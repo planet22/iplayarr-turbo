@@ -14,7 +14,7 @@
         "dev": "cross-env DEBUG=true concurrently \"npm run serve:backend\" \"npm run serve:frontend\"",
         "test": "cross-env NODE_ENV=test jest --collectCoverageFrom 'src/**/*.{js,ts}'",
         "test:watch": "jest --watch",
-        "lint": "eslint . --ext .ts",
+        "lint": "eslint . \"**/*.vue\"",
         "lint:fix": "npm run lint -- --fix",
         "prettier": "prettier . --check",
         "prettier:fix": "npm run prettier -- --write"

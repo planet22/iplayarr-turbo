@@ -1,5 +1,5 @@
 export const getHost = () => {
-    return process.env.NODE_ENV != 'production' ? `http://${window.location.hostname}:4404` : '';
+    return import.meta.env.DEV ? `http://${window.location.hostname}:4404` : '';
 };
 
 export const getPidFromBBCUrl = (url) => {

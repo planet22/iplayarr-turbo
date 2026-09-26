@@ -62,7 +62,7 @@ const pageSetup = async () => {
     if (socket.value == null) {
         document.body.scrollTop = document.documentElement.scrollTop = 0;
         await updateQueue();
-        if (process.env.NODE_ENV == 'production') {
+        if (import.meta.env.PROD) {
             socket.value = io();
         } else {
             const socketUrl = `http://${window.location.hostname}:4404`;
