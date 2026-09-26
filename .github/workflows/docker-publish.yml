@@ -38,7 +38,7 @@ jobs:
               id: meta
               uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
               with:
-                  images: nikorag/iplayarr
+                  images: planet22/iplayarr-turbo
 
             - name: Set up QEMU
               uses: docker/setup-qemu-action@v3
@@ -64,7 +64,7 @@ jobs:
                   platforms: linux/amd64,linux/arm64,linux/arm/v7
                   tags: |
                       ${{ steps.meta.outputs.tags }}
-                      nikorag/iplayarr:latest
+                      planet22/iplayarr-turbo:latest
                   labels: ${{ steps.meta.outputs.labels }}
                   build-args: |
                       iplayarr_version=${{ env.git_tag }}
@@ -72,6 +72,6 @@ jobs:
             - name: Generate artifact attestation
               uses: actions/attest-build-provenance@v2
               with:
-                  subject-name: index.docker.io/nikorag/iplayarr
+                  subject-name: index.docker.io/planet22/iplayarr-turbo
                   subject-digest: ${{ steps.push.outputs.digest }}
                   push-to-registry: true
