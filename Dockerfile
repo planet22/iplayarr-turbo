@@ -31,8 +31,10 @@ RUN npm ci --omit=dev
 # ---- redis: source of the bundled redis-server binary ----
 FROM redis:8-alpine3.23 AS redis
 
-# ---- runtime: final image - no compilers, no source, just what's needed to run ----
-FROM node:24-alpine3.24
+# ---- runtime-base: everything the app needs to run, shared by both the dev and
+# prod runtime images below - just not which node_modules yet, since that's the
+# one thing that differs between them.
+FROM node:24-alpine3.24 AS runtime-base
 
 RUN apk --update add \
     ffmpeg \
@@ -78,12 +80,12 @@ WORKDIR /redis
 COPY --from=redis /usr/local/bin/redis-server /redis/redis-server
 RUN chmod +x /redis/redis-server
 
-# Install iplayarr - only the production node_modules and built output make it into
-# this image; src/, frontend/src/, and all devDependencies stay behind in the build
-# stages (a `rm -rf` after COPY . . couldn't achieve this: it hides files from a later
-# layer, but earlier layers - and the image size that comes with them - are unaffected).
+# Install iplayarr - the built output makes it into this image either way; src/ and
+# frontend/src/ stay behind in the build stages regardless of which node_modules gets
+# layered on below (a `rm -rf` after COPY . . couldn't achieve this: it hides files
+# from a later layer, but earlier layers - and the image size that comes with them -
+# are unaffected).
 WORKDIR /app
-COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/frontend/dist ./frontend/dist
 COPY package*.json ./
@@ -92,4 +94,17 @@ COPY docker_entry.sh ./
 ENV LOG_DIR=/logs
 
 ENTRYPOINT [ "./docker_entry.sh" ]
+
+# ---- dev: full (incl. devDependencies) node_modules, for local hot-reload work -
+# only ever selected explicitly via `target: dev` (the personal docker-compose.yaml),
+# never the default build target, so a plain build can't accidentally ship this.
+FROM runtime-base AS dev
+COPY --from=deps /app/node_modules ./node_modules
+CMD ["npm", "run", "serve:backend"]
+
+# ---- runtime: production-only node_modules. This is the last stage in the file, so
+# it's what gets built whenever nothing specifies --target/target: - the published
+# image and docker-compose.prod.yaml included.
+FROM runtime-base AS runtime
+COPY --from=prod-deps /app/node_modules ./node_modules
 CMD ["npm", "run", "start"]
