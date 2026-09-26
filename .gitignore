@@ -1,3 +1,9 @@
+# Personal deployment config (not part of the project)
+docker-compose.yaml
+docker-compose.prod.yaml
+/cache/
+/config/
+
 # Logs
 logs
 *.log
@@ -133,3 +139,4 @@ dist
 
 test-results
 .DS_Store
+iplayarr-turbo

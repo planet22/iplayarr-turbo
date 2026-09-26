@@ -7,7 +7,7 @@
         "build:backend": "tsc",
         "build:frontend": "cd frontend && npm run build",
         "build:both": "concurrently \"npm run build:backend\" \"npm run build:frontend\"",
-        "serve:redis": "docker compose up -d",
+        "serve:redis": "docker compose -f docker-compose.redis.yml up -d",
         "serve:backend": "nodemon src/server.ts",
         "serve:frontend": "cd frontend && npm run serve",
         "start": "node -r tsconfig-paths/register dist/src/server.js",
