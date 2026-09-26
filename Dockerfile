@@ -1,8 +1,38 @@
-# Use Redis Alpine as a source for the binary
-FROM redis:alpine AS redis
+# syntax=docker/dockerfile:1
 
-# Main build stage
-FROM node:current-alpine3.20
+# Pinned to the current Node LTS (24, "Krypton") on the latest stable Alpine (3.24),
+# instead of the previous floating node:current-alpine3.20 (which had already drifted
+# to Node 24 anyway, just without anyone deciding that on purpose).
+FROM node:24-alpine3.24 AS base
+# python3/make/g++ are needed to compile the bcrypt native addon - Alpine's musl libc
+# has no prebuilt binary for it, so this is required for both the dev and prod installs.
+RUN apk add --no-cache python3 make g++
+
+# ---- deps: full install (incl. devDependencies) for building backend + frontend ----
+FROM base AS deps
+WORKDIR /app
+COPY package*.json ./
+COPY frontend/package*.json ./frontend/
+RUN npm run install:both
+
+# ---- build: compile backend (tsc) and frontend (vue-cli-service) ----
+FROM deps AS build
+COPY . .
+RUN npm run build:both
+
+# ---- prod-deps: production-only backend node_modules for the runtime image ----
+# Frontend has no runtime deps of its own - it ships as static files from the build
+# stage - so this only ever installs the backend's package.json.
+FROM base AS prod-deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# ---- redis: source of the bundled redis-server binary ----
+FROM redis:8-alpine3.23 AS redis
+
+# ---- runtime: final image - no compilers, no source, just what's needed to run ----
+FROM node:24-alpine3.24
 
 RUN apk --update add \
     ffmpeg \
@@ -12,20 +42,22 @@ RUN apk --update add \
     perl-xml-simple \
     perl-xml-libxml \
     su-exec \
-    make \
-    build-base \
-    atomicparsley --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted
+    python3
 
-# Symlink AtomicParsley
-RUN ln -s `which atomicparsley` /usr/local/bin/AtomicParsley
+# atomicparsley still isn't packaged in any stable Alpine release, only edge/testing,
+# so it needs its own apk invocation - keeping --allow-untrusted scoped to just this
+# command instead of the whole apk add above, so signature verification still applies
+# to everything else.
+RUN apk add --no-cache --repository https://dl-cdn.alpinelinux.org/alpine/edge/testing --allow-untrusted atomicparsley && \
+    ln -s "$(which atomicparsley)" /usr/local/bin/AtomicParsley
 
 RUN mkdir -p /data/output /data/config /config /data /node-persist /app/frontend /logs
 
 WORKDIR /iplayer
 
-ENV GET_IPLAYER_VERSION=3.35
+ENV GET_IPLAYER_VERSION=3.36
 
-RUN wget -qO- https://github.com/get-iplayer/get_iplayer/archive/v${GET_IPLAYER_VERSION}.tar.gz | tar -xvz -C /tmp && \
+RUN wget -qO- https://github.com/get-iplayer/get_iplayer/archive/v${GET_IPLAYER_VERSION}.tar.gz | tar -xz -C /tmp && \
     mv /tmp/get_iplayer-${GET_IPLAYER_VERSION}/get_iplayer . && \
     rm -rf /tmp/* && \
     chmod +x ./get_iplayer
@@ -36,9 +68,8 @@ ENV CACHE_LOCATION=/data
 
 WORKDIR /ytdlp
 
-RUN apk add --no-cache python3 py3-pip
-RUN wget -q https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
-RUN chmod +x ./yt-dlp
+RUN wget -q https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
+    chmod +x ./yt-dlp
 
 ENV YTDLP_EXEC=/ytdlp/yt-dlp
 
@@ -47,16 +78,16 @@ WORKDIR /redis
 COPY --from=redis /usr/local/bin/redis-server /redis/redis-server
 RUN chmod +x /redis/redis-server
 
-# Install iplayarr
+# Install iplayarr - only the production node_modules and built output make it into
+# this image; src/, frontend/src/, and all devDependencies stay behind in the build
+# stages (a `rm -rf` after COPY . . couldn't achieve this: it hides files from a later
+# layer, but earlier layers - and the image size that comes with them - are unaffected).
 WORKDIR /app
-
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/frontend/dist ./frontend/dist
 COPY package*.json ./
-COPY frontend/package*.json ./frontend/
-
-RUN npm run install:both
-COPY . .
-RUN npm run build:both
-RUN rm -rf /app/src /app/frontend/src
+COPY docker_entry.sh ./
 
 ENV LOG_DIR=/logs
 
