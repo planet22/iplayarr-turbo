@@ -6,6 +6,8 @@ iPlayarr is a companion tool for **Sonarr** and **Radarr**, making it easy to in
 ![Build Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/build.yml?logo=github)
 [![Coverage Status](https://coveralls.io/repos/github/planet22/iplayarr-turbo/badge.svg?branch=main)](https://coveralls.io/github/planet22/iplayarr-turbo?branch=main)
 
+> **This is iPlayarr Turbo**, a fork of upstream iPlayarr (based on v0.11.6) with a modernized Docker build and dependency stack — see [TURBO.md](TURBO.md) for everything this fork changes on top of what's described below.
+
 ## 📸 Screenshots
 
 <p align="center">
