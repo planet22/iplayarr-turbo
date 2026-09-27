@@ -66,8 +66,6 @@ jobs:
                       ${{ steps.meta.outputs.tags }}
                       planet22/iplayarr-turbo:latest
                   labels: ${{ steps.meta.outputs.labels }}
-                  build-args: |
-                      iplayarr_version=${{ env.git_tag }}
 
             - name: Generate artifact attestation
               uses: actions/attest-build-provenance@v2

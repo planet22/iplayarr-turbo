@@ -94,5 +94,8 @@
     },
     "allowScripts": {
         "bcrypt@6.0.0": true
+    },
+    "engines": {
+        "node": "24.x"
     }
 }

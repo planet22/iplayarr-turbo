@@ -18,8 +18,8 @@ Backend and frontend are separate npm projects (`/` and `/frontend`).
 ```bash
 npm run install:both      # install deps for backend + frontend
 npm run serve:redis       # start local Redis via docker compose (needed for local dev)
-npm run dev                # run backend (nodemon) + frontend (vue-cli-service serve) concurrently, with DEBUG=true
-npm run build:both         # build backend (tsc) + frontend (vue-cli-service build) for production
+npm run dev                # run backend (nodemon) + frontend (vite dev server) concurrently, with DEBUG=true
+npm run build:both         # build backend (tsc) + frontend (vite build) for production
 npm start                  # run the built backend (dist/src/server.js)
 
 npm test                   # jest, with coverage, over src/**/*.{js,ts}
@@ -27,7 +27,7 @@ npm run test:watch         # jest --watch
 npx jest path/to/File.test.ts               # run a single test file
 npx jest -t "test name"                     # run tests matching a name
 
-npm run lint               # eslint . --ext .ts
+npm run lint               # eslint . "**/*.vue"
 npm run lint:fix
 npm run prettier           # check formatting
 npm run prettier:fix
@@ -60,7 +60,7 @@ When changing download or search behavior, check whether the change belongs in t
 
 **Server bootstrap** (`src/server.ts`): auth middleware and `/auth` mounted first, then unauthenticated `/ping` healthcheck (checks Redis), then static frontend (`frontend/dist`), then `/api` (the dual-protocol route above) and `/json-api` (the frontend's own REST API, under `src/routes/json-api/`), then a catch-all serving `frontend/dist/index.html` for client-side routing.
 
-**Frontend**: Vue 3 + vue-router + Socket.IO client, under `frontend/src/`, built separately with `vue-cli-service` and served as static files by the Express backend in production.
+**Frontend**: Vue 3 + vue-router + Socket.IO client, under `frontend/src/`, built separately with Vite and served as static files by the Express backend in production.
 
 ## Docker image specifics
 

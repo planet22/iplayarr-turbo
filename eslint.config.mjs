@@ -13,7 +13,7 @@ export default [
     pluginJs.configs.recommended,
     ...tseslint.configs.recommended,
     ...pluginVue.configs['flat/recommended'],
-    { ignores: ['**/dist/**', '**/node_modules/**'] },
+    { ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**'] },
     {
         plugins: {
             import: importPlugin,

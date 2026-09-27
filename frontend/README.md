@@ -18,12 +18,12 @@ npm run serve
 npm run build
 ```
 
-### Lints and fixes files
+### Preview a production build locally
 
 ```
-npm run lint
+npm run preview
 ```
 
 ### Customize configuration
 
-See [Configuration Reference](https://cli.vuejs.org/config/).
+See [Vite Configuration Reference](https://vite.dev/config/).
