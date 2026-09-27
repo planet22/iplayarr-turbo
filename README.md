@@ -1,20 +1,20 @@
-# <img src="https://raw.githubusercontent.com/Nikorag/iplayarr/refs/heads/main/frontend/public/iplayarr.png" alt="Description" width="24px"> iPlayarr
+# <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/frontend/public/iplayarr.png" alt="Description" width="24px"> iPlayarr
 
 iPlayarr is a companion tool for **Sonarr** and **Radarr**, making it easy to integrate **get_iplayer** for searching and downloading iPlayer content directly. It acts as both an **indexer** and a **download client**, allowing seamless automation of TV and movie downloads.
 
 [![Discord](https://img.shields.io/discord/1359619754456907856?label=Discord&logo=discord&style=flat)](https://discord.com/channels/1359619754456907856)
-![Build Status](https://img.shields.io/github/actions/workflow/status/nikorag/iplayarr/build.yml?logo=github)
-[![Coverage Status](https://coveralls.io/repos/github/Nikorag/iplayarr/badge.svg?branch=main)](https://coveralls.io/github/Nikorag/iplayarr?branch=main)
+![Build Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/build.yml?logo=github)
+[![Coverage Status](https://coveralls.io/repos/github/planet22/iplayarr-turbo/badge.svg?branch=main)](https://coveralls.io/github/planet22/iplayarr-turbo?branch=main)
 
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Nikorag/iplayarr/refs/heads/main/readme-media/login.png" alt="Login View" width="49%">
-  <img src="https://raw.githubusercontent.com/Nikorag/iplayarr/refs/heads/main/readme-media/queue.png" alt="Queue View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/login.png" alt="Login View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/queue.png" alt="Queue View" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Nikorag/iplayarr/refs/heads/main/readme-media/search.png" alt="Search View" width="49%">
-  <img src="https://raw.githubusercontent.com/Nikorag/iplayarr/refs/heads/main/readme-media/details.png" alt="Details View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/search.png" alt="Search View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/details.png" alt="Details View" width="49%">
 </p>
 
 ## Why iPlayarr?
@@ -48,7 +48,7 @@ docker run -d --name iplayarr \
   -v /path/to/complete:/complete \
   --env-file=env-file \
   -p 4404:4404 \
-  nikorag/iplayarr:latest
+  planet22/iplayarr-turbo:latest
 ```
 
 Alternatively, use the bundled Dockerfile:
@@ -71,7 +71,7 @@ Or use Docker Compose:
 ```yml
 services:
     iplayarr:
-        image: 'nikorag/iplayarr:latest'
+        image: 'planet22/iplayarr-turbo:latest'
         container_name: 'iplayarr'
         environment:
             - 'API_KEY=1234'

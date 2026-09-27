@@ -1,6 +1,6 @@
 # For running container dependencies locally
 services:
     redis:
-        image: redis
+        image: redis:8-alpine3.23
         ports:
             - 6379:6379
