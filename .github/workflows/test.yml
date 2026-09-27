@@ -3,14 +3,17 @@ name: Run Jest Tests
 permissions:
     checks: write
     pull-requests: write
+    contents: write
 
 on:
     push:
         branches:
             - main
+            - dev
     pull_request:
         branches:
             - main
+            - dev
 jobs:
     test:
         name: Run Tests and publish Reports
@@ -38,7 +41,48 @@ jobs:
                   report_paths: ./test-results/junit.xml
                   token: ${{ secrets.GITHUB_TOKEN }}
 
+            - name: Add coverage summary
+              if: success() || failure()
+              run: |
+                  node -e '
+                    const fs = require("fs");
+                    const s = require("./coverage/coverage-summary.json").total;
+                    const row = (name, o) => `| ${name} | ${o.covered}/${o.total} | ${o.pct}% |`;
+                    const lines = [
+                      "## Coverage Summary",
+                      "",
+                      "| Metric | Covered/Total | % |",
+                      "|---|---|---|",
+                      row("Statements", s.statements),
+                      row("Branches", s.branches),
+                      row("Functions", s.functions),
+                      row("Lines", s.lines),
+                    ];
+                    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+                  '
+
+            - name: Upload coverage report
+              if: success() || failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: coverage-report
+                  path: coverage/
+                  retention-days: 14
+
+            - name: Update coverage badges in README
+              if: github.event_name == 'push'
+              run: npm run badges
+
+            - name: Commit updated coverage badges
+              if: github.event_name == 'push'
+              uses: stefanzweifel/git-auto-commit-action@v5
+              with:
+                  commit_message: 'chore: update coverage badges [skip ci]'
+                  file_pattern: README.md
+
             - uses: hrishikesh-kadam/setup-lcov@v1
+              continue-on-error: true
 
             - name: Coveralls
               uses: coverallsapp/github-action@v2
+              continue-on-error: true

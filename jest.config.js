@@ -20,6 +20,6 @@ module.exports = {
     modulePaths: ['<rootDir>'],
     setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
     collectCoverage: true,
-    coverageReporters: ['lcov', 'text'],
+    coverageReporters: ['lcov', 'text', 'json-summary'],
     testTimeout: 30000,
 };
