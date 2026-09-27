@@ -21,9 +21,9 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v5
             - name: Setup Node.js
-              uses: actions/setup-node@v4
+              uses: actions/setup-node@v5
               with:
                   node-version: 24
                   cache: 'npm'
@@ -36,7 +36,7 @@ jobs:
                   npm test
 
             - name: Publish Test Report
-              uses: mikepenz/action-junit-report@v5
+              uses: mikepenz/action-junit-report@v6
               if: success() || failure()
               with:
                   report_paths: ./test-results/junit.xml
@@ -64,7 +64,7 @@ jobs:
 
             - name: Upload coverage report
               if: success() || failure()
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@v6
               with:
                   name: coverage-report
                   path: coverage/
@@ -76,7 +76,7 @@ jobs:
 
             - name: Commit updated coverage badges
               if: github.event_name == 'push'
-              uses: stefanzweifel/git-auto-commit-action@v5
+              uses: stefanzweifel/git-auto-commit-action@v7
               with:
                   commit_message: 'chore: update coverage badges [skip ci]'
                   file_pattern: README.md
