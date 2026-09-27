@@ -11,14 +11,8 @@
         <h2>Author</h2>
         <p><a href="https://github.com/Nikorag">Nikorag</a></p>
         <div class="buttons">
-            <div v-if="!hiddenSettings.HIDE_DONATE">
-                <a href="https://ko-fi.com/H2H01BK2VY" target="_blank"><img
-height="36"
-                        style="border: 0px; height: 36px" src="https://storage.ko-fi.com/cdn/kofi5.png?v=6"
-                        alt="Buy Me a Coffee at ko-fi.com" /></a>
-            </div>
             <div>
-                <a href="https://github.com/Nikorag/iplayarr" target="_blank">
+                <a href="https://github.com/planet22/iplayarr-turbo" target="_blank">
                     <button class="githubButton clickable">
                         <font-awesome-icon :icon="['fab', 'github']" />
                         GitHub Project

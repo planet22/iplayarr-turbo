@@ -20,12 +20,7 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
             </div>
         </div>
         <div class="right">
-            <a
-v-if="!hiddenSettings.HIDE_DONATE" href="https://ko-fi.com/nikorag" aria-label="Donate"
-                class="desktopOnly donateLink" target="_blank">
-                <font-awesome-icon v-if="authState.user" class="desktopOnly clickable" :icon="['fas', 'heart']" />
-            </a>
-            <a href="https://github.com/Nikorag/iplayarr" class="desktopOnly" aria-label="GitHub" target="_blank">
+            <a href="https://github.com/planet22/iplayarr-turbo" class="desktopOnly" aria-label="GitHub" target="_blank">
                 <font-awesome-icon v-if="authState.user" class="desktopOnly clickable" :icon="['fab', 'github']" />
             </a>
         </div>
@@ -45,7 +40,6 @@ const router = useRouter();
 
 // const globalSettings = inject('globalSettings');
 const toggleLeftHandNav = inject('toggleLeftHandNav');
-const hiddenSettings = inject('hiddenSettings');
 const authState = inject('authState');
 const searchTerm = ref('');
 
