@@ -1,4 +1,4 @@
-# <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/frontend/public/iplayarr.png" alt="Description" width="24px"> iPlayarr
+# <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/frontend/public/iplayarr.png" alt="Description" width="24px"> iPlayarr Turbo
 
 iPlayarr is a companion tool for **Sonarr** and **Radarr**, making it easy to integrate **get_iplayer** for searching and downloading iPlayer content directly. It acts as both an **indexer** and a **download client**, allowing seamless automation of TV and movie downloads.
 

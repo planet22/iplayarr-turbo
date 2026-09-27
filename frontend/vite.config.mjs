@@ -24,8 +24,8 @@ export default defineConfig({
                 maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
             },
             manifest: {
-                name: 'iPlayarr',
-                short_name: 'iPlayarr',
+                name: 'iPlayarr Turbo',
+                short_name: 'iPlayarr Turbo',
                 theme_color: '#202020',
                 background_color: '#000000',
                 icons: [

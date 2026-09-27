@@ -4,7 +4,7 @@
             <div class="logoPanel">
                 <RouterLink to="/queue">
                     <img src="/iplayarr.png" alt="Logo" />
-                    <p class="desktopOnly">iPlayarr</p>
+                    <p class="desktopOnly">iPlayarr Turbo</p>
                 </RouterLink>
                 <font-awesome-icon
 v-if="authState.user" class="mobileOnly clickable burgerMenu" :icon="['fas', 'bars']"
