@@ -9,10 +9,10 @@ const historyService = {
         return (await storage.getItem('history')) ?? [];
     },
 
-    addHistory: async (item: QueueEntry): Promise<void> => {
+    addHistory: async (item: QueueEntry, status: QueueEntryStatus = QueueEntryStatus.COMPLETE): Promise<void> => {
         const historyItem: QueueEntry = {
             ...item,
-            status: QueueEntryStatus.COMPLETE,
+            status,
             details: { ...item.details, eta: '', speed: 0, progress: 100 },
             process: undefined,
         };

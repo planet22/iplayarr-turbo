@@ -16,6 +16,7 @@ import { DownloadClient } from '../types/enums/DownloadClient';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { LogLine, LogLineLevel } from '../types/LogLine';
 import { QueueEntry } from '../types/QueueEntry';
+import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { convertToMB, copyWithFallback, getETA } from '../utils/Utils';
 
 class DownloadFacade {
@@ -60,7 +61,9 @@ class DownloadFacade {
                     //Move the resultant file
                     loggingService.debug(pid, `Looking for video files in ${directory}`);
                     const files = fs.readdirSync(directory);
-                    const videoFile = files.find((file) => file.endsWith('.mp4') || file.endsWith('.mkv'));
+                    const videoFile = files.find((file) =>
+                        (file.endsWith('.mp4') || file.endsWith('.mkv')) && !file.includes('_original')
+                    );
 
                     if (videoFile) {
                         const oldPath = path.join(directory, videoFile);
@@ -69,13 +72,15 @@ class DownloadFacade {
                         loggingService.debug(pid, `Moving ${oldPath} to ${newPath}`);
 
                         copyWithFallback(oldPath, newPath);
+                    } else {
+                        loggingService.error(`get-iplayer exited successfully but produced no video file for ${pid}`);
                     }
 
                     // Delete the uuid directory and file after moving it
                     loggingService.debug(pid, `Deleting old directory ${directory}`);
                     fs.rmSync(directory, { recursive: true, force: true });
 
-                    await historyService.addHistory(queueItem);
+                    await historyService.addHistory(queueItem, videoFile ? QueueEntryStatus.COMPLETE : QueueEntryStatus.FAILED);
                 } catch (err) {
                     loggingService.error(err);
                 }
@@ -143,6 +148,10 @@ class DownloadFacade {
 
             entries.forEach((entry) => {
                 if (!entry.isDirectory()) return;
+
+                // Skip directories that belong to a download still active in the queue -
+                // it may still be writing files well past the timestamp threshold.
+                if (queueService.getFromQueue(entry.name)) return;
 
                 const dirPath: string = path.join(downloadDir, entry.name);
                 const filePath: string = path.join(dirPath, timestampFile);
