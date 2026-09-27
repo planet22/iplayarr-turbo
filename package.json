@@ -1,5 +1,5 @@
 {
-    "name": "iplayarr",
+    "name": "iplayarr-turbo",
     "version": "1.0.0",
     "main": "index.js",
     "scripts": {
@@ -20,8 +20,16 @@
         "prettier:fix": "npm run prettier -- --write"
     },
     "author": "",
-    "license": "ISC",
-    "description": "",
+    "license": "GPL-3.0",
+    "description": "iPlayarr Turbo - a modernized fork of Nikorag/iplayarr (BBC iPlayer indexer/download-client for Sonarr & Radarr)",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/planet22/iplayarr-turbo.git"
+    },
+    "homepage": "https://github.com/planet22/iplayarr-turbo#readme",
+    "bugs": {
+        "url": "https://github.com/planet22/iplayarr-turbo/issues"
+    },
     "dependencies": {
         "@types/lunr": "^2.3.7",
         "axios": "^1.8.2",
