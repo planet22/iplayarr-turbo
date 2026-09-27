@@ -5,10 +5,12 @@ import express, { Express, NextFunction, Request, Response } from 'express';
 import http, { Server } from 'http';
 import path from 'path';
 import { Server as SocketIOServer } from 'socket.io';
+import { v4 as uuidv4 } from 'uuid';
 
 import ApiRoute from './routes/ApiRoute';
 import AuthRoute, { addAuthMiddleware } from './routes/AuthRoute';
 import JsonApiRoute from './routes/JsonApiRoute';
+import configService from './service/configService';
 import loggingService from './service/loggingService';
 import { redis } from './service/redis/redisService';
 import socketService from './service/socketService';
@@ -72,6 +74,14 @@ const server: Server = http.createServer(app);
 
 const io = isDebug ? new SocketIOServer(server, { cors: {} }) : new SocketIOServer(server);
 socketService.registerIo(io);
+
+(async () => {
+    // Without this, a fresh install has no API key until a user opens Settings and
+    // generates one manually, so the Apps auto-setup flow fails with an empty apikey.
+    if (!(await configService.getParameter(IplayarrParameter.API_KEY))) {
+        await configService.setParameter(IplayarrParameter.API_KEY, uuidv4());
+    }
+})();
 
 server.listen(port, () => {
     loggingService.log(`Server running at http://localhost:${port}`);
