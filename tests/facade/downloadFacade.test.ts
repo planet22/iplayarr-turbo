@@ -13,6 +13,7 @@ jest.mock('bcrypt', () => ({
 }));
 
 jest.mock('fs', () => ({
+    ...jest.requireActual('fs'),
     mkdirSync: jest.fn(),
     writeFileSync: jest.fn(),
     readdirSync: jest.fn(),
