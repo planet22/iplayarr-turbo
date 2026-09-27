@@ -538,6 +538,136 @@ describe('Utils', () => {
         });
     });
 
+    describe('convertToMB', () => {
+        it('converts GB to MB', () => {
+            expect(Utils.convertToMB('1.5 GB')).toBe(1536);
+        });
+
+        it('converts GiB to MB', () => {
+            expect(Utils.convertToMB('2GiB')).toBe(2048);
+        });
+
+        it('converts KB to MB', () => {
+            expect(Utils.convertToMB('1024 KB')).toBe(1);
+        });
+
+        it('converts KiB to MB', () => {
+            expect(Utils.convertToMB('1024KiB')).toBe(1);
+        });
+
+        it('leaves MB as-is', () => {
+            expect(Utils.convertToMB('512 MB')).toBe(512);
+        });
+
+        it('treats MiB as equivalent to MB', () => {
+            expect(Utils.convertToMB('512 MiB')).toBe(512);
+        });
+
+        it('is case-insensitive on the unit', () => {
+            expect(Utils.convertToMB('1 gb')).toBe(1024);
+        });
+
+        it('returns 0 for an unparseable string', () => {
+            expect(Utils.convertToMB('not a size')).toBe(0);
+        });
+    });
+
+    describe('getETA', () => {
+        it('returns the given eta unchanged when provided', () => {
+            expect(Utils.getETA('01:02:03', 1000, 10, 50)).toBe('01:02:03');
+        });
+
+        it('returns an empty string when speed is zero or negative', () => {
+            expect(Utils.getETA(undefined, 1000, 0)).toBe('');
+            expect(Utils.getETA(undefined, 1000, -5)).toBe('');
+        });
+
+        it('calculates hh:mm:ss from remaining size and speed', () => {
+            // 3600 bytes remaining at 1 byte/sec = exactly 1 hour
+            expect(Utils.getETA(undefined, 3600, 1)).toBe('01:00:00');
+        });
+
+        it('accounts for percent already complete', () => {
+            // 50% of 7200 bytes remaining (3600) at 1 byte/sec = 1 hour
+            expect(Utils.getETA(undefined, 7200, 1, 50)).toBe('01:00:00');
+        });
+
+        it('defaults percent to 0 when not provided', () => {
+            expect(Utils.getETA(undefined, 3600, 1)).toBe(Utils.getETA(undefined, 3600, 1, 0));
+        });
+    });
+
+    describe('copyWithFallback', () => {
+        // require(), not `import * as fs` - jest.spyOn needs to redefine the
+        // property, and TS's namespace-import interop produces a non-
+        // configurable object that Object.defineProperty can't touch.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fs = require('fs');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const streamModule = require('stream');
+
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        it('uses copyFileSync directly when it succeeds', () => {
+            const copySpy = jest.spyOn(fs, 'copyFileSync').mockImplementation(() => undefined);
+
+            Utils.copyWithFallback('/src/file.mp4', '/dst/file.mp4');
+
+            expect(copySpy).toHaveBeenCalledWith('/src/file.mp4', '/dst/file.mp4');
+        });
+
+        it('re-throws non-EPERM errors from copyFileSync without falling back', () => {
+            jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {
+                throw Object.assign(new Error('disk full'), { code: 'ENOSPC' });
+            });
+            const streamSpy = jest.spyOn(fs, 'createReadStream');
+
+            expect(() => Utils.copyWithFallback('/src/file.mp4', '/dst/file.mp4')).toThrow('disk full');
+            expect(streamSpy).not.toHaveBeenCalled();
+        });
+
+        it('falls back to a read/write stream pipeline on EPERM (CIFS)', () => {
+            jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {
+                throw Object.assign(new Error('not permitted'), { code: 'EPERM' });
+            });
+            // pipeline() (from 'stream', not readStream.pipe()) synchronously
+            // validates that its arguments are real Readable/Writable streams -
+            // plain fake objects fail that check immediately. Mocking pipeline
+            // itself sidesteps needing to fake a real stream, and only spies on
+            // (doesn't fully replace) the 'stream' module, so it's restored by
+            // the afterEach above rather than leaking into other tests.
+            const pipelineSpy = jest.spyOn(streamModule, 'pipeline').mockImplementation(() => undefined as any);
+            const readStream = {};
+            const writeStream = {};
+            const readSpy = jest.spyOn(fs, 'createReadStream').mockReturnValue(readStream as any);
+            const writeSpy = jest.spyOn(fs, 'createWriteStream').mockReturnValue(writeStream as any);
+
+            Utils.copyWithFallback('/src/file.mp4', '/dst/file.mp4');
+
+            expect(pipelineSpy).toHaveBeenCalledWith(readStream, writeStream);
+
+            expect(readSpy).toHaveBeenCalledWith('/src/file.mp4');
+            expect(writeSpy).toHaveBeenCalledWith('/dst/file.mp4');
+        });
+
+        it('cleans up the partial destination file and rethrows if the fallback pipeline itself fails', () => {
+            jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {
+                throw Object.assign(new Error('not permitted'), { code: 'EPERM' });
+            });
+            jest.spyOn(streamModule, 'pipeline').mockImplementation(() => {
+                throw new Error('pipeline setup failed');
+            });
+            jest.spyOn(fs, 'createReadStream').mockReturnValue({} as any);
+            jest.spyOn(fs, 'createWriteStream').mockReturnValue({} as any);
+            const unlinkSpy = jest.spyOn(fs, 'unlinkSync').mockImplementation(() => undefined);
+
+            expect(() => Utils.copyWithFallback('/src/file.mp4', '/dst/file.mp4')).toThrow('pipeline setup failed');
+            expect(unlinkSpy).toHaveBeenCalledWith('/dst/file.mp4');
+        });
+    });
+
     describe('calculateSeasonAndEpisode', () => {
         describe('episodes', () => {
             it('standard series', async () =>
