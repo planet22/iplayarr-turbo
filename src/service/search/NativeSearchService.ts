@@ -18,7 +18,13 @@ class NativeSearchService implements AbstractSearchService {
     async search(term: string, synonym?: Synonym): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
         const url = `https://ibl.api.bbc.co.uk/ibl/v1/new-search?q=${encodeURIComponent(term)}`;
-        const response: AxiosResponse<IPlayerNewSearchResponse> = await axios.get(url);
+        let response: AxiosResponse<IPlayerNewSearchResponse>;
+        try {
+            response = await axios.get(url);
+        } catch (err: any) {
+            loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
+            return [];
+        }
         if (response.status == 200) {
             const {
                 new_search: { results },

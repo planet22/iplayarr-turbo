@@ -11,6 +11,7 @@ import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
 jest.mock('axios');
 jest.mock('../../../src/service//episodeCacheService');
 jest.mock('../../../src/service//iplayerDetailsService');
+jest.mock('../../../src/service/loggingService');
 jest.mock('../../../src/utils/Utils', () => ({
     ...jest.requireActual('../../../src/utils/Utils'),
     createNZBName: jest.fn(),
@@ -90,6 +91,16 @@ describe('NativeSearchService', () => {
             const results = await NativeSearchService.search(mockTerm);
 
             expect(results).toHaveLength(0); // Should return empty array on failure
+        });
+
+        it('should not throw and should return an empty array when the BBC search API rejects (e.g. 400 for an overlong title)', async () => {
+            (axios.get as jest.Mock).mockRejectedValue({ message: 'Request failed with status code 400' });
+
+            const results = await NativeSearchService.search(
+                'Michael Crawford and Michele Dotrice Remember... Some Mothers Do \'Ave \'Em'
+            );
+
+            expect(results).toEqual([]);
         });
 
         it('should handle the case when there are no results', async () => {
