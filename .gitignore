@@ -1,6 +1,7 @@
 # Personal deployment config (not part of the project)
 docker-compose.yaml
 docker-compose.prod.yaml
+docker-compose.vpnuk.yaml
 /cache/
 /config/
 
