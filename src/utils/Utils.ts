@@ -98,7 +98,7 @@ export async function createNZBDownloadLink(
             baseUrl = `${useSSL ? 'https' : 'http'}://${appObj.iplayarr.host}:${appObj.iplayarr.port}`;
         }
     }
-    return `${baseUrl}/api?mode=nzb-download&pid=${pid}&nzbName=${nzbName}&type=${type}&apikey=${apiKey}${app ? `&app=${app}` : ''}`;
+    return `${baseUrl}/api?mode=nzb-download&pid=${encodeURIComponent(pid)}&nzbName=${encodeURIComponent(nzbName ?? '')}&type=${encodeURIComponent(type)}&apikey=${encodeURIComponent(apiKey)}${app ? `&app=${encodeURIComponent(app)}` : ''}`;
 }
 
 export async function getQualityProfile(): Promise<QualityProfile> {
