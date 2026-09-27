@@ -164,7 +164,12 @@ export class V3ArrService implements AbstractArrService {
 
 
     async testConnection(app: App): Promise<boolean | string> {
-        const url: string = `${app.url}/api?apikey=${app.api_key}`;
+        if (!app.url || !app.api_key) return false;
+
+        // Hit the versioned, authenticated status endpoint rather than the bare /api
+        // root - the latter is often served as 200 by the *arr SPA/reverse proxy even
+        // with a missing or wrong apikey, making the test falsely succeed.
+        const url: string = `${this.getApiUrl(app)}/system/status?apikey=${app.api_key}`;
 
         try {
             const response = await axios.get(url, {
@@ -172,8 +177,7 @@ export class V3ArrService implements AbstractArrService {
                     'X-Api-Key': app.api_key,
                 },
             });
-            if (response.status == 200) return true;
-            return false;
+            return response.status == 200 && typeof response.data?.version == 'string';
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 return error.message;
@@ -191,7 +195,7 @@ export class V3ArrService implements AbstractArrService {
                     'X-Api-Key': app.api_key,
                 },
             });
-            if (response.status == 200) return response.data;
+            if (response.status == 200 && Array.isArray(response.data)) return response.data;
             return [];
         } catch {
             return [];
