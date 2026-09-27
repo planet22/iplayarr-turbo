@@ -50,7 +50,7 @@ docker run -d --name iplayarr \
   -v /path/to/complete:/complete \
   --env-file=env-file \
   -p 4404:4404 \
-  planet22/iplayarr-turbo:latest
+  ghcr.io/planet22/iplayarr-turbo:latest
 ```
 
 Alternatively, use the bundled Dockerfile:
@@ -73,7 +73,7 @@ Or use Docker Compose:
 ```yml
 services:
     iplayarr:
-        image: 'planet22/iplayarr-turbo:latest'
+        image: 'ghcr.io/planet22/iplayarr-turbo:latest'
         container_name: 'iplayarr'
         environment:
             - 'API_KEY=1234'
