@@ -34,7 +34,7 @@ class NativeSearchService implements AbstractSearchService {
             const pidLedger: string[] = [];
             const infoPidLedger: Set<string> = new Set();
 
-            let infos: IPlayerDetails[] = [];
+            const infos: IPlayerDetails[] = [];
 
             for (const { ref } of lunrResults) {
                 const brandPid = await iplayerDetailsService.findBrandForPid(ref);

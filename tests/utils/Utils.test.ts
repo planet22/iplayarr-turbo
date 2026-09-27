@@ -426,7 +426,7 @@ describe('Utils', () => {
         const synonym: Synonym = {
             id: '',
             from: 'Syno-Nym Bus?',
-            target: "That's a Title!",
+            target: 'That\'s a Title!',
             exemptions: '',
         };
 
@@ -468,22 +468,22 @@ describe('Utils', () => {
 
         it('extracts titles with special characters', () => {
             const [title, episode, series] = Utils.parseEpisodeDetailStrings(
-                "The Apprentice: You're Fired!: Series 19",
+                'The Apprentice: You\'re Fired!: Series 19',
                 '12',
                 '1'
             );
-            expect(title.trim()).toBe("The Apprentice: You're Fired!");
+            expect(title.trim()).toBe('The Apprentice: You\'re Fired!');
             expect(episode).toBe(12);
             expect(series).toBe(19);
         });
 
         it('fall back still extracts titles with special characters', () => {
             const [title, episode, series] = Utils.parseEpisodeDetailStrings(
-                "The Apprentice: You're Fired!",
+                'The Apprentice: You\'re Fired!',
                 '12',
                 '19'
             );
-            expect(title.trim()).toBe("The Apprentice: You're Fired!");
+            expect(title.trim()).toBe('The Apprentice: You\'re Fired!');
             expect(episode).toBe(12);
             expect(series).toBe(19);
         });
@@ -677,7 +677,7 @@ describe('Utils', () => {
                 await assertSeasonAndEpisode(m00255nq, VideoType.TV, 'Return to Paradise', 1, 6, 'Oh Mine Papa'));
 
             it('yearly series', async () =>
-                await assertSeasonAndEpisode(m001zh50, VideoType.TV, "Gardeners' World", 2024, 1, 'Episode 1'));
+                await assertSeasonAndEpisode(m001zh50, VideoType.TV, 'Gardeners\' World', 2024, 1, 'Episode 1'));
 
             it('parsed series title', async () =>
                 await assertSeasonAndEpisode(p09t2pyf, VideoType.TV, 'The Goes Wrong Show', 2, 1, 'Summer Once Again'));
