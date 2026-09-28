@@ -22,7 +22,7 @@ import NavBar from './components/common/NavBar.vue';
 import { enforceMaxLength } from './lib/utils';
 
 const authState = inject('authState');
-const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, videoEvents] = [
+const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, videoEvents, toolVersions] = [
     ref([]),
     ref([]),
     ref([]),
@@ -31,6 +31,7 @@ const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, vi
     ref({}),
     ref({ active: [], history: [] }),
     ref([]),
+    ref({}),
 ];
 
 const navBar = ref(null);
@@ -58,6 +59,12 @@ provide('hiddenSettings', hiddenSettings);
 provide('globalSettings', globalSettings);
 provide('streams', streams);
 provide('videoEvents', videoEvents);
+provide('toolVersions', toolVersions);
+
+const refreshToolVersions = async () => {
+    toolVersions.value = (await ipFetch('json-api/versions')).data;
+};
+provide('refreshToolVersions', refreshToolVersions);
 
 const refreshGlobalSettings = async () => {
     globalSettings.value = (await ipFetch('json-api/config')).data;
@@ -98,6 +105,7 @@ const pageSetup = async () => {
 
         hiddenSettings.value = (await ipFetch('json-api/config/hiddenSettings')).data;
         refreshGlobalSettings();
+        refreshToolVersions();
     }
 };
 
