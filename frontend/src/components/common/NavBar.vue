@@ -20,6 +20,13 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
             </div>
         </div>
         <div class="right">
+            <span
+v-if="authState.user && versionLabel" class="versionLabel desktopOnly"
+                :class="{ updateAvailable: toolVersions?.getIplayer?.updateAvailable || toolVersions?.ytdlp?.updateAvailable }"
+                :title="versionTooltip"
+            >
+                {{ versionLabel }}
+            </span>
             <a href="https://github.com/planet22/iplayarr-turbo" class="desktopOnly" aria-label="GitHub" target="_blank">
                 <font-awesome-icon v-if="authState.user" class="desktopOnly clickable" :icon="['fab', 'github']" />
             </a>
@@ -28,7 +35,7 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
 </template>
 
 <script setup>
-import { defineExpose, inject, ref, watch } from 'vue';
+import { computed, defineExpose, inject, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import dialogService from '@/lib/dialogService';
@@ -41,7 +48,34 @@ const router = useRouter();
 // const globalSettings = inject('globalSettings');
 const toggleLeftHandNav = inject('toggleLeftHandNav');
 const authState = inject('authState');
+const hiddenSettings = inject('hiddenSettings');
+const toolVersions = inject('toolVersions');
 const searchTerm = ref('');
+
+const versionLabel = computed(() => {
+    const parts = [];
+    if (hiddenSettings?.value?.VERSION) {
+        parts.push(`v${hiddenSettings.value.VERSION}`);
+    }
+    if (toolVersions?.value?.getIplayer?.current) {
+        parts.push(`get_iplayer: ${toolVersions.value.getIplayer.current}`);
+    }
+    if (toolVersions?.value?.ytdlp?.current) {
+        parts.push(`yt-dlp: ${toolVersions.value.ytdlp.current}`);
+    }
+    return parts.join(' • ');
+});
+
+const versionTooltip = computed(() => {
+    const notes = [];
+    if (toolVersions?.value?.getIplayer?.updateAvailable) {
+        notes.push(`get_iplayer update available (${toolVersions.value.getIplayer.latest})`);
+    }
+    if (toolVersions?.value?.ytdlp?.updateAvailable) {
+        notes.push(`yt-dlp update available (${toolVersions.value.ytdlp.latest})`);
+    }
+    return notes.length ? `${notes.join(' - ')} - see Settings > Download Client` : 'Installed tool versions';
+});
 
 watch(
     () => route.query.searchTerm,
@@ -140,13 +174,24 @@ defineExpose({ clearSearch });
 
         &.right {
             @media (min-width: @mobile-breakpoint) {
-                flex: 0 0 210px;
+                flex: 0 0 auto;
             }
 
             text-align: right;
             display: flex;
             align-items: center;
             justify-content: flex-end;
+            gap: 16px;
+
+            .versionLabel {
+                font-size: 12px;
+                color: @subtle-text-color;
+                white-space: nowrap;
+
+                &.updateAvailable {
+                    color: @warn-color;
+                }
+            }
 
             a {
                 width: 30px;
