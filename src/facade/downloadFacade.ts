@@ -6,17 +6,21 @@ import { progressRegex, timestampFile } from '../constants/iPlayarrConstants';
 import configService from '../service/configService';
 import AbstractDownloadService from '../service/download/AbstractDownloadService';
 import GetIplayerDownloadService from '../service/download/GetIplayerDownloadService';
+import StrmDownloadService from '../service/download/StrmDownloadService';
 import YTDLPDownloadService from '../service/download/YTDLPDownloadService';
 import historyService from '../service/historyService';
 import loggingService from '../service/loggingService';
 import queueService from '../service/queueService';
 import socketService from '../service/socketService';
+import videoEventService from '../service/videoEventService';
 import { DownloadDetails } from '../types/DownloadDetails';
 import { DownloadClient } from '../types/enums/DownloadClient';
+import { MediaMode } from '../types/enums/MediaMode';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { LogLine, LogLineLevel } from '../types/LogLine';
 import { QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
+import { VideoEventType } from '../types/VideoEvent';
 import { convertToMB, copyWithFallback, getETA } from '../utils/Utils';
 
 class DownloadFacade {
@@ -49,8 +53,6 @@ class DownloadFacade {
     async #processComplete(pid: string, directory: string, code: any, service : AbstractDownloadService): Promise<void> {
         const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
 
-        const outputFormat = await configService.getParameter(IplayarrParameter.OUTPUT_FORMAT);
-
         if (code === 0) {
             const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
             if (queueItem) {
@@ -62,18 +64,29 @@ class DownloadFacade {
                     loggingService.debug(pid, `Looking for video files in ${directory}`);
                     const files = fs.readdirSync(directory);
                     const videoFile = files.find((file) =>
-                        (file.endsWith('.mp4') || file.endsWith('.mkv')) && !file.includes('_original')
+                        (file.endsWith('.mp4') || file.endsWith('.mkv') || file.endsWith('.strm')) && !file.includes('_original')
                     );
 
                     if (videoFile) {
                         const oldPath = path.join(directory, videoFile);
+                        const extension = path.extname(videoFile).slice(1);
                         loggingService.debug(pid, `Found video file ${oldPath}`);
-                        const newPath = path.join(completeDir, `${queueItem?.nzbName}.${outputFormat}`);
+                        const newPath = path.join(completeDir, `${queueItem?.nzbName}.${extension}`);
                         loggingService.debug(pid, `Moving ${oldPath} to ${newPath}`);
 
                         copyWithFallback(oldPath, newPath);
+                        queueItem.extension = extension;
+
+                        videoEventService.record(
+                            extension === 'strm' ? VideoEventType.STRM_CREATED : VideoEventType.DOWNLOAD_COMPLETE,
+                            extension === 'strm'
+                                ? `Created .strm pointer for "${queueItem.nzbName}"`
+                                : `Downloaded "${queueItem.nzbName}"`,
+                            { pid }
+                        );
                     } else {
                         loggingService.error(`get-iplayer exited successfully but produced no video file for ${pid}`);
+                        videoEventService.record(VideoEventType.DOWNLOAD_FAILED, `No video file produced for "${queueItem.nzbName}"`, { pid, level: 'error' });
                     }
 
                     // Delete the uuid directory and file after moving it
@@ -85,11 +98,21 @@ class DownloadFacade {
                     loggingService.error(err);
                 }
             }
+        } else {
+            const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
+            if (queueItem) {
+                videoEventService.record(VideoEventType.DOWNLOAD_FAILED, `Download process for "${queueItem.nzbName}" exited with code ${code}`, { pid, level: 'error' });
+            }
         }
         queueService.removeFromQueue(pid);
     }
 
     async #getService(): Promise<AbstractDownloadService> {
+        const mediaMode: MediaMode = (await configService.getParameter(IplayarrParameter.MEDIA_MODE)) as MediaMode;
+        if (mediaMode === MediaMode.STRM) {
+            return StrmDownloadService;
+        }
+
         const client: DownloadClient = (await configService.getParameter(
             IplayarrParameter.DOWNLOAD_CLIENT
         )) as DownloadClient;

@@ -17,6 +17,9 @@ jest.mock('../../../src/service/configService', () => ({
 jest.mock('../../../src/service/loggingService', () => ({
   debug: jest.fn(),
 }));
+jest.mock('../../../src/service/dnsRelayService', () => ({
+  ensureDnsRelayRunning: jest.fn(),
+}));
 
 describe('YTDLPDownloadService', () => {
   afterEach(() => {

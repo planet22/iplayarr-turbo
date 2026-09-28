@@ -158,6 +158,25 @@ describe('Utils', () => {
         });
     });
 
+    describe('createStrmContent', () => {
+        it('builds a mode=stream URL using STREAM_BASE_URL and the supplied streamKey', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('http://192.168.1.10:4404');
+
+            await expect(Utils.createStrmContent('m0026fkl', 'the-stream-key')).resolves.toBe(
+                'http://192.168.1.10:4404/api?mode=stream&pid=m0026fkl&streamkey=the-stream-key'
+            );
+            expect(mockedConfigService.getParameter).toHaveBeenCalledWith(IplayarrParameter.STREAM_BASE_URL);
+        });
+
+        it('strips a trailing slash from STREAM_BASE_URL', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('http://192.168.1.10:4404/');
+
+            await expect(Utils.createStrmContent('m0026fkl', 'the-stream-key')).resolves.toBe(
+                'http://192.168.1.10:4404/api?mode=stream&pid=m0026fkl&streamkey=the-stream-key'
+            );
+        });
+    });
+
     describe('removeAllQueryParams', () => {
         it('removes all query params from a URL', () => {
             expect(Utils.removeAllQueryParams('http://example.com/path?foo=bar&baz=qux')).toBe(

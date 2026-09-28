@@ -1,3 +1,4 @@
+import { FailedGrabEntry } from '../../types/data/FailedGrabEntry';
 import { GrabHistoryEntry } from '../../types/data/GrabHistoryEntry';
 import { SearchHistoryEntry } from '../../types/data/SearchHistoryEntry';
 import { AbstractFIFOQueue } from '../../types/utils/AbstractFIFOQueue';
@@ -8,10 +9,12 @@ import { redis } from '../redis/redisService';
 class StatisticsService {
     searchHistory: AbstractFIFOQueue<SearchHistoryEntry>;
     grabHistory: AbstractFIFOQueue<GrabHistoryEntry>;
+    failedGrabHistory: AbstractFIFOQueue<FailedGrabEntry>;
 
     constructor() {
         this.searchHistory = new RedisFIFOQueue('search-history', 500);
         this.grabHistory = new RedisFIFOQueue('grab-history', 500);
+        this.failedGrabHistory = new RedisFIFOQueue('failed-grab-history', 200);
     }
 
     addSearch(entry: SearchHistoryEntry): void {
@@ -36,6 +39,18 @@ class StatisticsService {
 
     async clearGrabHistory(): Promise<void> {
         await this.grabHistory.clear();
+    }
+
+    addFailedGrab(entry: FailedGrabEntry): void {
+        this.failedGrabHistory.enqueue(entry);
+    }
+
+    async getFailedGrabHistory(): Promise<FailedGrabEntry[]> {
+        return await this.failedGrabHistory.getItems();
+    }
+
+    async clearFailedGrabHistory(): Promise<void> {
+        await this.failedGrabHistory.clear();
     }
 
     async setUptime(): Promise<void> {

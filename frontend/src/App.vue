@@ -22,13 +22,15 @@ import NavBar from './components/common/NavBar.vue';
 import { enforceMaxLength } from './lib/utils';
 
 const authState = inject('authState');
-const [queue, history, logs, socket, hiddenSettings, globalSettings] = [
+const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, videoEvents] = [
     ref([]),
     ref([]),
     ref([]),
     ref(null),
     ref({}),
     ref({}),
+    ref({ active: [], history: [] }),
+    ref([]),
 ];
 
 const navBar = ref(null);
@@ -38,6 +40,8 @@ const leftHandNav = ref(null);
 const updateQueue = async () => {
     queue.value = (await ipFetch('json-api/queue/queue')).data;
     history.value = (await ipFetch('json-api/queue/history')).data;
+    streams.value = (await ipFetch('json-api/streams')).data;
+    videoEvents.value = (await ipFetch('json-api/events')).data;
 };
 
 const toggleLeftHandNav = () => {
@@ -52,6 +56,8 @@ provide('updateQueue', updateQueue);
 provide('toggleLeftHandNav', toggleLeftHandNav);
 provide('hiddenSettings', hiddenSettings);
 provide('globalSettings', globalSettings);
+provide('streams', streams);
+provide('videoEvents', videoEvents);
 
 const refreshGlobalSettings = async () => {
     globalSettings.value = (await ipFetch('json-api/config')).data;
@@ -80,6 +86,14 @@ const pageSetup = async () => {
         socket.value.on('log', (data) => {
             logs.value.push(data);
             enforceMaxLength(logs.value, 5000);
+        });
+
+        socket.value.on('streams', (data) => {
+            streams.value = data;
+        });
+
+        socket.value.on('videoEvents', (data) => {
+            videoEvents.value = data;
         });
 
         hiddenSettings.value = (await ipFetch('json-api/config/hiddenSettings')).data;

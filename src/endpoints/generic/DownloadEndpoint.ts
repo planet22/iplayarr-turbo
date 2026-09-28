@@ -2,8 +2,10 @@ import { Request, Response } from 'express';
 
 import iplayerDetailsService from '../../service/iplayerDetailsService';
 import queueService from '../../service/queueService';
+import videoEventService from '../../service/videoEventService';
 import { VideoType } from '../../types/IPlayerSearchResult';
 import { IPlayerMetadataResponse } from '../../types/responses/IPlayerMetadataResponse';
+import { VideoEventType } from '../../types/VideoEvent';
 
 export default async (req: Request, res: Response) => {
     const { pid } = req.query as any;
@@ -20,6 +22,7 @@ export default async (req: Request, res: Response) => {
     }
 
     queueService.addToQueue(pid, name, type);
+    videoEventService.record(VideoEventType.QUEUED, `Queued "${name}" for download`, { pid });
 
     res.json({ status: true });
 };

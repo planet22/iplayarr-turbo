@@ -10,15 +10,29 @@ const router: Router = Router();
 const upload: Multer = multer();
 
 interface ApiRequest {
-    apikey: string;
+    apikey?: string;
+    streamkey?: string;
     mode?: string;
     t?: string;
 }
 
-router.all('/', upload.any(), async (req: Request, res: Response, next: NextFunction) => {
-    const { apikey: queryKey, mode, t } = req.query as any as ApiRequest;
-    const envKey: string | undefined = await configService.getParameter(IplayarrParameter.API_KEY);
-    if (envKey && envKey == queryKey) {
+// Matches both the bare mount root and any sub-path (e.g. /api/seg.ts) - the latter exists only
+// so a stream segment's URL can carry a plausible-looking file extension for ffmpeg's HLS
+// demuxer, which enforces an allow-list on segment reference extensions and otherwise rejects a
+// pure query-string URL outright ("is not in allowed_segment_extensions"). The extra path segment
+// is purely cosmetic; every handler still dispatches on query params exactly as before.
+router.all(['/', '/*'], upload.any(), async (req: Request, res: Response, next: NextFunction) => {
+    const { apikey: queryApiKey, streamkey: queryStreamKey, mode, t } = req.query as any as ApiRequest;
+    // mode=stream is gated by its own STREAM_KEY, not API_KEY - .strm files sit in plaintext in
+    // the media library (readable by anything with filesystem access, not just Sonarr/Radarr), so
+    // they must never embed the same key that gates the whole rest of this protocol (search,
+    // grab, queue, history). Independently regenerable in Settings for the same reason.
+    const isStreamMode = mode === 'stream';
+    const expectedKey: string | undefined = await configService.getParameter(
+        isStreamMode ? IplayarrParameter.STREAM_KEY : IplayarrParameter.API_KEY
+    );
+    const suppliedKey: string | undefined = isStreamMode ? queryStreamKey : queryApiKey;
+    if (expectedKey && expectedKey == suppliedKey) {
         const endpoint: string | undefined = mode || t;
         const directory: EndpointDirectory = mode ? SabNZBDEndpointDirectory : NewzNabEndpointDirectory;
         if (endpoint && directory[endpoint]) {

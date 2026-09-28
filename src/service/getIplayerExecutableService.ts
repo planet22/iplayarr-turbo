@@ -41,8 +41,16 @@ export class GetIplayerExecutableService {
     }
 
     async #getQualityParam(): Promise<string> {
+        const chain: string[] = await this.getQualityFallbackChain();
+        return `--tv-quality=${chain.join(',')}`;
+    }
+
+    // Same preference order used for --tv-quality, exposed separately so callers that need to
+    // pick a specific --streaminfo stream variant (rather than let get_iplayer itself download
+    // the best available one) can walk the same fallback chain.
+    async getQualityFallbackChain(): Promise<string[]> {
         const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
-        return `--tv-quality=${videoQuality},hd,sd,web,mobile`;
+        return [...new Set([videoQuality, 'hd', 'sd', 'web', 'mobile'])];
     }
 
     async getAllDownloadParameters(pid: string, directory: string): Promise<SpawnExecutable> {
@@ -61,6 +69,32 @@ export class GetIplayerExecutableService {
             '--overwrite',
             '--force',
             '--log-progress',
+            `--pid=${pid}`,
+        ];
+
+        return {
+            exec,
+            args: allArgs,
+        };
+    }
+
+    // get_iplayer (v3.x, HLS/DASH-based) has no direct stdout-piping mode - --streaminfo is its
+    // equivalent of yt-dlp's -g: it resolves and prints the actual playable CDN URLs for a pid
+    // without downloading anything, one block of key:value lines per available stream variant.
+    async getAllStreamInfoParameters(pid: string): Promise<SpawnExecutable> {
+        const { exec, args } = await this.getIPlayerExec();
+
+        // --streaminfo enumerates EVERY available programme version (audiodescribed, combined,
+        // original...) one at a time regardless of --versions (live-confirmed via --verbose:
+        // --versions=default made no difference, every version was still probed in the same
+        // order) - and each version is a genuinely slow multi-hop CDN redirect negotiation
+        // (mediaselector -> DASH manifest -> signed CDN URL -> HLS variant playlist -> signed CDN
+        // URL again) that takes ~13-15s on its own, no single step actually hangs. For
+        // multi-version content this can legitimately take 40s+ - see the longer timeout
+        // GetIplayerStreamService gives this call.
+        const allArgs: string[] = [
+            ...args,
+            '--streaminfo',
             `--pid=${pid}`,
         ];
 

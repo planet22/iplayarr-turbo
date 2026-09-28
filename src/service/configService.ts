@@ -45,6 +45,10 @@ const configService = {
         DOWNLOAD_CLIENT: 'GET_IPLAYER',
         OUTPUT_FORMAT: 'mp4',
         AUTH_TYPE: 'form',
+        MEDIA_MODE: 'download',
+        STREAM_MODE: 'direct',
+        STREAM_CLIENT: 'GET_IPLAYER',
+        STREAM_NATIVE_ADAPTIVE: 'true',
     } as ConfigMap,
 
     getParameter: async (parameter: IplayarrParameter): Promise<string | undefined> => {

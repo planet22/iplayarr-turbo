@@ -14,4 +14,13 @@ export abstract class Validator {
     matchesRegex(val: string, regexp: RegExp): boolean {
         return regexp.test(val);
     }
+
+    isValidUrl(val: string): boolean {
+        try {
+            new URL(val);
+            return true;
+        } catch {
+            return false;
+        }
+    }
 }

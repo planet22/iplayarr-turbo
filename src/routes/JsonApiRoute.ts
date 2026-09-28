@@ -5,14 +5,18 @@ import scheduleFacade from '../facade/scheduleFacade';
 import searchFacade from '../facade/searchFacade';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
+import videoEventService from '../service/videoEventService';
 import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
+import { VideoEventType } from '../types/VideoEvent';
 import AppsRoute from './json-api/AppsRoute';
+import EventsRoute from './json-api/EventsRoute';
 import OffScheduleRoute from './json-api/OffScheduleRoute';
 import QueueRoute from './json-api/QueueRoute';
 import SettingsRoute from './json-api/SettingsRoute';
 import StatisticsRoute from './json-api/StatisticsRoute';
+import StreamRoute from './json-api/StreamRoute';
 import SynonymsRoute from './json-api/SynonymsRoute';
 
 const router: Router = Router();
@@ -23,6 +27,8 @@ router.use('/queue', QueueRoute);
 router.use('/offSchedule', OffScheduleRoute);
 router.use('/apps', AppsRoute);
 router.use('/stats', StatisticsRoute);
+router.use('/streams', StreamRoute);
+router.use('/events', EventsRoute);
 
 router.post('/nzb/test', async (req: Request, res: Response) => {
     const { NZB_URL, NZB_API_KEY, NZB_TYPE, NZB_USERNAME, NZB_PASSWORD } = req.body;
@@ -89,6 +95,7 @@ router.get('/download', async (req: Request, res: Response) => {
     }
 
     queueService.addToQueue(pid, nzbName, type);
+    videoEventService.record(VideoEventType.QUEUED, `Queued "${nzbName}" for download`, { pid });
     res.json({ status: true });
 });
 
