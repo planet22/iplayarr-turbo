@@ -17,6 +17,17 @@ router.get('/grabHistory', async (req: Request, res: Response) => {
     res.json(limit ? grabHistory.slice(limit * -1) : grabHistory);
 });
 
+router.get('/failedGrabHistory', async (req: Request, res: Response) => {
+    const { limit } = req.query as any as { limit?: number };
+    const failedGrabHistory = await statisticsService.getFailedGrabHistory();
+    res.json(limit ? failedGrabHistory.slice(limit * -1) : failedGrabHistory);
+});
+
+router.delete('/failedGrabHistory', async (_: Request, res: Response) => {
+    await statisticsService.clearFailedGrabHistory();
+    res.json({ status: true });
+});
+
 router.get('/uptime', async (_, res: Response) => {
     const uptime = await statisticsService.getUptime();
     res.json({ uptime });

@@ -1,6 +1,7 @@
 import { RequestHandler } from 'express';
 
 import DownloadEndpoint from '../endpoints/generic/DownloadEndpoint';
+import StreamEndpoint from '../endpoints/generic/StreamEndpoint';
 import CapsEndpoint from '../endpoints/newznab/CapsEndpoint';
 import SearchEndpoint from '../endpoints/newznab/SearchEndpoint';
 import AddFileEndpoint from '../endpoints/sabnzbd/AddFileEndpoint';
@@ -16,6 +17,7 @@ export interface EndpointDirectory {
 
 export const GenericEndpointDirectory: EndpointDirectory = {
     download: DownloadEndpoint,
+    stream: StreamEndpoint,
 };
 
 export const SabNZBDEndpointDirectory: EndpointDirectory = {

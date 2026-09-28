@@ -81,6 +81,13 @@ socketService.registerIo(io);
     if (!(await configService.getParameter(IplayarrParameter.API_KEY))) {
         await configService.setParameter(IplayarrParameter.API_KEY, uuidv4());
     }
+    // A separate secret from API_KEY, deliberately - .strm files sit in plaintext in the media
+    // library (readable by anything with filesystem access, not just Sonarr/Radarr), so they must
+    // never embed the same key that gates the whole Sonarr/Radarr protocol surface (search, grab,
+    // queue, history). Independently regenerable in Settings for the same reason.
+    if (!(await configService.getParameter(IplayarrParameter.STREAM_KEY))) {
+        await configService.setParameter(IplayarrParameter.STREAM_KEY, uuidv4());
+    }
 })();
 
 server.listen(port, () => {

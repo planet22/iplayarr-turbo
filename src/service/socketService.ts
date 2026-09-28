@@ -3,6 +3,8 @@ import { Server, Socket } from 'socket.io';
 import historyService from './historyService';
 import loggingService from './loggingService';
 import queueService from './queueService';
+import streamSessionService from './stream/streamSessionService';
+import videoEventService from './videoEventService';
 
 const sockets: {
     [key: string]: Socket;
@@ -26,6 +28,11 @@ const socketService = {
 
         socket.emit('queue', queue);
         socket.emit('history', history);
+        socket.emit('streams', {
+            active: streamSessionService.getActive(),
+            history: await streamSessionService.getHistory(),
+        });
+        socket.emit('videoEvents', await videoEventService.getEvents());
 
         socket.on('disconnect', () => {
             delete sockets[socket.id];
@@ -33,7 +40,7 @@ const socketService = {
     },
 
     emit: (subject: string, message: any) => {
-        (io as Server).emit(subject, message);
+        io?.emit(subject, message);
     },
 
     publish: (socketId: string, subject: string, message: any) => {

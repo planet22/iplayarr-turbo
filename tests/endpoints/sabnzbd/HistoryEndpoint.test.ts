@@ -92,5 +92,31 @@ describe('sabnzbdActionEndpoint', () => {
                 size: '1 MB',
             });
         });
+
+        it('reports a .strm item using its own recorded extension rather than the global OUTPUT_FORMAT', async () => {
+            const queueEntries: QueueEntry[] = [
+                {
+                    pid: 'id1',
+                    nzbName: 'strmfile',
+                    status: QueueEntryStatus.COMPLETE,
+                    details: { size: 1 },
+                    type: VideoType.TV,
+                    extension: 'strm',
+                },
+            ];
+
+            (historyService.getHistory as jest.Mock).mockResolvedValue(queueEntries);
+            (configService.getParameter as jest.Mock).mockResolvedValueOnce('/complete');
+            (configService.getParameter as jest.Mock).mockResolvedValueOnce('mp4');
+
+            await handler(req as Request, res as Response, next);
+
+            const responseArg = (res.json as jest.Mock).mock.calls[0][0];
+            expect(responseArg.history.slots[0]).toMatchObject({
+                name: 'strmfile.strm',
+                storage: '/complete/strmfile.strm',
+                path: '/complete/strmfile.strm',
+            });
+        });
     });
 });

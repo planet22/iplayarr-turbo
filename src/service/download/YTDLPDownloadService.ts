@@ -6,6 +6,7 @@ import { SpawnExecutable } from '../../types/GetIplayer/SpawnExecutable';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import configService from '../configService';
+import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
 
 class YTDLPDownloadService implements AbstractDownloadService {
@@ -39,6 +40,10 @@ class YTDLPDownloadService implements AbstractDownloadService {
                 executable.args.push(outputFormat);
 	    }
         }
+
+        // Works around a musl libc getaddrinfo bug that otherwise breaks yt-dlp's DNS resolution
+        // entirely in this VPN'd container - see dnsRelayService.ts for the full writeup.
+        await ensureDnsRelayRunning();
 
         const iplayerURL: string = `https://www.bbc.co.uk/iplayer/episode/${pid}`;
         const outputTemplate = `${directory}/%(title)s.%(ext)s`;

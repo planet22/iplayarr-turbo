@@ -2,6 +2,9 @@
     <div ref="lhn" class="LeftHandNav">
         <ul>
             <LeftHandNavLink label="Queue" icon="tasks" path="/queue" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Video Events" icon="film" path="/events" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="NZB" icon="satellite-dish" path="/nzb" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Logs" icon="history" path="/logs" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Apps" icon="laptop-code" path="/apps" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Synonyms" icon="arrows-rotate" path="/synonyms" @option-clicked="closeLHN" />

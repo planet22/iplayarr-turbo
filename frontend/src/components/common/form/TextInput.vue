@@ -4,12 +4,17 @@
         <div class="inputBox">
             <div :class="['inputWithButton', error ? 'error' : '']">
                 <input v-model="localValue" :type="typeOverride" :placeholder="placeholder" />
-                <button v-if="iconButton" :title="buttonTooltip" @click="emit('action')">
-                    <font-awesome-icon :icon="['fas', iconButton]" />
-                </button>
-                <button v-if="brandButton" :title="buttonTooltip" @click="emit('action')">
-                    <img class="brand" :src="`/img/${brandButton.toLowerCase()}.svg`" />
-                </button>
+                <div class="buttonGroup">
+                    <button v-if="copyable" type="button" title="Copy to clipboard" @click="copyValue">
+                        <font-awesome-icon :icon="['fas', copied ? 'check' : 'copy']" />
+                    </button>
+                    <button v-if="iconButton" type="button" :title="buttonTooltip" @click="emit('action')">
+                        <font-awesome-icon :icon="['fas', iconButton]" />
+                    </button>
+                    <button v-if="brandButton" type="button" :title="buttonTooltip" @click="emit('action')">
+                        <img class="brand" :src="`/img/${brandButton.toLowerCase()}.svg`" />
+                    </button>
+                </div>
             </div>
             <div v-if="error" class="error">
                 {{ error }}
@@ -59,11 +64,18 @@ const props = defineProps({
     iconButton: String,
     brandButton: String,
     buttonTooltip: String,
+    copyable: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
 });
 
 const emit = defineEmits(['update:modelValue', 'action']);
 
 const localValue = ref(props.modelValue);
+const copied = ref(false);
+let copiedTimeout;
 
 watch(localValue, (newValue) => {
     emit('update:modelValue', newValue);
@@ -75,6 +87,20 @@ watch(
         localValue.value = newValue;
     }
 );
+
+const copyValue = async () => {
+    try {
+        await navigator.clipboard.writeText(localValue.value ?? '');
+        copied.value = true;
+        clearTimeout(copiedTimeout);
+        copiedTimeout = setTimeout(() => {
+            copied.value = false;
+        }, 1500);
+    } catch {
+        // Clipboard API can be unavailable (insecure context, permissions) - nothing sensible to
+        // do beyond leaving the field selectable for a manual copy.
+    }
+};
 </script>
 
 <style lang="less" scoped>
@@ -115,11 +141,15 @@ watch(
             align-items: center;
             width: 100%;
 
-            button {
+            .buttonGroup {
                 position: absolute;
                 right: 0;
                 top: 50%;
                 transform: translateY(-50%);
+                display: flex;
+            }
+
+            button {
                 background-color: @settings-button-hover-background-color;
                 border: none;
                 cursor: pointer;
@@ -128,6 +158,10 @@ watch(
                 align-items: center;
                 justify-content: center;
                 border: 1px solid @input-border-color;
+
+                &:not(:first-child) {
+                    border-left: none;
+                }
 
                 .brand {
                     width: 15px;

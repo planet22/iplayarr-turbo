@@ -1,15 +1,24 @@
 import express from 'express';
+import fs from 'fs';
 import request from 'supertest';
 
 import SettingsRoute from '../../../src/routes/json-api/SettingsRoute';
 import configService from '../../../src/service/configService';
+import historyService from '../../../src/service/historyService';
+import videoEventService from '../../../src/service/videoEventService';
 import { qualityProfiles } from '../../../src/types/QualityProfiles';
+import { QueueEntry } from '../../../src/types/QueueEntry';
 import { ApiError, ApiResponse } from '../../../src/types/responses/ApiResponse';
+import { VideoEventType } from '../../../src/types/VideoEvent';
 import * as Utils from '../../../src/utils/Utils';
 import { ConfigFormValidator } from '../../../src/validators/ConfigFormValidator';
 
 jest.mock('../../../src/service/configService');
+jest.mock('../../../src/service/historyService');
+jest.mock('../../../src/service/videoEventService');
 const mockedConfigService = jest.mocked(configService);
+const mockedHistoryService = jest.mocked(historyService);
+const mockedVideoEventService = jest.mocked(videoEventService);
 
 const mockedConfigFormValidator: jest.Mocked<ConfigFormValidator> = {
     validate: jest.fn(),
@@ -17,6 +26,7 @@ const mockedConfigFormValidator: jest.Mocked<ConfigFormValidator> = {
     directoryExists: jest.fn(),
     isNumber: jest.fn(),
     matchesRegex: jest.fn(),
+    isValidUrl: jest.fn(),
 };
 jest.mock('../../../src/validators/ConfigFormValidator', () => ({
     ConfigFormValidator: jest.fn(() => mockedConfigFormValidator),
@@ -158,6 +168,77 @@ describe('SettingsRoute', () => {
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual(body);
             expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
+        });
+
+        describe('key rotation rewrites .strm files', () => {
+            const strmItem = { extension: 'strm', nzbName: 'Some.Show.S01E01' } as QueueEntry;
+            const nonStrmItem = { extension: 'mp4', nzbName: 'Some.Movie' } as QueueEntry;
+
+            beforeEach(() => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                mockedConfigService.setParameter.mockResolvedValue();
+                mockedHistoryService.getHistory.mockResolvedValue([strmItem, nonStrmItem]);
+                jest.spyOn(fs, 'readFileSync').mockReturnValue('http://host:4404/api?mode=stream&pid=abc123&apikey=old-key');
+                jest.spyOn(fs, 'writeFileSync').mockImplementation(() => undefined);
+            });
+
+            it('rewrites apikey= in every .strm file when API_KEY changes, and records a video event', async () => {
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'API_KEY') return 'old-key';
+                    if (key === 'COMPLETE_DIR') return '/complete';
+                    return undefined;
+                });
+
+                const response = await request(app).put('/').send({ API_KEY: 'new-key' });
+
+                expect(response.statusCode).toBe(200);
+                expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+                expect(fs.writeFileSync).toHaveBeenCalledWith(
+                    expect.stringContaining('Some.Show.S01E01.strm'),
+                    'http://host:4404/api?mode=stream&pid=abc123&apikey=new-key',
+                    'utf8'
+                );
+                expect(mockedVideoEventService.record).toHaveBeenCalledWith(
+                    VideoEventType.API_KEY_ROTATED,
+                    expect.stringContaining('1 .strm file')
+                );
+            });
+
+            it('rewrites streamkey= in every .strm file when STREAM_KEY changes, and records a separate video event', async () => {
+                jest.spyOn(fs, 'readFileSync').mockReturnValue('http://host:4404/api?mode=stream&pid=abc123&streamkey=old-stream-key');
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'STREAM_KEY') return 'old-stream-key';
+                    if (key === 'COMPLETE_DIR') return '/complete';
+                    return undefined;
+                });
+
+                const response = await request(app).put('/').send({ STREAM_KEY: 'new-stream-key' });
+
+                expect(response.statusCode).toBe(200);
+                expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+                expect(fs.writeFileSync).toHaveBeenCalledWith(
+                    expect.stringContaining('Some.Show.S01E01.strm'),
+                    'http://host:4404/api?mode=stream&pid=abc123&streamkey=new-stream-key',
+                    'utf8'
+                );
+                expect(mockedVideoEventService.record).toHaveBeenCalledWith(
+                    VideoEventType.STREAM_KEY_ROTATED,
+                    expect.stringContaining('1 .strm file')
+                );
+            });
+
+            it('does not rewrite anything if the key is unchanged', async () => {
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'API_KEY') return 'same-key';
+                    return undefined;
+                });
+
+                const response = await request(app).put('/').send({ API_KEY: 'same-key' });
+
+                expect(response.statusCode).toBe(200);
+                expect(fs.writeFileSync).not.toHaveBeenCalled();
+                expect(mockedVideoEventService.record).not.toHaveBeenCalled();
+            });
         });
     });
 

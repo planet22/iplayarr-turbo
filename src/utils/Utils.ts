@@ -3,6 +3,8 @@ import * as crypto from 'crypto';
 import { Request } from 'express';
 import fs from 'fs';
 import Handlebars from 'handlebars';
+import os from 'os';
+import path from 'path';
 import { deromanize } from 'romans';
 import { pipeline } from 'stream';
 
@@ -99,6 +101,29 @@ export async function createNZBDownloadLink(
         }
     }
     return `${baseUrl}/api?mode=nzb-download&pid=${encodeURIComponent(pid)}&nzbName=${encodeURIComponent(nzbName ?? '')}&type=${encodeURIComponent(type)}&apikey=${encodeURIComponent(apiKey)}${app ? `&app=${encodeURIComponent(app)}` : ''}`;
+}
+
+// No req context is available at download time (downloadFacade.download() is invoked from
+// queueService, not from an HTTP request), so the stream URL is built from the configured
+// STREAM_BASE_URL rather than derived per-request like createNZBDownloadLink above.
+// Uses STREAM_KEY, deliberately not API_KEY - see ApiRoute.ts's mode=stream branch for why.
+export async function createStrmContent(pid: string, streamKey: string): Promise<string> {
+    const streamBaseUrl: string = (await configService.getParameter(IplayarrParameter.STREAM_BASE_URL)) as string;
+    return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}`;
+}
+
+function removeTrailingSlash(url: string): string {
+    return url?.endsWith('/') ? url.slice(0, -1) : url;
+}
+
+// Any on-disk caching the streaming feature needs (e.g. get_iplayer/yt-dlp working files) must
+// stay out of DOWNLOAD_DIR/COMPLETE_DIR - those are watched by Sonarr/Radarr and the media
+// server library, and stray cache files there would show up as spurious library items.
+export async function getStreamCacheDir(): Promise<string> {
+    const configured: string | undefined = await configService.getParameter(IplayarrParameter.STREAM_CACHE_DIR);
+    const dir: string = configured || path.join(os.tmpdir(), 'iplayarr-stream-cache');
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
 }
 
 export async function getQualityProfile(): Promise<QualityProfile> {

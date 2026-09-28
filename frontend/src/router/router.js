@@ -7,13 +7,16 @@ import AppsPage from '@/views/AppsPage.vue';
 import DownloadPage from '@/views/DownloadPage.vue';
 import LoginPage from '@/views/LoginPage.vue';
 import LogsPage from '@/views/LogsPage.vue';
+import NzbPage from '@/views/NzbPage.vue';
 import OffSchedulePage from '@/views/OffSchedulePage.vue';
 import QueueInfoPage from '@/views/QueueInfoPage.vue';
 import QueuePage from '@/views/QueuePage.vue';
 import SearchPage from '@/views/SearchPage.vue';
 import SettingsPage from '@/views/SettingsPage.vue';
 import StatisticsPage from '@/views/StatisticsPage.vue';
+import StreamingPage from '@/views/StreamingPage.vue';
 import SynonymsPage from '@/views/SynonymsPage.vue';
+import VideoEventsPage from '@/views/VideoEventsPage.vue';
 
 const routes = [
     { path: '/', redirect: '/queue' },
@@ -29,6 +32,9 @@ const routes = [
     { path: '/offSchedule', component: OffSchedulePage },
     { path: '/apps', component: AppsPage },
     { path: '/stats', component: StatisticsPage },
+    { path: '/streaming', component: StreamingPage },
+    { path: '/events', component: VideoEventsPage },
+    { path: '/nzb', component: NzbPage },
 ];
 
 const router = createRouter({

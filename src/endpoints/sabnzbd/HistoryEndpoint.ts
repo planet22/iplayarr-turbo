@@ -53,17 +53,18 @@ const actionDirectory: EndpointDirectory = {
 
 function createHistoryEntry(completeDir: string, item: QueueEntry, outputFormat: string): SABNZBDHistoryEntryResponse {
     const failed = item.status == QueueEntryStatus.FAILED;
+    const extension = item.extension ?? outputFormat;
     return {
         ...historyEntrySkeleton,
         duplicate_key: item.pid,
         size: formatBytes((item.details?.size as number) * sizeFactor),
         nzb_name: `${item.nzbName}.nzb`,
-        storage: `${completeDir}/${item.nzbName}.${outputFormat}`,
+        storage: `${completeDir}/${item.nzbName}.${extension}`,
         completed: (item.details?.size as number) * sizeFactor,
         downloaded: (item.details?.size as number) * sizeFactor,
         nzo_id: item.pid,
-        path: `${completeDir}/${item.nzbName}.${outputFormat}`,
-        name: `${item.nzbName}.${outputFormat}`,
+        path: `${completeDir}/${item.nzbName}.${extension}`,
+        name: `${item.nzbName}.${extension}`,
         url: `${item.nzbName}.nzb`,
         bytes: (item.details?.size as number) * sizeFactor,
         status: failed ? HistoryStatus.FAILED : HistoryStatus.COMPLETED,

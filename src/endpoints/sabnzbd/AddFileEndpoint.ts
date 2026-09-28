@@ -5,9 +5,13 @@ import nzbFacade from '../../facade/nzbFacade';
 import appService from '../../service/appService';
 import loggingService from '../../service/loggingService';
 import queueService from '../../service/queueService';
+import statisticsService from '../../service/stats/StatisticsService';
+import videoEventService from '../../service/videoEventService';
 import { AppType } from '../../types/AppType';
+import { FailedGrabEntry } from '../../types/data/FailedGrabEntry';
 import { VideoType } from '../../types/IPlayerSearchResult';
 import { NZBMetaEntry } from '../../types/responses/newznab/NZBFileResponse';
+import { VideoEventType } from '../../types/VideoEvent';
 
 const parser = new Parser();
 
@@ -35,6 +39,7 @@ export default async (req: Request, res: Response) => {
             const xmlString = file.buffer.toString('utf-8');
             const { pid, nzbName, type, appId } = await getDetails(xmlString);
             queueService.addToQueue(pid, nzbName, type, appId);
+            videoEventService.record(VideoEventType.QUEUED, `Queued "${nzbName}" for download`, { pid });
             pids.push(pid);
         }
 
@@ -66,9 +71,15 @@ export default async (req: Request, res: Response) => {
                 }
             }
         }
+        const error = rejection.err?.message || 'Unable to add NZB, Unknown Error';
+        statisticsService.addFailedGrab({
+            nzbName: rejection.nzbName,
+            error,
+            time: new Date().getTime(),
+        } as FailedGrabEntry);
         res.status(500).json({
             status: false,
-            error: rejection.err?.message || 'Unable to add NZB, Unknown Error',
+            error,
         });
     }
 };

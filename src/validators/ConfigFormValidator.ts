@@ -58,6 +58,9 @@ export class ConfigFormValidator extends Validator {
                 validatorError['NZB_PASSWORD'] = response as string;
             }
         }
+        if (input.MEDIA_MODE === 'strm' && !this.isValidUrl(input.STREAM_BASE_URL)) {
+            validatorError['STREAM_BASE_URL'] = 'Please provide a valid base URL (e.g. http://jellyfin-host:4404)';
+        }
         if (input.AUTH_TYPE === 'oidc') {
             if (!input.OIDC_CONFIG_URL) {
                 validatorError['OIDC_CONFIG_URL'] = 'Please provide a valid OIDC configuration URL';
