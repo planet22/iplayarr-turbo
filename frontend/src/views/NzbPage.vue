@@ -18,7 +18,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="(entry, index) in reversedSearches" :key="index">
+                <tr v-for="(entry, index) in pagedSearches" :key="index">
                     <td>{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</td>
                     <td>{{ entry.results }}</td>
                     <td>{{ entry.series ?? '' }}</td>
@@ -31,6 +31,7 @@
                 </tr>
             </tbody>
         </table>
+        <Pagination v-model="searchPage" :total="reversedSearches.length" :page-size="pageSize" />
 
         <legend>Recent Grabs</legend>
         <table class="dataTable">
@@ -44,7 +45,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="(entry, index) in reversedGrabs" :key="index">
+                <tr v-for="(entry, index) in pagedGrabs" :key="index">
                     <td>{{ entry.pid }}</td>
                     <td>{{ entry.nzbName }}</td>
                     <td><span class="pill">{{ entry.type }}</span></td>
@@ -56,6 +57,7 @@
                 </tr>
             </tbody>
         </table>
+        <Pagination v-model="grabPage" :total="reversedGrabs.length" :page-size="pageSize" />
 
         <SettingsPageToolbar :icons="['delete']" delete-label="Clear Failed" @delete-queue-item="clearFailedGrabs" />
         <legend>Failed Grabs</legend>
@@ -69,7 +71,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="(entry, index) in reversedFailedGrabs" :key="index">
+                <tr v-for="(entry, index) in pagedFailedGrabs" :key="index">
                     <td>{{ entry.pid }}</td>
                     <td>{{ entry.nzbName }}</td>
                     <td class="text">{{ entry.error }}</td>
@@ -80,6 +82,7 @@
                 </tr>
             </tbody>
         </table>
+        <Pagination v-model="failedGrabPage" :total="reversedFailedGrabs.length" :page-size="pageSize" />
     </div>
 </template>
 
@@ -88,17 +91,33 @@ import { computed, onMounted, ref } from 'vue';
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import Pagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+
+const pageSize = 25;
 
 const searchHistory = ref([]);
 const grabHistory = ref([]);
 const failedGrabHistory = ref([]);
 const apps = ref([]);
 
+const searchPage = ref(1);
+const grabPage = ref(1);
+const failedGrabPage = ref(1);
+
 const reversedSearches = computed(() => [...searchHistory.value].reverse());
 const reversedGrabs = computed(() => [...grabHistory.value].reverse());
 const reversedFailedGrabs = computed(() => [...failedGrabHistory.value].reverse());
+
+function page(list, pageNumber) {
+    const start = (pageNumber - 1) * pageSize;
+    return list.slice(start, start + pageSize);
+}
+
+const pagedSearches = computed(() => page(reversedSearches.value, searchPage.value));
+const pagedGrabs = computed(() => page(reversedGrabs.value, grabPage.value));
+const pagedFailedGrabs = computed(() => page(reversedFailedGrabs.value, failedGrabPage.value));
 
 onMounted(async () => {
     await refresh();
@@ -125,6 +144,7 @@ const clearFailedGrabs = async () => {
     if (await dialogService.confirm('Clear Failed Grabs', 'Are you sure you want to clear the failed grabs log?')) {
         await ipFetch('json-api/stats/failedGrabHistory', 'DELETE');
         failedGrabHistory.value = [];
+        failedGrabPage.value = 1;
     }
 };
 </script>
