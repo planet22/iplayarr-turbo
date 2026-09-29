@@ -49,7 +49,7 @@ class IPlayerDetailsService {
             firstBroadcast: programme.first_broadcast_date ?? undefined,
             link: `https://www.bbc.co.uk/programmes/${pid}`,
             thumbnail: programme.image
-                ? `https://ichef.bbci.co.uk/images/ic/1920x1080/${programme.image.pid}.jpg`
+                ? `json-api/thumbnail/${programme.image.pid}.jpg`
                 : undefined,
             type,
         };

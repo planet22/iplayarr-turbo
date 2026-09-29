@@ -33,6 +33,7 @@
             :oidc-callback-tooltip="oidcCallbackTooltip"
             @test-oidc="testOIDC"
         />
+        <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" />
     </div>
     <LoadingIndicator v-if="loading" />
 </template>
@@ -49,6 +50,7 @@ import UpdateAppDialog from '@/components/modals/UpdateAppDialog.vue';
 import AuthenticationSettingsTab from '@/components/settings/AuthenticationSettingsTab.vue';
 import DownloadClientSettingsTab from '@/components/settings/DownloadClientSettingsTab.vue';
 import GeneralSettingsTab from '@/components/settings/GeneralSettingsTab.vue';
+import MaintenanceSettingsTab from '@/components/settings/MaintenanceSettingsTab.vue';
 import MediaManagementSettingsTab from '@/components/settings/MediaManagementSettingsTab.vue';
 import SettingsTabs from '@/components/settings/SettingsTabs.vue';
 import StreamingSettingsTab from '@/components/settings/StreamingSettingsTab.vue';
@@ -70,6 +72,7 @@ const tabs = [
     { key: 'downloadClient', label: 'Download Client' },
     { key: 'streaming', label: 'Streaming' },
     { key: 'authentication', label: 'Authentication' },
+    { key: 'maintenance', label: 'Maintenance' },
 ];
 const activeTab = ref('general');
 

@@ -18,7 +18,7 @@
                         <img
                             v-if="event.pid && detailsFor(event.pid)?.thumbnail"
                             class="thumbnail"
-                            :src="detailsFor(event.pid).thumbnail"
+                            :src="getThumbnailUrl(detailsFor(event.pid).thumbnail)"
                         />
                         <font-awesome-icon v-else-if="event.pid" class="thumbnail-placeholder" :icon="['fas', 'film']" />
                     </td>
@@ -50,7 +50,7 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
-import { formatDateTimeWithMillis } from '@/lib/utils';
+import { formatDateTimeWithMillis, getThumbnailUrl } from '@/lib/utils';
 
 const events = inject('videoEvents');
 const reversedEvents = computed(() => [...events.value].reverse());

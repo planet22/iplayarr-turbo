@@ -2,6 +2,12 @@ export const getHost = () => {
     return import.meta.env.DEV ? `http://${window.location.hostname}:4404` : '';
 };
 
+// IPlayerDetails.thumbnail is a relative json-api path (e.g. "json-api/thumbnail/abc123.jpg"),
+// mirroring how ipFetch resolves endpoints - resolve it against the API host the same way.
+export const getThumbnailUrl = (thumbnail) => {
+    return thumbnail ? `${getHost()}/${thumbnail}` : undefined;
+};
+
 export const getPidFromBBCUrl = (url) => {
     if (!url) {
         return undefined;

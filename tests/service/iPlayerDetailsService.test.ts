@@ -53,7 +53,7 @@ describe('iplayerDetailsService', () => {
             runtime: 30,
             firstBroadcast: '2024-12-01',
             link: 'https://www.bbc.co.uk/programmes/b1234567',
-            thumbnail: 'https://ichef.bbci.co.uk/images/ic/1920x1080/p09image.jpg',
+            thumbnail: 'json-api/thumbnail/p09image.jpg',
         });
     });
 

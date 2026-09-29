@@ -5,6 +5,7 @@ import scheduleFacade from '../facade/scheduleFacade';
 import searchFacade from '../facade/searchFacade';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
+import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
 import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
@@ -104,6 +105,24 @@ router.get('/download', async (req: Request, res: Response) => {
 router.get('/cache-refresh', async (_, res: Response) => {
     scheduleFacade.refreshCache();
     res.json({ status: true });
+});
+
+// /json-api/thumbnail/<imagePid>.jpg - the cached BBC episode still image that IPlayerDetails.thumbnail
+// points at. Behind the same /json-api/* session auth as everything else, so an <img>/background-image
+// referencing it works as-is (session cookie is sent same-site with credentials: 'include').
+router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Response) => {
+    const imagePid = req.params[0];
+    const filePath = await thumbnailCacheService.getOrFetch(imagePid);
+    if (!filePath) {
+        res.status(404).json({ error: ApiError.INTERNAL_ERROR, message: 'Thumbnail not found' } as ApiResponse);
+        return;
+    }
+    res.sendFile(filePath);
+});
+
+router.post('/thumbnail/cleanup', async (_, res: Response) => {
+    const deleted = await thumbnailCacheService.cleanup();
+    res.json({ status: true, deleted });
 });
 
 export default router;

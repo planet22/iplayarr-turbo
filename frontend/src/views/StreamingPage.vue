@@ -40,7 +40,7 @@
                         <img
                             v-if="detailsFor(session.pid)?.thumbnail"
                             class="thumbnail"
-                            :src="detailsFor(session.pid).thumbnail"
+                            :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
                         />
                     </td>
                     <td class="text">
@@ -125,7 +125,7 @@
                         <img
                             v-if="detailsFor(session.pid)?.thumbnail"
                             class="thumbnail"
-                            :src="detailsFor(session.pid).thumbnail"
+                            :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
                         />
                     </td>
                     <td class="text">
@@ -173,7 +173,7 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
-import { formatDateTimeWithMillis, formatStorageSize } from '@/lib/utils';
+import { formatDateTimeWithMillis, formatStorageSize, getThumbnailUrl } from '@/lib/utils';
 
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';

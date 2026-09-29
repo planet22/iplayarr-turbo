@@ -42,6 +42,7 @@ const configService = {
         RSS_FEED_HOURS: '48',
         NATIVE_SEARCH: 'true',
         ARCHIVE_ENABLED: 'false',
+        THUMBNAIL_RETENTION_DAYS: '30',
         DOWNLOAD_CLIENT: 'GET_IPLAYER',
         OUTPUT_FORMAT: 'mp4',
         AUTH_TYPE: 'form',
