@@ -9,6 +9,17 @@
     />
     <div v-if="!loading" class="inner-content scroll-x">
         <table class="resultsTable">
+            <colgroup>
+                <col style="width: 40px" />
+                <col style="width: 80px" />
+                <col />
+                <col style="width: 220px" />
+                <col style="width: 260px" />
+                <col style="width: 90px" />
+                <col style="width: 120px" />
+                <col style="width: 150px" />
+                <col style="width: 44px" />
+            </colgroup>
             <thead>
                 <tr>
                     <th>
@@ -169,6 +180,10 @@ watch(
     border-collapse: collapse;
     font-size: 14px;
     color: @table-text-color;
+    // Fixed so the <colgroup> widths above are authoritative regardless of cell content -
+    // without this, a page of short titles/filenames vs. one with long ones sizes columns
+    // differently, shifting everything sideways when paging between them.
+    table-layout: fixed;
 
     thead {
         th {
@@ -176,6 +191,9 @@ watch(
             border-bottom: 1px solid @table-border-color;
             text-align: left;
             font-weight: bold;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
     }
 
@@ -191,8 +209,14 @@ watch(
                 padding: 8px;
                 border-top: 1px solid @table-border-color;
                 line-height: 1.52857143;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
 
+                // Filenames can genuinely need the extra height - deliberately excluded from
+                // the single-line ellipsis truncation every other column gets.
                 &.wrap {
+                    white-space: normal;
                     word-break: break-word;
                 }
             }

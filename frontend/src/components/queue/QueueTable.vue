@@ -1,5 +1,18 @@
 <template>
     <table class="queueTable" summary="Hed">
+        <colgroup>
+            <col style="width: 36px" />
+            <col style="width: 32px" />
+            <col />
+            <col style="width: 70px" />
+            <col style="width: 90px" />
+            <col style="width: 90px" />
+            <col style="width: 140px" />
+            <col style="width: 130px" />
+            <col style="width: 70px" />
+            <col style="width: 90px" />
+            <col style="width: 44px" />
+        </colgroup>
         <thead>
             <tr>
                 <th>
@@ -92,6 +105,10 @@ watch(
     border-collapse: collapse;
     font-size: 14px;
     color: @table-text-color;
+    // Fixed so the <colgroup> widths above are authoritative regardless of cell content -
+    // without this, queue rows (often blank App/ETA/Speed columns) vs. history rows (all filled
+    // in) size columns differently, shifting everything sideways when paging through history.
+    table-layout: fixed;
 
     thead {
         th {
@@ -99,6 +116,9 @@ watch(
             text-align: left;
             font-weight: bold;
             border-bottom: 1px solid @table-border-color;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
     }
 
@@ -115,15 +135,26 @@ watch(
             padding: 8px;
             border-top: 1px solid @table-border-color;
             line-height: 1.5;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
 
             .appDisplay {
                 display: flex;
                 align-items: center;
                 gap: 6px;
                 height: 30px;
+                overflow: hidden;
 
                 .appImg {
                     width: 15px;
+                    flex-shrink: 0;
+                }
+
+                .appName {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
                 }
             }
         }
