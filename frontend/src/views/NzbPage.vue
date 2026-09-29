@@ -6,15 +6,38 @@
         </InfoBar>
 
         <legend>Recent Searches</legend>
+        <div class="tableToolbar">
+            <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
+        </div>
         <table class="dataTable">
+            <colgroup>
+                <col />
+                <col style="width: 80px" />
+                <col style="width: 80px" />
+                <col style="width: 80px" />
+                <col style="width: 100px" />
+                <col style="width: 160px" />
+            </colgroup>
             <thead>
                 <tr>
-                    <th>Term</th>
-                    <th>Results</th>
-                    <th>Season</th>
-                    <th>Episode</th>
-                    <th>App</th>
-                    <th>Time</th>
+                    <th class="sortable" @click="toggleSearchSort('term')">
+                        Term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleSearchSort('results')">
+                        Results <SortIcon :active="searchSortBy == 'results'" :order="searchSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleSearchSort('series')">
+                        Season <SortIcon :active="searchSortBy == 'series'" :order="searchSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleSearchSort('episode')">
+                        Episode <SortIcon :active="searchSortBy == 'episode'" :order="searchSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleSearchSort('app')">
+                        App <SortIcon :active="searchSortBy == 'app'" :order="searchSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleSearchSort('time')">
+                        Time <SortIcon :active="searchSortBy == 'time'" :order="searchSortOrder" />
+                    </th>
                 </tr>
             </thead>
             <tbody>
@@ -26,22 +49,42 @@
                     <td>{{ appName(entry.appId) }}</td>
                     <td>{{ formatDate(entry.time) }}</td>
                 </tr>
-                <tr v-if="reversedSearches.length == 0">
+                <tr v-if="sortedSearches.length == 0">
                     <td colspan="6" class="empty">No searches recorded yet</td>
                 </tr>
             </tbody>
         </table>
-        <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="reversedSearches.length" />
+        <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
 
         <legend>Recent Grabs</legend>
+        <div class="tableToolbar">
+            <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
+        </div>
         <table class="dataTable">
+            <colgroup>
+                <col style="width: 110px" />
+                <col />
+                <col style="width: 80px" />
+                <col style="width: 100px" />
+                <col style="width: 160px" />
+            </colgroup>
             <thead>
                 <tr>
-                    <th>PID</th>
-                    <th>Name</th>
-                    <th>Type</th>
-                    <th>App</th>
-                    <th>Time</th>
+                    <th class="sortable" @click="toggleGrabSort('pid')">
+                        PID <SortIcon :active="grabSortBy == 'pid'" :order="grabSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleGrabSort('nzbName')">
+                        Name <SortIcon :active="grabSortBy == 'nzbName'" :order="grabSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleGrabSort('type')">
+                        Type <SortIcon :active="grabSortBy == 'type'" :order="grabSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleGrabSort('app')">
+                        App <SortIcon :active="grabSortBy == 'app'" :order="grabSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleGrabSort('time')">
+                        Time <SortIcon :active="grabSortBy == 'time'" :order="grabSortOrder" />
+                    </th>
                 </tr>
             </thead>
             <tbody>
@@ -52,22 +95,39 @@
                     <td>{{ appName(entry.appId) }}</td>
                     <td>{{ formatDate(entry.time) }}</td>
                 </tr>
-                <tr v-if="reversedGrabs.length == 0">
+                <tr v-if="sortedGrabs.length == 0">
                     <td colspan="5" class="empty">No grabs recorded yet</td>
                 </tr>
             </tbody>
         </table>
-        <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="reversedGrabs.length" />
+        <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
 
         <SettingsPageToolbar :icons="['delete']" delete-label="Clear Failed" @delete-queue-item="clearFailedGrabs" />
         <legend>Failed Grabs</legend>
+        <div class="tableToolbar">
+            <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
+        </div>
         <table class="dataTable">
+            <colgroup>
+                <col style="width: 110px" />
+                <col />
+                <col style="width: 300px" />
+                <col style="width: 160px" />
+            </colgroup>
             <thead>
                 <tr>
-                    <th>PID</th>
-                    <th>Name</th>
-                    <th>Error</th>
-                    <th>Time</th>
+                    <th class="sortable" @click="toggleFailedGrabSort('pid')">
+                        PID <SortIcon :active="failedGrabSortBy == 'pid'" :order="failedGrabSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleFailedGrabSort('nzbName')">
+                        Name <SortIcon :active="failedGrabSortBy == 'nzbName'" :order="failedGrabSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleFailedGrabSort('error')">
+                        Error <SortIcon :active="failedGrabSortBy == 'error'" :order="failedGrabSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleFailedGrabSort('time')">
+                        Time <SortIcon :active="failedGrabSortBy == 'time'" :order="failedGrabSortOrder" />
+                    </th>
                 </tr>
             </thead>
             <tbody>
@@ -77,24 +137,26 @@
                     <td class="text">{{ entry.error }}</td>
                     <td>{{ formatDate(entry.time) }}</td>
                 </tr>
-                <tr v-if="reversedFailedGrabs.length == 0">
+                <tr v-if="sortedFailedGrabs.length == 0">
                     <td colspan="4" class="empty">No failed grabs</td>
                 </tr>
             </tbody>
         </table>
-        <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="reversedFailedGrabs.length" />
+        <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="sortedFailedGrabs.length" />
     </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { useSortFilter } from '@/lib/useSortFilter';
 import { formatDateTimeWithMillis } from '@/lib/utils';
 
 const searchHistory = ref([]);
@@ -102,19 +164,64 @@ const grabHistory = ref([]);
 const failedGrabHistory = ref([]);
 const apps = ref([]);
 
-const reversedSearches = computed(() => [...searchHistory.value].reverse());
-const reversedGrabs = computed(() => [...grabHistory.value].reverse());
-const reversedFailedGrabs = computed(() => [...failedGrabHistory.value].reverse());
+function appName(appId) {
+    if (!appId) return '';
+    return apps.value.find(({ id }) => id == appId)?.name ?? '';
+}
+
+const {
+    filterText: searchFilterText, sortBy: searchSortBy, sortOrder: searchSortOrder, sorted: sortedSearches, toggleSort: toggleSearchSort,
+} = useSortFilter(searchHistory, {
+    filterFn: (entry, query) => [
+        entry.term == '*' ? 'RSS Feed' : entry.term,
+        appName(entry.appId),
+    ].some((value) => String(value ?? '').toLowerCase().includes(query)),
+    sortAccessors: {
+        term: (entry) => (entry.term == '*' ? 'RSS Feed' : entry.term ?? ''),
+        results: (entry) => entry.results,
+        series: (entry) => entry.series,
+        episode: (entry) => entry.episode,
+        app: (entry) => appName(entry.appId),
+        time: (entry) => entry.time,
+    },
+});
+
+const {
+    filterText: grabFilterText, sortBy: grabSortBy, sortOrder: grabSortOrder, sorted: sortedGrabs, toggleSort: toggleGrabSort,
+} = useSortFilter(grabHistory, {
+    filterFn: (entry, query) => [entry.pid, entry.nzbName, entry.type, appName(entry.appId)]
+        .some((value) => String(value ?? '').toLowerCase().includes(query)),
+    sortAccessors: {
+        pid: (entry) => entry.pid,
+        nzbName: (entry) => entry.nzbName,
+        type: (entry) => entry.type,
+        app: (entry) => appName(entry.appId),
+        time: (entry) => entry.time,
+    },
+});
+
+const {
+    filterText: failedGrabFilterText, sortBy: failedGrabSortBy, sortOrder: failedGrabSortOrder, sorted: sortedFailedGrabs, toggleSort: toggleFailedGrabSort,
+} = useSortFilter(failedGrabHistory, {
+    filterFn: (entry, query) => [entry.pid, entry.nzbName, entry.error]
+        .some((value) => String(value ?? '').toLowerCase().includes(query)),
+    sortAccessors: {
+        pid: (entry) => entry.pid,
+        nzbName: (entry) => entry.nzbName,
+        error: (entry) => entry.error,
+        time: (entry) => entry.time,
+    },
+});
 
 const {
     page: searchPage, pageSize: searchPageSize, pagedItems: pagedSearches,
-} = usePagination(reversedSearches);
+} = usePagination(sortedSearches);
 const {
     page: grabPage, pageSize: grabPageSize, pagedItems: pagedGrabs,
-} = usePagination(reversedGrabs);
+} = usePagination(sortedGrabs);
 const {
     page: failedGrabPage, pageSize: failedGrabPageSize, pagedItems: pagedFailedGrabs,
-} = usePagination(reversedFailedGrabs);
+} = usePagination(sortedFailedGrabs);
 
 onMounted(async () => {
     await refresh();
@@ -125,11 +232,6 @@ async function refresh() {
     searchHistory.value = (await ipFetch('json-api/stats/searchHistory?filterRss=true')).data;
     grabHistory.value = (await ipFetch('json-api/stats/grabHistory')).data;
     failedGrabHistory.value = (await ipFetch('json-api/stats/failedGrabHistory')).data;
-}
-
-function appName(appId) {
-    if (!appId) return '';
-    return apps.value.find(({ id }) => id == appId)?.name ?? '';
 }
 
 function formatDate(time) {
