@@ -5,8 +5,10 @@ import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
 import queueService from '../../src/service/queueService';
 import statisticsService from '../../src/service/stats/StatisticsService';
+import videoEventService from '../../src/service/videoEventService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
+import { VideoEventType } from '../../src/types/VideoEvent';
 
 jest.mock('../../src/service/stats/StatisticsService');
 
@@ -35,6 +37,13 @@ jest.mock('../../src/service/historyService', () => ({
     __esModule: true,
     default: {
         addArchive: jest.fn(),
+    },
+}));
+
+jest.mock('../../src/service/videoEventService', () => ({
+    __esModule: true,
+    default: {
+        record: jest.fn(),
     },
 }));
 
@@ -114,6 +123,11 @@ describe('queueService', () => {
             queueService.cancelItem('killme');
             expect(mockSpawn).toHaveBeenCalledWith('kill', ['-9', '1234']);
             expect(queueService.getFromQueue('killme')).toBeUndefined();
+            expect(videoEventService.record).toHaveBeenCalledWith(
+                VideoEventType.CANCELLED,
+                'Cancelled "Kill NZB"',
+                { pid: 'killme' }
+            );
         });
 
         it('archives the item if requested', () => {

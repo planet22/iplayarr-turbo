@@ -6,10 +6,12 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
+import { VideoEventType } from '../types/VideoEvent';
 import configService from './configService';
 import historyService from './historyService';
 import socketService from './socketService';
 import StatisticsService from './stats/StatisticsService';
+import videoEventService from './videoEventService';
 
 let queue: QueueEntry[] = [];
 
@@ -73,17 +75,16 @@ const queueService = {
     },
 
     cancelItem: (pid: string, archive: boolean = false): void => {
-        for (const queueItem of queue) {
-            if (queueItem.process && queueItem.pid == pid) {
-                spawn('kill', ['-9', String(queueItem.process.pid)]);
+        const queueItem: QueueEntry | undefined = queue.find(({ pid: id }) => id == pid);
+        for (const item of queue) {
+            if (item.process && item.pid == pid) {
+                spawn('kill', ['-9', String(item.process.pid)]);
             }
         }
-        if (archive) {
-            const queueItem: QueueEntry | undefined = queue.find(({ pid: id }) => id == pid);
-            if (queueItem) {
-                historyService.addArchive(queueItem);
-            }
+        if (archive && queueItem) {
+            historyService.addArchive(queueItem);
         }
+        videoEventService.record(VideoEventType.CANCELLED, `Cancelled "${queueItem?.nzbName ?? pid}"`, { pid });
         queueService.removeFromQueue(pid);
     },
 

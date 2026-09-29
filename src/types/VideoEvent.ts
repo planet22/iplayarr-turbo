@@ -7,6 +7,10 @@ export enum VideoEventType {
     STREAM_ENDED = 'stream_ended',
     API_KEY_ROTATED = 'api_key_rotated',
     STREAM_KEY_ROTATED = 'stream_key_rotated',
+    NZB_RELAYED = 'nzb_relayed',
+    NZB_RELAY_FAILED = 'nzb_relay_failed',
+    CANCELLED = 'cancelled',
+    HISTORY_REMOVED = 'history_removed',
 }
 
 export type VideoEventLevel = 'info' | 'warn' | 'error';

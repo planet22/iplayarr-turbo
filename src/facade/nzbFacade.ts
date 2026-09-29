@@ -5,10 +5,12 @@ import historyService from '../service/historyService';
 import loggingService from '../service/loggingService';
 import NZBGetService from '../service/nzb/NZBGetService';
 import SabNZBDService from '../service/nzb/SabNZBDService';
+import videoEventService from '../service/videoEventService';
 import { App } from '../types/App';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
+import { VideoEventType } from '../types/VideoEvent';
 
 class NZBFacade {
     async testConnection(
@@ -34,14 +36,26 @@ class NZBFacade {
 
     async addFile(app: App, files: Express.Multer.File[], nzbName?: string): Promise<AxiosResponse> {
         loggingService.log(`Received Real NZB, trying to add ${nzbName} to ${app.name}`);
-        this.createRelayEntry(app, nzbName);
+        const pid = this.createRelayEntry(app, nzbName);
         const service = this.#getService(app.type.toString().toLowerCase());
-        return service.addFile(app, files);
+        try {
+            const response = await service.addFile(app, files);
+            videoEventService.record(VideoEventType.NZB_RELAYED, `Relayed "${nzbName}" to ${app.name}`, { pid });
+            return response;
+        } catch (err) {
+            videoEventService.record(
+                VideoEventType.NZB_RELAY_FAILED,
+                `Failed to relay "${nzbName}" to ${app.name}`,
+                { pid, level: 'error' }
+            );
+            throw err;
+        }
     }
 
-    createRelayEntry({ id: appId }: App, nzbName?: string): void {
+    createRelayEntry({ id: appId }: App, nzbName?: string): string {
+        const pid = v4();
         const relayEntry: QueueEntry = {
-            pid: v4(),
+            pid,
             status: QueueEntryStatus.FORWARDED,
             nzbName: nzbName || 'Unknown',
             type: VideoType.UNKNOWN,
@@ -51,6 +65,7 @@ class NZBFacade {
             },
         };
         historyService.addRelay(relayEntry);
+        return pid;
     }
 }
 

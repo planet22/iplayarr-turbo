@@ -15,11 +15,18 @@ jest.mock('../../src/service/socketService', () => ({
     default: { emit: jest.fn() },
 }));
 
+jest.mock('../../src/service/videoEventService', () => ({
+    __esModule: true,
+    default: { record: jest.fn() },
+}));
+
 import historyService from '../../src/service/historyService';
 import socketService from '../../src/service/socketService';
+import videoEventService from '../../src/service/videoEventService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntry } from '../../src/types/QueueEntry';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
+import { VideoEventType } from '../../src/types/VideoEvent';
 
 const sampleEntry: QueueEntry = {
     pid: '123',
@@ -90,5 +97,15 @@ describe('historyService', () => {
         ]);
         await historyService.removeHistory('123');
         expect(mockSetItem).toHaveBeenCalledWith('history', [expect.objectContaining({ pid: '456' })]);
+    });
+
+    it('removeHistory records a HISTORY_REMOVED video event', async () => {
+        mockGetItem.mockResolvedValue([{ ...sampleEntry, pid: '123' }]);
+        await historyService.removeHistory('123');
+        expect(videoEventService.record).toHaveBeenCalledWith(
+            VideoEventType.HISTORY_REMOVED,
+            'Removed "Test NZB" from history',
+            { pid: '123' }
+        );
     });
 });
