@@ -49,6 +49,8 @@ const configService = {
         STREAM_MODE: 'direct',
         STREAM_CLIENT: 'GET_IPLAYER',
         STREAM_NATIVE_ADAPTIVE: 'true',
+        STREAM_NATIVE_HQ_PROBE: 'false',
+        STREAM_NATIVE_EXPERIMENTAL_FHD: 'false',
     } as ConfigMap,
 
     getParameter: async (parameter: IplayarrParameter): Promise<string | undefined> => {
