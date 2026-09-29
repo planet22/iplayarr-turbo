@@ -155,7 +155,20 @@ function cellTitle(index) {
     gap: 3px;
     max-height: 320px;
     overflow-y: auto;
+    overflow-x: hidden;
     justify-content: start;
+
+    // A definite width (not min-width) breaks the circularity between the fit-content-sized
+    // modal and the auto-fill grid: with min-width, the modal's max-width:80vw cap could still
+    // land the grid a few px short of a whole column count (overflow-y:auto forces overflow-x
+    // to auto too, per spec, producing a scrollbar) or, past that cap with overflow-x:hidden,
+    // clip real columns off the right edge. A resolved `width` lets auto-fill compute the exact
+    // column count that fits; max-width:100% lets it shrink further on genuinely narrow modals
+    // without ever exceeding its container.
+    @media (min-width: @mobile-breakpoint) {
+        width: 650px;
+        max-width: 100%;
+    }
 
     &.expanded {
         .segCell {
