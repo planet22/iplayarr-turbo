@@ -66,3 +66,14 @@ export function formatDate(dateString, dateStyle, timeStyle) {
               hour12: true,
           }).format(date);
 }
+
+export function formatDateTimeWithMillis(dateString) {
+    const date = dateString != null ? new Date(dateString) : undefined;
+    if (isNaN(date?.getTime())) {
+        return undefined;
+    }
+    const datePart = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(date);
+    const timePart = new Intl.DateTimeFormat('en-GB', { timeStyle: 'medium', hour12: false }).format(date);
+    const millis = String(date.getMilliseconds()).padStart(3, '0');
+    return `${datePart} ${timePart}.${millis}`;
+}

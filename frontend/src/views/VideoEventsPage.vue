@@ -50,6 +50,7 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { formatDateTimeWithMillis } from '@/lib/utils';
 
 const events = inject('videoEvents');
 const reversedEvents = computed(() => [...events.value].reverse());
@@ -83,7 +84,7 @@ onMounted(loadMissingDetails);
 watch(events, loadMissingDetails);
 
 function formatDate(value) {
-    return value ? new Date(value).toLocaleString() : '';
+    return value ? formatDateTimeWithMillis(value) : '';
 }
 
 const clearEvents = async () => {

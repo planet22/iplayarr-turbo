@@ -125,7 +125,7 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
-import { formatStorageSize } from '@/lib/utils';
+import { formatDateTimeWithMillis, formatStorageSize } from '@/lib/utils';
 
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
@@ -175,7 +175,7 @@ function clientLabel(client) {
 }
 
 function formatDate(value) {
-    return value ? new Date(value).toLocaleString() : '';
+    return value ? formatDateTimeWithMillis(value) : '';
 }
 
 function formatDuration(start, end) {

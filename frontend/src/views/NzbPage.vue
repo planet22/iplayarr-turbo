@@ -95,6 +95,7 @@ import Pagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { formatDateTimeWithMillis } from '@/lib/utils';
 
 const searchHistory = ref([]);
 const grabHistory = ref([]);
@@ -133,7 +134,7 @@ function appName(appId) {
 
 function formatDate(time) {
     if (!time) return '';
-    return new Date(time).toLocaleString();
+    return formatDateTimeWithMillis(time);
 }
 
 const clearFailedGrabs = async () => {
