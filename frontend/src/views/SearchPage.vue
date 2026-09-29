@@ -9,6 +9,17 @@
     />
     <div v-if="!loading" class="inner-content scroll-x">
         <table class="resultsTable">
+            <colgroup>
+                <col style="width: 40px" />
+                <col style="width: 80px" />
+                <col />
+                <col style="width: 220px" />
+                <col style="width: 260px" />
+                <col style="width: 90px" />
+                <col style="width: 120px" />
+                <col style="width: 150px" />
+                <col style="width: 44px" />
+            </colgroup>
             <thead>
                 <tr>
                     <th>
@@ -27,7 +38,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="result of filteredResults" :key="result.pid" class="clickable">
+                <tr v-for="result of pagedResults" :key="result.pid" class="clickable">
                     <td>
                         <CheckInput v-model="result.checked" />
                     </td>
@@ -67,6 +78,7 @@
                 </tr>
             </tbody>
         </table>
+        <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
         <template v-if="filteredResults.length == 0">
             <p>No Results Found</p>
         </template>
@@ -81,8 +93,10 @@ import { useRoute, useRouter } from 'vue-router';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { usePagination } from '@/lib/usePagination';
 import { formatDate, formatStorageSize } from '@/lib/utils';
 
 const route = useRoute();
@@ -100,6 +114,10 @@ const filteredResults = computed(() => {
         ? searchResults.value
         : searchResults.value.filter(({ type }) => type == filter.value.toUpperCase());
 });
+
+const {
+    page: resultsPage, pageSize: resultsPageSize, pagedItems: pagedResults,
+} = usePagination(filteredResults);
 
 watch(
     () => route.query.searchTerm,
@@ -141,6 +159,7 @@ const multipleImmediateDownload = async () => {
 
 const selectFilter = (option) => {
     filter.value = option;
+    resultsPage.value = 1;
 };
 
 watch(
@@ -161,6 +180,10 @@ watch(
     border-collapse: collapse;
     font-size: 14px;
     color: @table-text-color;
+    // Fixed so the <colgroup> widths above are authoritative regardless of cell content -
+    // without this, a page of short titles/filenames vs. one with long ones sizes columns
+    // differently, shifting everything sideways when paging between them.
+    table-layout: fixed;
 
     thead {
         th {
@@ -168,6 +191,9 @@ watch(
             border-bottom: 1px solid @table-border-color;
             text-align: left;
             font-weight: bold;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
     }
 
@@ -183,8 +209,14 @@ watch(
                 padding: 8px;
                 border-top: 1px solid @table-border-color;
                 line-height: 1.52857143;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
 
+                // Filenames can genuinely need the extra height - deliberately excluded from
+                // the single-line ellipsis truncation every other column gets.
                 &.wrap {
+                    white-space: normal;
                     word-break: break-word;
                 }
             }

@@ -1,7 +1,9 @@
 import { QueuedStorage } from '../types/QueuedStorage';
 import { QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
+import { VideoEventType } from '../types/VideoEvent';
 import socketService from './socketService';
+import videoEventService from './videoEventService';
 const storage: QueuedStorage = new QueuedStorage();
 
 const historyService = {
@@ -48,6 +50,7 @@ const historyService = {
         history = history.filter(({ pid: historyPid }) => historyPid !== pid);
         await storage.setItem('history', history);
         socketService.emit('history', history);
+        videoEventService.record(VideoEventType.HISTORY_REMOVED, `Removed "${historyItem?.nzbName ?? pid}" from history`, { pid });
         if (historyItem && archive) {
             historyService.addArchive(historyItem as QueueEntry, QueueEntryStatus.REMOVED);
         }

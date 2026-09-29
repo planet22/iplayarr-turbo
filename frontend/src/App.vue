@@ -7,6 +7,7 @@
         </div>
     </div>
     <ModalsContainer />
+    <ConnectionLostOverlay />
 </template>
 
 <script setup>
@@ -17,6 +18,7 @@ import { RouterView } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
 
+import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue';
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
 import { enforceMaxLength } from './lib/utils';
@@ -33,6 +35,8 @@ const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, vi
     ref([]),
     ref({}),
 ];
+
+const isConnected = ref(true);
 
 const navBar = ref(null);
 
@@ -52,6 +56,7 @@ const toggleLeftHandNav = () => {
 provide('queue', queue);
 provide('history', history);
 provide('socket', socket);
+provide('isConnected', isConnected);
 provide('logs', logs);
 provide('updateQueue', updateQueue);
 provide('toggleLeftHandNav', toggleLeftHandNav);
@@ -101,6 +106,14 @@ const pageSetup = async () => {
 
         socket.value.on('videoEvents', (data) => {
             videoEvents.value = data;
+        });
+
+        socket.value.on('connect', () => {
+            isConnected.value = true;
+        });
+
+        socket.value.on('disconnect', () => {
+            isConnected.value = false;
         });
 
         hiddenSettings.value = (await ipFetch('json-api/config/hiddenSettings')).data;

@@ -5,15 +5,18 @@ import historyService from '../../src/service/historyService';
 import loggingService from '../../src/service/loggingService';
 import NZBGetService from '../../src/service/nzb/NZBGetService';
 import SabNZBDService from '../../src/service/nzb/SabNZBDService';
+import videoEventService from '../../src/service/videoEventService';
 import { App } from '../../src/types/App';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
+import { VideoEventType } from '../../src/types/VideoEvent';
 
 jest.mock('uuid', () => ({ v4: jest.fn(() => 'mock-uuid') }));
 jest.mock('../../src/service/historyService');
 jest.mock('../../src/service/loggingService');
 jest.mock('../../src/service/nzb/NZBGetService');
 jest.mock('../../src/service/nzb/SabNZBDService');
+jest.mock('../../src/service/videoEventService');
 
 describe('NZBFacade', () => {
     const app: App = {
@@ -72,6 +75,25 @@ describe('NZBFacade', () => {
             }));
             expect(addFileMock).toHaveBeenCalledWith(app, [fakeFile]);
             expect(result).toEqual({ data: 'ok' });
+            expect(videoEventService.record).toHaveBeenCalledWith(
+                VideoEventType.NZB_RELAYED,
+                'Relayed "MyNZB" to TestApp',
+                { pid: 'mock-uuid' }
+            );
+        });
+
+        it('should record a failure event and rethrow when the service call fails', async () => {
+            const error = new Error('upstream boom');
+            const addFileMock = jest.fn().mockRejectedValue(error);
+            (SabNZBDService.addFile as jest.Mock) = addFileMock;
+
+            await expect(NZBFacade.addFile(app, [fakeFile], 'MyNZB')).rejects.toThrow(error);
+
+            expect(videoEventService.record).toHaveBeenCalledWith(
+                VideoEventType.NZB_RELAY_FAILED,
+                'Failed to relay "MyNZB" to TestApp',
+                { pid: 'mock-uuid', level: 'error' }
+            );
         });
     });
 

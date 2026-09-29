@@ -72,7 +72,13 @@ const streamSessionService = {
     // /videos/{id}/master.m3u8 URL, not on what it hands to ffmpeg as input). A dedup keyed on
     // clientIp would incorrectly end one real viewer's session the moment a second person started
     // watching the same show - worse than the cosmetic double-row-for-90s this leaves instead.
-    start: async (pid: string, mode: StreamMode, client: StreamClient, clientIp?: string): Promise<string> => {
+    start: async (
+        pid: string,
+        mode: StreamMode,
+        client: StreamClient,
+        clientIp?: string,
+        settings?: Record<string, string>
+    ): Promise<string> => {
         const session: StreamSession = {
             id: uuidv4(),
             pid,
@@ -81,11 +87,23 @@ const streamSessionService = {
             clientIp,
             startedAt: new Date(),
             lastActivityAt: new Date(),
+            settings,
         };
         active.push(session);
         await streamSessionService.emitStreams();
         videoEventService.record(VideoEventType.STREAM_STARTED, `Started streaming (${mode} via ${client})`, { pid });
         return session.id;
+    },
+
+    // Called once a stream service has actually resolved a playable URL (not at session start,
+    // since resolving is what takes the time) - see StreamSession.resolution for why this is kept
+    // separate from `settings` (a target/preference snapshotted at start) rather than merged into it.
+    setResolution: (id: string, resolution: string): void => {
+        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        if (session && session.resolution !== resolution) {
+            session.resolution = resolution;
+            streamSessionService.emitStreams();
+        }
     },
 
     // For progressive-mkv, a genuine single long-lived connection: ends the session the instant

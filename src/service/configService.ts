@@ -42,6 +42,7 @@ const configService = {
         RSS_FEED_HOURS: '48',
         NATIVE_SEARCH: 'true',
         ARCHIVE_ENABLED: 'false',
+        THUMBNAIL_RETENTION_DAYS: '30',
         DOWNLOAD_CLIENT: 'GET_IPLAYER',
         OUTPUT_FORMAT: 'mp4',
         AUTH_TYPE: 'form',
@@ -49,6 +50,8 @@ const configService = {
         STREAM_MODE: 'direct',
         STREAM_CLIENT: 'GET_IPLAYER',
         STREAM_NATIVE_ADAPTIVE: 'true',
+        STREAM_NATIVE_HQ_PROBE: 'false',
+        STREAM_NATIVE_EXPERIMENTAL_FHD: 'false',
     } as ConfigMap,
 
     getParameter: async (parameter: IplayarrParameter): Promise<string | undefined> => {

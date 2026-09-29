@@ -126,6 +126,16 @@ export async function getStreamCacheDir(): Promise<string> {
     return dir;
 }
 
+// Cached BBC episode thumbnails - fetched once per image pid then reused, instead of every
+// page view hitting ichef.bbci.co.uk directly. Kept out of DOWNLOAD_DIR/COMPLETE_DIR for the
+// same reason as getStreamCacheDir above.
+export async function getThumbnailCacheDir(): Promise<string> {
+    const configured: string | undefined = await configService.getParameter(IplayarrParameter.THUMBNAIL_CACHE_DIR);
+    const dir: string = configured || path.join(os.tmpdir(), 'iplayarr-thumbnail-cache');
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+}
+
 export async function getQualityProfile(): Promise<QualityProfile> {
     const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
     const profile = qualityProfiles.find(({ id }) => id == videoQuality) as QualityProfile;

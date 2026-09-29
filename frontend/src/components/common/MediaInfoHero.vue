@@ -1,5 +1,5 @@
 <template>
-    <div class="infoBanner" :style="{ 'background-image': `url(${details.thumbnail})` }">
+    <div class="infoBanner" :style="{ 'background-image': `url(${getThumbnailUrl(details.thumbnail)})` }">
         <div class="infoContainer">
             <h1>{{ title }}</h1>
             <h2 v-if="details.episodeTitle || subtitle">
@@ -42,7 +42,7 @@
 import { computed, defineProps, inject, ref, watch } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
-import { formatDate } from '@/lib/utils';
+import { formatDate, getThumbnailUrl } from '@/lib/utils';
 
 import LoadingIndicator from './LoadingIndicator.vue';
 

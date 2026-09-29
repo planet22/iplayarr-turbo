@@ -12,12 +12,39 @@ import YTDLPStreamService from '../../service/stream/YTDLPStreamService';
 import { StreamClient } from '../../types/enums/StreamClient';
 import { StreamMode } from '../../types/enums/StreamMode';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
+import { qualityProfiles } from '../../types/QualityProfiles';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 
 // Media-server library scans (ffprobe) hit .strm URLs on every scan. Probing doesn't need a
 // transcode - just enough of the stream to read its headers/codec info - so probes are always
 // served with the cheapest mode (direct) regardless of the configured StreamMode.
 const probeUserAgentRegex = /Lavf|ffprobe/i;
+
+// Snapshot of the config actually in effect for a session at start time - shown on the Streaming
+// page (active + history) alongside mode/client, mirroring Youtarr's StreamHistory settings
+// columns, so "what was this stream actually configured to do" survives even after the live
+// config is later changed. Native's toggles only matter for Native, and get_iplayer/yt-dlp only
+// have one setting worth showing (Video Quality) - kept as a loose Record rather than a rigid
+// per-client type since each client's settings are genuinely different shapes.
+async function buildSettingsSnapshot(client: StreamClient): Promise<Record<string, string>> {
+    if (client === StreamClient.NATIVE) {
+        const [adaptive, hqProbe, experimentalFhd] = await configService.getParameters(
+            IplayarrParameter.STREAM_NATIVE_ADAPTIVE,
+            IplayarrParameter.STREAM_NATIVE_HQ_PROBE,
+            IplayarrParameter.STREAM_NATIVE_EXPERIMENTAL_FHD
+        );
+        return {
+            Quality: (adaptive ?? 'true') !== 'false' ? 'Adaptive' : 'Fixed',
+            'Quality Probe': hqProbe === 'true' ? 'On' : 'Off',
+            'FHD Upgrade': experimentalFhd === 'true' ? 'Experimental (on)' : 'Off',
+        };
+    }
+    const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
+    const profile = qualityProfiles.find(({ id }) => id === videoQuality);
+    // Just the name (e.g. "Full-HD") - kept short for the Streaming page's small chip columns,
+    // same reasoning as FHD Upgrade's on-page label below.
+    return { 'Video Quality': profile ? profile.name : videoQuality ?? '' };
+}
 
 async function getStreamService(): Promise<{ client: StreamClient; service: AbstractStreamService }> {
     const client: StreamClient = (await configService.getParameter(IplayarrParameter.STREAM_CLIENT)) as StreamClient;
@@ -71,7 +98,8 @@ export default async (req: Request, res: Response): Promise<void> => {
     const configuredMode: StreamMode = (await configService.getParameter(IplayarrParameter.STREAM_MODE)) as StreamMode;
     const mode: StreamMode = isProbe ? StreamMode.DIRECT : configuredMode;
 
-    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip);
+    const settings = await buildSettingsSnapshot(client);
+    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings);
     // progressive-mkv's ffmpeg process/response is the one mode with a real connection for the
     // Streaming page's Stop button to tear down - destroying it triggers this same res.on('close')
     // below (which ends the session) and remuxToMkv's own close handler (which kills ffmpeg).

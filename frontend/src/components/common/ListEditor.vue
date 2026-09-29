@@ -1,5 +1,5 @@
 <template>
-    <button v-for="item in items" :key="JSON.stringify(item)" class="listButton clickable">
+    <button v-for="item in pagedItems" :key="JSON.stringify(item)" class="listButton clickable">
         <slot :item="item" />
         <div class="actionContainer">
             <button v-for="action in actions" :key="action[0]" class="clickable" @click="action[1](item)">
@@ -12,14 +12,20 @@
             <font-awesome-icon :icon="['fas', 'plus']" />
         </div>
     </button>
+    <div class="block-reset" />
+    <TablePagination v-model="page" v-model:page-size="pageSize" :total="items.length" />
 </template>
 
 <script setup>
-import { defineEmits, defineProps } from 'vue';
+import { computed, defineEmits, defineProps } from 'vue';
+
+import { usePagination } from '@/lib/usePagination';
+
+import TablePagination from './TablePagination.vue';
 
 const emit = defineEmits(['create']);
 
-defineProps({
+const props = defineProps({
     showAdd: {
         type: Boolean,
         required: false,
@@ -28,6 +34,9 @@ defineProps({
     items: Array,
     actions: Array,
 });
+
+const items = computed(() => props.items ?? []);
+const { page, pageSize, pagedItems } = usePagination(items);
 </script>
 
 <style lang="less">

@@ -41,6 +41,22 @@
             :options="adaptiveOptions"
         />
         <SelectInput
+            v-if="config.STREAM_CLIENT == 'NATIVE'"
+            v-model="config.STREAM_NATIVE_HQ_PROBE"
+            name="Native Quality Probe"
+            tooltip="BBC's mediaselector sometimes advertises a connection as 1080p-capable when its actual HLS stream never exceeds 720p - the only way to tell is to check. Enabled: check every candidate connection's real encoded quality and use the best one (slower to start playback, one extra fetch per candidate). Disabled (default): use the first connection offered, same as before."
+            :error="validationErrors.config?.STREAM_NATIVE_HQ_PROBE"
+            :options="hqProbeOptions"
+        />
+        <SelectInput
+            v-if="config.STREAM_CLIENT == 'NATIVE'"
+            v-model="config.STREAM_NATIVE_EXPERIMENTAL_FHD"
+            name="Native FHD Upgrade (Experimental)"
+            tooltip="EXPERIMENTAL - unsupported, reverse-engineered behavior that could break without warning if BBC changes their CDN. BBC's standard streaming ladder is deliberately capped at 720p, but on titles that genuinely have a 1080p source, a private BBC CDN quirk (the same one get_iplayer's own 'fhd' mode exploits) can sometimes be coaxed into serving it. When enabled, iPlayarr probes for this on every play and uses it only if a real working 1080p stream is confirmed; otherwise it silently falls back to the normal ladder. Adds a little latency to playback start either way."
+            :error="validationErrors.config?.STREAM_NATIVE_EXPERIMENTAL_FHD"
+            :options="experimentalFhdOptions"
+        />
+        <SelectInput
             v-model="config.STREAM_MODE"
             name="Stream Mode"
             tooltip="Both modes proxy the resolved stream through iPlayarr itself (never straight to BBC) so playback still goes through iPlayarr's VPN. Direct: proxy the bytes as-is (supports seeking). Progressive MKV: remux through ffmpeg on the fly (requires ffmpeg, no seeking)."
@@ -91,6 +107,16 @@ const emit = defineEmits(['generate-stream-key']);
 const adaptiveOptions = [
     { key: 'true', value: 'Adaptive (recommended)' },
     { key: 'false', value: 'Fixed (uses Video Quality)' },
+];
+
+const hqProbeOptions = [
+    { key: 'false', value: 'Disabled (recommended)' },
+    { key: 'true', value: 'Enabled (verify real quality)' },
+];
+
+const experimentalFhdOptions = [
+    { key: 'false', value: 'Disabled (recommended)' },
+    { key: 'true', value: 'Enabled (experimental)' },
 ];
 
 const config = inject('settingsConfig');

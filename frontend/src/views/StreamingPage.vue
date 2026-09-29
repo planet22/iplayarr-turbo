@@ -2,11 +2,31 @@
     <div class="inner-content scroll-x">
         <legend>Active Streams</legend>
         <table class="dataTable streamsTable">
+            <colgroup>
+                <col style="width: 70px" />
+                <col />
+                <col style="width: 64px" />
+                <col style="width: 50px" />
+                <col style="width: 56px" />
+                <col style="width: 48px" />
+                <col style="width: 92px" />
+                <col style="width: 46px" />
+                <col style="width: 120px" />
+                <col style="width: 82px" />
+                <col style="width: 88px" />
+                <col style="width: 110px" />
+                <col style="width: 64px" />
+            </colgroup>
             <thead>
                 <tr>
                     <th />
                     <th>Video</th>
                     <th>Mode</th>
+                    <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
+                    <th class="chipCol" title="Native Quality Probe">Probe</th>
+                    <th class="chipCol" title="Native experimental FHD upgrade">FHD</th>
+                    <th class="chipCol" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
+                    <th class="chipCol" title="Actual resolution served">Res</th>
                     <th>Client IP</th>
                     <th>Duration</th>
                     <th>Transferred</th>
@@ -20,7 +40,7 @@
                         <img
                             v-if="detailsFor(session.pid)?.thumbnail"
                             class="thumbnail"
-                            :src="detailsFor(session.pid).thumbnail"
+                            :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
                         />
                     </td>
                     <td class="text">
@@ -32,6 +52,10 @@
                     <td>
                         <span class="pill">{{ session.mode }}</span>
                         <div class="subtle">{{ clientLabel(session.client) }}</div>
+                    </td>
+                    <SettingsChips :settings="session.settings" />
+                    <td class="chipCol">
+                        <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
                     <td>{{ session.clientIp }}</td>
                     <td>{{ formatDuration(session.startedAt) }}</td>
@@ -56,18 +80,38 @@
                     </td>
                 </tr>
                 <tr v-if="streams.active.length == 0">
-                    <td colspan="8" class="empty">No streams currently playing</td>
+                    <td colspan="13" class="empty">No streams currently playing</td>
                 </tr>
             </tbody>
         </table>
 
         <legend>Stream History</legend>
         <table class="dataTable streamsTable">
+            <colgroup>
+                <col style="width: 70px" />
+                <col />
+                <col style="width: 64px" />
+                <col style="width: 50px" />
+                <col style="width: 56px" />
+                <col style="width: 48px" />
+                <col style="width: 92px" />
+                <col style="width: 46px" />
+                <col style="width: 120px" />
+                <col style="width: 150px" />
+                <col style="width: 82px" />
+                <col style="width: 88px" />
+                <col style="width: 110px" />
+            </colgroup>
             <thead>
                 <tr>
                     <th />
                     <th>Video</th>
                     <th>Mode</th>
+                    <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
+                    <th class="chipCol" title="Native Quality Probe">Probe</th>
+                    <th class="chipCol" title="Native experimental FHD upgrade">FHD</th>
+                    <th class="chipCol" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
+                    <th class="chipCol" title="Actual resolution served">Res</th>
                     <th>Client IP</th>
                     <th>Started</th>
                     <th>Duration</th>
@@ -76,12 +120,12 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="session in reversedHistory" :key="session.id">
+                <tr v-for="session in pagedHistory" :key="session.id">
                     <td>
                         <img
                             v-if="detailsFor(session.pid)?.thumbnail"
                             class="thumbnail"
-                            :src="detailsFor(session.pid).thumbnail"
+                            :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
                         />
                     </td>
                     <td class="text">
@@ -93,6 +137,10 @@
                     <td>
                         <span class="pill">{{ session.mode }}</span>
                         <div class="subtle">{{ clientLabel(session.client) }}</div>
+                    </td>
+                    <SettingsChips :settings="session.settings" />
+                    <td class="chipCol">
+                        <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
                     <td>{{ session.clientIp }}</td>
                     <td>{{ formatDate(session.startedAt) }}</td>
@@ -109,10 +157,11 @@
                     </td>
                 </tr>
                 <tr v-if="reversedHistory.length == 0">
-                    <td colspan="8" class="empty">No streaming history yet</td>
+                    <td colspan="13" class="empty">No streaming history yet</td>
                 </tr>
             </tbody>
         </table>
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
     </div>
 </template>
 
@@ -120,18 +169,24 @@
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { formatStorageSize } from '@/lib/utils';
+import { usePagination } from '@/lib/usePagination';
+import { formatDateTimeWithMillis, formatStorageSize, getThumbnailUrl } from '@/lib/utils';
 
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
+import SettingsChips from '../components/streaming/SettingsChips.vue';
 
 const streams = inject('streams');
 const details = reactive({});
 const stopping = ref(new Set());
 
 const reversedHistory = computed(() => [...streams.value.history].reverse());
+const {
+    page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
+} = usePagination(reversedHistory);
 
 function detailsFor(pid) {
     return details[pid];
@@ -169,7 +224,7 @@ function clientLabel(client) {
 }
 
 function formatDate(value) {
-    return value ? new Date(value).toLocaleString() : '';
+    return value ? formatDateTimeWithMillis(value) : '';
 }
 
 function formatDuration(start, end) {
@@ -210,6 +265,23 @@ function openSegments(session) {
 </script>
 
 <style lang="less">
+.tableToolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+
+    .tableFilter {
+        width: 100%;
+        max-width: 280px;
+        padding: 6px 10px;
+        height: 32px;
+        border: 1px solid @input-border-color;
+        border-radius: 4px;
+        background-color: @input-background-color;
+        color: @input-text-color;
+    }
+}
+
 .dataTable {
     max-width: 100%;
     width: 100%;
@@ -223,6 +295,27 @@ function openSegments(session) {
         text-align: left;
         font-weight: bold;
         border-bottom: 1px solid @table-border-color;
+
+        &.sortable {
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+
+            &:hover {
+                color: @primary-color;
+            }
+        }
+
+        .sortIcon {
+            font-size: 11px;
+            opacity: 0.35;
+            margin-left: 4px;
+
+            &.active {
+                opacity: 1;
+                color: @primary-color;
+            }
+        }
     }
 
     tbody {
@@ -248,6 +341,20 @@ function openSegments(session) {
 }
 
 .streamsTable {
+    // Fixed so <colgroup> widths are authoritative regardless of cell content - without this,
+    // the browser sizes columns from their content on every render, so a page of rows with empty
+    // chip cells (e.g. history predating this feature) vs. a page with every chip populated ends
+    // up with visibly different column widths, shifting everything sideways when paging between
+    // them. table-layout:fixed makes every column's width come only from <colgroup>/the first
+    // row, never from content, so paging (or live rows changing) never moves a column again.
+    table-layout: fixed;
+
+    td, th {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
     .thumbnail {
         width: 64px;
         height: 36px;
@@ -256,9 +363,36 @@ function openSegments(session) {
         display: block;
     }
 
+    .text {
+        white-space: normal;
+
+        > div {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    }
+
     .subtle {
         font-size: 12px;
         color: @subtle-text-color;
+    }
+
+    // Chip columns (Quality/Probe/FHD/Video Quality/Res) are deliberately much tighter than the
+    // table's normal cell padding - each one only ever holds a single short pill, so the default
+    // 8px td padding (and thead th's own 8px) just wastes width the Video (title) column could
+    // use instead. thead/tbody qualifiers needed to out-specify .dataTable's own `thead th` /
+    // `tbody td` padding rules above, which would otherwise win over a same-specificity `.chipCol`.
+    thead th.chipCol,
+    tbody td.chipCol {
+        padding: 4px 3px;
+    }
+
+    .chipCol .pill {
+        display: inline-block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .actionCol {
