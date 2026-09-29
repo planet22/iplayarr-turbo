@@ -43,7 +43,10 @@
             <tbody>
                 <tr v-for="(entry, index) in pagedSearches" :key="index">
                     <td>{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</td>
-                    <td>{{ entry.results }}</td>
+                    <td>
+                        <a v-if="entry.items?.length" class="clickable" @click="showResults(entry)">{{ entry.results }}</a>
+                        <template v-else>{{ entry.results }}</template>
+                    </td>
                     <td>{{ entry.series ?? '' }}</td>
                     <td>{{ entry.episode ?? '' }}</td>
                     <td>{{ appName(entry.appId) }}</td>
@@ -148,11 +151,13 @@
 
 <script setup>
 import { onMounted, ref } from 'vue';
+import { useModal } from 'vue-final-modal';
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
+import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
@@ -237,6 +242,17 @@ async function refresh() {
 function formatDate(time) {
     if (!time) return '';
     return formatDateTimeWithMillis(time);
+}
+
+function showResults(entry) {
+    const resultsModal = useModal({
+        component: SearchResultsDialog,
+        attrs: {
+            term: entry.term,
+            items: entry.items,
+        },
+    });
+    resultsModal.open();
 }
 
 const clearFailedGrabs = async () => {

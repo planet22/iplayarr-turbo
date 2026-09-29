@@ -71,7 +71,15 @@ describe('SearchEndpoint', () => {
             appId: 'radarr',
             series: '1',
             episode: '2',
-            time: expect.any(Number)
+            time: expect.any(Number),
+            items: [
+                {
+                    title: 'Test.Show.S01E02.720p',
+                    type: VideoType.TV,
+                    size: 1500,
+                    pubDate: fakeResults[0].pubDate,
+                },
+            ],
         });
     });
 });
