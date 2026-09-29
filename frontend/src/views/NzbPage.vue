@@ -31,7 +31,7 @@
                 </tr>
             </tbody>
         </table>
-        <Pagination v-model="searchPage" :total="reversedSearches.length" :page-size="pageSize" />
+        <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="reversedSearches.length" />
 
         <legend>Recent Grabs</legend>
         <table class="dataTable">
@@ -57,7 +57,7 @@
                 </tr>
             </tbody>
         </table>
-        <Pagination v-model="grabPage" :total="reversedGrabs.length" :page-size="pageSize" />
+        <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="reversedGrabs.length" />
 
         <SettingsPageToolbar :icons="['delete']" delete-label="Clear Failed" @delete-queue-item="clearFailedGrabs" />
         <legend>Failed Grabs</legend>
@@ -82,7 +82,7 @@
                 </tr>
             </tbody>
         </table>
-        <Pagination v-model="failedGrabPage" :total="reversedFailedGrabs.length" :page-size="pageSize" />
+        <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="reversedFailedGrabs.length" />
     </div>
 </template>
 
@@ -94,30 +94,26 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-
-const pageSize = 25;
+import { usePagination } from '@/lib/usePagination';
 
 const searchHistory = ref([]);
 const grabHistory = ref([]);
 const failedGrabHistory = ref([]);
 const apps = ref([]);
 
-const searchPage = ref(1);
-const grabPage = ref(1);
-const failedGrabPage = ref(1);
-
 const reversedSearches = computed(() => [...searchHistory.value].reverse());
 const reversedGrabs = computed(() => [...grabHistory.value].reverse());
 const reversedFailedGrabs = computed(() => [...failedGrabHistory.value].reverse());
 
-function page(list, pageNumber) {
-    const start = (pageNumber - 1) * pageSize;
-    return list.slice(start, start + pageSize);
-}
-
-const pagedSearches = computed(() => page(reversedSearches.value, searchPage.value));
-const pagedGrabs = computed(() => page(reversedGrabs.value, grabPage.value));
-const pagedFailedGrabs = computed(() => page(reversedFailedGrabs.value, failedGrabPage.value));
+const {
+    page: searchPage, pageSize: searchPageSize, pagedItems: pagedSearches,
+} = usePagination(reversedSearches);
+const {
+    page: grabPage, pageSize: grabPageSize, pagedItems: pagedGrabs,
+} = usePagination(reversedGrabs);
+const {
+    page: failedGrabPage, pageSize: failedGrabPageSize, pagedItems: pagedFailedGrabs,
+} = usePagination(reversedFailedGrabs);
 
 onMounted(async () => {
     await refresh();

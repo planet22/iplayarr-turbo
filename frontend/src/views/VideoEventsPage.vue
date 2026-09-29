@@ -13,7 +13,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="event in reversedEvents" :key="event.id">
+                <tr v-for="event in pagedEvents" :key="event.id">
                     <td>
                         <img
                             v-if="event.pid && detailsFor(event.pid)?.thumbnail"
@@ -38,6 +38,7 @@
                 </tr>
             </tbody>
         </table>
+        <TablePagination v-model="eventsPage" v-model:page-size="eventsPageSize" :total="reversedEvents.length" />
     </div>
 </template>
 
@@ -45,11 +46,16 @@
 import { computed, inject, onMounted, reactive, watch } from 'vue';
 
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { usePagination } from '@/lib/usePagination';
 
 const events = inject('videoEvents');
 const reversedEvents = computed(() => [...events.value].reverse());
+const {
+    page: eventsPage, pageSize: eventsPageSize, pagedItems: pagedEvents,
+} = usePagination(reversedEvents);
 const details = reactive({});
 
 function detailsFor(pid) {

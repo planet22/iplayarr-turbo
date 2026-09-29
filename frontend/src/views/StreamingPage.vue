@@ -76,7 +76,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="session in reversedHistory" :key="session.id">
+                <tr v-for="session in pagedHistory" :key="session.id">
                     <td>
                         <img
                             v-if="detailsFor(session.pid)?.thumbnail"
@@ -113,6 +113,7 @@
                 </tr>
             </tbody>
         </table>
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
     </div>
 </template>
 
@@ -120,8 +121,10 @@
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { usePagination } from '@/lib/usePagination';
 import { formatStorageSize } from '@/lib/utils';
 
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
@@ -132,6 +135,9 @@ const details = reactive({});
 const stopping = ref(new Set());
 
 const reversedHistory = computed(() => [...streams.value.history].reverse());
+const {
+    page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
+} = usePagination(reversedHistory);
 
 function detailsFor(pid) {
     return details[pid];

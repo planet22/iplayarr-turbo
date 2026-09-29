@@ -1,13 +1,25 @@
 <template>
-    <ul ref="logView">
+    <ul v-if="follow" ref="logView">
         <li v-for="log in filteredLogs" :key="`${log.id}_${log.timestamp}`">
             <pre :class="log.level">[ {{ log.id }} ] - {{ log.timestamp }} - {{ log.message.trim() }}</pre>
         </li>
     </ul>
+    <template v-else>
+        <ul>
+            <li v-for="log in pagedLogs" :key="`${log.id}_${log.timestamp}`">
+                <pre :class="log.level">[ {{ log.id }} ] - {{ log.timestamp }} - {{ log.message.trim() }}</pre>
+            </li>
+        </ul>
+        <TablePagination v-model="page" v-model:page-size="pageSize" :total="reversedLogs.length" />
+    </template>
 </template>
 
 <script setup>
 import { computed, defineProps, inject, nextTick, ref, watch } from 'vue';
+
+import { usePagination } from '@/lib/usePagination';
+
+import TablePagination from '../common/TablePagination.vue';
 
 const logs = inject('logs');
 const logView = ref(null);
@@ -27,6 +39,9 @@ const props = defineProps({
 const filteredLogs = computed(() =>
     props.filter == null ? logs.value : logs.value.filter((log) => props.filter == log.id)
 );
+
+const reversedLogs = computed(() => [...filteredLogs.value].reverse());
+const { page, pageSize, pagedItems: pagedLogs } = usePagination(reversedLogs);
 
 watch(
     filteredLogs,

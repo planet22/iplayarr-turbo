@@ -21,18 +21,22 @@
         </thead>
         <tbody>
             <QueueTableRow v-for="item in queue" :key="item.id" ref="queueRows" :item="item" />
-            <QueueTableRow v-for="item in history" :key="item.id" ref="historyRows" :item="item" />
+            <QueueTableRow v-for="item in pagedHistory" :key="item.id" ref="historyRows" :item="item" />
         </tbody>
     </table>
+    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="history.length" />
 </template>
 
 <script setup>
 import { computed, defineExpose, defineProps, ref, watch } from 'vue';
 
+import { usePagination } from '@/lib/usePagination';
+
 import CheckInput from '../common/form/CheckInput.vue';
+import TablePagination from '../common/TablePagination.vue';
 import QueueTableRow from './QueueTableRow.vue';
 
-defineProps({
+const props = defineProps({
     queue: {
         type: Array,
         required: true,
@@ -43,6 +47,11 @@ defineProps({
         required: true,
     },
 });
+
+const history = computed(() => props.history);
+const {
+    page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
+} = usePagination(history);
 
 const allChecked = ref(false);
 

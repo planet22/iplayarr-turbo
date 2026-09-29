@@ -27,7 +27,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="result of filteredResults" :key="result.pid" class="clickable">
+                <tr v-for="result of pagedResults" :key="result.pid" class="clickable">
                     <td>
                         <CheckInput v-model="result.checked" />
                     </td>
@@ -67,6 +67,7 @@
                 </tr>
             </tbody>
         </table>
+        <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
         <template v-if="filteredResults.length == 0">
             <p>No Results Found</p>
         </template>
@@ -81,8 +82,10 @@ import { useRoute, useRouter } from 'vue-router';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { usePagination } from '@/lib/usePagination';
 import { formatDate, formatStorageSize } from '@/lib/utils';
 
 const route = useRoute();
@@ -100,6 +103,10 @@ const filteredResults = computed(() => {
         ? searchResults.value
         : searchResults.value.filter(({ type }) => type == filter.value.toUpperCase());
 });
+
+const {
+    page: resultsPage, pageSize: resultsPageSize, pagedItems: pagedResults,
+} = usePagination(filteredResults);
 
 watch(
     () => route.query.searchTerm,
@@ -141,6 +148,7 @@ const multipleImmediateDownload = async () => {
 
 const selectFilter = (option) => {
     filter.value = option;
+    resultsPage.value = 1;
 };
 
 watch(
