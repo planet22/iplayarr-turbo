@@ -10,6 +10,7 @@ import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
+import streamSessionService from './streamSessionService';
 
 interface ProgrammeVersion {
     pid: string;
@@ -18,6 +19,7 @@ interface ProgrammeVersion {
 }
 
 interface MasterPlaylistVariant {
+    width: number;
     height: number;
     url: string;
 }
@@ -80,20 +82,25 @@ function fetchTextWithStatus(url: string): Promise<{ statusCode: number; body: s
     });
 }
 
-// Parses an HLS master playlist's #EXT-X-STREAM-INF/URI pairs into (height, absolute URL) - used
-// only when STREAM_NATIVE_ADAPTIVE is off and one fixed variant needs to be picked out instead of
-// handing the whole master playlist through.
+// Parses an HLS master playlist's #EXT-X-STREAM-INF/URI pairs into (width, height, absolute URL)
+// - used both when STREAM_NATIVE_ADAPTIVE is off and one fixed variant needs to be picked out
+// instead of handing the whole master playlist through, and to report the actual resolution
+// served on the Streaming page (see streamSessionService.setResolution).
 function parseMasterVariants(body: string, baseUrl: string): MasterPlaylistVariant[] {
     const lines = body.split(/\r?\n/);
     const variants: MasterPlaylistVariant[] = [];
     for (let i = 0; i < lines.length; i++) {
-        const match = /^#EXT-X-STREAM-INF:.*RESOLUTION=\d+x(\d+)/.exec(lines[i]);
+        const match = /^#EXT-X-STREAM-INF:.*RESOLUTION=(\d+)x(\d+)/.exec(lines[i]);
         if (!match) {
             continue;
         }
         const uriLine = lines.slice(i + 1).find((line) => line.trim() && !line.startsWith('#'));
         if (uriLine) {
-            variants.push({ height: parseInt(match[1]), url: new URL(uriLine.trim(), baseUrl).toString() });
+            variants.push({
+                width: parseInt(match[1]),
+                height: parseInt(match[2]),
+                url: new URL(uriLine.trim(), baseUrl).toString(),
+            });
         }
     }
     return variants;
@@ -128,7 +135,7 @@ class NativeStreamService implements AbstractStreamService {
     // a server-side pinned quality where that's supported. When STREAM_NATIVE_ADAPTIVE=false, one
     // fixed variant is picked using the same VIDEO_QUALITY setting and fallback chain
     // GetIplayerStreamService uses.
-    async #resolveUrl(pid: string): Promise<string> {
+    async #resolveUrl(pid: string, sessionId?: string): Promise<string> {
         const vpid = await this.#resolveVpid(pid);
         const masterPlaylistUrl = await this.#resolveMasterPlaylistUrl(vpid);
 
@@ -142,20 +149,35 @@ class NativeStreamService implements AbstractStreamService {
         if (experimentalFhd) {
             const upgraded = await this.#tryExperimentalFhdUpgrade(masterPlaylistUrl);
             if (upgraded) {
+                if (sessionId) {
+                    streamSessionService.setResolution(sessionId, '1920x1080 (FHD upgrade)');
+                }
                 return upgraded;
             }
         }
 
         const adaptive = ((await configService.getParameter(IplayarrParameter.STREAM_NATIVE_ADAPTIVE)) ?? 'true') !== 'false';
         if (adaptive) {
+            // The full ladder is handed to the player, which picks its own resolution based on
+            // network conditions - there's no single "served" resolution to report server-side.
+            if (sessionId) {
+                streamSessionService.setResolution(sessionId, 'Adaptive');
+            }
             return masterPlaylistUrl;
         }
         try {
-            return await this.#selectFixedVariant(masterPlaylistUrl);
+            const { url, resolution } = await this.#selectFixedVariant(masterPlaylistUrl);
+            if (sessionId && resolution) {
+                streamSessionService.setResolution(sessionId, resolution);
+            }
+            return url;
         } catch (err: any) {
             // Falling back to the full ABR ladder still plays fine - failing the whole stream
             // over a parsing hiccup in an optional quality-pinning step would not.
             loggingService.error(`NativeStreamService: failed to pin a fixed quality, falling back to adaptive - ${err?.message}`);
+            if (sessionId) {
+                streamSessionService.setResolution(sessionId, 'Adaptive');
+            }
             return masterPlaylistUrl;
         }
     }
@@ -183,11 +205,11 @@ class NativeStreamService implements AbstractStreamService {
         }
     }
 
-    async #selectFixedVariant(masterPlaylistUrl: string): Promise<string> {
+    async #selectFixedVariant(masterPlaylistUrl: string): Promise<{ url: string; resolution?: string }> {
         const body = await fetchText(masterPlaylistUrl);
         const variants = parseMasterVariants(body, masterPlaylistUrl);
         if (variants.length === 0) {
-            return masterPlaylistUrl;
+            return { url: masterPlaylistUrl };
         }
 
         const qualityChain: string[] = await getIplayerExecutableService.getQualityFallbackChain();
@@ -199,12 +221,14 @@ class NativeStreamService implements AbstractStreamService {
         for (const height of targetHeights) {
             const candidates = variants.filter((v) => v.height <= height).sort((a, b) => b.height - a.height);
             if (candidates.length > 0) {
-                return candidates[0].url;
+                const best = candidates[0];
+                return { url: best.url, resolution: `${best.width}x${best.height}` };
             }
         }
         // No variant at or below any preferred height (e.g. every target height was smaller than
         // everything on offer) - use the highest available rather than fail outright.
-        return [...variants].sort((a, b) => b.height - a.height)[0].url;
+        const best = [...variants].sort((a, b) => b.height - a.height)[0];
+        return { url: best.url, resolution: `${best.width}x${best.height}` };
     }
 
     // https://www.bbc.co.uk/programmes/<pid>/playlist.json lists every broadcast version (plain,
@@ -319,12 +343,12 @@ class NativeStreamService implements AbstractStreamService {
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
-        const url = await this.#resolveUrl(pid);
+        const url = await this.#resolveUrl(pid, sessionId);
         await proxyUrl(url, req, res, 5, sessionId);
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {
-        const url = await this.#resolveUrl(pid);
+        const url = await this.#resolveUrl(pid, sessionId);
         await remuxToMkv(url, pid, res, sessionId);
     }
 }

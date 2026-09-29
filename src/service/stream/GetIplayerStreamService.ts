@@ -5,10 +5,15 @@ import getIplayerExecutableService from '../getIplayerExecutableService';
 import AbstractStreamService from './AbstractStreamService';
 import { spawnCollectOutput } from './spawnWithTimeout';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
+import streamSessionService from './streamSessionService';
 
 interface StreamInfoEntry {
     [key: string]: string;
 }
+
+// entry.type looks like "gip_hvf_8490  hls h264 1920x1080 50fps 8490kbps 128kbps mf_bidi/40" -
+// the actual encoded resolution of the chosen stream, for reporting on the Streaming page.
+const resolutionInTypeRegex = /(\d+x\d+)/;
 
 // --streaminfo enumerates every available programme version (audiodescribed, combined,
 // original...) one at a time, and each is a genuinely slow multi-hop CDN redirect negotiation
@@ -38,7 +43,7 @@ class GetIplayerStreamService implements AbstractStreamService {
     // flag) - --streaminfo resolves the actual playable CDN URLs instead, one block per stream
     // variant (quality x CDN supplier). Picked by walking the same quality fallback chain used
     // for --tv-quality on downloads, preferring HLS (broadly player-compatible) over DASH.
-    async #resolveUrl(pid: string): Promise<string> {
+    async #resolveEntry(pid: string): Promise<StreamInfoEntry> {
         const { exec, args }: SpawnExecutable = await getIplayerExecutableService.getAllStreamInfoParameters(pid);
         const { stdout } = await spawnCollectOutput(exec, args, streamInfoTimeoutMs);
 
@@ -50,7 +55,7 @@ class GetIplayerStreamService implements AbstractStreamService {
                 .filter((entry) => entry.stream.startsWith(`hls${quality}`))
                 .sort((a, b) => parseInt(b.priority ?? '0') - parseInt(a.priority ?? '0'));
             if (candidates.length > 0) {
-                return candidates[0].streamurl;
+                return candidates[0];
             }
         }
 
@@ -58,19 +63,28 @@ class GetIplayerStreamService implements AbstractStreamService {
         // stream get_iplayer considers highest priority overall, rather than failing outright.
         const fallback = [...entries].sort((a, b) => parseInt(b.priority ?? '0') - parseInt(a.priority ?? '0'))[0];
         if (fallback) {
-            return fallback.streamurl;
+            return fallback;
         }
 
         throw new Error(`get_iplayer resolved no playable stream for ${pid}`);
     }
 
+    async #resolveUrl(pid: string, sessionId?: string): Promise<string> {
+        const entry = await this.#resolveEntry(pid);
+        if (sessionId) {
+            const resolution = resolutionInTypeRegex.exec(entry.type ?? '')?.[1];
+            streamSessionService.setResolution(sessionId, resolution ?? entry.stream ?? 'Unknown');
+        }
+        return entry.streamurl;
+    }
+
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
-        const url: string = await this.#resolveUrl(pid);
+        const url: string = await this.#resolveUrl(pid, sessionId);
         await proxyUrl(url, req, res, 5, sessionId);
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {
-        const url: string = await this.#resolveUrl(pid);
+        const url: string = await this.#resolveUrl(pid, sessionId);
         await remuxToMkv(url, pid, res, sessionId);
     }
 }

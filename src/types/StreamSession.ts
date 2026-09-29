@@ -36,4 +36,16 @@ export interface StreamSession {
     // as opposed to a natural end (connection closed / inactivity sweep) - mirrors Youtarr's
     // StreamHistory.end_reason ('manual-stop' vs a normal end).
     endReason?: string;
+    // Snapshot of the config actually in effect for this session at start time (e.g. Native's
+    // Adaptive/Quality Probe/FHD Upgrade toggles, or the other clients' Video Quality) - mirrors
+    // Youtarr's StreamHistory columns (quality/container/transcode/hardware_mode), which persist
+    // the settings a session actually ran with rather than whatever the live config says now,
+    // since that can change after the session started/ended. Built once in StreamEndpoint.ts.
+    settings?: Record<string, string>;
+    // The resolution actually served, filled in once the stream service has resolved a playable
+    // URL (see streamSessionService.setResolution) - distinct from `settings`' Video Quality/
+    // Adaptive config, which is a target/preference, not a confirmation of what was delivered.
+    // Left unset where a service can't determine this cheaply (e.g. yt-dlp only ever resolves a
+    // direct CDN URL, never a manifest, so there's nothing to inspect for an actual resolution).
+    resolution?: string;
 }

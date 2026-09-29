@@ -9,6 +9,7 @@ import { ensureDnsRelayRunning } from '../dnsRelayService';
 import AbstractStreamService from './AbstractStreamService';
 import { spawnCollectOutput } from './spawnWithTimeout';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
+import streamSessionService from './streamSessionService';
 
 class YTDLPStreamService implements AbstractStreamService {
     async #getExecutable(): Promise<SpawnExecutable> {
@@ -21,7 +22,7 @@ class YTDLPStreamService implements AbstractStreamService {
     // Resolved at play time, never at .strm-write time - BBC CDN URLs are short-lived/geo-tokened.
     // Uses a single combined format selector (unlike the download service's bestvideo+bestaudio
     // pair) since a proxy/redirect needs one fetchable URL, not two streams to merge locally.
-    async #resolveUrl(pid: string): Promise<string> {
+    async #resolveUrl(pid: string, sessionId?: string): Promise<string> {
         const executable: SpawnExecutable = await this.#getExecutable();
         const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
         const widthStr = qualityProfiles.find(({ id }) => id == videoQuality)?.quality;
@@ -44,16 +45,23 @@ class YTDLPStreamService implements AbstractStreamService {
         if (!url) {
             throw new Error(`yt-dlp produced no stream URL for ${pid}`);
         }
+        // yt-dlp's -g only ever returns a direct CDN URL, never a manifest/format report - there's
+        // nothing here to confirm the actual delivered resolution against (unlike Native, which
+        // reads an HLS master playlist, or get_iplayer, whose --streaminfo reports it directly).
+        // Labelled "(requested)" so this reads as the quality filter applied, not a confirmation.
+        if (sessionId) {
+            streamSessionService.setResolution(sessionId, widthStr ? `≤${widthStr} (requested)` : 'Best available (requested)');
+        }
         return url;
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
-        const url: string = await this.#resolveUrl(pid);
+        const url: string = await this.#resolveUrl(pid, sessionId);
         await proxyUrl(url, req, res, 5, sessionId);
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {
-        const url: string = await this.#resolveUrl(pid);
+        const url: string = await this.#resolveUrl(pid, sessionId);
         await remuxToMkv(url, pid, res, sessionId);
     }
 }
