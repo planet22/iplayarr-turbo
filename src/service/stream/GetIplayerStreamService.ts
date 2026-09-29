@@ -12,8 +12,9 @@ interface StreamInfoEntry {
 }
 
 // entry.type looks like "gip_hvf_8490  hls h264 1920x1080 50fps 8490kbps 128kbps mf_bidi/40" -
-// the actual encoded resolution of the chosen stream, for reporting on the Streaming page.
-const resolutionInTypeRegex = /(\d+x\d+)/;
+// the actual encoded resolution of the chosen stream, for reporting on the Streaming page (just
+// the height, e.g. "1080" - matches the plain-number style the Resolution column uses everywhere).
+const resolutionInTypeRegex = /\d+x(\d+)/;
 
 // --streaminfo enumerates every available programme version (audiodescribed, combined,
 // original...) one at a time, and each is a genuinely slow multi-hop CDN redirect negotiation
@@ -73,7 +74,9 @@ class GetIplayerStreamService implements AbstractStreamService {
         const entry = await this.#resolveEntry(pid);
         if (sessionId) {
             const resolution = resolutionInTypeRegex.exec(entry.type ?? '')?.[1];
-            streamSessionService.setResolution(sessionId, resolution ?? entry.stream ?? 'Unknown');
+            if (resolution) {
+                streamSessionService.setResolution(sessionId, resolution);
+            }
         }
         return entry.streamurl;
     }

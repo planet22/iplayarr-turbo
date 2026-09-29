@@ -7,8 +7,11 @@
                     <th />
                     <th>Video</th>
                     <th>Mode</th>
-                    <th>Settings</th>
-                    <th>Resolution</th>
+                    <th title="Native: Adaptive or Fixed quality">Quality</th>
+                    <th title="Native Quality Probe">Probe</th>
+                    <th title="Native experimental FHD upgrade">FHD</th>
+                    <th title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
+                    <th title="Actual resolution served">Res</th>
                     <th>Client IP</th>
                     <th>Duration</th>
                     <th>Transferred</th>
@@ -35,8 +38,10 @@
                         <span class="pill">{{ session.mode }}</span>
                         <div class="subtle">{{ clientLabel(session.client) }}</div>
                     </td>
-                    <td class="text">{{ settingsSummary(session) }}</td>
-                    <td class="text">{{ session.resolution ?? '' }}</td>
+                    <SettingsChips :settings="session.settings" />
+                    <td>
+                        <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
+                    </td>
                     <td>{{ session.clientIp }}</td>
                     <td>{{ formatDuration(session.startedAt) }}</td>
                     <td>{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
@@ -60,7 +65,7 @@
                     </td>
                 </tr>
                 <tr v-if="streams.active.length == 0">
-                    <td colspan="10" class="empty">No streams currently playing</td>
+                    <td colspan="13" class="empty">No streams currently playing</td>
                 </tr>
             </tbody>
         </table>
@@ -72,8 +77,11 @@
                     <th />
                     <th>Video</th>
                     <th>Mode</th>
-                    <th>Settings</th>
-                    <th>Resolution</th>
+                    <th title="Native: Adaptive or Fixed quality">Quality</th>
+                    <th title="Native Quality Probe">Probe</th>
+                    <th title="Native experimental FHD upgrade">FHD</th>
+                    <th title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
+                    <th title="Actual resolution served">Res</th>
                     <th>Client IP</th>
                     <th>Started</th>
                     <th>Duration</th>
@@ -100,8 +108,10 @@
                         <span class="pill">{{ session.mode }}</span>
                         <div class="subtle">{{ clientLabel(session.client) }}</div>
                     </td>
-                    <td class="text">{{ settingsSummary(session) }}</td>
-                    <td class="text">{{ session.resolution ?? '' }}</td>
+                    <SettingsChips :settings="session.settings" />
+                    <td>
+                        <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
+                    </td>
                     <td>{{ session.clientIp }}</td>
                     <td>{{ formatDate(session.startedAt) }}</td>
                     <td>{{ formatDuration(session.startedAt, session.endedAt) }}</td>
@@ -117,7 +127,7 @@
                     </td>
                 </tr>
                 <tr v-if="reversedHistory.length == 0">
-                    <td colspan="10" class="empty">No streaming history yet</td>
+                    <td colspan="13" class="empty">No streaming history yet</td>
                 </tr>
             </tbody>
         </table>
@@ -137,6 +147,7 @@ import { formatDateTimeWithMillis, formatStorageSize } from '@/lib/utils';
 
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
+import SettingsChips from '../components/streaming/SettingsChips.vue';
 
 const streams = inject('streams');
 const details = reactive({});
@@ -180,19 +191,6 @@ const clientLabels = {
 
 function clientLabel(client) {
     return clientLabels[client] ?? client ?? '';
-}
-
-// Snapshot of the config the session actually ran with (built once in StreamEndpoint.ts) - e.g.
-// "Quality: Adaptive · Quality Probe: Off · FHD Upgrade: Off" for Native, or "Video Quality:
-// HD (720p)" for get_iplayer/yt-dlp. Kept as a compact single line, mirroring how the Mode
-// column already pairs the mode pill with a subtle client label underneath.
-function settingsSummary(session) {
-    if (!session.settings) {
-        return '';
-    }
-    return Object.entries(session.settings)
-        .map(([key, value]) => `${key}: ${value}`)
-        .join(' · ');
 }
 
 function formatDate(value) {

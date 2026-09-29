@@ -48,9 +48,10 @@ class YTDLPStreamService implements AbstractStreamService {
         // yt-dlp's -g only ever returns a direct CDN URL, never a manifest/format report - there's
         // nothing here to confirm the actual delivered resolution against (unlike Native, which
         // reads an HLS master playlist, or get_iplayer, whose --streaminfo reports it directly).
-        // Labelled "(requested)" so this reads as the quality filter applied, not a confirmation.
-        if (sessionId) {
-            streamSessionService.setResolution(sessionId, widthStr ? `≤${widthStr} (requested)` : 'Best available (requested)');
+        // This is the requested ceiling, not a confirmation - left blank when there's no filter
+        // (VIDEO_QUALITY unset/unrecognised) rather than showing a vague "best available".
+        if (sessionId && !isNaN(width)) {
+            streamSessionService.setResolution(sessionId, `${width}`);
         }
         return url;
     }

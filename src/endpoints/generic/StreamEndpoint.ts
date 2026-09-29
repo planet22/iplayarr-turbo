@@ -41,7 +41,9 @@ async function buildSettingsSnapshot(client: StreamClient): Promise<Record<strin
     }
     const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
     const profile = qualityProfiles.find(({ id }) => id === videoQuality);
-    return { 'Video Quality': profile ? `${profile.name} (${profile.quality})` : videoQuality ?? '' };
+    // Just the name (e.g. "Full-HD") - kept short for the Streaming page's small chip columns,
+    // same reasoning as FHD Upgrade's on-page label below.
+    return { 'Video Quality': profile ? profile.name : videoQuality ?? '' };
 }
 
 async function getStreamService(): Promise<{ client: StreamClient; service: AbstractStreamService }> {

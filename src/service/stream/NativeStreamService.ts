@@ -150,7 +150,7 @@ class NativeStreamService implements AbstractStreamService {
             const upgraded = await this.#tryExperimentalFhdUpgrade(masterPlaylistUrl);
             if (upgraded) {
                 if (sessionId) {
-                    streamSessionService.setResolution(sessionId, '1920x1080 (FHD upgrade)');
+                    streamSessionService.setResolution(sessionId, '1080');
                 }
                 return upgraded;
             }
@@ -222,13 +222,13 @@ class NativeStreamService implements AbstractStreamService {
             const candidates = variants.filter((v) => v.height <= height).sort((a, b) => b.height - a.height);
             if (candidates.length > 0) {
                 const best = candidates[0];
-                return { url: best.url, resolution: `${best.width}x${best.height}` };
+                return { url: best.url, resolution: `${best.height}` };
             }
         }
         // No variant at or below any preferred height (e.g. every target height was smaller than
         // everything on offer) - use the highest available rather than fail outright.
         const best = [...variants].sort((a, b) => b.height - a.height)[0];
-        return { url: best.url, resolution: `${best.width}x${best.height}` };
+        return { url: best.url, resolution: `${best.height}` };
     }
 
     // https://www.bbc.co.uk/programmes/<pid>/playlist.json lists every broadcast version (plain,
