@@ -1,14 +1,14 @@
 <template>
-    <td>
+    <td class="chipCol">
         <span v-if="quality" class="pill grey">{{ quality }}</span>
     </td>
-    <td>
+    <td class="chipCol">
         <span v-if="probe" class="pill" :class="probe == 'On' ? 'success' : 'grey'">{{ probe }}</span>
     </td>
-    <td>
+    <td class="chipCol">
         <span v-if="fhd" class="pill" :class="isExperimentalOn ? 'warn' : 'grey'">{{ fhdLabel }}</span>
     </td>
-    <td>
+    <td class="chipCol">
         <span v-if="videoQuality" class="pill grey">{{ videoQuality }}</span>
     </td>
 </template>
