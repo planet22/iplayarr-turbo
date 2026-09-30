@@ -3,7 +3,7 @@ import { Builder } from 'xml2js';
 
 import searchFacade from '../../facade/searchFacade';
 import statisticsService from '../../service/stats/StatisticsService';
-import { SearchHistoryEntry } from '../../types/data/SearchHistoryEntry';
+import { SearchHistoryEntry, SearchHistoryResultItem } from '../../types/data/SearchHistoryEntry';
 import { IPlayerSearchResult, VideoType } from '../../types/IPlayerSearchResult';
 import { NewzNabAttr, NewzNabSearchResponse } from '../../types/responses/newznab/NewzNabSearchResponse';
 import { createNZBDownloadLink } from '../../utils/Utils';
@@ -26,13 +26,21 @@ export default async (req: Request, res: Response) => {
         results = results.filter(({ type }) => categoriesForType(type).some((category) => cat.includes(category)));
     }
 
+    const historyItems: SearchHistoryResultItem[] = results.map(({ nzbName, title, type, size, pubDate }) => ({
+        title: nzbName ?? title,
+        type,
+        size,
+        pubDate,
+    }));
+
     const historyEntry: SearchHistoryEntry = {
         term: searchTerm,
         results: results.length,
         appId: app,
         series: season,
         episode: ep,
-        time: new Date().getTime()
+        time: new Date().getTime(),
+        items: historyItems,
     };
     statisticsService.addSearch(historyEntry);
 
