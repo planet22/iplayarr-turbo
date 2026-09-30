@@ -2,13 +2,16 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { StreamClient } from '../../types/enums/StreamClient';
 import { StreamMode } from '../../types/enums/StreamMode';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { QueuedStorage } from '../../types/QueuedStorage';
 import { StreamSession } from '../../types/StreamSession';
 import { VideoEventType } from '../../types/VideoEvent';
+import configService from '../configService';
 import socketService from '../socketService';
 import videoEventService from '../videoEventService';
 
 const historyLimit = 200;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // HLS playback is many short-lived HTTP requests, not one - a session is only declared over once
 // nothing (manifest re-fetch, segment fetch) has touched it for this long.
 const inactivityTimeoutMs = 90_000;
@@ -151,6 +154,21 @@ const streamSessionService = {
     getActive: (): StreamSession[] => active,
 
     getHistory,
+
+    // Deletes stream history entries whose stream ended more than STREAM_HISTORY_RETENTION_DAYS
+    // ago - mirrors thumbnailCacheService.cleanup's age-based prune, run on the same nightly cron.
+    cleanupHistory: async (): Promise<number> => {
+        const retentionDays = Number(await configService.getParameter(IplayarrParameter.STREAM_HISTORY_RETENTION_DAYS)) || 30;
+        const cutoff = Date.now() - retentionDays * MS_PER_DAY;
+
+        const history = await getHistory();
+        const retained = history.filter((session) => !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
+        const deleted = history.length - retained.length;
+        if (deleted > 0) {
+            await storage.setItem('streamHistory', retained);
+        }
+        return deleted;
+    },
 
     setSegmentCount: (id: string, totalSegments: number): void => {
         const session: StreamSession | undefined = active.find((s) => s.id === id);

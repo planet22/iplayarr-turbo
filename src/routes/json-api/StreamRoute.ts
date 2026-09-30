@@ -21,4 +21,9 @@ router.post('/:id/stop', async (req: Request, res: Response) => {
     res.json({ ok: true });
 });
 
+router.post('/history/cleanup', async (_: Request, res: Response) => {
+    const deleted = await streamSessionService.cleanupHistory();
+    res.json({ status: true, deleted });
+});
+
 export default router;
