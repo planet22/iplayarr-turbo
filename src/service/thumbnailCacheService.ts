@@ -48,7 +48,12 @@ class ThumbnailCacheService {
         const filePath = await this.localPath(imagePid);
         const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
         try {
-            const response = await axios.get(`https://ichef.bbci.co.uk/images/ic/1920x1080/${imagePid}.jpg`, {
+            // 960x540 (BBC's ichef CDN resizes on request, so this costs nothing extra) rather
+            // than the full 1920x1080 - the largest on-page use is MediaInfoHero's hero banner,
+            // which never approaches native 1080p width, and every other use (table row
+            // thumbnails) is a 64x36 CSS box the browser downscales further. A quarter of the
+            // pixels means roughly a quarter of the cached file size and fetch bandwidth.
+            const response = await axios.get(`https://ichef.bbci.co.uk/images/ic/960x540/${imagePid}.jpg`, {
                 responseType: 'arraybuffer',
             });
             await fs.promises.writeFile(tmpPath, Buffer.from(response.data));
