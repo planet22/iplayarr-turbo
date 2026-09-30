@@ -8,6 +8,24 @@ export const getThumbnailUrl = (thumbnail) => {
     return thumbnail ? `${getHost()}/${thumbnail}` : undefined;
 };
 
+// Builds the "Series X, Episode Y" identifier shown alongside a video's channel wherever
+// IPlayerDetails is displayed (Streaming/Queue/Video Events), matching the SearchPage/DownloadPage
+// wording. Falls back to whichever of series/episode is present, e.g. for one-off programmes.
+export const getSeriesEpisodeLabel = (details) => {
+    if (!details) {
+        return undefined;
+    }
+    const { series, episode } = details;
+    if (series && episode) {
+        return `Series ${series}, Episode ${episode}`;
+    } else if (series) {
+        return `Series ${series}`;
+    } else if (episode) {
+        return `Episode ${episode}`;
+    }
+    return undefined;
+};
+
 export const getPidFromBBCUrl = (url) => {
     if (!url) {
         return undefined;

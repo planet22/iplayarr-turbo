@@ -45,8 +45,8 @@
                     </td>
                     <td class="text">
                         {{ event.pid && detailsFor(event.pid) ? detailsFor(event.pid).title : (event.pid || '') }}
-                        <div v-if="event.pid && detailsFor(event.pid)?.channel" class="subtle">
-                            {{ detailsFor(event.pid).channel }}
+                        <div v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" class="subtle">
+                            {{ [detailsFor(event.pid)?.channel, seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td><span class="pill">{{ event.type }}</span></td>
@@ -73,13 +73,17 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
-import { formatDateTimeWithMillis, getThumbnailUrl } from '@/lib/utils';
+import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
 
 const events = inject('videoEvents');
 const details = reactive({});
 
 function detailsFor(pid) {
     return details[pid];
+}
+
+function seriesEpisodeLabel(pid) {
+    return getSeriesEpisodeLabel(detailsFor(pid));
 }
 
 function videoLabel(event) {
