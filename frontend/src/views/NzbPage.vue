@@ -7,16 +7,17 @@
 
         <legend>Recent Searches</legend>
         <div class="tableToolbar">
+            <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
             <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
         </div>
         <table class="dataTable">
             <colgroup>
                 <col />
-                <col style="width: 80px" />
-                <col style="width: 80px" />
-                <col style="width: 80px" />
-                <col style="width: 100px" />
-                <col style="width: 160px" />
+                <col style="width: 10ch" />
+                <col style="width: 10ch" />
+                <col style="width: 10ch" />
+                <col style="width: 14ch" />
+                <col style="width: 22ch" />
             </colgroup>
             <thead>
                 <tr>
@@ -61,15 +62,16 @@
 
         <legend>Recent Grabs</legend>
         <div class="tableToolbar">
+            <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
             <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
         </div>
         <table class="dataTable">
             <colgroup>
-                <col style="width: 110px" />
+                <col style="width: 14ch" />
                 <col />
-                <col style="width: 80px" />
-                <col style="width: 100px" />
-                <col style="width: 160px" />
+                <col style="width: 10ch" />
+                <col style="width: 14ch" />
+                <col style="width: 22ch" />
             </colgroup>
             <thead>
                 <tr>
@@ -108,14 +110,15 @@
         <SettingsPageToolbar :icons="['delete']" delete-label="Clear Failed" @delete-queue-item="clearFailedGrabs" />
         <legend>Failed Grabs</legend>
         <div class="tableToolbar">
+            <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
             <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
         </div>
         <table class="dataTable">
             <colgroup>
-                <col style="width: 110px" />
+                <col style="width: 14ch" />
                 <col />
-                <col style="width: 300px" />
-                <col style="width: 160px" />
+                <col style="width: 38ch" />
+                <col style="width: 22ch" />
             </colgroup>
             <thead>
                 <tr>
@@ -153,6 +156,7 @@
 import { onMounted, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
@@ -175,7 +179,8 @@ function appName(appId) {
 }
 
 const {
-    filterText: searchFilterText, sortBy: searchSortBy, sortOrder: searchSortOrder, sorted: sortedSearches, toggleSort: toggleSearchSort,
+    filterText: searchFilterText, sortBy: searchSortBy, sortOrder: searchSortOrder,
+    dateFrom: searchDateFrom, dateTo: searchDateTo, sorted: sortedSearches, toggleSort: toggleSearchSort,
 } = useSortFilter(searchHistory, {
     filterFn: (entry, query) => [
         entry.term == '*' ? 'RSS Feed' : entry.term,
@@ -189,10 +194,13 @@ const {
         app: (entry) => appName(entry.appId),
         time: (entry) => entry.time,
     },
+    dateAccessor: (entry) => entry.time,
+    storageKey: 'nzbSearchTable',
 });
 
 const {
-    filterText: grabFilterText, sortBy: grabSortBy, sortOrder: grabSortOrder, sorted: sortedGrabs, toggleSort: toggleGrabSort,
+    filterText: grabFilterText, sortBy: grabSortBy, sortOrder: grabSortOrder,
+    dateFrom: grabDateFrom, dateTo: grabDateTo, sorted: sortedGrabs, toggleSort: toggleGrabSort,
 } = useSortFilter(grabHistory, {
     filterFn: (entry, query) => [entry.pid, entry.nzbName, entry.type, appName(entry.appId)]
         .some((value) => String(value ?? '').toLowerCase().includes(query)),
@@ -203,10 +211,13 @@ const {
         app: (entry) => appName(entry.appId),
         time: (entry) => entry.time,
     },
+    dateAccessor: (entry) => entry.time,
+    storageKey: 'nzbGrabTable',
 });
 
 const {
-    filterText: failedGrabFilterText, sortBy: failedGrabSortBy, sortOrder: failedGrabSortOrder, sorted: sortedFailedGrabs, toggleSort: toggleFailedGrabSort,
+    filterText: failedGrabFilterText, sortBy: failedGrabSortBy, sortOrder: failedGrabSortOrder,
+    dateFrom: failedGrabDateFrom, dateTo: failedGrabDateTo, sorted: sortedFailedGrabs, toggleSort: toggleFailedGrabSort,
 } = useSortFilter(failedGrabHistory, {
     filterFn: (entry, query) => [entry.pid, entry.nzbName, entry.error]
         .some((value) => String(value ?? '').toLowerCase().includes(query)),
@@ -216,6 +227,8 @@ const {
         error: (entry) => entry.error,
         time: (entry) => entry.time,
     },
+    dateAccessor: (entry) => entry.time,
+    storageKey: 'nzbFailedGrabTable',
 });
 
 const {

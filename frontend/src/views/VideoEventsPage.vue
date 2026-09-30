@@ -2,16 +2,18 @@
     <SettingsPageToolbar :icons="['delete']" delete-label="Clear Log" @delete-queue-item="clearEvents" />
     <div class="inner-content scroll-x">
         <div class="tableToolbar">
+            <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
             <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
         </div>
         <table class="dataTable eventLogTable">
             <colgroup>
                 <col style="width: 70px" />
                 <col />
-                <col style="width: 90px" />
-                <col style="width: 80px" />
-                <col style="width: 280px" />
-                <col style="width: 160px" />
+                <!-- longest real value is 'stream_key_rotated' (19 chars) - see VideoEventType -->
+                <col style="width: 20ch" />
+                <col style="width: 8ch" />
+                <col style="width: 40ch" />
+                <col style="width: 26ch" />
             </colgroup>
             <thead>
                 <tr>
@@ -51,7 +53,7 @@
                     </td>
                     <td><span class="pill">{{ event.type }}</span></td>
                     <td><span :class="['pill', event.level]">{{ event.level }}</span></td>
-                    <td>{{ event.message }}</td>
+                    <td class="text">{{ event.message }}</td>
                     <td>{{ formatDate(event.timestamp) }}</td>
                 </tr>
                 <tr v-if="sortedEvents.length == 0">
@@ -66,6 +68,7 @@
 <script setup>
 import { computed, inject, onMounted, reactive, watch } from 'vue';
 
+import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
@@ -93,7 +96,7 @@ function videoLabel(event) {
 const reversedEvents = computed(() => [...events.value].reverse());
 
 const {
-    filterText, sortBy, sortOrder, sorted: sortedEvents, toggleSort,
+    filterText, sortBy, sortOrder, dateFrom, dateTo, sorted: sortedEvents, toggleSort,
 } = useSortFilter(reversedEvents, {
     filterFn: (event, query) => [videoLabel(event), event.type, event.level, event.message]
         .some((value) => String(value ?? '').toLowerCase().includes(query)),
@@ -104,6 +107,8 @@ const {
         message: (event) => event.message,
         time: (event) => event.timestamp,
     },
+    dateAccessor: (event) => event.timestamp,
+    storageKey: 'videoEventsTable',
 });
 
 const {

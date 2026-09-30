@@ -7,8 +7,11 @@
         content-transition="vfm-fade"
     >
         <legend class="modalTitle">
-            <span>{{ title }}</span>
-            <font-awesome-icon class="clickable" :icon="['fas', 'xmark']" @click="close()" />
+            <span class="modalTitleText">{{ title }}</span>
+            <div class="modalTitleActions">
+                <slot name="header-actions" :close="close" />
+                <font-awesome-icon class="clickable" :icon="['fas', 'xmark']" @click="close()" />
+            </div>
         </legend>
         <div class="modal-inner">
             <slot />
