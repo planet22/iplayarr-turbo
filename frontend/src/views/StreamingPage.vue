@@ -5,15 +5,18 @@
             <colgroup>
                 <col style="width: 70px" />
                 <col />
-                <col style="width: 64px" />
-                <col style="width: 50px" />
-                <col style="width: 56px" />
-                <col style="width: 48px" />
-                <col style="width: 92px" />
-                <col style="width: 46px" />
-                <col style="width: 120px" />
-                <col style="width: 82px" />
-                <col style="width: 88px" />
+                <!-- ch (not px): sized to the actual text/chip content (e.g. "Full-HD (1080p)",
+                     "::ffff:172.19.0.3") so it doesn't clip whenever real values run longer than
+                     a guessed pixel width - see the equivalent note on QueueTable.vue. -->
+                <col style="width: 8ch" />
+                <col style="width: 10ch" />
+                <col style="width: 6ch" />
+                <col style="width: 6ch" />
+                <col style="width: 18ch" />
+                <col style="width: 11ch" />
+                <col style="width: 20ch" />
+                <col style="width: 10ch" />
+                <col style="width: 13ch" />
                 <col style="width: 110px" />
                 <col style="width: 64px" />
             </colgroup>
@@ -90,16 +93,16 @@
             <colgroup>
                 <col style="width: 70px" />
                 <col />
-                <col style="width: 64px" />
-                <col style="width: 50px" />
-                <col style="width: 56px" />
-                <col style="width: 48px" />
-                <col style="width: 92px" />
-                <col style="width: 46px" />
-                <col style="width: 120px" />
-                <col style="width: 150px" />
-                <col style="width: 82px" />
-                <col style="width: 88px" />
+                <col style="width: 8ch" />
+                <col style="width: 10ch" />
+                <col style="width: 6ch" />
+                <col style="width: 6ch" />
+                <col style="width: 18ch" />
+                <col style="width: 11ch" />
+                <col style="width: 20ch" />
+                <col style="width: 26ch" />
+                <col style="width: 10ch" />
+                <col style="width: 13ch" />
                 <col style="width: 110px" />
             </colgroup>
             <thead>
@@ -274,6 +277,9 @@ function openSegments(session) {
 .tableToolbar {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
     margin-bottom: 0.5rem;
 
     .tableFilter {

@@ -11,12 +11,9 @@
             <font-awesome-icon v-else class="thumbnail-placeholder" :icon="['fas', item.type == 'TV' ? 'tv' : 'film']" />
         </td>
         <td class="text" data-title="Filename">
-            <RouterLink
-                v-if="item.status != 'Forwarded'"
-                :to="{ path: '/info', query: { item: JSON.stringify(item) } }"
-            >
+            <a v-if="item.status != 'Forwarded'" class="clickable" @click="openInfo(item)">
                 {{ item.nzbName }}
-            </RouterLink>
+            </a>
             <a v-else target="_blank" :href="getAppForId(item.appId)?.link || getAppForId(item.appId)?.url || '#'">
                 {{ item.nzbName }}
             </a>
@@ -30,7 +27,7 @@
             </span>
         </td>
         <td data-title="Start">
-            {{ item.details.start }}
+            {{ formatDate(item.details.start, 'short', 'short') }}
         </td>
         <td data-title="Size">
             {{ formatStorageSize(item.details.size) }}
@@ -62,13 +59,15 @@
 
 <script setup>
 import { computed, defineExpose, defineProps, inject, ref } from 'vue';
+import { useModal } from 'vue-final-modal';
 
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
+import { formatDate, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
 import ProgressBar from '../common/ProgressBar.vue';
+import VideoInfoModal from '../modals/VideoInfoModal.vue';
 
 const props = defineProps({
     item: {
@@ -111,6 +110,14 @@ const deleteRow = async ({ pid, status }) => {
 
 const getAppForId = (id) => {
     return apps.value.find(({ id: appId }) => id == appId);
+};
+
+const openInfo = ({ pid }) => {
+    const infoModal = useModal({
+        component: VideoInfoModal,
+        attrs: { pid },
+    });
+    infoModal.open();
 };
 
 const getDownloadIcon = ({ status }) => {
