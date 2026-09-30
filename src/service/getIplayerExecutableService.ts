@@ -31,7 +31,11 @@ export class GetIplayerExecutableService {
         const cacheLocation = process.env.CACHE_LOCATION;
         if (cacheLocation) {
             args.push('--profile-dir');
-            args.push(`"${cacheLocation}"`);
+            // No shell is involved (spawn() is called directly with this args array in
+            // getAllDownloadParameters/download), so quoting this value would pass the
+            // literal quote characters through as part of the path get_iplayer receives,
+            // instead of stripping them the way a shell would.
+            args.push(cacheLocation);
         }
 
         return {

@@ -56,7 +56,7 @@ describe('GetIplayerExecutableService', () => {
             expect(result.args).toContain('--encoding-console-out');
             expect(result.args).toContain('UTF-8');
             expect(result.args).toContain('--profile-dir');
-            expect(result.args).toContain('"/mock/cache"');
+            expect(result.args).toContain('/mock/cache');
             mockArgs.forEach((arg) => {
                 expect(result.args).toContain(arg);
             });
