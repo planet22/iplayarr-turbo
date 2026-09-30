@@ -1,10 +1,15 @@
 import fs from 'fs';
+import path from 'path';
 
 import { timestampFile } from '../../src/constants/iPlayarrConstants';
 import downloadFacade from '../../src/facade/downloadFacade';
 import configService from '../../src/service/configService';
 import GetIplayerDownloadService from '../../src/service/download/GetIplayerDownloadService';
+import historyService from '../../src/service/historyService';
+import queueService from '../../src/service/queueService';
 import { DownloadClient } from '../../src/types/enums/DownloadClient';
+import { VideoType } from '../../src/types/IPlayerSearchResult';
+import { QueueEntry } from '../../src/types/QueueEntry';
 
 // Mocks
 jest.mock('bcrypt', () => ({
@@ -22,6 +27,7 @@ jest.mock('fs', () => ({
     rm: jest.fn(),
     stat: jest.fn(),
     readdir: jest.fn(),
+    existsSync: jest.fn(),
 }));
 
 jest.mock('child_process', () => ({
@@ -58,9 +64,20 @@ jest.mock('../../src/service/socketService', () => ({
     emit: jest.fn(),
 }));
 
+jest.mock('../../src/service/historyService', () => ({
+    addHistory: jest.fn(),
+}));
+
+jest.mock('../../src/service/videoEventService', () => ({
+    record: jest.fn(),
+}));
+
 describe('DownloadFacade', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        // resetAllMocks (not clearAllMocks) so a mockReturnValue/mockImplementation
+        // set by one test (e.g. queueService.getFromQueue) can't bleed into the
+        // next - every test here sets up the mocks it needs from scratch.
+        jest.resetAllMocks();
     });
 
     describe('download', () => {
@@ -98,6 +115,176 @@ describe('DownloadFacade', () => {
             expect(mockChildProcess.on).toHaveBeenCalledWith('close', expect.any(Function));
 
             expect(result).toBe(mockChildProcess);
+        });
+    });
+
+    describe('#processComplete (via the close event, library structure + nfo/strm)', () => {
+        const pid = 'test-pid';
+        const pidDir = '/downloads/test-pid';
+
+        function mockConfig(overrides: Record<string, string> = {}) {
+            const values: Record<string, string> = {
+                DOWNLOAD_DIR: '/downloads',
+                DOWNLOAD_CLIENT: DownloadClient.GET_IPLAYER,
+                MEDIA_MODE: 'download',
+                COMPLETE_DIR: '/complete',
+                LIBRARY_FOLDER_STRUCTURE: 'false',
+                WRITE_NFO_STRM: 'false',
+                ...overrides,
+            };
+            (configService.getParameter as jest.Mock).mockImplementation((param: string) =>
+                Promise.resolve(values[param.toString()])
+            );
+        }
+
+        async function runDownloadToCompletion(queueItem: QueueEntry, closeCode: number | null = 0): Promise<void> {
+            const mockChildProcess = {
+                stdout: { on: jest.fn() },
+                stderr: { on: jest.fn() },
+                on: jest.fn(),
+            };
+            (GetIplayerDownloadService.download as jest.Mock).mockResolvedValue(mockChildProcess);
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(queueItem);
+
+            await downloadFacade.download(pid);
+
+            const closeHandler = mockChildProcess.on.mock.calls.find(([event]) => event === 'close')?.[1];
+            await closeHandler(closeCode);
+        }
+
+        it('moves the file into a flat path when LIBRARY_FOLDER_STRUCTURE is off', async () => {
+            mockConfig();
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            expect(fs.copyFileSync).toHaveBeenCalledWith(
+                path.join(pidDir, 'episode.mkv'),
+                path.join('/complete', 'Show.S01E01.mkv')
+            );
+            expect(queueItem.libraryPath).toBe('Show.S01E01.mkv');
+            expect(historyService.addHistory).toHaveBeenCalled();
+        });
+
+        it('picks up a get-iplayer output file even when its name contains "_original" (DASH audio+video merge)', async () => {
+            // get-iplayer's DASH-delivered content (separate audio/video streams merged and
+            // tagged by get-iplayer/ffmpeg internally) can leave "_original" in the *final*
+            // output filename, not just in the transient per-stream .m4a/.m4v/.txt component
+            // files alongside it - a prior version of this filter excluded any "_original"
+            // filename outright and so missed the real output entirely.
+            mockConfig();
+            (fs.readdirSync as jest.Mock).mockReturnValue([
+                'Bing_Songs_original.audio.m4a',
+                'Bing_Songs_original.video.m4v',
+                'Bing_Songs_original.video.txt',
+                'Bing_Songs_original.mp4',
+            ]);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Bing.S03E06',
+                type: VideoType.TV,
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            expect(fs.copyFileSync).toHaveBeenCalledWith(
+                path.join(pidDir, 'Bing_Songs_original.mp4'),
+                path.join('/complete', 'Bing.S03E06.mp4')
+            );
+            expect(historyService.addHistory).toHaveBeenCalledWith(
+                expect.objectContaining({ pid }),
+                'Complete'
+            );
+        });
+
+        it('builds a Show/Season NN folder structure when LIBRARY_FOLDER_STRUCTURE is on', async () => {
+            mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1, episodeTitle: 'The Episode' },
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            const expectedPath = path.join('/complete', 'Show Name', 'Season 01', 'Show Name - S01E01 - The Episode.mkv');
+            expect(fs.mkdirSync).toHaveBeenCalledWith(path.join('/complete', 'Show Name', 'Season 01'), { recursive: true });
+            expect(fs.copyFileSync).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), expectedPath);
+            expect(queueItem.libraryPath).toBe('Show Name/Season 01/Show Name - S01E01 - The Episode.mkv');
+        });
+
+        it('writes .nfo + tvshow.nfo (but no extra .strm) for a real download when WRITE_NFO_STRM is on', async () => {
+            mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', WRITE_NFO_STRM: 'true' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+            (fs.existsSync as jest.Mock).mockReturnValue(false);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1, episodeTitle: 'The Episode' },
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            const seasonDir = path.join('/complete', 'Show Name', 'Season 01');
+            const showDir = path.join('/complete', 'Show Name');
+
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                path.join(seasonDir, 'Show Name - S01E01 - The Episode.nfo'),
+                expect.stringContaining('<episodedetails>'),
+                'utf8'
+            );
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                path.join(showDir, 'tvshow.nfo'),
+                expect.stringContaining('<tvshow>'),
+                'utf8'
+            );
+
+            const strmWrites = (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) =>
+                String(filePath).endsWith('.strm')
+            );
+            expect(strmWrites).toHaveLength(0);
+        });
+
+        it('writes .nfo for the .strm file itself when Media Mode is Streaming, without writing a second .strm', async () => {
+            mockConfig({ WRITE_NFO_STRM: 'true' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['stream.strm']);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1 },
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                path.join('/complete', 'Show.S01E01.nfo'),
+                expect.stringContaining('<episodedetails>'),
+                'utf8'
+            );
+
+            const strmWrites = (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) =>
+                String(filePath).endsWith('.strm')
+            );
+            expect(strmWrites).toHaveLength(0);
         });
     });
 

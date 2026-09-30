@@ -17,10 +17,13 @@ import { DownloadDetails } from '../types/DownloadDetails';
 import { DownloadClient } from '../types/enums/DownloadClient';
 import { MediaMode } from '../types/enums/MediaMode';
 import { IplayarrParameter } from '../types/IplayarrParameters';
+import { VideoType } from '../types/IPlayerSearchResult';
 import { LogLine, LogLineLevel } from '../types/LogLine';
 import { QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
+import { buildLibraryFilePath, LibraryFilePath } from '../utils/libraryPathBuilder';
+import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
 import { convertToMB, copyWithFallback, getETA } from '../utils/Utils';
 
 class DownloadFacade {
@@ -52,6 +55,8 @@ class DownloadFacade {
 
     async #processComplete(pid: string, directory: string, code: any, service : AbstractDownloadService): Promise<void> {
         const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
+        const useFolderStructure = (await configService.getParameter(IplayarrParameter.LIBRARY_FOLDER_STRUCTURE)) === 'true';
+        const writeNfoStrm = (await configService.getParameter(IplayarrParameter.WRITE_NFO_STRM)) === 'true';
 
         if (code === 0) {
             const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
@@ -63,19 +68,33 @@ class DownloadFacade {
                     //Move the resultant file
                     loggingService.debug(pid, `Looking for video files in ${directory}`);
                     const files = fs.readdirSync(directory);
+                    // This runs from the child process's 'close' event, i.e. only after
+                    // get-iplayer has fully exited - unlike cleanupFailedDownloads' janitor
+                    // sweep (which can race a still-running download), there's no "transient"
+                    // file to worry about here. Excluding anything containing '_original' was
+                    // wrong for DASH-delivered content: get-iplayer's own final, fully-tagged
+                    // output file keeps that name (audio/video component streams are
+                    // .m4a/.m4v/.txt, so the extension check alone already excludes those).
                     const videoFile = files.find((file) =>
-                        (file.endsWith('.mp4') || file.endsWith('.mkv') || file.endsWith('.strm')) && !file.includes('_original')
+                        file.endsWith('.mp4') || file.endsWith('.mkv') || file.endsWith('.strm')
                     );
 
                     if (videoFile) {
                         const oldPath = path.join(directory, videoFile);
                         const extension = path.extname(videoFile).slice(1);
                         loggingService.debug(pid, `Found video file ${oldPath}`);
-                        const newPath = path.join(completeDir, `${queueItem?.nzbName}.${extension}`);
-                        loggingService.debug(pid, `Moving ${oldPath} to ${newPath}`);
 
-                        copyWithFallback(oldPath, newPath);
+                        const libraryPath: LibraryFilePath = buildLibraryFilePath(completeDir, queueItem, extension, useFolderStructure);
+                        fs.mkdirSync(libraryPath.directory, { recursive: true });
+                        loggingService.debug(pid, `Moving ${oldPath} to ${libraryPath.fullPath}`);
+
+                        copyWithFallback(oldPath, libraryPath.fullPath);
                         queueItem.extension = extension;
+                        queueItem.libraryPath = libraryPath.relativePath;
+
+                        if (writeNfoStrm) {
+                            this.#writeLibrarySidecarFiles(queueItem, libraryPath);
+                        }
 
                         videoEventService.record(
                             extension === 'strm' ? VideoEventType.STRM_CREATED : VideoEventType.DOWNLOAD_COMPLETE,
@@ -105,6 +124,25 @@ class DownloadFacade {
             }
         }
         queueService.removeFromQueue(pid);
+    }
+
+    // Writes Jellyfin-compatible .nfo metadata next to the completed file.
+    // No separate .strm is ever written here - when Media Mode is Streaming,
+    // the completed file IS already a .strm (produced by StrmDownloadService
+    // and moved into place above), and for a real download a .strm would be
+    // redundant since Jellyfin can already see the video file directly.
+    #writeLibrarySidecarFiles(item: QueueEntry, libraryPath: LibraryFilePath): void {
+        const baseName = path.parse(libraryPath.fileName).name;
+
+        const nfoContent = item.type === VideoType.MOVIE ? buildMovieNfo(item) : buildEpisodeNfo(item);
+        fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.nfo`), nfoContent, 'utf8');
+
+        if (libraryPath.showDirectory && item.type === VideoType.TV) {
+            const showNfoPath = path.join(libraryPath.showDirectory, 'tvshow.nfo');
+            if (!fs.existsSync(showNfoPath)) {
+                fs.writeFileSync(showNfoPath, buildShowNfo(item.library?.title ?? item.nzbName), 'utf8');
+            }
+        }
     }
 
     async #getService(): Promise<AbstractDownloadService> {
