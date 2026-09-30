@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Builder } from 'xml2js';
 
 import searchFacade from '../../facade/searchFacade';
+import appService from '../../service/appService';
 import statisticsService from '../../service/stats/StatisticsService';
 import { SearchHistoryEntry, SearchHistoryResultItem } from '../../types/data/SearchHistoryEntry';
 import { IPlayerSearchResult, VideoType } from '../../types/IPlayerSearchResult';
@@ -17,7 +18,9 @@ interface SearchRequest {
 }
 
 export default async (req: Request, res: Response) => {
-    const { q, season, ep, cat: catList, app } = req.query as any as SearchRequest;
+    const { q, season, ep, cat: catList, app: queryApp } = req.query as any as SearchRequest;
+    const app: string | undefined =
+        queryApp ?? (await appService.findAppByUserAgent(req.headers['user-agent']))?.id;
     const cat: string[] | undefined = catList ? catList.split(',') : undefined;
     const searchTerm = q ?? '*';
     let results: IPlayerSearchResult[] = await searchFacade.search(searchTerm, season, ep);

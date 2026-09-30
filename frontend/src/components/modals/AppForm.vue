@@ -125,6 +125,13 @@
                         :tooltip="`Priority in ${capitalize(form.type)}`"
                         :error="validationErrors?.indexer_priority"
                     />
+                    <TextInput
+                        v-model="form.userAgentMatch"
+                        name="User-Agent Match"
+                        placeholder="Sonarr"
+                        tooltip="Substring to match against the caller's User-Agent header, used to identify this app on search requests that don't carry an app ID (e.g. a manually added indexer)"
+                        :error="validationErrors?.userAgentMatch"
+                    />
                 </template>
 
                 <template v-if="showForm('tags')">

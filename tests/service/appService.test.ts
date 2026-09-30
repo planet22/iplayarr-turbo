@@ -96,6 +96,30 @@ describe('appService', () => {
         expect(result).toBeUndefined();
     });
 
+    it('finds an app whose userAgentMatch is a substring of the User-Agent header', async () => {
+        const app: App = { id: 'sonarr-1', type: AppType.SONARR, userAgentMatch: 'Sonarr' } as any;
+        await appService.addApp(app);
+
+        const result = await appService.findAppByUserAgent('Sonarr/4.0.0.0 (linux)');
+
+        expect(result?.id).toBe('sonarr-1');
+    });
+
+    it('returns undefined when no userAgentMatch matches', async () => {
+        const app: App = { id: 'sonarr-1', type: AppType.SONARR, userAgentMatch: 'Sonarr' } as any;
+        await appService.addApp(app);
+
+        const result = await appService.findAppByUserAgent('Radarr/5.0.0.0 (linux)');
+
+        expect(result).toBeUndefined();
+    });
+
+    it('returns undefined when no User-Agent header is supplied', async () => {
+        const result = await appService.findAppByUserAgent(undefined);
+
+        expect(result).toBeUndefined();
+    });
+
     it('tests connection for NZBGET app', async () => {
         const form = { type: AppType.NZBGET, url: 'url', api_key: 'key', username: 'u', password: 'p' } as any;
         await appService.testAppConnection(form);

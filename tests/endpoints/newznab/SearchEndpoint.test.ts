@@ -3,11 +3,13 @@ import { parseStringPromise } from 'xml2js';
 
 import SearchEndpoint from '../../../src/endpoints/newznab/SearchEndpoint';
 import searchFacade from '../../../src/facade/searchFacade';
+import appService from '../../../src/service/appService';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 import { VideoType } from '../../../src/types/IPlayerSearchResult';
 import * as Utils from '../../../src/utils/Utils';
 
 jest.mock('../../../src/facade/searchFacade');
+jest.mock('../../../src/service/appService');
 jest.mock('../../../src/service/stats/StatisticsService');
 jest.spyOn(Utils, 'getBaseUrl').mockReturnValue('http://localhost:3000');
 jest.spyOn(Utils, 'createNZBDownloadLink').mockImplementation(() => Promise.resolve('/nzb/link.nzb'));
@@ -30,6 +32,7 @@ describe('SearchEndpoint', () => {
                 app: 'radarr',
                 apikey: 'mockkey',
             },
+            headers: {},
         };
         res = {
             set: setMock,
@@ -81,5 +84,21 @@ describe('SearchEndpoint', () => {
                 },
             ],
         });
+    });
+
+    it('falls back to matching the User-Agent header when app is not supplied', async () => {
+        (req.query as any).app = undefined;
+        req.headers = { 'user-agent': 'Sonarr/4.0.0.0 (linux)' };
+
+        (searchFacade.search as jest.Mock).mockResolvedValue([]);
+        (statisticsService.addSearch as jest.Mock).mockImplementation(() => { });
+        (appService.findAppByUserAgent as jest.Mock).mockResolvedValue({ id: 'sonarr-id' });
+
+        await SearchEndpoint(req as Request, res as Response);
+
+        expect(appService.findAppByUserAgent).toHaveBeenCalledWith('Sonarr/4.0.0.0 (linux)');
+        expect(statisticsService.addSearch).toHaveBeenCalledWith(
+            expect.objectContaining({ appId: 'sonarr-id' })
+        );
     });
 });
