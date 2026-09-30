@@ -5,6 +5,7 @@ import scheduleFacade from '../facade/scheduleFacade';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import configService from './configService';
 import episodeCacheService from './episodeCacheService';
+import streamSessionService from './stream/streamSessionService';
 import thumbnailCacheService from './thumbnailCacheService';
 
 
@@ -27,6 +28,14 @@ class TaskService {
         cron.schedule('35 3 * * *', () => {
             thumbnailCacheService.cleanup().catch((error) => {
                 console.error(`Error pruning unused thumbnails: ${error}`);
+            });
+        });
+
+        // Old stream history prune - 3:40 AM daily. Fixed schedule, same as the thumbnail prune
+        // above; retention itself is STREAM_HISTORY_RETENTION_DAYS.
+        cron.schedule('40 3 * * *', () => {
+            streamSessionService.cleanupHistory().catch((error) => {
+                console.error(`Error pruning old stream history: ${error}`);
             });
         });
     }
