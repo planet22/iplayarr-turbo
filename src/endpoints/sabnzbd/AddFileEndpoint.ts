@@ -10,6 +10,7 @@ import videoEventService from '../../service/videoEventService';
 import { AppType } from '../../types/AppType';
 import { FailedGrabEntry } from '../../types/data/FailedGrabEntry';
 import { VideoType } from '../../types/IPlayerSearchResult';
+import { QueueLibraryMetadata } from '../../types/QueueEntry';
 import { NZBMetaEntry } from '../../types/responses/newznab/NZBFileResponse';
 import { VideoEventType } from '../../types/VideoEvent';
 
@@ -24,6 +25,7 @@ interface NZBDetails {
     nzbName: string;
     type: VideoType;
     appId?: string;
+    library?: QueueLibraryMetadata;
 }
 
 interface DetailsRejection {
@@ -37,8 +39,12 @@ export default async (req: Request, res: Response) => {
         const pids: string[] = [];
         for (const file of files) {
             const xmlString = file.buffer.toString('utf-8');
-            const { pid, nzbName, type, appId } = await getDetails(xmlString);
-            queueService.addToQueue(pid, nzbName, type, appId);
+            const { pid, nzbName, type, appId, library } = await getDetails(xmlString);
+            if (library) {
+                queueService.addToQueue(pid, nzbName, type, appId, library);
+            } else {
+                queueService.addToQueue(pid, nzbName, type, appId);
+            }
             videoEventService.record(VideoEventType.QUEUED, `Queued "${nzbName}" for download`, { pid });
             pids.push(pid);
         }
@@ -98,14 +104,32 @@ async function getDetails(xml: string): Promise<NZBDetails> {
                     nzbName,
                 } as DetailsRejection);
             }
-            const nzbName: NZBMetaEntry = result.nzb.head[0].meta.find(({ $ }: any) => $.type === 'nzbName');
-            const type: NZBMetaEntry = result.nzb.head[0].meta.find(({ $ }: any) => $.type === 'type');
-            const app: NZBMetaEntry = result.nzb.head[0].meta.find(({ $ }: any) => $.type === 'app');
+            const meta: any[] = result.nzb.head[0].meta;
+            const findMeta = (metaType: string): string | undefined =>
+                meta.find(({ $ }: any) => $.type === metaType)?.$?._;
+
+            const nzbName = findMeta('nzbName');
+            const type = findMeta('type');
+            const app = findMeta('app');
+
+            const libraryTitle = findMeta('title');
+            const library: QueueLibraryMetadata | undefined = libraryTitle
+                ? {
+                    title: libraryTitle,
+                    series: findMeta('series') != null ? parseInt(findMeta('series') as string) : undefined,
+                    episode: findMeta('episode') != null ? parseInt(findMeta('episode') as string) : undefined,
+                    episodeTitle: findMeta('episodeTitle'),
+                    channel: findMeta('channel'),
+                    pubDate: findMeta('pubDate'),
+                }
+                : undefined;
+
             const details: NZBDetails = {
                 pid: result.nzb.head[0].title[0],
-                nzbName: nzbName?.$?._,
-                type: type?.$?._ as VideoType,
-                appId: app ? app?.$?._ : undefined,
+                nzbName: nzbName as string,
+                type: type as VideoType,
+                appId: app,
+                library,
             };
             resolve(details);
         });

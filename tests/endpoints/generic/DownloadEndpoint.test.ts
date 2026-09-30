@@ -39,7 +39,9 @@ describe('DownloadEndpoint', () => {
         expect(queueService.addToQueue).toHaveBeenCalledWith(
             'abc123',
             'Doctor.Who_The.Timeless.Child',
-            VideoType.TV
+            VideoType.TV,
+            undefined,
+            expect.objectContaining({ title: 'Doctor Who' })
         );
         expect(jsonMock).toHaveBeenCalledWith({ status: true });
     });
@@ -70,7 +72,9 @@ describe('DownloadEndpoint', () => {
         expect(queueService.addToQueue).toHaveBeenCalledWith(
             'abc123',
             'Inception',
-            VideoType.MOVIE
+            VideoType.MOVIE,
+            undefined,
+            expect.objectContaining({ title: 'Inception' })
         );
         expect(jsonMock).toHaveBeenCalledWith({ status: true });
     });

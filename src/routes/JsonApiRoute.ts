@@ -8,9 +8,11 @@ import queueService from '../service/queueService';
 import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
 import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
+import { QueueLibraryMetadata } from '../types/QueueEntry';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { VideoEventType } from '../types/VideoEvent';
+import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../utils/Utils';
 import AppsRoute from './json-api/AppsRoute';
 import EventsRoute from './json-api/EventsRoute';
 import OffScheduleRoute from './json-api/OffScheduleRoute';
@@ -66,12 +68,30 @@ router.get('/details', async (req: Request, res: Response) => {
 });
 
 router.get('/download', async (req: Request, res: Response) => {
-    const { pid } = req.query as any;
+    const { pid, title, series, episode, episodeTitle, channel, pubDate } = req.query as any;
     let { nzbName, type } = req.query as any;
+
+    // Structured metadata for library folder/nfo generation (libraryPathBuilder.ts /
+    // nfoBuilder.ts) - sent by the frontend's Search/Download pages, which already have
+    // the full IPlayerSearchResult in hand. When absent (a bare download-by-pid/URL with
+    // no prior search), it's derived below from the BBC metadata itself, the same way
+    // NativeSearchService derives it for search results (calculateSeasonAndEpisode).
+    let library: QueueLibraryMetadata | undefined = title
+        ? {
+            title,
+            series: series != null ? parseInt(series) : undefined,
+            episode: episode != null ? parseInt(episode) : undefined,
+            episodeTitle,
+            channel,
+            pubDate,
+        }
+        : undefined;
+
+    let metadata: IPlayerMetadataResponse | undefined;
 
     if (!nzbName || !type) {
         try {
-            const metadata: IPlayerMetadataResponse | undefined = await iplayerDetailsService.getMetadata(pid);
+            metadata = await iplayerDetailsService.getMetadata(pid);
             if (!metadata?.programme.display_title) {
                 res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: 'Unable to find episode details' } as ApiResponse);
                 return;
@@ -86,8 +106,8 @@ router.get('/download', async (req: Request, res: Response) => {
                 type = VideoType.TV;
             }
             if (!nzbName) {
-                const { title, subtitle } = metadata.programme.display_title!;
-                nzbName = `${title}${type == VideoType.TV && subtitle ? `.${subtitle}` : ''}`;
+                const { title: displayTitle, subtitle } = metadata.programme.display_title!;
+                nzbName = `${displayTitle}${type == VideoType.TV && subtitle ? `.${subtitle}` : ''}`;
                 nzbName = nzbName.replaceAll('.', '_')
                 nzbName = nzbName.replaceAll(' ', '.');
             }
@@ -97,7 +117,44 @@ router.get('/download', async (req: Request, res: Response) => {
         }
     }
 
-    queueService.addToQueue(pid, nzbName, type);
+    // No structured metadata sent by the caller (a bare download-by-pid/URL with no prior
+    // search, unlike the frontend's Search/Download pages) - derive it from the BBC
+    // metadata itself, the same way NativeSearchService derives it for search results.
+    // Best-effort: a failure here shouldn't fail the download, only skip the library
+    // folder/nfo treatment for this item (see libraryPathBuilder.ts's flat-name fallback).
+    if (!library) {
+        try {
+            metadata = metadata ?? (await iplayerDetailsService.getMetadata(pid));
+            if (metadata?.programme.display_title) {
+                const [, derivedEpisode, calcEpisodeTitle, derivedSeries] = await calculateSeasonAndEpisode(metadata.programme);
+                let calcEpisode = derivedEpisode;
+                let calcSeries = derivedSeries;
+                // BBC metadata has no resolvable series/episode (e.g. an off-schedule/archive
+                // item) - fall back to parsing a "S01E02" pattern out of the filename itself.
+                if (calcSeries == null || calcEpisode == null) {
+                    const parsed = parseSeasonEpisodeFromFilename(nzbName ?? '');
+                    calcSeries = calcSeries ?? parsed?.series;
+                    calcEpisode = calcEpisode ?? parsed?.episode;
+                }
+                library = {
+                    title: metadata.programme.display_title.title,
+                    series: calcSeries,
+                    episode: calcEpisode,
+                    episodeTitle: calcEpisodeTitle,
+                    channel: metadata.programme.ownership?.service?.title,
+                    pubDate: metadata.programme.first_broadcast_date ?? undefined,
+                };
+            }
+        } catch {
+            // Best-effort only - proceed without library metadata.
+        }
+    }
+
+    if (library) {
+        queueService.addToQueue(pid, nzbName, type, undefined, library);
+    } else {
+        queueService.addToQueue(pid, nzbName, type);
+    }
     videoEventService.record(VideoEventType.QUEUED, `Queued "${nzbName}" for download`, { pid });
     res.json({ status: true });
 });

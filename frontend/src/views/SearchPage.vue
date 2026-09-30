@@ -97,7 +97,7 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
-import { formatDate, formatStorageSize } from '@/lib/utils';
+import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();
@@ -138,8 +138,8 @@ const download = async (searchResult) => {
     router.push({ name: 'download', query: { json: JSON.stringify(searchResult) } });
 };
 
-const immediateDownload = async ({ pid, nzbName, type }) => {
-    const response = await ipFetch(`json-api/download?pid=${pid}&nzbName=${nzbName}&type=${type}`);
+const immediateDownload = async (searchResult) => {
+    const response = await ipFetch(`json-api/download?${buildDownloadQuery(searchResult)}`);
     if (response.ok) {
         router.push('/queue');
     }

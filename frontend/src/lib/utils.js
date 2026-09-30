@@ -2,6 +2,21 @@ export const getHost = () => {
     return import.meta.env.DEV ? `http://${window.location.hostname}:4404` : '';
 };
 
+// Builds the query string for json-api/download from a full search result, carrying the
+// structured show/season/episode metadata through so the backend can build a Jellyfin-style
+// library folder for it (libraryPathBuilder.ts) - not just pid/nzbName/type. Shared by
+// SearchPage's immediate/bulk download and DownloadPage's confirm-and-download.
+export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate }) => {
+    const params = new URLSearchParams({ pid, nzbName, type });
+    if (title) params.set('title', title);
+    if (series != null) params.set('series', series);
+    if (episode != null) params.set('episode', episode);
+    if (episodeTitle) params.set('episodeTitle', episodeTitle);
+    if (channel) params.set('channel', channel);
+    if (pubDate) params.set('pubDate', pubDate);
+    return params.toString();
+};
+
 // IPlayerDetails.thumbnail is a relative json-api path (e.g. "json-api/thumbnail/abc123.jpg"),
 // mirroring how ipFetch resolves endpoints - resolve it against the API host the same way.
 export const getThumbnailUrl = (thumbnail) => {

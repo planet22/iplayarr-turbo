@@ -11,10 +11,17 @@ interface DownloadNZBRequest {
     nzbName: string;
     type: VideoType;
     app?: string;
+    title?: string;
+    series?: string;
+    episode?: string;
+    episodeTitle?: string;
+    channel?: string;
+    pubDate?: string;
 }
 
 export default async (req: Request, res: Response) => {
-    const { pid, nzbName, type, app } = req.query as any as DownloadNZBRequest;
+    const { pid, nzbName, type, app, title, series, episode, episodeTitle, channel, pubDate } =
+        req.query as any as DownloadNZBRequest;
 
     const date: Date = new Date();
     date.setMinutes(date.getMinutes() - 720);
@@ -48,6 +55,23 @@ export default async (req: Request, res: Response) => {
                 _: app,
             },
         });
+    }
+
+    // Structured show/season/episode metadata, so AddFileEndpoint.ts can
+    // carry it onto the QueueEntry for library folder/nfo generation
+    // (libraryPathBuilder.ts / nfoBuilder.ts) without re-parsing nzbName.
+    const libraryMeta: [string, string | undefined][] = [
+        ['title', title],
+        ['series', series],
+        ['episode', episode],
+        ['episodeTitle', episodeTitle],
+        ['channel', channel],
+        ['pubDate', pubDate],
+    ];
+    for (const [metaType, value] of libraryMeta) {
+        if (value != null) {
+            meta.push({ $: { type: metaType, _: value } });
+        }
     }
 
     const nzbFile: NZBFileResponse = {

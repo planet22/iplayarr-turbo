@@ -100,6 +100,7 @@ describe('Utils', () => {
             pid: '123',
             nzbName: 'test.nzb',
             type: VideoType.MOVIE,
+            title: 'Test Movie',
         } as IPlayerSearchResult;
 
         const mockApp = (useSSL: boolean | string): App =>
@@ -125,35 +126,54 @@ describe('Utils', () => {
 
         it('builds download link correctly without app', async () => {
             await expect(Utils.createNZBDownloadLink(req, base, 'apikey')).resolves.toBe(
-                'http://localhost:4404/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey'
+                'http://localhost:4404/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&title=Test%20Movie'
             );
         });
 
         it('builds https download link when useSSL is boolean true', async () => {
             mockedAppService.getApp.mockResolvedValue(mockApp(true));
             await expect(Utils.createNZBDownloadLink(req, base, 'apikey', 'radarr')).resolves.toBe(
-                'https://iplayarr.example.com:443/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&app=radarr'
+                'https://iplayarr.example.com:443/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&app=radarr&title=Test%20Movie'
             );
         });
 
         it('builds https download link when useSSL is string "true"', async () => {
             mockedAppService.getApp.mockResolvedValue(mockApp('true'));
             await expect(Utils.createNZBDownloadLink(req, base, 'apikey', 'radarr')).resolves.toBe(
-                'https://iplayarr.example.com:443/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&app=radarr'
+                'https://iplayarr.example.com:443/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&app=radarr&title=Test%20Movie'
             );
         });
 
         it('builds http download link when useSSL is boolean false', async () => {
             mockedAppService.getApp.mockResolvedValue(mockApp(false));
             await expect(Utils.createNZBDownloadLink(req, base, 'apikey', 'radarr')).resolves.toBe(
-                'http://iplayarr.example.com:443/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&app=radarr'
+                'http://iplayarr.example.com:443/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&app=radarr&title=Test%20Movie'
             );
         });
 
         it('builds http download link when useSSL is string "false"', async () => {
             mockedAppService.getApp.mockResolvedValue(mockApp('false'));
             await expect(Utils.createNZBDownloadLink(req, base, 'apikey', 'radarr')).resolves.toBe(
-                'http://iplayarr.example.com:443/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&app=radarr'
+                'http://iplayarr.example.com:443/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&app=radarr&title=Test%20Movie'
+            );
+        });
+
+        it('carries series/episode/episodeTitle/channel/pubDate through as extra query params', async () => {
+            const tvResult: IPlayerSearchResult = {
+                ...base,
+                type: VideoType.TV,
+                title: 'Test Show',
+                series: 1,
+                episode: 2,
+                episodeTitle: 'The Episode',
+                channel: 'BBC One',
+                pubDate: new Date('2024-01-02T03:04:05.000Z'),
+            } as IPlayerSearchResult;
+
+            await expect(Utils.createNZBDownloadLink(req, tvResult, 'apikey')).resolves.toBe(
+                'http://localhost:4404/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=TV&apikey=apikey' +
+                '&title=Test%20Show&series=1&episode=2&episodeTitle=The%20Episode&channel=BBC%20One' +
+                '&pubDate=2024-01-02T03%3A04%3A05.000Z'
             );
         });
     });
@@ -818,6 +838,26 @@ describe('Utils', () => {
                 expect(mockedSkyhookService.lookupSeriesDetails).not.toHaveBeenCalled();
             }
         };
+    });
+
+    describe('parseSeasonEpisodeFromFilename', () => {
+        it('parses a scene-style S01E02 pattern', () => {
+            expect(Utils.parseSeasonEpisodeFromFilename('Show.Name.S01E02.WEBDL.720p-BBC')).toEqual({
+                series: 1,
+                episode: 2,
+            });
+        });
+
+        it('is case-insensitive and tolerates multi-digit numbers', () => {
+            expect(Utils.parseSeasonEpisodeFromFilename('show.name.s12e345.mp4')).toEqual({
+                series: 12,
+                episode: 345,
+            });
+        });
+
+        it('returns undefined when no pattern is present', () => {
+            expect(Utils.parseSeasonEpisodeFromFilename('Some.Movie.WEBDL.1080p-BBC')).toBeUndefined();
+        });
     });
 
     beforeEach(() => {
