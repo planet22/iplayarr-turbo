@@ -44,7 +44,8 @@ RUN apk --update add \
     perl-xml-simple \
     perl-xml-libxml \
     su-exec \
-    python3
+    python3 \
+    tzdata
 
 # atomicparsley still isn't packaged in any stable Alpine release, only edge/testing,
 # so it needs its own apk invocation - keeping --allow-untrusted scoped to just this
