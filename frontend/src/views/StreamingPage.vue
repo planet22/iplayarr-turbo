@@ -45,8 +45,8 @@
                     </td>
                     <td class="text">
                         {{ detailsFor(session.pid)?.title ?? session.pid }}
-                        <div v-if="detailsFor(session.pid)?.channel" class="subtle">
-                            {{ detailsFor(session.pid).channel }}
+                        <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
+                            {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td>
@@ -130,8 +130,8 @@
                     </td>
                     <td class="text">
                         {{ detailsFor(session.pid)?.title ?? session.pid }}
-                        <div v-if="detailsFor(session.pid)?.channel" class="subtle">
-                            {{ detailsFor(session.pid).channel }}
+                        <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
+                            {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td>
@@ -173,7 +173,9 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
-import { formatDateTimeWithMillis, formatStorageSize, getThumbnailUrl } from '@/lib/utils';
+import {
+    formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl,
+} from '@/lib/utils';
 
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
@@ -190,6 +192,10 @@ const {
 
 function detailsFor(pid) {
     return details[pid];
+}
+
+function seriesEpisodeLabel(pid) {
+    return getSeriesEpisodeLabel(detailsFor(pid));
 }
 
 async function loadDetails(pid) {

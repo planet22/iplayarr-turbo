@@ -3,6 +3,7 @@
         <colgroup>
             <col style="width: 36px" />
             <col style="width: 32px" />
+            <col style="width: 64px" />
             <col />
             <col style="width: 70px" />
             <col style="width: 90px" />
@@ -19,6 +20,7 @@
                     <CheckInput v-model="allChecked" />
                 </th>
                 <th />
+                <th />
                 <th>Filename</th>
                 <th>Type</th>
                 <th>Start</th>
@@ -33,16 +35,23 @@
             </tr>
         </thead>
         <tbody>
-            <QueueTableRow v-for="item in queue" :key="item.id" ref="queueRows" :item="item" />
-            <QueueTableRow v-for="item in pagedHistory" :key="item.id" ref="historyRows" :item="item" />
+            <QueueTableRow
+                v-for="item in queue" :key="item.id" ref="queueRows" :item="item"
+                :details="detailsFor(item.pid)"
+            />
+            <QueueTableRow
+                v-for="item in pagedHistory" :key="item.id" ref="historyRows" :item="item"
+                :details="detailsFor(item.pid)"
+            />
         </tbody>
     </table>
     <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="history.length" />
 </template>
 
 <script setup>
-import { computed, defineExpose, defineProps, ref, watch } from 'vue';
+import { computed, defineExpose, defineProps, onMounted, reactive, ref, watch } from 'vue';
 
+import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 
 import CheckInput from '../common/form/CheckInput.vue';
@@ -65,6 +74,35 @@ const history = computed(() => props.history);
 const {
     page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
 } = usePagination(history);
+
+const details = reactive({});
+
+function detailsFor(pid) {
+    return details[pid];
+}
+
+async function loadDetails(pid) {
+    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
+        return;
+    }
+    details[pid] = null;
+    try {
+        const response = await ipFetch(`json-api/details?pid=${pid}`);
+        details[pid] = response.ok ? response.data : null;
+    } catch {
+        details[pid] = null;
+    }
+}
+
+function loadMissingDetails() {
+    [...props.queue, ...props.history]
+        .map(({ pid }) => pid)
+        .filter(Boolean)
+        .forEach(loadDetails);
+}
+
+onMounted(loadMissingDetails);
+watch([() => props.queue, () => props.history], loadMissingDetails);
 
 const allChecked = ref(false);
 
@@ -138,6 +176,16 @@ watch(
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+
+            &.text {
+                white-space: normal;
+
+                > div {
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+            }
 
             .appDisplay {
                 display: flex;

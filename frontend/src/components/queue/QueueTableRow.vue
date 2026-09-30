@@ -6,6 +6,10 @@
         <td>
             <font-awesome-icon :class="[item.status]" :icon="['fas', getDownloadIcon(item)]" />
         </td>
+        <td>
+            <img v-if="details?.thumbnail" class="thumbnail" :src="getThumbnailUrl(details.thumbnail)" />
+            <font-awesome-icon v-else class="thumbnail-placeholder" :icon="['fas', item.type == 'TV' ? 'tv' : 'film']" />
+        </td>
         <td class="text" data-title="Filename">
             <RouterLink
                 v-if="item.status != 'Forwarded'"
@@ -16,6 +20,9 @@
             <a v-else target="_blank" :href="getAppForId(item.appId)?.link || getAppForId(item.appId)?.url || '#'">
                 {{ item.nzbName }}
             </a>
+            <div v-if="details?.channel || seriesEpisodeLabel" class="subtle">
+                {{ [details?.channel, seriesEpisodeLabel].filter(Boolean).join(' · ') }}
+            </div>
         </td>
         <td>
             <span :class="['pill', item.type]">
@@ -54,11 +61,11 @@
 </template>
 
 <script setup>
-import { defineExpose, defineProps, inject, ref } from 'vue';
+import { computed, defineExpose, defineProps, inject, ref } from 'vue';
 
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { formatStorageSize } from '@/lib/utils';
+import { formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
 import ProgressBar from '../common/ProgressBar.vue';
@@ -68,11 +75,19 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+
+    details: {
+        type: Object,
+        required: false,
+        default: null,
+    },
 });
 
 const apps = inject('apps');
 const checked = ref(false);
 defineExpose({ checked, item: props.item });
+
+const seriesEpisodeLabel = computed(() => getSeriesEpisodeLabel(props.details));
 
 const trash = async (pid) => {
     if (await dialogService.confirm('Delete', 'Are you sure you want to delete this history item?')) {
@@ -122,6 +137,25 @@ const getDeleteIcon = ({ status }) => {
 </script>
 
 <style lang="less" scoped>
+.thumbnail {
+    width: 64px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 2px;
+    display: block;
+}
+
+.thumbnail-placeholder {
+    width: 64px;
+    text-align: center;
+    color: @subtle-text-color;
+}
+
+.subtle {
+    font-size: 12px;
+    color: @subtle-text-color;
+}
+
 .Complete {
     color: @complete-color;
 }
