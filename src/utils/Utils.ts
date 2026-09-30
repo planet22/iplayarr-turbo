@@ -8,7 +8,7 @@ import path from 'path';
 import { deromanize } from 'romans';
 import { pipeline } from 'stream';
 
-import { episodeRegex, getIplayerSeriesRegex, nativeSeriesRegex } from '../constants/iPlayarrConstants';
+import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, nativeSeriesRegex } from '../constants/iPlayarrConstants';
 import appService from '../service/appService';
 import configService from '../service/configService';
 import SkyhookService from '../service/skyhook/SkyhookService';
@@ -88,7 +88,7 @@ export function isLegacyMD5Hash(value: string): boolean {
 
 export async function createNZBDownloadLink(
     req: Request,
-    { pid, nzbName, type }: IPlayerSearchResult,
+    { pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate }: IPlayerSearchResult,
     apiKey: string,
     app?: string
 ): Promise<string> {
@@ -100,7 +100,18 @@ export async function createNZBDownloadLink(
             baseUrl = `${useSSL ? 'https' : 'http'}://${appObj.iplayarr.host}:${appObj.iplayarr.port}`;
         }
     }
-    return `${baseUrl}/api?mode=nzb-download&pid=${encodeURIComponent(pid)}&nzbName=${encodeURIComponent(nzbName ?? '')}&type=${encodeURIComponent(type)}&apikey=${encodeURIComponent(apiKey)}${app ? `&app=${encodeURIComponent(app)}` : ''}`;
+    // Structured show/season/episode metadata, carried through the NZB (see
+    // DownloadNZBEndpoint.ts's meta entries) so the queue entry can build a
+    // Jellyfin-style library folder without re-parsing the formatted nzbName -
+    // see libraryPathBuilder.ts.
+    const libraryParams: string =
+        `&title=${encodeURIComponent(title)}` +
+        (series != null ? `&series=${encodeURIComponent(series)}` : '') +
+        (episode != null ? `&episode=${encodeURIComponent(episode)}` : '') +
+        (episodeTitle ? `&episodeTitle=${encodeURIComponent(episodeTitle)}` : '') +
+        (channel ? `&channel=${encodeURIComponent(channel)}` : '') +
+        (pubDate ? `&pubDate=${encodeURIComponent(pubDate.toISOString())}` : '');
+    return `${baseUrl}/api?mode=nzb-download&pid=${encodeURIComponent(pid)}&nzbName=${encodeURIComponent(nzbName ?? '')}&type=${encodeURIComponent(type)}&apikey=${encodeURIComponent(apiKey)}${app ? `&app=${encodeURIComponent(app)}` : ''}${libraryParams}`;
 }
 
 // No req context is available at download time (downloadFacade.download() is invoked from
@@ -243,6 +254,17 @@ export async function calculateSeasonAndEpisode(
 
     const type = series != null && episode != null ? VideoType.TV : VideoType.MOVIE;
     return [type, episode, episodeTitle, series];
+}
+
+// Last-resort fallback for a bare download-by-pid/URL when the BBC metadata itself has no
+// resolvable series/episode (calculateSeasonAndEpisode returns undefined for both) - e.g. an
+// off-schedule/archive item the BBC API doesn't structure as part of a series. Parses a
+// scene-style "S01E02" pattern out of a user-supplied filename instead, same as Sonarr/Radarr
+// would when matching a file on disk.
+export function parseSeasonEpisodeFromFilename(filename: string): { series?: number; episode?: number } | undefined {
+    const match = filenameSeasonEpisodeRegex.exec(filename);
+    if (!match) return undefined;
+    return { series: parseInt(match[1]), episode: parseInt(match[2]) };
 }
 
 export function convertToMB(size: string): number {

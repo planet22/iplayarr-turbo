@@ -4,7 +4,7 @@ import downloadFacade from '../facade/downloadFacade';
 import { DownloadDetails } from '../types/DownloadDetails';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
-import { QueueEntry } from '../types/QueueEntry';
+import { QueueEntry, QueueLibraryMetadata } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
 import configService from './configService';
@@ -16,7 +16,7 @@ import videoEventService from './videoEventService';
 let queue: QueueEntry[] = [];
 
 const queueService = {
-    addToQueue: (pid: string, nzbName: string, type: VideoType, appId?: string): void => {
+    addToQueue: (pid: string, nzbName: string, type: VideoType, appId?: string, library?: QueueLibraryMetadata): void => {
         const queueEntry: QueueEntry = {
             pid,
             status: QueueEntryStatus.QUEUED,
@@ -24,6 +24,7 @@ const queueService = {
             details: {},
             type,
             appId,
+            library,
         };
         queue.push(queueEntry);
         queueService.moveQueue();

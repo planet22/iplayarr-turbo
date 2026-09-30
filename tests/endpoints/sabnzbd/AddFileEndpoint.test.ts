@@ -29,6 +29,22 @@ const VALID_NZB_XML = `<?xml version="1.0"?>
     </head>
 </nzb>`;
 
+const VALID_NZB_XML_WITH_LIBRARY_META = `<?xml version="1.0"?>
+<nzb>
+    <head>
+        <title>m0012345</title>
+        <meta type="nzbName" _="My Show S01E01"/>
+        <meta type="type" _="${VideoType.TV}"/>
+        <meta type="app" _="app-123"/>
+        <meta type="title" _="My Show"/>
+        <meta type="series" _="1"/>
+        <meta type="episode" _="1"/>
+        <meta type="episodeTitle" _="The Episode"/>
+        <meta type="channel" _="BBC One"/>
+        <meta type="pubDate" _="2024-01-02T03:04:05.000Z"/>
+    </head>
+</nzb>`;
+
 // Well-formed XML, but missing the <title> AddFileEndpoint requires - triggers
 // the "Invalid iPlayarr NZB File" rejection branch (as opposed to a real XML
 // parse error). This branch is specifically for NZBs iplayarr-turbo didn't
@@ -75,6 +91,21 @@ describe('AddFileEndpoint', () => {
         expect(queueService.addToQueue).toHaveBeenCalledWith('m0012345', 'My Show S01E01', VideoType.TV, 'app-123');
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.json).toHaveBeenCalledWith({ status: true, nzo_ids: ['m0012345'] });
+    });
+
+    it('carries structured library metadata onto the queue entry when present', async () => {
+        req.files = [toFile(VALID_NZB_XML_WITH_LIBRARY_META)] as any;
+
+        await handler(req as Request, res as Response);
+
+        expect(queueService.addToQueue).toHaveBeenCalledWith('m0012345', 'My Show S01E01', VideoType.TV, 'app-123', {
+            title: 'My Show',
+            series: 1,
+            episode: 1,
+            episodeTitle: 'The Episode',
+            channel: 'BBC One',
+            pubDate: '2024-01-02T03:04:05.000Z',
+        });
     });
 
     it('responds 500 when the NZB is invalid and no configured app can take it', async () => {

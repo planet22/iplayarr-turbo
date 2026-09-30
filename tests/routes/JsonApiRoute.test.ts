@@ -83,6 +83,7 @@ describe('JsonApiRoute', () => {
         it('should add item to queue and return success', async () => {
             const addToQueueMock = queueService.addToQueue as jest.Mock;
             addToQueueMock.mockImplementation(() => { });
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
 
             const res = await request(app)
                 .get('/download')
@@ -91,6 +92,109 @@ describe('JsonApiRoute', () => {
             expect(addToQueueMock).toHaveBeenCalledWith('p01xyz', 'show.nzb', 'tv');
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ status: true });
+        });
+
+        it('carries structured library metadata straight through when the caller supplies it', async () => {
+            const addToQueueMock = queueService.addToQueue as jest.Mock;
+            addToQueueMock.mockImplementation(() => { });
+
+            const res = await request(app).get('/download').query({
+                pid: 'p01xyz',
+                nzbName: 'show.nzb',
+                type: 'tv',
+                title: 'My Show',
+                series: '1',
+                episode: '2',
+                episodeTitle: 'The Episode',
+                channel: 'BBC One',
+                pubDate: '2024-01-02T00:00:00.000Z',
+            });
+
+            expect(res.status).toBe(200);
+            expect(addToQueueMock).toHaveBeenCalledWith('p01xyz', 'show.nzb', 'tv', undefined, {
+                title: 'My Show',
+                series: 1,
+                episode: 2,
+                episodeTitle: 'The Episode',
+                channel: 'BBC One',
+                pubDate: '2024-01-02T00:00:00.000Z',
+            });
+            expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();
+        });
+
+        it('derives library metadata from BBC data when the caller supplies none', async () => {
+            const metadata = {
+                programme: {
+                    display_title: { title: 'Test Show' },
+                    title: 'The Real Title',
+                    position: 3,
+                    type: 'episode',
+                    pid: 'p01xyz',
+                    ownership: { service: { title: 'BBC One' } },
+                    first_broadcast_date: '2024-01-02',
+                    parent: {
+                        programme: {
+                            type: 'series',
+                            position: 1,
+                            title: 'Series 1',
+                            expected_child_count: 6,
+                            aggregated_episode_count: 6,
+                            pid: 'parent-pid',
+                            title2: undefined,
+                        },
+                    },
+                },
+            };
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata);
+            const addToQueueMock = queueService.addToQueue as jest.Mock;
+            addToQueueMock.mockImplementation(() => { });
+
+            const res = await request(app).get('/download').query({ pid: 'p01xyz' });
+
+            expect(res.status).toBe(200);
+            expect(addToQueueMock).toHaveBeenCalledWith(
+                'p01xyz',
+                expect.any(String),
+                'TV',
+                undefined,
+                {
+                    title: 'Test Show',
+                    series: 1,
+                    episode: 3,
+                    episodeTitle: 'The Real Title',
+                    channel: 'BBC One',
+                    pubDate: '2024-01-02',
+                }
+            );
+        });
+
+        it('falls back to parsing series/episode from the filename when BBC metadata has none', async () => {
+            const metadata = {
+                programme: {
+                    display_title: { title: 'Show Name' },
+                    title: 'Show Name',
+                    position: null,
+                    type: 'episode',
+                    pid: 'p01xyz',
+                    ownership: { service: { title: 'BBC One' } },
+                },
+            };
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(metadata);
+            const addToQueueMock = queueService.addToQueue as jest.Mock;
+            addToQueueMock.mockImplementation(() => { });
+
+            const res = await request(app)
+                .get('/download')
+                .query({ pid: 'p01xyz', nzbName: 'Show.Name.S02E05', type: 'tv' });
+
+            expect(res.status).toBe(200);
+            expect(addToQueueMock).toHaveBeenCalledWith(
+                'p01xyz',
+                'Show.Name.S02E05',
+                'tv',
+                undefined,
+                expect.objectContaining({ title: 'Show Name', series: 2, episode: 5 })
+            );
         });
     });
 

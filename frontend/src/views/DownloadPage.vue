@@ -23,6 +23,7 @@ import TextInput from '@/components/common/form/TextInput.vue';
 import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import { buildDownloadQuery } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();
@@ -38,9 +39,7 @@ watch(
 );
 
 const download = async () => {
-    const response = await ipFetch(
-        `json-api/download?pid=${searchResult.value.pid}&nzbName=${searchResult.value.nzbName}&type=${searchResult.value.type}`
-    );
+    const response = await ipFetch(`json-api/download?${buildDownloadQuery(searchResult.value)}`);
     if (response.ok) {
         router.push('/queue');
     }
