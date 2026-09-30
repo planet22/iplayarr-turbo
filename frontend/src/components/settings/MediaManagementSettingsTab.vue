@@ -33,6 +33,20 @@
         :error="validationErrors.config?.ARCHIVE_ENABLED"
         :options="trueOrFalse"
     />
+    <SelectInput
+        v-model="config.LIBRARY_FOLDER_STRUCTURE"
+        name="Organize into Folder Structure?"
+        tooltip="Store completed downloads under Complete Directory in Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Sonarr/Radarr are told the correct nested path."
+        :error="validationErrors.config?.LIBRARY_FOLDER_STRUCTURE"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-model="config.WRITE_NFO_STRM"
+        name="Write .nfo Metadata Files?"
+        tooltip="Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when Media Mode is set to Streaming - this just adds matching .nfo metadata for it."
+        :error="validationErrors.config?.WRITE_NFO_STRM"
+        :options="trueOrFalse"
+    />
 
     <template v-if="showAdvanced">
         <TextInput

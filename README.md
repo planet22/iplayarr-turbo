@@ -112,6 +112,8 @@ There's a few more optional settings too:
 | HIDE_DONATE      | If you don't like the Kofi donate links you can hide them                                 |
 | PUID             | Host User ID for file permissions                                                         |
 | PGID             | Host Group ID for file permissions                                                        |
+| LIBRARY_FOLDER_STRUCTURE | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to false |
+| WRITE_NFO_STRM   | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. Defaults to false |
 
 ### Usage
 

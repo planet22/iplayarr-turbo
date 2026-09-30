@@ -118,5 +118,32 @@ describe('sabnzbdActionEndpoint', () => {
                 path: '/complete/strmfile.strm',
             });
         });
+
+        it('reports the nested libraryPath when LIBRARY_FOLDER_STRUCTURE produced one', async () => {
+            const queueEntries: QueueEntry[] = [
+                {
+                    pid: 'id1',
+                    nzbName: 'Show.Name.S01E02',
+                    status: QueueEntryStatus.COMPLETE,
+                    details: { size: 1 },
+                    type: VideoType.TV,
+                    extension: 'mkv',
+                    libraryPath: 'Show Name/Season 01/Show Name - S01E02 - Title.mkv',
+                },
+            ];
+
+            (historyService.getHistory as jest.Mock).mockResolvedValue(queueEntries);
+            (configService.getParameter as jest.Mock).mockResolvedValueOnce('/complete');
+            (configService.getParameter as jest.Mock).mockResolvedValueOnce('mp4');
+
+            await handler(req as Request, res as Response, next);
+
+            const responseArg = (res.json as jest.Mock).mock.calls[0][0];
+            expect(responseArg.history.slots[0]).toMatchObject({
+                name: 'Show Name - S01E02 - Title.mkv',
+                storage: '/complete/Show Name/Season 01/Show Name - S01E02 - Title.mkv',
+                path: '/complete/Show Name/Season 01/Show Name - S01E02 - Title.mkv',
+            });
+        });
     });
 });

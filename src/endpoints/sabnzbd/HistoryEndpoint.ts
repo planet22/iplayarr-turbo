@@ -54,17 +54,24 @@ const actionDirectory: EndpointDirectory = {
 function createHistoryEntry(completeDir: string, item: QueueEntry, outputFormat: string): SABNZBDHistoryEntryResponse {
     const failed = item.status == QueueEntryStatus.FAILED;
     const extension = item.extension ?? outputFormat;
+    // libraryPath (set by downloadFacade at completion time) is preferred so
+    // Sonarr/Radarr are told the real on-disk location, including any
+    // LIBRARY_FOLDER_STRUCTURE show/season subfolders. Older history entries
+    // written before this field existed fall back to the flat layout.
+    const relativePath = item.libraryPath ?? `${item.nzbName}.${extension}`;
+    const fullPath = `${completeDir}/${relativePath}`;
+    const fileName = relativePath.split(/[/\\]/).pop() as string;
     return {
         ...historyEntrySkeleton,
         duplicate_key: item.pid,
         size: formatBytes((item.details?.size as number) * sizeFactor),
         nzb_name: `${item.nzbName}.nzb`,
-        storage: `${completeDir}/${item.nzbName}.${extension}`,
+        storage: fullPath,
         completed: (item.details?.size as number) * sizeFactor,
         downloaded: (item.details?.size as number) * sizeFactor,
         nzo_id: item.pid,
-        path: `${completeDir}/${item.nzbName}.${extension}`,
-        name: `${item.nzbName}.${extension}`,
+        path: fullPath,
+        name: fileName,
         url: `${item.nzbName}.nzb`,
         bytes: (item.details?.size as number) * sizeFactor,
         status: failed ? HistoryStatus.FAILED : HistoryStatus.COMPLETED,
