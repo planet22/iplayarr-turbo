@@ -23,6 +23,14 @@ const appService = {
         return allApps.find(({ id: app_id }) => app_id == id);
     },
 
+    findAppByUserAgent: async (userAgent?: string): Promise<App | undefined> => {
+        if (!userAgent) {
+            return undefined;
+        }
+        const allApps: App[] = await appService.getAllApps();
+        return allApps.find(({ userAgentMatch }) => userAgentMatch && userAgent.includes(userAgentMatch));
+    },
+
     removeApp: async (id: string): Promise<boolean> => {
         let allApps: App[] = await appService.getAllApps();
         allApps = allApps.filter(({ id: app_id }) => app_id != id);
