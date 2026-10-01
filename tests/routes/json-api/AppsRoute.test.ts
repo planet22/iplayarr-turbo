@@ -3,11 +3,13 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/AppsRoute'; // adjust path if needed
 import appService from '../../../src/service/appService';
+import userAgentMappingService from '../../../src/service/userAgentMappingService';
 import { appFeatures } from '../../../src/types/AppType';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 import { AppFormValidator } from '../../../src/validators/AppFormValidator';
 
 jest.mock('../../../src/service/appService');
+jest.mock('../../../src/service/userAgentMappingService');
 jest.mock('../../../src/validators/AppFormValidator');
 
 const app = express();
@@ -149,6 +151,79 @@ describe('App Router', () => {
         it('updates API key', async () => {
             const res = await request(app).post('/updateApiKey');
             expect(appService.updateApiKey).toHaveBeenCalled();
+            expect(res.status).toBe(200);
+            expect(res.body).toBe(true);
+        });
+    });
+
+    describe('GET /user-agents', () => {
+        it('returns all mappings', async () => {
+            const mappings = [{ id: '1', userAgent: 'Sonarr', appName: 'Iplayarr-sonarr' }];
+            (userAgentMappingService.getAllMappings as jest.Mock).mockResolvedValue(mappings);
+
+            const res = await request(app).get('/user-agents');
+
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual(mappings);
+        });
+    });
+
+    describe('POST /user-agents', () => {
+        it('adds a mapping with valid input', async () => {
+            const mapping = { userAgent: 'Sonarr', appName: 'Iplayarr-sonarr' };
+            const saved = { id: 'generated-id', ...mapping };
+            (userAgentMappingService.addMapping as jest.Mock).mockResolvedValue(saved);
+
+            const res = await request(app).post('/user-agents').send(mapping);
+
+            expect(userAgentMappingService.addMapping).toHaveBeenCalledWith(mapping);
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual(saved);
+        });
+
+        it('rejects a mapping missing userAgent or appName', async () => {
+            const res = await request(app).post('/user-agents').send({ userAgent: '' });
+
+            expect(userAgentMappingService.addMapping).not.toHaveBeenCalled();
+            expect(res.status).toBe(400);
+            expect(res.body).toEqual({
+                error: ApiError.INVALID_INPUT,
+                invalid_fields: {
+                    userAgent: 'User-Agent is required',
+                    appName: 'App Name is required',
+                },
+            });
+        });
+    });
+
+    describe('PUT /user-agents', () => {
+        it('updates a mapping, allowing a blank appName', async () => {
+            const mapping = { id: 'map-1', userAgent: 'Sonarr', appName: '' };
+
+            const res = await request(app).put('/user-agents').send(mapping);
+
+            expect(userAgentMappingService.updateMapping).toHaveBeenCalledWith(mapping);
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual(mapping);
+        });
+
+        it('rejects an update missing id or userAgent', async () => {
+            const res = await request(app).put('/user-agents').send({ userAgent: '' });
+
+            expect(userAgentMappingService.updateMapping).not.toHaveBeenCalled();
+            expect(res.status).toBe(400);
+            expect(res.body).toEqual({
+                error: ApiError.INVALID_INPUT,
+                invalid_fields: { userAgent: 'User-Agent is required' },
+            });
+        });
+    });
+
+    describe('DELETE /user-agents', () => {
+        it('removes a mapping', async () => {
+            const res = await request(app).delete('/user-agents').send({ id: 'map-1' });
+
+            expect(userAgentMappingService.removeMapping).toHaveBeenCalledWith('map-1');
             expect(res.status).toBe(200);
             expect(res.body).toBe(true);
         });

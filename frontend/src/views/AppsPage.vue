@@ -41,11 +41,89 @@
             </a>
         </ListEditor>
         <div class="block-reset" />
+
+        <legend>User-Agent Lookup</legend>
+        <p class="mb-0">
+            Alternative to configuring the integration directly on an App: map a caller's User-Agent header to an
+            App here, so search requests that don't carry an app ID (e.g. a manually added indexer) can still be
+            attributed to the right App. Unrecognised User-Agents are captured automatically with a blank App -
+            fill one in below to start attributing them. Matching is a partial match (substring), so you can
+            shorten a captured User-Agent (e.g. trim off the version number) to keep it matching future requests.
+        </p>
+        <table class="queueTable uaTable">
+            <colgroup>
+                <col />
+                <col style="width: 240px" />
+                <col style="width: 140px" />
+                <col style="width: 44px" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>User-Agent</th>
+                    <th>App</th>
+                    <th>Last Seen</th>
+                    <th />
+                </tr>
+            </thead>
+            <tbody>
+                <tr v-for="mapping in userAgentMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
+                    <td>
+                        <input
+                            v-model="mapping.userAgent"
+                            class="uaTextInput"
+                            type="text"
+                            placeholder="User-Agent"
+                            @change="saveMapping(mapping)"
+                        />
+                    </td>
+                    <td>
+                        <input
+                            v-model="mapping.appName"
+                            class="uaTextInput"
+                            type="text"
+                            placeholder="Fill in App name"
+                            @change="saveMapping(mapping)"
+                        />
+                    </td>
+                    <td>{{ formatRelativeTime(mapping.lastSeen, now) }}</td>
+                    <td class="center">
+                        <button class="clickable" title="Remove" @click="removeMapping(mapping)">
+                            <font-awesome-icon :icon="['fas', 'trash']" />
+                        </button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <input
+                            v-model="newMapping.userAgent"
+                            class="uaTextInput"
+                            type="text"
+                            placeholder="e.g. Sonarr"
+                        />
+                    </td>
+                    <td>
+                        <input
+                            v-model="newMapping.appName"
+                            class="uaTextInput"
+                            type="text"
+                            placeholder="e.g. Iplayarr-sonarr"
+                        />
+                    </td>
+                    <td />
+                    <td class="center">
+                        <button class="clickable" title="Add" :disabled="!canAddMapping" @click="addMapping">
+                            <font-awesome-icon :icon="['fas', 'plus']" />
+                        </button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="block-reset" />
     </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import InfoBar from '@/components/common/InfoBar.vue';
@@ -53,18 +131,35 @@ import ListEditor from '@/components/common/ListEditor.vue';
 import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { deepCopy } from '@/lib/utils';
+import { deepCopy, formatRelativeTime } from '@/lib/utils';
 
 const apps = ref([]);
 const features = ref([]);
+const userAgentMappings = ref([]);
+const newMapping = reactive({ userAgent: '', appName: '' });
+
+// Drives the "Last Seen" column's relative-time display - ticking this re-renders those labels
+// (e.g. "20 seconds ago" -> "21 seconds ago") without needing to re-fetch the mappings.
+const now = ref(Date.now());
+let nowInterval;
+onMounted(() => {
+    nowInterval = setInterval(() => {
+        now.value = Date.now();
+    }, 1000);
+});
+onUnmounted(() => clearInterval(nowInterval));
 
 const refreshApps = async () => {
     apps.value = (await ipFetch('json-api/apps')).data;
     features.value = (await ipFetch('json-api/apps/types')).data;
-    console.log(features.value);
+};
+
+const refreshUserAgentMappings = async () => {
+    userAgentMappings.value = (await ipFetch('json-api/apps/user-agents')).data;
 };
 
 onMounted(refreshApps);
+onMounted(refreshUserAgentMappings);
 
 const openForm = (app) => {
     const formModal = useModal({
@@ -97,6 +192,43 @@ const deleteApp = async ({ id, name }) => {
 const hasFeature = (itemType, type) => {
     return features.value[itemType] && features.value[itemType].includes(type);
 };
+
+const canAddMapping = computed(() => Boolean(newMapping.userAgent.trim()) && Boolean(newMapping.appName.trim()));
+
+const addMapping = async () => {
+    if (!canAddMapping.value) {
+        return;
+    }
+    await ipFetch('json-api/apps/user-agents', 'POST', {
+        userAgent: newMapping.userAgent.trim(),
+        appName: newMapping.appName.trim(),
+    });
+    newMapping.userAgent = '';
+    newMapping.appName = '';
+    await refreshUserAgentMappings();
+};
+
+const saveMapping = async (mapping) => {
+    const userAgent = mapping.userAgent.trim();
+    if (!userAgent) {
+        // User-Agent is required - revert rather than send an invalid update.
+        await refreshUserAgentMappings();
+        return;
+    }
+    await ipFetch('json-api/apps/user-agents', 'PUT', {
+        id: mapping.id,
+        userAgent,
+        appName: mapping.appName.trim(),
+    });
+    await refreshUserAgentMappings();
+};
+
+const removeMapping = async ({ id, userAgent }) => {
+    if (await dialogService.confirm('Delete User-Agent Mapping', `Are you sure you want to delete "${userAgent}"`)) {
+        await ipFetch('json-api/apps/user-agents', 'DELETE', { id });
+        await refreshUserAgentMappings();
+    }
+};
 </script>
 
 <style lang="less" scoped>
@@ -116,5 +248,42 @@ const hasFeature = (itemType, type) => {
     align-items: center;
     gap: 5px;
     margin-top: 6px;
+}
+
+.uaTable {
+    max-width: 700px;
+
+    .uaTextInput {
+        box-sizing: border-box;
+        padding: 6px 10px;
+        width: 100%;
+        height: 32px;
+        border: 1px solid @input-border-color;
+        border-radius: 4px;
+        background-color: @input-background-color;
+        color: @input-text-color;
+    }
+
+    td.center,
+    th.center {
+        text-align: center;
+    }
+
+    td.center button {
+        background: none;
+        border: none;
+        color: @table-text-color;
+        font-size: 15px;
+
+        &:disabled {
+            opacity: 0.35;
+        }
+    }
+
+    tbody tr.unassigned {
+        .uaTextInput {
+            border-color: @warn-color;
+        }
+    }
 }
 </style>

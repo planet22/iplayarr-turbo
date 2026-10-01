@@ -1,9 +1,11 @@
 import { Request, Response, Router } from 'express';
 
 import appService from '../../service/appService';
+import userAgentMappingService from '../../service/userAgentMappingService';
 import { App } from '../../types/App';
 import { appFeatures } from '../../types/AppType';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { UserAgentMapping } from '../../types/UserAgentMapping';
 import { AppFormValidator } from '../../validators/AppFormValidator';
 
 const router = Router();
@@ -87,6 +89,50 @@ router.post('/test', async (req: Request, res: Response) => {
 
 router.post('/updateApiKey', async (_, res: Response) => {
     appService.updateApiKey();
+    res.json(true);
+});
+
+router.get('/user-agents', async (_, res: Response) => {
+    const mappings = await userAgentMappingService.getAllMappings();
+    res.json(mappings);
+});
+
+router.post('/user-agents', async (req: Request, res: Response) => {
+    const mapping: UserAgentMapping = req.body as any as UserAgentMapping;
+    if (!mapping.userAgent || !mapping.appName) {
+        const apiResponse: ApiResponse = {
+            error: ApiError.INVALID_INPUT,
+            invalid_fields: {
+                ...(mapping.userAgent ? {} : { userAgent: 'User-Agent is required' }),
+                ...(mapping.appName ? {} : { appName: 'App Name is required' }),
+            },
+        };
+        res.status(400).json(apiResponse);
+        return;
+    }
+    const saved = await userAgentMappingService.addMapping(mapping);
+    res.json(saved);
+});
+
+router.put('/user-agents', async (req: Request, res: Response) => {
+    const mapping: UserAgentMapping = req.body as any as UserAgentMapping;
+    if (!mapping.id || !mapping.userAgent) {
+        const apiResponse: ApiResponse = {
+            error: ApiError.INVALID_INPUT,
+            invalid_fields: {
+                ...(mapping.userAgent ? {} : { userAgent: 'User-Agent is required' }),
+            },
+        };
+        res.status(400).json(apiResponse);
+        return;
+    }
+    await userAgentMappingService.updateMapping(mapping);
+    res.json(mapping);
+});
+
+router.delete('/user-agents', async (req: Request, res: Response) => {
+    const { id } = req.body;
+    await userAgentMappingService.removeMapping(id);
     res.json(true);
 });
 

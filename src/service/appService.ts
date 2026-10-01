@@ -10,6 +10,7 @@ import { CreateDownloadClientForm } from '../types/requests/form/CreateDownloadC
 import { CreateIndexerForm } from '../types/requests/form/CreateIndexerForm';
 import configService from './configService';
 import socketService from './socketService';
+import userAgentMappingService from './userAgentMappingService';
 
 const storage: QueuedStorage = new QueuedStorage();
 
@@ -27,8 +28,18 @@ const appService = {
         if (!userAgent) {
             return undefined;
         }
+        const mappings = await userAgentMappingService.getAllMappings();
+        const mapping = mappings.find(({ userAgent: match }) => userAgent.includes(match));
+        if (!mapping) {
+            await userAgentMappingService.recordSeenUserAgent(userAgent);
+            return undefined;
+        }
+        await userAgentMappingService.touchMapping(mapping.id);
+        if (!mapping.appName) {
+            return undefined;
+        }
         const allApps: App[] = await appService.getAllApps();
-        return allApps.find(({ userAgentMatch }) => userAgentMatch && userAgent.includes(userAgentMatch));
+        return allApps.find(({ name }) => name.toLowerCase() == mapping.appName.toLowerCase());
     },
 
     removeApp: async (id: string): Promise<boolean> => {
