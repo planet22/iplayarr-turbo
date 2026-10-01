@@ -1,8 +1,8 @@
 <template>
-    <IPlayarrModal :title="item?.nzbName || pid" :show-close="true" close-label="Close">
-        <template v-if="item">
-            <MediaInfoHero :pid="item.pid" :title="item.nzbName" :type="item.type" />
+    <IPlayarrModal :title="item?.nzbName || fallbackTitle || pid" :show-close="true" close-label="Close">
+        <MediaInfoHero :pid="pid" :title="item?.nzbName" :type="item?.type" />
 
+        <template v-if="item">
             <div v-if="item.library" class="infoSection">
                 <h3>Library</h3>
                 <dl class="infoGrid">
@@ -89,6 +89,11 @@ const props = defineProps({
 const queue = inject('queue');
 const history = inject('history');
 const followLog = ref(true);
+const fallbackTitle = ref(null);
+
+ipFetch(`json-api/details?pid=${props.pid}`).then((response) => {
+    if (response.ok) fallbackTitle.value = response.data?.title;
+});
 
 // Derived live from the injected queue/history arrays (not a point-in-time snapshot), so the
 // modal keeps reflecting progress/status while it's open, the same way MediaInfoHero already
