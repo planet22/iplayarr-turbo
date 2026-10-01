@@ -1,6 +1,6 @@
 <template>
     <IPlayarrModal :title="`Results for '${term == '*' ? 'RSS Feed' : term}'`" :show-close="true" close-label="Close">
-        <table class="resultsTable">
+        <table class="resultsTable responsive-table">
             <thead>
                 <tr>
                     <th>Title</th>
@@ -11,10 +11,10 @@
             </thead>
             <tbody>
                 <tr v-for="(item, index) of items" :key="index">
-                    <td>{{ item.title }}</td>
-                    <td><span class="pill">{{ item.type }}</span></td>
-                    <td>{{ formatStorageSize(item.size) }}</td>
-                    <td>{{ formatDate(item.pubDate) }}</td>
+                    <td class="text">{{ item.title }}</td>
+                    <td data-title="Type"><span class="pill">{{ item.type }}</span></td>
+                    <td data-title="Size">{{ formatStorageSize(item.size) }}</td>
+                    <td data-title="Air Date">{{ formatDate(item.pubDate) }}</td>
                 </tr>
                 <tr v-if="items.length == 0">
                     <td colspan="4" class="empty">No results were returned for this search</td>

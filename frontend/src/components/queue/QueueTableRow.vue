@@ -31,7 +31,7 @@
                 {{ [details?.channel, seriesEpisodeLabel].filter(Boolean).join(' · ') }}
             </div>
         </td>
-        <td>
+        <td data-title="Type">
             <span :class="['pill', item.type]">
                 {{ item.type }}
             </span>
@@ -42,7 +42,7 @@
         <td data-title="Size">
             {{ formatStorageSize(item.details.size) }}
         </td>
-        <td>
+        <td data-title="App">
             <template v-if="item.appId && getAppForId(item.appId)">
                 <div class="appDisplay">
                     <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />

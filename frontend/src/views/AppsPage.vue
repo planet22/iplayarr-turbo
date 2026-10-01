@@ -6,7 +6,6 @@
             In order for NZB Forwarding to work successfully, your NZB Client needs the category "iplayer"
         </InfoBar>
         <div class="block-reset" />
-        <AppsList :apps="apps" @create="openForm" />
         <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm">
             <a @click="openForm(item)">
                 <div class="major">
@@ -50,7 +49,7 @@
             fill one in below to start attributing them. Matching is a partial match (substring), so you can
             shorten a captured User-Agent (e.g. trim off the version number) to keep it matching future requests.
         </p>
-        <table class="queueTable uaTable">
+        <table class="queueTable uaTable responsive-table">
             <colgroup>
                 <col />
                 <col style="width: 240px" />
@@ -67,7 +66,7 @@
             </thead>
             <tbody>
                 <tr v-for="mapping in userAgentMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
-                    <td>
+                    <td class="text">
                         <input
                             v-model="mapping.userAgent"
                             class="uaTextInput"
@@ -76,7 +75,7 @@
                             @change="saveMapping(mapping)"
                         />
                     </td>
-                    <td>
+                    <td class="text">
                         <input
                             v-model="mapping.appName"
                             class="uaTextInput"
@@ -85,7 +84,7 @@
                             @change="saveMapping(mapping)"
                         />
                     </td>
-                    <td>{{ formatRelativeTime(mapping.lastSeen, now) }}</td>
+                    <td data-title="Last Seen">{{ formatRelativeTime(mapping.lastSeen, now) }}</td>
                     <td class="center">
                         <button class="clickable" title="Remove" @click="removeMapping(mapping)">
                             <font-awesome-icon :icon="['fas', 'trash']" />
@@ -93,7 +92,7 @@
                     </td>
                 </tr>
                 <tr>
-                    <td>
+                    <td class="text">
                         <input
                             v-model="newMapping.userAgent"
                             class="uaTextInput"
@@ -101,7 +100,7 @@
                             placeholder="e.g. Sonarr"
                         />
                     </td>
-                    <td>
+                    <td class="text">
                         <input
                             v-model="newMapping.appName"
                             class="uaTextInput"

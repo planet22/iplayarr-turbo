@@ -1,6 +1,6 @@
 <template>
     <IPlayarrModal title="Search History" :show-close="true" close-label="Cancel">
-        <table class="resultsTable">
+        <table class="resultsTable responsive-table">
             <thead>
                 <tr>
                     <th>Search Term</th>
@@ -15,11 +15,11 @@
             </thead>
             <tbody>
                 <tr v-for="history of searchHistory" :key="history.term">
-                    <td>{{ history.term }}</td>
-                    <td>{{ history.series }}</td>
-                    <td>{{ history.episode }}</td>
-                    <td>{{ history.results }}</td>
-                    <td>
+                    <td class="text">{{ history.term }}</td>
+                    <td data-title="Series">{{ history.series }}</td>
+                    <td data-title="Episode">{{ history.episode }}</td>
+                    <td data-title="Results">{{ history.results }}</td>
+                    <td data-title="App">
                         <template v-if="getAppForId(history.appId)">
                             <div class="appDisplay">
                                 <img

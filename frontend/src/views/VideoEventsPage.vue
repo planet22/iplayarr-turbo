@@ -5,7 +5,7 @@
             <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
             <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
         </div>
-        <table class="dataTable eventLogTable">
+        <table class="dataTable eventLogTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
                 <col />
@@ -59,10 +59,10 @@
                             {{ [detailsFor(event.pid)?.channel, seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
-                    <td><span class="pill">{{ event.type }}</span></td>
-                    <td><span :class="['pill', event.level]">{{ event.level }}</span></td>
+                    <td data-title="Type"><span class="pill">{{ event.type }}</span></td>
+                    <td data-title="Level"><span :class="['pill', event.level]">{{ event.level }}</span></td>
                     <td class="text">{{ event.message }}</td>
-                    <td>{{ formatDate(event.timestamp) }}</td>
+                    <td data-title="Time">{{ formatDate(event.timestamp) }}</td>
                 </tr>
                 <tr v-if="sortedEvents.length == 0">
                     <td colspan="6" class="empty">No events recorded yet</td>

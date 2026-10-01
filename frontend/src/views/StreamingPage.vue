@@ -1,7 +1,7 @@
 <template>
     <div class="inner-content scroll-x">
         <legend>Active Streams</legend>
-        <table class="dataTable streamsTable">
+        <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
                 <col />
@@ -55,18 +55,18 @@
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
-                    <td>
+                    <td data-title="Mode">
                         <span class="pill">{{ session.mode }}</span>
                         <div class="subtle">{{ clientLabel(session.client) }}</div>
                     </td>
                     <SettingsChips :settings="session.settings" />
-                    <td class="chipCol">
+                    <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td>{{ session.clientIp }}</td>
-                    <td>{{ formatDuration(session.startedAt) }}</td>
-                    <td>{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
-                    <td>
+                    <td data-title="Client IP">{{ session.clientIp }}</td>
+                    <td data-title="Duration">{{ formatDuration(session.startedAt) }}</td>
+                    <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
+                    <td data-title="Segments">
                         <SegmentActivityStrip
                             v-if="session.totalSegments"
                             :total="session.totalSegments"
@@ -92,7 +92,7 @@
         </table>
 
         <legend>Stream History</legend>
-        <table class="dataTable streamsTable">
+        <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
                 <col />
@@ -143,19 +143,19 @@
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
-                    <td>
+                    <td data-title="Mode">
                         <span class="pill">{{ session.mode }}</span>
                         <div class="subtle">{{ clientLabel(session.client) }}</div>
                     </td>
                     <SettingsChips :settings="session.settings" />
-                    <td class="chipCol">
+                    <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td>{{ session.clientIp }}</td>
-                    <td>{{ formatDate(session.startedAt) }}</td>
-                    <td>{{ formatDuration(session.startedAt, session.endedAt) }}</td>
-                    <td>{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
-                    <td>
+                    <td data-title="Client IP">{{ session.clientIp }}</td>
+                    <td data-title="Started">{{ formatDate(session.startedAt) }}</td>
+                    <td data-title="Duration">{{ formatDuration(session.startedAt, session.endedAt) }}</td>
+                    <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
+                    <td data-title="Segments">
                         <SegmentActivityStrip
                             v-if="session.totalSegments"
                             :total="session.totalSegments"
