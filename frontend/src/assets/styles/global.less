@@ -143,13 +143,15 @@ button:focus {
 
     .modal-inner {
         overflow-y: auto;
+        // Breathing room for the scrollbar so it doesn't sit flush against input boxes.
+        padding-right: 10px;
         @media (min-width: @mobile-breakpoint) {
             max-height: 75vh;
         }
     }
 
     @media (min-width: @mobile-breakpoint) {
-        min-width: 600px;
+        min-width: 640px;
         max-width: 80%;
     }
 
