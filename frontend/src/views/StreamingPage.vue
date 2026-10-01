@@ -42,12 +42,15 @@
                     <td>
                         <img
                             v-if="detailsFor(session.pid)?.thumbnail"
-                            class="thumbnail"
+                            class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
+                            @click="openInfo(session.pid)"
                         />
                     </td>
                     <td class="text">
-                        {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        <a class="clickable" @click="openInfo(session.pid)">
+                            {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
@@ -127,12 +130,15 @@
                     <td>
                         <img
                             v-if="detailsFor(session.pid)?.thumbnail"
-                            class="thumbnail"
+                            class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
+                            @click="openInfo(session.pid)"
                         />
                     </td>
                     <td class="text">
-                        {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        <a class="clickable" @click="openInfo(session.pid)">
+                            {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
@@ -180,6 +186,7 @@ import {
     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl,
 } from '@/lib/utils';
 
+import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
 import SettingsChips from '../components/streaming/SettingsChips.vue';
@@ -230,6 +237,14 @@ const clientLabels = {
 
 function clientLabel(client) {
     return clientLabels[client] ?? client ?? '';
+}
+
+function openInfo(pid) {
+    const infoModal = useModal({
+        component: VideoInfoModal,
+        attrs: { pid },
+    });
+    infoModal.open();
 }
 
 function formatDate(value) {
