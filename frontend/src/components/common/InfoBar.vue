@@ -22,6 +22,14 @@ defineProps({
     padding: 15px;
     border: 1px solid transparent;
     border-radius: 4px;
+    max-width: 650px;
+    overflow-wrap: break-word;
+    box-sizing: border-box;
+
+    &.small {
+        font-size: 12px;
+        padding: 10px 15px;
+    }
 
     &.info {
         border-color: @alertInfoBorderColor;

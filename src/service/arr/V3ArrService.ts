@@ -12,6 +12,26 @@ import { DownloadClientResponse } from '../../types/responses/arr/DownloadClient
 import { IndexerResponse } from '../../types/responses/arr/IndexerResponse';
 import AbstractArrService, { ArrTag } from './AbstractArrService';
 
+// Sonarr/Radarr return a 400 with a FluentValidation-style array
+// (`[{ propertyName, errorMessage, ... }]`) describing exactly what's wrong (e.g. "Port must be
+// between 1 and 65535. You entered 0."). Axios's own error.message is just "Request failed with
+// status code 400" and throws that detail away, so pull it out here and surface it instead -
+// callers (appService's validation errors shown in the Edit App form) otherwise have no way to
+// tell the user what's actually wrong.
+export function extractArrErrorMessage(error: unknown): string {
+    if (axios.isAxiosError(error)) {
+        const data = error.response?.data;
+        if (Array.isArray(data)) {
+            const messages = data.map((entry) => entry?.errorMessage).filter(Boolean);
+            if (messages.length > 0) return messages.join('; ');
+        } else if (typeof data?.message === 'string') {
+            return data.message;
+        }
+        return error.message;
+    }
+    return error instanceof Error ? error.message : String(error);
+}
+
 export class V3ArrService implements AbstractArrService {
     async search(app: App, term?: string): Promise<ArrLookupResponse[]> {
         const endpoint: string = app.type == AppType.SONARR ? 'series' : 'movie';
@@ -62,7 +82,23 @@ export class V3ArrService implements AbstractArrService {
 
             return id;
         } catch (err) {
-            throw err;
+            throw new Error(extractArrErrorMessage(err));
+        }
+    }
+
+    async deleteIndexer(app: App): Promise<void> {
+        if (!app.indexer?.id) return;
+        const url: string = `${this.getApiUrl(app)}/indexer/${app.indexer.id}?apikey=${app.api_key}`;
+
+        try {
+            await axios.delete(url, {
+                headers: {
+                    'X-Api-Key': app.api_key,
+                },
+            });
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 404) return;
+            throw error;
         }
     }
 
@@ -255,7 +291,7 @@ export class V3ArrService implements AbstractArrService {
 
             return id;
         } catch (err) {
-            throw err;
+            throw new Error(extractArrErrorMessage(err));
         }
     }
 
@@ -286,10 +322,27 @@ export class V3ArrService implements AbstractArrService {
         }
     }
 
+    async deleteDownloadClient(app: App): Promise<void> {
+        if (!app.download_client?.id) return;
+        const url: string = `${this.getApiUrl(app)}/downloadclient/${app.download_client.id}?apikey=${app.api_key}`;
+
+        try {
+            await axios.delete(url, {
+                headers: {
+                    'X-Api-Key': app.api_key,
+                },
+            });
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 404) return;
+            throw error;
+        }
+    }
+
     createDownloadClientRequestObject(form: CreateDownloadClientForm, tags: number[]): ArrCreateDownloadClientRequest {
         const createDownloadClientRequest: ArrCreateDownloadClientRequest = {
             ...createDownloadClientRequestSkeleton,
             name: `${form.name} (iPlayarr)`,
+            priority: form.priority || 1,
             tags,
             fields: [
                 ...(createDownloadClientRequestSkeleton.fields as CreateDownloadClientRequestField[]),

@@ -79,11 +79,23 @@ const appService = {
     createUpdateIntegrations: async (input: App, allowCreate: boolean = true): Promise<App> => {
         let form = input;
         const features: AppFeature[] = appFeatures[form.type];
+        // If a later feature (e.g. Indexer) fails after an earlier one (e.g. Download Client) was
+        // newly created in this same call, roll that creation back too - otherwise it's left
+        // orphaned in the *arr (no id stored locally to ever manage/delete it again), and the next
+        // attempt fails on the *arr's own name-uniqueness check instead of actually retrying.
+        const hadDownloadClientId = !!form.download_client?.id;
+        const hadIndexerId = !!form.indexer?.id;
 
         for (const feature of features) {
             try {
                 form = await createUpdateFeature[feature](form, allowCreate);
             } catch (err) {
+                if (!hadDownloadClientId && form.download_client?.id) {
+                    await arrFacade.deleteDownloadClient(form).catch(() => undefined);
+                }
+                if (!hadIndexerId && form.indexer?.id) {
+                    await arrFacade.deleteIndexer(form).catch(() => undefined);
+                }
                 throw err;
             }
         }
@@ -149,6 +161,7 @@ const createUpdateFeature: Record<AppFeature, (form: App, allowCreate: boolean) 
                     useSSL: form.iplayarr.useSSL,
                     apiKey: API_KEY,
                     tags: form.tags ?? [],
+                    priority: form.download_client.priority,
                 };
 
                 try {
@@ -164,6 +177,17 @@ const createUpdateFeature: Record<AppFeature, (form: App, allowCreate: boolean) 
                         type: 'download_client', // Add the type
                     };
                 }
+            } else if (form.download_client?.id) {
+                // Name was cleared on an app that already has one - delete it from the *arr instead of just forgetting it locally.
+                try {
+                    await arrFacade.deleteDownloadClient(form);
+                } catch (err: any) {
+                    throw {
+                        message: err.message,
+                        type: 'download_client',
+                    };
+                }
+                form.download_client = undefined;
             }
             return form;
         },
@@ -193,6 +217,17 @@ const createUpdateFeature: Record<AppFeature, (form: App, allowCreate: boolean) 
                         type: 'indexer', // Add the type
                     };
                 }
+            } else if (form.indexer?.id) {
+                // Name was cleared on an app that already has one - delete it from the *arr instead of just forgetting it locally.
+                try {
+                    await arrFacade.deleteIndexer(form);
+                } catch (err: any) {
+                    throw {
+                        message: err.message,
+                        type: 'indexer',
+                    };
+                }
+                form.indexer = undefined;
             }
             return form;
         },

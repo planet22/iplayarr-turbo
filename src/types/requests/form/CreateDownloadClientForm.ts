@@ -6,4 +6,5 @@ export interface CreateDownloadClientForm {
     urlBase?: string;
     apiKey: string;
     tags: string[];
+    priority?: number;
 }

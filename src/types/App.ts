@@ -22,6 +22,7 @@ export interface App {
         host?: string;
         api_key?: string;
         port?: number;
+        priority?: number;
     };
     indexer?: {
         id: number;

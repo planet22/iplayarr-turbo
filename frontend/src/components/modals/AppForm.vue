@@ -4,7 +4,7 @@
         :show-close="true"
         close-label="Cancel"
         :show-confirm="true"
-        :confirm-label="`${form.id ? 'Save' : 'Create'}`"
+        :confirm-label="`${form.id ? 'Update' : 'Create'}`"
         @confirm="saveApp"
     >
         <LoadingIndicator v-if="loading" />
@@ -98,6 +98,10 @@
                 <template v-if="showForm('download_client') || showForm('prowlarr_download_client')">
                     <legend class="sub">Download Client</legend>
                     <InfoBar clazz="info"> Leaving this blank will not create a Download Client </InfoBar>
+                    <InfoBar v-if="form.download_client.id && !form.download_client.name" clazz="warning">
+                        Saving with this blank will delete the existing Download Client from
+                        {{ capitalize(form.type) }}.
+                    </InfoBar>
                     <TextInput
                         v-model="form.download_client.name"
                         name="Name"
@@ -105,11 +109,26 @@
                         :tooltip="`Name for Download Client in ${capitalize(form.type)}`"
                         :error="validationErrors?.download_client_name"
                     />
+                    <InfoBar v-if="form.download_client.name" clazz="info small">
+                        Will appear in {{ capitalize(form.type) }} as "{{ form.download_client.name }} (iPlayarr)" -
+                        look for that exact name when matching it up {{ downstreamHint }}.
+                    </InfoBar>
+                    <TextInput
+                        v-model="form.download_client.priority"
+                        name="Priority"
+                        placeholder="1"
+                        type-override="number"
+                        :tooltip="`Download Client Priority in ${capitalize(form.type)} (lower number is first)`"
+                        :error="validationErrors?.download_client_priority"
+                    />
                 </template>
 
                 <template v-if="showForm('indexer') || showForm('prowlarr_indexer')">
                     <legend class="sub">Indexer</legend>
                     <InfoBar clazz="info"> Leaving this blank will not create an Indexer </InfoBar>
+                    <InfoBar v-if="form.indexer.id && !form.indexer.name" clazz="warning">
+                        Saving with this blank will delete the existing Indexer from {{ capitalize(form.type) }}.
+                    </InfoBar>
                     <TextInput
                         v-model="form.indexer.name"
                         name="Name"
@@ -117,6 +136,10 @@
                         :tooltip="`Name for Indexer in ${capitalize(form.type)}`"
                         :error="validationErrors?.indexer_name"
                     />
+                    <InfoBar v-if="form.indexer.name" clazz="info small">
+                        Will appear in {{ capitalize(form.type) }} as "{{ form.indexer.name }} (iPlayarr)" - look for
+                        that exact name when matching it up {{ downstreamHint }}.
+                    </InfoBar>
                     <TextInput
                         v-model="form.indexer.priority"
                         name="Priority"
@@ -162,20 +185,47 @@ const emit = defineEmits(['saved']);
 const defaultForm = {
     download_client: {},
     iplayarr: {
-        useSSL: false,
+        // window.location.port is '' whenever the page is served on the protocol's
+        // default port (e.g. behind a reverse proxy on plain :80/:443) - fall back to
+        // the standard port for the scheme actually being used instead of sending an
+        // empty port to the *arr, which it rejects with a 400.
+        useSSL: window.location.protocol === 'https:',
         host: window.location.hostname,
-        port: window.location.port,
+        port: window.location.port || (window.location.protocol === 'https:' ? 443 : 80),
     },
     indexer: {},
     priority: 5,
     tags: [],
 };
 
-const [features, form] = [ref({}), ref(props.inputObj || defaultForm)];
+// A deleted Download Client/Indexer is now removed from storage entirely (rather than left as
+// `{}`), so an app being edited can come back without those keys at all - back them with `{}`
+// here rather than in the template, since `v-model="form.download_client.name"` would otherwise
+// throw on render and silently crash/close this modal.
+const [features, form] = [
+    ref({}),
+    ref(
+        props.inputObj
+            ? {
+                  ...props.inputObj,
+                  download_client: props.inputObj.download_client || {},
+                  indexer: props.inputObj.indexer || {},
+              }
+            : defaultForm
+    ),
+];
 const testButton = ref(null);
 const validationErrors = ref({});
 const loading = ref(false);
 const tagInput = ref(null);
+
+// Prowlarr syncs its own download clients/indexers out to Sonarr/Radarr, so the useful hint
+// there points at those downstream apps; for Sonarr/Radarr themselves, Prowlarr is the thing that
+// might reference this by name instead. Avoids ever telling someone to go check the app they're
+// already looking at.
+const downstreamHint = computed(() =>
+    form.value.type === 'PROWLARR' ? 'against what shows up in Sonarr/Radarr' : 'against what shows up in Prowlarr'
+);
 
 const types = computed(() => {
     return Object.keys(features.value).map((k) => ({ key: k, value: capitalize(k) }));
