@@ -7,8 +7,18 @@
             <font-awesome-icon :class="[item.status]" :icon="['fas', getDownloadIcon(item)]" />
         </td>
         <td>
-            <img v-if="details?.thumbnail" class="thumbnail" :src="getThumbnailUrl(details.thumbnail)" />
-            <font-awesome-icon v-else class="thumbnail-placeholder" :icon="['fas', item.type == 'TV' ? 'tv' : 'film']" />
+            <img
+                v-if="details?.thumbnail"
+                class="thumbnail clickable"
+                :src="getThumbnailUrl(details.thumbnail)"
+                @click="openInfo(item)"
+            />
+            <font-awesome-icon
+                v-else
+                class="thumbnail-placeholder clickable"
+                :icon="['fas', item.type == 'TV' ? 'tv' : 'film']"
+                @click="openInfo(item)"
+            />
         </td>
         <td class="text" data-title="Filename">
             <a v-if="item.status != 'Forwarded'" class="clickable" @click="openInfo(item)">
@@ -21,7 +31,7 @@
                 {{ [details?.channel, seriesEpisodeLabel].filter(Boolean).join(' · ') }}
             </div>
         </td>
-        <td>
+        <td data-title="Type">
             <span :class="['pill', item.type]">
                 {{ item.type }}
             </span>
@@ -32,7 +42,7 @@
         <td data-title="Size">
             {{ formatStorageSize(item.details.size) }}
         </td>
-        <td>
+        <td data-title="App">
             <template v-if="item.appId && getAppForId(item.appId)">
                 <div class="appDisplay">
                     <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />

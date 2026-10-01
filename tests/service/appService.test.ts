@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import nzbFacade from '../../src/facade/nzbFacade';
 import appService from '../../src/service/appService';
 import socketService from '../../src/service/socketService';
+import userAgentMappingService from '../../src/service/userAgentMappingService';
 import { App } from '../../src/types/App';
 import { AppType } from '../../src/types/AppType';
 import { QueuedStorage } from '../../src/types/QueuedStorage';
@@ -96,22 +97,63 @@ describe('appService', () => {
         expect(result).toBeUndefined();
     });
 
-    it('finds an app whose userAgentMatch is a substring of the User-Agent header', async () => {
-        const app: App = { id: 'sonarr-1', type: AppType.SONARR, userAgentMatch: 'Sonarr' } as any;
+    it('finds an app via a mapped User-Agent substring, matched by app name', async () => {
+        const app: App = { id: 'sonarr-1', name: 'Iplayarr-sonarr', type: AppType.SONARR } as any;
         await appService.addApp(app);
+        await userAgentMappingService.addMapping({ id: 'map-1', userAgent: 'Sonarr', appName: 'iplayarr-sonarr' });
 
         const result = await appService.findAppByUserAgent('Sonarr/4.0.0.0 (linux)');
 
         expect(result?.id).toBe('sonarr-1');
     });
 
-    it('returns undefined when no userAgentMatch matches', async () => {
-        const app: App = { id: 'sonarr-1', type: AppType.SONARR, userAgentMatch: 'Sonarr' } as any;
+    it('stamps lastSeen on the matched mapping', async () => {
+        const app: App = { id: 'sonarr-1', name: 'Iplayarr-sonarr', type: AppType.SONARR } as any;
         await appService.addApp(app);
+        await userAgentMappingService.addMapping({ id: 'map-1', userAgent: 'Sonarr', appName: 'Iplayarr-sonarr' });
+
+        await appService.findAppByUserAgent('Sonarr/4.0.0.0 (linux)');
+
+        const [mapping] = await userAgentMappingService.getAllMappings();
+        expect(mapping.lastSeen).toEqual(expect.any(Number));
+    });
+
+    it('returns undefined when no mapping matches', async () => {
+        const app: App = { id: 'sonarr-1', name: 'Iplayarr-sonarr', type: AppType.SONARR } as any;
+        await appService.addApp(app);
+        await userAgentMappingService.addMapping({ id: 'map-1', userAgent: 'Sonarr', appName: 'Iplayarr-sonarr' });
 
         const result = await appService.findAppByUserAgent('Radarr/5.0.0.0 (linux)');
 
         expect(result).toBeUndefined();
+    });
+
+    it('returns undefined when the mapping\'s app name matches no configured App', async () => {
+        await userAgentMappingService.addMapping({ id: 'map-1', userAgent: 'Sonarr', appName: 'Unknown App' });
+
+        const result = await appService.findAppByUserAgent('Sonarr/4.0.0.0 (linux)');
+
+        expect(result).toBeUndefined();
+    });
+
+    it('returns undefined and leaves a blank-appName mapping alone', async () => {
+        await userAgentMappingService.addMapping({ id: 'map-1', userAgent: 'Sonarr', appName: '' });
+
+        const result = await appService.findAppByUserAgent('Sonarr/4.0.0.0 (linux)');
+
+        expect(result).toBeUndefined();
+        expect((await userAgentMappingService.getAllMappings())).toHaveLength(1);
+    });
+
+    it('auto-records an unrecognised User-Agent with a blank appName', async () => {
+        (uuidv4 as jest.Mock).mockReturnValue('generated-id');
+
+        const result = await appService.findAppByUserAgent('Sonarr/4.0.0.0 (linux)');
+
+        expect(result).toBeUndefined();
+        expect(await userAgentMappingService.getAllMappings()).toEqual([
+            { userAgent: 'Sonarr/4.0.0.0 (linux)', appName: '', id: 'generated-id', lastSeen: expect.any(Number) },
+        ]);
     });
 
     it('returns undefined when no User-Agent header is supplied', async () => {

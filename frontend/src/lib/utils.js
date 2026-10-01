@@ -116,3 +116,27 @@ export function formatDateTimeWithMillis(dateString) {
     const millis = String(date.getMilliseconds()).padStart(3, '0');
     return `${datePart} ${timePart}.${millis}`;
 }
+
+// "20 seconds ago" style relative time. `now` defaults to Date.now() but can be passed in so
+// callers can drive this off a ticking ref and get a reactive re-render as time passes.
+export function formatRelativeTime(timestamp, now = Date.now()) {
+    if (!timestamp) {
+        return 'Never';
+    }
+    const diffSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
+    const units = [
+        ['year', 31536000],
+        ['month', 2592000],
+        ['day', 86400],
+        ['hour', 3600],
+        ['minute', 60],
+        ['second', 1],
+    ];
+    for (const [unit, secondsInUnit] of units) {
+        const value = Math.floor(diffSeconds / secondsInUnit);
+        if (value >= 1) {
+            return `${value} ${unit}${value === 1 ? '' : 's'} ago`;
+        }
+    }
+    return 'just now';
+}

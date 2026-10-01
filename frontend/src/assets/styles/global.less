@@ -39,6 +39,76 @@ body {
     }
 }
 
+// Collapses a <table class="responsive-table"> into a stacked list of cards below the mobile
+// breakpoint, instead of forcing the user to scroll a dense table sideways. Pair it with:
+//  - data-title="Label" on any <td> that needs a visible label (purely visual cells - checkboxes,
+//    status icons, thumbnails - can skip it and just render inline, unlabelled)
+//  - class="text" on the one cell that should read as the card's title (e.g. filename/name) -
+//    it's promoted to its own full-width line above the rest, with no label prefix
+@media (max-width: @mobile-breakpoint) {
+    table.responsive-table {
+        display: block;
+
+        colgroup {
+            display: none;
+        }
+
+        thead {
+            display: none;
+        }
+
+        tbody {
+            display: block;
+
+            tr {
+                display: flex !important;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 4px 10px;
+                padding: 10px 12px !important;
+                margin-bottom: 8px;
+                border: 1px solid @table-border-color;
+                border-radius: 4px;
+                background-color: @nav-active-background-color;
+            }
+
+            td {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 0 !important;
+                border: none !important;
+                white-space: normal !important;
+                overflow: visible !important;
+                text-overflow: clip !important;
+                width: auto !important;
+                max-width: 100%;
+            }
+
+            td:empty {
+                display: none;
+            }
+
+            td[data-title]:not(.text)::before {
+                content: attr(data-title) ':';
+                font-weight: bold;
+                color: @subtle-text-color;
+            }
+
+            td.text {
+                flex-basis: 100%;
+                order: -1;
+                font-size: 15px;
+            }
+
+            td.empty {
+                flex-basis: 100%;
+                text-align: center;
+            }
+        }
+    }
+}
+
 legend {
     font-size: 21px;
     border-bottom: 1px solid @primary-text-color;
@@ -143,13 +213,15 @@ button:focus {
 
     .modal-inner {
         overflow-y: auto;
+        // Breathing room for the scrollbar so it doesn't sit flush against input boxes.
+        padding-right: 10px;
         @media (min-width: @mobile-breakpoint) {
             max-height: 75vh;
         }
     }
 
     @media (min-width: @mobile-breakpoint) {
-        min-width: 600px;
+        min-width: 640px;
         max-width: 80%;
     }
 

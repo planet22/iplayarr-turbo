@@ -5,7 +5,7 @@
             <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
             <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
         </div>
-        <table class="dataTable eventLogTable">
+        <table class="dataTable eventLogTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
                 <col />
@@ -40,21 +40,29 @@
                     <td>
                         <img
                             v-if="event.pid && detailsFor(event.pid)?.thumbnail"
-                            class="thumbnail"
+                            class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(event.pid).thumbnail)"
+                            @click="openInfo(event.pid)"
                         />
-                        <font-awesome-icon v-else-if="event.pid" class="thumbnail-placeholder" :icon="['fas', 'film']" />
+                        <font-awesome-icon
+                            v-else-if="event.pid"
+                            class="thumbnail-placeholder clickable"
+                            :icon="['fas', 'film']"
+                            @click="openInfo(event.pid)"
+                        />
                     </td>
                     <td class="text">
-                        {{ event.pid && detailsFor(event.pid) ? detailsFor(event.pid).title : (event.pid || '') }}
+                        <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">
+                            {{ detailsFor(event.pid)?.title ?? event.pid }}
+                        </a>
                         <div v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" class="subtle">
                             {{ [detailsFor(event.pid)?.channel, seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
-                    <td><span class="pill">{{ event.type }}</span></td>
-                    <td><span :class="['pill', event.level]">{{ event.level }}</span></td>
+                    <td data-title="Type"><span class="pill">{{ event.type }}</span></td>
+                    <td data-title="Level"><span :class="['pill', event.level]">{{ event.level }}</span></td>
                     <td class="text">{{ event.message }}</td>
-                    <td>{{ formatDate(event.timestamp) }}</td>
+                    <td data-title="Time">{{ formatDate(event.timestamp) }}</td>
                 </tr>
                 <tr v-if="sortedEvents.length == 0">
                     <td colspan="6" class="empty">No events recorded yet</td>
@@ -67,11 +75,13 @@
 
 <script setup>
 import { computed, inject, onMounted, reactive, watch } from 'vue';
+import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
@@ -134,6 +144,14 @@ function loadMissingDetails() {
 
 onMounted(loadMissingDetails);
 watch(events, loadMissingDetails);
+
+function openInfo(pid) {
+    const infoModal = useModal({
+        component: VideoInfoModal,
+        attrs: { pid },
+    });
+    infoModal.open();
+}
 
 function formatDate(value) {
     return value ? formatDateTimeWithMillis(value) : '';

@@ -3,7 +3,7 @@
         <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
         <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter queue..." />
     </div>
-    <table class="queueTable" summary="Hed">
+    <table class="queueTable responsive-table" summary="Hed">
         <colgroup>
             <col style="width: 36px" />
             <col style="width: 32px" />

@@ -11,7 +11,6 @@ export interface App {
     password?: string;
     priority?: number;
     tags?: string[];
-    userAgentMatch?: string;
     iplayarr: {
         host: string;
         port: number;
@@ -23,6 +22,7 @@ export interface App {
         host?: string;
         api_key?: string;
         port?: number;
+        priority?: number;
     };
     indexer?: {
         id: number;

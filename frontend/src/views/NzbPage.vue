@@ -10,7 +10,7 @@
             <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
             <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
         </div>
-        <table class="dataTable">
+        <table class="dataTable responsive-table">
             <colgroup>
                 <col />
                 <col style="width: 10ch" />
@@ -43,15 +43,15 @@
             </thead>
             <tbody>
                 <tr v-for="(entry, index) in pagedSearches" :key="index">
-                    <td>{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</td>
-                    <td>
+                    <td class="text">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</td>
+                    <td data-title="Results">
                         <a v-if="entry.items?.length" class="clickable" @click="showResults(entry)">{{ entry.results }}</a>
                         <template v-else>{{ entry.results }}</template>
                     </td>
-                    <td>{{ entry.series ?? '' }}</td>
-                    <td>{{ entry.episode ?? '' }}</td>
-                    <td>{{ appName(entry.appId) }}</td>
-                    <td>{{ formatDate(entry.time) }}</td>
+                    <td data-title="Season">{{ entry.series ?? '' }}</td>
+                    <td data-title="Episode">{{ entry.episode ?? '' }}</td>
+                    <td data-title="App">{{ appName(entry.appId) }}</td>
+                    <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedSearches.length == 0">
                     <td colspan="6" class="empty">No searches recorded yet</td>
@@ -65,7 +65,7 @@
             <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
             <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
         </div>
-        <table class="dataTable">
+        <table class="dataTable responsive-table">
             <colgroup>
                 <col style="width: 14ch" />
                 <col />
@@ -94,11 +94,11 @@
             </thead>
             <tbody>
                 <tr v-for="(entry, index) in pagedGrabs" :key="index">
-                    <td>{{ entry.pid }}</td>
-                    <td>{{ entry.nzbName }}</td>
-                    <td><span class="pill">{{ entry.type }}</span></td>
-                    <td>{{ appName(entry.appId) }}</td>
-                    <td>{{ formatDate(entry.time) }}</td>
+                    <td data-title="PID">{{ entry.pid }}</td>
+                    <td class="text">{{ entry.nzbName }}</td>
+                    <td data-title="Type"><span class="pill">{{ entry.type }}</span></td>
+                    <td data-title="App">{{ appName(entry.appId) }}</td>
+                    <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedGrabs.length == 0">
                     <td colspan="5" class="empty">No grabs recorded yet</td>
@@ -113,7 +113,7 @@
             <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
             <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
         </div>
-        <table class="dataTable">
+        <table class="dataTable responsive-table">
             <colgroup>
                 <col style="width: 14ch" />
                 <col />
@@ -138,10 +138,10 @@
             </thead>
             <tbody>
                 <tr v-for="(entry, index) in pagedFailedGrabs" :key="index">
-                    <td>{{ entry.pid }}</td>
-                    <td>{{ entry.nzbName }}</td>
+                    <td data-title="PID">{{ entry.pid }}</td>
+                    <td class="text">{{ entry.nzbName }}</td>
                     <td class="text">{{ entry.error }}</td>
-                    <td>{{ formatDate(entry.time) }}</td>
+                    <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedFailedGrabs.length == 0">
                     <td colspan="4" class="empty">No failed grabs</td>

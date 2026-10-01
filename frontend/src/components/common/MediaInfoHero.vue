@@ -1,7 +1,7 @@
 <template>
     <div class="infoBanner" :style="{ 'background-image': `url(${getThumbnailUrl(details.thumbnail)})` }">
         <div class="infoContainer">
-            <h1>{{ title }}</h1>
+            <h1>{{ title ?? details.title }}</h1>
             <h2 v-if="details.episodeTitle || subtitle">
                 {{ details.episodeTitle ?? subtitle }}
             </h2>
@@ -12,8 +12,8 @@
             </div>
             <div v-if="details.category" class="seriesDetails">
                 <span :class="['pill', 'grey']">
-                    <font-awesome-icon :icon="['fas', type == 'TV' ? 'tv' : 'film']" />
-                    {{ fixCasing(type) }}
+                    <font-awesome-icon :icon="['fas', resolvedType == 'TV' ? 'tv' : 'film']" />
+                    {{ fixCasing(resolvedType) }}
                 </span>
                 <span v-if="details.channel" :class="['pill', 'grey']">
                     <font-awesome-icon :icon="['fas', 'tower-broadcast']" />
@@ -57,17 +57,21 @@ const props = defineProps({
     },
     title: {
         type: String,
-        required: true,
+        required: false,
+        default: null,
     },
     type: {
         type: String,
-        required: true,
+        required: false,
+        default: null,
     },
     subtitle: {
         type: String,
         required: false,
     },
 });
+
+const resolvedType = computed(() => props.type ?? details.value.type);
 
 const downloadDetails = computed(() => {
     const historyItem = history.value.find(({ pid }) => pid == props.pid);

@@ -57,7 +57,9 @@ export const createProwlarrIndexerRequestSkeleton: Partial<CreateProwlarrIndexer
     language: 'en-US',
     encoding: 'Unicode (UTF-8)',
     enable: true,
-    redirect: false,
+    // Prowlarr requires this for any Usenet-protocol indexer (it proxies/redirects NZB download
+    // links itself) - leaving it false fails save with "Redirect must be enabled for Usenet indexers".
+    redirect: true,
     supportsRss: true,
     supportsSearch: true,
     supportsRedirect: true,

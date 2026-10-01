@@ -3,7 +3,7 @@
         <LoadingIndicator v-if="loading" />
         <div v-if="!loading" class="arrLookup">
             <TextInput v-if="showFilter" v-model="filterText" placeholder="Filter" />
-            <table class="resultsTable">
+            <table class="resultsTable responsive-table">
                 <thead>
                     <tr>
                         <th>Result</th>
@@ -14,7 +14,7 @@
                 </thead>
                 <tbody>
                     <tr v-for="result of computedResults" :key="result.id">
-                        <td>{{ result.title }}</td>
+                        <td class="text">{{ result.title }}</td>
                         <td>
                             <a class="clickable" @click="emit('select', result)"> Select </a>
                         </td>

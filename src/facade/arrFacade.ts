@@ -14,12 +14,18 @@ class ArrFacade {
     getDownloadClient(app: App): Promise<DownloadClientResponse | undefined> {
         return this.getService(app).getDownloadClient(app);
     }
+    deleteDownloadClient(app: App): Promise<void> {
+        return this.getService(app).deleteDownloadClient(app);
+    }
 
     upsertIndexer(form: CreateIndexerForm, app: App, allowCreate: boolean): Promise<number> {
         return this.getService(app).upsertIndexer(form, app, allowCreate);
     }
     getIndexer(app: App): Promise<IndexerResponse | undefined> {
         return this.getService(app).getIndexer(app);
+    }
+    deleteIndexer(app: App): Promise<void> {
+        return this.getService(app).deleteIndexer(app);
     }
 
     testConnection(app: App): Promise<boolean | string> {

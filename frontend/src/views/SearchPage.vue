@@ -8,7 +8,7 @@
         @select-filter="selectFilter"
     />
     <div v-if="!loading" class="inner-content scroll-x">
-        <table class="resultsTable">
+        <table class="resultsTable responsive-table">
             <colgroup>
                 <col style="width: 40px" />
                 <col style="width: 80px" />
@@ -42,31 +42,31 @@
                     <td>
                         <CheckInput v-model="result.checked" />
                     </td>
-                    <td @click="download(result)">
+                    <td data-title="Type" @click="download(result)">
                         <span :class="['pill', result.type]">
                             {{ result.type }}
                         </span>
                     </td>
-                    <td @click="download(result)">
+                    <td class="text" @click="download(result)">
                         {{ result.title }}
                     </td>
-                    <td @click="download(result)">
+                    <td data-title="Episode" @click="download(result)">
                         {{
                             result.episode ? `Series ${result.series}, Episode ${result.episode}` : result.episodeTitle
                         }}
                     </td>
-                    <td class="wrap" @click="download(result)">
+                    <td class="wrap" data-title="Filename" @click="download(result)">
                         {{ result.nzbName }}
                     </td>
-                    <td @click="download(result)">
+                    <td data-title="Est. Size" @click="download(result)">
                         {{ formatStorageSize(result.size) }}
                     </td>
-                    <td @click="download(result)">
+                    <td data-title="Channel" @click="download(result)">
                         <span :class="['pill', result.channel.replaceAll(' ', '')]">
                             {{ result.channel }}
                         </span>
                     </td>
-                    <td @click="download(result)">
+                    <td data-title="First Broadcast" @click="download(result)">
                         {{ formatDate(result.pubDate) }}
                     </td>
                     <td @click="immediateDownload(result)">

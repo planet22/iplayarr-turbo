@@ -16,6 +16,12 @@ export class AppFormValidator extends Validator {
         if (input.indexer?.priority && (input.indexer.priority < 0 || input.indexer.priority > 50)) {
             validatorError['indexer_priority'] = 'Priority must be between 0 and 50' as string;
         }
+        if (
+            input.download_client?.priority &&
+            (input.download_client.priority < 1 || input.download_client.priority > 50)
+        ) {
+            validatorError['download_client_priority'] = 'Priority must be between 1 and 50' as string;
+        }
         if (input.priority && input.priority < 0) {
             validatorError['priority'] = 'Priority must be a positive number' as string;
         }

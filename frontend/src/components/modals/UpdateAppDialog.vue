@@ -1,6 +1,6 @@
 <template>
     <IPlayarrModal title="Updating Apps" :show-close="true" close-label="Close">
-        <table class="resultsTable">
+        <table class="resultsTable responsive-table">
             <thead>
                 <tr>
                     <th>App</th>
@@ -12,7 +12,7 @@
             </thead>
             <tbody>
                 <tr v-for="app of apps" :key="app.id">
-                    <td>
+                    <td class="text">
                         <div class="appDisplay">
                             <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" />
                             <span class="appName">
@@ -20,12 +20,12 @@
                             </span>
                         </div>
                     </td>
-                    <td v-if="appStatus[app.id]">
+                    <td v-if="appStatus[app.id]" data-title="Status">
                         <span :class="['pill', getPillColor(appStatus[app.id].status)]">{{
                             appStatus[app.id].status
                         }}</span>
                     </td>
-                    <td v-if="appStatus[app.id]">
+                    <td v-if="appStatus[app.id]" data-title="Message">
                         {{ appStatus[app.id].message }}
                     </td>
                 </tr>

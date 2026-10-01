@@ -1,7 +1,7 @@
 <template>
     <div class="inner-content scroll-x">
         <legend>Active Streams</legend>
-        <table class="dataTable streamsTable">
+        <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
                 <col />
@@ -42,28 +42,31 @@
                     <td>
                         <img
                             v-if="detailsFor(session.pid)?.thumbnail"
-                            class="thumbnail"
+                            class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
+                            @click="openInfo(session.pid)"
                         />
                     </td>
                     <td class="text">
-                        {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        <a class="clickable" @click="openInfo(session.pid)">
+                            {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
-                    <td>
+                    <td data-title="Mode">
                         <span class="pill">{{ session.mode }}</span>
                         <div class="subtle">{{ clientLabel(session.client) }}</div>
                     </td>
                     <SettingsChips :settings="session.settings" />
-                    <td class="chipCol">
+                    <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td>{{ session.clientIp }}</td>
-                    <td>{{ formatDuration(session.startedAt) }}</td>
-                    <td>{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
-                    <td>
+                    <td data-title="Client IP">{{ session.clientIp }}</td>
+                    <td data-title="Duration">{{ formatDuration(session.startedAt) }}</td>
+                    <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
+                    <td data-title="Segments">
                         <SegmentActivityStrip
                             v-if="session.totalSegments"
                             :total="session.totalSegments"
@@ -89,7 +92,7 @@
         </table>
 
         <legend>Stream History</legend>
-        <table class="dataTable streamsTable">
+        <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
                 <col />
@@ -127,29 +130,32 @@
                     <td>
                         <img
                             v-if="detailsFor(session.pid)?.thumbnail"
-                            class="thumbnail"
+                            class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
+                            @click="openInfo(session.pid)"
                         />
                     </td>
                     <td class="text">
-                        {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        <a class="clickable" @click="openInfo(session.pid)">
+                            {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
-                    <td>
+                    <td data-title="Mode">
                         <span class="pill">{{ session.mode }}</span>
                         <div class="subtle">{{ clientLabel(session.client) }}</div>
                     </td>
                     <SettingsChips :settings="session.settings" />
-                    <td class="chipCol">
+                    <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td>{{ session.clientIp }}</td>
-                    <td>{{ formatDate(session.startedAt) }}</td>
-                    <td>{{ formatDuration(session.startedAt, session.endedAt) }}</td>
-                    <td>{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
-                    <td>
+                    <td data-title="Client IP">{{ session.clientIp }}</td>
+                    <td data-title="Started">{{ formatDate(session.startedAt) }}</td>
+                    <td data-title="Duration">{{ formatDuration(session.startedAt, session.endedAt) }}</td>
+                    <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
+                    <td data-title="Segments">
                         <SegmentActivityStrip
                             v-if="session.totalSegments"
                             :total="session.totalSegments"
@@ -180,6 +186,7 @@ import {
     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl,
 } from '@/lib/utils';
 
+import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
 import SettingsChips from '../components/streaming/SettingsChips.vue';
@@ -230,6 +237,14 @@ const clientLabels = {
 
 function clientLabel(client) {
     return clientLabels[client] ?? client ?? '';
+}
+
+function openInfo(pid) {
+    const infoModal = useModal({
+        component: VideoInfoModal,
+        attrs: { pid },
+    });
+    infoModal.open();
 }
 
 function formatDate(value) {
