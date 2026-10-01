@@ -34,6 +34,17 @@
             tooltip="RSS feed includes content from the past N hours."
             :error="validationErrors.config?.RSS_FEED_HOURS"
         />
+        <SelectInput
+            v-model="config.SCHEDULE_FULL_REFRESH"
+            :advanced="true"
+            name="Full Schedule Refresh"
+            tooltip="Off (default) re-fetches only today's schedule per channel and reuses a cached
+                copy of already-passed days, since those can't change. Turn on to always re-fetch
+                every day in the window on each refresh (the old behavior) if caching ever causes
+                stale or missing results."
+            :error="validationErrors.config?.SCHEDULE_FULL_REFRESH"
+            :options="trueOrFalse"
+        />
     </template>
 </template>
 
