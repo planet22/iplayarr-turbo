@@ -19,6 +19,11 @@ import { AbstractScheduleService } from './AbstractScheduleService';
 class NativeScheduleService implements AbstractScheduleService {
     scheduleCache: RedisCacheService<IPlayerSearchResult[]> = new RedisCacheService('schedule_cache', 5400);
     cacheTime: RedisCacheService<number> = new RedisCacheService('schedule_cache_time', 5400);
+    // A past day's BBC schedule page never changes once the day is over, so there's no reason to
+    // re-fetch/re-parse it on every refresh cycle - only today's page is still being updated.
+    // Cached indefinitely relative to a single refresh cycle (14 days comfortably outlives any
+    // realistic RSS_FEED_HOURS window) and only ever written once a day has fully passed.
+    schedulePageCache: RedisCacheService<string[]> = new RedisCacheService('schedule_page_pids', 60 * 60 * 24 * 14);
     caching: boolean = false;
 
 
@@ -26,7 +31,11 @@ class NativeScheduleService implements AbstractScheduleService {
 	const { sizeFactor } = await getQualityProfile();
 
         const rssHours: string = (await configService.getParameter(IplayarrParameter.RSS_FEED_HOURS)) as string;
-        const dupedPids = await Promise.all(ChannelSchedule.map(channel => this.getChannelPids(channel, rssHours)));
+        const fullRefresh: boolean =
+            (await configService.getParameter(IplayarrParameter.SCHEDULE_FULL_REFRESH)) === 'true';
+        const dupedPids = await Promise.all(
+            ChannelSchedule.map(channel => this.getChannelPids(channel, rssHours, fullRefresh))
+        );
         const pids = [...new Set(dupedPids.flat())];
 
         const chunks = splitArrayIntoChunks(pids, 5);
@@ -92,13 +101,18 @@ class NativeScheduleService implements AbstractScheduleService {
         return results;
     }
 
-    async getChannelPids({ id, name }: ChannelDefinition, rssHours: string): Promise<string[]> {
+    async getChannelPids(
+        { id, name }: ChannelDefinition,
+        rssHours: string,
+        fullRefresh: boolean = false
+    ): Promise<string[]> {
         const hours = parseInt(rssHours);
         const days = Math.ceil(hours / 24);
 
         const date = new Date();
         date.setDate(date.getDate() - days - 1);
 
+        const today = new Date();
         const allPids: Set<string> = new Set();
 
         while (date.getDate() != new Date().getDate()) {
@@ -109,9 +123,26 @@ class NativeScheduleService implements AbstractScheduleService {
             const day = String(date.getDate()).padStart(2, '0');
 
             const url = `https://www.bbc.co.uk/schedules/${id}/${year}/${month}/${day}`;
+            const cacheKey = `${id}_${year}-${month}-${day}`;
+            // SCHEDULE_FULL_REFRESH forces every day to be treated like "today" - always fetched
+            // fresh, never served from the per-day cache.
+            const isToday = fullRefresh || date.toDateString() === today.toDateString();
 
-            loggingService.log(`Fetching schedule for ${name} on ${year}-${month}-${day}... ${url}`);
-            const pids = await this.getPidsFromSchedulePage(url);
+            let pids: string[];
+            if (isToday) {
+                // Still being updated through the day - always fetch fresh, but still cache the
+                // result so tomorrow's refresh can treat today (now a completed past day) as cached
+                // without having to hit BBC for it again.
+                loggingService.log(`Fetching schedule for ${name} on ${year}-${month}-${day}... ${url}`);
+                pids = await this.getPidsFromSchedulePage(url);
+                await this.schedulePageCache.set(cacheKey, pids);
+            } else {
+                pids = await this.schedulePageCache.getOr(cacheKey, async () => {
+                    loggingService.log(`Fetching schedule for ${name} on ${year}-${month}-${day}... ${url}`);
+                    return this.getPidsFromSchedulePage(url);
+                });
+            }
+
             pids.forEach(pid => allPids.add(pid));
         }
 

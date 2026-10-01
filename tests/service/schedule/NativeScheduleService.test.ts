@@ -21,6 +21,9 @@ jest.mock('../../../src/service/synonymService');
 describe('NativeScheduleService', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        // Auto-mocked RedisCacheService.getOr returns undefined by default - simulate a cache miss
+        // that falls through to the fetch function, same as the real implementation does.
+        NativeScheduleService.schedulePageCache.getOr = jest.fn((_key, fetchFunction) => fetchFunction(_key));
     });
 
     describe('refreshCache', () => {

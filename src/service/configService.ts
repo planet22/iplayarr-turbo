@@ -40,6 +40,11 @@ const configService = {
             '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC',
         VIDEO_QUALITY: 'hd',
         RSS_FEED_HOURS: '48',
+        // 'false' re-fetches/re-parses only today's BBC schedule page per channel each refresh,
+        // reusing a cached result for any day that's already fully passed (it can't change once
+        // the day's over). 'true' restores the old behavior of re-fetching every day in the
+        // window on every refresh, in case the caching ever causes stale/missing results.
+        SCHEDULE_FULL_REFRESH: 'false',
         NATIVE_SEARCH: 'true',
         ARCHIVE_ENABLED: 'false',
         THUMBNAIL_RETENTION_DAYS: '30',
