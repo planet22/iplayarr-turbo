@@ -13,6 +13,22 @@ iPlayarr is a companion tool for **Sonarr** and **Radarr**, making it easy to in
 
 > **This is iPlayarr Turbo**, a fork of upstream iPlayarr (based on v0.11.6) with a modernized Docker build and dependency stack — see [TURBO.md](TURBO.md) for everything this fork changes on top of what's described below.
 
+## 📚 Further documentation
+
+This README covers the basics. For more detail, see `docs/`:
+
+- [CONFIG.md](docs/CONFIG.md) / [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) — full settings reference
+- [INSTALLATION.md](docs/INSTALLATION.md) — Docker deployment, volumes, PUID/PGID, updating
+- [AUTHENTICATION.md](docs/AUTHENTICATION.md) — auth types, password reset, OIDC
+- [REDIS.md](docs/REDIS.md) — what's stored in Redis, backup/restore
+- [SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) — how the dual-protocol trick works, troubleshooting a failed Test
+- [STREAMING.md](docs/STREAMING.md) and [LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) — `.strm` mode and Jellyfin-style library layout
+- [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI
+- [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common issues
+- [DEVELOPMENT.md](docs/DEVELOPMENT.md) — contributor setup, testing, linting
+- [media-servers/](docs/media-servers/) — Jellyfin, Plex, Emby specifics
+- [platforms/](docs/platforms/) — Synology, Unraid notes
+
 ## 📸 Screenshots
 
 <p align="center">
@@ -95,7 +111,9 @@ services:
             - './logs:/logs'
 ```
 
-You can pre-set the following environment variables, or you can set them in the Settings menu once the container is up.
+See [docs/INSTALLATION.md](docs/INSTALLATION.md) for a deeper walkthrough of volume mounts, PUID/PGID, and updating the container, and [docs/platforms/synology.md](docs/platforms/synology.md)/[docs/platforms/unraid.md](docs/platforms/unraid.md) for NAS-specific notes.
+
+You can pre-set the following environment variables, or you can set them in the Settings menu once the container is up. Full reference: [docs/CONFIG.md](docs/CONFIG.md) (by Settings tab) and [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) (flat lookup table).
 
 | Property     | Description                              |
 | ------------ | ---------------------------------------- |
@@ -109,11 +127,28 @@ There's a few more optional settings too:
 | ---------------- | ----------------------------------------------------------------------------------------- |
 | ACTIVE_LIMIT     | How many downloads are allowed simultaneously, defaults to 3                              |
 | REFRESH_SCHEDULE | Cron expression for when to proactively refresh schedule, defaults to hourly, on the hour |
+| SCHEDULE_FULL_REFRESH | Re-fetch every day in the schedule window on every refresh instead of reusing cached results for days that have already passed. Defaults to false |
 | HIDE_DONATE      | If you don't like the Kofi donate links you can hide them                                 |
 | PUID             | Host User ID for file permissions                                                         |
 | PGID             | Host Group ID for file permissions                                                        |
-| LIBRARY_FOLDER_STRUCTURE | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to false |
-| WRITE_NFO_STRM   | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. Defaults to false |
+| NATIVE_SEARCH    | Search BBC's own search API directly instead of shelling out to get_iplayer. Faster, and the default. Defaults to true |
+| ARCHIVE_ENABLED  | Keep a record of cancelled/removed downloads instead of discarding them outright. Defaults to false |
+| OUTPUT_FORMAT    | Output container format passed to get_iplayer (e.g. mp4). Defaults to mp4 |
+| LIBRARY_FOLDER_STRUCTURE | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to false. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
+| ARR_COMPLETE_DIR | Optional override of COMPLETE_DIR for TV downloads only (what Sonarr imports). Leave unset to use COMPLETE_DIR for everything |
+| WRITE_NFO_STRM   | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. One of `none` (default), `all`, `nzb` (only downloads added by Sonarr/Radarr), or `manual` (only manually-triggered downloads). See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
+| MEDIA_MODE       | `download` (default) saves the full file; `strm` saves a small pointer file that streams on demand instead, saving disk space. See [docs/STREAMING.md](docs/STREAMING.md) |
+| STREAM_CLIENT    | Which tool serves playback for `.strm` files: `GET_IPLAYER` (default), `YTDLP`, or `NATIVE` (fastest to start, adaptive quality). See [docs/STREAMING.md](docs/STREAMING.md) |
+| STREAM_MODE      | `direct` (default, supports seeking) or `progressive-mkv` (remuxes to MKV on the fly, needs ffmpeg, no seeking) |
+| STREAM_BASE_URL  | The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr, for links written into `.strm` files |
+| STREAM_KEY       | Secures `.strm` playback links, separate from API_KEY so it can be regenerated on its own |
+| STREAM_CACHE_DIR | Where temporary files are stored while streaming. Defaults to a temp folder |
+| STREAM_NATIVE_ADAPTIVE | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to true |
+| STREAM_NATIVE_HQ_PROBE | With STREAM_CLIENT=NATIVE, verify real stream quality before playing (adds a short delay). Defaults to false |
+| STREAM_NATIVE_EXPERIMENTAL_FHD | EXPERIMENTAL: try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to false |
+| THUMBNAIL_CACHE_DIR | Where cached BBC episode thumbnails are stored |
+| THUMBNAIL_RETENTION_DAYS | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30 |
+| STREAM_HISTORY_RETENTION_DAYS | How many days to keep native streaming session history before nightly cleanup. Defaults to 30 |
 
 ### Usage
 
@@ -124,6 +159,8 @@ The default details are:
 | Username | Password |
 | -------- | -------- |
 | admin    | password |
+
+See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for auth types (form/OIDC/none), changing credentials, and password reset.
 
 **Sonarr and Radarr link**
 
@@ -158,10 +195,12 @@ iPlayarr presents itself as both an indexer and a download client on port 4404. 
 | API Key         | API_KEY from above           |
 | Download Client | iPlayarr (created above)     |
 
+See [docs/SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) for how this dual-protocol setup actually works and how to troubleshoot a failed "Test".
+
 ### Web Interface
 
 To access the web frontend, visit `http://Your_Docker_Host:4404`.
-From here, you can manage settings, view logs, and monitor downloads.
+From here, you can manage settings, view logs, and monitor downloads. See [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md) for a tour of each page.
 
 ## Development Setup
 
@@ -206,6 +245,8 @@ The application will be available at:
 | `npm run lint`       | Run ESLint                                |
 | `npm run prettier`   | Check code formatting                     |
 
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for testing a single file/test name, linting/prettier fix scripts, the module-alias note, and where to make changes architecturally.
+
 ## Redis
 
 iPlayarr uses Redis for storage. This is built into the container and **doesn't require any additional setup**, but if you would like to use a standalone redis instance, set the following settings:
@@ -216,3 +257,5 @@ iPlayarr uses Redis for storage. This is built into the container and **doesn't 
 - REDIS_SSL (optionally 'true')
 
 If these are all set, it will not start the bundled version of Redis.
+
+See [docs/REDIS.md](docs/REDIS.md) for what's actually stored in Redis and backup/restore notes.
