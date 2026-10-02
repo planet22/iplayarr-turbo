@@ -59,7 +59,7 @@ const configService = {
         STREAM_NATIVE_HQ_PROBE: 'false',
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'false',
         LIBRARY_FOLDER_STRUCTURE: 'false',
-        WRITE_NFO_STRM: 'false',
+        WRITE_NFO_STRM: 'none',
     } as ConfigMap,
 
     getParameter: async (parameter: IplayarrParameter): Promise<string | undefined> => {

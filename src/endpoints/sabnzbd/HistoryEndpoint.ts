@@ -15,6 +15,7 @@ import {
 import { QueueEntryStatus } from '../../types/responses/sabnzbd/QueueResponse';
 import { TrueFalseResponse } from '../../types/responses/sabnzbd/TrueFalseResponse';
 import { formatBytes } from '../../utils/formatters';
+import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
 import { AbstractSabNZBDActionEndpoint, ActionQueryString } from './AbstractSabNZBDActionEndpoint';
 
 const sizeFactor: number = 1048576;
@@ -40,12 +41,13 @@ const actionDirectory: EndpointDirectory = {
         const completeDir: string = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
 
         const outputFormat = await configService.getParameter(IplayarrParameter.OUTPUT_FORMAT) as string;
+        const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
 
         const historyObject: SabNZBDHistoryResponse = {
             ...historySkeleton,
             slots: history
                 .filter(({ status }) => status != QueueEntryStatus.FORWARDED)
-                .map((item) => createHistoryEntry(completeDir, item, outputFormat)),
+                .map((item) => createHistoryEntry(resolveCompleteDir(item.type, completeDir, arrCompleteDir), item, outputFormat)),
         } as SabNZBDHistoryResponse;
         res.json({ history: historyObject });
     }

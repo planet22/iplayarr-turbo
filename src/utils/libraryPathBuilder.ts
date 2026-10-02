@@ -3,6 +3,15 @@ import path from 'path';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
 
+// Picks which configured complete directory a completed item should land under.
+// ARR_COMPLETE_DIR (set via the *arr Complete Directory setting) is an
+// optional override for TV content only - Movies always use COMPLETE_DIR.
+// Falls back to COMPLETE_DIR when unset, so leaving it blank keeps the old
+// single-directory behavior.
+export function resolveCompleteDir(type: VideoType, completeDir: string, arrCompleteDir?: string): string {
+    return type === VideoType.TV && arrCompleteDir ? arrCompleteDir : completeDir;
+}
+
 // Windows/POSIX-illegal filename characters.
 // eslint-disable-next-line no-control-regex
 const illegalCharsRegex = /[<>:"/\\|?*\x00-\x1F]/g;

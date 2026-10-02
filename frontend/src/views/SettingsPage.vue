@@ -17,6 +17,7 @@
             :quality-profiles="qualityProfiles"
             :output-formats="outputFormats"
             :true-or-false="trueOrFalse"
+            :nfo-write-modes="nfoWriteModes"
         />
         <DownloadClientSettingsTab v-if="activeTab == 'downloadClient'" :download-clients="downloadClients" />
         <StreamingSettingsTab
@@ -88,6 +89,13 @@ const qualityProfiles = ref([]);
 const trueOrFalse = ref([
     { key: 'true', value: 'Enabled' },
     { key: 'false', value: 'Disabled' },
+]);
+
+const nfoWriteModes = ref([
+    { key: 'none', value: 'Disabled' },
+    { key: 'all', value: 'Enabled (All Downloads)' },
+    { key: 'nzb', value: 'Enabled (Sonarr/Radarr Downloads Only)' },
+    { key: 'manual', value: 'Enabled (Manual Downloads Only)' },
 ]);
 
 const authTypes = ref([

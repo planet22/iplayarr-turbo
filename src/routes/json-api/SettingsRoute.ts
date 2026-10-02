@@ -12,6 +12,7 @@ import { qualityProfiles } from '../../types/QualityProfiles';
 import { QueueEntry } from '../../types/QueueEntry';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { VideoEventType } from '../../types/VideoEvent';
+import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../../utils/Utils';
 import { ConfigFormValidator } from '../../validators/ConfigFormValidator';
 import { Validator } from '../../validators/Validator';
@@ -100,11 +101,13 @@ async function rewriteStrmKeys(
     label: string
 ): Promise<void> {
     const completeDir: string = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
+    const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
     const history: QueueEntry[] = await historyService.getHistory();
     const strmItems = history.filter(({ extension }) => extension === 'strm');
 
     for (const item of strmItems) {
-        const strmPath = path.join(completeDir, item.libraryPath ?? `${item.nzbName}.strm`);
+        const itemCompleteDir = resolveCompleteDir(item.type, completeDir, arrCompleteDir);
+        const strmPath = path.join(itemCompleteDir, item.libraryPath ?? `${item.nzbName}.strm`);
         try {
             const content = fs.readFileSync(strmPath, 'utf8');
             fs.writeFileSync(strmPath, content.replace(`${param}=${oldKey}`, `${param}=${newKey}`), 'utf8');

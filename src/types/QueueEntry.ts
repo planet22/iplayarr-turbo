@@ -1,6 +1,7 @@
 import { ChildProcess } from 'child_process';
 
 import { DownloadDetails } from './DownloadDetails';
+import { QueueEntrySource } from './enums/QueueEntrySource';
 import { VideoType } from './IPlayerSearchResult';
 import { QueueEntryStatus } from './responses/sabnzbd/QueueResponse';
 
@@ -25,6 +26,11 @@ export interface QueueEntry {
     nzbName: string;
     type: VideoType;
     appId?: string;
+    // How this item was queued - via an NZB (Sonarr/Radarr) or a manual
+    // download-by-pid request. Defaults to NZB (queueService.addToQueue) since
+    // that's by far the common path; DownloadEndpoint.ts sets MANUAL
+    // explicitly. Used to scope WRITE_NFO_STRM (NfoWriteMode).
+    source?: QueueEntrySource;
     extension?: string;
     library?: QueueLibraryMetadata;
     // Path of the completed file relative to COMPLETE_DIR, set once the
