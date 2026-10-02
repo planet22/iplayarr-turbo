@@ -8,6 +8,7 @@
     </div>
     <ModalsContainer />
     <ConnectionLostOverlay />
+    <PipPlayer v-if="authState.user" />
 </template>
 
 <script setup>
@@ -21,6 +22,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue';
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
+import PipPlayer from './components/common/PipPlayer.vue';
 import { enforceMaxLength } from './lib/utils';
 
 const authState = inject('authState');

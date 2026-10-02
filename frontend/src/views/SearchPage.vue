@@ -19,6 +19,7 @@
                 <col style="width: 120px" />
                 <col style="width: 150px" />
                 <col style="width: 44px" />
+                <col style="width: 44px" />
             </colgroup>
             <thead>
                 <tr>
@@ -35,6 +36,7 @@
                     <th>
                         <font-awesome-icon :icon="['fas', 'gears']" />
                     </th>
+                    <th />
                 </tr>
             </thead>
             <tbody>
@@ -75,6 +77,14 @@
                             :icon="['fas', 'cloud-download']"
                         />
                     </td>
+                    <td>
+                        <font-awesome-icon
+                            class="clickable"
+                            :icon="['fas', 'play']"
+                            title="Play Video"
+                            @click="preview(result)"
+                        />
+                    </td>
                 </tr>
             </tbody>
         </table>
@@ -88,14 +98,17 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { playInPip } from '@/lib/pipPlayer';
 import { usePagination } from '@/lib/usePagination';
 import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 
@@ -134,8 +147,18 @@ watch(
     { immediate: true }
 );
 
-const download = async (searchResult) => {
-    router.push({ name: 'download', query: { json: JSON.stringify(searchResult) } });
+const download = (searchResult) => {
+    const modal = useModal({
+        component: DownloadConfirmModal,
+        attrs: {
+            result: searchResult,
+            onDownloaded: () => {
+                modal.close();
+                router.push('/queue');
+            },
+        },
+    });
+    modal.open();
 };
 
 const immediateDownload = async (searchResult) => {
@@ -143,6 +166,10 @@ const immediateDownload = async (searchResult) => {
     if (response.ok) {
         router.push('/queue');
     }
+};
+
+const preview = (searchResult) => {
+    playInPip(searchResult.pid, searchResult.title);
 };
 
 const multipleImmediateDownload = async () => {

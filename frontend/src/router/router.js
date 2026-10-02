@@ -4,7 +4,6 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { getHost } from '@/lib/utils';
 import AboutPage from '@/views/AboutPage.vue';
 import AppsPage from '@/views/AppsPage.vue';
-import DownloadPage from '@/views/DownloadPage.vue';
 import LoginPage from '@/views/LoginPage.vue';
 import LogsPage from '@/views/LogsPage.vue';
 import NzbPage from '@/views/NzbPage.vue';
@@ -28,7 +27,6 @@ const routes = [
     { path: '/synonyms', component: SynonymsPage },
     { path: '/login', component: LoginPage },
     { path: '/search', component: SearchPage, name: 'search' },
-    { path: '/download', component: DownloadPage, name: 'download' },
     { path: '/offSchedule', component: OffSchedulePage },
     { path: '/apps', component: AppsPage },
     { path: '/stats', component: StatisticsPage },
