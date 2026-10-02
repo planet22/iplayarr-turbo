@@ -65,8 +65,9 @@
             <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
             <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
         </div>
-        <table class="dataTable responsive-table">
+        <table class="dataTable streamsTable responsive-table">
             <colgroup>
+                <col style="width: 70px" />
                 <col style="width: 14ch" />
                 <col />
                 <col style="width: 10ch" />
@@ -75,6 +76,7 @@
             </colgroup>
             <thead>
                 <tr>
+                    <th />
                     <th class="sortable" @click="toggleGrabSort('pid')">
                         PID <SortIcon :active="grabSortBy == 'pid'" :order="grabSortOrder" />
                     </th>
@@ -94,14 +96,29 @@
             </thead>
             <tbody>
                 <tr v-for="(entry, index) in pagedGrabs" :key="index">
+                    <td>
+                        <img
+                            v-if="detailsFor(entry.pid)?.thumbnail"
+                            class="thumbnail clickable"
+                            :src="getThumbnailUrl(detailsFor(entry.pid).thumbnail)"
+                            @click="openInfo(entry.pid)"
+                        />
+                    </td>
                     <td data-title="PID">{{ entry.pid }}</td>
-                    <td class="text">{{ entry.nzbName }}</td>
+                    <td class="text">
+                        <a class="clickable" @click="openInfo(entry.pid)">
+                            {{ detailsFor(entry.pid)?.title ?? entry.nzbName }}
+                        </a>
+                        <div v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" class="subtle">
+                            {{ [detailsFor(entry.pid)?.channel, seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
+                        </div>
+                    </td>
                     <td data-title="Type"><span class="pill">{{ entry.type }}</span></td>
                     <td data-title="App">{{ appName(entry.appId) }}</td>
                     <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedGrabs.length == 0">
-                    <td colspan="5" class="empty">No grabs recorded yet</td>
+                    <td colspan="6" class="empty">No grabs recorded yet</td>
                 </tr>
             </tbody>
         </table>
@@ -153,7 +170,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
@@ -162,16 +179,56 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
+import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
-import { formatDateTimeWithMillis } from '@/lib/utils';
+import {
+    formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl,
+} from '@/lib/utils';
 
 const searchHistory = ref([]);
 const grabHistory = ref([]);
 const failedGrabHistory = ref([]);
 const apps = ref([]);
+const details = reactive({});
+
+function detailsFor(pid) {
+    return details[pid];
+}
+
+function seriesEpisodeLabel(pid) {
+    return getSeriesEpisodeLabel(detailsFor(pid));
+}
+
+async function loadDetails(pid) {
+    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
+        return;
+    }
+    details[pid] = null;
+    try {
+        const response = await ipFetch(`json-api/details?pid=${pid}`);
+        details[pid] = response.ok ? response.data : null;
+    } catch {
+        details[pid] = null;
+    }
+}
+
+function loadMissingDetails() {
+    const pids = grabHistory.value.map(({ pid }) => pid);
+    [...new Set(pids)].filter(Boolean).forEach(loadDetails);
+}
+
+watch(grabHistory, loadMissingDetails);
+
+function openInfo(pid) {
+    const infoModal = useModal({
+        component: VideoInfoModal,
+        attrs: { pid },
+    });
+    infoModal.open();
+}
 
 function appName(appId) {
     if (!appId) return '';
