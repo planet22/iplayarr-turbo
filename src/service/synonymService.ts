@@ -9,10 +9,11 @@ const storage: QueuedStorage = new QueuedStorage();
 const synonymService = {
     getSynonym: async (inputTerm: string): Promise<Synonym | undefined> => {
         const allSynonyms = await synonymService.getAllSynonyms();
+        const normalizedInput = inputTerm.trim().toLocaleLowerCase();
         return allSynonyms.find(
             ({ from: savedFrom, target: savedTarget }) =>
-                savedFrom.toLocaleLowerCase() == inputTerm.toLocaleLowerCase() ||
-                savedTarget.toLocaleLowerCase() == inputTerm.toLocaleLowerCase()
+                savedFrom.trim().toLocaleLowerCase() == normalizedInput ||
+                savedTarget.trim().toLocaleLowerCase() == normalizedInput
         );
     },
 

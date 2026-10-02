@@ -7,6 +7,7 @@ import { App } from '../../types/App';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { ArrLookupResponse } from '../../types/responses/arr/ArrLookupResponse';
 import { Synonym } from '../../types/Synonym';
+import { SynonymFormValidator } from '../../validators/SynonymFormValidator';
 
 const router = Router();
 
@@ -15,19 +16,28 @@ router.get('/', async (_, res: Response) => {
     res.json(synonyms);
 });
 
-router.post('/', async (req: Request, res: Response) => {
+const saveSynonym = async (req: Request, res: Response) => {
     const synonym: Synonym = req.body as any as Synonym;
-    await synonymService.addSynonym(synonym);
-    const synonyms = await synonymService.getAllSynonyms();
-    res.json(synonyms);
-});
+    const synonymFormValidator: SynonymFormValidator = new SynonymFormValidator();
+    const validationResult = await synonymFormValidator.validate(synonym);
+    if (Object.keys(validationResult).length > 0) {
+        const apiResponse: ApiResponse = {
+            error: ApiError.INVALID_INPUT,
+            invalid_fields: validationResult,
+        };
+        res.status(400).json(apiResponse);
+        return;
+    }
 
-router.put('/', async (req: Request, res: Response) => {
-    const synonym: Synonym = req.body as any as Synonym;
-    await synonymService.updateSynonym(synonym);
+    const serviceMethod = req.method === 'POST' ? 'addSynonym' : 'updateSynonym';
+    await synonymService[serviceMethod](synonym);
     const synonyms = await synonymService.getAllSynonyms();
     res.json(synonyms);
-});
+};
+
+router.post('/', saveSynonym);
+
+router.put('/', saveSynonym);
 
 router.delete('/', async (req: Request, res: Response) => {
     const { id } = req.body;

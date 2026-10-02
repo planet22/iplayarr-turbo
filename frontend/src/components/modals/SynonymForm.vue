@@ -14,9 +14,16 @@
             placeholder="Apprentice UK"
             icon-button="history"
             button-tooltip="Look at Search History"
+            :error="validationErrors?.from"
             @action="openSearchHistory"
         />
-        <TextInput v-model="form.target" name="To" tooltip="Outgoing search to iPlayer" placeholder="Apprentice" />
+        <TextInput
+            v-model="form.target"
+            name="To"
+            tooltip="Outgoing search to iPlayer"
+            placeholder="Apprentice"
+            :error="validationErrors?.target"
+        />
         <TextInput
             v-model="form.filenameOverride"
             name="Filename Override"
@@ -47,13 +54,15 @@ import { defineEmits, defineProps, onMounted, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import dialogService from '@/lib/dialogService';
+import { ipFetch } from '@/lib/ipFetch';
 
 import TextInput from '../common/form/TextInput.vue';
 import ArrLookupDialog from './ArrLookupDialog.vue';
 import IPlayarrModal from './IPlayarrModal.vue';
 import SearchHistoryDialog from './SearchHistoryDialog.vue';
 
-const emit = defineEmits(['save']);
+const emit = defineEmits(['saved']);
+const validationErrors = ref({});
 
 const props = defineProps({
     inputObj: {
@@ -92,19 +101,19 @@ onMounted(() => {
     }
 });
 
-const saveSynonym = () => {
+const saveSynonym = async () => {
     if (form.value.from && form.value.target) {
         if (form.value.filenameOverride == '') {
             delete form.value.filenameOverride;
         }
-        emit('save', form.value);
-        form.value = {
-            id: undefined,
-            from: '',
-            target: '',
-            exemptions: '',
-            filenameOverride: undefined,
-        };
+        const method = form.value.id ? 'PUT' : 'POST';
+        const response = await ipFetch('json-api/synonym', method, form.value);
+        if (response.ok) {
+            validationErrors.value = {};
+            emit('saved');
+        } else {
+            validationErrors.value = response.data.invalid_fields ?? {};
+        }
     } else {
         dialogService.alert('Can\'t Save', 'Please fill in a To and From');
     }

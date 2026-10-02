@@ -55,7 +55,7 @@ class SearchFacade {
 
     async #getTerm(inputTerm: string, season?: number): Promise<SearchTerm> {
         const term = !season ? removeLastFourDigitNumber(inputTerm) : inputTerm;
-        const synonym = await synonymService.getSynonym(inputTerm);
+        const synonym = (await synonymService.getSynonym(inputTerm)) ?? (term !== inputTerm ? await synonymService.getSynonym(term) : undefined);
         return {
             term: synonym ? synonym.target : term,
             synonym,

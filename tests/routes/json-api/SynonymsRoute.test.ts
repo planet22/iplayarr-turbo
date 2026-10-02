@@ -34,26 +34,53 @@ describe('Synonym and Lookup Routes', () => {
 
     describe('POST /', () => {
         it('adds a synonym and returns updated list', async () => {
-            const synonym = { id: 2, term: 'movie', synonym: 'film' };
+            const synonym = { id: '2', from: 'movie', target: 'film', exemptions: '' };
             const updatedSynonyms = [synonym];
 
+            (synonymService.getAllSynonyms as jest.Mock)
+                .mockResolvedValueOnce([]) // validator's conflict check
+                .mockResolvedValueOnce(updatedSynonyms); // response list after save
             (synonymService.addSynonym as jest.Mock).mockResolvedValue(undefined);
-            (synonymService.getAllSynonyms as jest.Mock).mockResolvedValue(updatedSynonyms);
 
             const res = await request(expressApp).post('/').send(synonym);
             expect(synonymService.addSynonym).toHaveBeenCalledWith(synonym);
             expect(res.status).toBe(200);
             expect(res.body).toEqual(updatedSynonyms);
         });
+
+        it('rejects a synonym without from/target', async () => {
+            (synonymService.getAllSynonyms as jest.Mock).mockResolvedValue([]);
+
+            const res = await request(expressApp).post('/').send({ id: '2' });
+            expect(synonymService.addSynonym).not.toHaveBeenCalled();
+            expect(res.status).toBe(400);
+            expect(res.body).toMatchObject({
+                error: ApiError.INVALID_INPUT,
+                invalid_fields: { from: expect.any(String), target: expect.any(String) },
+            });
+        });
+
+        it('rejects a synonym that conflicts with an existing one', async () => {
+            const existing = { id: '1', from: 'tv', target: 'television', exemptions: '' };
+            const synonym = { id: '2', from: 'television', target: 'telly', exemptions: '' };
+
+            (synonymService.getAllSynonyms as jest.Mock).mockResolvedValue([existing]);
+
+            const res = await request(expressApp).post('/').send(synonym);
+            expect(synonymService.addSynonym).not.toHaveBeenCalled();
+            expect(res.status).toBe(400);
+            expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+            expect(res.body.invalid_fields.from).toContain('Conflicts with existing Synonym');
+        });
     });
 
     describe('PUT /', () => {
         it('updates a synonym and returns updated list', async () => {
-            const synonym = { id: 3, term: 'doc', synonym: 'documentary' };
+            const synonym = { id: '3', from: 'doc', target: 'documentary', exemptions: '' };
             const updatedSynonyms = [synonym];
 
+            (synonymService.getAllSynonyms as jest.Mock).mockResolvedValue([synonym]);
             (synonymService.updateSynonym as jest.Mock).mockResolvedValue(undefined);
-            (synonymService.getAllSynonyms as jest.Mock).mockResolvedValue(updatedSynonyms);
 
             const res = await request(expressApp).put('/').send(synonym);
             expect(synonymService.updateSynonym).toHaveBeenCalledWith(synonym);

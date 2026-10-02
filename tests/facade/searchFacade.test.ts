@@ -82,4 +82,37 @@ describe('SearchFacade', () => {
     expect(getIplayerSearchService.search).toHaveBeenCalled();
     expect(results).toHaveLength(1);
   });
+
+  it('should fall back to a year-stripped synonym lookup when no season given', async () => {
+    (configService.getParameter as jest.Mock).mockResolvedValue('true');
+
+    // No synonym for the raw term (with year), but one exists for the stripped term
+    (synonymService.getSynonym as jest.Mock).mockImplementation((term: string) =>
+      Promise.resolve(term === 'Test Show' ? { from: 'Test Show', target: 'Stripped Target' } : undefined)
+    );
+
+    (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+    (nativeSearchService.search as jest.Mock).mockResolvedValue(mockResults);
+    (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation((results) => results);
+
+    await searchFacade.search('Test Show 2024');
+
+    expect(synonymService.getSynonym).toHaveBeenCalledWith('Test Show 2024');
+    expect(synonymService.getSynonym).toHaveBeenCalledWith('Test Show');
+    expect(nativeSearchService.search).toHaveBeenCalledWith('Stripped Target', { from: 'Test Show', target: 'Stripped Target' });
+  });
+
+  it('should not re-check synonym when season is given (no year stripping applied)', async () => {
+    (configService.getParameter as jest.Mock).mockResolvedValue('true');
+    (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+
+    (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+    (nativeSearchService.search as jest.Mock).mockResolvedValue(mockResults);
+    (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation((results) => results);
+
+    await searchFacade.search('Test Show 2024', 1, 1);
+
+    expect(synonymService.getSynonym).toHaveBeenCalledTimes(1);
+    expect(synonymService.getSynonym).toHaveBeenCalledWith('Test Show 2024');
+  });
 });

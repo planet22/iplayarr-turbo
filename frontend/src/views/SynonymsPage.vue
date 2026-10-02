@@ -56,19 +56,13 @@ const openForm = (synonym, inputApp) => {
             inputObj: deepCopy(synonym),
             inputApp,
             action: synonym ? 'Edit' : 'Create',
-            onSave(synonym) {
-                saveSynonym(synonym);
+            onSaved: async () => {
                 formModal.close();
+                await refreshSynonyms();
             },
         },
     });
     formModal.open();
-};
-
-const saveSynonym = async (synonym) => {
-    const method = synonym.id ? 'PUT' : 'POST';
-    await ipFetch('json-api/synonym', method, synonym);
-    refreshSynonyms();
 };
 
 const removeSynonym = async ({ id }) => {
