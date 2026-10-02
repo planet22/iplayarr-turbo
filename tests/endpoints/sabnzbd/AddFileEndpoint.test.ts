@@ -4,6 +4,7 @@ import handler from '../../../src/endpoints/sabnzbd/AddFileEndpoint';
 import nzbFacade from '../../../src/facade/nzbFacade';
 import appService from '../../../src/service/appService';
 import queueService from '../../../src/service/queueService';
+import statisticsService from '../../../src/service/stats/StatisticsService';
 import { App } from '../../../src/types/App';
 import { AppType } from '../../../src/types/AppType';
 import { VideoType } from '../../../src/types/IPlayerSearchResult';
@@ -75,7 +76,7 @@ describe('AddFileEndpoint', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        req = {};
+        req = { headers: {} };
         res = {
             status: jest.fn().mockReturnThis(),
             json: jest.fn().mockReturnThis(),
@@ -170,6 +171,21 @@ describe('AddFileEndpoint', () => {
             status: false,
             error: 'Invalid iPlayarr NZB File',
         });
+    });
+
+    it('attributes a failed grab to the app resolved from the request User-Agent', async () => {
+        req.files = [toFile(NZB_MISSING_TITLE_XML)] as any;
+        req.headers = { 'user-agent': 'Sonarr/4.0.0.0 (linux)' };
+        (appService.getAllApps as jest.Mock).mockResolvedValue([]);
+        (appService.findAppByUserAgent as jest.Mock).mockResolvedValue(buildApp({ id: 'sonarr-1' }));
+        const addFailedGrabSpy = jest.spyOn(statisticsService, 'addFailedGrab');
+
+        await handler(req as Request, res as Response);
+
+        expect(appService.findAppByUserAgent).toHaveBeenCalledWith('Sonarr/4.0.0.0 (linux)');
+        expect(addFailedGrabSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ appId: 'sonarr-1' })
+        );
     });
 
     it('skips apps that fail their connection test and falls back to 500', async () => {
