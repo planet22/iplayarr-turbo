@@ -3,7 +3,7 @@
     <SelectInput
         v-model="config.MEDIA_MODE"
         name="Media Mode"
-        tooltip="Download the full file (default), or hand Sonarr/Radarr a .strm pointer that plays back through iPlayarr's streaming endpoint on demand."
+        tooltip="Download the full file (default), or save a small .strm pointer that streams on demand when you play it - saves disk space but needs a network connection every time you watch."
         :error="validationErrors.config?.MEDIA_MODE"
         :options="mediaModes"
     />
@@ -12,13 +12,13 @@
         <TextInput
             v-model="config.STREAM_BASE_URL"
             name="Stream Base URL"
-            tooltip="The address your media server (Jellyfin/Plex/Emby) can reach iPlayarr on, e.g. http://192.168.1.10:4404. Baked into every .strm file written."
+            tooltip="The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr, e.g. http://192.168.1.10:4404."
             :error="validationErrors.config?.STREAM_BASE_URL"
         />
         <TextInput
             v-model="config.STREAM_KEY"
             name="Stream Key"
-            tooltip="Separate from the API Key, deliberately - .strm files sit in plaintext in your media library, so they never embed the same key that gates Sonarr/Radarr's whole search/grab/queue protocol. Regenerate independently if a .strm file's URL ever leaks."
+            tooltip="Secures playback links in your .strm files. Kept separate from your API Key so you can regenerate it on its own if a link ever leaks."
             :error="validationErrors.config?.STREAM_KEY"
             :copyable="true"
             icon-button="qrcode"
@@ -28,7 +28,7 @@
         <SelectInput
             v-model="config.STREAM_CLIENT"
             name="Stream Client"
-            tooltip="Which tool resolves the live stream URL when a .strm file is played - independent of the Download Client setting, so you can compare all three. Native talks to BBC's own APIs directly and skips get_iplayer/yt-dlp entirely - fastest, and hands the player the full adaptive-bitrate ladder (up to 720p) to switch between itself, rather than pinning to Video Quality like the other two do."
+            tooltip="Which tool starts playback when a .strm file is opened. Native is the fastest to start and lets the player adjust quality automatically; get_iplayer and yt-dlp pin to your Video Quality setting instead."
             :error="validationErrors.config?.STREAM_CLIENT"
             :options="streamClients"
         />
@@ -36,7 +36,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_ADAPTIVE"
             name="Native Quality"
-            tooltip="Adaptive (recommended): hand the player BBC's full quality ladder and let it switch resolution itself based on network conditions. Fixed: pin to one resolution using the Video Quality setting above, same as get_iplayer/yt-dlp do."
+            tooltip="Adaptive (recommended): quality adjusts automatically to your connection. Fixed: always play at the Video Quality you've set above."
             :error="validationErrors.config?.STREAM_NATIVE_ADAPTIVE"
             :options="adaptiveOptions"
         />
@@ -44,7 +44,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_HQ_PROBE"
             name="Native Quality Probe"
-            tooltip="BBC's mediaselector sometimes advertises a connection as 1080p-capable when its actual HLS stream never exceeds 720p - the only way to tell is to check. Enabled: check every candidate connection's real encoded quality and use the best one (slower to start playback, one extra fetch per candidate). Disabled (default): use the first connection offered, same as before."
+            tooltip="Checks for a genuinely higher-quality stream before playing, since BBC doesn't always advertise quality accurately. Gives better results but adds a short delay before playback starts."
             :error="validationErrors.config?.STREAM_NATIVE_HQ_PROBE"
             :options="hqProbeOptions"
         />
@@ -52,14 +52,14 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_EXPERIMENTAL_FHD"
             name="Native FHD Upgrade (Experimental)"
-            tooltip="EXPERIMENTAL - unsupported, reverse-engineered behavior that could break without warning if BBC changes their CDN. BBC's standard streaming ladder is deliberately capped at 720p, but on titles that genuinely have a 1080p source, a private BBC CDN quirk (the same one get_iplayer's own 'fhd' mode exploits) can sometimes be coaxed into serving it. When enabled, iPlayarr probes for this on every play and uses it only if a real working 1080p stream is confirmed; otherwise it silently falls back to the normal ladder. Adds a little latency to playback start either way."
+            tooltip="EXPERIMENTAL - tries to unlock real 1080p on titles that have it, above BBC's usual 720p cap. Falls back to normal quality if it doesn't work, but it's unsupported and could stop working without warning."
             :error="validationErrors.config?.STREAM_NATIVE_EXPERIMENTAL_FHD"
             :options="experimentalFhdOptions"
         />
         <SelectInput
             v-model="config.STREAM_MODE"
             name="Stream Mode"
-            tooltip="Both modes proxy the resolved stream through iPlayarr itself (never straight to BBC) so playback still goes through iPlayarr's VPN. Direct: proxy the bytes as-is (supports seeking). Progressive MKV: remux through ffmpeg on the fly (requires ffmpeg, no seeking)."
+            tooltip="Direct (recommended): plays the stream as-is and supports seeking. Progressive MKV: converts to MKV on the fly - needs ffmpeg installed and doesn't support seeking."
             :error="validationErrors.config?.STREAM_MODE"
             :options="streamModes"
         />
@@ -73,7 +73,7 @@
                 v-model="config.STREAM_CACHE_DIR"
                 :advanced="true"
                 name="Stream Cache Directory"
-                tooltip="Working directory for any temporary files get_iplayer/yt-dlp/ffmpeg create while streaming. Kept separate from Download/Complete directories so your media server never sees them. Leave blank to use a temp folder."
+                tooltip="Where temporary files are stored while streaming. Leave blank to use a temp folder."
                 :error="validationErrors.config?.STREAM_CACHE_DIR"
             />
         </template>
