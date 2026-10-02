@@ -81,6 +81,7 @@ describe('SearchEndpoint', () => {
                     type: VideoType.TV,
                     size: 1500,
                     pubDate: fakeResults[0].pubDate,
+                    pid: 'xyz123',
                 },
             ],
         });

@@ -76,6 +76,12 @@ describe('synonymService', () => {
             const result = await synonymService.getSynonym('ITV');
             expect(result).toBeUndefined();
         });
+
+        it('should match ignoring surrounding whitespace', async () => {
+            mockStorageData['synonyms'] = [testSynonym];
+            const result = await synonymService.getSynonym('  BBC  ');
+            expect(result).toEqual(testSynonym);
+        });
     });
 
     describe('addSynonym', () => {

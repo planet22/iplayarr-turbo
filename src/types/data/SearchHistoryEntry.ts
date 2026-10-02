@@ -6,6 +6,7 @@ export interface SearchHistoryResultItem {
     type: VideoType;
     size?: number;
     pubDate?: Date;
+    pid: string;
 }
 
 export interface SearchHistoryEntry extends AbstractHistoryEntry {
