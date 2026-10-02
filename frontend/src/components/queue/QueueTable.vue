@@ -19,7 +19,7 @@
             <col style="width: 16ch" />
             <col style="width: 10ch" />
             <col style="width: 12ch" />
-            <col style="width: 44px" />
+            <col style="width: 70px" />
         </colgroup>
         <thead>
             <tr>

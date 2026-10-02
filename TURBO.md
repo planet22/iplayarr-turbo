@@ -16,6 +16,7 @@ This started as a ground-up modernization of the build/deploy tooling and depend
 - **Mobile-responsive UI** — data tables (Queue, NZB, Streaming, Video Events, Apps) collapse into card layouts below 768px; modals widened with a scrollbar gutter so content doesn't touch the edges.
 - **Schedule refresh caching** — `SCHEDULE_FULL_REFRESH` (false by default) skips re-fetching/re-parsing days of the BBC schedule that have already fully passed, instead of re-walking the whole window on every refresh.
 - **Thumbnails and stream history** — episode thumbnails are cached locally (`THUMBNAIL_CACHE_DIR`, pruned nightly per `THUMBNAIL_RETENTION_DAYS`), and native streaming sessions are recorded with their own nightly cleanup (`STREAM_HISTORY_RETENTION_DAYS`).
+- **Play Video (in-app preview player)** — a Play icon on Search results and Queue/History rows, and a "Play Video" button in the video info modal, plays any pid through the configured `STREAM_CLIENT`/`STREAM_MODE` right in the browser (hls.js, with real Picture-in-Picture when the browser supports it), independent of `MEDIA_MODE` — a quick way to confirm streaming settings actually work without downloading anything.
 
 **Build/tooling (original scope)**
 
@@ -60,9 +61,17 @@ See [docs/SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) for t
 
 Search requests that arrive without an app ID (e.g. a manually-configured indexer in Sonarr/Radarr, rather than one created through iPlayarr's own Apps flow) previously couldn't be attributed to a specific app. The Apps page (`frontend/src/views/AppsPage.vue`) now has a User-Agent Lookup table: unrecognised User-Agent headers are captured automatically with a blank app, and filling one in lets iPlayarr attribute future matching requests (partial/substring match) to that app for stats and logging. Download Client and Indexer entries can now also be deleted straight from the Apps form, rather than only from Sonarr/Radarr's own side.
 
+### Play Video (in-app preview player)
+
+A Play icon (Search results, Queue/History table rows) and a "Play Video" button (video info modal, reachable from Queue, History, Streaming, NZB, and Video Events) stream a given pid straight through the browser, independent of `MEDIA_MODE` — useful for confirming `STREAM_CLIENT`/`STREAM_MODE` settings actually work before relying on them for real playback.
+
+A single shared player (`frontend/src/lib/pipPlayer.js`, rendered once by `frontend/src/components/common/PipPlayer.vue` mounted at the app root) hits the same mode-agnostic `/api?mode=stream&pid=...` endpoint the `.strm` files themselves use, via `hls.js` for HLS manifests, falling back to a plain `<video src>` for progressive modes (`STREAM_MODE=direct` with a non-HLS client). It attempts real browser Picture-in-Picture first and falls back to playing inline in a small floating panel if PiP is unavailable or refused. Being a single instance mounted above the router, it keeps playing across page navigation the same way a real PiP window would.
+
 ### Mobile-responsive tables and modal fixes
 
 Data tables on Queue, NZB, Streaming, Video Events, and Apps collapse into stacked card layouts below 768px instead of overflowing horizontally. Modals were widened and given a scrollbar gutter so their content doesn't visually collide with input boxes.
+
+Search's download confirmation (rename the file before downloading) is now a modal (`frontend/src/components/modals/DownloadConfirmModal.vue`) opened in place, rather than navigating to a separate `/download` page (removed).
 
 ### Schedule refresh caching
 

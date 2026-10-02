@@ -58,6 +58,10 @@ These only apply when `STREAM_CLIENT=NATIVE`:
 
 `STREAM_CACHE_DIR` is where temporary files live while a stream is in flight. Leave it blank to use a system temp folder, or point it at a specific directory if you want more control over where that scratch data lands.
 
+## Testing it without downloading anything
+
+Every search result, Queue/History row, and video info modal (opened from Queue, History, Streaming, NZB, or Video Events) has a Play icon / "Play Video" button that streams that item straight through the browser using whatever `STREAM_CLIENT`/`STREAM_MODE` is currently configured. It works regardless of `MEDIA_MODE` — a quick way to confirm your streaming settings actually resolve and play before relying on `.strm` mode for real.
+
 ## Field reference
 
 | Setting | Default | Notes |
