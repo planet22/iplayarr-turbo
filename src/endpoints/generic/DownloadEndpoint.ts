@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import iplayerDetailsService from '../../service/iplayerDetailsService';
 import queueService from '../../service/queueService';
 import videoEventService from '../../service/videoEventService';
+import { QueueEntrySource } from '../../types/enums/QueueEntrySource';
 import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueLibraryMetadata } from '../../types/QueueEntry';
 import { IPlayerMetadataResponse } from '../../types/responses/IPlayerMetadataResponse';
@@ -48,9 +49,9 @@ export default async (req: Request, res: Response) => {
     }
 
     if (library) {
-        queueService.addToQueue(pid, name, type, undefined, library);
+        queueService.addToQueue(pid, name, type, undefined, library, QueueEntrySource.MANUAL);
     } else {
-        queueService.addToQueue(pid, name, type);
+        queueService.addToQueue(pid, name, type, undefined, undefined, QueueEntrySource.MANUAL);
     }
     videoEventService.record(VideoEventType.QUEUED, `Queued "${name}" for download`, { pid });
 

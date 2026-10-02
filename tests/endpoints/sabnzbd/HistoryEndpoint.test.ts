@@ -17,6 +17,7 @@ describe('sabnzbdActionEndpoint', () => {
     let next: NextFunction;
 
     beforeEach(() => {
+        jest.resetAllMocks();
         req = { query: {} };
         res = { json: jest.fn() };
         next = jest.fn();
@@ -117,6 +118,41 @@ describe('sabnzbdActionEndpoint', () => {
                 storage: '/complete/strmfile.strm',
                 path: '/complete/strmfile.strm',
             });
+        });
+
+        it('uses ARR_COMPLETE_DIR for TV items when set, and COMPLETE_DIR for movies', async () => {
+            const queueEntries: QueueEntry[] = [
+                {
+                    pid: 'id1',
+                    nzbName: 'tvfile',
+                    status: QueueEntryStatus.COMPLETE,
+                    details: { size: 1 },
+                    type: VideoType.TV,
+                },
+                {
+                    pid: 'id2',
+                    nzbName: 'moviefile',
+                    status: QueueEntryStatus.COMPLETE,
+                    details: { size: 1 },
+                    type: VideoType.MOVIE,
+                },
+            ];
+
+            (historyService.getHistory as jest.Mock).mockResolvedValue(queueEntries);
+            (configService.getParameter as jest.Mock).mockImplementation((param: IplayarrParameter) => {
+                if (param === IplayarrParameter.COMPLETE_DIR) return Promise.resolve('/complete');
+                if (param === IplayarrParameter.OUTPUT_FORMAT) return Promise.resolve('mp4');
+                if (param === IplayarrParameter.ARR_COMPLETE_DIR) return Promise.resolve('/arr-complete');
+                return Promise.resolve(undefined);
+            });
+
+            await handler(req as Request, res as Response, next);
+
+            const responseArg = (res.json as jest.Mock).mock.calls[0][0];
+            expect(responseArg.history.slots).toMatchObject([
+                { storage: '/arr-complete/tvfile.mp4' },
+                { storage: '/complete/moviefile.mp4' },
+            ]);
         });
 
         it('reports the nested libraryPath when LIBRARY_FOLDER_STRUCTURE produced one', async () => {

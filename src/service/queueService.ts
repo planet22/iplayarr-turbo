@@ -2,6 +2,7 @@ import { ChildProcess, spawn } from 'child_process';
 
 import downloadFacade from '../facade/downloadFacade';
 import { DownloadDetails } from '../types/DownloadDetails';
+import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry, QueueLibraryMetadata } from '../types/QueueEntry';
@@ -16,7 +17,14 @@ import videoEventService from './videoEventService';
 let queue: QueueEntry[] = [];
 
 const queueService = {
-    addToQueue: (pid: string, nzbName: string, type: VideoType, appId?: string, library?: QueueLibraryMetadata): void => {
+    addToQueue: (
+        pid: string,
+        nzbName: string,
+        type: VideoType,
+        appId?: string,
+        library?: QueueLibraryMetadata,
+        source: QueueEntrySource = QueueEntrySource.NZB
+    ): void => {
         const queueEntry: QueueEntry = {
             pid,
             status: QueueEntryStatus.QUEUED,
@@ -25,6 +33,7 @@ const queueService = {
             type,
             appId,
             library,
+            source,
         };
         queue.push(queueEntry);
         queueService.moveQueue();
