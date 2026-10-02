@@ -16,6 +16,9 @@ export class ConfigFormValidator extends Validator {
         if (!this.directoryExists(input.COMPLETE_DIR)) {
             validatorError['COMPLETE_DIR'] = `Directory ${input.COMPLETE_DIR} does not exist`;
         }
+        if (input.ARR_COMPLETE_DIR && !this.directoryExists(input.ARR_COMPLETE_DIR)) {
+            validatorError['ARR_COMPLETE_DIR'] = `Directory ${input.ARR_COMPLETE_DIR} does not exist`;
+        }
         if (!this.isNumber(input.ACTIVE_LIMIT)) {
             validatorError['ACTIVE_LIMIT'] = 'Download limit must be a number';
         } else if (input.ACTIVE_LIMIT < 0) {

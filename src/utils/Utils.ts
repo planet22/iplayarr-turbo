@@ -12,6 +12,8 @@ import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, native
 import appService from '../service/appService';
 import configService from '../service/configService';
 import SkyhookService from '../service/skyhook/SkyhookService';
+import { NfoWriteMode } from '../types/enums/NfoWriteMode';
+import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { FilenameTemplateContext } from '../types/FilenameTemplateContext';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { IPlayerDetails } from '../types/IPlayerDetails';
@@ -334,5 +336,23 @@ export function copyWithFallback(src: string, dst: string) {
     } catch (err) {
         fs.unlinkSync(dst);
         throw err;
+    }
+}
+
+// WRITE_NFO_STRM predates NfoWriteMode and stored a plain 'true'/'false' -
+// accept those as aliases for ALL/NONE so existing stored config keeps working.
+export function shouldWriteNfo(mode: string | undefined, source: QueueEntrySource | undefined): boolean {
+    switch (mode) {
+        case NfoWriteMode.ALL:
+        case 'true':
+            return true;
+        case NfoWriteMode.NZB:
+            return source === QueueEntrySource.NZB;
+        case NfoWriteMode.MANUAL:
+            return source === QueueEntrySource.MANUAL;
+        case NfoWriteMode.NONE:
+        case 'false':
+        default:
+            return false;
     }
 }

@@ -22,9 +22,9 @@ import { LogLine, LogLineLevel } from '../types/LogLine';
 import { QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
-import { buildLibraryFilePath, LibraryFilePath } from '../utils/libraryPathBuilder';
+import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
-import { convertToMB, copyWithFallback, getETA } from '../utils/Utils';
+import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
 
 class DownloadFacade {
     async download(pid: string): Promise<ChildProcess> {
@@ -55,8 +55,9 @@ class DownloadFacade {
 
     async #processComplete(pid: string, directory: string, code: any, service : AbstractDownloadService): Promise<void> {
         const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
+        const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
         const useFolderStructure = (await configService.getParameter(IplayarrParameter.LIBRARY_FOLDER_STRUCTURE)) === 'true';
-        const writeNfoStrm = (await configService.getParameter(IplayarrParameter.WRITE_NFO_STRM)) === 'true';
+        const nfoWriteMode = await configService.getParameter(IplayarrParameter.WRITE_NFO_STRM);
 
         if (code === 0) {
             const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
@@ -84,7 +85,8 @@ class DownloadFacade {
                         const extension = path.extname(videoFile).slice(1);
                         loggingService.debug(pid, `Found video file ${oldPath}`);
 
-                        const libraryPath: LibraryFilePath = buildLibraryFilePath(completeDir, queueItem, extension, useFolderStructure);
+                        const itemCompleteDir = resolveCompleteDir(queueItem.type, completeDir, arrCompleteDir);
+                        const libraryPath: LibraryFilePath = buildLibraryFilePath(itemCompleteDir, queueItem, extension, useFolderStructure);
                         fs.mkdirSync(libraryPath.directory, { recursive: true });
                         loggingService.debug(pid, `Moving ${oldPath} to ${libraryPath.fullPath}`);
 
@@ -92,7 +94,7 @@ class DownloadFacade {
                         queueItem.extension = extension;
                         queueItem.libraryPath = libraryPath.relativePath;
 
-                        if (writeNfoStrm) {
+                        if (shouldWriteNfo(nfoWriteMode, queueItem.source)) {
                             this.#writeLibrarySidecarFiles(queueItem, libraryPath);
                         }
 

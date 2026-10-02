@@ -12,6 +12,12 @@
         tooltip="Directory for completed Downloads."
         :error="validationErrors.config?.COMPLETE_DIR"
     />
+    <TextInput
+        v-model="config.ARR_COMPLETE_DIR"
+        name="*arr Complete Directory"
+        tooltip="Optional override of Complete Directory for TV downloads only (what the *arr imports). Leave blank to use Complete Directory for everything."
+        :error="validationErrors.config?.ARR_COMPLETE_DIR"
+    />
     <SelectInput
         v-model="config.VIDEO_QUALITY"
         name="Video Quality"
@@ -43,9 +49,9 @@
     <SelectInput
         v-model="config.WRITE_NFO_STRM"
         name="Write .nfo Metadata Files?"
-        tooltip="Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when Media Mode is set to Streaming - this just adds matching .nfo metadata for it."
+        tooltip="Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when Media Mode is set to Streaming - this just adds matching .nfo metadata for it. Can be scoped to only downloads added by Sonarr/Radarr (NZB) or only manually-triggered downloads."
         :error="validationErrors.config?.WRITE_NFO_STRM"
-        :options="trueOrFalse"
+        :options="nfoWriteModes"
     />
 
     <template v-if="showAdvanced">
@@ -82,6 +88,10 @@ defineProps({
         required: true,
     },
     trueOrFalse: {
+        type: Array,
+        required: true,
+    },
+    nfoWriteModes: {
         type: Array,
         required: true,
     },

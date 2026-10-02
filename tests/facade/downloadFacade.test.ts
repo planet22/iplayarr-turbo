@@ -8,6 +8,7 @@ import GetIplayerDownloadService from '../../src/service/download/GetIplayerDown
 import historyService from '../../src/service/historyService';
 import queueService from '../../src/service/queueService';
 import { DownloadClient } from '../../src/types/enums/DownloadClient';
+import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntry } from '../../src/types/QueueEntry';
 
@@ -129,7 +130,7 @@ describe('DownloadFacade', () => {
                 MEDIA_MODE: 'download',
                 COMPLETE_DIR: '/complete',
                 LIBRARY_FOLDER_STRUCTURE: 'false',
-                WRITE_NFO_STRM: 'false',
+                WRITE_NFO_STRM: 'none',
                 ...overrides,
             };
             (configService.getParameter as jest.Mock).mockImplementation((param: string) =>
@@ -227,7 +228,7 @@ describe('DownloadFacade', () => {
         });
 
         it('writes .nfo + tvshow.nfo (but no extra .strm) for a real download when WRITE_NFO_STRM is on', async () => {
-            mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', WRITE_NFO_STRM: 'true' });
+            mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', WRITE_NFO_STRM: 'all' });
             (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
             (fs.existsSync as jest.Mock).mockReturnValue(false);
 
@@ -262,7 +263,7 @@ describe('DownloadFacade', () => {
         });
 
         it('writes .nfo for the .strm file itself when Media Mode is Streaming, without writing a second .strm', async () => {
-            mockConfig({ WRITE_NFO_STRM: 'true' });
+            mockConfig({ WRITE_NFO_STRM: 'all' });
             (fs.readdirSync as jest.Mock).mockReturnValue(['stream.strm']);
 
             const queueItem: QueueEntry = {
@@ -285,6 +286,106 @@ describe('DownloadFacade', () => {
                 String(filePath).endsWith('.strm')
             );
             expect(strmWrites).toHaveLength(0);
+        });
+
+        it('moves TV downloads into ARR_COMPLETE_DIR when set, leaving movies in COMPLETE_DIR', async () => {
+            mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            expect(fs.copyFileSync).toHaveBeenCalledWith(
+                path.join(pidDir, 'episode.mkv'),
+                path.join('/arr-complete', 'Show.S01E01.mkv')
+            );
+        });
+
+        it('leaves movies in COMPLETE_DIR even when ARR_COMPLETE_DIR is set', async () => {
+            mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['movie.mkv']);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Some.Movie',
+                type: VideoType.MOVIE,
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            expect(fs.copyFileSync).toHaveBeenCalledWith(
+                path.join(pidDir, 'movie.mkv'),
+                path.join('/complete', 'Some.Movie.mkv')
+            );
+        });
+
+        it('only writes .nfo for NZB-sourced downloads when WRITE_NFO_STRM is "nzb"', async () => {
+            mockConfig({ WRITE_NFO_STRM: 'nzb' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+
+            const nzbItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                source: QueueEntrySource.NZB,
+            };
+
+            await runDownloadToCompletion(nzbItem);
+
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                expect.stringContaining('.nfo'),
+                expect.stringContaining('<episodedetails>'),
+                'utf8'
+            );
+        });
+
+        it('does not write .nfo for a manual download when WRITE_NFO_STRM is "nzb"', async () => {
+            mockConfig({ WRITE_NFO_STRM: 'nzb' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+
+            const manualItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                source: QueueEntrySource.MANUAL,
+            };
+
+            await runDownloadToCompletion(manualItem);
+
+            const nfoWrites = (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) =>
+                String(filePath).endsWith('.nfo')
+            );
+            expect(nfoWrites).toHaveLength(0);
+        });
+
+        it('only writes .nfo for manual downloads when WRITE_NFO_STRM is "manual"', async () => {
+            mockConfig({ WRITE_NFO_STRM: 'manual' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+
+            const manualItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                source: QueueEntrySource.MANUAL,
+            };
+
+            await runDownloadToCompletion(manualItem);
+
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                expect.stringContaining('.nfo'),
+                expect.stringContaining('<episodedetails>'),
+                'utf8'
+            );
         });
     });
 
