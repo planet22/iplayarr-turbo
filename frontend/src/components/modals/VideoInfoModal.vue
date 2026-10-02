@@ -60,8 +60,12 @@
         </template>
         <p v-else class="empty">This item is no longer in the queue or history.</p>
 
-        <div v-if="item" class="button-container floor">
-            <button class="clickable cancel" @click="deleteItem">
+        <div class="button-container floor">
+            <button class="clickable preview-button" @click="preview">
+                <font-awesome-icon :icon="['fas', 'play']" />
+                Play Video
+            </button>
+            <button v-if="item" class="clickable cancel" @click="deleteItem">
                 {{ deleteLabel }}
             </button>
         </div>
@@ -73,6 +77,7 @@ import { computed, defineProps, inject, ref } from 'vue';
 
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { playInPip } from '@/lib/pipPlayer';
 import { formatDate, formatStorageSize } from '@/lib/utils';
 
 import MediaInfoHero from '../common/MediaInfoHero.vue';
@@ -112,6 +117,10 @@ const deleteLabel = computed(() => {
 });
 
 const pad = (n) => String(n).padStart(2, '0');
+
+const preview = () => {
+    playInPip(props.pid, item.value?.nzbName || fallbackTitle.value || props.pid);
+};
 
 const deleteItem = async () => {
     const { pid, status } = item.value;
@@ -176,5 +185,9 @@ const deleteItem = async () => {
 
 .empty {
     color: @subtle-text-color;
+}
+
+.preview-button svg {
+    margin-right: 6px;
 }
 </style>

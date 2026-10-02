@@ -5,7 +5,7 @@ export const getHost = () => {
 // Builds the query string for json-api/download from a full search result, carrying the
 // structured show/season/episode metadata through so the backend can build a Jellyfin-style
 // library folder for it (libraryPathBuilder.ts) - not just pid/nzbName/type. Shared by
-// SearchPage's immediate/bulk download and DownloadPage's confirm-and-download.
+// SearchPage's immediate/bulk download and DownloadConfirmModal's confirm-and-download.
 export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate }) => {
     const params = new URLSearchParams({ pid, nzbName, type });
     if (title) params.set('title', title);
@@ -24,8 +24,8 @@ export const getThumbnailUrl = (thumbnail) => {
 };
 
 // Builds the "Series X, Episode Y" identifier shown alongside a video's channel wherever
-// IPlayerDetails is displayed (Streaming/Queue/Video Events), matching the SearchPage/DownloadPage
-// wording. Falls back to whichever of series/episode is present, e.g. for one-off programmes.
+// IPlayerDetails is displayed (Streaming/Queue/Video Events), matching the SearchPage/
+// DownloadConfirmModal wording. Falls back to whichever of series/episode is present, e.g. for one-off programmes.
 export const getSeriesEpisodeLabel = (details) => {
     if (!details) {
         return undefined;

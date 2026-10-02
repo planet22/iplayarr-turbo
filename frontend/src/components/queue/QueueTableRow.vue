@@ -61,6 +61,12 @@
         <td data-title="Speed">{{ item.details.speed || '' }} {{ item.details.speed != '' ? 'Mb/s' : '' }}</td>
         <td class="actionCol" data-title="Action">
             <span>
+                <font-awesome-icon
+                    class="clickable"
+                    :icon="['fas', 'play']"
+                    title="Play Video"
+                    @click="preview(item)"
+                />
                 <font-awesome-icon class="clickable" :icon="['fas', getDeleteIcon(item)]" @click="deleteRow(item)" />
             </span>
         </td>
@@ -73,6 +79,7 @@ import { useModal } from 'vue-final-modal';
 
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { playInPip } from '@/lib/pipPlayer';
 import { formatDate, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
@@ -97,6 +104,10 @@ const checked = ref(false);
 defineExpose({ checked, item: props.item });
 
 const seriesEpisodeLabel = computed(() => getSeriesEpisodeLabel(props.details));
+
+const preview = ({ pid, nzbName }) => {
+    playInPip(pid, nzbName);
+};
 
 const trash = async (pid) => {
     if (await dialogService.confirm('Delete', 'Are you sure you want to delete this history item?')) {
@@ -154,6 +165,12 @@ const getDeleteIcon = ({ status }) => {
 </script>
 
 <style lang="less" scoped>
+.actionCol span {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .thumbnail {
     width: 64px;
     height: 36px;
