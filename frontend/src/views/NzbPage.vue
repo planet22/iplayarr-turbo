@@ -135,6 +135,7 @@
                 <col style="width: 14ch" />
                 <col />
                 <col style="width: 38ch" />
+                <col style="width: 14ch" />
                 <col style="width: 22ch" />
             </colgroup>
             <thead>
@@ -148,6 +149,9 @@
                     <th class="sortable" @click="toggleFailedGrabSort('error')">
                         Error <SortIcon :active="failedGrabSortBy == 'error'" :order="failedGrabSortOrder" />
                     </th>
+                    <th class="sortable" @click="toggleFailedGrabSort('app')">
+                        App <SortIcon :active="failedGrabSortBy == 'app'" :order="failedGrabSortOrder" />
+                    </th>
                     <th class="sortable" @click="toggleFailedGrabSort('time')">
                         Time <SortIcon :active="failedGrabSortBy == 'time'" :order="failedGrabSortOrder" />
                     </th>
@@ -158,10 +162,11 @@
                     <td data-title="PID">{{ entry.pid }}</td>
                     <td class="text">{{ entry.nzbName }}</td>
                     <td class="text">{{ entry.error }}</td>
+                    <td data-title="App">{{ appName(entry.appId) }}</td>
                     <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedFailedGrabs.length == 0">
-                    <td colspan="4" class="empty">No failed grabs</td>
+                    <td colspan="5" class="empty">No failed grabs</td>
                 </tr>
             </tbody>
         </table>
@@ -276,12 +281,13 @@ const {
     filterText: failedGrabFilterText, sortBy: failedGrabSortBy, sortOrder: failedGrabSortOrder,
     dateFrom: failedGrabDateFrom, dateTo: failedGrabDateTo, sorted: sortedFailedGrabs, toggleSort: toggleFailedGrabSort,
 } = useSortFilter(failedGrabHistory, {
-    filterFn: (entry, query) => [entry.pid, entry.nzbName, entry.error]
+    filterFn: (entry, query) => [entry.pid, entry.nzbName, entry.error, appName(entry.appId)]
         .some((value) => String(value ?? '').toLowerCase().includes(query)),
     sortAccessors: {
         pid: (entry) => entry.pid,
         nzbName: (entry) => entry.nzbName,
         error: (entry) => entry.error,
+        app: (entry) => appName(entry.appId),
         time: (entry) => entry.time,
     },
     dateAccessor: (entry) => entry.time,

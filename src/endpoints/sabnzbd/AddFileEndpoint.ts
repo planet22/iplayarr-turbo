@@ -78,8 +78,10 @@ export default async (req: Request, res: Response) => {
             }
         }
         const error = rejection.err?.message || 'Unable to add NZB, Unknown Error';
+        const attributedApp = await appService.findAppByUserAgent(req.headers['user-agent']);
         statisticsService.addFailedGrab({
             nzbName: rejection.nzbName,
+            appId: attributedApp?.id,
             error,
             time: new Date().getTime(),
         } as FailedGrabEntry);
