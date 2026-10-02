@@ -1,5 +1,5 @@
 <template>
-    <apexchart type="line" height="350" :options="options" :series="series" />
+    <apexchart type="line" height="260" :options="options" :series="chartSeries" />
 </template>
 
 <script setup>
@@ -7,21 +7,20 @@ import { computed, defineProps } from 'vue';
 
 const props = defineProps({
     title: String,
-    data: Object // expected as { 'YYYY-MM-DD': Number }
+    series: {
+        type: Array, // [{ name, data, color }], data as { 'YYYY-MM-DD': Number }
+        required: true
+    }
 });
 
-
-const series = computed(() => {
-    const series = [
-        {
-            name: props.title || 'Series',
-            data: Object.entries(props.data).map(([date, value]) => ({
-                x: date,
-                y: value
-            }))
-        }
-    ];
-    return series;
+const chartSeries = computed(() => {
+    return props.series.map(({ name, data }) => ({
+        name,
+        data: Object.entries(data).map(([date, value]) => ({
+            x: date,
+            y: value
+        }))
+    }));
 });
 
 const options = computed(() => ({
@@ -62,7 +61,7 @@ const options = computed(() => ({
     stroke: {
         curve: 'straight'
     },
-    colors: ['#F12D7F'],
+    colors: props.series.map(({ color }) => color),
     tooltip: {
         theme: 'dark',
         x: {
@@ -71,6 +70,12 @@ const options = computed(() => ({
     },
     dataLabels: {
         enabled: false
+    },
+    legend: {
+        show: props.series.length > 1,
+        labels: {
+            colors: '#ffffff'
+        }
     },
     grid: {
         borderColor: '#444'

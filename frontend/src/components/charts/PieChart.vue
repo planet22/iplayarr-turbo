@@ -1,5 +1,5 @@
 <template>
-    <apexchart type="donut" :options="options" :series="processedData.series"></apexchart>
+    <apexchart type="donut" height="260" :options="options" :series="processedData.series"></apexchart>
 </template>
 
 <script setup>
@@ -55,7 +55,7 @@ const options = computed(() => {
         legend: {
             position: 'right',
             offsetY: 0,
-            height: 230,
+            height: 200,
         }
     };
 })

@@ -29,11 +29,12 @@ export default async (req: Request, res: Response) => {
         results = results.filter(({ type }) => categoriesForType(type).some((category) => cat.includes(category)));
     }
 
-    const historyItems: SearchHistoryResultItem[] = results.map(({ nzbName, title, type, size, pubDate }) => ({
+    const historyItems: SearchHistoryResultItem[] = results.map(({ nzbName, title, type, size, pubDate, pid }) => ({
         title: nzbName ?? title,
         type,
         size,
         pubDate,
+        pid,
     }));
 
     const historyEntry: SearchHistoryEntry = {
