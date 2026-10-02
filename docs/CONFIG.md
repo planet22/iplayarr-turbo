@@ -66,7 +66,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | --- | --- | --- | --- |
 | Download Directory | `DOWNLOAD_DIR` | _(required, no default)_ | Where in-progress downloads land. |
 | Complete Directory | `COMPLETE_DIR` | _(required, no default)_ | Where completed downloads are moved. |
-| Sonarr Complete Directory | `ARR_COMPLETE_DIR` | _(unset)_ | Optional override of `COMPLETE_DIR` for TV downloads only (what Sonarr imports). Leave blank to use `COMPLETE_DIR` for everything. |
+| *arr Complete Directory | `ARR_COMPLETE_DIR` | _(unset)_ | Optional override of `COMPLETE_DIR` for TV downloads only (what the *arr imports). Leave blank to use `COMPLETE_DIR` for everything. |
 | Video Quality | `VIDEO_QUALITY` | `hd` | See above. |
 | Output Format? | `OUTPUT_FORMAT` | `mp4` | `mp4` or `mkv`. |
 | Archive Downloads? | `ARCHIVE_ENABLED` | `false` | Keep cancelled/removed queue and history items instead of discarding them. See `src/facade/downloadFacade.ts` and `historyService.addArchive`. |

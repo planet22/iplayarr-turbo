@@ -7,7 +7,7 @@ Two settings fix that without changing anything about how Sonarr/Radarr see the 
 ## What you get
 
 - **`LIBRARY_FOLDER_STRUCTURE`** — nests completed files into `Show Title/Season 01/Show Title - S01E02 - Episode Title.ext` for TV, and `Movie Title/Movie Title.ext` for movies, instead of one flat folder.
-- **`ARR_COMPLETE_DIR`** — optional override of `COMPLETE_DIR` for TV downloads only (what Sonarr imports), so TV and Movie content can live under separate root folders. Leave unset to keep using `COMPLETE_DIR` for everything.
+- **`ARR_COMPLETE_DIR`** — optional override of `COMPLETE_DIR` for TV downloads only (what the *arr imports), so TV and Movie content can live under separate root folders. Leave unset to keep using `COMPLETE_DIR` for everything.
 - **`WRITE_NFO_STRM`** — writes a Jellyfin/Kodi/Emby-compatible `.nfo` metadata file alongside each item (episode title, air date, season/episode numbers, channel), and a `tvshow.nfo` at the show-folder level. Can be scoped to only downloads added by Sonarr/Radarr (`nzb`) or only ones triggered manually from the UI (`manual`), as well as `all`/`none`.
 
 Sonarr/Radarr are told the correct nested relative path either way, so post-processing and series/episode matching keep working normally.

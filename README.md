@@ -135,7 +135,7 @@ There's a few more optional settings too:
 | ARCHIVE_ENABLED  | Keep a record of cancelled/removed downloads instead of discarding them outright. Defaults to false |
 | OUTPUT_FORMAT    | Output container format passed to get_iplayer (e.g. mp4). Defaults to mp4 |
 | LIBRARY_FOLDER_STRUCTURE | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to false. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
-| ARR_COMPLETE_DIR | Optional override of COMPLETE_DIR for TV downloads only (what Sonarr imports). Leave unset to use COMPLETE_DIR for everything |
+| ARR_COMPLETE_DIR | Optional override of COMPLETE_DIR for TV downloads only (what the *arr imports). Leave unset to use COMPLETE_DIR for everything |
 | WRITE_NFO_STRM   | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. One of `none` (default), `all`, `nzb` (only downloads added by Sonarr/Radarr), or `manual` (only manually-triggered downloads). See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
 | MEDIA_MODE       | `download` (default) saves the full file; `strm` saves a small pointer file that streams on demand instead, saving disk space. See [docs/STREAMING.md](docs/STREAMING.md) |
 | STREAM_CLIENT    | Which tool serves playback for `.strm` files: `GET_IPLAYER` (default), `YTDLP`, or `NATIVE` (fastest to start, adaptive quality). See [docs/STREAMING.md](docs/STREAMING.md) |
