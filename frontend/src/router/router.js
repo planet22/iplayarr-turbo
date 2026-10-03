@@ -4,10 +4,14 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { getHost } from '@/lib/utils';
 import AboutPage from '@/views/AboutPage.vue';
 import AppsPage from '@/views/AppsPage.vue';
+import ChannelPage from '@/views/ChannelPage.vue';
+import DiscoverPage from '@/views/DiscoverPage.vue';
+import GridPage from '@/views/GridPage.vue';
 import LoginPage from '@/views/LoginPage.vue';
 import LogsPage from '@/views/LogsPage.vue';
 import NzbPage from '@/views/NzbPage.vue';
 import OffSchedulePage from '@/views/OffSchedulePage.vue';
+import ProgrammePage from '@/views/ProgrammePage.vue';
 import QueueInfoPage from '@/views/QueueInfoPage.vue';
 import QueuePage from '@/views/QueuePage.vue';
 import SearchPage from '@/views/SearchPage.vue';
@@ -15,6 +19,7 @@ import SettingsPage from '@/views/SettingsPage.vue';
 import StatisticsPage from '@/views/StatisticsPage.vue';
 import StreamingPage from '@/views/StreamingPage.vue';
 import SynonymsPage from '@/views/SynonymsPage.vue';
+import TilesPage from '@/views/TilesPage.vue';
 import VideoEventsPage from '@/views/VideoEventsPage.vue';
 
 const routes = [
@@ -33,6 +38,13 @@ const routes = [
     { path: '/streaming', component: StreamingPage },
     { path: '/events', component: VideoEventsPage },
     { path: '/nzb', component: NzbPage },
+    { path: '/browse', component: DiscoverPage },
+    { path: '/browse/channels', component: TilesPage, meta: { tiles: 'channels' } },
+    { path: '/browse/channel/:id', component: ChannelPage },
+    { path: '/browse/categories', component: TilesPage, meta: { tiles: 'categories' } },
+    { path: '/browse/category/:id', component: GridPage, meta: { grid: 'category' } },
+    { path: '/browse/atoz/:letter?', component: GridPage, meta: { grid: 'atoz' } },
+    { path: '/browse/programme/:pid', component: ProgrammePage },
 ];
 
 const router = createRouter({
