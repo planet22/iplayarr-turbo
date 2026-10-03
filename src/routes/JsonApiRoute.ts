@@ -14,6 +14,7 @@ import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataRespo
 import { VideoEventType } from '../types/VideoEvent';
 import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../utils/Utils';
 import AppsRoute from './json-api/AppsRoute';
+import BrowseRoute from './json-api/BrowseRoute';
 import EventsRoute from './json-api/EventsRoute';
 import OffScheduleRoute from './json-api/OffScheduleRoute';
 import QueueRoute from './json-api/QueueRoute';
@@ -34,6 +35,7 @@ router.use('/stats', StatisticsRoute);
 router.use('/streams', StreamRoute);
 router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
+router.use('/browse', BrowseRoute);
 
 router.post('/nzb/test', async (req: Request, res: Response) => {
     const { NZB_URL, NZB_API_KEY, NZB_TYPE, NZB_USERNAME, NZB_PASSWORD } = req.body;
