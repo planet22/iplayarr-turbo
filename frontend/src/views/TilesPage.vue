@@ -9,15 +9,21 @@
                 :class="['tile', isChannels ? '' : 'imageTile']"
                 :style="!isChannels && tile.thumbnail ? { 'background-image': `url(${getThumbnailUrl(tile.thumbnail)})` } : {}"
             >
-                <font-awesome-icon v-if="isChannels" :icon="['fas', 'tower-broadcast']" />
-                <span :class="isChannels ? ['pill', tile.title.replaceAll(' ', '')] : ['tileTitle']">{{ tile.title }}</span>
+                <template v-if="isChannels">
+                    <img
+                        v-if="tile.logo && !failedLogos[tile.id]" class="channelLogo" :src="getThumbnailUrl(tile.logo)"
+                        :alt="tile.title" @error="failedLogos[tile.id] = true"
+                    />
+                    <span v-else :class="['pill', tile.title.replaceAll(' ', '')]">{{ tile.title }}</span>
+                </template>
+                <span v-else class="tileTitle">{{ tile.title }}</span>
             </RouterLink>
         </div>
     </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import InfoBar from '@/components/common/InfoBar.vue';
@@ -27,6 +33,8 @@ import { getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
 const tiles = ref([]);
+// Channel logos that failed to load fall back to the text label.
+const failedLogos = reactive({});
 const loading = ref(true);
 const error = ref(null);
 
@@ -86,6 +94,13 @@ watch(
     .pill {
         font-size: 14px;
         padding: 2px 8px;
+    }
+
+    .channelLogo {
+        display: block;
+        height: 36px;
+        max-width: 100%;
+        margin: 0 auto;
     }
 
     // Categories: large artwork tiles with the title over a gradient.

@@ -286,6 +286,42 @@ describe('browseService', () => {
         expect(rails).toEqual([{ id: 'b1', title: 'Panel Shows', items: [expect.objectContaining({ pid: 'r1' })] }]);
     });
 
+    it('nowNext finds the live slot in yesterday\'s schedule during the small hours', async () => {
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            if (url.endsWith('/schedule/2026-10-04')) {
+                return { data: { schedule: { elements: [broadcast('breakfast', '2026-10-04T04:00:00Z', '2026-10-04T08:00:00Z')] } } };
+            }
+            if (url.endsWith('/schedule/2026-10-03')) {
+                return { data: { schedule: { elements: [broadcast('overnight', '2026-10-03T22:25:00Z', '2026-10-04T04:00:00Z')] } } };
+            }
+            return { data: { schedule: { elements: [] } } };
+        });
+        // 01:00 UTC on 4 Oct is 02:00 UK time, so the UK date is already the 4th.
+        const result = await browseService.nowNext('bbc_one_london', new Date('2026-10-04T01:00:00Z'));
+        expect(result.now?.item.pid).toBe('overnight');
+        expect(result.next?.item.pid).toBe('breakfast');
+    });
+
+    const logoHtml = (extra: string = '') =>
+        `<html>${extra}<svg viewBox="0 0 76 32" id="iplayer-nav-icon-bbcone"><path d="M1 1"></path></svg>` +
+        '<svg viewBox="0 0 76 32" id="iplayer-nav-icon-bbcone-active"><path fill="#e8504b" d="M0 0"></path></svg>' +
+        `<script>window.__IPLAYER_REDUX_STATE__ = ${JSON.stringify({
+            navigation: { items: [{ id: 'channels', subItems: [{ id: 'bbc_one', icon: 'bbcone' }, { id: 'bbc_two', icon: 'bbctwo' }] }] },
+        })};</script></html>`;
+
+    it('channels() attaches a logo url, and channelLogo extracts a white svg from iPlayer', async () => {
+        expect(browseService.channels().find((c) => c.id === 'bbc_one_london')?.logo).toBe(
+            'json-api/browse/channel-logo/bbc_one.svg'
+        );
+        mockedAxios.get.mockResolvedValue({ data: logoHtml() });
+        const svg = await browseService.channelLogo('bbc_one');
+        expect(svg).toBe('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 32" fill="#fff"><path d="M1 1"></path></svg>');
+        // The "-active" variant must not be picked up, and an icon missing from the page yields nothing.
+        expect(svg).not.toContain('e8504b');
+        expect(await browseService.channelLogo('bbc_two')).toBeUndefined();
+        expect(await browseService.channelLogo('unknown')).toBeUndefined();
+    });
+
     it('programme groups episodes into ordered seasons', async () => {
         mockedDetails.getMetadata.mockResolvedValue({
             programme: { type: 'brand', pid: 'b00brand', title: 'Brand', medium_synopsis: 'syn', image: { pid: 'p0img' } },

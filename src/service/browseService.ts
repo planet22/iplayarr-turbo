@@ -85,6 +85,11 @@ export function toBrowseItems(elements: any[]): BrowseItem[] {
     return items;
 }
 
+const withLogo = (channel: BrowseChannel): BrowseChannel => ({
+    ...channel,
+    logo: channel.masterBrand ? `json-api/browse/channel-logo/${channel.masterBrand}.svg` : undefined,
+});
+
 class BrowseService {
     shortCache: RedisCacheService<any> = new RedisCacheService('browse_short', 900); // 15 minutes
     longCache: RedisCacheService<any> = new RedisCacheService('browse_long', 86400); // 24 hours
@@ -215,10 +220,12 @@ class BrowseService {
     }
 
     // What's on a channel right now and what follows. The day's schedule is cached; "now" is
-    // evaluated per request. Looks into tomorrow's schedule when today's is nearly over.
+    // evaluated per request. Looks at adjacent days when today's schedule doesn't cover both.
     async nowNext(channelId: string, at: Date = new Date()): Promise<BrowseNowNext> {
         const slots: BrowseSlot[] = [];
-        for (const offset of [0, 1]) {
+        // iPlayer's schedule day runs 05:00-05:00, so in the small hours what's live is still in
+        // yesterday's schedule; today's is tried first since it answers most of the time.
+        for (const offset of [0, -1, 1]) {
             const day = new Date(at.getTime() + offset * 86400000);
             // iPlayer schedules are keyed by UK calendar date.
             const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
@@ -273,12 +280,35 @@ class BrowseService {
         return this.#listing(`categories/${encodeURIComponent(id)}/programmes`, page, perPage);
     }
 
+    // Channel logos come from the inline SVG icons on iPlayer's own pages (the IBL API has none).
+    // Fetched at runtime and cached rather than shipped in this repo, like the thumbnails.
+    async channelLogo(masterBrand: string): Promise<string | undefined> {
+        const logos: Record<string, string> = await this.longCache.getOr('channel_logos', async () => {
+            const page = await axios.get('https://www.bbc.co.uk/iplayer', { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            const html = String(page.data);
+            const nav: any[] = parseIplayerState(html)?.navigation?.items ?? [];
+            const subItems: any[] = nav.find((item) => item?.id === 'channels')?.subItems ?? [];
+            const found: Record<string, string> = {};
+            for (const { id, icon } of subItems) {
+                if (!/^[a-z0-9_]+$/i.test(String(id)) || !/^[a-z0-9]+$/i.test(String(icon))) continue;
+                const match = new RegExp(`<svg viewBox="([^"]+)" id="iplayer-nav-icon-${icon}">(.*?)</svg>`, 's').exec(html);
+                if (match) {
+                    // White so it reads on the dark UI; the source icons take their colour from the page CSS.
+                    found[id] = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${match[1]}" fill="#fff">${match[2]}</svg>`;
+                }
+            }
+            return found;
+        });
+        return logos[masterBrand];
+    }
+
     channels(): BrowseChannel[] {
-        return BrowseChannels;
+        return BrowseChannels.map(withLogo);
     }
 
     async channel(id: string): Promise<{ channel?: BrowseChannel; rails: BrowseRail[]; nowNext?: BrowseNowNext }> {
-        const channel = BrowseChannels.find((c) => c.id === id);
+        const found = BrowseChannels.find((c) => c.id === id);
+        const channel = found && withLogo(found);
         const listing = await this.#listing(`channels/${encodeURIComponent(id)}/programmes`, 1, 60);
         const rails: BrowseRail[] = [];
         try {

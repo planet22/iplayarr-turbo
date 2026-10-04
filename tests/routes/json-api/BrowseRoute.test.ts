@@ -95,6 +95,19 @@ describe('BrowseRoute', () => {
         expect((await request(app).get('/category/bad%20id!/rails')).status).toBe(400);
     });
 
+    it('GET /channel-logo/:file serves svg with a locked-down CSP, 404s otherwise', async () => {
+        mocked.channelLogo.mockResolvedValueOnce('<svg></svg>');
+        const ok = await request(app).get('/channel-logo/bbc_one.svg');
+        expect(ok.status).toBe(200);
+        expect(ok.headers['content-type']).toContain('image/svg+xml');
+        expect(ok.headers['content-security-policy']).toContain('default-src \'none\'');
+        expect(mocked.channelLogo).toHaveBeenCalledWith('bbc_one');
+        mocked.channelLogo.mockResolvedValueOnce(undefined);
+        expect((await request(app).get('/channel-logo/nope.svg')).status).toBe(404);
+        expect((await request(app).get('/channel-logo/..%2Fx.svg')).status).toBe(404);
+        expect((await request(app).get('/channel-logo/bbc_one.png')).status).toBe(404);
+    });
+
     it('turns upstream failures into the standard error response', async () => {
         mocked.home.mockRejectedValue(new Error('BBC down'));
         const res = await request(app).get('/home');

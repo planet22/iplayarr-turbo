@@ -65,6 +65,25 @@ router.get(
 router.get('/channels', (_, res) => res.json(browseService.channels()));
 
 router.get(
+    '/channel-logo/:file',
+    handle(async (req, res) => {
+        const match = /^([a-z0-9_]+)\.svg$/i.exec(req.params.file as string);
+        const svg = match ? await browseService.channelLogo(match[1]) : undefined;
+        if (!svg) {
+            res.status(404).json({ error: ApiError.INTERNAL_ERROR, message: 'Logo not found' } as ApiResponse);
+            return;
+        }
+        res.set({
+            'Content-Type': 'image/svg+xml',
+            'Cache-Control': 'public, max-age=86400',
+            // Third-party markup: never let it run script if opened directly.
+            'Content-Security-Policy': 'default-src \'none\'; style-src \'unsafe-inline\'',
+        });
+        res.send(svg);
+    })
+);
+
+router.get(
     '/channel/:id',
     handle(async (req, res) => {
         const id = req.params.id as string;

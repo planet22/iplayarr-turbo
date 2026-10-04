@@ -59,6 +59,10 @@ export interface BrowseNowNext {
 export interface BrowseChannel {
     id: string;
     title: string;
+    // iPlayer's master brand id (bbc_one, ...) - what its logo icons are keyed by.
+    masterBrand?: string;
+    // json-api/browse/channel-logo/<masterBrand>.svg (fetched from iPlayer and cached server-side).
+    logo?: string;
 }
 
 export interface BrowseSeason {

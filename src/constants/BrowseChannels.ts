@@ -3,17 +3,17 @@ import { BrowseChannel } from '../types/Browse';
 // iPlayer's own (IBL API) channel ids, as listed by GET /ibl/v1/channels - distinct from the schedule-page pids in
 // ChannelSchedule.ts. Used for the Channels browse screens.
 export const BrowseChannels: BrowseChannel[] = [
-    { id: 'bbc_one_london', title: 'BBC One' },
-    { id: 'bbc_two_england', title: 'BBC Two' },
-    { id: 'bbc_three', title: 'BBC Three' },
-    { id: 'bbc_four', title: 'BBC Four' },
-    { id: 'bbc_news24', title: 'BBC News' },
-    { id: 'bbc_parliament', title: 'BBC Parliament' },
-    { id: 'cbbc', title: 'CBBC' },
-    { id: 'cbeebies', title: 'CBeebies' },
-    { id: 'bbc_alba', title: 'BBC Alba' },
-    { id: 'bbc_scotland', title: 'BBC Scotland' },
-    { id: 's4cpbs', title: 'S4C' },
+    { id: 'bbc_one_london', title: 'BBC One', masterBrand: 'bbc_one' },
+    { id: 'bbc_two_england', title: 'BBC Two', masterBrand: 'bbc_two' },
+    { id: 'bbc_three', title: 'BBC Three', masterBrand: 'bbc_three' },
+    { id: 'bbc_four', title: 'BBC Four', masterBrand: 'bbc_four' },
+    { id: 'bbc_news24', title: 'BBC News', masterBrand: 'bbc_news24' },
+    { id: 'bbc_parliament', title: 'BBC Parliament', masterBrand: 'bbc_parliament' },
+    { id: 'cbbc', title: 'CBBC', masterBrand: 'cbbc' },
+    { id: 'cbeebies', title: 'CBeebies', masterBrand: 'cbeebies' },
+    { id: 'bbc_alba', title: 'BBC Alba', masterBrand: 'bbc_alba' },
+    { id: 'bbc_scotland', title: 'BBC Scotland', masterBrand: 'bbc_scotland' },
+    { id: 's4cpbs', title: 'S4C', masterBrand: 's4cpbs' },
 ];
 
 // Home screen rails: each is one IBL path. A rail that fails or comes back empty is simply
