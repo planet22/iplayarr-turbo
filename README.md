@@ -5,10 +5,10 @@ iPlayarr is a companion tool for **Sonarr** and **Radarr**, making it easy to in
 ![Build Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/build.yml?logo=github)
 ![Test Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/test.yml?logo=github&label=tests)
 <!--- istanbul-badges-readme:start --->
-![Statements](https://img.shields.io/badge/statements-68.53%25-red.svg?style=flat)
-![Branches](https://img.shields.io/badge/branches-58.77%25-red.svg?style=flat)
-![Functions](https://img.shields.io/badge/functions-67.82%25-red.svg?style=flat)
-![Lines](https://img.shields.io/badge/lines-69.19%25-red.svg?style=flat)
+![Statements](https://img.shields.io/badge/statements-69.52%25-red.svg?style=flat)
+![Branches](https://img.shields.io/badge/branches-59.57%25-red.svg?style=flat)
+![Functions](https://img.shields.io/badge/functions-68.52%25-red.svg?style=flat)
+![Lines](https://img.shields.io/badge/lines-70.12%25-red.svg?style=flat)
 <!--- istanbul-badges-readme:end --->
 
 > **This is iPlayarr Turbo**, a fork of upstream iPlayarr (based on v0.11.6) with a modernized Docker build and dependency stack — see [TURBO.md](TURBO.md) for everything this fork changes on top of what's described below.
