@@ -72,7 +72,7 @@ const filteredItems = computed(() => {
 
 // One view for category and A-Z listings: the route's meta says which.
 const isAtoZ = computed(() => route.meta.grid === 'atoz');
-const letter = computed(() => (route.params.letter ?? 'a').toLowerCase());
+const letter = computed(() => (route.params.letter || '0').toLowerCase());
 const heading = computed(() => (isAtoZ.value ? 'A to Z' : categoryTitle.value || 'Category'));
 
 const hasMore = computed(() => (total.value != null ? items.value.length < total.value : lastPageFull.value));
