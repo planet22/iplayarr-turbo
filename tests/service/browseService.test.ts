@@ -169,7 +169,7 @@ describe('browseService', () => {
         expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('atoz/a/programmes'));
     });
 
-    it('atoz maps the digit bucket to IBL's 0-9', async () => {
+    it('atoz maps the digit bucket to the IBL 0-9 bucket', async () => {
         mockedAxios.get.mockResolvedValue({ data: {} });
         await browseService.atoz('0');
         expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('atoz/0-9/programmes'));
