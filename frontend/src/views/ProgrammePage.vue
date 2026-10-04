@@ -25,6 +25,14 @@
                     </span>
                 </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>
+                <button
+                    v-if="programme.kind !== 'episode' || subscription"
+                    :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
+                    @click="toggleSubscription"
+                >
+                    <font-awesome-icon :icon="['fas', subscribing ? 'circle-notch' : 'bell']" :spin="subscribing" />
+                    {{ subscription ? 'Subscribed' : 'Subscribe' }}
+                </button>
                 </div>
             </div>
         </div>
@@ -88,6 +96,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
 
@@ -100,6 +109,26 @@ const selected = ref(0);
 const downloadingSeason = ref(false);
 
 const { canPlay, play, download } = useBrowseActions();
+
+// Subscribing is per show: after the server climbs an episode to its brand, programme.pid is the
+// brand pid that subscriptions are keyed by.
+const { load: loadSubscriptions, findByPid, subscribe, unsubscribe } = useSubscriptions();
+const subscribing = ref(false);
+const subscription = computed(() => (programme.value ? findByPid(programme.value.pid) : undefined));
+
+const toggleSubscription = async () => {
+    subscribing.value = true;
+    try {
+        if (subscription.value) {
+            await unsubscribe(subscription.value);
+        } else if ((await subscribe(programme.value)) === 'subscribed-latest') {
+            router.push('/queue');
+        }
+    } finally {
+        subscribing.value = false;
+    }
+};
+loadSubscriptions();
 
 const episodes = computed(() => programme.value?.seasons[selected.value]?.episodes ?? []);
 
@@ -249,6 +278,29 @@ watch(
     .programmeText {
         flex: 1;
         min-width: 0;
+    }
+}
+
+.subscribeButton {
+    margin-top: 14px;
+    padding: 8px 16px;
+    font-size: 15px;
+    border-radius: 4px;
+    border: 1px solid @settings-button-border-color;
+    background-color: @settings-button-background-color;
+    color: @primary-text-color;
+
+    svg {
+        margin-right: 6px;
+    }
+
+    &:hover:not(:disabled) {
+        background-color: @settings-button-hover-background-color;
+    }
+
+    &.on {
+        background-color: @brand-color;
+        border-color: @brand-color;
     }
 }
 

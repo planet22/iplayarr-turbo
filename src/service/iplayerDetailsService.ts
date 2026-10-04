@@ -81,10 +81,10 @@ class IPlayerDetailsService {
         return undefined;
     }
 
-    async getSeriesEpisodes(pid: string): Promise<IPlayerEpisodeMetadata[]> {
+    async getSeriesEpisodes(pid: string, page: number = 1): Promise<IPlayerEpisodeMetadata[]> {
         try {
             const response: AxiosResponse<IPlayerEpisodesResponse> = await axios.get(
-                `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${searchResultLimit}`
+                `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${searchResultLimit}${page > 1 ? `&page=${page}` : ''}`
             );
             return response.data.programme_episodes.elements;
         } catch {

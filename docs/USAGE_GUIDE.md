@@ -2,9 +2,19 @@
 
 A tour of the web UI once iPlayarr is installed and linked to Sonarr/Radarr (see the main [README.md](../README.md) and [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md) if you haven't done that yet). This links out to the feature-specific docs rather than repeating them.
 
+New to iPlayarr? Start with [GETTING_STARTED_BBC.md](GETTING_STARTED_BBC.md).
+
+## Discover, Channels, Categories, A to Z (`/browse`)
+
+A browse-first way in: a hero banner and rows of programmes (Featured, Recently Added, Most Popular), channel pages with a Now / Next strip, category pages with iPlayer's own curated rows, and an A-Z index. Every card has **Play** (the in-app player) and **Download**; a show page lists its series and episodes and can download a whole series or be subscribed to. See [BROWSE.md](BROWSE.md).
+
+## Subscriptions (`/subscriptions`)
+
+Shows you have subscribed to, whose new episodes are queued automatically (checked hourly, or on demand). See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md).
+
 ## Search (`/search`)
 
-Manual search against the same backend Sonarr/Radarr use (`NativeSearchService` or `get_iplayer --search`, depending on `NATIVE_SEARCH`) — useful for grabbing something one-off without waiting for Sonarr/Radarr's own scheduled search, or for content that isn't matched to a series Sonarr/Radarr is tracking. Results can be downloaded directly from here; see [DownloadPage](#download-download) for how that request is handled.
+Manual search against the same backend Sonarr/Radarr use (`NativeSearchService` or `get_iplayer --search`, depending on `NATIVE_SEARCH`) — useful for grabbing something one-off without waiting for Sonarr/Radarr's own scheduled search, or for content that isn't matched to a series Sonarr/Radarr is tracking. The search box also suggests titles as you type, the **Posters** toggle shows results as artwork cards, and a dropdown filters by channel (see [BROWSE.md](BROWSE.md#search)). Results can be downloaded directly from here; see [DownloadPage](#download-download) for how that request is handled.
 
 ## Download (`/download`)
 

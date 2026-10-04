@@ -18,6 +18,7 @@ import SearchPage from '@/views/SearchPage.vue';
 import SettingsPage from '@/views/SettingsPage.vue';
 import StatisticsPage from '@/views/StatisticsPage.vue';
 import StreamingPage from '@/views/StreamingPage.vue';
+import SubscriptionsPage from '@/views/SubscriptionsPage.vue';
 import SynonymsPage from '@/views/SynonymsPage.vue';
 import TilesPage from '@/views/TilesPage.vue';
 import VideoEventsPage from '@/views/VideoEventsPage.vue';
@@ -29,6 +30,7 @@ const routes = [
     { path: '/logs', component: LogsPage },
     { path: '/about', component: AboutPage },
     { path: '/settings', component: SettingsPage },
+    { path: '/subscriptions', component: SubscriptionsPage },
     { path: '/synonyms', component: SynonymsPage },
     { path: '/login', component: LoginPage },
     { path: '/search', component: SearchPage, name: 'search' },

@@ -21,6 +21,7 @@ import QueueRoute from './json-api/QueueRoute';
 import SettingsRoute from './json-api/SettingsRoute';
 import StatisticsRoute from './json-api/StatisticsRoute';
 import StreamRoute from './json-api/StreamRoute';
+import SubscriptionsRoute from './json-api/SubscriptionsRoute';
 import SynonymsRoute from './json-api/SynonymsRoute';
 import VersionRoute from './json-api/VersionRoute';
 
@@ -36,6 +37,7 @@ router.use('/streams', StreamRoute);
 router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
+router.use('/subscriptions', SubscriptionsRoute);
 
 router.post('/nzb/test', async (req: Request, res: Response) => {
     const { NZB_URL, NZB_API_KEY, NZB_TYPE, NZB_USERNAME, NZB_PASSWORD } = req.body;
