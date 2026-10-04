@@ -62,7 +62,7 @@ jobs:
                   context: .
                   file: ./Dockerfile
                   push: true
-                  platforms: linux/amd64,linux/arm64,linux/arm/v7
+                  platforms: linux/amd64,linux/arm64
                   tags: |
                       ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:${{ env.git_tag }}
                       ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:latest
