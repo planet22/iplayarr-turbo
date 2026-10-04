@@ -6,6 +6,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import configService from './configService';
 import episodeCacheService from './episodeCacheService';
 import streamSessionService from './stream/streamSessionService';
+import subscriptionService from './subscriptionService';
 import thumbnailCacheService from './thumbnailCacheService';
 
 
@@ -20,6 +21,14 @@ class TaskService {
                     }
                 });
                 downloadFacade.cleanupFailedDownloads();
+            });
+        });
+
+        // Subscriptions - hourly at :17 (off the hour, away from the schedule refresh). Fixed
+        // schedule; "Check now" on the Subscriptions page runs the same pass on demand.
+        cron.schedule('17 * * * *', () => {
+            subscriptionService.checkAll().catch((error) => {
+                console.error(`Error checking subscriptions: ${error}`);
             });
         });
 
