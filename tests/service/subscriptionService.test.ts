@@ -3,6 +3,7 @@ import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
 import subscriptionService, { SubscriptionError } from '../../src/service/subscriptionService';
 import synonymService from '../../src/service/synonymService';
+import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import * as Utils from '../../src/utils/Utils';
 
@@ -130,7 +131,7 @@ describe('subscriptionService', () => {
             details.getSeriesEpisodes.mockResolvedValue([ep('old', '2026-01-01T00:00:00Z'), ep('new', '2026-03-01T00:00:00Z')] as any);
             await subscriptionService.subscribe('m00episode', { downloadLatest: true });
             expect(queue.addToQueue).toHaveBeenCalledTimes(1);
-            expect(queue.addToQueue).toHaveBeenCalledWith('new', 'The.Show.S02E03', VideoType.TV, undefined, expect.any(Object));
+            expect(queue.addToQueue).toHaveBeenCalledWith('new', 'The.Show.S02E03', VideoType.TV, undefined, expect.any(Object), QueueEntrySource.MANUAL);
         });
     });
 
@@ -150,7 +151,7 @@ describe('subscriptionService', () => {
                 episodeTitle: 'Ep Three',
                 channel: 'BBC Two',
                 pubDate: '2026-02-02',
-            });
+            }, QueueEntrySource.MANUAL);
             const [saved] = await subscriptionService.list();
             expect(saved.seen).toContain('e3');
             expect(saved).toMatchObject({ lastQueuedCount: 1 });

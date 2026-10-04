@@ -1,6 +1,7 @@
 import { v4 } from 'uuid';
 
 import { searchResultLimit } from '../constants/iPlayarrConstants';
+import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { SubscribeOptions, Subscription, SubscriptionCheckResult } from '../types/Subscription';
@@ -116,7 +117,7 @@ class SubscriptionService {
             episodeTitle: details.episodeTitle,
             channel: details.channel,
             pubDate: details.firstBroadcast,
-        });
+        }, QueueEntrySource.MANUAL); // Not handed in by Sonarr/Radarr, so scoped like any other manual download (e.g. WRITE_NFO_STRM=manual)
         videoEventService.record(VideoEventType.QUEUED, `Subscription queued "${nzbName}" for download`, { pid });
         return nzbName;
     }
