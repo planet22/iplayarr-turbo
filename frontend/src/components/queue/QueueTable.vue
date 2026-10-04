@@ -6,7 +6,7 @@
     <table class="queueTable responsive-table" summary="Hed">
         <colgroup>
             <col style="width: 36px" />
-            <col style="width: 32px" />
+            <col style="width: 40px" />
             <col style="width: 64px" />
             <col />
             <!-- ch (not px) below: these size to the actual text they hold (e.g. a formatted
