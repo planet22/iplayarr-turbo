@@ -23,6 +23,9 @@ This README covers the basics. For more detail, see `docs/`:
 - [REDIS.md](docs/REDIS.md) — what's stored in Redis, backup/restore
 - [SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) — how the dual-protocol trick works, troubleshooting a failed Test
 - [STREAMING.md](docs/STREAMING.md) and [LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) — `.strm` mode and Jellyfin-style library layout
+- [GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md) — from a running container to watching and downloading BBC programmes
+- [BROWSE.md](docs/BROWSE.md) — Discover, Channels, Categories, A to Z, type-ahead search
+- [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show
 - [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common issues
 - [DEVELOPMENT.md](docs/DEVELOPMENT.md) — contributor setup, testing, linting

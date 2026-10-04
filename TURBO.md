@@ -11,6 +11,8 @@ This started as a ground-up modernization of the build/deploy tooling and depend
 - **Native streaming** — `STREAM_CLIENT=NATIVE` talks to BBC's streaming APIs directly instead of shelling out to `get_iplayer`/`yt-dlp`, with an adaptive bitrate ladder, an opt-in quality probe (`STREAM_NATIVE_HQ_PROBE`), and an experimental 1080p upgrade trick (`STREAM_NATIVE_EXPERIMENTAL_FHD`). See [docs/STREAMING.md](docs/STREAMING.md).
 - **`.strm` streaming mode** — `MEDIA_MODE=strm` writes a small pointer file instead of downloading the full media, so Sonarr/Radarr/Jellyfin see a "complete" item instantly and the file streams on demand through iPlayarr. See [docs/STREAMING.md](docs/STREAMING.md).
 - **Jellyfin-style library organization + NFO metadata** — `LIBRARY_FOLDER_STRUCTURE` nests completed downloads into `Show/Season NN/...` (or a movie folder); `WRITE_NFO_STRM` writes matching `.nfo` metadata alongside. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md).
+- **Browse UI** — Discover, Channels (with Now / Next), Categories (artwork tiles plus iPlayer's curated rails), A to Z and a Programme page, built on the BBC's iPlayer API with Redis caching. Play uses the in-app player and Download uses the normal queue. The search box suggests titles as you type, and the Search page gains a Posters view and a channel filter. See [docs/BROWSE.md](docs/BROWSE.md) and [docs/GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md).
+- **Subscriptions** — Subscribe to a show and new episodes are queued automatically (hourly check, plus on-demand), de-duplicated against the queue and history. See [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md).
 - **Download archive** — `ARCHIVE_ENABLED` keeps a record of cancelled/removed queue and history items instead of discarding them outright.
 - **Apps page improvements** — a User-Agent lookup table attributes unauthenticated/app-ID-less search requests to the right Sonarr/Radarr instance, and Download Client/Indexer entries can now be deleted directly from the Apps form. See [docs/SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md).
 - **Mobile-responsive UI** — data tables (Queue, NZB, Streaming, Video Events, Apps) collapse into card layouts below 768px; modals widened with a scrollbar gutter so content doesn't touch the edges.
@@ -44,6 +46,16 @@ This started as a ground-up modernization of the build/deploy tooling and depend
 `STREAM_MODE` controls how the resolved stream is served: `direct` (default, passthrough, supports seeking) or `progressive-mkv` (remuxed to MKV on the fly via ffmpeg, no seeking). `STREAM_BASE_URL` is the address your media server uses to reach iPlayarr for stream playback; `STREAM_KEY` is a separate secret (regenerable independently of `API_KEY`) that secures the links written into `.strm` files; `STREAM_CACHE_DIR` is where temporary files for in-flight streams live.
 
 See [docs/STREAMING.md](docs/STREAMING.md) for setup steps.
+
+### Browse UI
+
+`/json-api/browse/*` (`src/routes/json-api/BrowseRoute.ts`, `src/service/browseService.ts`) is a read-only discovery API over the BBC's iPlayer API (`ibl.api.bbc.co.uk`), normalised to a `BrowseItem` that is shape-compatible with `IPlayerSearchResult`, so the existing `playInPip` player and `DownloadConfirmModal` accept it unchanged. Responses are cached in Redis (`browse_short`, 15 minutes; `browse_long`, 24 hours). Endpoints were verified against the live API: there is no site-wide highlights endpoint (Featured uses BBC One's channel highlights), channel ids differ from iPlayer's page ids (`src/constants/BrowseChannels.ts`), and the BBC `0-9` A-Z bucket is literally `0-9`.
+
+Two pieces have no API and are scraped from iPlayer's own pages, best-effort: category rails (the `bundles` in the page's embedded state, each loaded through the regular groups endpoint) and channel logos (the inline nav SVGs, served as white SVG from `/channel-logo/:masterBrand.svg` and cached, never committed). Both degrade to the plain grid and text names if the BBC changes the page. The frontend lives in `frontend/src/views/` (`DiscoverPage`, `TilesPage`, `GridPage`, `ChannelPage`, `ProgrammePage`) and `frontend/src/components/browse/`. See [docs/BROWSE.md](docs/BROWSE.md).
+
+### Subscriptions
+
+`src/service/subscriptionService.ts` stores subscriptions in Redis (`QueuedStorage`, key `subscriptions`). Subscribing climbs to the show's brand pid and records every available episode as seen (refusing an empty list, which would otherwise make the first check download the whole back catalogue). A cron job (`17 * * * *`, in `taskService`) lists each show's episodes (paged), and queues unseen ones through `queueService.addToQueue` with `QueueEntrySource.MANUAL`, naming them with `createNZBName` and the matching synonym exactly as search results are named. Episodes already queued or in history are skipped; an episode that fails to queue stays unseen and is retried. See [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md).
 
 ### Jellyfin-style library organization
 

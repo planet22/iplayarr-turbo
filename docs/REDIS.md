@@ -25,6 +25,8 @@ For local development, `npm run serve:redis` brings up a throwaway Redis via `do
 - **Queue and download state** (`queueService`, `historyService`) — in-progress downloads, completed history, and (when `ARCHIVE_ENABLED=true`) archived cancelled/removed entries.
 - **Sessions** (`connect-redis`, prefix `iplayarr:`) — login sessions for the web UI. See [AUTHENTICATION.md](AUTHENTICATION.md).
 - **Logs** (`loggingService`) — the most recent 250 log lines (`iplayarr_logs` list, trimmed on every push), used to populate the Logs page on load before new lines stream in over Socket.IO.
+- **Subscriptions** (`subscriptionService`) — the shows you follow, and the episodes already seen for each, under a single `subscriptions` key. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md).
+- **Browse caches** (`browseService`) — short-lived copies of BBC listings (`browse_short_*`, 15 minutes) and the category list, its artwork and channel logos (`browse_long_*`, 24 hours). Safe to lose; they refill on demand. See [BROWSE.md](BROWSE.md).
 - **Apps, User-Agent mappings, synonyms, statistics, thumbnail cache metadata, native streaming session history** — all the other frontend-managed state surfaced under `/json-api`.
 
 If Redis is unreachable, the `/ping` healthcheck endpoint reports `503` with the underlying error message (`src/server.ts`) — this is what Docker's `HEALTHCHECK`/your monitoring should be watching.
