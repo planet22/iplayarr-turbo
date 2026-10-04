@@ -42,16 +42,16 @@ describe('BrowseRoute', () => {
     });
 
     it('GET /channels is synchronous and returns the list', async () => {
-        mocked.channels.mockReturnValue([{ id: 'bbc_one', title: 'BBC One' }]);
+        mocked.channels.mockReturnValue([{ id: 'bbc_one_london', title: 'BBC One' }]);
         const res = await request(app).get('/channels');
-        expect(res.body).toEqual([{ id: 'bbc_one', title: 'BBC One' }]);
+        expect(res.body).toEqual([{ id: 'bbc_one_london', title: 'BBC One' }]);
     });
 
     it('GET /channel/:id returns the channel page', async () => {
         mocked.channel.mockResolvedValue({ rails: [] });
-        const res = await request(app).get('/channel/bbc_one');
+        const res = await request(app).get('/channel/bbc_one_london');
         expect(res.status).toBe(200);
-        expect(mocked.channel).toHaveBeenCalledWith('bbc_one');
+        expect(mocked.channel).toHaveBeenCalledWith('bbc_one_london');
     });
 
     it('GET /atoz/:letter validates the letter', async () => {

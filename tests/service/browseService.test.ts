@@ -173,7 +173,7 @@ describe('browseService', () => {
         mockedAxios.get
             .mockResolvedValueOnce({ data: { channel_programmes: { elements: [element('p1')] } } })
             .mockResolvedValueOnce({ data: { channel_highlights: { elements: [element('f1')] } } });
-        const result = await browseService.channel('bbc_one');
+        const result = await browseService.channel('bbc_one_london');
         expect(result.channel?.title).toBe('BBC One');
         expect(result.rails.map((r) => r.id)).toEqual(['highlights', 'programmes']);
     });
