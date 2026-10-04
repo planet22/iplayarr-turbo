@@ -192,7 +192,9 @@ class BrowseService {
     }
 
     atoz(letter: string, page?: number, perPage?: number): Promise<BrowsePage> {
-        return this.#listing(`atoz/${encodeURIComponent(letter.toLowerCase())}/programmes`, page, perPage);
+        // IBL's bucket for titles starting with a digit is literally "0-9"; "0" is a 400.
+        const bucket = letter === '0' ? '0-9' : letter.toLowerCase();
+        return this.#listing(`atoz/${encodeURIComponent(bucket)}/programmes`, page, perPage);
     }
 
     async programme(requestedPid: string): Promise<BrowseProgramme> {

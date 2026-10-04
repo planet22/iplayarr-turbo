@@ -2,11 +2,19 @@ import { ipFetch } from '@/lib/ipFetch';
 
 // GET json-api/browse/<path>, throwing the server's message on failure so views can show it.
 export const browseFetch = async (path) => {
-    const { data, ok } = await ipFetch(`json-api/browse/${path}`);
-    if (!ok) {
-        throw new Error(data?.message || 'Unable to load content');
+    let result;
+    try {
+        result = await ipFetch(`json-api/browse/${path}`);
+    } catch (e) {
+        // A non-JSON body means the server answered with its HTML page - typically mid-restart.
+        throw new Error(
+            e instanceof SyntaxError ? 'The server returned an unexpected response - it may be restarting. Try again.' : e.message
+        );
     }
-    return data;
+    if (!result.ok) {
+        throw new Error(result.data?.message || 'Unable to load content');
+    }
+    return result.data;
 };
 
 const pad = (n) => String(n).padStart(2, '0');

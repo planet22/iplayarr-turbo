@@ -169,6 +169,12 @@ describe('browseService', () => {
         expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('atoz/a/programmes'));
     });
 
+    it('atoz maps the digit bucket to IBL's 0-9', async () => {
+        mockedAxios.get.mockResolvedValue({ data: {} });
+        await browseService.atoz('0');
+        expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('atoz/0-9/programmes'));
+    });
+
     it('channel returns the known channel plus rails', async () => {
         mockedAxios.get
             .mockResolvedValueOnce({ data: { channel_programmes: { elements: [element('p1')] } } })
