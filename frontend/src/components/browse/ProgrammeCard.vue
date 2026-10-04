@@ -94,6 +94,10 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail));
         transition: opacity 150ms;
 
         button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
             width: 40px;
             height: 40px;
             border-radius: 50%;

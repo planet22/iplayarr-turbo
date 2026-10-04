@@ -61,6 +61,10 @@ const scroll = (direction) => {
     }
 
     .railControls button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
         width: 30px;
         height: 30px;
         margin-left: 6px;
@@ -81,6 +85,14 @@ const scroll = (direction) => {
         overflow-x: auto;
         scroll-snap-type: x proximity;
         padding-bottom: 8px;
+        // The arrow buttons (desktop) and swiping (touch) already scroll the rail, so the native
+        // bar is just clutter. Still scrollable with trackpad / shift+wheel / keyboard.
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+
+        &::-webkit-scrollbar {
+            display: none;
+        }
 
         .railItem {
             flex: 0 0 240px;
