@@ -12,13 +12,18 @@ router.get('/', async (_, res: Response) => {
 });
 
 router.post('/', async (req: Request, res: Response) => {
-    const { pid, downloadLatest } = req.body ?? {};
+    const { pid, downloadLatest, downloadAll } = req.body ?? {};
     if (typeof pid !== 'string' || !PID_REGEX.test(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A valid pid is required' } as ApiResponse);
         return;
     }
     try {
-        res.json(await subscriptionService.subscribe(pid, { downloadLatest: downloadLatest === true }));
+        res.json(
+            await subscriptionService.subscribe(pid, {
+                downloadLatest: downloadLatest === true,
+                downloadAll: downloadAll === true,
+            })
+        );
     } catch (error: any) {
         const known = error instanceof SubscriptionError;
         res.status(known ? 400 : 500).json({

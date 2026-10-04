@@ -24,6 +24,17 @@ const isEpisode = ({ type, release_date_time }: IPlayerEpisodeMetadata) => type 
 
 class SubscriptionService {
     checking: boolean = false;
+    // Subscriptions with a check running right now, so a manual "check now" or the hourly pass
+    // can't queue the same episodes a first "download everything" run is still working through.
+    #inFlight: Set<string> = new Set();
+    // Background work started by subscribe(); awaited by whenIdle() (graceful shutdown, tests).
+    #background: Set<Promise<unknown>> = new Set();
+
+    async whenIdle(): Promise<void> {
+        while (this.#background.size) {
+            await Promise.allSettled([...this.#background]);
+        }
+    }
 
     async list(): Promise<Subscription[]> {
         return (await storage.getItem(STORAGE_KEY)) || [];
@@ -80,11 +91,19 @@ class SubscriptionService {
             thumbnail: programme.image ? `json-api/thumbnail/${programme.image.pid}.jpg` : undefined,
             channel: programme.ownership?.service?.title,
             createdAt: new Date().toISOString(),
-            seen: episodes.map(({ id }) => id),
+            // "Download everything" starts with nothing seen: the first check then queues every
+            // available episode (de-duplicated, retried and named like any other), without making
+            // this request wait for hundreds of metadata lookups.
+            seen: options.downloadAll ? [] : episodes.map(({ id }) => id),
         };
         await storage.setItem(STORAGE_KEY, [...(await this.list()), subscription]);
 
-        if (options.downloadLatest) {
+        if (options.downloadAll) {
+            const run = this.check(subscription)
+                .catch((error) => loggingService.error(`Subscription "${subscription.title}": first check failed: ${error}`))
+                .finally(() => this.#background.delete(run));
+            this.#background.add(run);
+        } else if (options.downloadLatest) {
             const newest = [...episodes].sort(
                 (a, b) => Date.parse(b.release_date_time as string) - Date.parse(a.release_date_time as string)
             )[0];
@@ -130,11 +149,16 @@ class SubscriptionService {
 
     async check(subscription: Subscription): Promise<SubscriptionCheckResult> {
         const result: SubscriptionCheckResult = { id: subscription.id, title: subscription.title, queued: [] };
+        if (this.#inFlight.has(subscription.id)) return result;
+        this.#inFlight.add(subscription.id);
         try {
             const episodes = await this.listEpisodes(subscription.pid);
             // Empty means the lookup failed (or the show has nothing available) - nothing to do.
             const seen = new Set(subscription.seen);
-            const fresh = episodes.filter(({ id }) => !seen.has(id));
+            // Oldest first, so a big first run reaches the queue (and your library) in broadcast order.
+            const fresh = episodes
+                .filter(({ id }) => !seen.has(id))
+                .sort((a, b) => Date.parse(a.release_date_time as string) - Date.parse(b.release_date_time as string));
             const handled: string[] = [];
             for (const { id } of fresh) {
                 if (await this.#alreadyHandled(id)) {
@@ -165,6 +189,8 @@ class SubscriptionService {
                 lastChecked: new Date().toISOString(),
                 lastError: result.error,
             }));
+        } finally {
+            this.#inFlight.delete(subscription.id);
         }
         return result;
     }

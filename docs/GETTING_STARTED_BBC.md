@@ -38,7 +38,7 @@ Open **Settings**. Most things have sensible defaults; these are the ones to loo
 3. **Press Play.** A small floating player opens at the bottom right and, where your browser allows it, pops into Picture-in-Picture. It keeps playing while you move around the app. Close it with the **X**.
 4. **On a show page,** pick a series tab and use the buttons on each episode: **Play** or **Download**. **Download series** queues the whole selected series after a confirmation.
 5. **Press Download** and check the filename (edit it if you like), then confirm. You land on **Queue**, where progress shows live.
-6. **Press Subscribe** on a show you want to follow. Choose "only new episodes" or "new episodes, and download the latest one now". From then on new episodes are queued automatically ([SUBSCRIPTIONS.md](SUBSCRIPTIONS.md)).
+6. **Press Subscribe** on a show you want to follow. Choose "only new episodes", "new episodes, and download the latest one now", or "download all available episodes now, plus new ones". From then on new episodes are queued automatically ([SUBSCRIPTIONS.md](SUBSCRIPTIONS.md)).
 7. **Know the name already?** Type it in the search box at the top. Suggestions appear as you type; **Enter** opens the highlighted show, or runs a full search. On the Search page, the **Posters** toggle gives the same results as artwork cards and a dropdown filters by channel.
 
 You can also paste an iPlayer programme URL into the search box and press Enter to download it directly.

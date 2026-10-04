@@ -162,6 +162,18 @@ describe('subscriptionService', () => {
             expect(queue.addToQueue).toHaveBeenCalledTimes(1);
         });
 
+        it('queues several new episodes oldest first', async () => {
+            const sub = await subscribed();
+            details.getSeriesEpisodes.mockResolvedValue([
+                ep('e1'),
+                ep('e2'),
+                ep('late', '2026-06-01T00:00:00Z'),
+                ep('early', '2026-02-01T00:00:00Z'),
+            ] as any);
+            const result = await subscriptionService.check(sub);
+            expect(result.queued).toEqual(['early', 'late']);
+        });
+
         it('skips episodes already queued or downloaded elsewhere, but marks them handled', async () => {
             const sub = await subscribed();
             details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('inq'), ep('inhist')] as any);
@@ -200,6 +212,71 @@ describe('subscriptionService', () => {
             details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3')] as any);
             await subscriptionService.check(sub);
             expect(createNZBName).toHaveBeenCalledWith(expect.objectContaining({ pid: 'e3' }), synonym);
+        });
+    });
+
+    describe('download all', () => {
+        const dated = (id: string, date: string) => ep(id, date);
+
+        it('starts with nothing seen and queues every episode, oldest first, in the background', async () => {
+            details.getSeriesEpisodes.mockResolvedValue([
+                dated('c', '2026-03-01T00:00:00Z'),
+                dated('a', '2026-01-01T00:00:00Z'),
+                dated('b', '2026-02-01T00:00:00Z'),
+            ] as any);
+            const sub = await subscriptionService.subscribe('m00episode', { downloadAll: true });
+            expect(sub.seen).toEqual([]);
+            await subscriptionService.whenIdle();
+
+            expect(queue.addToQueue.mock.calls.map((call) => call[0])).toEqual(['a', 'b', 'c']);
+            expect(queue.addToQueue.mock.calls.every((call) => call[5] === QueueEntrySource.MANUAL)).toBe(true);
+            const [saved] = await subscriptionService.list();
+            expect(saved.seen.sort()).toEqual(['a', 'b', 'c']);
+            expect(saved).toMatchObject({ lastQueuedCount: 3 });
+        });
+
+        it('skips episodes already queued or downloaded elsewhere', async () => {
+            details.getSeriesEpisodes.mockResolvedValue([dated('a', '2026-01-01T00:00:00Z'), dated('b', '2026-02-01T00:00:00Z')] as any);
+            history.getHistory.mockResolvedValue([{ pid: 'a' } as any]);
+            await subscriptionService.subscribe('m00episode', { downloadAll: true });
+            await subscriptionService.whenIdle();
+            expect(queue.addToQueue.mock.calls.map((call) => call[0])).toEqual(['b']);
+            expect((await subscriptionService.list())[0].seen.sort()).toEqual(['a', 'b']);
+        });
+
+        it('leaves failures unseen so the next check retries them', async () => {
+            details.getSeriesEpisodes.mockResolvedValue([dated('a', '2026-01-01T00:00:00Z'), dated('b', '2026-02-01T00:00:00Z')] as any);
+            details.details.mockImplementation(async (pids: string[]) => (pids[0] === 'a' ? [] : pids.map(detail)));
+            await subscriptionService.subscribe('m00episode', { downloadAll: true });
+            await subscriptionService.whenIdle();
+            expect((await subscriptionService.list())[0].seen).toEqual(['b']);
+
+            details.details.mockImplementation(async (pids: string[]) => pids.map(detail));
+            const retry = await subscriptionService.check((await subscriptionService.list())[0]);
+            expect(retry.queued).toEqual(['a']);
+        });
+
+        it('takes precedence over downloadLatest (no separate latest queue)', async () => {
+            details.getSeriesEpisodes.mockResolvedValue([dated('a', '2026-01-01T00:00:00Z'), dated('b', '2026-02-01T00:00:00Z')] as any);
+            await subscriptionService.subscribe('m00episode', { downloadAll: true, downloadLatest: true });
+            await subscriptionService.whenIdle();
+            expect(queue.addToQueue).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not let a second check queue the same episodes while the first is running', async () => {
+            details.getSeriesEpisodes.mockResolvedValue([dated('a', '2026-01-01T00:00:00Z')] as any);
+            let release: () => void = () => undefined;
+            details.details.mockImplementation(
+                (pids: string[]) => new Promise((resolve) => (release = () => resolve(pids.map(detail))))
+            );
+            const sub = await subscriptionService.subscribe('m00episode', { downloadAll: true });
+            await new Promise((r) => setImmediate(r));
+            await new Promise((r) => setImmediate(r));
+            const second = await subscriptionService.check(sub);
+            expect(second.queued).toEqual([]);
+            release();
+            await subscriptionService.whenIdle();
+            expect(queue.addToQueue).toHaveBeenCalledTimes(1);
         });
     });
 

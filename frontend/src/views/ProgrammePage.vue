@@ -121,8 +121,11 @@ const toggleSubscription = async () => {
     try {
         if (subscription.value) {
             await unsubscribe(subscription.value);
-        } else if ((await subscribe(programme.value)) === 'subscribed-latest') {
-            router.push('/queue');
+        } else {
+            const total = programme.value.seasons.reduce((n, season) => n + season.episodes.length, 0);
+            const outcome = await subscribe(programme.value, total);
+            // Both of these put downloads in the queue straight away - show them.
+            if (outcome === 'subscribed-latest' || outcome === 'subscribed-all') router.push('/queue');
         }
     } finally {
         subscribing.value = false;
