@@ -200,10 +200,25 @@ describe('browseService', () => {
         expect(mockedDetails.detailsForEpisodeMetadata.mock.calls[0][0]).toHaveLength(3); // series entry filtered out
     });
 
+    it('programme for an episode opens its brand and lists all episodes', async () => {
+        mockedDetails.getMetadata
+            .mockResolvedValueOnce({ programme: { type: 'episode', pid: 'b00ep001', title: 'Ep' } } as any)
+            .mockResolvedValueOnce({ programme: { type: 'brand', pid: 'b00brand', title: 'The Show' } } as any);
+        mockedDetails.findBrandForPid.mockResolvedValue('b00brand');
+        mockedDetails.getSeriesEpisodes.mockResolvedValue([{ id: 'e1', type: 'episode', title: 'e1' }] as any);
+        mockedDetails.detailsForEpisodeMetadata.mockResolvedValue([
+            { pid: 'e1', title: 'The Show', series: 1, episode: 1, type: VideoType.TV },
+        ]);
+        const result = await browseService.programme('b00ep001');
+        expect(result).toMatchObject({ pid: 'b00brand', kind: 'brand', title: 'The Show' });
+        expect(mockedDetails.getSeriesEpisodes).toHaveBeenCalledWith('b00brand');
+    });
+
     it('programme for a single episode wraps just that episode', async () => {
         mockedDetails.getMetadata.mockResolvedValue({
             programme: { type: 'episode', pid: 'b00ep001', title: 'Ep' },
         } as any);
+        mockedDetails.findBrandForPid.mockResolvedValue(undefined);
         mockedDetails.details.mockResolvedValue([{ pid: 'b00ep001', title: 'Ep', type: VideoType.TV }]);
         const result = await browseService.programme('b00ep001');
         expect(result.seasons).toEqual([{ series: undefined, episodes: [expect.objectContaining({ pid: 'b00ep001' })] }]);

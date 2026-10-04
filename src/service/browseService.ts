@@ -195,8 +195,22 @@ class BrowseService {
         return this.#listing(`atoz/${encodeURIComponent(letter.toLowerCase())}/programmes`, page, perPage);
     }
 
-    async programme(pid: string): Promise<BrowseProgramme> {
-        const { programme } = await iplayerDetailsService.getMetadata(pid);
+    async programme(requestedPid: string): Promise<BrowseProgramme> {
+        let pid = requestedPid;
+        let { programme } = await iplayerDetailsService.getMetadata(pid);
+        // An episode card opens its whole show: climb to the brand and list every episode there.
+        if (programme.type === 'episode') {
+            const brandPid = await iplayerDetailsService.findBrandForPid(pid).catch(() => undefined);
+            if (brandPid && brandPid !== pid) {
+                try {
+                    const brand = await iplayerDetailsService.getMetadata(brandPid);
+                    pid = brandPid;
+                    programme = brand.programme;
+                } catch {
+                    // Keep the single-episode view.
+                }
+            }
+        }
         const kind: BrowseKind = programme.type;
         const base = {
             pid,
