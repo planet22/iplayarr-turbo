@@ -185,17 +185,26 @@ describe('browseService', () => {
         expect(result.rails.map((r) => r.id)).toEqual(['highlights', 'programmes']);
     });
 
-    it('categories borrows artwork from each first programme and tolerates failures', async () => {
+    it('categories borrows artwork, avoiding repeats across tiles, and tolerates failures', async () => {
+        const programmes = (...ids: string[]) => ({
+            data: {
+                category_programmes: {
+                    elements: ids.map((id) => ({ ...element(id), images: { standard: `https://ichef.bbci.co.uk/images/ic/{recipe}/p0${id}.jpg` } })),
+                },
+            },
+        });
         mockedAxios.get.mockImplementation(async (url: string) => {
             if (url.endsWith('/categories')) {
-                return { data: { categories: [{ id: 'comedy', title: 'Comedy' }, { id: 'news', title: 'News' }] } };
+                return { data: { categories: [{ id: 'drama', title: 'Drama' }, { id: 'films', title: 'Films' }, { id: 'news', title: 'News' }] } };
             }
-            if (url.includes('categories/comedy/')) return { data: { category_programmes: { elements: [element('c1')] } } };
+            if (url.includes('categories/drama/')) return programmes('aaa111', 'bbb222');
+            if (url.includes('categories/films/')) return programmes('aaa111', 'ccc333');
             throw new Error('boom');
         });
         expect(await browseService.categories()).toEqual([
-            { id: 'comedy', title: 'Comedy', thumbnail: 'json-api/thumbnail/p0abc123.jpg' },
-            { id: 'news', title: 'News' },
+            { id: 'drama', title: 'Drama', thumbnail: 'json-api/thumbnail/p0aaa111.jpg' },
+            { id: 'films', title: 'Films', thumbnail: 'json-api/thumbnail/p0ccc333.jpg' },
+            { id: 'news', title: 'News', thumbnail: undefined },
         ]);
     });
 

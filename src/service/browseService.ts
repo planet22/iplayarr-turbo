@@ -181,22 +181,31 @@ class BrowseService {
     }
 
     async categories(): Promise<BrowseCategory[]> {
-        return this.longCache.getOr('category_tiles', async () => {
+        return this.longCache.getOr('category_tiles_v2', async () => {
             const data = await this.#ibl('categories', this.longCache);
             const list: any[] = Array.isArray(data?.categories) ? data.categories : [];
             const categories = list.filter((c) => c?.id && c?.title);
-            // One tiny request per category for artwork; a failure just leaves that tile plain.
-            return Promise.all(
-                categories.map(async (c): Promise<BrowseCategory> => {
+            // A few programmes per category so neighbouring tiles can avoid repeating a picture
+            // (e.g. Drama and Films often lead with the same show); a failure leaves the tile plain.
+            const candidates = await Promise.all(
+                categories.map(async (c): Promise<string[]> => {
                     try {
-                        const path = `categories/${encodeURIComponent(c.id)}/programmes?per_page=1`;
-                        const first = toBrowseItems(extractElements(await this.#ibl(path, this.longCache)))[0];
-                        return { id: c.id, title: c.title, thumbnail: first?.thumbnail };
+                        const path = `categories/${encodeURIComponent(c.id)}/programmes?per_page=6`;
+                        return toBrowseItems(extractElements(await this.#ibl(path, this.longCache)))
+                            .map((item) => item.thumbnail)
+                            .filter((thumbnail): thumbnail is string => Boolean(thumbnail));
                     } catch {
-                        return { id: c.id, title: c.title };
+                        return [];
                     }
                 })
             );
+            const used = new Set<string>();
+            return categories.map((c, index): BrowseCategory => {
+                const options = candidates[index];
+                const thumbnail = options.find((t) => !used.has(t)) ?? options[0];
+                if (thumbnail) used.add(thumbnail);
+                return { id: c.id, title: c.title, thumbnail };
+            });
         });
     }
 

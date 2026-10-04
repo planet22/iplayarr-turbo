@@ -242,6 +242,17 @@ defineExpose({ clearSearch });
                     left: 0;
                     min-width: 320px;
                     max-width: 90vw;
+
+                    // On phones the search box sits well right of the screen edge, so anchor the
+                    // dropdown to the viewport instead of the box.
+                    @media (max-width: @mobile-breakpoint) {
+                        position: fixed;
+                        top: 60px;
+                        left: 8px;
+                        right: 8px;
+                        min-width: 0;
+                        max-width: none;
+                    }
                     margin: 0;
                     padding: 4px 0;
                     list-style: none;

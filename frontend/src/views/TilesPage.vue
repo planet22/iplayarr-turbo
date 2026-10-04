@@ -14,7 +14,8 @@
                         v-if="tile.logo && !failedLogos[tile.id]" class="channelLogo" :src="getThumbnailUrl(tile.logo)"
                         :alt="tile.title" @error="failedLogos[tile.id] = true"
                     />
-                    <span v-else :class="['pill', tile.title.replaceAll(' ', '')]">{{ tile.title }}</span>
+                    <!-- The logo icons carry only the channel word ("ONE"), so keep the full name beside it. -->
+                    <span :class="['channelName', tile.logo && !failedLogos[tile.id] ? 'caption' : '']">{{ tile.title }}</span>
                 </template>
                 <span v-else class="tileTitle">{{ tile.title }}</span>
             </RouterLink>
@@ -101,6 +102,23 @@ watch(
         height: 36px;
         max-width: 100%;
         margin: 0 auto;
+    }
+
+    .channelName {
+        font-size: 16px;
+
+        &.caption {
+            font-size: 12px;
+            color: @subtle-text-color;
+        }
+    }
+
+    &:not(.imageTile) {
+        flex-direction: column;
+        justify-content: center;
+        text-align: center;
+        gap: 4px;
+        padding: 14px 12px;
     }
 
     // Categories: large artwork tiles with the title over a gradient.
