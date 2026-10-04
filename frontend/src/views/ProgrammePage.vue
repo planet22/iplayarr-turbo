@@ -146,6 +146,10 @@ watch(
         selected.value = 0;
         try {
             programme.value = await browseFetch(`programme/${encodeURIComponent(pid)}`);
+            // Land on the newest numbered series rather than Specials (series 0), which sorts first.
+            const { seasons } = programme.value;
+            const latest = seasons.reduce((best, { series }, i) => (series > (seasons[best].series ?? -1) ? i : best), 0);
+            selected.value = latest;
         } catch (e) {
             error.value = e.message;
         } finally {
