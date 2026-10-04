@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { BrowseChannels, BrowseHomeRails } from '../constants/BrowseChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
+import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
     BrowseChannel,
@@ -100,22 +101,64 @@ class BrowseService {
         return { items: toBrowseItems(extractElements(data)), total, ...params };
     }
 
+    // Newest episodes from the schedule feed (the same feed the "*" RSS search uses). Works for both
+    // search backends and needs no extra BBC endpoint; the feed has no artwork, so the top few are
+    // enriched from (cached) programme metadata.
+    async recentlyAdded(limit: number = 30): Promise<BrowseRail | undefined> {
+        const items: BrowseItem[] = await this.shortCache.getOr('recently_added', async () => {
+            const feed = await scheduleFacade.getFeed();
+            const latest = feed
+                .filter(({ pubDate }) => pubDate)
+                .sort((a, b) => (b.pubDate as Date).getTime() - (a.pubDate as Date).getTime())
+                .slice(0, limit);
+            const details = await iplayerDetailsService.details(latest.map(({ pid }) => pid));
+            const byPid = new Map(details.map((d) => [d.pid, d]));
+            return latest.map((result): BrowseItem => {
+                const detail = byPid.get(result.pid);
+                return {
+                    pid: result.pid,
+                    kind: 'episode',
+                    type: result.type,
+                    title: result.title,
+                    subtitle: result.episodeTitle || undefined,
+                    episodeTitle: result.episodeTitle || undefined,
+                    synopsis: detail?.description,
+                    thumbnail: detail?.thumbnail,
+                    channel: result.channel || undefined,
+                    category: detail?.category,
+                };
+            });
+        });
+        return items.length ? { id: 'recent', title: 'Recently Added', items } : undefined;
+    }
+
     async home(): Promise<BrowseRail[]> {
-        const settled = await Promise.allSettled(
-            BrowseHomeRails.map(async ({ id, title, path }): Promise<BrowseRail> => {
-                const items = toBrowseItems(extractElements(await this.#ibl(path)));
-                return { id, title, items };
-            })
-        );
+        const sources: { id: string; load: () => Promise<BrowseRail | undefined> }[] = BrowseHomeRails.map((rail) => ({
+            id: rail.id,
+            load: () => this.#iblRail(rail),
+        }));
+        // Slot "Recently Added" in right after the lead (Featured) rail.
+        sources.splice(1, 0, { id: 'recent', load: () => this.recentlyAdded() });
+        const settled = await Promise.allSettled(sources.map(({ load }) => load()));
         const rails: BrowseRail[] = [];
         settled.forEach((result, index) => {
             if (result.status === 'fulfilled') {
-                if (result.value.items.length) rails.push(result.value);
+                if (result.value?.items.length) rails.push(result.value);
             } else {
-                loggingService.error(`Browse rail ${BrowseHomeRails[index].id} failed: ${result.reason}`);
+                loggingService.error(`Browse rail ${sources[index].id} failed: ${result.reason}`);
             }
         });
         return rails;
+    }
+
+    async #iblRail({ id, title, path }: { id: string; title: string; path: string }): Promise<BrowseRail> {
+        return { id, title, items: toBrowseItems(extractElements(await this.#ibl(path))) };
+    }
+
+    // Batch episode details (thumbnail, synopsis, ...) for a page of results that only carry pids,
+    // e.g. the Search page's poster view.
+    async details(pids: string[]): Promise<IPlayerDetails[]> {
+        return iplayerDetailsService.details(pids);
     }
 
     async categories(): Promise<BrowseCategory[]> {

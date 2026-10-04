@@ -8,7 +8,26 @@
         @select-filter="selectFilter"
     />
     <div v-if="!loading" class="inner-content scroll-x">
-        <table class="resultsTable responsive-table">
+        <div v-if="filteredResults.length" class="viewToggle">
+            <button
+                :class="['clickable', viewMode === 'table' ? 'active' : '']"
+                title="Table view"
+                @click="setViewMode('table')"
+            >
+                <font-awesome-icon :icon="['fas', 'table-list']" />
+            </button>
+            <button
+                :class="['clickable', viewMode === 'posters' ? 'active' : '']"
+                title="Poster view"
+                @click="setViewMode('posters')"
+            >
+                <font-awesome-icon :icon="['fas', 'table-cells-large']" />
+            </button>
+        </div>
+        <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
+            <ProgrammeCard v-for="item in posterItems" :key="item.pid" :item="item" />
+        </div>
+        <table v-else class="resultsTable responsive-table">
             <colgroup>
                 <col style="width: 40px" />
                 <col style="width: 80px" />
@@ -101,11 +120,13 @@ import { computed, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
+import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
+import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
@@ -131,6 +152,69 @@ const filteredResults = computed(() => {
 const {
     page: resultsPage, pageSize: resultsPageSize, pagedItems: pagedResults,
 } = usePagination(filteredResults);
+
+// Table (default) or poster grid. Remembered per browser; storage can be unavailable (private
+// windows, blocked site data) so every access is guarded.
+const VIEW_MODE_KEY = 'iplayarr.searchViewMode';
+const readViewMode = () => {
+    try {
+        return localStorage.getItem(VIEW_MODE_KEY) === 'posters' ? 'posters' : 'table';
+    } catch {
+        return 'table';
+    }
+};
+const viewMode = ref(readViewMode());
+const setViewMode = (mode) => {
+    viewMode.value = mode;
+    try {
+        localStorage.setItem(VIEW_MODE_KEY, mode);
+    } catch {
+        // Not persisted - the toggle still works for this session.
+    }
+};
+
+// Search results only carry pids, so artwork for the posters is fetched per visible page
+// (server-side metadata is cached) and merged in as it arrives.
+const thumbnails = ref({});
+const requestedThumbnails = new Set();
+watch(
+    [pagedResults, viewMode],
+    async ([results, mode]) => {
+        if (mode !== 'posters') return;
+        const missing = results.map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
+        if (missing.length === 0) return;
+        missing.forEach((pid) => requestedThumbnails.add(pid));
+        try {
+            const details = await browseFetch(`details?pids=${missing.join(',')}`);
+            const found = {};
+            details.forEach(({ pid, thumbnail }) => {
+                if (thumbnail) found[pid] = thumbnail;
+            });
+            thumbnails.value = { ...thumbnails.value, ...found };
+        } catch {
+            // Posters just fall back to the placeholder tile.
+            missing.forEach((pid) => requestedThumbnails.delete(pid));
+        }
+    },
+    { immediate: true }
+);
+
+const posterItems = computed(() =>
+    pagedResults.value.map((result) => ({
+        pid: result.pid,
+        kind: 'episode',
+        type: result.type,
+        title: result.title,
+        subtitle: result.episode ? `Series ${result.series}, Episode ${result.episode}` : result.episodeTitle,
+        episodeTitle: result.episodeTitle,
+        series: result.series,
+        episode: result.episode,
+        channel: result.channel,
+        pubDate: result.pubDate,
+        nzbName: result.nzbName,
+        thumbnail: thumbnails.value[result.pid],
+    }))
+);
 
 watch(
     () => route.query.searchTerm,
@@ -201,6 +285,31 @@ watch(
 </script>
 
 <style lang="less" scoped>
+.viewToggle {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-bottom: 10px;
+
+    button {
+        width: 34px;
+        height: 30px;
+        border-radius: 4px;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+
+        &:hover {
+            background-color: @settings-button-hover-background-color;
+        }
+
+        &.active {
+            background-color: @brand-color;
+            border-color: @brand-color;
+        }
+    }
+}
+
 .resultsTable {
     max-width: 100%;
     width: 100%;

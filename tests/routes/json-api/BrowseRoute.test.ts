@@ -67,6 +67,17 @@ describe('BrowseRoute', () => {
         expect(res.status).toBe(200);
     });
 
+    it('GET /details validates and passes pids through', async () => {
+        mocked.details.mockResolvedValue([{ pid: 'b00abcde' } as any]);
+        const ok = await request(app).get('/details?pids=b00abcde,b00fghij');
+        expect(ok.status).toBe(200);
+        expect(mocked.details).toHaveBeenCalledWith(['b00abcde', 'b00fghij']);
+        expect((await request(app).get('/details')).status).toBe(400);
+        expect((await request(app).get('/details?pids=../x')).status).toBe(400);
+        const tooMany = Array.from({ length: 41 }, (_, i) => `b00abc${String(i).padStart(2, '0')}`).join(',');
+        expect((await request(app).get(`/details?pids=${tooMany}`)).status).toBe(400);
+    });
+
     it('turns upstream failures into the standard error response', async () => {
         mocked.home.mockRejectedValue(new Error('BBC down'));
         const res = await request(app).get('/home');

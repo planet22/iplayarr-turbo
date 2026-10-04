@@ -38,6 +38,13 @@
                         {{ seasonLabel(season) }}
                     </button>
                 </div>
+                <div class="seasonActions">
+                    <button class="clickable seasonDownload" :disabled="downloadingSeason" @click="downloadSeason">
+                        <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-download']" :spin="downloadingSeason" />
+                        Download {{ programme.seasons.length > 1 ? seasonLabel(programme.seasons[selected]) : 'all' }}
+                        ({{ episodes.length }})
+                    </button>
+                </div>
                 <div class="episodeList">
                     <div v-for="episode in episodes" :key="episode.pid" class="episodeRow">
                         <img v-if="episode.thumbnail" :src="getThumbnailUrl(episode.thumbnail)" :alt="episode.title" loading="lazy" />
@@ -70,19 +77,23 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
-import { browseFetch } from '@/lib/browse';
+import { browseFetch, toDownloadResult } from '@/lib/browse';
+import dialogService from '@/lib/dialogService';
+import { ipFetch } from '@/lib/ipFetch';
 import { useBrowseActions } from '@/lib/useBrowseActions';
-import { formatDate, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
+import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
+const router = useRouter();
 const programme = ref(null);
 const loading = ref(true);
 const error = ref(null);
 const selected = ref(0);
+const downloadingSeason = ref(false);
 
 const { canPlay, play, download } = useBrowseActions();
 
@@ -94,6 +105,37 @@ const bannerStyle = computed(() => {
 });
 
 const seasonLabel = ({ series }) => (series == null ? 'Episodes' : series === 0 ? 'Specials' : `Series ${series}`);
+
+// Queue every episode of the selected series, one request at a time like the Search page's bulk
+// download, then report any that were refused instead of failing silently.
+const downloadSeason = async () => {
+    const batch = episodes.value;
+    if (batch.length === 0) return;
+    const label = programme.value.seasons.length > 1 ? seasonLabel(programme.value.seasons[selected.value]) : programme.value.title;
+    if (!(await dialogService.confirm('Download', `Download ${batch.length} episodes of ${label}?`))) return;
+
+    downloadingSeason.value = true;
+    const failed = [];
+    for (const episode of batch) {
+        try {
+            const response = await ipFetch(`json-api/download?${buildDownloadQuery(toDownloadResult(episode))}`);
+            if (!response.ok) failed.push(episode);
+        } catch {
+            failed.push(episode);
+        }
+    }
+    downloadingSeason.value = false;
+
+    if (failed.length === 0) {
+        router.push('/queue');
+    } else {
+        dialogService.alert(
+            'Some downloads failed',
+            `${batch.length - failed.length} of ${batch.length} episodes were queued.`,
+            `Failed: ${failed.map((e) => getSeriesEpisodeLabel(e) || e.episodeTitle || e.pid).join(', ')}`
+        );
+    }
+};
 
 watch(
     () => route.params.pid,
@@ -154,6 +196,25 @@ watch(
                 color: inherit;
                 text-decoration: none;
             }
+        }
+    }
+}
+
+.seasonActions {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 4px;
+
+    .seasonDownload {
+        padding: 6px 14px;
+        border-radius: 4px;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+
+        &:hover:not(:disabled) {
+            background-color: @brand-color;
+            border-color: @brand-color;
         }
     }
 }

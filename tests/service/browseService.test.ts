@@ -1,11 +1,13 @@
 import axios from 'axios';
 
+import scheduleFacade from '../../src/facade/scheduleFacade';
 import browseService, { extractElements, toBrowseItem, toBrowseItems } from '../../src/service/browseService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 
 jest.mock('axios');
 jest.mock('../../src/service/iplayerDetailsService');
+jest.mock('../../src/facade/scheduleFacade');
 jest.mock('../../src/service/loggingService');
 jest.mock('../../src/service/redis/redisCacheService', () => ({
     __esModule: true,
@@ -18,6 +20,7 @@ jest.mock('../../src/service/redis/redisCacheService', () => ({
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 const mockedDetails = iplayerDetailsService as jest.Mocked<typeof iplayerDetailsService>;
+const mockedSchedule = scheduleFacade as jest.Mocked<typeof scheduleFacade>;
 
 const element = (id: string, extra: object = {}) => ({
     id,
@@ -76,14 +79,69 @@ describe('browseService helpers', () => {
 describe('browseService', () => {
     beforeEach(() => jest.resetAllMocks());
 
+    const feedResult = (pid: string, daysAgo: number) => ({
+        number: 0,
+        pid,
+        title: `Feed ${pid}`,
+        channel: 'BBC Two',
+        episodeTitle: `Ep ${pid}`,
+        type: VideoType.TV,
+        request: { term: '*', line: '*' },
+        pubDate: new Date(Date.now() - daysAgo * 86400000),
+    });
+
     it('home returns non-empty rails and drops failed ones', async () => {
         mockedAxios.get
             .mockResolvedValueOnce({ data: { home_highlights: { elements: [element('h1')] } } })
             .mockRejectedValueOnce(new Error('boom'));
+        mockedSchedule.getFeed.mockResolvedValue([]);
         const rails = await browseService.home();
         expect(rails).toHaveLength(1);
         expect(rails[0].id).toBe('highlights');
         expect(rails[0].items[0].pid).toBe('h1');
+    });
+
+    it('home places Recently Added after Featured', async () => {
+        mockedAxios.get.mockResolvedValue({ data: { elements: [element('x1')] } });
+        mockedSchedule.getFeed.mockResolvedValue([feedResult('f1', 1)]);
+        mockedDetails.details.mockResolvedValue([]);
+        const rails = await browseService.home();
+        expect(rails.map((r) => r.id)).toEqual(['highlights', 'recent', 'popular']);
+    });
+
+    it('recentlyAdded sorts newest first, caps the list and enriches from details', async () => {
+        mockedSchedule.getFeed.mockResolvedValue([
+            feedResult('old', 5),
+            feedResult('new', 1),
+            { ...feedResult('undated', 0), pubDate: undefined },
+            feedResult('mid', 3),
+        ]);
+        mockedDetails.details.mockResolvedValue([
+            { pid: 'new', title: 'T', thumbnail: 'json-api/thumbnail/p0new.jpg', description: 'Fresh', category: 'Drama', type: VideoType.TV },
+        ]);
+        const rail = await browseService.recentlyAdded(2);
+        expect(rail?.title).toBe('Recently Added');
+        expect(rail?.items.map((i) => i.pid)).toEqual(['new', 'mid']);
+        expect(rail?.items[0]).toMatchObject({
+            thumbnail: 'json-api/thumbnail/p0new.jpg',
+            synopsis: 'Fresh',
+            category: 'Drama',
+            channel: 'BBC Two',
+            episodeTitle: 'Ep new',
+        });
+        expect(mockedDetails.details).toHaveBeenCalledWith(['new', 'mid']);
+    });
+
+    it('recentlyAdded returns undefined for an empty feed', async () => {
+        mockedSchedule.getFeed.mockResolvedValue([]);
+        mockedDetails.details.mockResolvedValue([]);
+        expect(await browseService.recentlyAdded()).toBeUndefined();
+    });
+
+    it('details delegates to iplayerDetailsService', async () => {
+        mockedDetails.details.mockResolvedValue([{ pid: 'a', title: 'A', type: VideoType.TV }]);
+        expect(await browseService.details(['a'])).toEqual([{ pid: 'a', title: 'A', type: VideoType.TV }]);
+        expect(mockedDetails.details).toHaveBeenCalledWith(['a']);
     });
 
     it('categories maps and filters the list', async () => {

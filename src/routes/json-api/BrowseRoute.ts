@@ -7,6 +7,7 @@ const router = Router();
 
 const ID_REGEX = /^[a-z0-9_-]+$/i;
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
+const MAX_DETAIL_PIDS = 40;
 const LETTER_REGEX = /^[a-z0]$/i; // '0' is iPlayer's bucket for titles starting with a digit
 
 const invalid = (res: Response, message: string) =>
@@ -60,6 +61,19 @@ router.get(
         const letter = req.params.letter as string;
         if (!LETTER_REGEX.test(letter)) return invalid(res, 'Letter must be a-z or 0');
         res.json(await browseService.atoz(letter, toInt(req.query.page), toInt(req.query.perPage)));
+    })
+);
+
+router.get(
+    '/details',
+    handle(async (req, res) => {
+        const pids = String(req.query.pids ?? '')
+            .split(',')
+            .filter(Boolean);
+        if (pids.length === 0 || pids.length > MAX_DETAIL_PIDS || !pids.every((pid) => PID_REGEX.test(pid))) {
+            return invalid(res, `pids must be 1-${MAX_DETAIL_PIDS} comma-separated pids`);
+        }
+        res.json(await browseService.details(pids));
     })
 );
 
