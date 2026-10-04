@@ -8,10 +8,13 @@ import {
     BrowseChannel,
     BrowseItem,
     BrowseKind,
+    BrowseNowNext,
     BrowsePage,
     BrowseProgramme,
     BrowseRail,
     BrowseSeason,
+    BrowseSlot,
+    BrowseSuggestion,
 } from '../types/Browse';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { VideoType } from '../types/IPlayerSearchResult';
@@ -35,6 +38,17 @@ export function extractElements(data: any): any[] {
         }
     }
     return [];
+}
+
+// The JSON blob iPlayer's pages embed as window.__IPLAYER_REDUX_STATE__.
+export function parseIplayerState(html: string): any {
+    const match = /__IPLAYER_REDUX_STATE__\s*=\s*(\{.*?\});\s*<\/script>/s.exec(html);
+    if (!match) return undefined;
+    try {
+        return JSON.parse(match[1]);
+    } catch {
+        return undefined;
+    }
 }
 
 export function toBrowseItem(element: any): BrowseItem | undefined {
@@ -162,9 +176,97 @@ class BrowseService {
     }
 
     async categories(): Promise<BrowseCategory[]> {
-        const data = await this.#ibl('categories', this.longCache);
-        const list: any[] = Array.isArray(data?.categories) ? data.categories : [];
-        return list.filter((c) => c?.id && c?.title).map((c) => ({ id: c.id, title: c.title }));
+        return this.longCache.getOr('category_tiles', async () => {
+            const data = await this.#ibl('categories', this.longCache);
+            const list: any[] = Array.isArray(data?.categories) ? data.categories : [];
+            const categories = list.filter((c) => c?.id && c?.title);
+            // One tiny request per category for artwork; a failure just leaves that tile plain.
+            return Promise.all(
+                categories.map(async (c): Promise<BrowseCategory> => {
+                    try {
+                        const path = `categories/${encodeURIComponent(c.id)}/programmes?per_page=1`;
+                        const first = toBrowseItems(extractElements(await this.#ibl(path, this.longCache)))[0];
+                        return { id: c.id, title: c.title, thumbnail: first?.thumbnail };
+                    } catch {
+                        return { id: c.id, title: c.title };
+                    }
+                })
+            );
+        });
+    }
+
+    // Title-only type-ahead for the search box.
+    async suggest(term: string, limit: number = 8): Promise<BrowseSuggestion[]> {
+        const query = term.trim();
+        if (query.length < 2) return [];
+        const data = await this.#ibl(`new-search?q=${encodeURIComponent(query)}`);
+        const results: any[] = data?.new_search?.results ?? [];
+        const seen = new Set<string>();
+        const suggestions: BrowseSuggestion[] = [];
+        for (const { id, title } of results) {
+            const key = String(title).toLowerCase();
+            if (id && title && !seen.has(key)) {
+                seen.add(key);
+                suggestions.push({ pid: id, title });
+            }
+            if (suggestions.length >= limit) break;
+        }
+        return suggestions;
+    }
+
+    // What's on a channel right now and what follows. The day's schedule is cached; "now" is
+    // evaluated per request. Looks into tomorrow's schedule when today's is nearly over.
+    async nowNext(channelId: string, at: Date = new Date()): Promise<BrowseNowNext> {
+        const slots: BrowseSlot[] = [];
+        for (const offset of [0, 1]) {
+            const day = new Date(at.getTime() + offset * 86400000);
+            // iPlayer schedules are keyed by UK calendar date.
+            const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
+            const data = await this.#ibl(`channels/${encodeURIComponent(channelId)}/schedule/${date}`);
+            for (const broadcast of extractElements(data)) {
+                const item = toBrowseItem(broadcast.episode);
+                if (item && broadcast.scheduled_start && broadcast.scheduled_end) {
+                    slots.push({ item, start: broadcast.scheduled_start, end: broadcast.scheduled_end });
+                }
+            }
+            const found = this.#pickNowNext(slots, at);
+            if (found.now && found.next) return found;
+        }
+        return this.#pickNowNext(slots, at);
+    }
+
+    #pickNowNext(slots: BrowseSlot[], at: Date): BrowseNowNext {
+        const time = at.getTime();
+        const sorted = [...slots].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+        const now = sorted.find((s) => Date.parse(s.start) <= time && time < Date.parse(s.end));
+        const next = sorted.find((s) => Date.parse(s.start) > time);
+        return { now, next };
+    }
+
+    // iPlayer's own curated rails for a category ("Panel Show Palooza!", ...). The bundle list only
+    // exists in the category page's embedded state - there's no IBL endpoint for it - so this is a
+    // best-effort scrape: any failure yields no rails and the plain grid still works. Each bundle's
+    // contents come from the regular IBL groups endpoint.
+    async categoryRails(id: string, maxRails: number = 8): Promise<BrowseRail[]> {
+        return this.shortCache.getOr(`category_rails_${id}`, async () => {
+            const page = await axios.get(`https://www.bbc.co.uk/iplayer/categories/${encodeURIComponent(id)}/featured`, {
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+            });
+            const state = parseIplayerState(String(page.data));
+            const bundles: any[] = Array.isArray(state?.bundles) ? state.bundles : [];
+            const groups = bundles
+                .filter((b) => b?.journey?.type === 'group' && b.journey.id && (b.title?.default ?? '').trim())
+                .slice(0, maxRails);
+            const settled = await Promise.allSettled(
+                groups.map(async (b): Promise<BrowseRail> => {
+                    const data = await this.#ibl(`groups/${encodeURIComponent(b.journey.id)}/episodes?per_page=20`);
+                    return { id: String(b.id), title: String(b.title.default).trim(), items: toBrowseItems(extractElements(data)) };
+                })
+            );
+            return settled
+                .filter((r): r is PromiseFulfilledResult<BrowseRail> => r.status === 'fulfilled' && r.value.items.length > 0)
+                .map((r) => r.value);
+        });
     }
 
     category(id: string, page?: number, perPage?: number): Promise<BrowsePage> {
@@ -175,7 +277,7 @@ class BrowseService {
         return BrowseChannels;
     }
 
-    async channel(id: string): Promise<{ channel?: BrowseChannel; rails: BrowseRail[] }> {
+    async channel(id: string): Promise<{ channel?: BrowseChannel; rails: BrowseRail[]; nowNext?: BrowseNowNext }> {
         const channel = BrowseChannels.find((c) => c.id === id);
         const listing = await this.#listing(`channels/${encodeURIComponent(id)}/programmes`, 1, 60);
         const rails: BrowseRail[] = [];
@@ -188,7 +290,11 @@ class BrowseService {
             loggingService.error(`Browse channel highlights for ${id} failed: ${error}`);
         }
         if (listing.items.length) rails.push({ id: 'programmes', title: 'All Programmes', items: listing.items });
-        return { channel, rails };
+        const nowNext = await this.nowNext(id).catch((error) => {
+            loggingService.error(`Browse now/next for ${id} failed: ${error}`);
+            return undefined;
+        });
+        return { channel, rails, nowNext };
     }
 
     atoz(letter: string, page?: number, perPage?: number): Promise<BrowsePage> {

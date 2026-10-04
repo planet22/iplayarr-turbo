@@ -8,7 +8,12 @@
         @select-filter="selectFilter"
     />
     <div v-if="!loading" class="inner-content scroll-x">
-        <div v-if="filteredResults.length" class="viewToggle">
+        <div v-if="searchResults.length" class="viewToggle">
+            <select v-if="channelOptions.length > 2" v-model="channelFilter" class="channelFilter" title="Filter by channel">
+                <option v-for="option in channelOptions" :key="option" :value="option">
+                    {{ option === 'All' ? 'All channels' : option }}
+                </option>
+            </select>
             <button
                 :class="['clickable', viewMode === 'table' ? 'active' : '']"
                 title="Table view"
@@ -143,10 +148,18 @@ const availableFilters = ref(['All', 'TV', 'Movie']);
 const filter = ref('All');
 const allChecked = ref(false);
 
+const channelFilter = ref('All');
+const channelOptions = computed(() => [
+    'All',
+    ...[...new Set(searchResults.value.map(({ channel }) => channel).filter(Boolean))].sort(),
+]);
+
 const filteredResults = computed(() => {
-    return filter.value == 'All'
-        ? searchResults.value
-        : searchResults.value.filter(({ type }) => type == filter.value.toUpperCase());
+    return searchResults.value.filter(
+        ({ type, channel }) =>
+            (filter.value == 'All' || type == filter.value.toUpperCase()) &&
+            (channelFilter.value == 'All' || channel == channelFilter.value)
+    );
 });
 
 const {
@@ -221,6 +234,7 @@ watch(
     async (newSearchTerm) => {
         if (newSearchTerm) {
             filter.value = 'All';
+            channelFilter.value = 'All';
             loading.value = true;
             searchResults.value = [];
             searchTerm.value = newSearchTerm;
@@ -288,8 +302,19 @@ watch(
 .viewToggle {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 6px;
     margin-bottom: 10px;
+
+    .channelFilter {
+        height: 30px;
+        margin-right: 6px;
+        padding: 0 8px;
+        border-radius: 4px;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+    }
 
     button {
         width: 34px;

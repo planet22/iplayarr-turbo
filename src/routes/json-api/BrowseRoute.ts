@@ -36,11 +36,29 @@ router.get('/home', handle(async (_, res) => res.json(await browseService.home()
 router.get('/categories', handle(async (_, res) => res.json(await browseService.categories())));
 
 router.get(
+    '/suggest',
+    handle(async (req, res) => {
+        const q = String(req.query.q ?? '').slice(0, 100);
+        res.json(await browseService.suggest(q));
+    })
+);
+
+router.get(
     '/category/:id',
     handle(async (req, res) => {
         const id = req.params.id as string;
         if (!ID_REGEX.test(id)) return invalid(res, 'Invalid category id');
         res.json(await browseService.category(id, toInt(req.query.page), toInt(req.query.perPage)));
+    })
+);
+
+router.get(
+    '/category/:id/rails',
+    handle(async (req, res) => {
+        const id = req.params.id as string;
+        if (!ID_REGEX.test(id)) return invalid(res, 'Invalid category id');
+        // Rails are an enhancement - never fail the page over them.
+        res.json(await browseService.categoryRails(id).catch(() => []));
     })
 );
 

@@ -78,6 +78,23 @@ describe('BrowseRoute', () => {
         expect((await request(app).get(`/details?pids=${tooMany}`)).status).toBe(400);
     });
 
+    it('GET /suggest passes the query through', async () => {
+        mocked.suggest.mockResolvedValue([{ pid: 'a1', title: 'Doctor Who' }]);
+        const res = await request(app).get('/suggest?q=doct');
+        expect(res.body).toEqual([{ pid: 'a1', title: 'Doctor Who' }]);
+        expect(mocked.suggest).toHaveBeenCalledWith('doct');
+    });
+
+    it('GET /category/:id/rails returns rails, or [] when they fail', async () => {
+        mocked.categoryRails.mockResolvedValueOnce([{ id: 'r', title: 'R', items: [] }]);
+        expect((await request(app).get('/category/comedy/rails')).body).toEqual([{ id: 'r', title: 'R', items: [] }]);
+        mocked.categoryRails.mockRejectedValueOnce(new Error('scrape broke'));
+        const res = await request(app).get('/category/comedy/rails');
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual([]);
+        expect((await request(app).get('/category/bad%20id!/rails')).status).toBe(400);
+    });
+
     it('turns upstream failures into the standard error response', async () => {
         mocked.home.mockRejectedValue(new Error('BBC down'));
         const res = await request(app).get('/home');

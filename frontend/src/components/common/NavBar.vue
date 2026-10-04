@@ -14,9 +14,23 @@ v-if="authState.user" class="mobileOnly clickable burgerMenu" :icon="['fas', 'ba
         <div class="middle">
             <div v-if="authState.user" class="searchPanel">
                 <font-awesome-icon :icon="['fas', 'search']" />
-                <input
+                <div class="searchWrap">
+                    <input
 v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Download Url"
-                    @keyup.enter="search" />
+                        autocomplete="off" @input="onInput" @focus="onInput" @blur="closeSuggestions"
+                        @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
+                        @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
+                    <ul v-if="showSuggestions && suggestions.length" class="suggestions">
+                        <li
+                            v-for="(suggestion, index) in suggestions" :key="suggestion.pid"
+                            :class="{ active: index === activeIndex }" @mousedown.prevent="openSuggestion(suggestion)"
+                        >
+                            <font-awesome-icon :icon="['fas', 'tv']" />
+                            <span>{{ suggestion.title }}</span>
+                        </li>
+                        <li class="seeAll" @mousedown.prevent="search">See all results for "{{ searchTerm }}"</li>
+                    </ul>
+                </div>
             </div>
         </div>
         <div class="right">
@@ -35,7 +49,7 @@ v-if="authState.user && versionLabel" class="versionLabel desktopOnly"
 </template>
 
 <script setup>
-import { computed, defineExpose, inject, ref, watch } from 'vue';
+import { computed, defineExpose, inject, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import dialogService from '@/lib/dialogService';
@@ -87,7 +101,72 @@ watch(
     { immediate: true }
 );
 
+// As-you-type suggestions (titles only, from the browse API). Debounced, and a request counter
+// drops responses that arrive after a newer keystroke.
+const suggestions = ref([]);
+const showSuggestions = ref(false);
+const activeIndex = ref(-1);
+let suggestTimer = null;
+let suggestRequest = 0;
+
+const closeSuggestions = () => {
+    showSuggestions.value = false;
+    activeIndex.value = -1;
+    suggestRequest += 1;
+    clearTimeout(suggestTimer);
+};
+
+const onInput = () => {
+    clearTimeout(suggestTimer);
+    const term = (searchTerm.value ?? '').trim();
+    // URLs go straight to the download path on Enter - nothing to suggest for them.
+    if (term.length < 2 || /[/:]/.test(term)) {
+        closeSuggestions();
+        return;
+    }
+    suggestTimer = setTimeout(async () => {
+        const request = ++suggestRequest;
+        try {
+            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}`);
+            if (request === suggestRequest && ok && Array.isArray(data)) {
+                suggestions.value = data;
+                activeIndex.value = -1;
+                showSuggestions.value = true;
+            }
+        } catch {
+            // Suggestions are a nicety - Enter still runs a normal search.
+        }
+    }, 250);
+};
+
+const moveActive = (delta) => {
+    if (!showSuggestions.value || !suggestions.value.length) return;
+    // Cycles through the suggestions, with -1 meaning "none highlighted" (Enter = plain search).
+    const count = suggestions.value.length;
+    const next = activeIndex.value + delta;
+    activeIndex.value = next < -1 ? count - 1 : next >= count ? -1 : next;
+};
+
+const openSuggestion = (suggestion) => {
+    closeSuggestions();
+    searchTerm.value = '';
+    router.push(`/browse/programme/${suggestion.pid}`);
+};
+
+const onEnter = () => {
+    const picked = showSuggestions.value ? suggestions.value[activeIndex.value] : undefined;
+    if (picked) {
+        openSuggestion(picked);
+    } else {
+        closeSuggestions();
+        search();
+    }
+};
+
+onBeforeUnmount(() => clearTimeout(suggestTimer));
+
 const search = async () => {
+    closeSuggestions();
     const pid = getPidFromBBCUrl(searchTerm.value);
     if (pid) {
         const { ok, data } = await ipFetch(`json-api/download?pid=${pid}`, 'GET');
@@ -149,6 +228,56 @@ defineExpose({ clearSearch });
                 align-items: center;
                 gap: 10px;
                 height: 100%;
+
+                .searchWrap {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    height: 100%;
+                }
+
+                .suggestions {
+                    position: absolute;
+                    top: calc(100% - 8px);
+                    left: 0;
+                    min-width: 320px;
+                    max-width: 90vw;
+                    margin: 0;
+                    padding: 4px 0;
+                    list-style: none;
+                    z-index: 10;
+                    border-radius: 4px;
+                    border: 1px solid @settings-button-border-color;
+                    background-color: @nav-active-background-color;
+                    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+
+                    li {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        padding: 8px 12px;
+                        cursor: pointer;
+                        font-size: 14px;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+
+                        svg {
+                            color: @subtle-text-color;
+                        }
+
+                        &:hover,
+                        &.active {
+                            background-color: @settings-button-hover-background-color;
+                        }
+
+                        &.seeAll {
+                            color: @primary-color;
+                            border-top: 1px solid @settings-button-border-color;
+                            margin-top: 4px;
+                        }
+                    }
+                }
 
                 .searchBox {
                     background-color: transparent;

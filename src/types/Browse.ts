@@ -36,6 +36,24 @@ export interface BrowsePage {
 export interface BrowseCategory {
     id: string;
     title: string;
+    // Artwork borrowed from the category's first programme, for the image tiles.
+    thumbnail?: string;
+}
+
+export interface BrowseSuggestion {
+    pid: string;
+    title: string;
+}
+
+export interface BrowseSlot {
+    item: BrowseItem;
+    start: string;
+    end: string;
+}
+
+export interface BrowseNowNext {
+    now?: BrowseSlot;
+    next?: BrowseSlot;
 }
 
 export interface BrowseChannel {

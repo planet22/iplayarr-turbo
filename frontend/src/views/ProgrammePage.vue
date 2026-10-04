@@ -2,8 +2,11 @@
     <LoadingIndicator v-if="loading" />
     <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
     <template v-else-if="programme">
-        <div class="programmeBanner" :style="bannerStyle">
+        <div class="programmeBanner">
+            <div class="bannerBackdrop" :style="bannerStyle" />
             <div class="programmeBannerContent">
+                <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" />
+                <div class="programmeText">
                 <h1>{{ programme.title }}</h1>
                 <div class="programmeMeta">
                     <span :class="['pill', 'grey']">
@@ -22,6 +25,7 @@
                     </span>
                 </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>
+                </div>
             </div>
         </div>
 
@@ -98,6 +102,8 @@ const downloadingSeason = ref(false);
 const { canPlay, play, download } = useBrowseActions();
 
 const episodes = computed(() => programme.value?.seasons[selected.value]?.episodes ?? []);
+
+const posterUrl = computed(() => getThumbnailUrl(programme.value?.thumbnail));
 
 const bannerStyle = computed(() => {
     const url = getThumbnailUrl(programme.value?.thumbnail);
@@ -201,6 +207,48 @@ watch(
                 text-decoration: none;
             }
         }
+    }
+}
+
+// Blurred full-width backdrop with the artwork also shown as a poster beside the details.
+.programmeBanner {
+    position: relative;
+    overflow: hidden;
+
+    .bannerBackdrop {
+        position: absolute;
+        inset: 0;
+        background-size: cover;
+        background-position: center;
+        filter: blur(22px);
+        transform: scale(1.12);
+    }
+
+    .programmeBannerContent {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 24px;
+        background-color: rgba(0, 0, 0, 0.55);
+    }
+
+    .poster {
+        flex: 0 0 150px;
+        width: 150px;
+        aspect-ratio: 2 / 3;
+        object-fit: cover;
+        border-radius: 4px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+
+        @media (max-width: @mobile-breakpoint) {
+            flex-basis: 90px;
+            width: 90px;
+        }
+    }
+
+    .programmeText {
+        flex: 1;
+        min-width: 0;
     }
 }
 

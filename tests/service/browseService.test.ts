@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 import scheduleFacade from '../../src/facade/scheduleFacade';
-import browseService, { extractElements, toBrowseItem, toBrowseItems } from '../../src/service/browseService';
+import browseService, { extractElements, parseIplayerState, toBrowseItem, toBrowseItems } from '../../src/service/browseService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 
@@ -181,7 +181,109 @@ describe('browseService', () => {
             .mockResolvedValueOnce({ data: { channel_highlights: { elements: [element('f1')] } } });
         const result = await browseService.channel('bbc_one_london');
         expect(result.channel?.title).toBe('BBC One');
+        expect(result).toHaveProperty('nowNext');
         expect(result.rails.map((r) => r.id)).toEqual(['highlights', 'programmes']);
+    });
+
+    it('categories borrows artwork from each first programme and tolerates failures', async () => {
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            if (url.endsWith('/categories')) {
+                return { data: { categories: [{ id: 'comedy', title: 'Comedy' }, { id: 'news', title: 'News' }] } };
+            }
+            if (url.includes('categories/comedy/')) return { data: { category_programmes: { elements: [element('c1')] } } };
+            throw new Error('boom');
+        });
+        expect(await browseService.categories()).toEqual([
+            { id: 'comedy', title: 'Comedy', thumbnail: 'json-api/thumbnail/p0abc123.jpg' },
+            { id: 'news', title: 'News' },
+        ]);
+    });
+
+    it('suggest returns de-duplicated titles and ignores short terms', async () => {
+        mockedAxios.get.mockResolvedValue({
+            data: {
+                new_search: {
+                    results: [
+                        { id: 'a1', title: 'Doctor Who' },
+                        { id: 'a2', title: 'doctor who' },
+                        { id: 'a3', title: 'Doctors' },
+                    ],
+                },
+            },
+        });
+        expect(await browseService.suggest('d')).toEqual([]);
+        expect(mockedAxios.get).not.toHaveBeenCalled();
+        expect(await browseService.suggest(' doct ')).toEqual([
+            { pid: 'a1', title: 'Doctor Who' },
+            { pid: 'a3', title: 'Doctors' },
+        ]);
+        expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('new-search?q=doct'));
+    });
+
+    const broadcast = (id: string, start: string, end: string) => ({
+        scheduled_start: start,
+        scheduled_end: end,
+        episode: element(id),
+    });
+
+    it('nowNext picks the live and following broadcasts', async () => {
+        mockedAxios.get.mockResolvedValue({
+            data: {
+                schedule: {
+                    elements: [
+                        broadcast('s3', '2026-10-03T20:00:00Z', '2026-10-03T21:00:00Z'),
+                        broadcast('s1', '2026-10-03T18:00:00Z', '2026-10-03T19:00:00Z'),
+                        broadcast('s2', '2026-10-03T19:00:00Z', '2026-10-03T20:00:00Z'),
+                    ],
+                },
+            },
+        });
+        const result = await browseService.nowNext('bbc_one_london', new Date('2026-10-03T19:30:00Z'));
+        expect(result.now?.item.pid).toBe('s2');
+        expect(result.next?.item.pid).toBe('s3');
+    });
+
+    it('nowNext falls through to tomorrow when today has no next slot', async () => {
+        mockedAxios.get
+            .mockResolvedValueOnce({
+                data: { schedule: { elements: [broadcast('late', '2026-10-03T23:00:00Z', '2026-10-04T00:30:00Z')] } },
+            })
+            .mockResolvedValueOnce({
+                data: { schedule: { elements: [broadcast('early', '2026-10-04T00:30:00Z', '2026-10-04T05:00:00Z')] } },
+            });
+        const result = await browseService.nowNext('bbc_one_london', new Date('2026-10-03T23:30:00Z'));
+        expect(result.now?.item.pid).toBe('late');
+        expect(result.next?.item.pid).toBe('early');
+        expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+    });
+
+    const stateHtml = (bundles: object[]) =>
+        `<html><script>window.__IPLAYER_REDUX_STATE__ = ${JSON.stringify({ bundles })};</script></html>`;
+
+    it('parseIplayerState extracts the embedded state and tolerates junk', () => {
+        expect(parseIplayerState(stateHtml([{ id: 'a' }]))).toEqual({ bundles: [{ id: 'a' }] });
+        expect(parseIplayerState('<html>nothing</html>')).toBeUndefined();
+        expect(parseIplayerState('<script>__IPLAYER_REDUX_STATE__ = {broken};</script>')).toBeUndefined();
+    });
+
+    it('categoryRails turns group bundles into rails and skips empty or failed ones', async () => {
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            if (url.includes('/iplayer/categories/comedy/featured')) {
+                return {
+                    data: stateHtml([
+                        { id: 'b1', title: { default: 'Panel Shows ' }, journey: { id: 'g1', type: 'group' } },
+                        { id: 'b2', title: { default: 'Empty' }, journey: { id: 'g2', type: 'group' } },
+                        { id: 'b3', title: { default: 'Broken' }, journey: { id: 'g3', type: 'group' } },
+                        { id: 'b4', title: { default: 'Not a group' }, journey: { id: 'x', type: 'brand' } },
+                    ]),
+                };
+            }
+            if (url.includes('groups/g1/')) return { data: { group_episodes: { elements: [element('r1')] } } };
+            if (url.includes('groups/g2/')) return { data: { group_episodes: { elements: [] } } };
+            throw new Error('boom');
+        });
+        const rails = await browseService.categoryRails('comedy');
+        expect(rails).toEqual([{ id: 'b1', title: 'Panel Shows', items: [expect.objectContaining({ pid: 'r1' })] }]);
     });
 
     it('programme groups episodes into ordered seasons', async () => {
