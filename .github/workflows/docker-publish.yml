@@ -42,6 +42,22 @@ jobs:
                   # GHCR requires a lowercase image path
                   echo "lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
+            - name: Compute image tags
+              id: tags
+              run: |
+                  # :latest only ever moves for a release built off main - a release cut from
+                  # any other branch (e.g. a "dev" prerelease for testing) must never overwrite
+                  # the production :latest image that docker run/compose examples pull by default.
+                  TAGS="ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:${{ env.git_tag }}"
+                  if [ "${{ github.event.release.target_commitish }}" = "main" ]; then
+                      TAGS="$TAGS"$'\n'"ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:latest"
+                  fi
+                  {
+                      echo "list<<EOF"
+                      echo "$TAGS"
+                      echo "EOF"
+                  } >> $GITHUB_OUTPUT
+
             - name: Log in to GHCR
               uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
               with:
@@ -63,9 +79,7 @@ jobs:
                   file: ./Dockerfile
                   push: true
                   platforms: linux/amd64,linux/arm64
-                  tags: |
-                      ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:${{ env.git_tag }}
-                      ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:latest
+                  tags: ${{ steps.tags.outputs.list }}
 
             - name: Generate artifact attestation
               uses: actions/attest-build-provenance@v2
