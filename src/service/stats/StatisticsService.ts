@@ -5,6 +5,7 @@ import { AbstractFIFOQueue } from '../../types/utils/AbstractFIFOQueue';
 import { RedisFIFOQueue } from '../../types/utils/RedisFIFOQueue';
 import RedisCacheService from '../redis/redisCacheService';
 import { redis } from '../redis/redisService';
+import socketService from '../socketService';
 
 class StatisticsService {
     searchHistory: AbstractFIFOQueue<SearchHistoryEntry>;
@@ -17,8 +18,9 @@ class StatisticsService {
         this.failedGrabHistory = new RedisFIFOQueue('failed-grab-history', 200);
     }
 
-    addSearch(entry: SearchHistoryEntry): void {
-        this.searchHistory.enqueue(entry);
+    async addSearch(entry: SearchHistoryEntry): Promise<void> {
+        await this.searchHistory.enqueue(entry);
+        socketService.emit('searchHistory', await this.getSearchHistory());
     }
 
     async getSearchHistory(): Promise<SearchHistoryEntry[]> {
@@ -27,10 +29,12 @@ class StatisticsService {
 
     async clearSearchHistory(): Promise<void> {
         await this.searchHistory.clear();
+        socketService.emit('searchHistory', await this.getSearchHistory());
     }
 
-    addGrab(entry: GrabHistoryEntry): void {
-        this.grabHistory.enqueue(entry);
+    async addGrab(entry: GrabHistoryEntry): Promise<void> {
+        await this.grabHistory.enqueue(entry);
+        socketService.emit('grabHistory', await this.getGrabHistory());
     }
 
     async getGrabHistory(): Promise<GrabHistoryEntry[]> {
@@ -39,10 +43,12 @@ class StatisticsService {
 
     async clearGrabHistory(): Promise<void> {
         await this.grabHistory.clear();
+        socketService.emit('grabHistory', await this.getGrabHistory());
     }
 
-    addFailedGrab(entry: FailedGrabEntry): void {
-        this.failedGrabHistory.enqueue(entry);
+    async addFailedGrab(entry: FailedGrabEntry): Promise<void> {
+        await this.failedGrabHistory.enqueue(entry);
+        socketService.emit('failedGrabHistory', await this.getFailedGrabHistory());
     }
 
     async getFailedGrabHistory(): Promise<FailedGrabEntry[]> {
@@ -51,6 +57,7 @@ class StatisticsService {
 
     async clearFailedGrabHistory(): Promise<void> {
         await this.failedGrabHistory.clear();
+        socketService.emit('failedGrabHistory', await this.getFailedGrabHistory());
     }
 
     async setUptime(): Promise<void> {
