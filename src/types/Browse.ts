@@ -56,6 +56,12 @@ export interface BrowseNowNext {
     next?: BrowseSlot;
 }
 
+// One channel's full day of broadcasts, for the multi-channel schedule grid.
+export interface BrowseChannelSchedule {
+    channel: BrowseChannel;
+    slots: BrowseSlot[];
+}
+
 export interface BrowseChannel {
     id: string;
     title: string;

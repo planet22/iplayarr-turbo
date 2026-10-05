@@ -9,6 +9,7 @@ const ID_REGEX = /^[a-z0-9_-]+$/i;
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
 const MAX_DETAIL_PIDS = 40;
 const LETTER_REGEX = /^[a-z0]$/i; // '0' is iPlayer's bucket for titles starting with a digit
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const invalid = (res: Response, message: string) =>
     res.status(400).json({ error: ApiError.INVALID_INPUT, message } as ApiResponse);
@@ -80,6 +81,15 @@ router.get(
             'Content-Security-Policy': 'default-src \'none\'; style-src \'unsafe-inline\'',
         });
         res.send(svg);
+    })
+);
+
+router.get(
+    '/schedule',
+    handle(async (req, res) => {
+        const date = req.query.date as string | undefined;
+        if (date && !DATE_REGEX.test(date)) return invalid(res, 'date must be YYYY-MM-DD');
+        res.json(await browseService.schedule(date));
     })
 );
 

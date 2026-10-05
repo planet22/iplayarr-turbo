@@ -6,6 +6,7 @@ import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
     BrowseChannel,
+    BrowseChannelSchedule,
     BrowseItem,
     BrowseKind,
     BrowseNowNext,
@@ -267,6 +268,29 @@ class BrowseService {
         const now = sorted.find((s) => Date.parse(s.start) <= time && time < Date.parse(s.end));
         const next = sorted.find((s) => Date.parse(s.start) > time);
         return { now, next };
+    }
+
+    // Every channel's full day, for the multi-channel guide grid. Reuses the same per-channel,
+    // per-date IBL path nowNext() hits, so it rides the same 15-minute cache.
+    async schedule(date?: string): Promise<BrowseChannelSchedule[]> {
+        const day = date ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
+        const settled = await Promise.allSettled(
+            BrowseChannels.map(async (channel): Promise<BrowseChannelSchedule> => {
+                const slots: BrowseSlot[] = [];
+                const data = await this.#ibl(`channels/${encodeURIComponent(channel.id)}/schedule/${day}`);
+                for (const broadcast of extractElements(data)) {
+                    const item = toBrowseItem(broadcast.episode);
+                    if (item && broadcast.scheduled_start && broadcast.scheduled_end) {
+                        slots.push({ item, start: broadcast.scheduled_start, end: broadcast.scheduled_end });
+                    }
+                }
+                slots.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+                return { channel: withLogo(channel), slots };
+            })
+        );
+        return settled
+            .filter((r): r is PromiseFulfilledResult<BrowseChannelSchedule> => r.status === 'fulfilled')
+            .map((r) => r.value);
     }
 
     // iPlayer's own curated rails for a category ("Panel Show Palooza!", ...). The bundle list only

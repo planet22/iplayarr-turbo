@@ -14,6 +14,7 @@ import OffSchedulePage from '@/views/OffSchedulePage.vue';
 import ProgrammePage from '@/views/ProgrammePage.vue';
 import QueueInfoPage from '@/views/QueueInfoPage.vue';
 import QueuePage from '@/views/QueuePage.vue';
+import SchedulePage from '@/views/SchedulePage.vue';
 import SearchPage from '@/views/SearchPage.vue';
 import SettingsPage from '@/views/SettingsPage.vue';
 import StatisticsPage from '@/views/StatisticsPage.vue';
@@ -43,6 +44,7 @@ const routes = [
     { path: '/browse', component: DiscoverPage },
     { path: '/browse/channels', component: TilesPage, meta: { tiles: 'channels' } },
     { path: '/browse/channel/:id', component: ChannelPage },
+    { path: '/browse/schedule', component: SchedulePage },
     { path: '/browse/categories', component: TilesPage, meta: { tiles: 'categories' } },
     { path: '/browse/category/:id', component: GridPage, meta: { grid: 'category' } },
     { path: '/browse/atoz/:letter?', component: GridPage, meta: { grid: 'atoz' } },
