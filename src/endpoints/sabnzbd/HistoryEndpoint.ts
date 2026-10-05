@@ -36,21 +36,30 @@ const actionDirectory: EndpointDirectory = {
     _default: async (req: Request, res: Response) => {
         let history: QueueEntry[] = await historyService.getHistory();
         history = history.filter(
-            ({ status }) => status != QueueEntryStatus.FORWARDED && status != QueueEntryStatus.CANCELLED && status != QueueEntryStatus.REMOVED
+            ({ status }) =>
+                status != QueueEntryStatus.FORWARDED &&
+                status != QueueEntryStatus.CANCELLED &&
+                status != QueueEntryStatus.REMOVED
         );
         const completeDir: string = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
 
-        const outputFormat = await configService.getParameter(IplayarrParameter.OUTPUT_FORMAT) as string;
+        const outputFormat = (await configService.getParameter(IplayarrParameter.OUTPUT_FORMAT)) as string;
         const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
 
         const historyObject: SabNZBDHistoryResponse = {
             ...historySkeleton,
             slots: history
                 .filter(({ status }) => status != QueueEntryStatus.FORWARDED)
-                .map((item) => createHistoryEntry(resolveCompleteDir(item.type, completeDir, arrCompleteDir), item, outputFormat)),
+                .map((item) =>
+                    createHistoryEntry(
+                        resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir),
+                        item,
+                        outputFormat
+                    )
+                ),
         } as SabNZBDHistoryResponse;
         res.json({ history: historyObject });
-    }
+    },
 };
 
 function createHistoryEntry(completeDir: string, item: QueueEntry, outputFormat: string): SABNZBDHistoryEntryResponse {

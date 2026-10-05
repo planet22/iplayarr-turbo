@@ -106,7 +106,7 @@ async function rewriteStrmKeys(
     const strmItems = history.filter(({ extension }) => extension === 'strm');
 
     for (const item of strmItems) {
-        const itemCompleteDir = resolveCompleteDir(item.type, completeDir, arrCompleteDir);
+        const itemCompleteDir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir);
         const strmPath = path.join(itemCompleteDir, item.libraryPath ?? `${item.nzbName}.strm`);
         try {
             const content = fs.readFileSync(strmPath, 'utf8');

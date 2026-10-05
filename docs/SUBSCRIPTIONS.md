@@ -44,7 +44,7 @@ Lists every subscription with its artwork, channel, when it was last checked, an
 
 Subscribed downloads behave like any other download:
 
-- **Folder:** TV goes to `ARR_COMPLETE_DIR` if you have set one, otherwise `COMPLETE_DIR`; with `LIBRARY_FOLDER_STRUCTURE` on, under `Show/Season NN/` ([LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md)). There is no separate folder for subscriptions.
+- **Folder:** always `COMPLETE_DIR`, never `ARR_COMPLETE_DIR` — that override only applies to TV Sonarr/Radarr itself queued (see `.nfo` note below), and a subscription isn't one of those even though it's TV. With `LIBRARY_FOLDER_STRUCTURE` on, under `Show/Season NN/` ([LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md)). There is no separate folder for subscriptions.
 - **File type:** a full video, or a small `.strm` pointer if `MEDIA_MODE=strm` ([STREAMING.md](STREAMING.md)), in which case they complete almost instantly.
 - **`.nfo` files:** subscriptions are tagged as *manual* downloads (not as coming from Sonarr/Radarr), so they get `.nfo` metadata when `WRITE_NFO_STRM` is `all` or `manual`, and not when it is `nzb`.
 
