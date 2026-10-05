@@ -4,6 +4,7 @@ import handler from '../../../src/endpoints/sabnzbd/QueueEndpoint';
 import configService from '../../../src/service/configService';
 import historyService from '../../../src/service/historyService';
 import queueService from '../../../src/service/queueService';
+import { QueueEntrySource } from '../../../src/types/enums/QueueEntrySource';
 import { QueueEntryStatus } from '../../../src/types/responses/sabnzbd/QueueResponse';
 
 
@@ -53,6 +54,7 @@ describe('AbstractSabNZBDActionEndpoint', () => {
                     status: QueueEntryStatus.DOWNLOADING,
                     pid: 'pid1',
                     nzbName: 'example.nzb',
+                    source: QueueEntrySource.NZB,
                     details: {
                         size: 500,
                         sizeLeft: 100,
@@ -61,7 +63,10 @@ describe('AbstractSabNZBDActionEndpoint', () => {
                     },
                 },
             ];
-            const mockHistory = [{ id: 1 }, { id: 2 }];
+            const mockHistory = [
+                { id: 1, source: QueueEntrySource.NZB },
+                { id: 2, source: QueueEntrySource.NZB },
+            ];
 
             (queueService.getQueue as jest.Mock).mockReturnValue(mockQueue);
             (historyService.getHistory as jest.Mock).mockResolvedValue(mockHistory);
@@ -129,6 +134,7 @@ describe('AbstractSabNZBDActionEndpoint', () => {
                     status: QueueEntryStatus.QUEUED,
                     pid: 'pid2',
                     nzbName: 'another.nzb',
+                    source: QueueEntrySource.NZB,
                     details: {
                         size: 700,
                         sizeLeft: 700,
@@ -194,6 +200,27 @@ describe('AbstractSabNZBDActionEndpoint', () => {
                     ]
                 }
             });
+        });
+
+        it('excludes manual/subscription-sourced entries - only NZB-sourced items are Sonarr/Radarr\'s business', async () => {
+            const mockQueue = [
+                { status: QueueEntryStatus.DOWNLOADING, pid: 'nzb-pid', nzbName: 'nzb.item', source: QueueEntrySource.NZB, details: {} },
+                { status: QueueEntryStatus.DOWNLOADING, pid: 'manual-pid', nzbName: 'manual.item', source: QueueEntrySource.MANUAL, details: {} },
+            ];
+            const mockHistory = [
+                { id: 1, source: QueueEntrySource.NZB },
+                { id: 2, source: QueueEntrySource.MANUAL },
+            ];
+
+            (queueService.getQueue as jest.Mock).mockReturnValue(mockQueue);
+            (historyService.getHistory as jest.Mock).mockResolvedValue(mockHistory);
+
+            await handler(req as Request, res as Response, next);
+
+            const response = (res.json as jest.Mock).mock.calls[0][0];
+            expect(response.queue.noofslots_total).toBe(1);
+            expect(response.queue.slots.map((s: any) => s.nzo_id)).toEqual(['nzb-pid']);
+            expect(response.queue.finish).toBe(1);
         });
     });
 });
