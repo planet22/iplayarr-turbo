@@ -7,7 +7,7 @@ Two settings fix that without changing anything about how Sonarr/Radarr see the 
 ## What you get
 
 - **`LIBRARY_FOLDER_STRUCTURE`** — nests completed files into `Show Title/Season 01/Show Title - S01E02 - Episode Title.ext` for TV, and `Movie Title/Movie Title.ext` for movies, instead of one flat folder.
-- **`ARR_COMPLETE_DIR`** — optional override of `COMPLETE_DIR` for TV downloads only (what the *arr imports), so TV and Movie content can live under separate root folders. Leave unset to keep using `COMPLETE_DIR` for everything.
+- **`ARR_COMPLETE_DIR`** — optional override of `COMPLETE_DIR`, used only for TV downloads Sonarr/Radarr themselves queued (what the *arr imports) - a manual download from the UI, or one a [subscription](SUBSCRIPTIONS.md) queued, stays in `COMPLETE_DIR` even if it's TV, so your manually-curated and *arr-managed TV don't get mixed into the same folder tree. Leave unset to keep using `COMPLETE_DIR` for everything.
 - **`WRITE_NFO_STRM`** — writes a Jellyfin/Kodi/Emby-compatible `.nfo` metadata file alongside each item (episode title, air date, season/episode numbers, channel), and a `tvshow.nfo` at the show-folder level. Can be scoped to only downloads added by Sonarr/Radarr (`nzb`) or only ones triggered manually from the UI (`manual`), as well as `all`/`none`.
 - **`WRITE_STRMTOOL_JSON`** — when `WRITE_NFO_STRM` is enabled, also writes a `.strmtool.json` sidecar next to each `.strm` file (Media Mode = Streaming only), for the [StrmTool Jellyfin plugin](https://github.com/jinlin-teck/StrmTool)'s probe-skip cache.
 
@@ -50,12 +50,16 @@ If `MEDIA_MODE` is set to Streaming, iPlayarr's completed items are `.strm` poin
 
 Settings → Media Management → **Write .strmtool.json Files?** (`WRITE_STRMTOOL_JSON`, default off), shown once `WRITE_NFO_STRM` is enabled. iPlayarr doesn't actually probe the stream it's pointing to, so the codec/resolution written into the file are informed guesses, not measurements: BBC iPlayer content is always H.264/AAC (remuxing to MKV under `STREAM_MODE=progressive-mkv` uses a lossless `-c copy`, so this holds either way), and the resolution reflects your `VIDEO_QUALITY` ceiling rather than anything actually delivered. `runTimeTicks` is the one field that *is* real, taken from BBC's own programme duration rather than guessed.
 
+## Empty folder cleanup
+
+With `LIBRARY_FOLDER_STRUCTURE` on, once Sonarr/Radarr imports (moves) a file out of its `Show/Season NN/` folder, the now-empty folder is left behind on disk - nothing in that import step removes it. A daily maintenance task (`Empty Library Folder Cleanup`, 3:45 AM, alongside the thumbnail and stream-history cleanup jobs) walks `COMPLETE_DIR` and `ARR_COMPLETE_DIR` (if set) and removes directories that are empty or "effectively empty" - containing only leftover sidecar files (`.nfo`, `.strmtool.json`) or common OS junk (`Thumbs.db`, `desktop.ini`, `.DS_Store`), never actual media. It works bottom-up, so an empty Season folder is removed and then its Show folder too if that was the last thing in it. The configured root (`COMPLETE_DIR`/`ARR_COMPLETE_DIR` itself) is never removed. It's a no-op when `LIBRARY_FOLDER_STRUCTURE` is off, since flat mode never creates nested folders to begin with. Run it on demand from Settings → Maintenance.
+
 ## Field reference
 
 | Setting | Default | Notes |
 | --- | --- | --- |
 | `LIBRARY_FOLDER_STRUCTURE` | `false` | Jellyfin-style `Show/Season NN/...` and `Movie/...` folders |
-| `ARR_COMPLETE_DIR` | unset | Overrides `COMPLETE_DIR` for TV downloads only |
+| `ARR_COMPLETE_DIR` | unset | Overrides `COMPLETE_DIR` for Sonarr/Radarr-queued TV downloads only |
 | `WRITE_NFO_STRM` | `none` | `none`/`all`/`nzb`/`manual` — writes `.nfo` metadata; independent of `MEDIA_MODE` |
 | `WRITE_STRMTOOL_JSON` | `false` | Writes a `.strmtool.json` sidecar for `.strm` files; requires `WRITE_NFO_STRM` on |
 | `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC` | Advanced setting — only affects the flat (non-folder-structure) filename |
