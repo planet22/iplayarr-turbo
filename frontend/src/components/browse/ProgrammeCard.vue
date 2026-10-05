@@ -18,7 +18,7 @@
         <div class="meta">
             <div class="title" :title="item.title">{{ item.title }}</div>
             <div v-if="item.subtitle" class="subtitle" :title="item.subtitle">{{ item.subtitle }}</div>
-            <span v-if="item.channel" :class="['pill', channelPillClass(item.channel)]" :style="pillStyle(item.channel)">{{ item.channel }}</span>
+            <ChannelPill :channel="item.channel" :show-logo="false" />
         </div>
     </RouterLink>
 </template>
@@ -26,8 +26,7 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
-import { channelPillClass } from '@/lib/browse';
-import { useChannelPillColors } from '@/lib/channelPillColors';
+import ChannelPill from '@/components/common/ChannelPill.vue';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { getThumbnailUrl } from '@/lib/utils';
 
@@ -39,7 +38,6 @@ const props = defineProps({
 });
 
 const { canPlay, play, download } = useBrowseActions();
-const { pillStyle } = useChannelPillColors();
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail));
 </script>
 

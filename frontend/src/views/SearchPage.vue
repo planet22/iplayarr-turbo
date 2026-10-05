@@ -117,9 +117,7 @@
                         {{ formatStorageSize(result.size) }}
                     </td>
                     <td data-title="Channel" @click="download(result)">
-                        <span :class="['pill', result.channel.replaceAll(' ', '')]" :style="pillStyle(result.channel)">
-                            {{ result.channel }}
-                        </span>
+                        <ChannelPill :channel="result.channel" />
                     </td>
                     <td data-title="First Broadcast" @click="download(result)">
                         {{ formatDate(result.pubDate) }}
@@ -155,13 +153,13 @@ import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
 import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
+import ChannelPill from '@/components/common/ChannelPill.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
-import { useChannelPillColors } from '@/lib/channelPillColors';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
@@ -170,7 +168,6 @@ import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();
-const { pillStyle } = useChannelPillColors();
 
 const searchResults = ref([]);
 const searchTerm = ref('');

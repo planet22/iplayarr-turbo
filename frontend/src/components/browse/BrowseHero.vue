@@ -1,7 +1,7 @@
 <template>
     <div class="browseHero" :style="heroStyle">
         <div class="heroContent">
-            <span v-if="item.channel" :class="['pill', channelPillClass(item.channel)]" :style="pillStyle(item.channel)">{{ item.channel }}</span>
+            <ChannelPill :channel="item.channel" />
             <h1>{{ item.title }}</h1>
             <h2 v-if="item.subtitle">{{ item.subtitle }}</h2>
             <p v-if="item.synopsis">{{ item.synopsis }}</p>
@@ -26,8 +26,7 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
-import { channelPillClass } from '@/lib/browse';
-import { useChannelPillColors } from '@/lib/channelPillColors';
+import ChannelPill from '@/components/common/ChannelPill.vue';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { getThumbnailUrl } from '@/lib/utils';
 
@@ -39,7 +38,6 @@ const props = defineProps({
 });
 
 const { canPlay, play, download } = useBrowseActions();
-const { pillStyle } = useChannelPillColors();
 
 const heroStyle = computed(() => {
     const url = getThumbnailUrl(props.item.thumbnail);
