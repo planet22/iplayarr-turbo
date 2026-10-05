@@ -291,7 +291,7 @@ function openSegments(session) {
 <style lang="less">
 .tableToolbar {
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;

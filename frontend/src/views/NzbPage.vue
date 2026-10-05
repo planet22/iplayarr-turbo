@@ -7,8 +7,8 @@
 
         <legend>Recent Searches</legend>
         <div class="tableToolbar">
-            <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
             <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
+            <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
         </div>
         <table class="dataTable responsive-table">
             <colgroup>
@@ -62,8 +62,8 @@
 
         <legend>Recent Grabs</legend>
         <div class="tableToolbar">
-            <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
             <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
+            <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
         </div>
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
@@ -127,8 +127,8 @@
         <SettingsPageToolbar :icons="['delete']" delete-label="Clear Failed" @delete-queue-item="clearFailedGrabs" />
         <legend>Failed Grabs</legend>
         <div class="tableToolbar">
-            <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
             <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
+            <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
         </div>
         <table class="dataTable responsive-table">
             <colgroup>

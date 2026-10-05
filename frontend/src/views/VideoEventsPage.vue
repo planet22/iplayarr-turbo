@@ -2,8 +2,8 @@
     <SettingsPageToolbar :icons="['delete']" delete-label="Clear Log" @delete-queue-item="clearEvents" />
     <div class="inner-content scroll-x">
         <div class="tableToolbar">
-            <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
             <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
+            <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
         </div>
         <table class="dataTable eventLogTable responsive-table">
             <colgroup>
