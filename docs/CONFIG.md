@@ -52,7 +52,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
 | Download Limit | `ACTIVE_LIMIT` | `3` | Max simultaneous downloads. Must be a non-negative number. |
-| Download Client? | `DOWNLOAD_CLIENT` | `GET_IPLAYER` | `GET_IPLAYER` or `YTDLP` (experimental) — which tool actually performs full downloads (`AbstractDownloadService` implementations). |
+| Download Client? | `DOWNLOAD_CLIENT` | `GET_IPLAYER` | `GET_IPLAYER` or `YTDLP` (experimental) — which tool actually performs full downloads (`AbstractDownloadService` implementations). `YTDLP` in a non-root container needs `cap_add: [NET_BIND_SERVICE]` - see the note under [Stream Client](#streaming-settings--streaming) below. |
 | Additional Download Parameters _(advanced)_ | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | Extra CLI parameters appended to the `get_iplayer` download invocation. |
 | — | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (baked into the Docker image) | Path to the `get_iplayer` binary. Env-only; not in the Settings UI. |
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |
@@ -86,7 +86,7 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Media Mode | `MEDIA_MODE` | `strm` | `strm` (pointer file, resolved on playback) or `download` (full file). |
 | Stream Base URL | `STREAM_BASE_URL` | _(required when `MEDIA_MODE=strm`)_ | Address your media server uses to reach iPlayarr; validated as a URL on save. |
 | Stream Key | `STREAM_KEY` | _(auto-generated)_ | Secures `.strm` playback links, independent of `API_KEY`. |
-| Stream Client | `STREAM_CLIENT` | `NATIVE` | `GET_IPLAYER`, `YTDLP`, or `NATIVE`. |
+| Stream Client | `STREAM_CLIENT` | `NATIVE` | `GET_IPLAYER`, `YTDLP`, or `NATIVE`. `YTDLP` (for this or `DOWNLOAD_CLIENT` above) needs `cap_add: [NET_BIND_SERVICE]` in a non-root container (i.e. one with `PUID`/`PGID` set) - without it, iPlayarr's DNS relay (a workaround for a musl-libc bug that otherwise breaks yt-dlp's DNS resolution) silently fails to bind port 53 and yt-dlp's resolution can fail. |
 | Native Quality | `STREAM_NATIVE_ADAPTIVE` | `false` | Native client only. |
 | Native Quality Probe | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only. |
 | Native FHD Upgrade | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only. |

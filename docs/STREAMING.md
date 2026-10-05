@@ -39,6 +39,8 @@ Under Settings → Streaming:
 
 Native is recommended for most setups — it's the only client that resolves a single targeted playback path instead of walking every programme version, so playback starts noticeably faster.
 
+**Using `YTDLP`** (for this or `DOWNLOAD_CLIENT`) in a container that drops to a non-root user (i.e. `PUID`/`PGID` set) needs `cap_add: [NET_BIND_SERVICE]` - see [INSTALLATION.md](INSTALLATION.md#puid--pgid) for why.
+
 ### Native-only settings
 
 These only apply when `STREAM_CLIENT=NATIVE`:
