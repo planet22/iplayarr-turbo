@@ -56,8 +56,7 @@
                         </div>
                     </td>
                     <td data-title="Mode">
-                        <span class="pill">{{ session.mode }}</span>
-                        <div class="subtle">{{ clientLabel(session.client) }}</div>
+                        <span class="pill">{{ modeLabel(session) }}</span>
                     </td>
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
@@ -144,8 +143,7 @@
                         </div>
                     </td>
                     <td data-title="Mode">
-                        <span class="pill">{{ session.mode }}</span>
-                        <div class="subtle">{{ clientLabel(session.client) }}</div>
+                        <span class="pill">{{ modeLabel(session) }}</span>
                     </td>
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
@@ -237,6 +235,11 @@ const clientLabels = {
 
 function clientLabel(client) {
     return clientLabels[client] ?? client ?? '';
+}
+
+function modeLabel(session) {
+    const client = clientLabel(session.client);
+    return client ? `${session.mode} (${client})` : session.mode;
 }
 
 function openInfo(pid) {
