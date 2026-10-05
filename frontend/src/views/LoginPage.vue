@@ -83,7 +83,7 @@ const login = async () => {
     if (loginMethod.value == 'form'){
         const response = await ipFetch('auth/login', 'POST', loginForm.value);
         if (response.ok) {
-            router.push('/queue');
+            router.push('/browse');
         } else {
             error.value = true;
         }
@@ -112,7 +112,7 @@ const submitForgot = async () => {
 onMounted(async () => {
     const response = await ipFetch('auth/me');
     if (response.ok) {
-        router.push('/queue');
+        router.push('/browse');
     } else {
         const {data : methodResponse} = await ipFetch('auth/method');
         loginMethod.value = methodResponse.message;
