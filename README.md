@@ -42,6 +42,10 @@ This README covers the basics. For more detail, see `docs/`:
   <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/search.png" alt="Search View" width="49%">
   <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/details.png" alt="Details View" width="49%">
 </p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/channels.png" alt="Channels View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/schedule.png" alt="Schedule View" width="49%">
+</p>
 
 ## Why iPlayarr?
 
