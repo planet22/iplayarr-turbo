@@ -128,6 +128,7 @@ class NativeSearchService implements AbstractSearchService {
             size: details.runtime ? Math.floor(details.runtime * 60 * sizeFactor) : undefined,
             nzbName: await createNZBName(details, synonym),
             episodeTitle: details.episodeTitle,
+            runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
         };
     }
 

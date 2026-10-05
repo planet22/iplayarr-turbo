@@ -16,6 +16,9 @@ export interface QueueLibraryMetadata {
     episodeTitle?: string;
     channel?: string;
     pubDate?: string;
+    // Episode duration in seconds, when known - populates the .nfo <runtime> tag
+    // (nfoBuilder.ts) and the .strmtool.json runTimeTicks field (strmToolBuilder.ts).
+    runtimeSeconds?: number;
 }
 
 export interface QueueEntry {

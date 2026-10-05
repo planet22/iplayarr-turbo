@@ -136,6 +136,7 @@ class SubscriptionService {
             episodeTitle: details.episodeTitle,
             channel: details.channel,
             pubDate: details.firstBroadcast,
+            runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
         }, QueueEntrySource.MANUAL); // Not handed in by Sonarr/Radarr, so scoped like any other manual download (e.g. WRITE_NFO_STRM=manual)
         videoEventService.record(VideoEventType.QUEUED, `Subscription queued "${nzbName}" for download`, { pid });
         return nzbName;

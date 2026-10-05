@@ -18,6 +18,7 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | `OUTPUT_FORMAT` | `mp4` | No | `mp4` or `mkv`. |
 | `LIBRARY_FOLDER_STRUCTURE` | `false` | No | Jellyfin-style `Show/Season/...` folder nesting. |
 | `WRITE_NFO_STRM` | `none` | No | `none` / `all` / `nzb` / `manual` — writes `.nfo` metadata. |
+| `WRITE_STRMTOOL_JSON` | `false` | No | Also writes a `.strmtool.json` sidecar for `.strm` files (StrmTool Jellyfin plugin). Requires `WRITE_NFO_STRM` to be enabled. |
 | `TV_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat TV filenames. |
 | `MOVIE_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat movie filenames. |
 | `FALLBACK_FILENAME_SUFFIX` | `WEB.H264-BBC` | No | Suffix used when template metadata is unavailable. |

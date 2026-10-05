@@ -74,7 +74,7 @@ router.get('/details', async (req: Request, res: Response) => {
 });
 
 router.get('/download', async (req: Request, res: Response) => {
-    const { pid, title, series, episode, episodeTitle, channel, pubDate } = req.query as any;
+    const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime } = req.query as any;
     let { nzbName, type } = req.query as any;
 
     // Structured metadata for library folder/nfo generation (libraryPathBuilder.ts /
@@ -90,6 +90,7 @@ router.get('/download', async (req: Request, res: Response) => {
             episodeTitle,
             channel,
             pubDate,
+            runtimeSeconds: runtime != null ? parseInt(runtime) : undefined,
         }
         : undefined;
 
@@ -149,6 +150,7 @@ router.get('/download', async (req: Request, res: Response) => {
                     episodeTitle: calcEpisodeTitle,
                     channel: metadata.programme.ownership?.service?.title,
                     pubDate: metadata.programme.first_broadcast_date ?? undefined,
+                    runtimeSeconds: metadata.programme.versions?.length ? metadata.programme.versions[0].duration : undefined,
                 };
             }
         } catch {

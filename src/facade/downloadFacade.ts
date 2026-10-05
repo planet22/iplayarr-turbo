@@ -24,6 +24,7 @@ import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
 import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
+import { buildStrmToolJson } from '../utils/strmToolBuilder';
 import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
 
 class DownloadFacade {
@@ -58,6 +59,9 @@ class DownloadFacade {
         const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
         const useFolderStructure = (await configService.getParameter(IplayarrParameter.LIBRARY_FOLDER_STRUCTURE)) === 'true';
         const nfoWriteMode = await configService.getParameter(IplayarrParameter.WRITE_NFO_STRM);
+        const writeStrmToolJson = (await configService.getParameter(IplayarrParameter.WRITE_STRMTOOL_JSON)) === 'true';
+        const streamMode = await configService.getParameter(IplayarrParameter.STREAM_MODE);
+        const videoQuality = await configService.getParameter(IplayarrParameter.VIDEO_QUALITY);
 
         if (code === 0) {
             const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
@@ -95,7 +99,7 @@ class DownloadFacade {
                         queueItem.libraryPath = libraryPath.relativePath;
 
                         if (shouldWriteNfo(nfoWriteMode, queueItem.source)) {
-                            this.#writeLibrarySidecarFiles(queueItem, libraryPath);
+                            this.#writeLibrarySidecarFiles(queueItem, libraryPath, writeStrmToolJson, streamMode, videoQuality);
                         }
 
                         videoEventService.record(
@@ -133,7 +137,13 @@ class DownloadFacade {
     // the completed file IS already a .strm (produced by StrmDownloadService
     // and moved into place above), and for a real download a .strm would be
     // redundant since Jellyfin can already see the video file directly.
-    #writeLibrarySidecarFiles(item: QueueEntry, libraryPath: LibraryFilePath): void {
+    #writeLibrarySidecarFiles(
+        item: QueueEntry,
+        libraryPath: LibraryFilePath,
+        writeStrmToolJson: boolean,
+        streamMode?: string,
+        videoQuality?: string
+    ): void {
         const baseName = path.parse(libraryPath.fileName).name;
 
         const nfoContent = item.type === VideoType.MOVIE ? buildMovieNfo(item) : buildEpisodeNfo(item);
@@ -144,6 +154,14 @@ class DownloadFacade {
             if (!fs.existsSync(showNfoPath)) {
                 fs.writeFileSync(showNfoPath, buildShowNfo(item.library?.title ?? item.nzbName), 'utf8');
             }
+        }
+
+        // Only meaningful for .strm pointer files (see class comment above) -
+        // a real downloaded file needs no probe-skip hint since Jellyfin can
+        // already read its media info directly from disk.
+        if (writeStrmToolJson && item.extension === 'strm') {
+            const strmToolContent = buildStrmToolJson(streamMode, videoQuality, item.library?.runtimeSeconds);
+            fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.strmtool.json`), strmToolContent, 'utf8');
         }
     }
 

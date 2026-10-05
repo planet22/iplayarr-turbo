@@ -123,6 +123,7 @@ async function getDetails(xml: string): Promise<NZBDetails> {
                     episodeTitle: findMeta('episodeTitle'),
                     channel: findMeta('channel'),
                     pubDate: findMeta('pubDate'),
+                    runtimeSeconds: findMeta('runtime') != null ? parseInt(findMeta('runtime') as string) : undefined,
                 }
                 : undefined;
 

@@ -17,6 +17,10 @@ export interface IPlayerSearchResult {
     episodeTitle?: string;
     size?: number;
     pubDate?: Date;
+    // Episode duration in seconds, when known - carried through to the NZB (see
+    // Utils.ts#createNZBDownloadLink / DownloadNZBEndpoint.ts) so QueueLibraryMetadata.runtimeSeconds
+    // can populate the <runtime> NFO tag and the .strmtool.json runTimeTicks field.
+    runtimeSeconds?: number;
 }
 
 export interface IplayerSearchResultRequest {
