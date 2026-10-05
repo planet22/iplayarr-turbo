@@ -35,7 +35,7 @@
                     <span v-else class="channelName">{{ row.channel.title }}</span>
                 </RouterLink>
             </div>
-            <div ref="scrollEl" class="timelineScroll">
+            <div ref="scrollEl" class="timelineScroll" @wheel="onWheel">
                 <div class="timelineInner" :style="{ width: `${totalWidth}px` }">
                     <div class="hourRuler">
                         <span v-for="hour in hourMarks" :key="hour.left" class="hourMark" :style="{ left: `${hour.left}px` }">
@@ -93,6 +93,14 @@ const zoomBy = (delta) => {
 };
 const zoomOut = () => zoomBy(-ZOOM_STEP);
 const zoomIn = () => zoomBy(ZOOM_STEP);
+
+// Ctrl/Cmd+wheel (and trackpad pinch, which browsers report as ctrlKey wheel events) zooms the
+// timeline instead of scrolling the page, mirroring the zoom buttons.
+const onWheel = (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    zoomBy(event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+};
 
 const channels = ref([]);
 const failedLogos = reactive({});
@@ -339,6 +347,25 @@ onBeforeUnmount(() => {
     flex: 1;
     overflow-x: auto;
     min-width: 0;
+    scrollbar-width: thin;
+    scrollbar-color: @settings-button-hover-border-color transparent;
+
+    &::-webkit-scrollbar {
+        height: 10px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background-color: @settings-button-hover-border-color;
+        border-radius: 5px;
+
+        &:hover {
+            background-color: @brand-color;
+        }
+    }
 }
 
 .timelineInner {
