@@ -145,7 +145,8 @@ const fixCasing = (str) => {
 }
 
 .seriesDetails {
-    .pill.grey {
+    .pill.grey,
+    .pill.channelPill {
         padding: 3px 7px;
         font-weight: 300;
         font-size: 17px;
