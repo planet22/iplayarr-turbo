@@ -102,7 +102,6 @@
                     </td>
                     <td
                         data-title="Series"
-                        :class="{ seriesLink: result.seriesPid }"
                         :title="result.seriesPid ? 'View Series' : undefined"
                         @click="result.seriesPid ? router.push(`/browse/programme/${result.seriesPid}`) : download(result)"
                     >
@@ -585,14 +584,6 @@ watch(
 
                     :deep(.CheckInput-container) {
                         justify-content: center;
-                    }
-                }
-
-                &.seriesLink {
-                    color: @brand-color;
-
-                    &:hover {
-                        opacity: 0.8;
                     }
                 }
             }
