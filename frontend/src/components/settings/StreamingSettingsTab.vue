@@ -12,7 +12,7 @@
         <TextInput
             v-model="config.STREAM_BASE_URL"
             name="Stream Base URL"
-            tooltip="The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr, e.g. http://192.168.1.10:4404."
+            tooltip="The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
             :error="validationErrors.config?.STREAM_BASE_URL"
         />
         <TextInput

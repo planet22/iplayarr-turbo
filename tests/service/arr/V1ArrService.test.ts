@@ -59,7 +59,7 @@ describe('V1ArrService', () => {
             const result = V1ArrService.createIndexerRequestObject(form) as CreateProwlarrIndexerRequest;
 
             expect(result.priority).toBe(10);
-            expect(result.name).toBe('BBC (iPlayarr)');
+            expect(result.name).toBe('BBC (iPlayarr Turbo)');
             expect(result.indexerUrls).toEqual(['http://indexer.local']);
             expect(result.downloadClientId).toBe(9);
 

@@ -102,7 +102,7 @@ async function getDetails(xml: string): Promise<NZBDetails> {
                 const nzbName: string | undefined = title ? title?._ : undefined;
                 return reject({
                     isError: true,
-                    err: new Error('Invalid iPlayarr NZB File'),
+                    err: new Error('Invalid iPlayarr Turbo NZB File'),
                     nzbName,
                 } as DetailsRejection);
             }

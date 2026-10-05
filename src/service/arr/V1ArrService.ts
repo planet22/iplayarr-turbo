@@ -43,7 +43,7 @@ class V1ArrService extends V3ArrService {
             priority: form.priority || 25,
             added: new Date(),
             indexerUrls: [form.url],
-            name: `${form.name} (iPlayarr)`,
+            name: `${form.name} (iPlayarr Turbo)`,
             downloadClientId: form.downloadClientId,
             fields: [
                 ...createIndexRequestFieldsSkeleton,

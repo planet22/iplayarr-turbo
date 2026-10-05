@@ -126,8 +126,8 @@ const mediaModes = ref([
 ]);
 
 const streamModes = ref([
-    { key: 'direct', value: 'Direct (proxied through iPlayarr, supports seeking)' },
-    { key: 'progressive-mkv', value: 'Progressive MKV (ffmpeg remux, proxied through iPlayarr)' },
+    { key: 'direct', value: 'Direct (proxied through iPlayarr Turbo, supports seeking)' },
+    { key: 'progressive-mkv', value: 'Progressive MKV (ffmpeg remux, proxied through iPlayarr Turbo)' },
 ]);
 
 const saveEnabled = computed(() => {

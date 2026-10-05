@@ -75,8 +75,8 @@
                     </InfoBar>
                     <SelectInput
                         v-model="form.iplayarr.useSSL"
-                        name="iPlayarr Protocol"
-                        :tooltip="`iPlayarr Protocol for connection from ${capitalize(form.type)}`"
+                        name="iPlayarr Turbo Protocol"
+                        :tooltip="`iPlayarr Turbo Protocol for connection from ${capitalize(form.type)}`"
                         :options="[
                             { key: true, value: 'https' },
                             { key: false, value: 'http' },
@@ -84,14 +84,14 @@
                     />
                     <TextInput
                         v-model="form.iplayarr.host"
-                        name="iPlayarr Host"
-                        :tooltip="`iPlayarr Host for connection from ${capitalize(form.type)}`"
+                        name="iPlayarr Turbo Host"
+                        :tooltip="`iPlayarr Turbo Host for connection from ${capitalize(form.type)}`"
                     />
                     <TextInput
                         v-model="form.iplayarr.port"
-                        name="iPlayarr Port"
+                        name="iPlayarr Turbo Port"
                         type-override="number"
-                        :tooltip="`iPlayarr Port for connection from ${capitalize(form.type)}`"
+                        :tooltip="`iPlayarr Turbo Port for connection from ${capitalize(form.type)}`"
                     />
                 </template>
 
@@ -105,12 +105,12 @@
                     <TextInput
                         v-model="form.download_client.name"
                         name="Name"
-                        placeholder="iPlayarr"
+                        placeholder="iPlayarr Turbo"
                         :tooltip="`Name for Download Client in ${capitalize(form.type)}`"
                         :error="validationErrors?.download_client_name"
                     />
                     <InfoBar v-if="form.download_client.name" clazz="info small">
-                        Will appear in {{ capitalize(form.type) }} as "{{ form.download_client.name }} (iPlayarr)" -
+                        Will appear in {{ capitalize(form.type) }} as "{{ form.download_client.name }} (iPlayarr Turbo)" -
                         look for that exact name when matching it up {{ downstreamHint }}.
                     </InfoBar>
                     <TextInput
@@ -132,13 +132,13 @@
                     <TextInput
                         v-model="form.indexer.name"
                         name="Name"
-                        placeholder="iPlayarr"
+                        placeholder="iPlayarr Turbo"
                         :tooltip="`Name for Indexer in ${capitalize(form.type)}`"
                         :error="validationErrors?.indexer_name"
                     />
                     <InfoBar v-if="form.indexer.name" clazz="info small">
-                        Will appear in {{ capitalize(form.type) }} as "{{ form.indexer.name }} (iPlayarr)" - look for
-                        that exact name when matching it up {{ downstreamHint }}.
+                        Will appear in {{ capitalize(form.type) }} as "{{ form.indexer.name }} (iPlayarr Turbo)" - look
+                        for that exact name when matching it up {{ downstreamHint }}.
                     </InfoBar>
                     <TextInput
                         v-model="form.indexer.priority"

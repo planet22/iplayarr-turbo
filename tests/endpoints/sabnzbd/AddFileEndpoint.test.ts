@@ -47,7 +47,7 @@ const VALID_NZB_XML_WITH_LIBRARY_META = `<?xml version="1.0"?>
 </nzb>`;
 
 // Well-formed XML, but missing the <title> AddFileEndpoint requires - triggers
-// the "Invalid iPlayarr NZB File" rejection branch (as opposed to a real XML
+// the "Invalid iPlayarr Turbo NZB File" rejection branch (as opposed to a real XML
 // parse error). This branch is specifically for NZBs iplayarr-turbo didn't
 // generate itself (hence "invalid"), so unlike the attribute-based meta
 // format above, it reads the "name" meta's value as ordinary element text -
@@ -119,7 +119,7 @@ describe('AddFileEndpoint', () => {
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({
             status: false,
-            error: 'Invalid iPlayarr NZB File',
+            error: 'Invalid iPlayarr Turbo NZB File',
         });
     });
 
@@ -169,7 +169,7 @@ describe('AddFileEndpoint', () => {
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.json).toHaveBeenCalledWith({
             status: false,
-            error: 'Invalid iPlayarr NZB File',
+            error: 'Invalid iPlayarr Turbo NZB File',
         });
     });
 
