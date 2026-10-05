@@ -18,7 +18,7 @@
         <div class="meta">
             <div class="title" :title="item.title">{{ item.title }}</div>
             <div v-if="item.subtitle" class="subtitle" :title="item.subtitle">{{ item.subtitle }}</div>
-            <ChannelPill :channel="item.channel" :show-logo="false" />
+            <ChannelPill :channel="item.channel" />
         </div>
     </RouterLink>
 </template>

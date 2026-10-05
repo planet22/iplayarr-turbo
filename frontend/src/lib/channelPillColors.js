@@ -58,9 +58,5 @@ export const useChannelPillColors = () => {
         return color ? { backgroundColor: color.bg, borderColor: color.bg, color: color.fg } : {};
     };
 
-    // The channel's full logo path (json-api/browse/channel-logo/<masterBrand>.svg), independent
-    // of the enabled toggle - used for the hover popup even when pills themselves are plain.
-    const pillLogo = (channel) => (channel ? state.colors[channel.replaceAll(' ', '')]?.logo : undefined);
-
-    return { state, setEnabled, pillStyle, pillLogo };
+    return { state, setEnabled, pillStyle };
 };

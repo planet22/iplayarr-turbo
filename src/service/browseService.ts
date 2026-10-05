@@ -354,24 +354,20 @@ class BrowseService {
         return logos[masterBrand];
     }
 
-    // Each channel's brand colours (background + contrasting text) plus its logo URL, read off
-    // the same coloured icon channelLogo() serves - the "-active" SVG's first two fills are the
-    // background rect and the letter mark, in that order. Keyed the same way the channel pill CSS
-    // classes already are (title with spaces stripped, e.g. "BBC One" -> "BBCOne") so the frontend
-    // can look them up directly against whatever channel name a pill already carries.
-    async channelColors(): Promise<Record<string, { bg: string; fg: string; logo?: string }>> {
+    // Each channel's brand colours (background + contrasting text), read off the same coloured
+    // icon channelLogo() serves - the "-active" SVG's first two fills are the background rect and
+    // the letter mark, in that order. Keyed the same way the channel pill CSS classes already are
+    // (title with spaces stripped, e.g. "BBC One" -> "BBCOne") so the frontend can look them up
+    // directly against whatever channel name a pill already carries.
+    async channelColors(): Promise<Record<string, { bg: string; fg: string }>> {
         const icons = await this.#channelIconSvgs();
-        const colors: Record<string, { bg: string; fg: string; logo?: string }> = {};
+        const colors: Record<string, { bg: string; fg: string }> = {};
         for (const channel of BrowseChannels) {
             const svg = channel.masterBrand && icons[channel.masterBrand];
             if (!svg) continue;
             const fills = Array.from(svg.matchAll(/fill="(#[0-9a-f]{3,8})"/gi)).map((m) => m[1]);
             if (fills.length >= 2) {
-                colors[channel.title.replaceAll(' ', '')] = {
-                    bg: fills[0],
-                    fg: fills[1],
-                    logo: `json-api/browse/channel-logo/${channel.masterBrand}.svg`,
-                };
+                colors[channel.title.replaceAll(' ', '')] = { bg: fills[0], fg: fills[1] };
             }
         }
         return colors;
