@@ -5,6 +5,7 @@
             Prowlarr, not manual searches/downloads from within iPlayarr Turbo itself.
         </InfoBar>
 
+        <SettingsPageToolbar :icons="['delete']" delete-label="Clear Searches" @delete-queue-item="clearSearches" />
         <legend>Recent Searches</legend>
         <div class="tableToolbar">
             <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
@@ -60,6 +61,7 @@
         </table>
         <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
 
+        <SettingsPageToolbar :icons="['delete']" delete-label="Clear Grabs" @delete-queue-item="clearGrabs" />
         <legend>Recent Grabs</legend>
         <div class="tableToolbar">
             <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
@@ -336,6 +338,22 @@ const clearFailedGrabs = async () => {
         await ipFetch('json-api/stats/failedGrabHistory', 'DELETE');
         failedGrabHistory.value = [];
         failedGrabPage.value = 1;
+    }
+};
+
+const clearSearches = async () => {
+    if (await dialogService.confirm('Clear Recent Searches', 'Are you sure you want to clear the recent searches log?')) {
+        await ipFetch('json-api/stats/searchHistory', 'DELETE');
+        searchHistory.value = [];
+        searchPage.value = 1;
+    }
+};
+
+const clearGrabs = async () => {
+    if (await dialogService.confirm('Clear Recent Grabs', 'Are you sure you want to clear the recent grabs log?')) {
+        await ipFetch('json-api/stats/grabHistory', 'DELETE');
+        grabHistory.value = [];
+        grabPage.value = 1;
     }
 };
 </script>

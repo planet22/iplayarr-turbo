@@ -155,6 +155,10 @@ const streamSessionService = {
 
     getHistory,
 
+    clearHistory: async (): Promise<void> => {
+        await storage.setItem('streamHistory', []);
+    },
+
     // Deletes stream history entries whose stream ended more than STREAM_HISTORY_RETENTION_DAYS
     // ago - mirrors thumbnailCacheService.cleanup's age-based prune, run on the same nightly cron.
     cleanupHistory: async (): Promise<number> => {
