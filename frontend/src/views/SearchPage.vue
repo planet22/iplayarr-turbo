@@ -59,9 +59,10 @@
                 <col style="width: 40px" />
                 <col style="width: 70px" />
                 <col />
+                <col style="width: 110px" />
                 <col style="width: 160px" />
                 <col />
-                <col style="width: 85px" />
+                <col style="width: 95px" />
                 <col style="width: 100px" />
                 <col style="width: 190px" />
                 <col style="width: 44px" />
@@ -74,6 +75,7 @@
                     </th>
                     <th>Type</th>
                     <th>Title</th>
+                    <th>Series</th>
                     <th>Episode</th>
                     <th>Filename</th>
                     <th>Est. Size</th>
@@ -98,10 +100,16 @@
                     <td class="text" @click="download(result)">
                         {{ result.title }}
                     </td>
+                    <td
+                        data-title="Series"
+                        :class="{ seriesLink: result.seriesPid }"
+                        :title="result.seriesPid ? 'View Series' : undefined"
+                        @click="result.seriesPid ? router.push(`/browse/programme/${result.seriesPid}`) : download(result)"
+                    >
+                        {{ result.series ? `Series ${result.series}` : '-' }}
+                    </td>
                     <td data-title="Episode" @click="download(result)">
-                        {{
-                            result.episode ? `Series ${result.series}, Episode ${result.episode}` : result.episodeTitle
-                        }}
+                        {{ result.episode ? `Episode ${result.episode}` : result.episodeTitle }}
                     </td>
                     <td class="wrap" data-title="Filename" @click="download(result)">
                         {{ result.nzbName }}
@@ -313,6 +321,7 @@ watch(
 const posterItems = computed(() =>
     pagedResults.value.map((result) => ({
         pid: result.pid,
+        seriesPid: result.seriesPid,
         kind: 'episode',
         type: result.type,
         title: result.title,
@@ -576,6 +585,17 @@ watch(
 
                     :deep(.CheckInput-container) {
                         justify-content: center;
+                    }
+                }
+
+                &.seriesLink {
+                    color: @brand-color;
+                    text-decoration: underline;
+                    text-decoration-color: transparent;
+                    transition: text-decoration-color 150ms;
+
+                    &:hover {
+                        text-decoration-color: @brand-color;
                     }
                 }
             }
