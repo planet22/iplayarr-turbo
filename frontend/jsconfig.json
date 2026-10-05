@@ -4,7 +4,7 @@
         "module": "esnext",
         "moduleResolution": "bundler",
         "paths": {
-            "@/*": ["src/*"]
+            "@/*": ["./src/*"]
         },
         "lib": ["esnext", "dom", "dom.iterable"]
     },
