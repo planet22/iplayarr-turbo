@@ -325,8 +325,8 @@ class BrowseService {
 
     // Channel logos come from the inline SVG icons on iPlayer's own pages (the IBL API has none).
     // Fetched at runtime and cached rather than shipped in this repo, like the thumbnails.
-    async channelLogo(masterBrand: string): Promise<string | undefined> {
-        const logos: Record<string, string> = await this.longCache.getOr('channel_logos_v2', async () => {
+    async #channelIconSvgs(): Promise<Record<string, string>> {
+        return this.longCache.getOr('channel_logos_v2', async () => {
             const page = await axios.get('https://www.bbc.co.uk/iplayer', { headers: { 'User-Agent': 'Mozilla/5.0' } });
             const html = String(page.data);
             const nav: any[] = parseIplayerState(html)?.navigation?.items ?? [];
@@ -347,7 +347,30 @@ class BrowseService {
             }
             return found;
         });
+    }
+
+    async channelLogo(masterBrand: string): Promise<string | undefined> {
+        const logos = await this.#channelIconSvgs();
         return logos[masterBrand];
+    }
+
+    // Each channel's brand colours (background + contrasting text), read off the same coloured
+    // icon channelLogo() serves - the "-active" SVG's first two fills are the background rect and
+    // the letter mark, in that order. Keyed the same way the channel pill CSS classes already are
+    // (title with spaces stripped, e.g. "BBC One" -> "BBCOne") so the frontend can look them up
+    // directly against whatever channel name a pill already carries.
+    async channelColors(): Promise<Record<string, { bg: string; fg: string }>> {
+        const icons = await this.#channelIconSvgs();
+        const colors: Record<string, { bg: string; fg: string }> = {};
+        for (const channel of BrowseChannels) {
+            const svg = channel.masterBrand && icons[channel.masterBrand];
+            if (!svg) continue;
+            const fills = Array.from(svg.matchAll(/fill="(#[0-9a-f]{3,8})"/gi)).map((m) => m[1]);
+            if (fills.length >= 2) {
+                colors[channel.title.replaceAll(' ', '')] = { bg: fills[0], fg: fills[1] };
+            }
+        }
+        return colors;
     }
 
     channels(): BrowseChannel[] {

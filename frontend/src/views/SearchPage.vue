@@ -117,7 +117,7 @@
                         {{ formatStorageSize(result.size) }}
                     </td>
                     <td data-title="Channel" @click="download(result)">
-                        <span :class="['pill', result.channel.replaceAll(' ', '')]">
+                        <span :class="['pill', result.channel.replaceAll(' ', '')]" :style="pillStyle(result.channel)">
                             {{ result.channel }}
                         </span>
                     </td>
@@ -161,6 +161,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
+import { useChannelPillColors } from '@/lib/channelPillColors';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
@@ -169,6 +170,7 @@ import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();
+const { pillStyle } = useChannelPillColors();
 
 const searchResults = ref([]);
 const searchTerm = ref('');

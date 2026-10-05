@@ -25,7 +25,7 @@
                 <div class="info">
                     <RouterLink :to="`/browse/programme/${subscription.pid}`" class="title">{{ subscription.title }}</RouterLink>
                     <div class="details">
-                        <span v-if="subscription.channel" :class="['pill', subscription.channel.replaceAll(' ', '')]">{{ subscription.channel }}</span>
+                        <span v-if="subscription.channel" :class="['pill', subscription.channel.replaceAll(' ', '')]" :style="pillStyle(subscription.channel)">{{ subscription.channel }}</span>
                         <span>Checked {{ checkedLabel(subscription) }}</span>
                         <span v-if="subscription.lastQueuedAt">
                             Last download {{ formatRelativeTime(Date.parse(subscription.lastQueuedAt)) }}
@@ -51,12 +51,14 @@
 import { onMounted, reactive, ref } from 'vue';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import { useChannelPillColors } from '@/lib/channelPillColors';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { formatRelativeTime, getThumbnailUrl } from '@/lib/utils';
 
 const { subscriptions, loaded, load, unsubscribe } = useSubscriptions();
+const { pillStyle } = useChannelPillColors();
 const busy = reactive({});
 const checkingAll = ref(false);
 

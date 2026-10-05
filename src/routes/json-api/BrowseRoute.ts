@@ -94,6 +94,11 @@ router.get(
 );
 
 router.get(
+    '/channel-colors',
+    handle(async (_, res) => res.json(await browseService.channelColors()))
+);
+
+router.get(
     '/channel/:id',
     handle(async (req, res) => {
         const id = req.params.id as string;
