@@ -19,7 +19,7 @@ Sonarr/Radarr are told the correct nested relative path either way, so post-proc
 
 ## Step 1 — turn on folder structure
 
-Settings → Media Management → **Organize into Folder Structure?** (`LIBRARY_FOLDER_STRUCTURE`, default off). Once enabled, new completed downloads land at:
+Settings → Media Management → **Organize into Folder Structure?** (`LIBRARY_FOLDER_STRUCTURE`, default on). Once enabled, new completed downloads land at:
 
 ```
 COMPLETE_DIR/
@@ -35,7 +35,7 @@ This only applies going forward — existing completed files aren't moved retroa
 
 ## Step 2 — turn on NFO metadata
 
-Settings → Media Management → **Write .nfo Metadata Files?** (`WRITE_NFO_STRM`, default `none`). Set it to `all` and each completed item gets a matching `.nfo` file next to it:
+Settings → Media Management → **Write .nfo Metadata Files?** (`WRITE_NFO_STRM`, default `manual`). Set it to `all` and each completed item gets a matching `.nfo` file next to it:
 
 - TV episodes get an `<episodedetails>` NFO with title, show title, season/episode numbers, air date, runtime (minutes, from BBC's own programme metadata), and channel (as `<studio>`), plus a `tvshow.nfo` at the show folder root.
 - Movies get a `<movie>` NFO with title, air date, year, runtime, and channel.
@@ -58,9 +58,9 @@ With `LIBRARY_FOLDER_STRUCTURE` on, once Sonarr/Radarr imports (moves) a file ou
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `LIBRARY_FOLDER_STRUCTURE` | `false` | Jellyfin-style `Show/Season NN/...` and `Movie/...` folders |
+| `LIBRARY_FOLDER_STRUCTURE` | `true` | Jellyfin-style `Show/Season NN/...` and `Movie/...` folders |
 | `ARR_COMPLETE_DIR` | unset | Overrides `COMPLETE_DIR` for Sonarr/Radarr-queued TV downloads only |
-| `WRITE_NFO_STRM` | `none` | `none`/`all`/`nzb`/`manual` — writes `.nfo` metadata; independent of `MEDIA_MODE` |
+| `WRITE_NFO_STRM` | `manual` | `none`/`all`/`nzb`/`manual` — writes `.nfo` metadata; independent of `MEDIA_MODE` |
 | `WRITE_STRMTOOL_JSON` | `false` | Writes a `.strmtool.json` sidecar for `.strm` files; requires `WRITE_NFO_STRM` on |
 | `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC` | Advanced setting — only affects the flat (non-folder-structure) filename |
 | `MOVIE_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC` | Advanced setting — same caveat |
