@@ -8,7 +8,7 @@ This started as a ground-up modernization of the build/deploy tooling and depend
 
 **Features**
 
-- **Native streaming** — `STREAM_CLIENT=NATIVE` talks to BBC's streaming APIs directly instead of shelling out to `get_iplayer`/`yt-dlp`, with an adaptive bitrate ladder, an opt-in quality probe (`STREAM_NATIVE_HQ_PROBE`), and an experimental 1080p upgrade trick (`STREAM_NATIVE_EXPERIMENTAL_FHD`). See [docs/STREAMING.md](docs/STREAMING.md).
+- **Native streaming** — `STREAM_CLIENT=NATIVE` (default) talks to BBC's streaming APIs directly instead of shelling out to `get_iplayer`/`yt-dlp`, with an adaptive bitrate ladder, an opt-in quality probe (`STREAM_NATIVE_HQ_PROBE`), and a 1080p upgrade trick (`STREAM_NATIVE_EXPERIMENTAL_FHD`). See [docs/STREAMING.md](docs/STREAMING.md).
 - **`.strm` streaming mode** — `MEDIA_MODE=strm` writes a small pointer file instead of downloading the full media, so Sonarr/Radarr/Jellyfin see a "complete" item instantly and the file streams on demand through iPlayarr. See [docs/STREAMING.md](docs/STREAMING.md).
 - **Jellyfin-style library organization + NFO metadata** — `LIBRARY_FOLDER_STRUCTURE` nests completed downloads into `Show/Season NN/...` (or a movie folder); `WRITE_NFO_STRM` writes matching `.nfo` metadata alongside. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md).
 - **Browse UI** — Discover, Channels (with Now / Next), Categories (artwork tiles plus iPlayer's curated rails), A to Z and a Programme page, built on the BBC's iPlayer API with Redis caching. Play uses the in-app player and Download uses the normal queue. The search box suggests titles as you type, and the Search page gains a Posters view and a channel filter. See [docs/BROWSE.md](docs/BROWSE.md) and [docs/GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md).
@@ -35,13 +35,13 @@ This started as a ground-up modernization of the build/deploy tooling and depend
 
 ### Native streaming and `.strm` mode
 
-`MEDIA_MODE=strm` (default is `download`) makes completed items a tiny `.strm` pointer file instead of the full media — Sonarr/Radarr see it as complete right away, and it plays on demand when opened. `STREAM_CLIENT` picks what actually serves the stream when that `.strm` file is opened: `NATIVE` (`src/service/stream/NativeStreamService.ts`), `GET_IPLAYER` (`GetIplayerStreamService.ts`, uses `get_iplayer --streaminfo`), or `YTDLP` (`YTDLPStreamService.ts`) — selected via `AbstractStreamService`, same pluggable-base pattern as search/download.
+`MEDIA_MODE=strm` (default) makes completed items a tiny `.strm` pointer file instead of the full media — Sonarr/Radarr see it as complete right away, and it plays on demand when opened; set `download` to fetch the full file instead. `STREAM_CLIENT` picks what actually serves the stream when that `.strm` file is opened: `NATIVE` (default, `src/service/stream/NativeStreamService.ts`), `GET_IPLAYER` (`GetIplayerStreamService.ts`, uses `get_iplayer --streaminfo`), or `YTDLP` (`YTDLPStreamService.ts`) — selected via `AbstractStreamService`, same pluggable-base pattern as search/download.
 
 `NativeStreamService` resolves a playable URL by talking to BBC's `programmes/<pid>/playlist.json`, `mediaselector`, and HLS master playlist endpoints directly, bypassing `get_iplayer`/`yt-dlp` entirely for a large speed win (`get_iplayer --streaminfo` walks every programme version, each a ~13-15s CDN negotiation; native resolution is one targeted path). Three related flags, all under `STREAM_CLIENT=NATIVE`:
 
-- `STREAM_NATIVE_ADAPTIVE` (default `true`) — hand the player the full HLS bitrate ladder for standard ABR, versus pinning one fixed quality from `VIDEO_QUALITY`.
+- `STREAM_NATIVE_ADAPTIVE` (default `false`) — hand the player the full HLS bitrate ladder for standard ABR, versus pinning one fixed quality from `VIDEO_QUALITY` (the default).
 - `STREAM_NATIVE_HQ_PROBE` (default `false`) — fetch and compare every candidate HLS connection's real encoded height instead of trusting BBC's advertised connection metadata (which can under-report), at the cost of extra requests before playback starts.
-- `STREAM_NATIVE_EXPERIMENTAL_FHD` (default `false`) — an isolated, explicitly-labelled-experimental trick (`src/service/stream/experimental/bbcFhdUpgrade.ts`) that attempts to unlock genuine 1080p above BBC's usual 720p cap on native streams that have it; falls back cleanly if it doesn't apply.
+- `STREAM_NATIVE_EXPERIMENTAL_FHD` (default `true`) — an isolated trick (`src/service/stream/experimental/bbcFhdUpgrade.ts`) that attempts to unlock genuine 1080p above BBC's usual 720p cap on native streams that have it; falls back cleanly if it doesn't apply.
 
 `STREAM_MODE` controls how the resolved stream is served: `direct` (default, passthrough, supports seeking) or `progressive-mkv` (remuxed to MKV on the fly via ffmpeg, no seeking). `STREAM_BASE_URL` is the address your media server uses to reach iPlayarr for stream playback; `STREAM_KEY` is a separate secret (regenerable independently of `API_KEY`) that secures the links written into `.strm` files; `STREAM_CACHE_DIR` is where temporary files for in-flight streams live.
 
@@ -55,7 +55,7 @@ Two pieces have no API and are scraped from iPlayer's own pages, best-effort: ca
 
 ### Subscriptions
 
-`src/service/subscriptionService.ts` stores subscriptions in Redis (`QueuedStorage`, key `subscriptions`). Subscribing climbs to the show's brand pid and records every available episode as seen (refusing an empty list, which would otherwise make the first check download the whole back catalogue). A cron job (`17 * * * *`, in `taskService`) lists each show's episodes (paged), and queues unseen ones through `queueService.addToQueue` with `QueueEntrySource.MANUAL`, naming them with `createNZBName` and the matching synonym exactly as search results are named. Episodes already queued or in history are skipped; an episode that fails to queue stays unseen and is retried. See [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md).
+`src/service/subscriptionService.ts` stores subscriptions in Redis (`QueuedStorage`, key `subscriptions`). Subscribing climbs to the show's brand pid and records every available episode as seen (refusing an empty list, which would otherwise make the first check download the whole back catalogue). A cron job (`17 * * * *`, in `taskService`) lists each show's episodes (paged), and queues unseen ones through `queueService.addToQueue` with `QueueEntrySource.MANUAL`, naming them with `createNZBName` and the matching synonym exactly as search results are named. Episodes already queued or in history are skipped; an episode that fails to queue stays unseen and is retried. "Download all" simply starts a subscription with an empty seen list and runs its first check in the background (guarded by a per-subscription in-flight set so no second check overlaps it), queuing oldest first. See [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md).
 
 ### Jellyfin-style library organization
 

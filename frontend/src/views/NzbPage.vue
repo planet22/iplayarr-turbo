@@ -2,7 +2,7 @@
     <div class="inner-content scroll-x">
         <InfoBar>
             Diagnostics for the Newznab/SABnzbd integration - only reflects searches and grabs from Sonarr, Radarr, or
-            Prowlarr, not manual searches/downloads from within iPlayarr itself.
+            Prowlarr, not manual searches/downloads from within iPlayarr Turbo itself.
         </InfoBar>
 
         <legend>Recent Searches</legend>

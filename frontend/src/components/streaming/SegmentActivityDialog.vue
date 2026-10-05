@@ -182,6 +182,7 @@ function cellTitle(index) {
 }
 
 .segCell {
+    box-sizing: border-box;
     width: 100%;
     aspect-ratio: 1 / 1;
     border-radius: 2px;

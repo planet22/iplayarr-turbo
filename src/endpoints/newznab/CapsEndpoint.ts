@@ -5,7 +5,7 @@ import { NewzNabServerConfig } from '../../types/responses/newznab/CapsResponse'
 
 export default async (_: Request, res: Response) => {
     const serverConfig: NewzNabServerConfig = {
-        server: { $: { title: 'iPlayarr' } },
+        server: { $: { title: 'iPlayarr Turbo' } },
         limits: { $: { default: '100', max: '100' } },
         searching: {
             search: { $: { available: 'yes', supportedParams: 'q' } },

@@ -53,6 +53,14 @@
         :error="validationErrors.config?.WRITE_NFO_STRM"
         :options="nfoWriteModes"
     />
+    <SelectInput
+        v-if="config.WRITE_NFO_STRM !== 'none'"
+        v-model="config.WRITE_STRMTOOL_JSON"
+        name="Write .strmtool.json Files?"
+        tooltip="Alongside the .nfo, also write a .strmtool.json sidecar for the StrmTool Jellyfin plugin (jinlin-teck/StrmTool) so it can skip probing a .strm file. Only written for .strm files (Media Mode = Streaming). iPlayarr never probes the actual stream, so the codec/resolution in the file are informed guesses (BBC content is H.264/AAC; resolution from Video Quality), not measurements."
+        :error="validationErrors.config?.WRITE_STRMTOOL_JSON"
+        :options="trueOrFalse"
+    />
 
     <template v-if="showAdvanced">
         <TextInput

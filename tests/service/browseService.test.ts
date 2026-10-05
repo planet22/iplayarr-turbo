@@ -70,6 +70,16 @@ describe('browseService helpers', () => {
         expect(toBrowseItem(null)).toBeUndefined();
     });
 
+    it('toBrowseItem rejects category/collection promo tiles whose type is not a real programme kind', () => {
+        expect(toBrowseItem(element('p07jlk69', { type: 'promotion', master_brand: undefined }))).toBeUndefined();
+    });
+
+    it('toBrowseItem falls back to tleo_type for atoz/category listings wrapped as programme_large', () => {
+        const item = toBrowseItem(element('b01qm16p', { type: 'programme_large', tleo_type: 'brand' }));
+        expect(item?.kind).toBe('brand');
+        expect(item?.pid).toBe('b01qm16p');
+    });
+
     it('toBrowseItems drops invalid and duplicate entries', () => {
         const items = toBrowseItems([element('a1'), element('a1'), { id: 'bad' }, element('a2')]);
         expect(items.map((i) => i.pid)).toEqual(['a1', 'a2']);

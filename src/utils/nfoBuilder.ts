@@ -20,6 +20,14 @@ function premieredDate(pubDate?: string): string | undefined {
     return date.toISOString().substring(0, 10);
 }
 
+// Kodi/Jellyfin's <runtime> is whole minutes, while QueueLibraryMetadata.runtimeSeconds
+// is seconds (matches the BBC metadata it's sourced from) - round rather than truncate
+// so a 59m50s episode doesn't get reported as 59.
+function runtimeMinutes(runtimeSeconds?: number): number | undefined {
+    if (!runtimeSeconds) return undefined;
+    return Math.round(runtimeSeconds / 60);
+}
+
 export function buildEpisodeNfo(item: QueueEntry): string {
     const library = item.library;
     const showTitle = escapeXml(library?.title);
@@ -28,6 +36,7 @@ export function buildEpisodeNfo(item: QueueEntry): string {
     const episode = library?.episode ?? 0;
     const premiered = premieredDate(library?.pubDate);
     const studio = escapeXml(library?.channel);
+    const runtime = runtimeMinutes(library?.runtimeSeconds);
 
     let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
     xml += '<episodedetails>\n';
@@ -40,6 +49,9 @@ export function buildEpisodeNfo(item: QueueEntry): string {
     }
     xml += `  <season>${season}</season>\n`;
     xml += `  <episode>${episode}</episode>\n`;
+    if (runtime) {
+        xml += `  <runtime>${runtime}</runtime>\n`;
+    }
     if (studio) {
         xml += `  <studio>${studio}</studio>\n`;
     }
@@ -53,6 +65,7 @@ export function buildMovieNfo(item: QueueEntry): string {
     const premiered = premieredDate(library?.pubDate);
     const year = premiered?.substring(0, 4);
     const studio = escapeXml(library?.channel);
+    const runtime = runtimeMinutes(library?.runtimeSeconds);
 
     let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
     xml += '<movie>\n';
@@ -63,6 +76,9 @@ export function buildMovieNfo(item: QueueEntry): string {
     }
     if (year) {
         xml += `  <year>${year}</year>\n`;
+    }
+    if (runtime) {
+        xml += `  <runtime>${runtime}</runtime>\n`;
     }
     if (studio) {
         xml += `  <studio>${studio}</studio>\n`;

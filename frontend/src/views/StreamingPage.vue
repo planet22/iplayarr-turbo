@@ -27,7 +27,7 @@
                     <th>Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
-                    <th class="chipCol" title="Native experimental FHD upgrade">FHD</th>
+                    <th class="chipCol" title="Native FHD upgrade">FHD</th>
                     <th class="chipCol" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
                     <th>Client IP</th>
@@ -115,7 +115,7 @@
                     <th>Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
-                    <th class="chipCol" title="Native experimental FHD upgrade">FHD</th>
+                    <th class="chipCol" title="Native FHD upgrade">FHD</th>
                     <th class="chipCol" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
                     <th>Client IP</th>

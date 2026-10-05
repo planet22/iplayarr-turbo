@@ -9,6 +9,7 @@ Two settings fix that without changing anything about how Sonarr/Radarr see the 
 - **`LIBRARY_FOLDER_STRUCTURE`** — nests completed files into `Show Title/Season 01/Show Title - S01E02 - Episode Title.ext` for TV, and `Movie Title/Movie Title.ext` for movies, instead of one flat folder.
 - **`ARR_COMPLETE_DIR`** — optional override of `COMPLETE_DIR` for TV downloads only (what the *arr imports), so TV and Movie content can live under separate root folders. Leave unset to keep using `COMPLETE_DIR` for everything.
 - **`WRITE_NFO_STRM`** — writes a Jellyfin/Kodi/Emby-compatible `.nfo` metadata file alongside each item (episode title, air date, season/episode numbers, channel), and a `tvshow.nfo` at the show-folder level. Can be scoped to only downloads added by Sonarr/Radarr (`nzb`) or only ones triggered manually from the UI (`manual`), as well as `all`/`none`.
+- **`WRITE_STRMTOOL_JSON`** — when `WRITE_NFO_STRM` is enabled, also writes a `.strmtool.json` sidecar next to each `.strm` file (Media Mode = Streaming only), for the [StrmTool Jellyfin plugin](https://github.com/jinlin-teck/StrmTool)'s probe-skip cache.
 
 Sonarr/Radarr are told the correct nested relative path either way, so post-processing and series/episode matching keep working normally.
 
@@ -36,12 +37,18 @@ This only applies going forward — existing completed files aren't moved retroa
 
 Settings → Media Management → **Write .nfo Metadata Files?** (`WRITE_NFO_STRM`, default `none`). Set it to `all` and each completed item gets a matching `.nfo` file next to it:
 
-- TV episodes get an `<episodedetails>` NFO with title, show title, season/episode numbers, air date, and channel (as `<studio>`), plus a `tvshow.nfo` at the show folder root.
-- Movies get a `<movie>` NFO with title, air date, year, and channel.
+- TV episodes get an `<episodedetails>` NFO with title, show title, season/episode numbers, air date, runtime (minutes, from BBC's own programme metadata), and channel (as `<studio>`), plus a `tvshow.nfo` at the show folder root.
+- Movies get a `<movie>` NFO with title, air date, year, runtime, and channel.
 
 Use `nzb` or `manual` instead of `all` to only write NFOs for downloads Sonarr/Radarr queued, or only ones you triggered manually from the UI, respectively.
 
 Despite the setting's name, this isn't limited to `.strm` streaming mode — it writes NFO files for any completed download (full file or `.strm` pointer) when enabled. Point your media server's library scan at `COMPLETE_DIR` (and `ARR_COMPLETE_DIR`, if set) and it will pick up both the folder structure and the NFO metadata the way it would any other Jellyfin-style library.
+
+## Step 3 — turn on .strmtool.json sidecars (optional, Streaming mode only)
+
+If `MEDIA_MODE` is set to Streaming, iPlayarr's completed items are `.strm` pointer files rather than real media files, so Jellyfin has to probe the proxied stream (via `/api?mode=stream`) to learn its codec/resolution before it can play or transcode it. The [StrmTool Jellyfin plugin](https://github.com/jinlin-teck/StrmTool) can skip that probe if a `.strmtool.json` cache file sits next to the `.strm`.
+
+Settings → Media Management → **Write .strmtool.json Files?** (`WRITE_STRMTOOL_JSON`, default off), shown once `WRITE_NFO_STRM` is enabled. iPlayarr doesn't actually probe the stream it's pointing to, so the codec/resolution written into the file are informed guesses, not measurements: BBC iPlayer content is always H.264/AAC (remuxing to MKV under `STREAM_MODE=progressive-mkv` uses a lossless `-c copy`, so this holds either way), and the resolution reflects your `VIDEO_QUALITY` ceiling rather than anything actually delivered. `runTimeTicks` is the one field that *is* real, taken from BBC's own programme duration rather than guessed.
 
 ## Field reference
 
@@ -50,6 +57,7 @@ Despite the setting's name, this isn't limited to `.strm` streaming mode — it 
 | `LIBRARY_FOLDER_STRUCTURE` | `false` | Jellyfin-style `Show/Season NN/...` and `Movie/...` folders |
 | `ARR_COMPLETE_DIR` | unset | Overrides `COMPLETE_DIR` for TV downloads only |
 | `WRITE_NFO_STRM` | `none` | `none`/`all`/`nzb`/`manual` — writes `.nfo` metadata; independent of `MEDIA_MODE` |
+| `WRITE_STRMTOOL_JSON` | `false` | Writes a `.strmtool.json` sidecar for `.strm` files; requires `WRITE_NFO_STRM` on |
 | `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC` | Advanced setting — only affects the flat (non-folder-structure) filename |
 | `MOVIE_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC` | Advanced setting — same caveat |
 

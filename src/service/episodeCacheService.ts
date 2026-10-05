@@ -173,6 +173,7 @@ async function createResult(term: string, details: IPlayerDetails, sizeFactor: n
         type: VideoType.TV,
         size,
         nzbName,
+        runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
     };
 }
 

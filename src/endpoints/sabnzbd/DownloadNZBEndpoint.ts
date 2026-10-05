@@ -17,10 +17,11 @@ interface DownloadNZBRequest {
     episodeTitle?: string;
     channel?: string;
     pubDate?: string;
+    runtime?: string;
 }
 
 export default async (req: Request, res: Response) => {
-    const { pid, nzbName, type, app, title, series, episode, episodeTitle, channel, pubDate } =
+    const { pid, nzbName, type, app, title, series, episode, episodeTitle, channel, pubDate, runtime } =
         req.query as any as DownloadNZBRequest;
 
     const date: Date = new Date();
@@ -67,6 +68,7 @@ export default async (req: Request, res: Response) => {
         ['episodeTitle', episodeTitle],
         ['channel', channel],
         ['pubDate', pubDate],
+        ['runtime', runtime],
     ];
     for (const [metaType, value] of libraryMeta) {
         if (value != null) {

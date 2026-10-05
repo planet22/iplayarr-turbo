@@ -1,6 +1,20 @@
 <template>
-    <IPlayarrModal :title="item?.nzbName || fallbackTitle || pid" :show-close="true" close-label="Close">
+    <IPlayarrModal
+        :title="item?.nzbName || fallbackTitle || pid"
+        :show-cancel="!!item"
+        :cancel-label="deleteLabel"
+        show-close
+        close-label="Close"
+        @cancel="deleteItem"
+    >
         <MediaInfoHero :pid="pid" :title="item?.nzbName" :type="item?.type" />
+
+        <div class="button-row">
+            <button class="clickable preview-button" @click="preview">
+                <font-awesome-icon :icon="['fas', 'play']" />
+                Play Video
+            </button>
+        </div>
 
         <template v-if="item">
             <div v-if="item.library" class="infoSection">
@@ -25,6 +39,22 @@
                     <template v-if="item.library.pubDate">
                         <dt>Air Date</dt>
                         <dd>{{ formatDate(item.library.pubDate) }}</dd>
+                    </template>
+                </dl>
+            </div>
+
+            <div class="infoSection">
+                <h3>Download</h3>
+                <dl class="infoGrid">
+                    <dt>Status</dt>
+                    <dd>{{ item.status }}</dd>
+                    <template v-if="requestedByApp">
+                        <dt>Requested By</dt>
+                        <dd>{{ requestedByApp.name }}</dd>
+                    </template>
+                    <template v-if="item.details?.start">
+                        <dt>Started</dt>
+                        <dd>{{ formatDate(item.details.start) }}</dd>
                     </template>
                 </dl>
             </div>
@@ -59,16 +89,6 @@
             </div>
         </template>
         <p v-else class="empty">This item is no longer in the queue or history.</p>
-
-        <div class="button-container floor">
-            <button class="clickable preview-button" @click="preview">
-                <font-awesome-icon :icon="['fas', 'play']" />
-                Play Video
-            </button>
-            <button v-if="item" class="clickable cancel" @click="deleteItem">
-                {{ deleteLabel }}
-            </button>
-        </div>
     </IPlayarrModal>
 </template>
 
@@ -93,6 +113,7 @@ const props = defineProps({
 
 const queue = inject('queue');
 const history = inject('history');
+const apps = inject('apps');
 const followLog = ref(true);
 const fallbackTitle = ref(null);
 
@@ -108,6 +129,8 @@ const item = computed(
         queue.value.find(({ pid }) => pid == props.pid) ||
         history.value.find(({ pid }) => pid == props.pid)
 );
+
+const requestedByApp = computed(() => apps.value.find(({ id }) => id == item.value?.appId));
 
 const deleteLabel = computed(() => {
     const status = item.value?.status;
@@ -185,6 +208,12 @@ const deleteItem = async () => {
 
 .empty {
     color: @subtle-text-color;
+}
+
+.button-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.75rem;
 }
 
 .preview-button svg {

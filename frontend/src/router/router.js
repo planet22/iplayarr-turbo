@@ -24,7 +24,7 @@ import TilesPage from '@/views/TilesPage.vue';
 import VideoEventsPage from '@/views/VideoEventsPage.vue';
 
 const routes = [
-    { path: '/', redirect: '/queue' },
+    { path: '/', redirect: '/browse' },
     { path: '/queue', component: QueuePage },
     { path: '/info', component: QueueInfoPage, name: 'queueInfo' },
     { path: '/logs', component: LogsPage },

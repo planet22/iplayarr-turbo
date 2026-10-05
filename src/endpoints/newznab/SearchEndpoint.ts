@@ -90,7 +90,7 @@ export default async (req: Request, res: Response) => {
         },
         channel: {
             'atom:link': { $: { rel: 'self', type: 'application/rss+xml' } },
-            title: 'iPlayarr',
+            title: 'iPlayarr Turbo',
             item: items,
         },
     } as NewzNabSearchResponse;

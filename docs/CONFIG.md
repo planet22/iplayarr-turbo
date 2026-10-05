@@ -72,6 +72,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Archive Downloads? | `ARCHIVE_ENABLED` | `false` | Keep cancelled/removed queue and history items instead of discarding them. See `src/facade/downloadFacade.ts` and `historyService.addArchive`. |
 | Organize into Folder Structure? | `LIBRARY_FOLDER_STRUCTURE` | `false` | Jellyfin-style `Show/Season NN/...` and `Movie/...` nesting under `COMPLETE_DIR`. See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
 | Write .nfo Metadata Files? | `WRITE_NFO_STRM` | `none` | `none` / `all` / `nzb` (Sonarr/Radarr-triggered only) / `manual` (UI-triggered only). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
+| Write .strmtool.json Files? | `WRITE_STRMTOOL_JSON` | `false` | Also writes a `.strmtool.json` sidecar next to each `.strm` file, for the StrmTool Jellyfin plugin's probe-skip cache. Only takes effect when `WRITE_NFO_STRM` is enabled and the completed item is a `.strm` (Media Mode = Streaming). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
 | TV Filename Template _(advanced)_ | `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC` | Handlebars template; only affects the flat (non-folder-structure) filename. Must compile against `{title, season, episode, episodeTitle, synonym, quality}`. |
 | Movie Filename Template _(advanced)_ | `MOVIE_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC` | Same caveat as above. |
 | — | `FALLBACK_FILENAME_SUFFIX` | `WEB.H264-BBC` | Env-only; suffix used when the structured metadata needed for the normal template isn't available. |
@@ -82,13 +83,13 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
-| Media Mode | `MEDIA_MODE` | `download` | `download` (full file) or `strm` (pointer file, resolved on playback). |
+| Media Mode | `MEDIA_MODE` | `strm` | `strm` (pointer file, resolved on playback) or `download` (full file). |
 | Stream Base URL | `STREAM_BASE_URL` | _(required when `MEDIA_MODE=strm`)_ | Address your media server uses to reach iPlayarr; validated as a URL on save. |
 | Stream Key | `STREAM_KEY` | _(auto-generated)_ | Secures `.strm` playback links, independent of `API_KEY`. |
-| Stream Client | `STREAM_CLIENT` | `GET_IPLAYER` | `GET_IPLAYER`, `YTDLP`, or `NATIVE`. |
-| Native Quality | `STREAM_NATIVE_ADAPTIVE` | `true` | Native client only. |
+| Stream Client | `STREAM_CLIENT` | `NATIVE` | `GET_IPLAYER`, `YTDLP`, or `NATIVE`. |
+| Native Quality | `STREAM_NATIVE_ADAPTIVE` | `false` | Native client only. |
 | Native Quality Probe | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only. |
-| Native FHD Upgrade (Experimental) | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `false` | Native client only, unsupported/experimental. |
+| Native FHD Upgrade | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only. |
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
 | Stream Cache Directory _(advanced)_ | `STREAM_CACHE_DIR` | temp folder | Scratch space for in-flight streams. |
 | — | `THUMBNAIL_CACHE_DIR` | temp folder | Where cached BBC episode thumbnails are stored. Env-only. |

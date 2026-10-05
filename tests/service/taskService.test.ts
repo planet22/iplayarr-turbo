@@ -1,14 +1,15 @@
-import cron from 'node-cron';
-
 import downloadFacade from '../../src/facade/downloadFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import configService from '../../src/service/configService';
+import cronJobService from '../../src/service/cronJobService';
 import episodeCacheService from '../../src/service/episodeCacheService';
+import streamSessionService from '../../src/service/stream/streamSessionService';
+import subscriptionService from '../../src/service/subscriptionService';
 import TaskService from '../../src/service/taskService';
+import thumbnailCacheService from '../../src/service/thumbnailCacheService';
 
-// Mock dependencies
-jest.mock('node-cron', () => ({
-    schedule: jest.fn(),
+jest.mock('../../src/service/cronJobService', () => ({
+    defineTask: jest.fn(),
 }));
 
 jest.mock('../../src/service/configService', () => ({
@@ -20,60 +21,89 @@ jest.mock('../../src/facade/scheduleFacade', () => ({
 }));
 
 jest.mock('../../src/facade/downloadFacade', () => ({
-    cleanupFailedDownloads: jest.fn(),
+    cleanupFailedDownloads: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('../../src/service/episodeCacheService', () => ({
     recacheAllSeries: jest.fn(),
 }));
 
+jest.mock('../../src/service/subscriptionService', () => ({
+    checkAll: jest.fn(),
+}));
+
+jest.mock('../../src/service/thumbnailCacheService', () => ({
+    cleanup: jest.fn(),
+}));
+
+jest.mock('../../src/service/stream/streamSessionService', () => ({
+    cleanupHistory: jest.fn(),
+}));
+
+const definedTasks = () => {
+    const tasks: Record<string, { definition: any; run: () => Promise<unknown> }> = {};
+    for (const [definition, run] of (cronJobService.defineTask as jest.Mock).mock.calls) {
+        tasks[definition.id] = { definition, run };
+    }
+    return tasks;
+};
+
 describe('TaskService', () => {
     beforeEach(() => {
         jest.clearAllMocks();
     });
 
-    it('should schedule a cron job with the configured schedule', async () => {
-        // Mock config values
+    it('registers the schedule-refresh task with the configured cron and refreshes/cleans up when run', async () => {
         (configService.getParameter as jest.Mock)
             .mockResolvedValueOnce('*/5 * * * *') // REFRESH_SCHEDULE
             .mockResolvedValueOnce('false'); // NATIVE_SEARCH
 
-        const cronCallback = jest.fn();
-        (cron.schedule as jest.Mock).mockImplementation((expression, callback) => {
-            cronCallback.mockImplementation(callback); // Save the callback for later execution
-            return {};
-        });
-
-        // Run init
         await TaskService.init();
 
-        // Check cron.schedule was called with correct expression
-        expect(cron.schedule).toHaveBeenCalledWith('*/5 * * * *', expect.any(Function));
+        const { 'schedule-refresh': task } = definedTasks();
+        expect(task.definition.cron).toBe('*/5 * * * *');
 
-        // Execute scheduled job manually
-        await cronCallback();
+        await task.run();
 
         expect(scheduleFacade.refreshCache).toHaveBeenCalled();
         expect(downloadFacade.cleanupFailedDownloads).toHaveBeenCalled();
         expect(episodeCacheService.recacheAllSeries).toHaveBeenCalled();
     });
 
-    it('should skip recaching if native search is enabled', async () => {
+    it('skips recaching if native search is enabled', async () => {
         (configService.getParameter as jest.Mock)
             .mockResolvedValueOnce('*/5 * * * *') // REFRESH_SCHEDULE
             .mockResolvedValueOnce('true'); // NATIVE_SEARCH
 
-        const cronCallback = jest.fn();
-        (cron.schedule as jest.Mock).mockImplementation((expression, callback) => {
-            cronCallback.mockImplementation(callback);
-            return {};
-        });
-
         await TaskService.init();
-        await cronCallback();
+
+        const { 'schedule-refresh': task } = definedTasks();
+        await task.run();
 
         expect(scheduleFacade.refreshCache).toHaveBeenCalled();
         expect(downloadFacade.cleanupFailedDownloads).toHaveBeenCalled();
         expect(episodeCacheService.recacheAllSeries).not.toHaveBeenCalled();
+    });
+
+    it('registers the fixed-schedule maintenance tasks', async () => {
+        (configService.getParameter as jest.Mock)
+            .mockResolvedValueOnce('*/5 * * * *')
+            .mockResolvedValueOnce('false');
+
+        await TaskService.init();
+
+        const tasks = definedTasks();
+        expect(tasks['subscriptions-check'].definition.cron).toBe('17 * * * *');
+        expect(tasks['thumbnail-cleanup'].definition.cron).toBe('35 3 * * *');
+        expect(tasks['stream-history-cleanup'].definition.cron).toBe('40 3 * * *');
+
+        await tasks['subscriptions-check'].run();
+        expect(subscriptionService.checkAll).toHaveBeenCalled();
+
+        await tasks['thumbnail-cleanup'].run();
+        expect(thumbnailCacheService.cleanup).toHaveBeenCalled();
+
+        await tasks['stream-history-cleanup'].run();
+        expect(streamSessionService.cleanupHistory).toHaveBeenCalled();
     });
 });

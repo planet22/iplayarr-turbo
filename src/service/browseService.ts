@@ -53,10 +53,20 @@ export function parseIplayerState(html: string): any {
 
 export function toBrowseItem(element: any): BrowseItem | undefined {
     if (!element?.id || !element?.title) return undefined;
+    // Rails like a channel's "highlights" mix in category/collection promo tiles whose id isn't a
+    // real programme pid (e.g. "Comedy" pointing at p07jlk69). atoz/category listings wrap the real
+    // item in `type: "programme_large"` and carry the actual kind in `tleo_type` instead - only
+    // elements where one of those fields names an actual episode/series/brand are safe to route to
+    // the programme page.
+    const kind: BrowseKind | undefined = KINDS.includes(element.type)
+        ? element.type
+        : KINDS.includes(element.tleo_type)
+          ? element.tleo_type
+          : undefined;
+    if (!kind) return undefined;
 
     const imageUrl: string | undefined = element.images?.standard ?? element.images?.portrait ?? element.image?.standard;
     const imagePid = typeof imageUrl === 'string' ? IMAGE_PID_REGEX.exec(imageUrl)?.[1] : undefined;
-    const kind: BrowseKind = KINDS.includes(element.type) ? element.type : 'episode';
 
     return {
         pid: element.id,

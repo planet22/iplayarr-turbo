@@ -102,7 +102,7 @@ async function getDetails(xml: string): Promise<NZBDetails> {
                 const nzbName: string | undefined = title ? title?._ : undefined;
                 return reject({
                     isError: true,
-                    err: new Error('Invalid iPlayarr NZB File'),
+                    err: new Error('Invalid iPlayarr Turbo NZB File'),
                     nzbName,
                 } as DetailsRejection);
             }
@@ -123,6 +123,7 @@ async function getDetails(xml: string): Promise<NZBDetails> {
                     episodeTitle: findMeta('episodeTitle'),
                     channel: findMeta('channel'),
                     pubDate: findMeta('pubDate'),
+                    runtimeSeconds: findMeta('runtime') != null ? parseInt(findMeta('runtime') as string) : undefined,
                 }
                 : undefined;
 

@@ -45,6 +45,7 @@ export default async (req: Request, res: Response) => {
             episodeTitle: calcEpisodeTitle,
             channel: metadata.programme.ownership?.service?.title,
             pubDate: metadata.programme.first_broadcast_date ?? undefined,
+            runtimeSeconds: metadata.programme.versions?.length ? metadata.programme.versions[0].duration : undefined,
         };
     }
 

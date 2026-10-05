@@ -47,6 +47,41 @@ services:
 
 (This repo's own `docker-compose.redis.yml` is dev tooling only — a throwaway local Redis for `npm run serve:redis`, not a deployment template. There's no other docker-compose file checked into the repository; any other compose file you might find alongside a working copy is personal/gitignored deployment config, not something this doc should assume.)
 
+## Typical real-world setup
+
+A more realistic deployment than the minimal example above, for anyone running Sonarr/Radarr on a NAS-based Docker host. The pieces that differ from the minimal example:
+
+**iPlayer is only reachable from a UK-based network/IP.** If your Docker host isn't itself UK-based, iPlayarr needs to reach the internet from one, by whatever means you'd normally use to give a single container a UK egress (a UK-based host, a routed subnet, etc.) — that's outside the scope of this doc; just make sure whatever you use doesn't change the container's exposed port or the paths below.
+
+```yaml
+# docker-compose.yaml
+services:
+    iplayarr:
+        image: 'ghcr.io/planet22/iplayarr-turbo:latest'
+        container_name: iplayarr
+        environment:
+            - 'API_KEY=${IPLAYERARR_API_KEY}'
+            - 'DOWNLOAD_DIR=/data/downloads/iplayarr/incomplete'
+            - 'COMPLETE_DIR=/data/downloads/iplayarr/complete'
+            - 'PUID=${USER_ID}'
+            - 'PGID=${GROUP_ID}'
+            - 'TZ=${TIMEZONE}'
+        ports:
+            - '4404:4404'
+        volumes:
+            - '${DATA_ROOT}/downloads:/data/downloads'
+            - '${CONFIG_ROOT}/cache:/data'
+            - '${CONFIG_ROOT}/config:/config'
+            - '${CONFIG_ROOT}/logs:/logs'
+        restart: unless-stopped
+```
+
+Points worth calling out:
+
+- **Use absolute host paths in `.env`** (`CONFIG_ROOT=/volume1/docker/iplayarr`, `DATA_ROOT=/volume1/media`), not relative (`./...`) ones, if this stack is managed by any tool that rewrites relative paths on deploy (Portainer, Dockhand, etc.) — a path that's only relative after variable substitution (e.g. `${CONFIG_ROOT:-.}/cache`) can silently resolve against that tool's own internal working directory instead of the real host path.
+- **`PUID`/`PGID` from `.env`** (`USER_ID`/`GROUP_ID`), matching the UID/GID that owns the media library on the host — see [PUID / PGID](#puid--pgid) below.
+- Because all persistent state is in Redis under `/config` (see [REDIS.md](REDIS.md)), the stack can be freely recreated/rebuilt without losing settings, queue/history, or sessions.
+
 ## Volume mounts explained
 
 | Container path | Purpose | Backed by |
