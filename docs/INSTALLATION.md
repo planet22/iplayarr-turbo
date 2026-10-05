@@ -101,6 +101,8 @@ If you use `ARR_COMPLETE_DIR` to separate TV from movies, or `STREAM_CACHE_DIR`/
 
 `docker_entry.sh` runs as root initially, creates (or reuses) a group/user matching `PGID`/`PUID` (default `1000`/`1000` if unset), `chown`s `/data`, `/config`, `/logs`, and anything under `/app` not already owned by that UID/GID, then drops privileges via `su-exec` before actually starting the app. Set these to match the UID/GID that owns your media library on the host, the same way you would for any LinuxServer.io-style image — otherwise the files iPlayarr writes under `/complete` may not be readable/writable by whatever else manages that library.
 
+**If you use `STREAM_CLIENT=YTDLP` or `DOWNLOAD_CLIENT=YTDLP`**, also add `cap_add: [NET_BIND_SERVICE]` (or `--cap-add=NET_BIND_SERVICE` for `docker run`). Dropping to a non-root user here means the process can no longer bind port 53, which iPlayarr needs for a local DNS relay that works around a musl-libc bug breaking yt-dlp's DNS resolution — without the capability, the relay just silently fails to start and yt-dlp's resolution can fail the same way it did before that fix existed. Not needed for the default `GET_IPLAYER`/`NATIVE` clients.
+
 ## Updating the container
 
 ```bash
