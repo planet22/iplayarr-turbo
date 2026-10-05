@@ -29,6 +29,11 @@ jest.mock('fs', () => ({
     stat: jest.fn(),
     readdir: jest.fn(),
     existsSync: jest.fn(),
+    promises: {
+        readdir: jest.fn(),
+        stat: jest.fn(),
+        rm: jest.fn(),
+    },
 }));
 
 jest.mock('child_process', () => ({
@@ -463,47 +468,80 @@ describe('DownloadFacade', () => {
     });
 
     describe('cleanupFailedDownloads', () => {
+        const dirEntry = (name: string) => ({ name, isDirectory: () => true });
+
+        beforeEach(() => {
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(undefined);
+        });
+
         it('should delete old download directories', async () => {
             const downloadDir = '/downloads';
             const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
 
-            const mockDirEntry = {
-                name: 'oldDir',
-                isDirectory: () => true,
-            };
-
             (configService.getParameter as jest.Mock).mockResolvedValue(downloadDir);
-            (fs.readdir as unknown as jest.Mock).mockImplementation((_path, opts, cb) => cb(null, [mockDirEntry]));
-            (fs.stat as unknown as jest.Mock).mockImplementation((_path, cb) =>
-                cb(null, { mtimeMs: threeHoursAgo - 10000 })
-            );
-            (fs.rm as unknown as jest.Mock).mockImplementation((_path, opts, cb) => cb(null));
+            (fs.promises.readdir as jest.Mock).mockResolvedValue([dirEntry('oldDir')]);
+            (fs.promises.stat as jest.Mock).mockResolvedValue({ mtimeMs: threeHoursAgo - 10000 });
+            (fs.promises.rm as jest.Mock).mockResolvedValue(undefined);
 
             await downloadFacade.cleanupFailedDownloads();
 
-            expect(fs.rm).toHaveBeenCalledWith(
-                expect.stringContaining('oldDir'),
-                { recursive: true, force: true },
-                expect.any(Function)
-            );
+            expect(fs.promises.rm).toHaveBeenCalledWith(expect.stringContaining('oldDir'), {
+                recursive: true,
+                force: true,
+            });
         });
 
         it('should not delete recent directories', async () => {
             const downloadDir = '/downloads';
             const now = Date.now();
 
-            const mockDirEntry = {
-                name: 'recentDir',
-                isDirectory: () => true,
-            };
-
             (configService.getParameter as jest.Mock).mockResolvedValue(downloadDir);
-            (fs.readdir as unknown as jest.Mock).mockImplementation((_path, opts, cb) => cb(null, [mockDirEntry]));
-            (fs.stat as unknown as jest.Mock).mockImplementation((_path, cb) => cb(null, { mtimeMs: now }));
+            (fs.promises.readdir as jest.Mock).mockResolvedValue([dirEntry('recentDir')]);
+            (fs.promises.stat as jest.Mock).mockResolvedValue({ mtimeMs: now });
 
             await downloadFacade.cleanupFailedDownloads();
 
-            expect(fs.rm).not.toHaveBeenCalled();
+            expect(fs.promises.rm).not.toHaveBeenCalled();
+        });
+
+        it('should not delete a directory currently active in the queue, even if its timestamp is old', async () => {
+            const downloadDir = '/downloads';
+            const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+
+            (configService.getParameter as jest.Mock).mockResolvedValue(downloadDir);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue([dirEntry('activePid')]);
+            (fs.promises.stat as jest.Mock).mockResolvedValue({ mtimeMs: threeHoursAgo - 10000 });
+            (queueService.getFromQueue as jest.Mock).mockReturnValue({ pid: 'activePid' });
+
+            await downloadFacade.cleanupFailedDownloads();
+
+            expect(fs.promises.stat).not.toHaveBeenCalled();
+            expect(fs.promises.rm).not.toHaveBeenCalled();
+        });
+
+        it('does not delete a directory that was re-queued between the stat check and the delete (TOCTOU race)', async () => {
+            // Regression test: a stale pidDir (timestamp >3h old, not in queue yet) is re-used
+            // by a brand new download for the same pid before cleanup gets around to deleting
+            // it - queueService.getFromQueue() must be re-checked right before fs.rm, not just
+            // once up front, or the new download's files get deleted out from under it.
+            const downloadDir = '/downloads';
+            const threeHoursAgo = Date.now() - 3 * 60 * 60 * 1000;
+
+            (configService.getParameter as jest.Mock).mockResolvedValue(downloadDir);
+            (fs.promises.readdir as jest.Mock).mockResolvedValue([dirEntry('racyPid')]);
+            (fs.promises.stat as jest.Mock).mockResolvedValue({ mtimeMs: threeHoursAgo - 10000 });
+
+            let callCount = 0;
+            (queueService.getFromQueue as jest.Mock).mockImplementation(() => {
+                callCount += 1;
+                // Not queued on the first (up-front) check, but queued by the second
+                // (pre-delete) check - simulating a new download starting in between.
+                return callCount >= 2 ? { pid: 'racyPid' } : undefined;
+            });
+
+            await downloadFacade.cleanupFailedDownloads();
+
+            expect(fs.promises.rm).not.toHaveBeenCalled();
         });
     });
 });

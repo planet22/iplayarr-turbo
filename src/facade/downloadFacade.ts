@@ -249,41 +249,51 @@ class DownloadFacade {
     async cleanupFailedDownloads(): Promise<void> {
         const downloadDir = (await configService.getParameter(IplayarrParameter.DOWNLOAD_DIR)) as string;
         const threeHoursAgo: number = Date.now() - 3 * 60 * 60 * 1000;
-        fs.readdir(downloadDir, { withFileTypes: true }, (err, entries) => {
-            if (err) {
-                console.error('Error reading directory:', err);
-                return;
-            }
 
-            entries.forEach((entry) => {
-                if (!entry.isDirectory()) return;
+        let entries: fs.Dirent[];
+        try {
+            entries = await fs.promises.readdir(downloadDir, { withFileTypes: true });
+        } catch (err) {
+            loggingService.error('Error reading directory:', err);
+            return;
+        }
 
-                // Skip directories that belong to a download still active in the queue -
-                // it may still be writing files well past the timestamp threshold.
-                if (queueService.getFromQueue(entry.name)) return;
+        await Promise.all(
+            entries
+                .filter((entry) => entry.isDirectory())
+                .map(async (entry) => {
+                    // Skip directories that belong to a download still active in the queue - it
+                    // may still be writing files well past the timestamp threshold.
+                    if (queueService.getFromQueue(entry.name)) return;
 
-                const dirPath: string = path.join(downloadDir, entry.name);
-                const filePath: string = path.join(dirPath, timestampFile);
+                    const dirPath: string = path.join(downloadDir, entry.name);
+                    const filePath: string = path.join(dirPath, timestampFile);
 
-                fs.stat(filePath, (err, stats) => {
-                    if (err) {
+                    let stats: fs.Stats;
+                    try {
+                        stats = await fs.promises.stat(filePath);
+                    } catch (err: any) {
                         // Ignore missing files
-                        if (err.code !== 'ENOENT') console.error(`Error checking ${filePath}:`, err);
+                        if (err.code !== 'ENOENT') loggingService.error(`Error checking ${filePath}:`, err);
                         return;
                     }
 
-                    if (stats.mtimeMs < threeHoursAgo) {
-                        fs.rm(dirPath, { recursive: true, force: true }, (err) => {
-                            if (err) {
-                                loggingService.error(`Error deleting ${dirPath}:`, err);
-                            } else {
-                                loggingService.log(`Deleted old directory: ${dirPath}`);
-                            }
-                        });
+                    if (stats.mtimeMs >= threeHoursAgo) return;
+
+                    // Re-check immediately before deleting, closing the race where a brand new
+                    // download reusing this same pid (same directory, freshly recreated) started
+                    // between the stat above and now - addToQueue() always happens before that
+                    // download creates/rewrites this directory, so this reliably catches it.
+                    if (queueService.getFromQueue(entry.name)) return;
+
+                    try {
+                        await fs.promises.rm(dirPath, { recursive: true, force: true });
+                        loggingService.log(`Deleted old directory: ${dirPath}`);
+                    } catch (err) {
+                        loggingService.error(`Error deleting ${dirPath}:`, err);
                     }
-                });
-            });
-        });
+                })
+        );
     }
 }
 
