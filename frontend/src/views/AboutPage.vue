@@ -3,7 +3,7 @@
         <img src="/iplayarr.png" alt="Logo" class="logo" />
         <h3>iPlayarr Turbo</h3>
         <p>Version {{ hiddenSettings.VERSION }}</p>
-        <p>2025</p>
+        <p>2026</p>
         <p>
             iPlayarr Turbo is a companion for Sonarr (and the rest of the *arr stack) to simplify integrating
             get_iplayer for episode search and download.
