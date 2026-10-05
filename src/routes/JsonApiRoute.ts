@@ -16,6 +16,7 @@ import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../ut
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import EventsRoute from './json-api/EventsRoute';
+import MaintenanceRoute from './json-api/MaintenanceRoute';
 import OffScheduleRoute from './json-api/OffScheduleRoute';
 import QueueRoute from './json-api/QueueRoute';
 import SettingsRoute from './json-api/SettingsRoute';
@@ -38,6 +39,7 @@ router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
 router.use('/subscriptions', SubscriptionsRoute);
+router.use('/maintenance', MaintenanceRoute);
 
 router.post('/nzb/test', async (req: Request, res: Response) => {
     const { NZB_URL, NZB_API_KEY, NZB_TYPE, NZB_USERNAME, NZB_PASSWORD } = req.body;
@@ -179,11 +181,6 @@ router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Re
         return;
     }
     res.sendFile(filePath);
-});
-
-router.post('/thumbnail/cleanup', async (_, res: Response) => {
-    const deleted = await thumbnailCacheService.cleanup();
-    res.json({ status: true, deleted });
 });
 
 export default router;
