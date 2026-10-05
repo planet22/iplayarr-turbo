@@ -14,7 +14,7 @@ This is the quickest route from "container running" to "watching or downloading 
 
 ## 1. Before you start
 
-- **Be in the UK.** The BBC only serves iPlayer to UK addresses, so the machine running iPlayarr needs a UK IP address (a UK host, or a UK VPN for the container). If the browse pages say "Nothing to show yet", this is the first thing to check.
+- **Be in the UK.** The BBC only serves iPlayer to UK addresses, so the machine running iPlayarr needs a UK IP address. If the browse pages say "Nothing to show yet", this is the first thing to check.
 - **Run the container** following the [README](../README.md) or [INSTALLATION.md](INSTALLATION.md), then open `http://<your-host>:4404`.
 - **Log in.** The default is `admin` / `password` unless you changed it. Change it under Settings → Authentication ([AUTHENTICATION.md](AUTHENTICATION.md)).
 
@@ -60,7 +60,7 @@ Finished items are in your **Complete Directory**, in `Show/Season NN/` folders 
 
 | Symptom | Check |
 | --- | --- |
-| Browse pages empty, or "Nothing to show yet" | The server can't reach the BBC: UK IP/VPN, DNS, firewall. Look at **Logs**. |
+| Browse pages empty, or "Nothing to show yet" | The server can't reach the BBC: UK IP, DNS, firewall. Look at **Logs**. |
 | No Play button | Stream Key is empty (Settings → Streaming). |
 | Play spins, then fails | Try Stream Client `NATIVE`; the **Open in BBC iPlayer** link in the error shows whether the BBC itself will play it from your location. |
 | "The server returned an unexpected response" | The container was restarting; try again in a moment. |
