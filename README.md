@@ -5,6 +5,7 @@ iPlayarr is a companion tool for **Sonarr** and **Radarr**, making it easy to in
 ![Build Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/build.yml?logo=github)
 ![Test Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/test.yml?logo=github&label=tests)
 <!--- istanbul-badges-readme:start --->
+
 ![Statements](https://img.shields.io/badge/statements-70.39%25-red.svg?style=flat)
 ![Branches](https://img.shields.io/badge/branches-60.34%25-red.svg?style=flat)
 ![Functions](https://img.shields.io/badge/functions-69.67%25-red.svg?style=flat)
@@ -36,15 +37,22 @@ This README covers the basics. For more detail, see `docs/`:
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/login.png" alt="Login View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/search.png" alt="Search View" width="49%">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/download.png" alt="Download Confirmation" width="49%">
   <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/queue.png" alt="Queue View" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/search.png" alt="Search View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/subscribe.png" alt="Subscribe to a Show" width="49%">
   <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/details.png" alt="Details View" width="49%">
 </p>
 <p align="center">
   <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/channels.png" alt="Channels View" width="49%">
   <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/schedule.png" alt="Schedule View" width="49%">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/mobile.png" alt="Mobile View" width="30%">
 </p>
 
 ## Why iPlayarr?
@@ -76,6 +84,7 @@ docker run -d --name iplayarr \
   -v ./logs:/logs \
   -v /path/to/incomplete:/incomplete \
   -v /path/to/complete:/complete \
+  -v /path/to/arrcomplete:/arrcomplete \
   --env-file=env-file \
   -p 4404:4404 \
   ghcr.io/planet22/iplayarr-turbo:latest
@@ -91,10 +100,13 @@ docker run -d --name iplayarr \
   -v ./logs:/logs \
   -v /path/to/incomplete:/incomplete \
   -v /path/to/complete:/complete \
+  -v /path/to/arrcomplete:/arrcomplete \
   --env-file=env-file \
   -p 4404:4404 \
   iplayarr
 ```
+
+The `/path/to/arrcomplete` mount is only needed if you set `ARR_COMPLETE_DIR` (e.g. `ARR_COMPLETE_DIR=/arrcomplete` in `env-file`) to give TV downloads their own completed-files folder, separate from `COMPLETE_DIR` — see the optional settings table below. Leave it out if you don't use that setting.
 
 Or use Docker Compose:
 
@@ -107,6 +119,7 @@ services:
             - 'API_KEY=1234'
             - 'DOWNLOAD_DIR=/mnt/media/iplayarr/incomplete'
             - 'COMPLETE_DIR=/mnt/media/iplayarr/complete'
+            - 'ARR_COMPLETE_DIR=/mnt/media/iplayarr/arrcomplete'
             - 'PUID=1000'
             - 'PGID=1000'
         ports:
@@ -117,6 +130,8 @@ services:
             - './config:/config'
             - './logs:/logs'
 ```
+
+`ARR_COMPLETE_DIR` is optional — it's under `/mnt/media/iplayarr/arrcomplete`, so the existing `/mnt/media:/mnt/media` mount already covers it. Remove that environment line if you don't want TV downloads split into their own folder.
 
 See [docs/INSTALLATION.md](docs/INSTALLATION.md) for a deeper walkthrough of volume mounts, PUID/PGID, and updating the container, and [docs/platforms/synology.md](docs/platforms/synology.md)/[docs/platforms/unraid.md](docs/platforms/unraid.md) for NAS-specific notes.
 
@@ -130,32 +145,32 @@ You can pre-set the following environment variables, or you can set them in the 
 
 There's a few more optional settings too:
 
-| Property         | Description                                                                               |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| ACTIVE_LIMIT     | How many downloads are allowed simultaneously, defaults to 3                              |
-| REFRESH_SCHEDULE | Cron expression for when to proactively refresh schedule, defaults to hourly, on the hour |
-| SCHEDULE_FULL_REFRESH | Re-fetch every day in the schedule window on every refresh instead of reusing cached results for days that have already passed. Defaults to false |
-| HIDE_DONATE      | If you don't like the Kofi donate links you can hide them                                 |
-| PUID             | Host User ID for file permissions                                                         |
-| PGID             | Host Group ID for file permissions                                                        |
-| NATIVE_SEARCH    | Search BBC's own search API directly instead of shelling out to get_iplayer. Faster, and the default. Defaults to true |
-| ARCHIVE_ENABLED  | Keep a record of cancelled/removed downloads instead of discarding them outright. Defaults to false |
-| OUTPUT_FORMAT    | Output container format passed to get_iplayer (e.g. mp4). Defaults to mp4 |
-| LIBRARY_FOLDER_STRUCTURE | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to false. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
-| ARR_COMPLETE_DIR | Optional override of COMPLETE_DIR for TV downloads only (what the *arr imports). Leave unset to use COMPLETE_DIR for everything |
-| WRITE_NFO_STRM   | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. One of `none` (default), `all`, `nzb` (only downloads added by Sonarr/Radarr), or `manual` (only manually-triggered downloads). See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
-| MEDIA_MODE       | `strm` (default) saves a small pointer file that streams on demand, saving disk space; `download` saves the full file instead. See [docs/STREAMING.md](docs/STREAMING.md) |
-| STREAM_CLIENT    | Which tool serves playback for `.strm` files: `NATIVE` (default, fastest to start, adaptive quality), `GET_IPLAYER`, or `YTDLP`. See [docs/STREAMING.md](docs/STREAMING.md) |
-| STREAM_MODE      | `direct` (default, supports seeking) or `progressive-mkv` (remuxes to MKV on the fly, needs ffmpeg, no seeking) |
-| STREAM_BASE_URL  | The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr, for links written into `.strm` files |
-| STREAM_KEY       | Secures `.strm` playback links, separate from API_KEY so it can be regenerated on its own |
-| STREAM_CACHE_DIR | Where temporary files are stored while streaming. Defaults to a temp folder |
-| STREAM_NATIVE_ADAPTIVE | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to false |
-| STREAM_NATIVE_HQ_PROBE | With STREAM_CLIENT=NATIVE, verify real stream quality before playing (adds a short delay). Defaults to false |
-| STREAM_NATIVE_EXPERIMENTAL_FHD | With STREAM_CLIENT=NATIVE, try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to true |
-| THUMBNAIL_CACHE_DIR | Where cached BBC episode thumbnails are stored |
-| THUMBNAIL_RETENTION_DAYS | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30 |
-| STREAM_HISTORY_RETENTION_DAYS | How many days to keep native streaming session history before nightly cleanup. Defaults to 30 |
+| Property                       | Description                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ACTIVE_LIMIT                   | How many downloads are allowed simultaneously, defaults to 3                                                                                                                                                                                                                                                                                                                               |
+| REFRESH_SCHEDULE               | Cron expression for when to proactively refresh schedule, defaults to hourly, on the hour                                                                                                                                                                                                                                                                                                  |
+| SCHEDULE_FULL_REFRESH          | Re-fetch every day in the schedule window on every refresh instead of reusing cached results for days that have already passed. Defaults to false                                                                                                                                                                                                                                          |
+| HIDE_DONATE                    | If you don't like the Kofi donate links you can hide them                                                                                                                                                                                                                                                                                                                                  |
+| PUID                           | Host User ID for file permissions                                                                                                                                                                                                                                                                                                                                                          |
+| PGID                           | Host Group ID for file permissions                                                                                                                                                                                                                                                                                                                                                         |
+| NATIVE_SEARCH                  | Search BBC's own search API directly instead of shelling out to get_iplayer. Faster, and the default. Defaults to true                                                                                                                                                                                                                                                                     |
+| ARCHIVE_ENABLED                | Keep a record of cancelled/removed downloads instead of discarding them outright. Defaults to false                                                                                                                                                                                                                                                                                        |
+| OUTPUT_FORMAT                  | Output container format passed to get_iplayer (e.g. mp4). Defaults to mp4                                                                                                                                                                                                                                                                                                                  |
+| LIBRARY_FOLDER_STRUCTURE       | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to false. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md)                                                                                                                                                               |
+| ARR_COMPLETE_DIR               | Optional override of COMPLETE_DIR for TV downloads only (what the *arr imports). Leave unset to use COMPLETE_DIR for everything                                                                                                                                                                                                                                                            |
+| WRITE_NFO_STRM                 | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. One of `none` (default), `all`, `nzb` (only downloads added by Sonarr/Radarr), or `manual` (only manually-triggered downloads). See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
+| MEDIA_MODE                     | `strm` (default) saves a small pointer file that streams on demand, saving disk space; `download` saves the full file instead. See [docs/STREAMING.md](docs/STREAMING.md)                                                                                                                                                                                                                  |
+| STREAM_CLIENT                  | Which tool serves playback for `.strm` files: `NATIVE` (default, fastest to start, adaptive quality), `GET_IPLAYER`, or `YTDLP`. See [docs/STREAMING.md](docs/STREAMING.md)                                                                                                                                                                                                                |
+| STREAM_MODE                    | `direct` (default, supports seeking) or `progressive-mkv` (remuxes to MKV on the fly, needs ffmpeg, no seeking)                                                                                                                                                                                                                                                                            |
+| STREAM_BASE_URL                | The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr, for links written into `.strm` files                                                                                                                                                                                                                                                                            |
+| STREAM_KEY                     | Secures `.strm` playback links, separate from API_KEY so it can be regenerated on its own                                                                                                                                                                                                                                                                                                  |
+| STREAM_CACHE_DIR               | Where temporary files are stored while streaming. Defaults to a temp folder                                                                                                                                                                                                                                                                                                                |
+| STREAM_NATIVE_ADAPTIVE         | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to false                                                                                                                                                                                                                                                                 |
+| STREAM_NATIVE_HQ_PROBE         | With STREAM_CLIENT=NATIVE, verify real stream quality before playing (adds a short delay). Defaults to false                                                                                                                                                                                                                                                                               |
+| STREAM_NATIVE_EXPERIMENTAL_FHD | With STREAM_CLIENT=NATIVE, try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to true                                                                                                                                                                                                                                                                         |
+| THUMBNAIL_CACHE_DIR            | Where cached BBC episode thumbnails are stored                                                                                                                                                                                                                                                                                                                                             |
+| THUMBNAIL_RETENTION_DAYS       | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                                      |
+| STREAM_HISTORY_RETENTION_DAYS  | How many days to keep native streaming session history before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                              |
 
 ### Usage
 

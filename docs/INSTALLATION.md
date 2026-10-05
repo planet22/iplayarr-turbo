@@ -63,6 +63,7 @@ services:
             - 'API_KEY=${IPLAYERARR_API_KEY}'
             - 'DOWNLOAD_DIR=/data/downloads/iplayarr/incomplete'
             - 'COMPLETE_DIR=/data/downloads/iplayarr/complete'
+            - 'ARR_COMPLETE_DIR=/data/downloads/iplayarr/ArrComplete' # optional - see below
             - 'PUID=${USER_ID}'
             - 'PGID=${GROUP_ID}'
             - 'TZ=${TIMEZONE}'
