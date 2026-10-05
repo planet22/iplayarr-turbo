@@ -36,7 +36,7 @@ async function buildSettingsSnapshot(client: StreamClient): Promise<Record<strin
         return {
             Quality: (adaptive ?? 'true') !== 'false' ? 'Adaptive' : 'Fixed',
             'Quality Probe': hqProbe === 'true' ? 'On' : 'Off',
-            'FHD Upgrade': experimentalFhd === 'true' ? 'Experimental (on)' : 'Off',
+            'FHD Upgrade': experimentalFhd === 'true' ? 'On' : 'Off',
         };
     }
     const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;

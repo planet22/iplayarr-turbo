@@ -82,13 +82,13 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
-| Media Mode | `MEDIA_MODE` | `download` | `download` (full file) or `strm` (pointer file, resolved on playback). |
+| Media Mode | `MEDIA_MODE` | `strm` | `strm` (pointer file, resolved on playback) or `download` (full file). |
 | Stream Base URL | `STREAM_BASE_URL` | _(required when `MEDIA_MODE=strm`)_ | Address your media server uses to reach iPlayarr; validated as a URL on save. |
 | Stream Key | `STREAM_KEY` | _(auto-generated)_ | Secures `.strm` playback links, independent of `API_KEY`. |
-| Stream Client | `STREAM_CLIENT` | `GET_IPLAYER` | `GET_IPLAYER`, `YTDLP`, or `NATIVE`. |
-| Native Quality | `STREAM_NATIVE_ADAPTIVE` | `true` | Native client only. |
+| Stream Client | `STREAM_CLIENT` | `NATIVE` | `GET_IPLAYER`, `YTDLP`, or `NATIVE`. |
+| Native Quality | `STREAM_NATIVE_ADAPTIVE` | `false` | Native client only. |
 | Native Quality Probe | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only. |
-| Native FHD Upgrade (Experimental) | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `false` | Native client only, unsupported/experimental. |
+| Native FHD Upgrade | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only. |
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
 | Stream Cache Directory _(advanced)_ | `STREAM_CACHE_DIR` | temp folder | Scratch space for in-flight streams. |
 | — | `THUMBNAIL_CACHE_DIR` | temp folder | Where cached BBC episode thumbnails are stored. Env-only. |

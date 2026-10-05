@@ -6,7 +6,7 @@
         <span v-if="probe" class="pill" :class="probe == 'On' ? 'success' : 'grey'">{{ probe }}</span>
     </td>
     <td class="chipCol" data-title="FHD">
-        <span v-if="fhd" class="pill" :class="isExperimentalOn ? 'warn' : 'grey'">{{ fhdLabel }}</span>
+        <span v-if="fhd" class="pill" :class="fhd == 'On' ? 'success' : 'grey'">{{ fhd }}</span>
     </td>
     <td class="chipCol" data-title="Video Quality">
         <span v-if="videoQuality" class="pill grey">{{ videoQuality }}</span>
@@ -34,7 +34,4 @@ const quality = computed(() => props.settings?.Quality ?? '');
 const probe = computed(() => props.settings?.['Quality Probe'] ?? '');
 const fhd = computed(() => props.settings?.['FHD Upgrade'] ?? '');
 const videoQuality = computed(() => props.settings?.['Video Quality'] ?? '');
-const isExperimentalOn = computed(() => fhd.value.toLowerCase().includes('experimental'));
-// "Experimental (on)" is fine as a Settings-page option label but too wide for a table chip.
-const fhdLabel = computed(() => (isExperimentalOn.value ? 'On' : fhd.value));
 </script>

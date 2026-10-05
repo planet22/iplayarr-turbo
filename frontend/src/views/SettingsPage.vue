@@ -111,8 +111,8 @@ const downloadClients = ref([
 
 const streamClients = ref([
     { key: 'GET_IPLAYER', value: 'get_iplayer' },
-    { key: 'YTDLP', value: 'yt-dlp (Experimental)' },
-    { key: 'NATIVE', value: 'Native (fastest - talks to BBC directly, no get_iplayer/yt-dlp)' },
+    { key: 'YTDLP', value: 'yt-dlp' },
+    { key: 'NATIVE', value: 'Native (fastest - talks to BBC directly, no get_iplayer/yt-dlp, recommended)' },
 ]);
 
 const outputFormats = ref([
