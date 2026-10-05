@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from 'express';
 import handler from '../../../src/endpoints/sabnzbd/HistoryEndpoint';
 import configService from '../../../src/service/configService';
 import historyService from '../../../src/service/historyService';
+import { QueueEntrySource } from '../../../src/types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { VideoType } from '../../../src/types/IPlayerSearchResult';
 import { QueueEntry } from '../../../src/types/QueueEntry';
@@ -53,21 +54,21 @@ describe('sabnzbdActionEndpoint', () => {
                     nzbName: 'testfile',
                     status: QueueEntryStatus.COMPLETE,
                     details: { size: 1 },
-                    type: VideoType.TV
+                    type: VideoType.TV,
                 },
                 {
                     pid: 'id2',
                     nzbName: 'skipfile',
                     status: QueueEntryStatus.CANCELLED,
                     details: { size: 2 },
-                    type: VideoType.TV
+                    type: VideoType.TV,
                 },
                 {
                     pid: 'id3',
                     nzbName: 'skipfile2',
                     status: QueueEntryStatus.FORWARDED,
                     details: { size: 3 },
-                    type: VideoType.TV
+                    type: VideoType.TV,
                 },
             ];
 
@@ -120,7 +121,7 @@ describe('sabnzbdActionEndpoint', () => {
             });
         });
 
-        it('uses ARR_COMPLETE_DIR for TV items when set, and COMPLETE_DIR for movies', async () => {
+        it('uses ARR_COMPLETE_DIR for NZB-sourced TV items when set, and COMPLETE_DIR for movies', async () => {
             const queueEntries: QueueEntry[] = [
                 {
                     pid: 'id1',
@@ -128,6 +129,7 @@ describe('sabnzbdActionEndpoint', () => {
                     status: QueueEntryStatus.COMPLETE,
                     details: { size: 1 },
                     type: VideoType.TV,
+                    source: QueueEntrySource.NZB,
                 },
                 {
                     pid: 'id2',
@@ -135,6 +137,7 @@ describe('sabnzbdActionEndpoint', () => {
                     status: QueueEntryStatus.COMPLETE,
                     details: { size: 1 },
                     type: VideoType.MOVIE,
+                    source: QueueEntrySource.NZB,
                 },
             ];
 
@@ -153,6 +156,32 @@ describe('sabnzbdActionEndpoint', () => {
                 { storage: '/arr-complete/tvfile.mp4' },
                 { storage: '/complete/moviefile.mp4' },
             ]);
+        });
+
+        it('uses COMPLETE_DIR for a manually/subscription-sourced TV item even when ARR_COMPLETE_DIR is set', async () => {
+            const queueEntries: QueueEntry[] = [
+                {
+                    pid: 'id1',
+                    nzbName: 'tvfile',
+                    status: QueueEntryStatus.COMPLETE,
+                    details: { size: 1 },
+                    type: VideoType.TV,
+                    source: QueueEntrySource.MANUAL,
+                },
+            ];
+
+            (historyService.getHistory as jest.Mock).mockResolvedValue(queueEntries);
+            (configService.getParameter as jest.Mock).mockImplementation((param: IplayarrParameter) => {
+                if (param === IplayarrParameter.COMPLETE_DIR) return Promise.resolve('/complete');
+                if (param === IplayarrParameter.OUTPUT_FORMAT) return Promise.resolve('mp4');
+                if (param === IplayarrParameter.ARR_COMPLETE_DIR) return Promise.resolve('/arr-complete');
+                return Promise.resolve(undefined);
+            });
+
+            await handler(req as Request, res as Response, next);
+
+            const responseArg = (res.json as jest.Mock).mock.calls[0][0];
+            expect(responseArg.history.slots).toMatchObject([{ storage: '/complete/tvfile.mp4' }]);
         });
 
         it('reports the nested libraryPath when LIBRARY_FOLDER_STRUCTURE produced one', async () => {

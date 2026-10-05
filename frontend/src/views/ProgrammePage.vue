@@ -13,10 +13,9 @@
                         <font-awesome-icon :icon="['fas', 'tv']" />
                         {{ programme.kind === 'brand' ? 'Programme' : programme.kind === 'series' ? 'Series' : 'Episode' }}
                     </span>
-                    <span v-if="programme.channel" :class="['pill', 'grey']">
+                    <ChannelPill :channel="programme.channel">
                         <font-awesome-icon :icon="['fas', 'tower-broadcast']" />
-                        {{ programme.channel }}
-                    </span>
+                    </ChannelPill>
                     <span v-if="programme.category" :class="['pill', 'grey']">{{ programme.category }}</span>
                     <span :class="['pill', 'grey']">
                         <a :href="`https://www.bbc.co.uk/programmes/${programme.pid}`" target="_blank" rel="noopener noreferrer">
@@ -91,6 +90,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import ChannelPill from '@/components/common/ChannelPill.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
@@ -228,7 +228,8 @@ watch(
     .programmeMeta {
         margin-bottom: 12px;
 
-        .pill.grey {
+        .pill.grey,
+        .pill.channelPill {
             padding: 3px 7px;
             margin-right: 10px;
             font-size: 15px;

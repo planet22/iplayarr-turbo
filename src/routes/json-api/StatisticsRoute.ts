@@ -11,10 +11,20 @@ router.get('/searchHistory', async (req: Request, res: Response) => {
     res.json(limit ? searchHistory.slice(limit * -1) : searchHistory);
 });
 
+router.delete('/searchHistory', async (_: Request, res: Response) => {
+    await statisticsService.clearSearchHistory();
+    res.json({ status: true });
+});
+
 router.get('/grabHistory', async (req: Request, res: Response) => {
     const { limit } = req.query as any as { limit?: number };
     const grabHistory = await statisticsService.getGrabHistory();
     res.json(limit ? grabHistory.slice(limit * -1) : grabHistory);
+});
+
+router.delete('/grabHistory', async (_: Request, res: Response) => {
+    await statisticsService.clearGrabHistory();
+    res.json({ status: true });
 });
 
 router.get('/failedGrabHistory', async (req: Request, res: Response) => {

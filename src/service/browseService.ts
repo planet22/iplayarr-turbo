@@ -6,6 +6,7 @@ import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
     BrowseChannel,
+    BrowseChannelSchedule,
     BrowseItem,
     BrowseKind,
     BrowseNowNext,
@@ -269,6 +270,29 @@ class BrowseService {
         return { now, next };
     }
 
+    // Every channel's full day, for the multi-channel guide grid. Reuses the same per-channel,
+    // per-date IBL path nowNext() hits, so it rides the same 15-minute cache.
+    async schedule(date?: string): Promise<BrowseChannelSchedule[]> {
+        const day = date ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
+        const settled = await Promise.allSettled(
+            BrowseChannels.map(async (channel): Promise<BrowseChannelSchedule> => {
+                const slots: BrowseSlot[] = [];
+                const data = await this.#ibl(`channels/${encodeURIComponent(channel.id)}/schedule/${day}`);
+                for (const broadcast of extractElements(data)) {
+                    const item = toBrowseItem(broadcast.episode);
+                    if (item && broadcast.scheduled_start && broadcast.scheduled_end) {
+                        slots.push({ item, start: broadcast.scheduled_start, end: broadcast.scheduled_end });
+                    }
+                }
+                slots.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+                return { channel: withLogo(channel), slots };
+            })
+        );
+        return settled
+            .filter((r): r is PromiseFulfilledResult<BrowseChannelSchedule> => r.status === 'fulfilled')
+            .map((r) => r.value);
+    }
+
     // iPlayer's own curated rails for a category ("Panel Show Palooza!", ...). The bundle list only
     // exists in the category page's embedded state - there's no IBL endpoint for it - so this is a
     // best-effort scrape: any failure yields no rails and the plain grid still works. Each bundle's
@@ -301,8 +325,8 @@ class BrowseService {
 
     // Channel logos come from the inline SVG icons on iPlayer's own pages (the IBL API has none).
     // Fetched at runtime and cached rather than shipped in this repo, like the thumbnails.
-    async channelLogo(masterBrand: string): Promise<string | undefined> {
-        const logos: Record<string, string> = await this.longCache.getOr('channel_logos', async () => {
+    async #channelIconSvgs(): Promise<Record<string, string>> {
+        return this.longCache.getOr('channel_logos_v2', async () => {
             const page = await axios.get('https://www.bbc.co.uk/iplayer', { headers: { 'User-Agent': 'Mozilla/5.0' } });
             const html = String(page.data);
             const nav: any[] = parseIplayerState(html)?.navigation?.items ?? [];
@@ -310,15 +334,43 @@ class BrowseService {
             const found: Record<string, string> = {};
             for (const { id, icon } of subItems) {
                 if (!/^[a-z0-9_]+$/i.test(String(id)) || !/^[a-z0-9]+$/i.test(String(icon))) continue;
-                const match = new RegExp(`<svg viewBox="([^"]+)" id="iplayer-nav-icon-${icon}">(.*?)</svg>`, 's').exec(html);
+                // The "-active" variant is the coloured one (brand-colour background + contrasting
+                // letter mark) shown on iPlayer's own nav when a channel is selected; attribute order
+                // on the <svg> varies between icons, so match viewBox/id independent of position.
+                const match = new RegExp(
+                    `<svg\\b[^>]*\\bviewBox="([^"]+)"[^>]*\\bid="iplayer-nav-icon-${icon}-active"[^>]*>(.*?)</svg>`,
+                    's'
+                ).exec(html);
                 if (match) {
-                    // White so it reads on the dark UI; the source icons take their colour from the page CSS.
-                    found[id] = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${match[1]}" fill="#fff">${match[2]}</svg>`;
+                    found[id] = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${match[1]}">${match[2]}</svg>`;
                 }
             }
             return found;
         });
+    }
+
+    async channelLogo(masterBrand: string): Promise<string | undefined> {
+        const logos = await this.#channelIconSvgs();
         return logos[masterBrand];
+    }
+
+    // Each channel's brand colours (background + contrasting text), read off the same coloured
+    // icon channelLogo() serves - the "-active" SVG's first two fills are the background rect and
+    // the letter mark, in that order. Keyed the same way the channel pill CSS classes already are
+    // (title with spaces stripped, e.g. "BBC One" -> "BBCOne") so the frontend can look them up
+    // directly against whatever channel name a pill already carries.
+    async channelColors(): Promise<Record<string, { bg: string; fg: string }>> {
+        const icons = await this.#channelIconSvgs();
+        const colors: Record<string, { bg: string; fg: string }> = {};
+        for (const channel of BrowseChannels) {
+            const svg = channel.masterBrand && icons[channel.masterBrand];
+            if (!svg) continue;
+            const fills = Array.from(svg.matchAll(/fill="(#[0-9a-f]{3,8})"/gi)).map((m) => m[1]);
+            if (fills.length >= 2) {
+                colors[channel.title.replaceAll(' ', '')] = { bg: fills[0], fg: fills[1] };
+            }
+        }
+        return colors;
     }
 
     channels(): BrowseChannel[] {

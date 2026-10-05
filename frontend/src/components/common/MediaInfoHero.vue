@@ -15,10 +15,9 @@
                     <font-awesome-icon :icon="['fas', resolvedType == 'TV' ? 'tv' : 'film']" />
                     {{ fixCasing(resolvedType) }}
                 </span>
-                <span v-if="details.channel" :class="['pill', 'grey']">
+                <ChannelPill :channel="details.channel">
                     <font-awesome-icon :icon="['fas', 'tower-broadcast']" />
-                    {{ details.channel }}
-                </span>
+                </ChannelPill>
                 <span v-if="details.link" :class="['pill', 'grey']">
                     <a :href="details.link" target="_blank">
                         <font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" />Link
@@ -44,6 +43,7 @@ import { computed, defineProps, inject, ref, watch } from 'vue';
 import { ipFetch } from '@/lib/ipFetch';
 import { formatDate, getThumbnailUrl } from '@/lib/utils';
 
+import ChannelPill from './ChannelPill.vue';
 import LoadingIndicator from './LoadingIndicator.vue';
 
 const details = ref({});
@@ -145,7 +145,8 @@ const fixCasing = (str) => {
 }
 
 .seriesDetails {
-    .pill.grey {
+    .pill.grey,
+    .pill.channelPill {
         padding: 3px 7px;
         font-weight: 300;
         font-size: 17px;

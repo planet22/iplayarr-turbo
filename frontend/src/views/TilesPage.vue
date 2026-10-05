@@ -14,8 +14,8 @@
                         v-if="tile.logo && !failedLogos[tile.id]" class="channelLogo" :src="getThumbnailUrl(tile.logo)"
                         :alt="tile.title" @error="failedLogos[tile.id] = true"
                     />
-                    <!-- The logo icons carry only the channel word ("ONE"), so keep the full name beside it. -->
-                    <span :class="['channelName', tile.logo && !failedLogos[tile.id] ? 'caption' : '']">{{ tile.title }}</span>
+                    <!-- Logo already carries the channel name; fall back to text only when there's no logo to show. -->
+                    <span v-else class="channelName">{{ tile.title }}</span>
                 </template>
                 <span v-else class="tileTitle">{{ tile.title }}</span>
             </RouterLink>
@@ -99,18 +99,13 @@ watch(
 
     .channelLogo {
         display: block;
-        height: 36px;
-        max-width: 100%;
-        margin: 0 auto;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }
 
     .channelName {
         font-size: 16px;
-
-        &.caption {
-            font-size: 12px;
-            color: @subtle-text-color;
-        }
     }
 
     &:not(.imageTile) {
@@ -119,6 +114,13 @@ watch(
         text-align: center;
         gap: 4px;
         padding: 14px 12px;
+
+        // Matches the BBC logo SVGs' own viewBox (76x32) so cover never has to crop them.
+        &:has(.channelLogo) {
+            padding: 0;
+            aspect-ratio: 2.375 / 1;
+            overflow: hidden;
+        }
     }
 
     // Categories: large artwork tiles with the title over a gradient.

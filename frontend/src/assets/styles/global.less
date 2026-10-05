@@ -249,6 +249,10 @@ button:focus {
         justify-content: flex-end;
         text-align: right;
         max-width: 650px;
+        // A block box defaults to flush-left even with text-align:right centering its own
+        // content - without this, capping max-width just shrinks the box without moving it,
+        // leaving the whole button row sitting left-of-center on a wide modal.
+        margin-left: auto;
 
         @media (max-width: @mobile-breakpoint) {
             &.floor {

@@ -1,7 +1,12 @@
 import axios from 'axios';
 
 import scheduleFacade from '../../src/facade/scheduleFacade';
-import browseService, { extractElements, parseIplayerState, toBrowseItem, toBrowseItems } from '../../src/service/browseService';
+import browseService, {
+    extractElements,
+    parseIplayerState,
+    toBrowseItem,
+    toBrowseItems,
+} from '../../src/service/browseService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 
@@ -127,7 +132,14 @@ describe('browseService', () => {
             feedResult('mid', 3),
         ]);
         mockedDetails.details.mockResolvedValue([
-            { pid: 'new', title: 'T', thumbnail: 'json-api/thumbnail/p0new.jpg', description: 'Fresh', category: 'Drama', type: VideoType.TV },
+            {
+                pid: 'new',
+                title: 'T',
+                thumbnail: 'json-api/thumbnail/p0new.jpg',
+                description: 'Fresh',
+                category: 'Drama',
+                type: VideoType.TV,
+            },
         ]);
         const rail = await browseService.recentlyAdded(2);
         expect(rail?.title).toBe('Recently Added');
@@ -199,13 +211,24 @@ describe('browseService', () => {
         const programmes = (...ids: string[]) => ({
             data: {
                 category_programmes: {
-                    elements: ids.map((id) => ({ ...element(id), images: { standard: `https://ichef.bbci.co.uk/images/ic/{recipe}/p0${id}.jpg` } })),
+                    elements: ids.map((id) => ({
+                        ...element(id),
+                        images: { standard: `https://ichef.bbci.co.uk/images/ic/{recipe}/p0${id}.jpg` },
+                    })),
                 },
             },
         });
         mockedAxios.get.mockImplementation(async (url: string) => {
             if (url.endsWith('/categories')) {
-                return { data: { categories: [{ id: 'drama', title: 'Drama' }, { id: 'films', title: 'Films' }, { id: 'news', title: 'News' }] } };
+                return {
+                    data: {
+                        categories: [
+                            { id: 'drama', title: 'Drama' },
+                            { id: 'films', title: 'Films' },
+                            { id: 'news', title: 'News' },
+                        ],
+                    },
+                };
             }
             if (url.includes('categories/drama/')) return programmes('aaa111', 'bbb222');
             if (url.includes('categories/films/')) return programmes('aaa111', 'ccc333');
@@ -308,10 +331,22 @@ describe('browseService', () => {
     it('nowNext finds the live slot in yesterday\'s schedule during the small hours', async () => {
         mockedAxios.get.mockImplementation(async (url: string) => {
             if (url.endsWith('/schedule/2026-10-04')) {
-                return { data: { schedule: { elements: [broadcast('breakfast', '2026-10-04T04:00:00Z', '2026-10-04T08:00:00Z')] } } };
+                return {
+                    data: {
+                        schedule: {
+                            elements: [broadcast('breakfast', '2026-10-04T04:00:00Z', '2026-10-04T08:00:00Z')],
+                        },
+                    },
+                };
             }
             if (url.endsWith('/schedule/2026-10-03')) {
-                return { data: { schedule: { elements: [broadcast('overnight', '2026-10-03T22:25:00Z', '2026-10-04T04:00:00Z')] } } };
+                return {
+                    data: {
+                        schedule: {
+                            elements: [broadcast('overnight', '2026-10-03T22:25:00Z', '2026-10-04T04:00:00Z')],
+                        },
+                    },
+                };
             }
             return { data: { schedule: { elements: [] } } };
         });
@@ -325,25 +360,45 @@ describe('browseService', () => {
         `<html>${extra}<svg viewBox="0 0 76 32" id="iplayer-nav-icon-bbcone"><path d="M1 1"></path></svg>` +
         '<svg viewBox="0 0 76 32" id="iplayer-nav-icon-bbcone-active"><path fill="#e8504b" d="M0 0"></path></svg>' +
         `<script>window.__IPLAYER_REDUX_STATE__ = ${JSON.stringify({
-            navigation: { items: [{ id: 'channels', subItems: [{ id: 'bbc_one', icon: 'bbcone' }, { id: 'bbc_two', icon: 'bbctwo' }] }] },
+            navigation: {
+                items: [
+                    {
+                        id: 'channels',
+                        subItems: [
+                            { id: 'bbc_one', icon: 'bbcone' },
+                            { id: 'bbc_two', icon: 'bbctwo' },
+                        ],
+                    },
+                ],
+            },
         })};</script></html>`;
 
-    it('channels() attaches a logo url, and channelLogo extracts a white svg from iPlayer', async () => {
+    it('channels() attaches a logo url, and channelLogo extracts the branded (coloured) svg from iPlayer', async () => {
         expect(browseService.channels().find((c) => c.id === 'bbc_one_london')?.logo).toBe(
             'json-api/browse/channel-logo/bbc_one.svg'
         );
         mockedAxios.get.mockResolvedValue({ data: logoHtml() });
         const svg = await browseService.channelLogo('bbc_one');
-        expect(svg).toBe('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 32" fill="#fff"><path d="M1 1"></path></svg>');
-        // The "-active" variant must not be picked up, and an icon missing from the page yields nothing.
-        expect(svg).not.toContain('e8504b');
+        expect(svg).toBe(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 32"><path fill="#e8504b" d="M0 0"></path></svg>'
+        );
+        // Must come from the coloured "-active" variant (brand colour + contrasting letter mark),
+        // not the plain icon, which carries no fill of its own. An icon missing from the page
+        // yields nothing.
+        expect(svg).toContain('e8504b');
         expect(await browseService.channelLogo('bbc_two')).toBeUndefined();
         expect(await browseService.channelLogo('unknown')).toBeUndefined();
     });
 
     it('programme groups episodes into ordered seasons', async () => {
         mockedDetails.getMetadata.mockResolvedValue({
-            programme: { type: 'brand', pid: 'b00brand', title: 'Brand', medium_synopsis: 'syn', image: { pid: 'p0img' } },
+            programme: {
+                type: 'brand',
+                pid: 'b00brand',
+                title: 'Brand',
+                medium_synopsis: 'syn',
+                image: { pid: 'p0img' },
+            },
         } as any);
         mockedDetails.getSeriesEpisodes.mockResolvedValue([
             { id: 'e1', type: 'episode', title: 'e1' },
@@ -384,7 +439,9 @@ describe('browseService', () => {
         mockedDetails.findBrandForPid.mockResolvedValue(undefined);
         mockedDetails.details.mockResolvedValue([{ pid: 'b00ep001', title: 'Ep', type: VideoType.TV }]);
         const result = await browseService.programme('b00ep001');
-        expect(result.seasons).toEqual([{ series: undefined, episodes: [expect.objectContaining({ pid: 'b00ep001' })] }]);
+        expect(result.seasons).toEqual([
+            { series: undefined, episodes: [expect.objectContaining({ pid: 'b00ep001' })] },
+        ]);
         expect(mockedDetails.getSeriesEpisodes).not.toHaveBeenCalled();
     });
 });

@@ -6,9 +6,10 @@ A read-only discovery UI for finding something to watch, without already knowing
 
 | Page | Route | What it shows |
 | --- | --- | --- |
-| Discover | `/browse` | A hero banner for the lead programme, then horizontal rails: **Featured**, **Recently Added**, **Most Popular**. |
-| Channels | `/browse/channels` | A tile per channel (logo plus name). |
+| Discover | `/browse` | A hero banner for the lead programme, then horizontal rails: **Featured**, **Recently Added**, **Most Popular**. Also has the **Colour channel pills by logo** toggle (see below). |
+| Channels | `/browse/channels` | A tile per channel, filled edge-to-edge with that channel's own coloured BBC logo. A channel without a usable logo falls back to its plain name on a plain tile. |
 | Channel | `/browse/channel/:id` | A **Now / Next** strip for what is on the channel, then **Featured** and **All Programmes** rails. |
+| Schedule | `/browse/schedule` | A multi-channel TV guide: every channel as a row, programmes laid out on a shared scrollable timeline sized by actual duration, a live "now" indicator, zoom in/out, and day navigation (prev/next/Today). |
 | Categories | `/browse/categories` | Artwork tiles, one per category. |
 | Category | `/browse/category/:id` | iPlayer's own curated rails for the category (e.g. "Panel Show Palooza!"), then every programme in a grid with **Load more**, a title filter and a channel filter. |
 | A to Z | `/browse/atoz/:letter?` | Letter bar (`0-9`, `A`-`Z`) and a grid for the chosen letter. Opens on `0-9`. |
@@ -21,6 +22,12 @@ Opening an *episode* card takes you to its whole show, not just that one episode
 - **Type-ahead:** the search box suggests programme titles as you type (two or more characters, debounced). Arrow keys move through the list, **Enter** opens the highlighted show, and **Enter** with nothing highlighted runs the normal search. Pasting an iPlayer URL still downloads it directly, as before.
 - **Posters view:** the Search page has a Table / Posters toggle (remembered per browser; Table is the default). Posters shows the same results as cards with Play and Download on hover. Bulk-select checkboxes exist in Table view only.
 - **Channel filter:** a channel dropdown appears when results span more than one channel. It combines with the existing TV / Movie filter.
+
+### Channel pills
+
+Wherever a channel name appears as a small pill (Discover, Search, Subscriptions, a Programme page, the episode info banner), it's coloured using that channel's own brand colours, sampled from the same coloured logo the Channels page uses - BBC One's pill is red, BBC Three's is lime green, and so on. Hovering (or focusing, for keyboard use) a coloured pill pops up the full logo.
+
+This is a per-browser preference, not a server setting: the **Colour channel pills by logo** checkbox on the Discover page toggles it off, back to every pill being the plain default colour, and the choice is remembered (`localStorage`) across visits. A channel with no mapped colour (e.g. one not in `BrowseChannels.ts`) always falls back to the plain style regardless of the toggle.
 
 ### Play and Download
 
@@ -52,11 +59,11 @@ Responses are cached in Redis so browsing does not hammer the BBC:
 | `browse_long` | 24 hours | The category list and its artwork, channel logos |
 | `metadata_cache` (existing) | 24 hours | Programme and episode metadata |
 
-"Now / Next" is worked out per request from the cached day schedule. iPlayer's schedule day runs 05:00 to 05:00, so in the early hours it also looks at the previous day.
+"Now / Next" is worked out per request from the cached day schedule. iPlayer's schedule day runs 05:00 to 05:00, so in the early hours it also looks at the previous day. The Schedule page's `/schedule` endpoint fetches the same per-channel day schedule, so it rides the same `browse_short` cache - switching between the Schedule page and a Channel page's Now/Next for the same day doesn't re-hit the BBC.
 
 ## Channels are a fixed list
 
-The category list is fetched live, but the 11 channels shown are listed in `src/constants/BrowseChannels.ts`, using the iPlayer API's own ids (`bbc_one_london`, `bbc_two_england`, ... from `GET /ibl/v1/channels`). Adding or renaming a channel means editing that file. Each entry also names its `masterBrand`, which is what the logo is looked up by; CBBC and CBeebies have no logo on iPlayer's page and show their name instead.
+The category list is fetched live, but the 11 channels shown are listed in `src/constants/BrowseChannels.ts`, using the iPlayer API's own ids (`bbc_one_london`, `bbc_two_england`, ... from `GET /ibl/v1/channels`). Adding or renaming a channel means editing that file. Each entry also names its `masterBrand`, which is what the logo (and its colours) are looked up by.
 
 ## Things to know
 
@@ -78,7 +85,9 @@ All under `/json-api/browse` (behind the same login as the rest of `/json-api`),
 | `GET /category/:id/rails` | iPlayer's curated rails for the category (`[]` if unavailable) |
 | `GET /channels` | The channel list with logo URLs |
 | `GET /channel/:id` | Channel info, rails and `nowNext` |
-| `GET /channel-logo/:masterBrand.svg` | A channel logo (white SVG) |
+| `GET /channel-logo/:masterBrand.svg` | A channel logo, in its real brand colours (coloured background + contrasting letter mark) |
+| `GET /channel-colors` | Each channel's `{bg, fg, logo}`, keyed by its display name with spaces stripped (e.g. `BBCOne`) - what the coloured pills and their hover popup use |
+| `GET /schedule?date=YYYY-MM-DD` | Every channel's full day of broadcasts (defaults to today, UK calendar date) - what the Schedule page renders |
 | `GET /atoz/:letter?page=&perPage=` | A page of programmes for `a`-`z` or `0` (digits) |
 | `GET /programme/:pid` | A show with its series and episodes |
 | `GET /details?pids=a,b,c` | Batch episode details (up to 40), used for Posters artwork |

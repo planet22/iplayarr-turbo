@@ -4,9 +4,9 @@ A tour of the web UI once iPlayarr is installed and linked to Sonarr/Radarr (see
 
 New to iPlayarr? Start with [GETTING_STARTED_BBC.md](GETTING_STARTED_BBC.md).
 
-## Discover, Channels, Categories, A to Z (`/browse`)
+## Discover, Channels, Schedule, Categories, A to Z (`/browse`)
 
-A browse-first way in: a hero banner and rows of programmes (Featured, Recently Added, Most Popular), channel pages with a Now / Next strip, category pages with iPlayer's own curated rows, and an A-Z index. Every card has **Play** (the in-app player) and **Download**; a show page lists its series and episodes and can download a whole series or be subscribed to. See [BROWSE.md](BROWSE.md).
+A browse-first way in: a hero banner and rows of programmes (Featured, Recently Added, Most Popular), channel tiles with their real coloured BBC logos, a channel page with a Now / Next strip, a multi-channel Schedule/TV-guide page, category pages with iPlayer's own curated rows, and an A-Z index. Every card has **Play** (the in-app player) and **Download**; a show page lists its series and episodes and can download a whole series or be subscribed to. Channel pills throughout the UI are coloured per-channel too, with a toggle to turn that off. See [BROWSE.md](BROWSE.md).
 
 ## Subscriptions (`/subscriptions`)
 
@@ -26,11 +26,11 @@ The main day-to-day view: active downloads and completed history, combined (`Que
 
 ## Streaming (`/streaming`)
 
-Only relevant when `MEDIA_MODE=strm`. Shows **Active Streams** currently being served, and **Stream History** — past sessions, retained per `STREAM_HISTORY_RETENTION_DAYS`. See [STREAMING.md](STREAMING.md) for setup and [CONFIG.md](CONFIG.md) for the full field reference.
+Only relevant when `MEDIA_MODE=strm`. Shows **Active Streams** currently being served, and **Stream History** — past sessions, retained per `STREAM_HISTORY_RETENTION_DAYS` (or cleared on demand with the Clear History button). The two tables share column widths/positions so they line up, even where one table has a column the other doesn't (e.g. Stream History's Started column, Active Streams' Action column) — those just render blank in the table that lacks them. See [STREAMING.md](STREAMING.md) for setup and [CONFIG.md](CONFIG.md) for the full field reference.
 
 ## NZB (`/nzb`)
 
-Diagnostics for the Newznab/SABnzbd integration specifically — recent searches and grabs *from Sonarr, Radarr, or Prowlarr*, not from manual Search/Download in the UI. Useful for confirming what a connected Arr instance is actually asking for, and for spotting a misbehaving search (e.g. wrong season/episode parsing). See [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md) for the protocol this reflects.
+Diagnostics for the Newznab/SABnzbd integration specifically — recent searches and grabs *from Sonarr, Radarr, or Prowlarr*, not from manual Search/Download in the UI. Useful for confirming what a connected Arr instance is actually asking for, and for spotting a misbehaving search (e.g. wrong season/episode parsing). Each of Recent Searches, Recent Grabs and Failed Grabs can be cleared independently (confirmation required). See [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md) for the protocol this reflects.
 
 ## Apps (`/apps`)
 

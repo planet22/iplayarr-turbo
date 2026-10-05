@@ -4,6 +4,7 @@
             <li class="sectionLabel">Browse</li>
             <LeftHandNavLink label="Discover" icon="compass" path="/browse" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Search" icon="search" path="/search" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Schedule" icon="calendar-days" path="/browse/schedule" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Channels" icon="tower-broadcast" path="/browse/channels" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" @option-clicked="closeLHN" />
             <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" @option-clicked="closeLHN" />

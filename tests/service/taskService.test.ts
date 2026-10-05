@@ -3,6 +3,7 @@ import scheduleFacade from '../../src/facade/scheduleFacade';
 import configService from '../../src/service/configService';
 import cronJobService from '../../src/service/cronJobService';
 import episodeCacheService from '../../src/service/episodeCacheService';
+import libraryCleanupService from '../../src/service/libraryCleanupService';
 import streamSessionService from '../../src/service/stream/streamSessionService';
 import subscriptionService from '../../src/service/subscriptionService';
 import TaskService from '../../src/service/taskService';
@@ -38,6 +39,10 @@ jest.mock('../../src/service/thumbnailCacheService', () => ({
 
 jest.mock('../../src/service/stream/streamSessionService', () => ({
     cleanupHistory: jest.fn(),
+}));
+
+jest.mock('../../src/service/libraryCleanupService', () => ({
+    cleanup: jest.fn(),
 }));
 
 const definedTasks = () => {
@@ -86,9 +91,7 @@ describe('TaskService', () => {
     });
 
     it('registers the fixed-schedule maintenance tasks', async () => {
-        (configService.getParameter as jest.Mock)
-            .mockResolvedValueOnce('*/5 * * * *')
-            .mockResolvedValueOnce('false');
+        (configService.getParameter as jest.Mock).mockResolvedValueOnce('*/5 * * * *').mockResolvedValueOnce('false');
 
         await TaskService.init();
 
@@ -96,6 +99,7 @@ describe('TaskService', () => {
         expect(tasks['subscriptions-check'].definition.cron).toBe('17 * * * *');
         expect(tasks['thumbnail-cleanup'].definition.cron).toBe('35 3 * * *');
         expect(tasks['stream-history-cleanup'].definition.cron).toBe('40 3 * * *');
+        expect(tasks['library-cleanup'].definition.cron).toBe('45 3 * * *');
 
         await tasks['subscriptions-check'].run();
         expect(subscriptionService.checkAll).toHaveBeenCalled();
@@ -105,5 +109,8 @@ describe('TaskService', () => {
 
         await tasks['stream-history-cleanup'].run();
         expect(streamSessionService.cleanupHistory).toHaveBeenCalled();
+
+        await tasks['library-cleanup'].run();
+        expect(libraryCleanupService.cleanup).toHaveBeenCalled();
     });
 });

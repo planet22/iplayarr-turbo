@@ -18,7 +18,7 @@
         <div class="meta">
             <div class="title" :title="item.title">{{ item.title }}</div>
             <div v-if="item.subtitle" class="subtitle" :title="item.subtitle">{{ item.subtitle }}</div>
-            <span v-if="item.channel" :class="['pill', channelPillClass(item.channel)]">{{ item.channel }}</span>
+            <ChannelPill :channel="item.channel" />
         </div>
     </RouterLink>
 </template>
@@ -26,7 +26,7 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
-import { channelPillClass } from '@/lib/browse';
+import ChannelPill from '@/components/common/ChannelPill.vue';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { getThumbnailUrl } from '@/lib/utils';
 
