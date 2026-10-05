@@ -590,12 +590,9 @@ watch(
 
                 &.seriesLink {
                     color: @brand-color;
-                    text-decoration: underline;
-                    text-decoration-color: transparent;
-                    transition: text-decoration-color 150ms;
 
                     &:hover {
-                        text-decoration-color: @brand-color;
+                        opacity: 0.8;
                     }
                 }
             }
