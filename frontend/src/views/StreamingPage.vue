@@ -4,17 +4,27 @@
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
-                <col />
+                <!-- A fixed px width, not a bare flexible <col/> - under table-layout:fixed a
+                     column with no specified width gets whatever's left after every other column
+                     claims its share, which can be 0 (and was: invisible, unclickable title) once
+                     enough ch-sized columns are added up. Fixed like every other column instead,
+                     so it can never collapse and both tables size it identically. -->
+                <col style="width: 200px" />
                 <!-- ch (not px): sized to the actual text/chip content (e.g. "Full-HD (1080p)",
                      "::ffff:172.19.0.3") so it doesn't clip whenever real values run longer than
-                     a guessed pixel width - see the equivalent note on QueueTable.vue. -->
-                <col style="width: 8ch" />
+                     a guessed pixel width - see the equivalent note on QueueTable.vue. Mode/Client
+                     IP/Started widths are shared with the history table below so columns that
+                     exist in both line up; Started has no value here (a running stream has no end
+                     to pair it with - Duration already covers "how long"), but keeps its column so
+                     Duration/Transferred/Segments still land under the same columns as history. -->
+                <col style="width: 18ch" />
                 <col style="width: 10ch" />
                 <col style="width: 6ch" />
                 <col style="width: 6ch" />
                 <col style="width: 18ch" />
                 <col style="width: 11ch" />
                 <col style="width: 20ch" />
+                <col style="width: 26ch" />
                 <col style="width: 10ch" />
                 <col style="width: 13ch" />
                 <col style="width: 110px" />
@@ -31,6 +41,7 @@
                     <th class="chipCol" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
                     <th>Client IP</th>
+                    <th />
                     <th>Duration</th>
                     <th>Transferred</th>
                     <th>Segments</th>
@@ -56,14 +67,14 @@
                         </div>
                     </td>
                     <td data-title="Mode">
-                        <span class="pill">{{ session.mode }}</span>
-                        <div class="subtle">{{ clientLabel(session.client) }}</div>
+                        <span class="pill">{{ modeLabel(session) }}</span>
                     </td>
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
                     <td data-title="Client IP">{{ session.clientIp }}</td>
+                    <td />
                     <td data-title="Duration">{{ formatDuration(session.startedAt) }}</td>
                     <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
                     <td data-title="Segments">
@@ -86,17 +97,18 @@
                     </td>
                 </tr>
                 <tr v-if="streams.active.length == 0">
-                    <td colspan="13" class="empty">No streams currently playing</td>
+                    <td colspan="14" class="empty">No streams currently playing</td>
                 </tr>
             </tbody>
         </table>
 
+        <SettingsPageToolbar :icons="['delete']" delete-label="Clear History" @delete-queue-item="clearHistory" />
         <legend>Stream History</legend>
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
-                <col />
-                <col style="width: 8ch" />
+                <col style="width: 200px" />
+                <col style="width: 18ch" />
                 <col style="width: 10ch" />
                 <col style="width: 6ch" />
                 <col style="width: 6ch" />
@@ -107,6 +119,9 @@
                 <col style="width: 10ch" />
                 <col style="width: 13ch" />
                 <col style="width: 110px" />
+                <!-- No per-row action here (nothing to stop on a finished stream) - kept so this
+                     column still lines up under the active-streams table's Action column. -->
+                <col style="width: 64px" />
             </colgroup>
             <thead>
                 <tr>
@@ -123,6 +138,7 @@
                     <th>Duration</th>
                     <th>Transferred</th>
                     <th>Segments</th>
+                    <th />
                 </tr>
             </thead>
             <tbody>
@@ -144,8 +160,7 @@
                         </div>
                     </td>
                     <td data-title="Mode">
-                        <span class="pill">{{ session.mode }}</span>
-                        <div class="subtle">{{ clientLabel(session.client) }}</div>
+                        <span class="pill">{{ modeLabel(session) }}</span>
                     </td>
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
@@ -164,9 +179,10 @@
                             @click="openSegments(session)"
                         />
                     </td>
+                    <td />
                 </tr>
                 <tr v-if="reversedHistory.length == 0">
-                    <td colspan="13" class="empty">No streaming history yet</td>
+                    <td colspan="14" class="empty">No streaming history yet</td>
                 </tr>
             </tbody>
         </table>
@@ -178,6 +194,7 @@
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
@@ -239,6 +256,11 @@ function clientLabel(client) {
     return clientLabels[client] ?? client ?? '';
 }
 
+function modeLabel(session) {
+    const client = clientLabel(session.client);
+    return client ? `${session.mode} (${client})` : session.mode;
+}
+
 function openInfo(pid) {
     const infoModal = useModal({
         component: VideoInfoModal,
@@ -286,12 +308,21 @@ function openSegments(session) {
     });
     modal.open();
 }
+
+async function clearHistory() {
+    if (await dialogService.confirm('Clear Stream History', 'Are you sure you want to clear the stream history?')) {
+        // The 'streams' socket push updates streams.value.history once the server confirms it -
+        // no need to clear it here too, same as stopStream above.
+        await ipFetch('json-api/streams/history', 'DELETE');
+        historyPage.value = 1;
+    }
+}
 </script>
 
 <style lang="less">
 .tableToolbar {
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
     align-items: center;
     gap: 10px;
     flex-wrap: wrap;

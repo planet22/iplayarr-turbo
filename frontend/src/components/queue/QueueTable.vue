@@ -1,7 +1,7 @@
 <template>
     <div class="tableToolbar">
-        <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
         <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter queue..." />
+        <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
     </div>
     <table class="queueTable responsive-table" summary="Hed">
         <colgroup>

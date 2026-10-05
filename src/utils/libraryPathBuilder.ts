@@ -1,15 +1,23 @@
 import path from 'path';
 
+import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
 
 // Picks which configured complete directory a completed item should land under.
 // ARR_COMPLETE_DIR (set via the *arr Complete Directory setting) is an
-// optional override for TV content only - Movies always use COMPLETE_DIR.
-// Falls back to COMPLETE_DIR when unset, so leaving it blank keeps the old
-// single-directory behavior.
-export function resolveCompleteDir(type: VideoType, completeDir: string, arrCompleteDir?: string): string {
-    return type === VideoType.TV && arrCompleteDir ? arrCompleteDir : completeDir;
+// optional override for TV content that Sonarr/Radarr actually queued (source
+// NZB) - Movies, and any manually-triggered or subscription-queued TV
+// download (source MANUAL), always use COMPLETE_DIR. Falls back to
+// COMPLETE_DIR when unset, so leaving it blank keeps the old single-directory
+// behavior.
+export function resolveCompleteDir(
+    type: VideoType,
+    source: QueueEntrySource | undefined,
+    completeDir: string,
+    arrCompleteDir?: string
+): string {
+    return type === VideoType.TV && source === QueueEntrySource.NZB && arrCompleteDir ? arrCompleteDir : completeDir;
 }
 
 // Windows/POSIX-illegal filename characters.

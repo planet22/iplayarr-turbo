@@ -2,7 +2,7 @@
     <div class="NavBar">
         <div class="left">
             <div class="logoPanel">
-                <RouterLink to="/queue">
+                <RouterLink to="/browse">
                     <img src="/iplayarr.png" alt="Logo" />
                     <p class="desktopOnly">iPlayarr Turbo</p>
                 </RouterLink>

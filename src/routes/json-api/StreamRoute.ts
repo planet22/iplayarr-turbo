@@ -12,6 +12,12 @@ router.get('/', async (_: Request, res: Response) => {
     res.json({ active, history });
 });
 
+router.delete('/history', async (_: Request, res: Response) => {
+    await streamSessionService.clearHistory();
+    await streamSessionService.emitStreams();
+    res.json({ ok: true });
+});
+
 router.post('/:id/stop', async (req: Request, res: Response) => {
     const stopped: boolean = await streamSessionService.stop(req.params.id as string);
     if (!stopped) {

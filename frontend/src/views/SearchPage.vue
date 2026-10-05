@@ -117,9 +117,7 @@
                         {{ formatStorageSize(result.size) }}
                     </td>
                     <td data-title="Channel" @click="download(result)">
-                        <span :class="['pill', result.channel.replaceAll(' ', '')]">
-                            {{ result.channel }}
-                        </span>
+                        <ChannelPill :channel="result.channel" />
                     </td>
                     <td data-title="First Broadcast" @click="download(result)">
                         {{ formatDate(result.pubDate) }}
@@ -155,6 +153,7 @@ import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
 import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
+import ChannelPill from '@/components/common/ChannelPill.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';

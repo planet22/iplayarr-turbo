@@ -201,10 +201,7 @@ describe('DownloadFacade', () => {
                 path.join(pidDir, 'Bing_Songs_original.mp4'),
                 path.join('/complete', 'Bing.S03E06.mp4')
             );
-            expect(historyService.addHistory).toHaveBeenCalledWith(
-                expect.objectContaining({ pid }),
-                'Complete'
-            );
+            expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
         });
 
         it('builds a Show/Season NN folder structure when LIBRARY_FOLDER_STRUCTURE is on', async () => {
@@ -221,8 +218,15 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            const expectedPath = path.join('/complete', 'Show Name', 'Season 01', 'Show Name - S01E01 - The Episode.mkv');
-            expect(fs.mkdirSync).toHaveBeenCalledWith(path.join('/complete', 'Show Name', 'Season 01'), { recursive: true });
+            const expectedPath = path.join(
+                '/complete',
+                'Show Name',
+                'Season 01',
+                'Show Name - S01E01 - The Episode.mkv'
+            );
+            expect(fs.mkdirSync).toHaveBeenCalledWith(path.join('/complete', 'Show Name', 'Season 01'), {
+                recursive: true,
+            });
             expect(fs.copyFileSync).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), expectedPath);
             expect(queueItem.libraryPath).toBe('Show Name/Season 01/Show Name - S01E01 - The Episode.mkv');
         });
@@ -289,7 +293,12 @@ describe('DownloadFacade', () => {
         });
 
         it('writes a .strmtool.json sidecar for a .strm file when WRITE_STRMTOOL_JSON is on', async () => {
-            mockConfig({ WRITE_NFO_STRM: 'all', WRITE_STRMTOOL_JSON: 'true', STREAM_MODE: 'progressive-mkv', VIDEO_QUALITY: 'hd' });
+            mockConfig({
+                WRITE_NFO_STRM: 'all',
+                WRITE_STRMTOOL_JSON: 'true',
+                STREAM_MODE: 'progressive-mkv',
+                VIDEO_QUALITY: 'hd',
+            });
             (fs.readdirSync as jest.Mock).mockReturnValue(['stream.strm']);
 
             const queueItem: QueueEntry = {
@@ -302,8 +311,8 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            const [[writtenPath, writtenContent]] = (fs.writeFileSync as jest.Mock).mock.calls.filter(
-                ([filePath]) => String(filePath).endsWith('.strmtool.json')
+            const [[writtenPath, writtenContent]] = (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) =>
+                String(filePath).endsWith('.strmtool.json')
             );
             expect(writtenPath).toBe(path.join('/complete', 'Show.S01E01.strmtool.json'));
             expect(JSON.parse(writtenContent as string)).toMatchObject({ isValid: true, container: 'mkv' });
@@ -330,7 +339,7 @@ describe('DownloadFacade', () => {
             expect(strmToolWrites).toHaveLength(0);
         });
 
-        it('moves TV downloads into ARR_COMPLETE_DIR when set, leaving movies in COMPLETE_DIR', async () => {
+        it('moves NZB-sourced TV downloads into ARR_COMPLETE_DIR when set, leaving movies in COMPLETE_DIR', async () => {
             mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
             (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
 
@@ -339,6 +348,7 @@ describe('DownloadFacade', () => {
                 status: 'DOWNLOADING' as any,
                 nzbName: 'Show.S01E01',
                 type: VideoType.TV,
+                source: QueueEntrySource.NZB,
             };
 
             await runDownloadToCompletion(queueItem);
@@ -358,6 +368,7 @@ describe('DownloadFacade', () => {
                 status: 'DOWNLOADING' as any,
                 nzbName: 'Some.Movie',
                 type: VideoType.MOVIE,
+                source: QueueEntrySource.NZB,
             };
 
             await runDownloadToCompletion(queueItem);
@@ -365,6 +376,26 @@ describe('DownloadFacade', () => {
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 path.join(pidDir, 'movie.mkv'),
                 path.join('/complete', 'Some.Movie.mkv')
+            );
+        });
+
+        it('leaves manually-triggered (and subscription) TV downloads in COMPLETE_DIR even when ARR_COMPLETE_DIR is set', async () => {
+            mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                source: QueueEntrySource.MANUAL,
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            expect(fs.copyFileSync).toHaveBeenCalledWith(
+                path.join(pidDir, 'episode.mkv'),
+                path.join('/complete', 'Show.S01E01.mkv')
             );
         });
 

@@ -15,7 +15,7 @@
     <TextInput
         v-model="config.ARR_COMPLETE_DIR"
         name="*arr Complete Directory"
-        tooltip="Optional override of Complete Directory for TV downloads only (what the *arr imports). Leave blank to use Complete Directory for everything."
+        tooltip="Overrides Complete Directory for Sonarr/Radarr-queued TV only. Blank = Complete Directory for everything."
         :error="validationErrors.config?.ARR_COMPLETE_DIR"
     />
     <SelectInput
@@ -42,14 +42,14 @@
     <SelectInput
         v-model="config.LIBRARY_FOLDER_STRUCTURE"
         name="Organize into Folder Structure?"
-        tooltip="Store completed downloads under Complete Directory in Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Sonarr/Radarr are told the correct nested path."
+        tooltip="Organizes completed downloads into Jellyfin-style Show/Season (or Movie) folders instead of one flat folder."
         :error="validationErrors.config?.LIBRARY_FOLDER_STRUCTURE"
         :options="trueOrFalse"
     />
     <SelectInput
         v-model="config.WRITE_NFO_STRM"
         name="Write .nfo Metadata Files?"
-        tooltip="Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when Media Mode is set to Streaming - this just adds matching .nfo metadata for it. Can be scoped to only downloads added by Sonarr/Radarr (NZB) or only manually-triggered downloads."
+        tooltip="Writes a Jellyfin-compatible .nfo file alongside each completed item. Can be scoped to Sonarr/Radarr or manual downloads only."
         :error="validationErrors.config?.WRITE_NFO_STRM"
         :options="nfoWriteModes"
     />
@@ -57,7 +57,7 @@
         v-if="config.WRITE_NFO_STRM !== 'none'"
         v-model="config.WRITE_STRMTOOL_JSON"
         name="Write .strmtool.json Files?"
-        tooltip="Alongside the .nfo, also write a .strmtool.json sidecar for the StrmTool Jellyfin plugin (jinlin-teck/StrmTool) so it can skip probing a .strm file. Only written for .strm files (Media Mode = Streaming). iPlayarr never probes the actual stream, so the codec/resolution in the file are informed guesses (BBC content is H.264/AAC; resolution from Video Quality), not measurements."
+        tooltip="Writes a .strmtool.json sidecar for the StrmTool Jellyfin plugin, so it can skip probing .strm files. Codec/resolution are informed guesses, not measurements."
         :error="validationErrors.config?.WRITE_STRMTOOL_JSON"
         :options="trueOrFalse"
     />

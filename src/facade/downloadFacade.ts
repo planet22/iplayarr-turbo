@@ -54,10 +54,11 @@ class DownloadFacade {
         }
     }
 
-    async #processComplete(pid: string, directory: string, code: any, service : AbstractDownloadService): Promise<void> {
+    async #processComplete(pid: string, directory: string, code: any, service: AbstractDownloadService): Promise<void> {
         const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
         const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
-        const useFolderStructure = (await configService.getParameter(IplayarrParameter.LIBRARY_FOLDER_STRUCTURE)) === 'true';
+        const useFolderStructure =
+            (await configService.getParameter(IplayarrParameter.LIBRARY_FOLDER_STRUCTURE)) === 'true';
         const nfoWriteMode = await configService.getParameter(IplayarrParameter.WRITE_NFO_STRM);
         const writeStrmToolJson = (await configService.getParameter(IplayarrParameter.WRITE_STRMTOOL_JSON)) === 'true';
         const streamMode = await configService.getParameter(IplayarrParameter.STREAM_MODE);
@@ -80,8 +81,8 @@ class DownloadFacade {
                     // wrong for DASH-delivered content: get-iplayer's own final, fully-tagged
                     // output file keeps that name (audio/video component streams are
                     // .m4a/.m4v/.txt, so the extension check alone already excludes those).
-                    const videoFile = files.find((file) =>
-                        file.endsWith('.mp4') || file.endsWith('.mkv') || file.endsWith('.strm')
+                    const videoFile = files.find(
+                        (file) => file.endsWith('.mp4') || file.endsWith('.mkv') || file.endsWith('.strm')
                     );
 
                     if (videoFile) {
@@ -89,8 +90,18 @@ class DownloadFacade {
                         const extension = path.extname(videoFile).slice(1);
                         loggingService.debug(pid, `Found video file ${oldPath}`);
 
-                        const itemCompleteDir = resolveCompleteDir(queueItem.type, completeDir, arrCompleteDir);
-                        const libraryPath: LibraryFilePath = buildLibraryFilePath(itemCompleteDir, queueItem, extension, useFolderStructure);
+                        const itemCompleteDir = resolveCompleteDir(
+                            queueItem.type,
+                            queueItem.source,
+                            completeDir,
+                            arrCompleteDir
+                        );
+                        const libraryPath: LibraryFilePath = buildLibraryFilePath(
+                            itemCompleteDir,
+                            queueItem,
+                            extension,
+                            useFolderStructure
+                        );
                         fs.mkdirSync(libraryPath.directory, { recursive: true });
                         loggingService.debug(pid, `Moving ${oldPath} to ${libraryPath.fullPath}`);
 
@@ -99,7 +110,13 @@ class DownloadFacade {
                         queueItem.libraryPath = libraryPath.relativePath;
 
                         if (shouldWriteNfo(nfoWriteMode, queueItem.source)) {
-                            this.#writeLibrarySidecarFiles(queueItem, libraryPath, writeStrmToolJson, streamMode, videoQuality);
+                            this.#writeLibrarySidecarFiles(
+                                queueItem,
+                                libraryPath,
+                                writeStrmToolJson,
+                                streamMode,
+                                videoQuality
+                            );
                         }
 
                         videoEventService.record(
@@ -111,14 +128,21 @@ class DownloadFacade {
                         );
                     } else {
                         loggingService.error(`get-iplayer exited successfully but produced no video file for ${pid}`);
-                        videoEventService.record(VideoEventType.DOWNLOAD_FAILED, `No video file produced for "${queueItem.nzbName}"`, { pid, level: 'error' });
+                        videoEventService.record(
+                            VideoEventType.DOWNLOAD_FAILED,
+                            `No video file produced for "${queueItem.nzbName}"`,
+                            { pid, level: 'error' }
+                        );
                     }
 
                     // Delete the uuid directory and file after moving it
                     loggingService.debug(pid, `Deleting old directory ${directory}`);
                     fs.rmSync(directory, { recursive: true, force: true });
 
-                    await historyService.addHistory(queueItem, videoFile ? QueueEntryStatus.COMPLETE : QueueEntryStatus.FAILED);
+                    await historyService.addHistory(
+                        queueItem,
+                        videoFile ? QueueEntryStatus.COMPLETE : QueueEntryStatus.FAILED
+                    );
                 } catch (err) {
                     loggingService.error(err);
                 }
@@ -126,7 +150,11 @@ class DownloadFacade {
         } else {
             const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
             if (queueItem) {
-                videoEventService.record(VideoEventType.DOWNLOAD_FAILED, `Download process for "${queueItem.nzbName}" exited with code ${code}`, { pid, level: 'error' });
+                videoEventService.record(
+                    VideoEventType.DOWNLOAD_FAILED,
+                    `Download process for "${queueItem.nzbName}" exited with code ${code}`,
+                    { pid, level: 'error' }
+                );
             }
         }
         queueService.removeFromQueue(pid);

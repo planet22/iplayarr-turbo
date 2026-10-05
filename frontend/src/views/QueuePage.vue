@@ -6,7 +6,7 @@
 </template>
 
 <script setup>
-import { inject, onMounted, provide, ref } from 'vue';
+import { inject, ref } from 'vue';
 
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import dialogService from '@/lib/dialogService';
@@ -26,13 +26,6 @@ const queue = inject('queue');
 const history = inject('history');
 
 const queueTable = ref(null);
-
-const apps = ref([]);
-provide('apps', apps);
-
-onMounted(async () => {
-    apps.value = (await ipFetch('json-api/apps')).data;
-});
 
 const deleteItems = async () => {
     const queueItems = queueTable.value.selectedQueue;
