@@ -6,6 +6,7 @@ import downloadFacade from '../../src/facade/downloadFacade';
 import configService from '../../src/service/configService';
 import GetIplayerDownloadService from '../../src/service/download/GetIplayerDownloadService';
 import historyService from '../../src/service/historyService';
+import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
 import { DownloadClient } from '../../src/types/enums/DownloadClient';
 import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
@@ -54,6 +55,10 @@ jest.mock('../../src/service/download/YTDLPDownloadService', () => ({
     postProcess: jest.fn(),
 }));
 
+jest.mock('../../src/service/iplayerDetailsService', () => ({
+    episodeDetails: jest.fn(),
+}));
+
 jest.mock('../../src/service/queueService', () => ({
     updateQueue: jest.fn(),
     getFromQueue: jest.fn(),
@@ -84,6 +89,9 @@ describe('DownloadFacade', () => {
         // set by one test (e.g. queueService.getFromQueue) can't bleed into the
         // next - every test here sets up the mocks it needs from scratch.
         jest.resetAllMocks();
+        // Sane default so tests that don't care about the .nfo <plot> tag don't need
+        // to mock this themselves - overridden explicitly by the tests that do.
+        (iplayerDetailsService.episodeDetails as jest.Mock).mockResolvedValue({ description: undefined });
     });
 
     describe('download', () => {
@@ -464,6 +472,52 @@ describe('DownloadFacade', () => {
                 expect.stringContaining('<episodedetails>'),
                 'utf8'
             );
+        });
+
+        it('fetches and writes the synopsis into the .nfo <plot> tag', async () => {
+            mockConfig({ WRITE_NFO_STRM: 'all' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+            (iplayerDetailsService.episodeDetails as jest.Mock).mockResolvedValue({
+                description: 'A fight to the death with a spaceship.',
+            });
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1 },
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            expect(iplayerDetailsService.episodeDetails).toHaveBeenCalledWith(pid);
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                expect.stringContaining('.nfo'),
+                expect.stringContaining('<plot>A fight to the death with a spaceship.</plot>'),
+                'utf8'
+            );
+        });
+
+        it('still writes the .nfo without a <plot> tag when the synopsis lookup fails', async () => {
+            mockConfig({ WRITE_NFO_STRM: 'all' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+            (iplayerDetailsService.episodeDetails as jest.Mock).mockRejectedValue(new Error('BBC API down'));
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1 },
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            const [[, nfoContent]] = (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) =>
+                String(filePath).endsWith('.nfo')
+            );
+            expect(nfoContent).not.toContain('<plot>');
         });
     });
 

@@ -9,6 +9,7 @@ import GetIplayerDownloadService from '../service/download/GetIplayerDownloadSer
 import StrmDownloadService from '../service/download/StrmDownloadService';
 import YTDLPDownloadService from '../service/download/YTDLPDownloadService';
 import historyService from '../service/historyService';
+import iplayerDetailsService from '../service/iplayerDetailsService';
 import loggingService from '../service/loggingService';
 import queueService from '../service/queueService';
 import socketService from '../service/socketService';
@@ -110,7 +111,7 @@ class DownloadFacade {
                         queueItem.libraryPath = libraryPath.relativePath;
 
                         if (shouldWriteNfo(nfoWriteMode, queueItem.source)) {
-                            this.#writeLibrarySidecarFiles(
+                            await this.#writeLibrarySidecarFiles(
                                 queueItem,
                                 libraryPath,
                                 writeStrmToolJson,
@@ -165,14 +166,24 @@ class DownloadFacade {
     // the completed file IS already a .strm (produced by StrmDownloadService
     // and moved into place above), and for a real download a .strm would be
     // redundant since Jellyfin can already see the video file directly.
-    #writeLibrarySidecarFiles(
+    async #writeLibrarySidecarFiles(
         item: QueueEntry,
         libraryPath: LibraryFilePath,
         writeStrmToolJson: boolean,
         streamMode?: string,
         videoQuality?: string
-    ): void {
+    ): Promise<void> {
         const baseName = path.parse(libraryPath.fileName).name;
+
+        if (item.library && !item.library.description) {
+            // Best-effort - the synopsis is a nice-to-have for the .nfo <plot> tag, not
+            // essential, so a lookup failure (BBC API down, pid no longer valid, etc.)
+            // shouldn't block writing the rest of the metadata.
+            item.library.description = await iplayerDetailsService
+                .episodeDetails(item.pid)
+                .then((details) => details.description)
+                .catch(() => undefined);
+        }
 
         const nfoContent = item.type === VideoType.MOVIE ? buildMovieNfo(item) : buildEpisodeNfo(item);
         fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.nfo`), nfoContent, 'utf8');

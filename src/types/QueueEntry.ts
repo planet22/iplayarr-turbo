@@ -19,6 +19,10 @@ export interface QueueLibraryMetadata {
     // Episode duration in seconds, when known - populates the .nfo <runtime> tag
     // (nfoBuilder.ts) and the .strmtool.json runTimeTicks field (strmToolBuilder.ts).
     runtimeSeconds?: number;
+    // Synopsis, fetched best-effort from iplayerDetailsService at NFO-write time
+    // (not carried through the NZB round-trip like the other fields) - populates
+    // the .nfo <plot> tag.
+    description?: string;
 }
 
 export interface QueueEntry {
