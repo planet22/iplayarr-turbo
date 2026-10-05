@@ -4,7 +4,12 @@
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
-                <col />
+                <!-- A fixed px width, not a bare flexible <col/> - under table-layout:fixed a
+                     column with no specified width gets whatever's left after every other column
+                     claims its share, which can be 0 (and was: invisible, unclickable title) once
+                     enough ch-sized columns are added up. Fixed like every other column instead,
+                     so it can never collapse and both tables size it identically. -->
+                <col style="width: 200px" />
                 <!-- ch (not px): sized to the actual text/chip content (e.g. "Full-HD (1080p)",
                      "::ffff:172.19.0.3") so it doesn't clip whenever real values run longer than
                      a guessed pixel width - see the equivalent note on QueueTable.vue. Mode/Client
@@ -12,7 +17,7 @@
                      exist in both line up; Started has no value here (a running stream has no end
                      to pair it with - Duration already covers "how long"), but keeps its column so
                      Duration/Transferred/Segments still land under the same columns as history. -->
-                <col style="width: 28ch" />
+                <col style="width: 18ch" />
                 <col style="width: 10ch" />
                 <col style="width: 6ch" />
                 <col style="width: 6ch" />
@@ -102,8 +107,8 @@
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
-                <col />
-                <col style="width: 28ch" />
+                <col style="width: 200px" />
+                <col style="width: 18ch" />
                 <col style="width: 10ch" />
                 <col style="width: 6ch" />
                 <col style="width: 6ch" />
@@ -174,6 +179,7 @@
                             @click="openSegments(session)"
                         />
                     </td>
+                    <td />
                 </tr>
                 <tr v-if="reversedHistory.length == 0">
                     <td colspan="14" class="empty">No streaming history yet</td>
