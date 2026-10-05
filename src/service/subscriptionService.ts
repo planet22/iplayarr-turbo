@@ -1,7 +1,6 @@
 import { v4 } from 'uuid';
 
 import { searchResultLimit } from '../constants/iPlayarrConstants';
-import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { SubscribeOptions, Subscription, SubscriptionCheckResult } from '../types/Subscription';
@@ -129,6 +128,8 @@ class SubscriptionService {
         if (!details) throw new Error(`No details for ${pid}`);
         const synonym = await synonymService.getSynonym(details.title);
         const nzbName = await createNZBName(details, synonym);
+        // MANUAL (the default) is correct here - not handed in by Sonarr/Radarr, so scoped
+        // like any other manual download (e.g. WRITE_NFO_STRM=manual).
         queueService.addToQueue(pid, nzbName, details.type, undefined, {
             title: details.title,
             series: details.series,
@@ -137,7 +138,7 @@ class SubscriptionService {
             channel: details.channel,
             pubDate: details.firstBroadcast,
             runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
-        }, QueueEntrySource.MANUAL); // Not handed in by Sonarr/Radarr, so scoped like any other manual download (e.g. WRITE_NFO_STRM=manual)
+        });
         videoEventService.record(VideoEventType.QUEUED, `Subscription queued "${nzbName}" for download`, { pid });
         return nzbName;
     }

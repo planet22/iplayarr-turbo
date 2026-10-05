@@ -9,6 +9,7 @@ import statisticsService from '../../service/stats/StatisticsService';
 import videoEventService from '../../service/videoEventService';
 import { AppType } from '../../types/AppType';
 import { FailedGrabEntry } from '../../types/data/FailedGrabEntry';
+import { QueueEntrySource } from '../../types/enums/QueueEntrySource';
 import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueLibraryMetadata } from '../../types/QueueEntry';
 import { NZBMetaEntry } from '../../types/responses/newznab/NZBFileResponse';
@@ -40,10 +41,12 @@ export default async (req: Request, res: Response) => {
         for (const file of files) {
             const xmlString = file.buffer.toString('utf-8');
             const { pid, nzbName, type, appId, library } = await getDetails(xmlString);
+            // This endpoint only ever receives files from the SABnzbd-compatible protocol
+            // (Sonarr/Radarr/Prowlarr handing off a grab) - the one legitimate NZB source.
             if (library) {
-                queueService.addToQueue(pid, nzbName, type, appId, library);
+                queueService.addToQueue(pid, nzbName, type, appId, library, QueueEntrySource.NZB);
             } else {
-                queueService.addToQueue(pid, nzbName, type, appId);
+                queueService.addToQueue(pid, nzbName, type, appId, undefined, QueueEntrySource.NZB);
             }
             videoEventService.record(VideoEventType.QUEUED, `Queued "${nzbName}" for download`, { pid });
             pids.push(pid);

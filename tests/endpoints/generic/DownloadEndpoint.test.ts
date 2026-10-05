@@ -3,7 +3,6 @@ import { Request, Response } from 'express';
 import DownloadEndpoint from '../../../src/endpoints/generic/DownloadEndpoint';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import queueService from '../../../src/service/queueService';
-import { QueueEntrySource } from '../../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../../src/types/IPlayerSearchResult';
 import { IPlayerMetadataResponse } from '../../../src/types/responses/IPlayerMetadataResponse';
 
@@ -42,8 +41,7 @@ describe('DownloadEndpoint', () => {
             'Doctor.Who_The.Timeless.Child',
             VideoType.TV,
             undefined,
-            expect.objectContaining({ title: 'Doctor Who' }),
-            QueueEntrySource.MANUAL
+            expect.objectContaining({ title: 'Doctor Who' })
         );
         expect(jsonMock).toHaveBeenCalledWith({ status: true });
     });
@@ -76,8 +74,7 @@ describe('DownloadEndpoint', () => {
             'Inception',
             VideoType.MOVIE,
             undefined,
-            expect.objectContaining({ title: 'Inception' }),
-            QueueEntrySource.MANUAL
+            expect.objectContaining({ title: 'Inception' })
         );
         expect(jsonMock).toHaveBeenCalledWith({ status: true });
     });
@@ -87,14 +84,7 @@ describe('DownloadEndpoint', () => {
 
         await DownloadEndpoint(req as Request, res as Response);
 
-        expect(queueService.addToQueue).toHaveBeenCalledWith(
-            'abc123',
-            '',
-            VideoType.TV,
-            undefined,
-            undefined,
-            QueueEntrySource.MANUAL
-        );
+        expect(queueService.addToQueue).toHaveBeenCalledWith('abc123', '', VideoType.TV);
         expect(jsonMock).toHaveBeenCalledWith({ status: true });
     });
 });
