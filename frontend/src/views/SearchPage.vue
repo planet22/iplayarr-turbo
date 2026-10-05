@@ -1,6 +1,28 @@
 <template>
+    <div class="pageSearchBar">
+        <div class="searchPanel">
+            <font-awesome-icon :icon="['fas', 'search']" />
+            <div class="searchWrap">
+                <input
+                    v-model="searchInput" class="searchBox" type="text" placeholder="Search or Download Url"
+                    autocomplete="off" @input="onInput" @focus="onInput" @blur="closeSuggestions"
+                    @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
+                    @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
+                <ul v-if="showSuggestions && suggestions.length" class="suggestions">
+                    <li
+                        v-for="(suggestion, index) in suggestions" :key="suggestion.pid"
+                        :class="{ active: index === activeIndex }" @mousedown.prevent="openSuggestion(suggestion)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'tv']" />
+                        <span>{{ suggestion.title }}</span>
+                    </li>
+                    <li class="seeAll" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
+                </ul>
+            </div>
+        </div>
+    </div>
     <SettingsPageToolbar
-        :icons="filteredResults.length ? ['filter', 'download'] : []"
+        :icons="toolbarIcons"
         :filter-options="availableFilters"
         :selected-filter="filter"
         :filter-enabled="filter != 'All'"
@@ -35,13 +57,13 @@
         <table v-else class="resultsTable responsive-table">
             <colgroup>
                 <col style="width: 40px" />
-                <col style="width: 80px" />
+                <col style="width: 70px" />
                 <col />
-                <col style="width: 220px" />
-                <col style="width: 260px" />
-                <col style="width: 90px" />
-                <col style="width: 120px" />
-                <col style="width: 150px" />
+                <col style="width: 160px" />
+                <col />
+                <col style="width: 85px" />
+                <col style="width: 100px" />
+                <col style="width: 190px" />
                 <col style="width: 44px" />
                 <col style="width: 44px" />
             </colgroup>
@@ -143,10 +165,86 @@ const router = useRouter();
 
 const searchResults = ref([]);
 const searchTerm = ref('');
+const searchInput = ref(route.query.searchTerm ?? '');
 const loading = ref(searchTerm.value !== '');
 const availableFilters = ref(['All', 'TV', 'Movie']);
 const filter = ref('All');
 const allChecked = ref(false);
+
+const toolbarIcons = computed(() => {
+    const icons = [];
+    if (searchResults.value.length) icons.push('filter');
+    if (filteredResults.value.length) icons.push('download');
+    return icons;
+});
+
+// As-you-type suggestions (titles only, from the browse API) - mirrors the nav bar's search box.
+// Debounced, and a request counter drops responses that arrive after a newer keystroke.
+const suggestions = ref([]);
+const showSuggestions = ref(false);
+const activeIndex = ref(-1);
+let suggestTimer = null;
+let suggestRequest = 0;
+
+const closeSuggestions = () => {
+    showSuggestions.value = false;
+    activeIndex.value = -1;
+    suggestRequest += 1;
+    clearTimeout(suggestTimer);
+};
+
+const onInput = () => {
+    clearTimeout(suggestTimer);
+    const term = (searchInput.value ?? '').trim();
+    // URLs go straight to the download path on Enter - nothing to suggest for them.
+    if (term.length < 2 || /[/:]/.test(term)) {
+        closeSuggestions();
+        return;
+    }
+    suggestTimer = setTimeout(async () => {
+        const request = ++suggestRequest;
+        try {
+            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}`);
+            if (request === suggestRequest && ok && Array.isArray(data)) {
+                suggestions.value = data;
+                activeIndex.value = -1;
+                showSuggestions.value = true;
+            }
+        } catch {
+            // Suggestions are a nicety - Enter still runs a normal search.
+        }
+    }, 250);
+};
+
+const moveActive = (delta) => {
+    if (!showSuggestions.value || !suggestions.value.length) return;
+    // Cycles through the suggestions, with -1 meaning "none highlighted" (Enter = plain search).
+    const count = suggestions.value.length;
+    const next = activeIndex.value + delta;
+    activeIndex.value = next < -1 ? count - 1 : next >= count ? -1 : next;
+};
+
+const openSuggestion = (suggestion) => {
+    closeSuggestions();
+    searchInput.value = '';
+    router.push(`/browse/programme/${suggestion.pid}`);
+};
+
+const onEnter = () => {
+    const picked = showSuggestions.value ? suggestions.value[activeIndex.value] : undefined;
+    if (picked) {
+        openSuggestion(picked);
+    } else {
+        closeSuggestions();
+        runSearch();
+    }
+};
+
+const runSearch = () => {
+    filter.value = 'All';
+    channelFilter.value = 'All';
+    router.push({ name: 'search', query: { searchTerm: searchInput.value } });
+};
 
 const channelFilter = ref('All');
 const channelOptions = computed(() => [
@@ -238,6 +336,7 @@ watch(
             loading.value = true;
             searchResults.value = [];
             searchTerm.value = newSearchTerm;
+            searchInput.value = newSearchTerm;
             searchResults.value = (await ipFetch(`json-api/search?q=${searchTerm.value}`)).data;
             loading.value = false;
         }
@@ -299,6 +398,83 @@ watch(
 </script>
 
 <style lang="less" scoped>
+.pageSearchBar {
+    padding: 1rem 1rem 0;
+
+    .searchPanel {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        max-width: 480px;
+
+        .searchWrap {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .searchBox {
+            flex: 1;
+            background-color: transparent;
+            border: 0px;
+            border-bottom: 1px solid @primary-text-color;
+            padding: 5px 5px;
+            color: @primary-text-color;
+            border-radius: 0px;
+            transition: border-bottom-color 0.3s ease-out;
+
+            &:focus {
+                outline: none;
+                box-shadow: none;
+                border-bottom-color: @brand-color;
+            }
+        }
+
+        .suggestions {
+            position: absolute;
+            top: calc(100% - 4px);
+            left: 0;
+            right: 0;
+            margin: 0;
+            padding: 4px 0;
+            list-style: none;
+            z-index: 10;
+            border-radius: 4px;
+            border: 1px solid @settings-button-border-color;
+            background-color: @nav-active-background-color;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+
+            li {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 8px 12px;
+                cursor: pointer;
+                font-size: 14px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+
+                svg {
+                    color: @subtle-text-color;
+                }
+
+                &:hover,
+                &.active {
+                    background-color: @settings-button-hover-background-color;
+                }
+
+                &.seeAll {
+                    color: @primary-color;
+                    border-top: 1px solid @settings-button-border-color;
+                    margin-top: 4px;
+                }
+            }
+        }
+    }
+}
+
 .viewToggle {
     display: flex;
     justify-content: flex-end;
@@ -355,6 +531,15 @@ watch(
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+
+            &:first-child,
+            &:nth-last-child(-n + 2) {
+                text-align: center;
+
+                :deep(.CheckInput-container) {
+                    justify-content: center;
+                }
+            }
         }
     }
 
@@ -379,6 +564,15 @@ watch(
                 &.wrap {
                     white-space: normal;
                     word-break: break-word;
+                }
+
+                &:first-child,
+                &:nth-last-child(-n + 2) {
+                    text-align: center;
+
+                    :deep(.CheckInput-container) {
+                        justify-content: center;
+                    }
                 }
             }
         }
