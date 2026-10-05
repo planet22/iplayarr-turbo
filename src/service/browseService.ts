@@ -302,7 +302,7 @@ class BrowseService {
     // Channel logos come from the inline SVG icons on iPlayer's own pages (the IBL API has none).
     // Fetched at runtime and cached rather than shipped in this repo, like the thumbnails.
     async channelLogo(masterBrand: string): Promise<string | undefined> {
-        const logos: Record<string, string> = await this.longCache.getOr('channel_logos', async () => {
+        const logos: Record<string, string> = await this.longCache.getOr('channel_logos_v2', async () => {
             const page = await axios.get('https://www.bbc.co.uk/iplayer', { headers: { 'User-Agent': 'Mozilla/5.0' } });
             const html = String(page.data);
             const nav: any[] = parseIplayerState(html)?.navigation?.items ?? [];
@@ -310,10 +310,15 @@ class BrowseService {
             const found: Record<string, string> = {};
             for (const { id, icon } of subItems) {
                 if (!/^[a-z0-9_]+$/i.test(String(id)) || !/^[a-z0-9]+$/i.test(String(icon))) continue;
-                const match = new RegExp(`<svg viewBox="([^"]+)" id="iplayer-nav-icon-${icon}">(.*?)</svg>`, 's').exec(html);
+                // The "-active" variant is the coloured one (brand-colour background + contrasting
+                // letter mark) shown on iPlayer's own nav when a channel is selected; attribute order
+                // on the <svg> varies between icons, so match viewBox/id independent of position.
+                const match = new RegExp(
+                    `<svg\\b[^>]*\\bviewBox="([^"]+)"[^>]*\\bid="iplayer-nav-icon-${icon}-active"[^>]*>(.*?)</svg>`,
+                    's'
+                ).exec(html);
                 if (match) {
-                    // White so it reads on the dark UI; the source icons take their colour from the page CSS.
-                    found[id] = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${match[1]}" fill="#fff">${match[2]}</svg>`;
+                    found[id] = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${match[1]}">${match[2]}</svg>`;
                 }
             }
             return found;
