@@ -8,11 +8,22 @@ Subscribe to a show and iPlayarr queues its **new episodes** for download automa
 2. Press **Subscribe** under the synopsis.
 3. Choose what you want:
    - **Only new episodes from now on**, or
-   - **New episodes, and download the latest one now**.
+   - **New episodes, and download the latest one now**, or
+   - **Download all N available episodes now, plus new ones** (N is how many the show page lists).
 
 The button then reads **Subscribed**; press it again to unsubscribe. Subscriptions are per *show* (the brand), so a new series of a show you follow is picked up automatically. A one-off programme that is not part of a show cannot be subscribed to.
 
-When you subscribe, every episode that is already available is recorded as **seen** and will not be downloaded. Only episodes that appear afterwards are queued.
+With the first two choices, every episode that is already available is recorded as **seen** and will not be downloaded; only episodes that appear afterwards are queued (plus the newest one if you asked for it).
+
+### Download all
+
+The third choice starts the subscription with *nothing* seen, so the first check queues every available episode. That check runs in the background, so pressing Subscribe returns straight away even for a show with hundreds of episodes, and you are taken to the Queue to watch them arrive.
+
+- Episodes are queued **oldest first**, in broadcast order, named and filed like any other download.
+- Episodes already in the queue or in history are skipped, and one that fails to queue is left unseen and retried by the next hourly check.
+- The Queue's normal limit on simultaneous downloads applies, so a big show works through its backlog gradually.
+- It can be a lot of data (or a lot of `.strm` files, in `strm` mode). The dialog says how many episodes it will queue. If you pick it by mistake, remove the items from the Queue and Unsubscribe.
+- Only the *first* check is special: later checks behave as normal, and a second check cannot start while the first is still working through the list.
 
 ## Subscriptions page (`/subscriptions`)
 
@@ -58,7 +69,7 @@ Subscriptions live in Redis under the `subscriptions` key (see [REDIS.md](REDIS.
 | Endpoint | Does |
 | --- | --- |
 | `GET /` | List subscriptions |
-| `POST /` with `{ "pid": "...", "downloadLatest": false }` | Subscribe (an episode or show pid; returns the existing subscription if there is one) |
+| `POST /` with `{ "pid": "...", "downloadLatest": false, "downloadAll": false }` | Subscribe (an episode or show pid; returns the existing subscription if there is one). `downloadAll` wins over `downloadLatest`, and both are only honoured when exactly `true`. |
 | `POST /check` | Check every subscription now |
 | `POST /:id/check` | Check one subscription now |
 | `DELETE /:id` | Unsubscribe |

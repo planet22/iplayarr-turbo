@@ -36,6 +36,15 @@ class IPlayerDetailsService {
     async episodeDetails(pid: string, axiosInstance: Axios = axios): Promise<IPlayerDetails> {
         const { programme } = await this.getMetadata(pid, axiosInstance);
         const [type, episode, episodeTitle, series] = await calculateSeasonAndEpisode(programme);
+        // The immediate parent is often a mid-tier "series" (season), not the top-level "brand" -
+        // only a brand's episode listing is guaranteed non-empty, so climb the rest of the way when
+        // the parent isn't already one (see findBrandForPid / browseService.programme's own climb).
+        const parent = programme.parent?.programme;
+        const seriesPid = !parent
+            ? undefined
+            : parent.type === 'brand'
+                ? parent.pid
+                : await this.findBrandForPid(parent.pid).catch(() => undefined);
         return {
             pid,
             title: programme.display_title?.title ?? programme.title,
@@ -52,6 +61,7 @@ class IPlayerDetailsService {
                 ? `json-api/thumbnail/${programme.image.pid}.jpg`
                 : undefined,
             type,
+            seriesPid,
         };
     }
 

@@ -22,13 +22,14 @@
                 </option>
             </select>
         </div>
-        <div v-if="filteredItems.length" class="browseGrid">
-            <ProgrammeCard v-for="item in filteredItems" :key="item.pid" :item="item" />
+        <div v-if="pagedItems.length" class="browseGrid">
+            <ProgrammeCard v-for="item in pagedItems" :key="item.pid" :item="item" />
         </div>
-        <p v-else-if="items.length && !loading">Nothing matches that filter - try loading more.</p>
+        <p v-else-if="items.length && !loadingAll">Nothing matches that filter.</p>
         <LoadingIndicator v-if="loading" />
         <p v-else-if="!error && items.length === 0">No programmes found.</p>
-        <button v-if="hasMore && !loading" class="clickable browseLoadMore" @click="loadMore">Load more</button>
+        <p v-else-if="loadingAll" class="loadingMoreNote">Loading more ({{ items.length }} of {{ total ?? '…' }})&hellip;</p>
+        <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
     </div>
 </template>
 
@@ -40,23 +41,26 @@ import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch } from '@/lib/browse';
+import { usePagination } from '@/lib/usePagination';
 
-const PER_PAGE = 30;
+const PER_PAGE = 150; // the server's max perPage - fewest round trips when fetching everything
 const letters = ['0', ...'abcdefghijklmnopqrstuvwxyz'];
 
 const route = useRoute();
 const items = ref([]);
-const page = ref(1);
 const total = ref(undefined);
-const loading = ref(false);
+const loading = ref(false); // first page only - the grid is blank until this resolves
+const loadingAll = ref(false); // remaining pages, fetched automatically in the background
 const error = ref(null);
 const categoryTitle = ref('');
 const rails = ref([]);
 const textFilter = ref('');
 const channelFilter = ref('All');
 
-// Filters apply to what's loaded so far (pages are fetched on demand).
+// Everything is fetched up front (in the background, page by page) so filtering and pagination
+// below apply to the whole listing, not just whatever page happened to be loaded so far.
 const channelOptions = computed(() => [
     'All',
     ...[...new Set(items.value.map(({ channel }) => channel).filter(Boolean))].sort(),
@@ -70,13 +74,18 @@ const filteredItems = computed(() => {
     );
 });
 
+const {
+    page: gridPage, pageSize: gridPageSize, pagedItems,
+} = usePagination(filteredItems);
+
+watch([textFilter, channelFilter], () => {
+    gridPage.value = 1;
+});
+
 // One view for category and A-Z listings: the route's meta says which.
 const isAtoZ = computed(() => route.meta.grid === 'atoz');
 const letter = computed(() => (route.params.letter || '0').toLowerCase());
 const heading = computed(() => (isAtoZ.value ? 'A to Z' : categoryTitle.value || 'Category'));
-
-const hasMore = computed(() => (total.value != null ? items.value.length < total.value : lastPageFull.value));
-const lastPageFull = ref(false);
 
 const endpoint = (pageNumber) => {
     const base = isAtoZ.value
@@ -85,24 +94,36 @@ const endpoint = (pageNumber) => {
     return `${base}?page=${pageNumber}&perPage=${PER_PAGE}`;
 };
 
-const fetchPage = async (pageNumber) => {
+// Fetches every page of the listing automatically, one at a time, stopping once we've seen
+// `total` items (or a short page, if the server never reports a total).
+const fetchAll = async () => {
     loading.value = true;
+    loadingAll.value = true;
     error.value = null;
+    const requestLetter = letter.value;
+    const requestCategoryId = route.params.id;
+    const stillCurrent = () =>
+        isAtoZ.value ? letter.value === requestLetter : route.params.id === requestCategoryId;
     try {
-        const result = await browseFetch(endpoint(pageNumber));
-        const known = new Set(items.value.map(({ pid }) => pid));
-        items.value.push(...result.items.filter(({ pid }) => !known.has(pid)));
-        total.value = result.total;
-        lastPageFull.value = result.items.length >= PER_PAGE;
-        page.value = pageNumber;
+        let pageNumber = 1;
+        let lastPageSize = PER_PAGE;
+        while (stillCurrent() && (total.value == null || items.value.length < total.value) && lastPageSize >= PER_PAGE) {
+            const result = await browseFetch(endpoint(pageNumber));
+            if (!stillCurrent()) return;
+            const known = new Set(items.value.map(({ pid }) => pid));
+            items.value.push(...result.items.filter(({ pid }) => !known.has(pid)));
+            total.value = result.total;
+            lastPageSize = result.items.length;
+            loading.value = false;
+            pageNumber += 1;
+        }
     } catch (e) {
         error.value = e.message;
     } finally {
         loading.value = false;
+        loadingAll.value = false;
     }
 };
-
-const loadMore = () => fetchPage(page.value + 1);
 
 // iPlayer's curated rails for this category. Best effort: the grid is the page, rails are a bonus.
 const loadRails = async (id) => {
@@ -133,12 +154,12 @@ watch(
         textFilter.value = '';
         channelFilter.value = 'All';
         total.value = undefined;
-        lastPageFull.value = false;
+        gridPage.value = 1;
         if (!isAtoZ.value) {
             resolveCategoryTitle();
             loadRails(route.params.id);
         }
-        fetchPage(1);
+        fetchAll();
     },
     { immediate: true }
 );
@@ -167,6 +188,12 @@ watch(
         background-color: @settings-button-background-color;
         color: @primary-text-color;
     }
+}
+
+.loadingMoreNote {
+    color: @subtle-text-color;
+    font-size: 13px;
+    text-align: center;
 }
 
 .letterBar {

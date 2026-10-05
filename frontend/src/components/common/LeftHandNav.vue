@@ -1,17 +1,22 @@
 <template>
     <div ref="lhn" class="LeftHandNav">
         <ul>
+            <li class="sectionLabel">Browse</li>
             <LeftHandNavLink label="Discover" icon="compass" path="/browse" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Search" icon="search" path="/search" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Channels" icon="tower-broadcast" path="/browse/channels" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" @option-clicked="closeLHN" />
             <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
+
+            <li class="sectionLabel">Activity</li>
             <LeftHandNavLink label="Queue" icon="tasks" path="/queue" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Video Events" icon="film" path="/events" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="NZB" icon="satellite-dish" path="/nzb" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Logs" icon="history" path="/logs" @option-clicked="closeLHN" />
+
+            <li class="sectionLabel">Integrations</li>
             <LeftHandNavLink label="Apps" icon="laptop-code" path="/apps" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="NZB" icon="satellite-dish" path="/nzb" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Synonyms" icon="arrows-rotate" path="/synonyms" @option-clicked="closeLHN" />
             <template v-if="globalSettings.NATIVE_SEARCH == 'false'">
                 <LeftHandNavLink label="Off Schedule" icon="calendar" path="/offSchedule" @option-clicked="closeLHN" />
@@ -19,8 +24,11 @@
 label="Refresh Index" icon="address-book" :no-link="true"
                     @option-clicked="refreshCache" />
             </template>
-            <LeftHandNavLink label="Settings" icon="gears" path="/settings" @option-clicked="closeLHN" />
+
+            <li class="sectionLabel">System</li>
             <LeftHandNavLink label="Statistics" icon="chart-bar" path="/stats" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Logs" icon="history" path="/logs" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Settings" icon="gears" path="/settings" @option-clicked="closeLHN" />
             <LeftHandNavLink label="About" icon="circle-info" path="/about" @option-clicked="closeLHN" />
             <LeftHandNavLink v-if="globalSettings.AUTH_TYPE != 'none'" label="Logout" icon="sign-out" :no-link="true" @option-clicked="logout" />
         </ul>
@@ -136,6 +144,20 @@ const handleClickOutside = (event) => {
         list-style: none;
         padding: 0;
         margin: 0;
+    }
+
+    li.sectionLabel {
+        padding: 18px 24px 6px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: @subtle-text-color;
+        cursor: default;
+
+        &:first-child {
+            padding-top: 12px;
+        }
     }
 
     li {

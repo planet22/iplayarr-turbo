@@ -18,6 +18,9 @@ export interface Subscription {
 export interface SubscribeOptions {
     // Also queue the newest existing episode straight away.
     downloadLatest?: boolean;
+    // Queue every episode that is currently available, as well as new ones from now on.
+    // Takes precedence over downloadLatest.
+    downloadAll?: boolean;
 }
 
 export interface SubscriptionCheckResult {

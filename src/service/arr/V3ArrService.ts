@@ -106,7 +106,7 @@ export class V3ArrService implements AbstractArrService {
         return {
             ...createIndexerRequestSkeleton,
             priority: form.priority || 25,
-            name: `${form.name} (iPlayarr)`,
+            name: `${form.name} (iPlayarr Turbo)`,
             downloadClientId: form.downloadClientId,
             tags,
             fields: [
@@ -341,7 +341,7 @@ export class V3ArrService implements AbstractArrService {
     createDownloadClientRequestObject(form: CreateDownloadClientForm, tags: number[]): ArrCreateDownloadClientRequest {
         const createDownloadClientRequest: ArrCreateDownloadClientRequest = {
             ...createDownloadClientRequestSkeleton,
-            name: `${form.name} (iPlayarr)`,
+            name: `${form.name} (iPlayarr Turbo)`,
             priority: form.priority || 1,
             tags,
             fields: [

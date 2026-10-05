@@ -19,7 +19,7 @@
                 <button v-if="showCancel" class="clickable cancel" @click="emit('cancel')">
                     {{ cancelLabel }}
                 </button>
-                <button v-if="showClose" class="clickable cancel" @click="close()">
+                <button v-if="showClose" :class="['clickable', { cancel: !showCancel }]" @click="close()">
                     {{ closeLabel }}
                 </button>
                 <button v-if="showConfirm" class="clickable" @click="emit('confirm')">

@@ -4,7 +4,7 @@
         v-model="config.AUTH_TYPE"
         :advanced="false"
         name="Authentication Enabled?"
-        tooltip="Enable Authentication for iPlayarr."
+        tooltip="Enable Authentication for iPlayarr Turbo."
         :error="validationErrors.config?.AUTH_TYPE"
         :options="authTypes"
     />

@@ -3,11 +3,11 @@
         <div v-for="(item, index) in items" :key="`${item.title}-${index}`" class="topContentRow">
             <span class="topContentRank">{{ index + 1 }}</span>
             <img
-                v-if="item.pid"
+                v-if="item.pid && !failedThumbs.has(item.pid)"
                 class="topContentThumb"
                 :src="`json-api/thumbnail/${item.pid}.jpg`"
                 loading="lazy"
-                @error="onImgError"
+                @error="onImgError(item.pid)"
             />
             <div v-else class="topContentThumb topContentThumbPlaceholder">
                 <font-awesome-icon :icon="['fas', 'film']" />
@@ -20,7 +20,7 @@
 </template>
 
 <script setup>
-import { defineProps } from 'vue';
+import { defineProps, ref } from 'vue';
 
 defineProps({
     items: {
@@ -29,8 +29,12 @@ defineProps({
     }
 });
 
-const onImgError = (event) => {
-    event.target.style.display = 'none';
+// Remembered per-pid so a broken thumbnail swaps to the placeholder icon instead of
+// leaving a browser broken-image glyph, and doesn't keep retrying on re-render.
+const failedThumbs = ref(new Set());
+
+const onImgError = (pid) => {
+    failedThumbs.value = new Set(failedThumbs.value).add(pid);
 };
 </script>
 

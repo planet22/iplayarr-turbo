@@ -47,6 +47,7 @@ export const toDownloadResult = (item) => ({
     channel: item.channel,
     pubDate: item.pubDate ?? item.firstBroadcast,
     nzbName: item.nzbName ?? defaultNzbName(item),
+    runtimeSeconds: item.runtimeSeconds,
 });
 
 export const channelPillClass = (channel) => (channel ? channel.replaceAll(' ', '') : '');

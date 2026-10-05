@@ -1,5 +1,5 @@
 <template>
-    <RouterLink class="programmeCard" :to="`/browse/programme/${item.pid}`">
+    <RouterLink class="programmeCard" :to="`/browse/programme/${item.seriesPid ?? item.pid}`">
         <div class="thumb">
             <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" />
             <div v-else class="noThumb">

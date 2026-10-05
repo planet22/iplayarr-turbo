@@ -288,6 +288,48 @@ describe('DownloadFacade', () => {
             expect(strmWrites).toHaveLength(0);
         });
 
+        it('writes a .strmtool.json sidecar for a .strm file when WRITE_STRMTOOL_JSON is on', async () => {
+            mockConfig({ WRITE_NFO_STRM: 'all', WRITE_STRMTOOL_JSON: 'true', STREAM_MODE: 'progressive-mkv', VIDEO_QUALITY: 'hd' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['stream.strm']);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1 },
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            const [[writtenPath, writtenContent]] = (fs.writeFileSync as jest.Mock).mock.calls.filter(
+                ([filePath]) => String(filePath).endsWith('.strmtool.json')
+            );
+            expect(writtenPath).toBe(path.join('/complete', 'Show.S01E01.strmtool.json'));
+            expect(JSON.parse(writtenContent as string)).toMatchObject({ isValid: true, container: 'mkv' });
+        });
+
+        it('does not write a .strmtool.json sidecar for a real download even when WRITE_STRMTOOL_JSON is on', async () => {
+            mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', WRITE_NFO_STRM: 'all', WRITE_STRMTOOL_JSON: 'true' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+            (fs.existsSync as jest.Mock).mockReturnValue(false);
+
+            const queueItem: QueueEntry = {
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E01',
+                type: VideoType.TV,
+                library: { title: 'Show Name', series: 1, episode: 1, episodeTitle: 'The Episode' },
+            };
+
+            await runDownloadToCompletion(queueItem);
+
+            const strmToolWrites = (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) =>
+                String(filePath).endsWith('.strmtool.json')
+            );
+            expect(strmToolWrites).toHaveLength(0);
+        });
+
         it('moves TV downloads into ARR_COMPLETE_DIR when set, leaving movies in COMPLETE_DIR', async () => {
             mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
             (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);

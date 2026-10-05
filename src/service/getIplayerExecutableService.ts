@@ -244,6 +244,7 @@ export class GetIplayerExecutableService {
                     size: duration == null || isNaN(duration) ? undefined : Math.floor(duration * sizeFactor),
                     pubDate: onlineFrom ? new Date(onlineFrom) : undefined,
                     episodeTitle,
+                    runtimeSeconds: duration == null || isNaN(duration) ? undefined : duration,
                 });
             }
         }

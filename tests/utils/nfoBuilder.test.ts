@@ -24,6 +24,7 @@ describe('nfoBuilder', () => {
                     episodeTitle: 'The Episode',
                     channel: 'BBC One',
                     pubDate: '2024-01-02T03:04:05.000Z',
+                    runtimeSeconds: 1770,
                 },
             });
 
@@ -36,6 +37,7 @@ describe('nfoBuilder', () => {
             expect(xml).toContain('<episode>2</episode>');
             expect(xml).toContain('<aired>2024-01-02</aired>');
             expect(xml).toContain('<premiered>2024-01-02</premiered>');
+            expect(xml).toContain('<runtime>30</runtime>');
             expect(xml).toContain('<studio>BBC One</studio>');
         });
 
@@ -47,6 +49,7 @@ describe('nfoBuilder', () => {
             expect(xml).toContain('<season>0</season>');
             expect(xml).toContain('<episode>0</episode>');
             expect(xml).not.toContain('<studio>');
+            expect(xml).not.toContain('<runtime>');
         });
     });
 
@@ -54,7 +57,7 @@ describe('nfoBuilder', () => {
         it('builds a Jellyfin-compatible movie NFO', () => {
             const item = baseItem({
                 type: VideoType.MOVIE,
-                library: { title: 'Movie Name', channel: 'BBC Two', pubDate: '2020-05-06T00:00:00.000Z' },
+                library: { title: 'Movie Name', channel: 'BBC Two', pubDate: '2020-05-06T00:00:00.000Z', runtimeSeconds: 5400 },
             });
 
             const xml = buildMovieNfo(item);
@@ -63,6 +66,7 @@ describe('nfoBuilder', () => {
             expect(xml).toContain('<title>Movie Name</title>');
             expect(xml).toContain('<premiered>2020-05-06</premiered>');
             expect(xml).toContain('<year>2020</year>');
+            expect(xml).toContain('<runtime>90</runtime>');
             expect(xml).toContain('<studio>BBC Two</studio>');
         });
 

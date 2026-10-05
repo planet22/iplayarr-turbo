@@ -6,7 +6,7 @@ export const getHost = () => {
 // structured show/season/episode metadata through so the backend can build a Jellyfin-style
 // library folder for it (libraryPathBuilder.ts) - not just pid/nzbName/type. Shared by
 // SearchPage's immediate/bulk download and DownloadConfirmModal's confirm-and-download.
-export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate }) => {
+export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds }) => {
     const params = new URLSearchParams({ pid, nzbName, type });
     if (title) params.set('title', title);
     if (series != null) params.set('series', series);
@@ -14,6 +14,7 @@ export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode,
     if (episodeTitle) params.set('episodeTitle', episodeTitle);
     if (channel) params.set('channel', channel);
     if (pubDate) params.set('pubDate', pubDate);
+    if (runtimeSeconds != null) params.set('runtime', runtimeSeconds);
     return params.toString();
 };
 
@@ -54,7 +55,9 @@ export const formatStorageSize = (mb) => {
         if (mb >= 1024) {
             return (mb / 1024).toFixed(2) + ' GB';
         }
-        return mb.toFixed(2) + ' MB';
+        // Drop decimals once it's a 3-digit MB value - "1020.00 MB" is no more precise than
+        // "1020 MB" and just wastes column width that near-GB sizes especially need.
+        return (mb >= 100 ? Math.round(mb) : mb.toFixed(2)) + ' MB';
     }
     return;
 };

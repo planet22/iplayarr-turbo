@@ -5,10 +5,10 @@ iPlayarr is a companion tool for **Sonarr** and **Radarr**, making it easy to in
 ![Build Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/build.yml?logo=github)
 ![Test Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/test.yml?logo=github&label=tests)
 <!--- istanbul-badges-readme:start --->
-![Statements](https://img.shields.io/badge/statements-69.52%25-red.svg?style=flat)
-![Branches](https://img.shields.io/badge/branches-59.57%25-red.svg?style=flat)
-![Functions](https://img.shields.io/badge/functions-68.52%25-red.svg?style=flat)
-![Lines](https://img.shields.io/badge/lines-70.12%25-red.svg?style=flat)
+![Statements](https://img.shields.io/badge/statements-70.39%25-red.svg?style=flat)
+![Branches](https://img.shields.io/badge/branches-60.34%25-red.svg?style=flat)
+![Functions](https://img.shields.io/badge/functions-69.67%25-red.svg?style=flat)
+![Lines](https://img.shields.io/badge/lines-71.02%25-red.svg?style=flat)
 <!--- istanbul-badges-readme:end --->
 
 > **This is iPlayarr Turbo**, a fork of upstream iPlayarr (based on v0.11.6) with a modernized Docker build and dependency stack — see [TURBO.md](TURBO.md) for everything this fork changes on top of what's described below.
@@ -140,15 +140,15 @@ There's a few more optional settings too:
 | LIBRARY_FOLDER_STRUCTURE | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to false. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
 | ARR_COMPLETE_DIR | Optional override of COMPLETE_DIR for TV downloads only (what the *arr imports). Leave unset to use COMPLETE_DIR for everything |
 | WRITE_NFO_STRM   | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. One of `none` (default), `all`, `nzb` (only downloads added by Sonarr/Radarr), or `manual` (only manually-triggered downloads). See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
-| MEDIA_MODE       | `download` (default) saves the full file; `strm` saves a small pointer file that streams on demand instead, saving disk space. See [docs/STREAMING.md](docs/STREAMING.md) |
-| STREAM_CLIENT    | Which tool serves playback for `.strm` files: `GET_IPLAYER` (default), `YTDLP`, or `NATIVE` (fastest to start, adaptive quality). See [docs/STREAMING.md](docs/STREAMING.md) |
+| MEDIA_MODE       | `strm` (default) saves a small pointer file that streams on demand, saving disk space; `download` saves the full file instead. See [docs/STREAMING.md](docs/STREAMING.md) |
+| STREAM_CLIENT    | Which tool serves playback for `.strm` files: `NATIVE` (default, fastest to start, adaptive quality), `GET_IPLAYER`, or `YTDLP`. See [docs/STREAMING.md](docs/STREAMING.md) |
 | STREAM_MODE      | `direct` (default, supports seeking) or `progressive-mkv` (remuxes to MKV on the fly, needs ffmpeg, no seeking) |
 | STREAM_BASE_URL  | The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr, for links written into `.strm` files |
 | STREAM_KEY       | Secures `.strm` playback links, separate from API_KEY so it can be regenerated on its own |
 | STREAM_CACHE_DIR | Where temporary files are stored while streaming. Defaults to a temp folder |
-| STREAM_NATIVE_ADAPTIVE | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to true |
+| STREAM_NATIVE_ADAPTIVE | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to false |
 | STREAM_NATIVE_HQ_PROBE | With STREAM_CLIENT=NATIVE, verify real stream quality before playing (adds a short delay). Defaults to false |
-| STREAM_NATIVE_EXPERIMENTAL_FHD | EXPERIMENTAL: try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to false |
+| STREAM_NATIVE_EXPERIMENTAL_FHD | With STREAM_CLIENT=NATIVE, try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to true |
 | THUMBNAIL_CACHE_DIR | Where cached BBC episode thumbnails are stored |
 | THUMBNAIL_RETENTION_DAYS | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30 |
 | STREAM_HISTORY_RETENTION_DAYS | How many days to keep native streaming session history before nightly cleanup. Defaults to 30 |

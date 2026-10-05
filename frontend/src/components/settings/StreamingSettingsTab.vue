@@ -3,7 +3,7 @@
     <SelectInput
         v-model="config.MEDIA_MODE"
         name="Media Mode"
-        tooltip="Download the full file (default), or save a small .strm pointer that streams on demand when you play it - saves disk space but needs a network connection every time you watch."
+        tooltip="Save a small .strm pointer that streams on demand when you play it (default) - saves disk space but needs a network connection every time you watch. Or download the full file."
         :error="validationErrors.config?.MEDIA_MODE"
         :options="mediaModes"
     />
@@ -12,7 +12,7 @@
         <TextInput
             v-model="config.STREAM_BASE_URL"
             name="Stream Base URL"
-            tooltip="The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr, e.g. http://192.168.1.10:4404."
+            tooltip="The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
             :error="validationErrors.config?.STREAM_BASE_URL"
         />
         <TextInput
@@ -36,7 +36,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_ADAPTIVE"
             name="Native Quality"
-            tooltip="Adaptive (recommended): quality adjusts automatically to your connection. Fixed: always play at the Video Quality you've set above."
+            tooltip="Fixed (recommended): always play at the Video Quality you've set above. Adaptive: quality adjusts automatically to your connection."
             :error="validationErrors.config?.STREAM_NATIVE_ADAPTIVE"
             :options="adaptiveOptions"
         />
@@ -51,8 +51,8 @@
         <SelectInput
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_EXPERIMENTAL_FHD"
-            name="Native FHD Upgrade (Experimental)"
-            tooltip="EXPERIMENTAL - tries to unlock real 1080p on titles that have it, above BBC's usual 720p cap. Falls back to normal quality if it doesn't work, but it's unsupported and could stop working without warning."
+            name="Native FHD Upgrade"
+            tooltip="Tries to unlock real 1080p on titles that have it, above BBC's usual 720p cap (recommended). Falls back to normal quality if it doesn't work."
             :error="validationErrors.config?.STREAM_NATIVE_EXPERIMENTAL_FHD"
             :options="experimentalFhdOptions"
         />
@@ -105,8 +105,8 @@ defineProps({
 const emit = defineEmits(['generate-stream-key']);
 
 const adaptiveOptions = [
-    { key: 'true', value: 'Adaptive (recommended)' },
-    { key: 'false', value: 'Fixed (uses Video Quality)' },
+    { key: 'true', value: 'Adaptive' },
+    { key: 'false', value: 'Fixed (uses Video Quality, recommended)' },
 ];
 
 const hqProbeOptions = [
@@ -115,8 +115,8 @@ const hqProbeOptions = [
 ];
 
 const experimentalFhdOptions = [
-    { key: 'false', value: 'Disabled (recommended)' },
-    { key: 'true', value: 'Enabled (experimental)' },
+    { key: 'false', value: 'Disabled' },
+    { key: 'true', value: 'Enabled (recommended)' },
 ];
 
 const config = inject('settingsConfig');
