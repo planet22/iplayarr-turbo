@@ -109,5 +109,11 @@
     },
     "engines": {
         "node": "24.x"
+    },
+    "nodemonConfig": {
+        "watch": [
+            "src"
+        ],
+        "ext": "ts,json"
     }
 }

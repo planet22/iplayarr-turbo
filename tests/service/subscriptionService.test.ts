@@ -3,7 +3,6 @@ import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
 import subscriptionService, { SubscriptionError } from '../../src/service/subscriptionService';
 import synonymService from '../../src/service/synonymService';
-import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import * as Utils from '../../src/utils/Utils';
 
@@ -131,7 +130,7 @@ describe('subscriptionService', () => {
             details.getSeriesEpisodes.mockResolvedValue([ep('old', '2026-01-01T00:00:00Z'), ep('new', '2026-03-01T00:00:00Z')] as any);
             await subscriptionService.subscribe('m00episode', { downloadLatest: true });
             expect(queue.addToQueue).toHaveBeenCalledTimes(1);
-            expect(queue.addToQueue).toHaveBeenCalledWith('new', 'The.Show.S02E03', VideoType.TV, undefined, expect.any(Object), QueueEntrySource.MANUAL);
+            expect(queue.addToQueue).toHaveBeenCalledWith('new', 'The.Show.S02E03', VideoType.TV, undefined, expect.any(Object));
         });
     });
 
@@ -151,7 +150,7 @@ describe('subscriptionService', () => {
                 episodeTitle: 'Ep Three',
                 channel: 'BBC Two',
                 pubDate: '2026-02-02',
-            }, QueueEntrySource.MANUAL);
+            });
             const [saved] = await subscriptionService.list();
             expect(saved.seen).toContain('e3');
             expect(saved).toMatchObject({ lastQueuedCount: 1 });
@@ -229,7 +228,8 @@ describe('subscriptionService', () => {
             await subscriptionService.whenIdle();
 
             expect(queue.addToQueue.mock.calls.map((call) => call[0])).toEqual(['a', 'b', 'c']);
-            expect(queue.addToQueue.mock.calls.every((call) => call[5] === QueueEntrySource.MANUAL)).toBe(true);
+            // No explicit source passed (MANUAL is addToQueue's default) - every call's 6th arg is absent.
+            expect(queue.addToQueue.mock.calls.every((call) => call[5] === undefined)).toBe(true);
             const [saved] = await subscriptionService.list();
             expect(saved.seen.sort()).toEqual(['a', 'b', 'c']);
             expect(saved).toMatchObject({ lastQueuedCount: 3 });

@@ -23,7 +23,12 @@ const queueService = {
         type: VideoType,
         appId?: string,
         library?: QueueLibraryMetadata,
-        source: QueueEntrySource = QueueEntrySource.NZB
+        // MANUAL is the safe default - NZB (routes TV to ARR_COMPLETE_DIR when set, see
+        // libraryPathBuilder.ts#resolveCompleteDir) is reserved for the one caller that
+        // actually is Sonarr/Radarr/Prowlarr handing this off via the SABnzbd-compatible
+        // endpoint (AddFileEndpoint.ts) - every other caller forgetting to pass `source`
+        // should fail safe into the shared directory, not the *arr-only one.
+        source: QueueEntrySource = QueueEntrySource.MANUAL
     ): void => {
         const queueEntry: QueueEntry = {
             pid,

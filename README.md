@@ -1,15 +1,15 @@
 # <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/frontend/public/iplayarr.png" alt="Description" width="24px"> iPlayarr Turbo
 
-iPlayarr is a companion tool for **Sonarr** and **Radarr**, making it easy to integrate **get_iplayer** for searching and downloading iPlayer content directly. It acts as both an **indexer** and a **download client**, allowing seamless automation of TV and movie downloads.
+iPlayarr Turbo is a companion tool for **Sonarr** and **Radarr**, making it easy to integrate **get_iplayer** for searching and downloading iPlayer content directly. It acts as both an **indexer** and a **download client**, allowing seamless automation of TV and movie downloads.
 
 ![Build Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/build.yml?logo=github)
 ![Test Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/test.yml?logo=github&label=tests)
 <!--- istanbul-badges-readme:start --->
 
-![Statements](https://img.shields.io/badge/statements-70.14%25-red.svg?style=flat)
-![Branches](https://img.shields.io/badge/branches-60.1%25-red.svg?style=flat)
-![Functions](https://img.shields.io/badge/functions-68.83%25-red.svg?style=flat)
-![Lines](https://img.shields.io/badge/lines-70.76%25-red.svg?style=flat)
+![Statements](https://img.shields.io/badge/statements-70.29%25-red.svg?style=flat)
+![Branches](https://img.shields.io/badge/branches-60.72%25-red.svg?style=flat)
+![Functions](https://img.shields.io/badge/functions-69.02%25-red.svg?style=flat)
+![Lines](https://img.shields.io/badge/lines-70.86%25-red.svg?style=flat)
 <!--- istanbul-badges-readme:end --->
 
 > **This is iPlayarr Turbo**, a fork of upstream iPlayarr (based on v0.11.6) with a modernized Docker build and dependency stack — see [TURBO.md](TURBO.md) for everything this fork changes on top of what's described below.
@@ -52,30 +52,33 @@ This README covers the basics. For more detail, see `docs/`:
   <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/schedule.png" alt="Schedule View" width="49%">
 </p>
 <p align="center">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/jellyfin.png" alt="Jellyfin Playback" width="49%">
   <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/mobile.png" alt="Mobile View" width="30%">
 </p>
 
-## Why iPlayarr?
+## Why iPlayarr Turbo?
 
-iPlayer offers a wide range of high-quality content, but integrating it with Sonarr and Radarr has always been tricky. iPlayarr solves this problem by:
+iPlayer offers a wide range of high-quality content, but integrating it with Sonarr and Radarr has always been tricky. iPlayarr Turbo solves this problem by:
 
 - Acting as a Newznab-compatible indexer, making iPlayer content searchable within Sonarr/Radarr
 - Presenting as a SABnzbd-compatible download client, allowing automatic downloads and post-processing
 - Handling the full download lifecycle, from fetching content with get_iplayer to organizing completed files
+- Streaming content on demand to Jellyfin/Plex/Emby via small `.strm` pointer files, instead of pre-downloading everything
+- Works standalone too - Browse/Discover, Channels, Categories, A to Z, search, and Subscriptions are all usable from the web UI without Sonarr/Radarr at all
 
-Unlike torrents and Usenet, iPlayarr operates in a less legally ambiguous space by only downloading content that is freely available for streaming.
+Unlike torrents and Usenet, iPlayarr Turbo operates in a less legally ambiguous space by only downloading content that is freely available for streaming.
 
-## Why Create iPlayarr?
+## Why Create iPlayarr Turbo?
 
 This project started as an experiment: Is it possible to integrate iPlayer with Sonarr/Radarr in a clean, automated way?
 
-Most existing solutions rely on torrents or Usenet, but I wanted something that could get media from a reliable source. iPlayarr functions like a personal DVR for iPlayer, making it easier to automate downloads without needing traditional PVR software.
+Most existing solutions rely on torrents or Usenet, but I wanted something that could get media from a reliable source. iPlayarr Turbo functions like a personal DVR for iPlayer, making it easier to automate downloads without needing traditional PVR software.
 
 ## Getting Started
 
 ### Download/Installation
 
-The simplest way to use iPlayarr is via Docker:
+The simplest way to use iPlayarr Turbo is via Docker:
 
 ```bash
 docker run -d --name iplayarr \
@@ -156,13 +159,13 @@ There's a few more optional settings too:
 | NATIVE_SEARCH                  | Search BBC's own search API directly instead of shelling out to get_iplayer. Faster, and the default. Defaults to true                                                                                                                                                                                                                                                                     |
 | ARCHIVE_ENABLED                | Keep a record of cancelled/removed downloads instead of discarding them outright. Defaults to false                                                                                                                                                                                                                                                                                        |
 | OUTPUT_FORMAT                  | Output container format passed to get_iplayer (e.g. mp4). Defaults to mp4                                                                                                                                                                                                                                                                                                                  |
-| LIBRARY_FOLDER_STRUCTURE       | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to false. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md)                                                                                                                                                               |
+| LIBRARY_FOLDER_STRUCTURE       | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to true. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md)                                                                                                                                                                |
 | ARR_COMPLETE_DIR               | Optional override of COMPLETE_DIR for TV downloads Sonarr/Radarr themselves queued (NZB) only - manual UI downloads and subscriptions always use COMPLETE_DIR, even for TV. Leave unset to use COMPLETE_DIR for everything                                                                                                                                                                 |
-| WRITE_NFO_STRM                 | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. One of `none` (default), `all`, `nzb` (only downloads added by Sonarr/Radarr), or `manual` (only manually-triggered downloads). See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
+| WRITE_NFO_STRM                 | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. One of `none`, `all`, `nzb` (only downloads added by Sonarr/Radarr), or `manual` (only manually-triggered downloads, the default). See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
 | MEDIA_MODE                     | `strm` (default) saves a small pointer file that streams on demand, saving disk space; `download` saves the full file instead. See [docs/STREAMING.md](docs/STREAMING.md)                                                                                                                                                                                                                  |
-| STREAM_CLIENT                  | Which tool serves playback for `.strm` files: `NATIVE` (default, fastest to start, adaptive quality), `GET_IPLAYER`, or `YTDLP`. See [docs/STREAMING.md](docs/STREAMING.md)                                                                                                                                                                                                                |
+| STREAM_CLIENT                  | Which tool serves playback for `.strm` files: `NATIVE` (default, fastest to start, adaptive quality), `GET_IPLAYER`, or `YTDLP`. If using `YTDLP` (for this or `DOWNLOAD_CLIENT`) in a non-root container (i.e. with `PUID`/`PGID` set), also add `cap_add: [NET_BIND_SERVICE]` - see [docs/STREAMING.md](docs/STREAMING.md)                                                             |
 | STREAM_MODE                    | `direct` (default, supports seeking) or `progressive-mkv` (remuxes to MKV on the fly, needs ffmpeg, no seeking)                                                                                                                                                                                                                                                                            |
-| STREAM_BASE_URL                | The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr, for links written into `.strm` files                                                                                                                                                                                                                                                                            |
+| STREAM_BASE_URL                | The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr Turbo, for links written into `.strm` files                                                                                                                                                                                                                                                                      |
 | STREAM_KEY                     | Secures `.strm` playback links, separate from API_KEY so it can be regenerated on its own                                                                                                                                                                                                                                                                                                  |
 | STREAM_CACHE_DIR               | Where temporary files are stored while streaming. Defaults to a temp folder                                                                                                                                                                                                                                                                                                                |
 | STREAM_NATIVE_ADAPTIVE         | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to false                                                                                                                                                                                                                                                                 |
@@ -186,18 +189,18 @@ See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for auth types (form/OIDC/n
 
 **Sonarr and Radarr link**
 
-> **Info:** The best way to add iPlayarr to Sonarr or Radarr is to use the "Apps" section of the web UI in iPlayarr
+> **Info:** The best way to add iPlayarr Turbo to Sonarr or Radarr is to use the "Apps" section of the web UI in iPlayarr Turbo
 
-iPlayarr presents itself as both an indexer and a download client on port 4404. You can configure it automatically in the Settings menu or manually as follows:
+iPlayarr Turbo presents itself as both an indexer and a download client on port 4404. You can configure it automatically in the Settings menu or manually as follows:
 
-**Add iPlayarr manually as a Download Client**
+**Add iPlayarr Turbo manually as a Download Client**
 
 1. Go to Settings > Download Clients in Sonarr/Radarr.
 2. Add a new SABnzbd client with the following details:
 
 | Property | Value              |
 | -------- | ------------------ |
-| Name     | iPlayarr           |
+| Name     | iPlayarr Turbo     |
 | Host     | Your_Docker_Host   |
 | Port     | 4404               |
 | API Key  | API_KEY from above |
@@ -205,17 +208,17 @@ iPlayarr presents itself as both an indexer and a download client on port 4404. 
 
 3. Test and save.
 
-**Add iPlayarr manually as an Indexer**
+**Add iPlayarr Turbo manually as an Indexer**
 
 1. Go to Settings > Indexers in Sonarr/Radarr.
 2. Add a new Newznab indexer with these settings:
 
-| Property        | Value                        |
-| --------------- | ---------------------------- |
-| Name            | iPlayarr                     |
-| URL             | http://Your_Docker_Host:4404 |
-| API Key         | API_KEY from above           |
-| Download Client | iPlayarr (created above)     |
+| Property        | Value                          |
+| --------------- | ------------------------------ |
+| Name            | iPlayarr Turbo                 |
+| URL             | http://Your_Docker_Host:4404   |
+| API Key         | API_KEY from above             |
+| Download Client | iPlayarr Turbo (created above) |
 
 See [docs/SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) for how this dual-protocol setup actually works and how to troubleshoot a failed "Test".
 
@@ -226,7 +229,7 @@ From here, you can manage settings, view logs, and monitor downloads. See [docs/
 
 ## Development Setup
 
-To run iPlayarr locally for development:
+To run iPlayarr Turbo locally for development:
 
 ### Prerequisites
 
@@ -271,7 +274,7 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for testing a single file/test na
 
 ## Redis
 
-iPlayarr uses Redis for storage. This is built into the container and **doesn't require any additional setup**, but if you would like to use a standalone redis instance, set the following settings:
+iPlayarr Turbo uses Redis for storage. This is built into the container and **doesn't require any additional setup**, but if you would like to use a standalone redis instance, set the following settings:
 
 - REDIS_HOST
 - REDIS_PORT

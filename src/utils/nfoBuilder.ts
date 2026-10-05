@@ -37,12 +37,15 @@ export function buildEpisodeNfo(item: QueueEntry): string {
     const premiered = premieredDate(library?.pubDate);
     const studio = escapeXml(library?.channel);
     const runtime = runtimeMinutes(library?.runtimeSeconds);
+    const plot = escapeXml(library?.description);
 
     let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
     xml += '<episodedetails>\n';
-    xml += '  <lockdata>true</lockdata>\n';
     xml += `  <title>${title}</title>\n`;
     xml += `  <showtitle>${showTitle}</showtitle>\n`;
+    if (plot) {
+        xml += `  <plot>${plot}</plot>\n`;
+    }
     if (premiered) {
         xml += `  <aired>${premiered}</aired>\n`;
         xml += `  <premiered>${premiered}</premiered>\n`;
@@ -66,11 +69,14 @@ export function buildMovieNfo(item: QueueEntry): string {
     const year = premiered?.substring(0, 4);
     const studio = escapeXml(library?.channel);
     const runtime = runtimeMinutes(library?.runtimeSeconds);
+    const plot = escapeXml(library?.description);
 
     let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
     xml += '<movie>\n';
-    xml += '  <lockdata>true</lockdata>\n';
     xml += `  <title>${title}</title>\n`;
+    if (plot) {
+        xml += `  <plot>${plot}</plot>\n`;
+    }
     if (premiered) {
         xml += `  <premiered>${premiered}</premiered>\n`;
     }
@@ -90,7 +96,6 @@ export function buildMovieNfo(item: QueueEntry): string {
 export function buildShowNfo(title: string): string {
     let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
     xml += '<tvshow>\n';
-    xml += '  <lockdata>true</lockdata>\n';
     xml += `  <title>${escapeXml(title)}</title>\n`;
     xml += '</tvshow>\n';
     return xml;

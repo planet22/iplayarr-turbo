@@ -140,6 +140,7 @@ dist
 
 test-results
 .DS_Store
+Thumbs.db
 iplayarr-turbo
 
 # Claude Code scratch/working files (screenshots, one-off scripts) - not part of the project

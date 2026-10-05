@@ -3,7 +3,6 @@ import { Request, Response } from 'express';
 import iplayerDetailsService from '../../service/iplayerDetailsService';
 import queueService from '../../service/queueService';
 import videoEventService from '../../service/videoEventService';
-import { QueueEntrySource } from '../../types/enums/QueueEntrySource';
 import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueLibraryMetadata } from '../../types/QueueEntry';
 import { IPlayerMetadataResponse } from '../../types/responses/IPlayerMetadataResponse';
@@ -49,10 +48,11 @@ export default async (req: Request, res: Response) => {
         };
     }
 
+    // MANUAL (the default) is correct here - a bare download-by-pid/URL request.
     if (library) {
-        queueService.addToQueue(pid, name, type, undefined, library, QueueEntrySource.MANUAL);
+        queueService.addToQueue(pid, name, type, undefined, library);
     } else {
-        queueService.addToQueue(pid, name, type, undefined, undefined, QueueEntrySource.MANUAL);
+        queueService.addToQueue(pid, name, type);
     }
     videoEventService.record(VideoEventType.QUEUED, `Queued "${name}" for download`, { pid });
 
