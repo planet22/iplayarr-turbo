@@ -493,8 +493,12 @@ watch(
     }
 
     button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
         width: 34px;
         height: 30px;
+        padding: 0;
         border-radius: 4px;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
