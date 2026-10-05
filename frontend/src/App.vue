@@ -26,7 +26,7 @@ import PipPlayer from './components/common/PipPlayer.vue';
 import { enforceMaxLength } from './lib/utils';
 
 const authState = inject('authState');
-const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, videoEvents, toolVersions] = [
+const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, videoEvents, toolVersions, apps] = [
     ref([]),
     ref([]),
     ref([]),
@@ -36,6 +36,7 @@ const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, vi
     ref({ active: [], history: [] }),
     ref([]),
     ref({}),
+    ref([]),
 ];
 
 const isConnected = ref(true);
@@ -67,6 +68,10 @@ provide('globalSettings', globalSettings);
 provide('streams', streams);
 provide('videoEvents', videoEvents);
 provide('toolVersions', toolVersions);
+// Global (not just QueuePage, which locally provided this before) - VideoInfoModal's
+// requestedByApp lookup injects 'apps' and is opened from Streaming/NZB/Video Events too, not
+// just Queue, so it needs to resolve everywhere the modal can be opened from.
+provide('apps', apps);
 
 const refreshToolVersions = async () => {
     toolVersions.value = (await ipFetch('json-api/versions')).data;
@@ -119,6 +124,7 @@ const pageSetup = async () => {
         });
 
         hiddenSettings.value = (await ipFetch('json-api/config/hiddenSettings')).data;
+        apps.value = (await ipFetch('json-api/apps')).data;
         refreshGlobalSettings();
         refreshToolVersions();
     }
