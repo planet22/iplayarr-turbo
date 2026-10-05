@@ -4,6 +4,7 @@ import { EndpointDirectory } from '../../constants/EndpointDirectory';
 import configService from '../../service/configService';
 import historyService from '../../service/historyService';
 import queueService from '../../service/queueService';
+import { QueueEntrySource } from '../../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { QueueEntry } from '../../types/QueueEntry';
 import {
@@ -33,9 +34,15 @@ const actionDirectory: EndpointDirectory = {
     },
 
     _default: async (req: Request, res: Response) => {
-        const queue: QueueEntry[] = queueService.getQueue();
+        // This protocol is how an *arr app monitors what it itself sent (AddFileEndpoint.ts) -
+        // manual UI downloads and subscriptions are real downloads, but not this caller's
+        // business, and showing them here lets Sonarr/Radarr's Completed Download Handling try
+        // to import something nobody asked it to.
+        const queue: QueueEntry[] = queueService.getQueue().filter(({ source }) => source === QueueEntrySource.NZB);
         const downloadQueue: QueueEntry[] = queue.filter(({ status }) => status == QueueEntryStatus.DOWNLOADING);
-        const iplayerComplete = await historyService.getHistory();
+        const iplayerComplete = (await historyService.getHistory()).filter(
+            ({ source }) => source === QueueEntrySource.NZB
+        );
 
         const totalMb = queue.reduce((acc, slot) => acc + (slot.details?.size || 0), 0);
         const totalMbLeft = queue.reduce((acc, slot) => acc + (slot.details?.sizeLeft || 0), 0);

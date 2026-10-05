@@ -9,6 +9,7 @@ import GetIplayerDownloadService from '../service/download/GetIplayerDownloadSer
 import StrmDownloadService from '../service/download/StrmDownloadService';
 import YTDLPDownloadService from '../service/download/YTDLPDownloadService';
 import historyService from '../service/historyService';
+import iplayerDetailsService from '../service/iplayerDetailsService';
 import loggingService from '../service/loggingService';
 import queueService from '../service/queueService';
 import socketService from '../service/socketService';
@@ -110,7 +111,7 @@ class DownloadFacade {
                         queueItem.libraryPath = libraryPath.relativePath;
 
                         if (shouldWriteNfo(nfoWriteMode, queueItem.source)) {
-                            this.#writeLibrarySidecarFiles(
+                            await this.#writeLibrarySidecarFiles(
                                 queueItem,
                                 libraryPath,
                                 writeStrmToolJson,
@@ -165,14 +166,24 @@ class DownloadFacade {
     // the completed file IS already a .strm (produced by StrmDownloadService
     // and moved into place above), and for a real download a .strm would be
     // redundant since Jellyfin can already see the video file directly.
-    #writeLibrarySidecarFiles(
+    async #writeLibrarySidecarFiles(
         item: QueueEntry,
         libraryPath: LibraryFilePath,
         writeStrmToolJson: boolean,
         streamMode?: string,
         videoQuality?: string
-    ): void {
+    ): Promise<void> {
         const baseName = path.parse(libraryPath.fileName).name;
+
+        if (item.library && !item.library.description) {
+            // Best-effort - the synopsis is a nice-to-have for the .nfo <plot> tag, not
+            // essential, so a lookup failure (BBC API down, pid no longer valid, etc.)
+            // shouldn't block writing the rest of the metadata.
+            item.library.description = await iplayerDetailsService
+                .episodeDetails(item.pid)
+                .then((details) => details.description)
+                .catch(() => undefined);
+        }
 
         const nfoContent = item.type === VideoType.MOVIE ? buildMovieNfo(item) : buildEpisodeNfo(item);
         fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.nfo`), nfoContent, 'utf8');
@@ -249,41 +260,51 @@ class DownloadFacade {
     async cleanupFailedDownloads(): Promise<void> {
         const downloadDir = (await configService.getParameter(IplayarrParameter.DOWNLOAD_DIR)) as string;
         const threeHoursAgo: number = Date.now() - 3 * 60 * 60 * 1000;
-        fs.readdir(downloadDir, { withFileTypes: true }, (err, entries) => {
-            if (err) {
-                console.error('Error reading directory:', err);
-                return;
-            }
 
-            entries.forEach((entry) => {
-                if (!entry.isDirectory()) return;
+        let entries: fs.Dirent[];
+        try {
+            entries = await fs.promises.readdir(downloadDir, { withFileTypes: true });
+        } catch (err) {
+            loggingService.error('Error reading directory:', err);
+            return;
+        }
 
-                // Skip directories that belong to a download still active in the queue -
-                // it may still be writing files well past the timestamp threshold.
-                if (queueService.getFromQueue(entry.name)) return;
+        await Promise.all(
+            entries
+                .filter((entry) => entry.isDirectory())
+                .map(async (entry) => {
+                    // Skip directories that belong to a download still active in the queue - it
+                    // may still be writing files well past the timestamp threshold.
+                    if (queueService.getFromQueue(entry.name)) return;
 
-                const dirPath: string = path.join(downloadDir, entry.name);
-                const filePath: string = path.join(dirPath, timestampFile);
+                    const dirPath: string = path.join(downloadDir, entry.name);
+                    const filePath: string = path.join(dirPath, timestampFile);
 
-                fs.stat(filePath, (err, stats) => {
-                    if (err) {
+                    let stats: fs.Stats;
+                    try {
+                        stats = await fs.promises.stat(filePath);
+                    } catch (err: any) {
                         // Ignore missing files
-                        if (err.code !== 'ENOENT') console.error(`Error checking ${filePath}:`, err);
+                        if (err.code !== 'ENOENT') loggingService.error(`Error checking ${filePath}:`, err);
                         return;
                     }
 
-                    if (stats.mtimeMs < threeHoursAgo) {
-                        fs.rm(dirPath, { recursive: true, force: true }, (err) => {
-                            if (err) {
-                                loggingService.error(`Error deleting ${dirPath}:`, err);
-                            } else {
-                                loggingService.log(`Deleted old directory: ${dirPath}`);
-                            }
-                        });
+                    if (stats.mtimeMs >= threeHoursAgo) return;
+
+                    // Re-check immediately before deleting, closing the race where a brand new
+                    // download reusing this same pid (same directory, freshly recreated) started
+                    // between the stat above and now - addToQueue() always happens before that
+                    // download creates/rewrites this directory, so this reliably catches it.
+                    if (queueService.getFromQueue(entry.name)) return;
+
+                    try {
+                        await fs.promises.rm(dirPath, { recursive: true, force: true });
+                        loggingService.log(`Deleted old directory: ${dirPath}`);
+                    } catch (err) {
+                        loggingService.error(`Error deleting ${dirPath}:`, err);
                     }
-                });
-            });
-        });
+                })
+        );
     }
 }
 

@@ -55,6 +55,7 @@ describe('sabnzbdActionEndpoint', () => {
                     status: QueueEntryStatus.COMPLETE,
                     details: { size: 1 },
                     type: VideoType.TV,
+                    source: QueueEntrySource.NZB,
                 },
                 {
                     pid: 'id2',
@@ -62,6 +63,7 @@ describe('sabnzbdActionEndpoint', () => {
                     status: QueueEntryStatus.CANCELLED,
                     details: { size: 2 },
                     type: VideoType.TV,
+                    source: QueueEntrySource.NZB,
                 },
                 {
                     pid: 'id3',
@@ -69,6 +71,7 @@ describe('sabnzbdActionEndpoint', () => {
                     status: QueueEntryStatus.FORWARDED,
                     details: { size: 3 },
                     type: VideoType.TV,
+                    source: QueueEntrySource.NZB,
                 },
             ];
 
@@ -104,6 +107,7 @@ describe('sabnzbdActionEndpoint', () => {
                     details: { size: 1 },
                     type: VideoType.TV,
                     extension: 'strm',
+                    source: QueueEntrySource.NZB,
                 },
             ];
 
@@ -158,7 +162,7 @@ describe('sabnzbdActionEndpoint', () => {
             ]);
         });
 
-        it('uses COMPLETE_DIR for a manually/subscription-sourced TV item even when ARR_COMPLETE_DIR is set', async () => {
+        it('excludes manually/subscription-sourced items entirely - not this *arr app\'s business', async () => {
             const queueEntries: QueueEntry[] = [
                 {
                     pid: 'id1',
@@ -181,7 +185,7 @@ describe('sabnzbdActionEndpoint', () => {
             await handler(req as Request, res as Response, next);
 
             const responseArg = (res.json as jest.Mock).mock.calls[0][0];
-            expect(responseArg.history.slots).toMatchObject([{ storage: '/complete/tvfile.mp4' }]);
+            expect(responseArg.history.slots).toHaveLength(0);
         });
 
         it('reports the nested libraryPath when LIBRARY_FOLDER_STRUCTURE produced one', async () => {
@@ -194,6 +198,7 @@ describe('sabnzbdActionEndpoint', () => {
                     type: VideoType.TV,
                     extension: 'mkv',
                     libraryPath: 'Show Name/Season 01/Show Name - S01E02 - Title.mkv',
+                    source: QueueEntrySource.NZB,
                 },
             ];
 

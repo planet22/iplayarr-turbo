@@ -7,6 +7,7 @@ import queueService from '../../../src/service/queueService';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 import { App } from '../../../src/types/App';
 import { AppType } from '../../../src/types/AppType';
+import { QueueEntrySource } from '../../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../../src/types/IPlayerSearchResult';
 
 jest.mock('../../../src/facade/nzbFacade');
@@ -89,7 +90,14 @@ describe('AddFileEndpoint', () => {
 
         await handler(req as Request, res as Response);
 
-        expect(queueService.addToQueue).toHaveBeenCalledWith('m0012345', 'My Show S01E01', VideoType.TV, 'app-123');
+        expect(queueService.addToQueue).toHaveBeenCalledWith(
+            'm0012345',
+            'My Show S01E01',
+            VideoType.TV,
+            'app-123',
+            undefined,
+            QueueEntrySource.NZB
+        );
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.json).toHaveBeenCalledWith({ status: true, nzo_ids: ['m0012345'] });
     });
@@ -99,14 +107,21 @@ describe('AddFileEndpoint', () => {
 
         await handler(req as Request, res as Response);
 
-        expect(queueService.addToQueue).toHaveBeenCalledWith('m0012345', 'My Show S01E01', VideoType.TV, 'app-123', {
-            title: 'My Show',
-            series: 1,
-            episode: 1,
-            episodeTitle: 'The Episode',
-            channel: 'BBC One',
-            pubDate: '2024-01-02T03:04:05.000Z',
-        });
+        expect(queueService.addToQueue).toHaveBeenCalledWith(
+            'm0012345',
+            'My Show S01E01',
+            VideoType.TV,
+            'app-123',
+            {
+                title: 'My Show',
+                series: 1,
+                episode: 1,
+                episodeTitle: 'The Episode',
+                channel: 'BBC One',
+                pubDate: '2024-01-02T03:04:05.000Z',
+            },
+            QueueEntrySource.NZB
+        );
     });
 
     it('responds 500 when the NZB is invalid and no configured app can take it', async () => {

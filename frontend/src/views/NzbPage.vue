@@ -177,7 +177,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue';
+import { inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
@@ -200,6 +200,8 @@ const grabHistory = ref([]);
 const failedGrabHistory = ref([]);
 const apps = ref([]);
 const details = reactive({});
+
+const socket = inject('socket');
 
 function detailsFor(pid) {
     return details[pid];
@@ -309,6 +311,22 @@ const {
 onMounted(async () => {
     await refresh();
     apps.value = (await ipFetch('json-api/apps')).data;
+
+    socket.value?.on('searchHistory', (data) => {
+        searchHistory.value = data.filter(({ term }) => term != '*');
+    });
+    socket.value?.on('grabHistory', (data) => {
+        grabHistory.value = data;
+    });
+    socket.value?.on('failedGrabHistory', (data) => {
+        failedGrabHistory.value = data;
+    });
+});
+
+onBeforeUnmount(() => {
+    socket.value?.off('searchHistory');
+    socket.value?.off('grabHistory');
+    socket.value?.off('failedGrabHistory');
 });
 
 async function refresh() {

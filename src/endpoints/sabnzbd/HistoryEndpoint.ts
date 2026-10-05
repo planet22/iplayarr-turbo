@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { EndpointDirectory } from '../../constants/EndpointDirectory';
 import configService from '../../service/configService';
 import historyService from '../../service/historyService';
+import { QueueEntrySource } from '../../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { QueueEntry } from '../../types/QueueEntry';
 import {
@@ -36,10 +37,15 @@ const actionDirectory: EndpointDirectory = {
     _default: async (req: Request, res: Response) => {
         let history: QueueEntry[] = await historyService.getHistory();
         history = history.filter(
-            ({ status }) =>
+            ({ status, source }) =>
                 status != QueueEntryStatus.FORWARDED &&
                 status != QueueEntryStatus.CANCELLED &&
-                status != QueueEntryStatus.REMOVED
+                status != QueueEntryStatus.REMOVED &&
+                // This protocol is how an *arr app monitors what it itself sent
+                // (AddFileEndpoint.ts) - manual UI downloads and subscriptions shouldn't
+                // show up in Sonarr/Radarr's history, or its Completed Download Handling
+                // may try to import something nobody asked it to.
+                source === QueueEntrySource.NZB
         );
         const completeDir: string = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
 
