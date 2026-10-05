@@ -43,11 +43,9 @@
 
         <legend>User-Agent Lookup</legend>
         <p class="mb-0">
-            Alternative to configuring the integration directly on an App: map a caller's User-Agent header to an
-            App here, so search requests that don't carry an app ID (e.g. a manually added indexer) can still be
-            attributed to the right App. Unrecognised User-Agents are captured automatically with a blank App -
-            fill one in below to start attributing them. Matching is a partial match (substring), so you can
-            shorten a captured User-Agent (e.g. trim off the version number) to keep it matching future requests.
+            Maps a caller's User-Agent to an App, for requests without an app ID (e.g. a manually added indexer).
+            Unrecognised ones appear automatically with a blank App - fill one in, or trim it, to match future
+            requests (partial match).
         </p>
         <table class="queueTable uaTable responsive-table">
             <colgroup>

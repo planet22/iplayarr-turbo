@@ -17,6 +17,12 @@
         :error="validationErrors.config?.NATIVE_SEARCH"
         :options="trueOrFalse"
     />
+    <SelectInput
+        v-model="pillColorsEnabled"
+        name="Colour Channel Pills by Logo"
+        tooltip="Colours channel pills using each channel's BBC logo. Applies instantly, not saved with this page."
+        :options="trueOrFalse"
+    />
 
     <template v-if="showAdvanced">
         <TextInput
@@ -38,10 +44,7 @@
             v-model="config.SCHEDULE_FULL_REFRESH"
             :advanced="true"
             name="Full Schedule Refresh"
-            tooltip="Off (default) re-fetches only today's schedule per channel and reuses a cached
-                copy of already-passed days, since those can't change. Turn on to always re-fetch
-                every day in the window on each refresh (the old behavior) if caching ever causes
-                stale or missing results."
+            tooltip="Off (default) only re-fetches today's schedule, reusing cached past days. Turn on to always re-fetch everything."
             :error="validationErrors.config?.SCHEDULE_FULL_REFRESH"
             :options="trueOrFalse"
         />
@@ -49,10 +52,11 @@
 </template>
 
 <script setup>
-import { defineEmits, defineProps, inject } from 'vue';
+import { computed, defineEmits, defineProps, inject } from 'vue';
 
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
+import { useChannelPillColors } from '@/lib/channelPillColors';
 
 defineProps({
     trueOrFalse: {
@@ -66,4 +70,10 @@ const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
 
 const emit = defineEmits(['generate-api-key']);
+
+const { state: pillColors, setEnabled: setPillColorsEnabled } = useChannelPillColors();
+const pillColorsEnabled = computed({
+    get: () => String(pillColors.enabled),
+    set: (value) => setPillColorsEnabled(value === 'true'),
+});
 </script>
