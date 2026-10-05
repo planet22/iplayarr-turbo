@@ -8,6 +8,14 @@
                 <button type="button" @click="shiftDay(1)"><font-awesome-icon :icon="['fas', 'chevron-right']" /></button>
                 <button v-if="!isToday" type="button" class="todayButton" @click="goToday">Today</button>
             </div>
+            <div class="zoomNav">
+                <button type="button" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
+                    <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
+                </button>
+                <button type="button" :disabled="pxPerMinute >= ZOOM_MAX" @click="zoomIn">
+                    <font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" />
+                </button>
+            </div>
         </div>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
@@ -60,8 +68,31 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import { browseFetch } from '@/lib/browse';
 import { getThumbnailUrl } from '@/lib/utils';
 
-const PX_PER_MINUTE = 2.5;
+const ZOOM_STEP = 0.5;
+const ZOOM_MIN = 1;
+// High enough that a 10-minute kids' show (CBBC/CBeebies) still gets a readable block width
+// before MIN_BLOCK_WIDTH's floor takes over.
+const ZOOM_MAX = 8;
 const MIN_BLOCK_WIDTH = 60;
+
+const pxPerMinute = ref(2.5);
+
+// Re-centers the timeline on whatever time was in the middle of the viewport, so zooming doesn't
+// just jump the scroll position back to the start of the day.
+const zoomBy = (delta) => {
+    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +(pxPerMinute.value + delta).toFixed(2)));
+    if (clamped === pxPerMinute.value) return;
+    const el = scrollEl.value;
+    const centerMinutes = el ? (el.scrollLeft + el.clientWidth / 2) / pxPerMinute.value : null;
+    pxPerMinute.value = clamped;
+    if (el && centerMinutes != null) {
+        nextTick(() => {
+            el.scrollLeft = Math.max(0, centerMinutes * pxPerMinute.value - el.clientWidth / 2);
+        });
+    }
+};
+const zoomOut = () => zoomBy(-ZOOM_STEP);
+const zoomIn = () => zoomBy(ZOOM_STEP);
 
 const channels = ref([]);
 const failedLogos = reactive({});
@@ -100,7 +131,7 @@ const dayEnd = computed(() => {
     return latest;
 });
 const totalWidth = computed(() =>
-    dayStart.value && dayEnd.value ? ((dayEnd.value - dayStart.value) / 60000) * PX_PER_MINUTE : 0
+    dayStart.value && dayEnd.value ? ((dayEnd.value - dayStart.value) / 60000) * pxPerMinute.value : 0
 );
 
 const hourMarks = computed(() => {
@@ -109,7 +140,7 @@ const hourMarks = computed(() => {
     const cursor = new Date(dayStart.value);
     while (cursor <= dayEnd.value) {
         marks.push({
-            left: ((cursor - dayStart.value) / 60000) * PX_PER_MINUTE,
+            left: ((cursor - dayStart.value) / 60000) * pxPerMinute.value,
             label: cursor.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }),
         });
         cursor.setHours(cursor.getHours() + 1);
@@ -121,7 +152,7 @@ const nowLeft = computed(() => {
     if (!isToday.value || !dayStart.value || !dayEnd.value) return null;
     const time = now.value.getTime();
     if (time < dayStart.value.getTime() || time > dayEnd.value.getTime()) return null;
-    return ((time - dayStart.value) / 60000) * PX_PER_MINUTE;
+    return ((time - dayStart.value) / 60000) * pxPerMinute.value;
 });
 
 const formatTime = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -133,8 +164,11 @@ const isLive = (slot) => {
 
 const blockStyle = (slot) => {
     if (!dayStart.value) return {};
-    const left = ((Date.parse(slot.start) - dayStart.value) / 60000) * PX_PER_MINUTE;
-    const width = Math.max(((Date.parse(slot.end) - Date.parse(slot.start)) / 60000) * PX_PER_MINUTE, MIN_BLOCK_WIDTH);
+    const left = ((Date.parse(slot.start) - dayStart.value) / 60000) * pxPerMinute.value;
+    const width = Math.max(
+        ((Date.parse(slot.end) - Date.parse(slot.start)) / 60000) * pxPerMinute.value,
+        MIN_BLOCK_WIDTH
+    );
     return { left: `${left}px`, width: `${width}px` };
 };
 
@@ -206,7 +240,8 @@ onBeforeUnmount(() => {
     }
 }
 
-.dateNav {
+.dateNav,
+.zoomNav {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -223,11 +258,18 @@ onBeforeUnmount(() => {
         color: @primary-text-color;
         cursor: pointer;
 
-        &:hover {
+        &:hover:not(:disabled) {
             border-color: @brand-color;
         }
-    }
 
+        &:disabled {
+            opacity: 0.4;
+            cursor: default;
+        }
+    }
+}
+
+.dateNav {
     .todayButton {
         width: auto;
         padding: 0 12px;
@@ -259,6 +301,7 @@ onBeforeUnmount(() => {
 
     .corner {
         height: @ruler-height;
+        box-sizing: border-box;
         background-color: @settings-button-background-color;
     }
 
@@ -305,6 +348,7 @@ onBeforeUnmount(() => {
 .hourRuler {
     position: relative;
     height: @ruler-height;
+    box-sizing: border-box;
     background-color: @settings-button-background-color;
     border-bottom: 1px solid @settings-button-border-color;
 }
@@ -324,6 +368,7 @@ onBeforeUnmount(() => {
 .channelRow {
     position: relative;
     height: @row-height;
+    box-sizing: border-box;
     border-top: 1px solid @settings-button-border-color;
 
     &:nth-child(odd) {
