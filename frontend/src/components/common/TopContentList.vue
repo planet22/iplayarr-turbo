@@ -3,9 +3,9 @@
         <div v-for="(item, index) in items" :key="`${item.title}-${index}`" class="topContentRow">
             <span class="topContentRank">{{ index + 1 }}</span>
             <img
-                v-if="item.pid && !failedThumbs.has(item.pid)"
+                v-if="thumbnailFor(item.pid) && !failedThumbs.has(item.pid)"
                 class="topContentThumb"
-                :src="`json-api/thumbnail/${item.pid}.jpg`"
+                :src="thumbnailFor(item.pid)"
                 loading="lazy"
                 @error="onImgError(item.pid)"
             />
@@ -20,14 +20,22 @@
 </template>
 
 <script setup>
-import { defineProps, ref } from 'vue';
+import { defineProps, reactive, ref, watch } from 'vue';
 
-defineProps({
+import { ipFetch } from '@/lib/ipFetch';
+import { getThumbnailUrl } from '@/lib/utils';
+
+const props = defineProps({
     items: {
         type: Array, // [{ title, count, pid? }]
         default: () => []
     }
 });
+
+// item.pid is the episode pid, not the BBC image pid the thumbnail endpoint expects -
+// resolve it through json-api/details (same pattern as StreamingPage/VideoEventsPage)
+// to get the real IPlayerDetails.thumbnail path.
+const details = reactive({});
 
 // Remembered per-pid so a broken thumbnail swaps to the placeholder icon instead of
 // leaving a browser broken-image glyph, and doesn't keep retrying on re-render.
@@ -36,6 +44,31 @@ const failedThumbs = ref(new Set());
 const onImgError = (pid) => {
     failedThumbs.value = new Set(failedThumbs.value).add(pid);
 };
+
+const thumbnailFor = (pid) => {
+    return pid ? getThumbnailUrl(details[pid]?.thumbnail) : undefined;
+};
+
+async function loadDetails(pid) {
+    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
+        return;
+    }
+    details[pid] = null;
+    try {
+        const response = await ipFetch(`json-api/details?pid=${pid}`);
+        details[pid] = response.ok ? response.data : null;
+    } catch {
+        details[pid] = null;
+    }
+}
+
+watch(
+    () => props.items,
+    (items) => {
+        [...new Set(items.map(({ pid }) => pid))].filter(Boolean).forEach(loadDetails);
+    },
+    { immediate: true }
+);
 </script>
 
 <style lang="less">
