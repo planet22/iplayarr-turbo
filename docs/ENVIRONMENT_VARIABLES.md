@@ -14,10 +14,10 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (Docker image) | No | Path to the `yt-dlp` binary. |
 | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | No | Extra CLI params passed to `get_iplayer` downloads. |
 | `SUB_DIR` | _(unset)_ | No | Optional subtitle output directory. |
-| `VIDEO_QUALITY` | `hd` | No | Max requested video quality. |
+| `VIDEO_QUALITY` | `fhd` | No | Max requested video quality. |
 | `OUTPUT_FORMAT` | `mp4` | No | `mp4` or `mkv`. |
-| `LIBRARY_FOLDER_STRUCTURE` | `false` | No | Jellyfin-style `Show/Season/...` folder nesting. |
-| `WRITE_NFO_STRM` | `none` | No | `none` / `all` / `nzb` / `manual` — writes `.nfo` metadata. |
+| `LIBRARY_FOLDER_STRUCTURE` | `true` | No | Jellyfin-style `Show/Season/...` folder nesting. |
+| `WRITE_NFO_STRM` | `manual` | No | `none` / `all` / `nzb` / `manual` — writes `.nfo` metadata. |
 | `WRITE_STRMTOOL_JSON` | `false` | No | Also writes a `.strmtool.json` sidecar for `.strm` files (StrmTool Jellyfin plugin). Requires `WRITE_NFO_STRM` to be enabled. |
 | `TV_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat TV filenames. |
 | `MOVIE_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat movie filenames. |

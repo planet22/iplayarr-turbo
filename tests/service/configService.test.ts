@@ -54,7 +54,7 @@ describe('configService', () => {
   it('returns multiple parameters', async () => {
     const [debug, quality] = await configService.getParameters(IplayarrParameter.DEBUG, IplayarrParameter.VIDEO_QUALITY);
     expect(debug).toBe('false');
-    expect(quality).toBe('hd');
+    expect(quality).toBe('fhd');
   });
 
   it('sets and gets parameter', async () => {

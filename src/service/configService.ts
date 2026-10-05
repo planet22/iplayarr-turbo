@@ -38,7 +38,7 @@ const configService = {
         MOVIE_FILENAME_TEMPLATE: '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC',
         TV_FILENAME_TEMPLATE:
             '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC',
-        VIDEO_QUALITY: 'hd',
+        VIDEO_QUALITY: 'fhd',
         RSS_FEED_HOURS: '48',
         // 'false' re-fetches/re-parses only today's BBC schedule page per channel each refresh,
         // reusing a cached result for any day that's already fully passed (it can't change once
@@ -58,8 +58,8 @@ const configService = {
         STREAM_NATIVE_ADAPTIVE: 'false',
         STREAM_NATIVE_HQ_PROBE: 'false',
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
-        LIBRARY_FOLDER_STRUCTURE: 'false',
-        WRITE_NFO_STRM: 'none',
+        LIBRARY_FOLDER_STRUCTURE: 'true',
+        WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
     } as ConfigMap,
 
