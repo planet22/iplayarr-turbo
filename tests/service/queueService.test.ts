@@ -6,6 +6,7 @@ import historyService from '../../src/service/historyService';
 import queueService from '../../src/service/queueService';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import videoEventService from '../../src/service/videoEventService';
+import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../../src/types/VideoEvent';
@@ -67,7 +68,7 @@ describe('queueService', () => {
             (configService.getParameter as jest.Mock).mockResolvedValue('1');
             (downloadFacade.download as jest.Mock).mockResolvedValue({ pid: 999 });
 
-            queueService.addToQueue('123', 'Test NZB', VideoType.TV, 'myApp');
+            queueService.addToQueue('123', 'Test NZB', VideoType.TV, 'myApp', undefined, QueueEntrySource.NZB);
 
             await new Promise((r) => setTimeout(r, 10)); // wait for async `moveQueue`
 
@@ -88,6 +89,14 @@ describe('queueService', () => {
                 type: VideoType.TV,
                 appId: 'myApp'
             })
+        });
+
+        it('does not record a grab for non-NZB (manual/subscription) downloads', () => {
+            (statisticsService.addGrab as jest.Mock).mockClear();
+
+            queueService.addToQueue('789', 'Manual', VideoType.TV);
+
+            expect(statisticsService.addGrab).not.toHaveBeenCalled();
         });
     });
 

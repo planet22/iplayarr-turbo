@@ -43,13 +43,17 @@ const queueService = {
         queue.push(queueEntry);
         queueService.moveQueue();
 
-        StatisticsService.addGrab({
-            pid,
-            nzbName,
-            time: new Date().getTime(),
-            type,
-            appId
-        })
+        // "Grabs" are NZBs handed over by Sonarr/Radarr - subscription and manual downloads
+        // aren't grabs, and would otherwise clutter the NZB page's Recent Grabs.
+        if (source === QueueEntrySource.NZB) {
+            StatisticsService.addGrab({
+                pid,
+                nzbName,
+                time: new Date().getTime(),
+                type,
+                appId
+            })
+        }
     },
 
     moveQueue: async (): Promise<void> => {
@@ -57,21 +61,28 @@ const queueService = {
             (await configService.getParameter(IplayarrParameter.ACTIVE_LIMIT)) as string
         );
 
-        let activeQueue: QueueEntry[] = queue.filter(({ status }) => status == QueueEntryStatus.DOWNLOADING);
-        let idleQueue: QueueEntry[] = queue.filter(({ status }) => status == QueueEntryStatus.QUEUED);
-        while (activeQueue.length < activeLimit && idleQueue.length > 0) {
-            const next = idleQueue.shift() as QueueEntry;
+        // Always re-read `queue` rather than holding snapshots across the await below: other
+        // moveQueue calls and removeFromQueue (a download finishing) run while a download is
+        // being started, and writing back a stale snapshot resurrects finished items as
+        // permanent "Downloading" zombies. The item is also claimed *before* the await so
+        // concurrent calls can't pick the same one and start it twice.
+        while (true) {
+            const activeCount = queue.filter(({ status }) => status == QueueEntryStatus.DOWNLOADING).length;
+            const next = queue.find(({ status }) => status == QueueEntryStatus.QUEUED);
+            if (activeCount >= activeLimit || !next) break;
 
-            const downloadProcess: ChildProcess = await downloadFacade.download(next.pid);
             next.status = QueueEntryStatus.DOWNLOADING;
-            next.process = downloadProcess;
             next.details = { ...next.details, start: new Date() };
-
-            activeQueue.push(next);
-
-            queue = [...activeQueue, ...idleQueue];
-            activeQueue = queue.filter(({ status }) => status == QueueEntryStatus.DOWNLOADING);
-            idleQueue = queue.filter(({ status }) => status == QueueEntryStatus.QUEUED);
+            try {
+                next.process = await downloadFacade.download(next.pid);
+            } catch (error) {
+                videoEventService.record(
+                    VideoEventType.DOWNLOAD_FAILED,
+                    `Could not start download for "${next.nzbName}": ${error}`,
+                    { pid: next.pid, level: 'error' }
+                );
+                queue = queue.filter((entry) => entry !== next);
+            }
         }
         socketService.emit('queue', queue);
     },
