@@ -67,6 +67,32 @@ router.get('/search', async (req: Request, res: Response) => {
     }
 });
 
+// Same search as /search, sent as newline-delimited JSON: one array of results per line as they are
+// found, then a final {"done":true} line (or {"error":"..."} if it failed part-way).
+router.get('/search/stream', async (req: Request, res: Response) => {
+    const { q } = req.query as any;
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    let open = true;
+    res.on('close', () => {
+        open = false;
+    });
+    const send = (line: unknown) => {
+        if (open) res.write(`${JSON.stringify(line)}\n`);
+    };
+
+    try {
+        await searchFacade.searchStreaming(q, (batch) => send(batch));
+        send({ done: true });
+    } catch (error: any) {
+        send({ error: error?.message || 'Search failed' });
+    }
+    res.end();
+});
+
 router.get('/details', async (req: Request, res: Response) => {
     const { pid } = req.query as any;
     const details = await iplayerDetailsService.details([pid]);

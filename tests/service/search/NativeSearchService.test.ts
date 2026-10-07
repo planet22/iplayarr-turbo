@@ -220,6 +220,91 @@ describe('NativeSearchService', () => {
             expect(results).toHaveLength(12);
         });
 
+        it('should report results to onBatch as each chunk of episodes is resolved', async () => {
+            const manyEpisodes: IPlayerEpisodeMetadata[] = Array.from({ length: 12 }, (_, i) => ({
+                type: 'episode',
+                id: `ep${i}`,
+                title: `Episode ${i}`,
+                release_date_time: '2025-01-01'
+            }));
+            (axios.get as jest.Mock).mockResolvedValueOnce({
+                status: 200,
+                data: { new_search: { results: [{ id: 'brandId', title: 'Test Brand' }] } }
+            });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue('testBrandPid');
+            (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockResolvedValue(manyEpisodes);
+            (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockImplementation(
+                (eps: IPlayerEpisodeMetadata[]) => Promise.resolve(
+                    eps.map(ep => ({ title: ep.title, pid: ep.id, type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 }))
+                )
+            );
+
+            const batchSizes: number[] = [];
+            const results = await NativeSearchService.search(mockTerm, undefined, (batch) => batchSizes.push(batch.length));
+
+            expect(batchSizes).toEqual([5, 5, 2]);
+            expect(results).toHaveLength(12);
+        });
+
+        describe('paging a brand\'s episode list', () => {
+            const episodes = (prefix: string, count: number): IPlayerEpisodeMetadata[] =>
+                Array.from({ length: count }, (_, i) => ({
+                    type: 'episode',
+                    id: `${prefix}${i}`,
+                    title: `Episode ${prefix}${i}`,
+                    release_date_time: '2025-01-01'
+                }));
+
+            const arrange = () => {
+                (axios.get as jest.Mock).mockResolvedValueOnce({
+                    status: 200,
+                    data: { new_search: { results: [{ id: 'brandId', title: 'Test Brand' }] } }
+                });
+                (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue('testBrandPid');
+                (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockImplementation(
+                    (eps: IPlayerEpisodeMetadata[]) => Promise.resolve(
+                        eps.map(ep => ({ title: ep.title, pid: ep.id, type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 }))
+                    )
+                );
+            };
+
+            it('should fetch further pages while each page is full', async () => {
+                arrange();
+                (iplayerDetailsService.getSeriesEpisodes as jest.Mock)
+                    .mockResolvedValueOnce(episodes('a', searchResultLimit))
+                    .mockResolvedValueOnce(episodes('b', searchResultLimit))
+                    .mockResolvedValueOnce(episodes('c', 20));
+
+                const results = await NativeSearchService.search(mockTerm);
+
+                expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledWith('testBrandPid');
+                expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledWith('testBrandPid', 2);
+                expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledWith('testBrandPid', 3);
+                expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledTimes(3);
+                expect(results).toHaveLength(searchResultLimit * 2 + 20);
+            });
+
+            it('should not request another page after a short page', async () => {
+                arrange();
+                (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockResolvedValueOnce(episodes('a', 40));
+
+                await NativeSearchService.search(mockTerm);
+
+                expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledTimes(1);
+            });
+
+            it('should stop paging at the maximum page count', async () => {
+                arrange();
+                (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockImplementation(
+                    (_pid: string, page: number = 1) => Promise.resolve(episodes(`p${page}_`, searchResultLimit))
+                );
+
+                await NativeSearchService.search(mockTerm);
+
+                expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledTimes(10);
+            });
+        });
+
         it('should limit results to searchResultLimit', async () => {
             const episodesPerBrand: IPlayerEpisodeMetadata[] = Array.from({ length: searchResultLimit + 10 }, (_, i) => ({
                 type: 'episode',

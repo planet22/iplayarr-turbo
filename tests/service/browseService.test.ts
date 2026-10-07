@@ -429,7 +429,56 @@ describe('browseService', () => {
         ]);
         const result = await browseService.programme('b00ep001');
         expect(result).toMatchObject({ pid: 'b00brand', kind: 'brand', title: 'The Show' });
-        expect(mockedDetails.getSeriesEpisodes).toHaveBeenCalledWith('b00brand');
+        expect(mockedDetails.getSeriesEpisodes).toHaveBeenCalledWith('b00brand', 1, 30);
+    });
+
+    describe('programme paging', () => {
+        const brand = { programme: { type: 'brand', pid: 'b00brand', title: 'Brand' } } as any;
+        const metas = (count: number, prefix = 'e') =>
+            Array.from({ length: count }, (_, i) => ({ id: `${prefix}${i}`, type: 'episode', title: 't' })) as any;
+        const echoDetails = () =>
+            mockedDetails.detailsForEpisodeMetadata.mockImplementation(async (chunk: any[]) =>
+                chunk.map((m) => ({ pid: m.id, title: 'Brand', series: 1, episode: 1, type: VideoType.TV }))
+            );
+
+        it('asks the BBC for one page of the requested number', async () => {
+            mockedDetails.getMetadata.mockResolvedValue(brand);
+            mockedDetails.getSeriesEpisodes.mockResolvedValue(metas(5));
+            echoDetails();
+            await browseService.programme('b00brand', 3);
+            expect(mockedDetails.getSeriesEpisodes).toHaveBeenCalledWith('b00brand', 3, 30);
+        });
+
+        it('reports more pages while the BBC page comes back full', async () => {
+            mockedDetails.getMetadata.mockResolvedValue(brand);
+            mockedDetails.getSeriesEpisodes.mockResolvedValue(metas(30));
+            echoDetails();
+            const result = await browseService.programme('b00brand');
+            expect(result).toMatchObject({ page: 1, hasMore: true });
+            expect(result.seasons[0].episodes).toHaveLength(30);
+        });
+
+        it('reports no more pages after a short page', async () => {
+            mockedDetails.getMetadata.mockResolvedValue(brand);
+            mockedDetails.getSeriesEpisodes.mockResolvedValue(metas(12));
+            echoDetails();
+            expect(await browseService.programme('b00brand', 2)).toMatchObject({ page: 2, hasMore: false });
+        });
+
+        it('treats a full page of series containers as more pages too', async () => {
+            mockedDetails.getMetadata.mockResolvedValue(brand);
+            mockedDetails.getSeriesEpisodes.mockResolvedValue(
+                Array.from({ length: 30 }, (_, i) => ({ id: `s${i}`, type: 'series', title: 's' })) as any
+            );
+            expect((await browseService.programme('b00brand')).hasMore).toBe(true);
+        });
+
+        it('never pages a single episode', async () => {
+            mockedDetails.getMetadata.mockResolvedValue({ programme: { type: 'episode', pid: 'b00ep001', title: 'Ep' } } as any);
+            mockedDetails.findBrandForPid.mockResolvedValue(undefined);
+            mockedDetails.details.mockResolvedValue([{ pid: 'b00ep001', title: 'Ep', type: VideoType.TV }]);
+            expect(await browseService.programme('b00ep001')).toMatchObject({ page: 1, hasMore: false });
+        });
     });
 
     it('programme for a single episode wraps just that episode', async () => {

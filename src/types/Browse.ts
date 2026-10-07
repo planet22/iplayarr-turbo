@@ -86,4 +86,7 @@ export interface BrowseProgramme {
     channel?: string;
     category?: string;
     seasons: BrowseSeason[];
+    // Which page of the show's episode list `seasons` holds, and whether the BBC has further pages.
+    page: number;
+    hasMore: boolean;
 }

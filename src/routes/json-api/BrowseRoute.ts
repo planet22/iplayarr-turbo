@@ -134,7 +134,7 @@ router.get(
     handle(async (req, res) => {
         const pid = req.params.pid as string;
         if (!PID_REGEX.test(pid)) return invalid(res, 'Invalid pid');
-        res.json(await browseService.programme(pid));
+        res.json(await browseService.programme(pid, toInt(req.query.page)));
     })
 );
 
