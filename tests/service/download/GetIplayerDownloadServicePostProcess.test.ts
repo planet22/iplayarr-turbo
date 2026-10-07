@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import fs from 'fs/promises';
+import path from 'path';
 
 import configService from '../../../src/service/configService';
 import service from '../../../src/service/download/GetIplayerDownloadService';
@@ -34,8 +35,15 @@ describe('GetIplayerDownloadService.postProcess', () => {
         (configService.getParameter as jest.Mock).mockResolvedValue('mkv');
         ffmpeg('close', 0);
         await service.postProcess('pid', '/d');
-        expect(spawn).toHaveBeenCalledWith('ffmpeg', ['-y', '-i', '/d/show.mp4', '-c', 'copy', '/d/show.mkv']);
-        expect(fs.unlink).toHaveBeenCalledWith('/d/show.mp4');
+        expect(spawn).toHaveBeenCalledWith('ffmpeg', [
+            '-y',
+            '-i',
+            path.join('/d', 'show.mp4'),
+            '-c',
+            'copy',
+            path.join('/d', 'show.mkv'),
+        ]);
+        expect(fs.unlink).toHaveBeenCalledWith(path.join('/d', 'show.mp4'));
     });
 
     it('skips when there is no mp4', async () => {
