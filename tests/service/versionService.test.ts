@@ -207,10 +207,14 @@ describe('versionService', () => {
             exec = `${dir}/get_iplayer`;
             (configService.getParameter as jest.Mock).mockResolvedValue(exec);
         });
-        afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+        afterEach(() => {
+            jest.restoreAllMocks();
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
 
         const mockDownload = (statuses: Array<{ status: number; location?: string }>) => {
             let i = 0;
+            jest.spyOn(fs, 'createWriteStream').mockReturnValue({} as any);
             (https.get as jest.Mock).mockImplementation((_url: string, cb: any) => {
                 const r = statuses[i++];
                 const res: any = { statusCode: r.status, headers: { location: r.location }, resume: jest.fn() };
