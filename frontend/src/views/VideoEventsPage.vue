@@ -5,14 +5,16 @@
             <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
             <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
         </div>
+        <TablePagination v-model="eventsPage" v-model:page-size="eventsPageSize" :total="sortedEvents.length" />
         <table class="dataTable eventLogTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
-                <col />
+                <col style="width: 40ch" />
                 <!-- longest real value is 'stream_key_rotated' (19 chars) - see VideoEventType -->
                 <col style="width: 20ch" />
                 <col style="width: 8ch" />
-                <col style="width: 40ch" />
+                <!-- no width: Message takes whatever the fixed columns leave over -->
+                <col />
                 <col style="width: 26ch" />
             </colgroup>
             <thead>

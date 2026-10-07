@@ -3,6 +3,7 @@
         <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter queue..." />
         <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
     </div>
+    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
     <table class="queueTable responsive-table" summary="Hed">
         <colgroup>
             <col style="width: 36px" />
@@ -257,6 +258,13 @@ watch(
             &.text {
                 white-space: normal;
 
+                > a {
+                    display: block;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
                 > div {
                     white-space: nowrap;
                     overflow: hidden;
@@ -287,6 +295,39 @@ watch(
 
     .progress-column {
         min-width: 75px;
+    }
+
+    @media (max-width: @mobile-breakpoint) {
+        tbody {
+            td.text {
+                min-width: 0;
+                flex-direction: column;
+                align-items: flex-start !important;
+                gap: 2px;
+
+                > a {
+                    white-space: normal;
+                    overflow: visible;
+                    overflow-wrap: anywhere;
+                }
+
+                > div {
+                    white-space: normal;
+                }
+            }
+
+            // Full-width bar on its own line (it collapses to a dot inside an auto-width
+            // inline-flex cell), and no "Progress:" label since the bar speaks for itself.
+            td.progress-column {
+                display: flex;
+                flex-basis: 100%;
+                order: 1;
+
+                &::before {
+                    display: none;
+                }
+            }
+        }
     }
 }
 </style>

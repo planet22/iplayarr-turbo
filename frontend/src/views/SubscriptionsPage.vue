@@ -16,8 +16,9 @@
             No subscriptions yet. Open a show from
             <RouterLink to="/browse">Discover</RouterLink> and press Subscribe.
         </p>
-        <div v-else class="subscriptionList">
-            <div v-for="subscription in subscriptions" :key="subscription.id" class="subscriptionRow">
+        <TablePagination v-if="loaded && subscriptions.length" v-model="page" v-model:page-size="pageSize" :total="subscriptions.length" />
+        <div v-if="loaded && subscriptions.length" class="subscriptionList">
+            <div v-for="subscription in pagedItems" :key="subscription.id" class="subscriptionRow">
                 <RouterLink :to="`/browse/programme/${subscription.pid}`" class="thumbLink">
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail)" :alt="subscription.title" loading="lazy" />
                     <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
@@ -44,6 +45,7 @@
                 </div>
             </div>
         </div>
+        <TablePagination v-if="loaded && subscriptions.length" v-model="page" v-model:page-size="pageSize" :total="subscriptions.length" />
     </div>
 </template>
 
@@ -52,12 +54,15 @@ import { onMounted, reactive, ref } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useSubscriptions } from '@/lib/subscriptions';
+import { usePagination } from '@/lib/usePagination';
 import { formatRelativeTime, getThumbnailUrl } from '@/lib/utils';
 
 const { subscriptions, loaded, load, unsubscribe } = useSubscriptions();
+const { page, pageSize, pagedItems } = usePagination(subscriptions);
 const busy = reactive({});
 const checkingAll = ref(false);
 

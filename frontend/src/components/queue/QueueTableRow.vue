@@ -58,7 +58,7 @@
         <td data-title="ETA">
             {{ item.details.eta }}
         </td>
-        <td data-title="Speed">{{ item.details.speed || '' }} {{ item.details.speed != '' ? 'Mb/s' : '' }}</td>
+        <td data-title="Speed">{{ item.details.speed ? `${item.details.speed} Mb/s` : '' }}</td>
         <td class="actionCol" data-title="Action">
             <span>
                 <font-awesome-icon

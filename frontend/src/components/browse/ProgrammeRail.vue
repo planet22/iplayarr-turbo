@@ -99,7 +99,7 @@ const scroll = (direction) => {
             scroll-snap-align: start;
 
             @media (max-width: @mobile-breakpoint) {
-                flex-basis: 70vw;
+                flex-basis: 42vw;
             }
         }
     }

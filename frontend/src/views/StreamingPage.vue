@@ -104,6 +104,7 @@
 
         <SettingsPageToolbar :icons="['delete']" delete-label="Clear History" @delete-queue-item="clearHistory" />
         <legend>Stream History</legend>
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
