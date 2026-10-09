@@ -35,6 +35,7 @@ const deleteItems = async () => {
     const queueItems = queueTable.value.selectedQueue;
     const historyItems = queueTable.value.selectedHistory;
     if (queueItems.length == 0 && historyItems.length == 0) {
+        dialogService.alert('Nothing Selected', 'Tick the items you want to remove first.');
         return;
     }
     const count = queueItems.length + historyItems.length;
