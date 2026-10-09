@@ -109,7 +109,6 @@ function clear() {
                 flex: 0 0 12px;
             }
         }
-        }
 
         span {
             font-size: 12px;

@@ -13,6 +13,18 @@ export interface Subscription {
     lastError?: string;
     // Episodes already dealt with (queued, or present when subscribed) - never queued again.
     seen: string[];
+    // Optional link to a Sonarr/Radarr library entry (see subscriptionArrService).
+    arr?: SubscriptionArrLink;
+    // Added only to Sonarr/Radarr, which does the downloading: iPlayarr never checks or queues for it.
+    arrOnly?: boolean;
+}
+
+export interface SubscriptionArrLink {
+    appId: string;
+    arrId: number;
+    title: string;
+    // True when iPlayarr created the entry, so only then may unlinking remove it from Sonarr/Radarr.
+    addedByUs: boolean;
 }
 
 export interface SubscribeOptions {
@@ -21,6 +33,8 @@ export interface SubscribeOptions {
     // Queue every episode that is currently available, as well as new ones from now on.
     // Takes precedence over downloadLatest.
     downloadAll?: boolean;
+    // Record the show without any iPlayarr checking or queuing (Sonarr/Radarr handles downloads).
+    arrOnly?: boolean;
 }
 
 export interface SubscriptionCheckResult {

@@ -22,6 +22,7 @@ import QueueRoute from './json-api/QueueRoute';
 import SettingsRoute from './json-api/SettingsRoute';
 import StatisticsRoute from './json-api/StatisticsRoute';
 import StreamRoute from './json-api/StreamRoute';
+import SubscriptionArrRoute from './json-api/SubscriptionArrRoute';
 import SubscriptionsRoute from './json-api/SubscriptionsRoute';
 import SynonymsRoute from './json-api/SynonymsRoute';
 import VersionRoute from './json-api/VersionRoute';
@@ -38,6 +39,7 @@ router.use('/streams', StreamRoute);
 router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
+router.use('/subscriptions/arr', SubscriptionArrRoute);
 router.use('/subscriptions', SubscriptionsRoute);
 router.use('/maintenance', MaintenanceRoute);
 

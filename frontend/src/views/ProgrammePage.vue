@@ -24,14 +24,32 @@
                     </span>
                 </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>
-                <button
-                    v-if="programme.kind !== 'episode' || subscription"
-                    :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
-                    @click="toggleSubscription"
-                >
-                    <font-awesome-icon :icon="['fas', subscribing ? 'circle-notch' : 'bell']" :spin="subscribing" />
-                    {{ subscription ? 'Subscribed' : 'Subscribe' }}
-                </button>
+                <div v-if="programme.kind !== 'episode' || subscription" class="subscribeRow">
+                    <button
+                        :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
+                        @click="toggleSubscription"
+                    >
+                        <font-awesome-icon :icon="['fas', subscribing ? 'circle-notch' : 'bell']" :spin="subscribing" />
+                        {{ subscription ? 'Subscribed' : 'Subscribe' }}
+                    </button>
+                    <button
+                        v-if="subscription && !subscription.arrOnly"
+                        class="clickable subscribeButton"
+                        :disabled="subscribing"
+                        @click="toggleArrWithBusy"
+                    >
+                        <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
+                        {{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}
+                    </button>
+                    <span
+                        v-if="subscription && subscription.arr"
+                        class="subscribeButton on arrChip"
+                        :title="`In ${arrAppName(subscription.arr.appId)} as ${subscription.arr.title}`"
+                    >
+                        <font-awesome-icon :icon="['fas', 'check']" />
+                        {{ arrAppName(subscription.arr.appId) }}
+                    </span>
+                </div>
                 </div>
             </div>
         </div>
@@ -103,6 +121,7 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { usePagination } from '@/lib/usePagination';
@@ -120,7 +139,8 @@ const { canPlay, play, download } = useBrowseActions();
 
 // Subscribing is per show: after the server climbs an episode to its brand, programme.pid is the
 // brand pid that subscriptions are keyed by.
-const { load: loadSubscriptions, findByPid, subscribe, unsubscribe } = useSubscriptions();
+const { load: loadSubscriptions, findByPid, subscribe, unsubscribe, toggleArr } = useSubscriptions();
+const { loadAppNames, arrAppName } = useArrAppNames();
 const subscribing = ref(false);
 const subscription = computed(() => (programme.value ? findByPid(programme.value.pid) : undefined));
 
@@ -139,7 +159,17 @@ const toggleSubscription = async () => {
         subscribing.value = false;
     }
 };
+
+const toggleArrWithBusy = async () => {
+    subscribing.value = true;
+    try {
+        await toggleArr(subscription.value);
+    } finally {
+        subscribing.value = false;
+    }
+};
 loadSubscriptions();
+loadAppNames();
 
 // Newest first: by first broadcast when both have one, otherwise by episode number.
 const newestFirst = (a, b) => {
@@ -356,8 +386,15 @@ watch(
     }
 }
 
-.subscribeButton {
+.subscribeRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
     margin-top: 14px;
+}
+
+.subscribeButton {
     padding: 8px 16px;
     font-size: 15px;
     border-radius: 4px;
@@ -376,6 +413,15 @@ watch(
     &.on {
         background-color: @brand-color;
         border-color: @brand-color;
+    }
+
+    // Same size as the buttons, but a status label rather than something to press.
+    &.arrChip,
+    &.arrChip:hover:not(:disabled) {
+        background-color: @brand-color;
+        border-color: @brand-color;
+        cursor: default;
+        user-select: none;
     }
 }
 

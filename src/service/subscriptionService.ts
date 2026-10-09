@@ -3,7 +3,7 @@ import { v4 } from 'uuid';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
-import { SubscribeOptions, Subscription, SubscriptionCheckResult } from '../types/Subscription';
+import { SubscribeOptions, Subscription, SubscriptionArrLink, SubscriptionCheckResult } from '../types/Subscription';
 import { VideoEventType } from '../types/VideoEvent';
 import { createNZBName } from '../utils/Utils';
 import historyService from './historyService';
@@ -94,10 +94,13 @@ class SubscriptionService {
             // available episode (de-duplicated, retried and named like any other), without making
             // this request wait for hundreds of metadata lookups.
             seen: options.downloadAll ? [] : episodes.map(({ id }) => id),
+            ...(options.arrOnly ? { arrOnly: true } : {}),
         };
         await storage.setItem(STORAGE_KEY, [...(await this.list()), subscription]);
 
-        if (options.downloadAll) {
+        if (options.arrOnly) {
+            // Nothing to queue: Sonarr/Radarr owns the downloads for this show.
+        } else if (options.downloadAll) {
             const run = this.check(subscription)
                 .catch((error) => loggingService.error(`Subscription "${subscription.title}": first check failed: ${error}`))
                 .finally(() => this.#background.delete(run));
@@ -111,6 +114,13 @@ class SubscriptionService {
             );
         }
         return subscription;
+    }
+
+    // Sets or clears the Sonarr/Radarr link; false if the subscription no longer exists.
+    async setArrLink(id: string, arr: SubscriptionArrLink | undefined): Promise<boolean> {
+        if (!(await this.list()).some((s) => s.id === id)) return false;
+        await this.#update(id, (s) => ({ ...s, arr }));
+        return true;
     }
 
     async unsubscribe(id: string): Promise<boolean> {
@@ -151,7 +161,7 @@ class SubscriptionService {
 
     async check(subscription: Subscription): Promise<SubscriptionCheckResult> {
         const result: SubscriptionCheckResult = { id: subscription.id, title: subscription.title, queued: [] };
-        if (this.#inFlight.has(subscription.id)) return result;
+        if (subscription.arrOnly || this.#inFlight.has(subscription.id)) return result;
         this.#inFlight.add(subscription.id);
         try {
             const episodes = await this.listEpisodes(subscription.pid);

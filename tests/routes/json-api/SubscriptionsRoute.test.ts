@@ -42,6 +42,14 @@ describe('SubscriptionsRoute', () => {
         expect(mocked.subscribe).toHaveBeenLastCalledWith('b006mkw3', { downloadLatest: false, downloadAll: false });
     });
 
+    it('POST / passes arrOnly only when strictly true', async () => {
+        mocked.subscribe.mockResolvedValue({ id: 'a' } as any);
+        await request(app).post('/').send({ pid: 'b006mkw3', arrOnly: true }).expect(200);
+        expect(mocked.subscribe).toHaveBeenLastCalledWith('b006mkw3', { downloadLatest: false, downloadAll: false, arrOnly: true });
+        await request(app).post('/').send({ pid: 'b006mkw3', arrOnly: 'yes' }).expect(200);
+        expect(mocked.subscribe).toHaveBeenLastCalledWith('b006mkw3', { downloadLatest: false, downloadAll: false });
+    });
+
     it('POST / validates the pid', async () => {
         for (const body of [{}, { pid: 5 }, { pid: '../x' }]) {
             const res = await request(app).post('/').send(body);

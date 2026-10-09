@@ -27,16 +27,26 @@
                     <RouterLink :to="`/browse/programme/${subscription.pid}`" class="title">{{ subscription.title }}</RouterLink>
                     <div class="details">
                         <ChannelPill :channel="subscription.channel" />
-                        <span>Checked {{ checkedLabel(subscription) }}</span>
+                        <span v-if="!subscription.arrOnly">Checked {{ checkedLabel(subscription) }}</span>
                         <span v-if="subscription.lastQueuedAt">
                             Last download {{ formatRelativeTime(Date.parse(subscription.lastQueuedAt)) }}
                             ({{ subscription.lastQueuedCount }} episode{{ subscription.lastQueuedCount === 1 ? '' : 's' }})
                         </span>
                         <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
+                        <span v-if="subscription.arr" class="pill" :title="subscription.arrOnly ? `In ${arrAppName(subscription.arr.appId)} as ${subscription.arr.title} - downloads are handled there, not by iPlayarr` : `In ${arrAppName(subscription.arr.appId)} as ${subscription.arr.title}`">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                     </div>
                 </div>
                 <div class="rowActions">
-                    <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
+                    <button
+                        v-if="!subscription.arrOnly"
+                        class="clickable"
+                        :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
+                        :disabled="busy[subscription.id]"
+                        @click="toggleArrWithBusy(subscription)"
+                    >
+                        <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
+                    </button>
+                    <button v-if="!subscription.arrOnly" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'rotate']" :spin="busy[subscription.id]" />
                     </button>
                     <button class="clickable" title="Unsubscribe" @click="remove(subscription)">
@@ -57,16 +67,22 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { usePagination } from '@/lib/usePagination';
 import { formatRelativeTime, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
-const { subscriptions, loaded, load, unsubscribe } = useSubscriptions();
+const { subscriptions, loaded, load, unsubscribe, toggleArr } = useSubscriptions();
 const { page, pageSize, pagedItems } = usePagination(subscriptions);
 const busy = reactive({});
 const checkingAll = ref(false);
 
-onMounted(load);
+const { loadAppNames, arrAppName } = useArrAppNames();
+
+onMounted(() => {
+    load();
+    loadAppNames();
+});
 
 const checkedLabel = (subscription) =>
     subscription.lastChecked ? formatRelativeTime(Date.parse(subscription.lastChecked)) : 'not yet';
@@ -102,6 +118,15 @@ const checkOne = async (subscription) => {
         const { data, ok } = await ipFetch(`json-api/subscriptions/${subscription.id}/check`, 'POST');
         await load();
         if (ok) summarise([data]);
+    } finally {
+        busy[subscription.id] = false;
+    }
+};
+
+const toggleArrWithBusy = async (subscription) => {
+    busy[subscription.id] = true;
+    try {
+        await toggleArr(subscription);
     } finally {
         busy[subscription.id] = false;
     }
