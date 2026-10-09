@@ -149,6 +149,11 @@ legend {
     color: @warn-text-color;
     text-align: center;
 
+    // Space between a leading icon and the pill's text, everywhere pills are used.
+    svg:not(:last-child) {
+        margin-right: 0.35em;
+    }
+
     &.TV {
         background-color: @primary-color;
         border-color: @primary-color;

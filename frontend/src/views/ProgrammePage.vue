@@ -295,11 +295,14 @@ watch(
 
     .programmeMeta {
         margin-bottom: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
 
         .pill.grey,
         .pill.channelPill {
             padding: 3px 7px;
-            margin-right: 10px;
+            margin-right: 0;
             font-size: 15px;
             font-weight: 300;
 
