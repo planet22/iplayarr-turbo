@@ -1,5 +1,8 @@
 <template>
     <div class="inner-content">
+        <InfoBar clazz="warning small">
+            NZB clients need the category "iplayer" for NZB forwarding to work.
+        </InfoBar>
         <legend>Apps</legend>
         <p class="mb-0">Manage your integrations with Apps (including Arr and NZB Clients) here</p>
         <div class="block-reset" />
@@ -121,6 +124,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
 import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';

@@ -1,8 +1,5 @@
 <template>
     <div class="inner-content scroll-x">
-        <InfoBar clazz="warning small">
-            NZB clients need the category "iplayer" for NZB forwarding to work.
-        </InfoBar>
         <SettingsPageToolbar
             :icons="['delete', 'filterToggle']" delete-label="Clear Searches"
             :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
@@ -192,7 +189,6 @@ import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } fr
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
