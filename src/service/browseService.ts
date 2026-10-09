@@ -101,6 +101,8 @@ const withLogo = (channel: BrowseChannel): BrowseChannel => ({
     logo: channel.masterBrand ? `json-api/browse/channel-logo/${channel.masterBrand}.svg` : undefined,
 });
 
+const PROGRAMME_PAGE_SIZE = 30;
+
 class BrowseService {
     shortCache: RedisCacheService<any> = new RedisCacheService('browse_short', 900); // 15 minutes
     longCache: RedisCacheService<any> = new RedisCacheService('browse_long', 86400); // 24 hours
@@ -404,7 +406,9 @@ class BrowseService {
         return this.#listing(`atoz/${encodeURIComponent(bucket)}/programmes`, page, perPage);
     }
 
-    async programme(requestedPid: string): Promise<BrowseProgramme> {
+    // One page of a show's episodes (PROGRAMME_PAGE_SIZE from the BBC); callers walk `page` while `hasMore`.
+    async programme(requestedPid: string, page: number = 1): Promise<BrowseProgramme> {
+        const safePage = Number.isInteger(page) && page > 0 ? page : 1;
         let pid = requestedPid;
         let { programme } = await iplayerDetailsService.getMetadata(pid);
         // An episode card opens its whole show: climb to the brand and list every episode there.
@@ -433,16 +437,19 @@ class BrowseService {
         };
 
         let episodes: IPlayerDetails[];
+        let hasMore = false;
         if (kind === 'episode') {
             episodes = await iplayerDetailsService.details([pid]);
         } else {
-            const metas = (await iplayerDetailsService.getSeriesEpisodes(pid)).filter((e) => e.type === 'episode');
+            const batch = await iplayerDetailsService.getSeriesEpisodes(pid, safePage, PROGRAMME_PAGE_SIZE);
+            hasMore = batch.length >= PROGRAMME_PAGE_SIZE;
+            const metas = batch.filter((e) => e.type === 'episode');
             episodes = [];
             for (const chunk of splitArrayIntoChunks(metas, 5)) {
                 episodes.push(...(await iplayerDetailsService.detailsForEpisodeMetadata(chunk)));
             }
         }
-        return { ...base, seasons: this.#groupSeasons(episodes) };
+        return { ...base, seasons: this.#groupSeasons(episodes), page: safePage, hasMore };
     }
 
     #groupSeasons(episodes: IPlayerDetails[]): BrowseSeason[] {

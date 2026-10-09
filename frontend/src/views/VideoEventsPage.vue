@@ -1,18 +1,24 @@
 <template>
-    <SettingsPageToolbar :icons="['delete']" delete-label="Clear Log" @delete-queue-item="clearEvents" />
+    <SettingsPageToolbar
+        :icons="['delete', 'filterToggle']" delete-label="Clear Log"
+        :filters-shown="showFilters" :filters-active="filtersActive"
+        @delete-queue-item="clearEvents" @toggle-filters="showFilters = !showFilters"
+    />
     <div class="inner-content scroll-x">
-        <div class="tableToolbar">
+        <div v-if="showFilters" class="tableToolbar">
             <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
             <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
         </div>
+        <TablePagination v-model="eventsPage" v-model:page-size="eventsPageSize" :total="sortedEvents.length" />
         <table class="dataTable eventLogTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
-                <col />
+                <col style="width: 40ch" />
                 <!-- longest real value is 'stream_key_rotated' (19 chars) - see VideoEventType -->
                 <col style="width: 20ch" />
                 <col style="width: 8ch" />
-                <col style="width: 40ch" />
+                <!-- no width: Message takes whatever the fixed columns leave over -->
+                <col />
                 <col style="width: 26ch" />
             </colgroup>
             <thead>
@@ -43,12 +49,14 @@
                             class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(event.pid).thumbnail)"
                             @click="openInfo(event.pid)"
+                            @error="hideBrokenImage"
                         />
                         <font-awesome-icon
                             v-else-if="event.pid"
                             class="thumbnail-placeholder clickable"
                             :icon="['fas', 'film']"
                             @click="openInfo(event.pid)"
+                            @error="hideBrokenImage"
                         />
                     </td>
                     <td class="text">
@@ -74,7 +82,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onMounted, reactive, watch } from 'vue';
+import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
@@ -86,7 +94,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
-import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
+import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const events = inject('videoEvents');
 const details = reactive({});
@@ -120,6 +128,10 @@ const {
     dateAccessor: (event) => event.timestamp,
     storageKey: 'videoEventsTable',
 });
+
+// Filter bar sits behind the toolbar's filter icon; start open if a persisted filter is applied.
+const filtersActive = computed(() => !!(filterText.value || dateFrom.value || dateTo.value));
+const showFilters = ref(filtersActive.value);
 
 const {
     page: eventsPage, pageSize: eventsPageSize, pagedItems: pagedEvents,

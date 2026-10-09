@@ -10,7 +10,7 @@
                 <span>{{ details.category }}</span>
                 <span>{{ formatDate(details.firstBroadcast, 'full', 'long') }}</span>
             </div>
-            <div v-if="details.category" class="seriesDetails">
+            <div v-if="details.category" class="seriesDetails pillRow">
                 <span :class="['pill', 'grey']">
                     <font-awesome-icon :icon="['fas', resolvedType == 'TV' ? 'tv' : 'film']" />
                     {{ fixCasing(resolvedType) }}
@@ -151,11 +151,13 @@ const fixCasing = (str) => {
         font-weight: 300;
         font-size: 17px;
 
-        svg {
-            margin-right: 3px;
-        }
-
-        margin-right: 10px !important;
+        margin-right: 0 !important;
     }
+}
+
+.seriesDetails.pillRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
 }
 </style>

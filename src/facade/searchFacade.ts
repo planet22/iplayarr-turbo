@@ -19,16 +19,50 @@ class SearchFacade {
     searchCache: RedisCacheService<IPlayerSearchResult[]> = new RedisCacheService('search_cache', 300);
 
     async search(inputTerm: string, season?: number, episode?: number): Promise<IPlayerSearchResult[]> {
+        return this.#run(inputTerm, season, episode);
+    }
+
+    // Same results as search(), but handed to onBatch as the service finds them so a UI can show the
+    // first ones early. Every result is delivered exactly once; the returned list is the complete set.
+    async searchStreaming(inputTerm: string, onBatch: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
+        return this.#run(inputTerm, undefined, undefined, onBatch);
+    }
+
+    async #run(
+        inputTerm: string,
+        season?: number,
+        episode?: number,
+        onBatch?: (batch: IPlayerSearchResult[]) => void
+    ): Promise<IPlayerSearchResult[]> {
         if (inputTerm == '*') {
-            return scheduleFacade.getFeed();
+            const feed = await scheduleFacade.getFeed();
+            if (feed.length) onBatch?.(feed);
+            return feed;
         }
 
         const service = await this.#getService();
         const { term, synonym } = await this.#getTerm(inputTerm, season);
 
+        const delivered = new Set<string>();
+        const deliver = (batch: IPlayerSearchResult[]) => {
+            const fresh = batch.filter(({ pid }) => !delivered.has(pid));
+            fresh.forEach(({ pid }) => delivered.add(pid));
+            if (fresh.length) onBatch?.(fresh);
+        };
+
         let results: IPlayerSearchResult[] | undefined = await this.searchCache.get(term);
         if (!results) {
-            results = await service.search(term, synonym);
+            results = onBatch
+                ? await service.search(term, synonym, async (batch) => {
+                    try {
+                        const filtered = await this.#filterForSeasonAndEpisode(batch, season, episode);
+                        const processed = await service.processCompletedSearch(filtered, inputTerm, synonym, season, episode);
+                        deliver(processed.filter(({ pubDate }) => !pubDate || pubDate < new Date()));
+                    } catch {
+                        // The final pass below delivers anything a batch couldn't.
+                    }
+                })
+                : await service.search(term, synonym);
             this.searchCache.set(term, results as IPlayerSearchResult[]);
         } else {
             //Fix the results which are stored as string
@@ -45,7 +79,9 @@ class SearchFacade {
 
         const processedResults: IPlayerSearchResult[] = await service.processCompletedSearch(filteredResults, inputTerm, synonym, season, episode);
 
-        return processedResults.filter(({ pubDate }) => !pubDate || pubDate < new Date());
+        const finalResults = processedResults.filter(({ pubDate }) => !pubDate || pubDate < new Date());
+        deliver(finalResults); // whatever the per-batch pass couldn't know about (cache hits, cross-result merging)
+        return finalResults;
     }
 
     async #getService(): Promise<AbstractSearchService> {

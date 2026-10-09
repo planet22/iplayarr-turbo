@@ -20,6 +20,13 @@ export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode,
 
 // IPlayerDetails.thumbnail is a relative json-api path (e.g. "json-api/thumbnail/abc123.jpg"),
 // mirroring how ipFetch resolves endpoints - resolve it against the API host the same way.
+// @error handler for thumbnail <img>s: when the image fails to load (e.g. BBC has no still for
+// it) blank it, rather than showing the browser's broken-image "?" icon. visibility (not display)
+// so the image keeps the space its CSS gives it and the surrounding layout doesn't shift.
+export const hideBrokenImage = (event) => {
+    event.target.style.visibility = 'hidden';
+};
+
 export const getThumbnailUrl = (thumbnail) => {
     return thumbnail ? `${getHost()}/${thumbnail}` : undefined;
 };

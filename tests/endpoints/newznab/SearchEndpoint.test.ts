@@ -102,4 +102,24 @@ describe('SearchEndpoint', () => {
             expect.objectContaining({ appId: 'sonarr-id' })
         );
     });
+
+    it('touches the app when an app ID is supplied in the query', async () => {
+        (searchFacade.search as jest.Mock).mockResolvedValue([]);
+
+        await SearchEndpoint(req as Request, res as Response);
+
+        expect(appService.touchApp).toHaveBeenCalledWith('radarr');
+    });
+
+    it('does not touch an app directly when resolving by User-Agent', async () => {
+        (req.query as any).app = undefined;
+        req.headers = { 'user-agent': 'Sonarr/4.0.0.0 (linux)' };
+        (searchFacade.search as jest.Mock).mockResolvedValue([]);
+        (appService.findAppByUserAgent as jest.Mock).mockResolvedValue({ id: 'sonarr-id' });
+        (appService.touchApp as jest.Mock).mockClear();
+
+        await SearchEndpoint(req as Request, res as Response);
+
+        expect(appService.touchApp).not.toHaveBeenCalled();
+    });
 });

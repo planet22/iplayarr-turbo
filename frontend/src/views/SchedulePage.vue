@@ -35,10 +35,13 @@
                     <span v-else class="channelName">{{ row.channel.title }}</span>
                 </RouterLink>
             </div>
-            <div ref="scrollEl" class="timelineScroll" @wheel="onWheel">
+            <div ref="scrollEl" class="timelineScroll" @wheel="onWheel" @scroll="onScroll">
                 <div class="timelineInner" :style="{ width: `${totalWidth}px` }">
                     <div class="hourRuler">
-                        <span v-for="hour in hourMarks" :key="hour.left" class="hourMark" :style="{ left: `${hour.left}px` }">
+                        <span
+                            v-for="hour in hourMarks" :key="hour.left" :class="['hourMark', hour.midnight ? 'midnight' : '']"
+                            :style="{ left: `${hour.left}px` }"
+                        >
                             {{ hour.label }}
                         </span>
                     </div>
@@ -53,6 +56,10 @@
                             <span class="blockTime">{{ formatTime(slot.start) }} - {{ formatTime(slot.end) }}</span>
                         </RouterLink>
                     </div>
+                    <div
+                        v-for="shade in adjacentShades" :key="shade.left" class="adjacentDay"
+                        :style="{ left: `${shade.left}px`, width: `${shade.width}px` }"
+                    ></div>
                     <div v-if="nowLeft != null" class="nowLine" :style="{ left: `${nowLeft}px` }"></div>
                 </div>
             </div>
@@ -113,57 +120,113 @@ let nowTimer;
 const ukDate = (date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(date);
 const selectedDate = ref(ukDate(new Date()));
 
-const isToday = computed(() => selectedDate.value === ukDate(now.value));
+// The guide is laid out in UK time whatever the browser's timezone, since iPlayer's schedule days
+// are UK calendar days.
+const DAY_MS = 86400000;
+const dateAdd = (date, days) => new Date(Date.parse(`${date}T12:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
+const ukOffsetMs = (ms) => {
+    const p = Object.fromEntries(
+        new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Europe/London', hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric',
+            hour: 'numeric', minute: 'numeric', second: 'numeric',
+        }).formatToParts(new Date(ms)).map((x) => [x.type, +x.value])
+    );
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - Math.floor(ms / 1000) * 1000;
+};
+const ukMidnight = (date) => {
+    const utc = Date.parse(`${date}T00:00:00Z`);
+    return new Date(utc - ukOffsetMs(utc - ukOffsetMs(utc)));
+};
+const ukTime = (ms) =>
+    new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/London' });
+
+// The date shown in the toolbar follows whichever day is in the middle of the viewport, so it
+// updates as you scroll across midnight. selectedDate (which anchors the loaded window) catches up
+// once scrolling settles - see onScroll.
+const scrollLeft = ref(0);
+const viewDate = computed(() => {
+    const el = scrollEl.value;
+    if (!el || !dayStart.value) return selectedDate.value;
+    const minutes = (scrollLeft.value + el.clientWidth / 2) / pxPerMinute.value;
+    return ukDate(new Date(dayStart.value.getTime() + minutes * 60000));
+});
+const isToday = computed(() => viewDate.value === ukDate(now.value));
 const dateLabel = computed(() =>
     new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' }).format(
-        new Date(`${selectedDate.value}T12:00:00`)
+        new Date(`${viewDate.value}T12:00:00Z`)
     )
 );
 
-// The grid's time window is derived from the data itself (rounded out to the hour) rather than a
-// fixed 24h span, since iPlayer's schedule "day" runs roughly 05:00-05:00 and varies by channel.
-const dayStart = computed(() => {
-    const starts = channels.value.flatMap((row) => row.slots.map((s) => Date.parse(s.start)));
-    if (starts.length === 0) return null;
-    const earliest = new Date(Math.min(...starts));
-    earliest.setMinutes(0, 0, 0);
-    return earliest;
+let settleTimer;
+let recentering = false;
+const onScroll = () => {
+    scrollLeft.value = scrollEl.value.scrollLeft;
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(recenter, 200);
+};
+
+// Once scrolling stops in a neighbouring day, make it the selected day: the window shifts by whole
+// days, so scrollLeft is moved by the same amount and nothing visibly jumps; data for the new
+// neighbour is then fetched in the background.
+const recenter = () => {
+    const el = scrollEl.value;
+    if (!el || viewDate.value === selectedDate.value) return;
+    const shiftMs = ukMidnight(viewDate.value) - ukMidnight(selectedDate.value);
+    // scrollLeft (the ref) must move in the same tick as selectedDate, or viewDate is briefly
+    // computed from the new window with the old offset and recenters a second time.
+    const targetDate = viewDate.value;
+    const target = scrollLeft.value - (shiftMs / 60000) * pxPerMinute.value;
+    recentering = true;
+    scrollLeft.value = target;
+    selectedDate.value = targetDate;
+    nextTick(() => {
+        el.scrollLeft = target;
+    });
+};
+
+// The timeline is a continuous 3-day strip: the previous day, the selected day and the next day,
+// each running UK midnight to midnight. The selected day is the unshaded middle third.
+const dayStart = computed(() => ukMidnight(dateAdd(selectedDate.value, -1)));
+const selectedStart = computed(() => ukMidnight(selectedDate.value));
+const selectedEnd = computed(() => ukMidnight(dateAdd(selectedDate.value, 1)));
+const dayEnd = computed(() => ukMidnight(dateAdd(selectedDate.value, 2)));
+const totalWidth = computed(() => ((dayEnd.value - dayStart.value) / 60000) * pxPerMinute.value);
+
+const adjacentShades = computed(() => {
+    const toPx = (ms) => (ms / 60000) * pxPerMinute.value;
+    return [
+        { left: 0, width: toPx(selectedStart.value - dayStart.value) },
+        { left: toPx(selectedEnd.value - dayStart.value), width: toPx(dayEnd.value - selectedEnd.value) },
+    ];
 });
-const dayEnd = computed(() => {
-    const ends = channels.value.flatMap((row) => row.slots.map((s) => Date.parse(s.end)));
-    if (ends.length === 0) return null;
-    const latest = new Date(Math.max(...ends));
-    if (latest.getMinutes() || latest.getSeconds()) {
-        latest.setHours(latest.getHours() + 1, 0, 0, 0);
-    }
-    return latest;
-});
-const totalWidth = computed(() =>
-    dayStart.value && dayEnd.value ? ((dayEnd.value - dayStart.value) / 60000) * pxPerMinute.value : 0
-);
 
 const hourMarks = computed(() => {
-    if (!dayStart.value || !dayEnd.value) return [];
     const marks = [];
-    const cursor = new Date(dayStart.value);
-    while (cursor <= dayEnd.value) {
+    for (let ms = dayStart.value.getTime(); ms < dayEnd.value.getTime(); ms += 3600000) {
+        const label = ukTime(ms);
+        const midnight = label === '00:00';
         marks.push({
-            left: ((cursor - dayStart.value) / 60000) * pxPerMinute.value,
-            label: cursor.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }),
+            left: ((ms - dayStart.value) / 60000) * pxPerMinute.value,
+            label: midnight
+                ? new Date(ms).toLocaleDateString('en-GB', {
+                    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London',
+                })
+                : label,
+            midnight,
         });
-        cursor.setHours(cursor.getHours() + 1);
     }
     return marks;
 });
 
+// Based on selectedDate rather than the scrolled-to view date, so the line exists before scrolling.
 const nowLeft = computed(() => {
-    if (!isToday.value || !dayStart.value || !dayEnd.value) return null;
+    if (selectedDate.value !== ukDate(now.value)) return null;
     const time = now.value.getTime();
     if (time < dayStart.value.getTime() || time > dayEnd.value.getTime()) return null;
     return ((time - dayStart.value) / 60000) * pxPerMinute.value;
 });
 
-const formatTime = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+const formatTime = (iso) => ukTime(Date.parse(iso));
 
 const isLive = (slot) => {
     const time = now.value.getTime();
@@ -171,8 +234,7 @@ const isLive = (slot) => {
 };
 
 const blockStyle = (slot) => {
-    if (!dayStart.value) return {};
-    const left = ((Date.parse(slot.start) - dayStart.value) / 60000) * pxPerMinute.value;
+        const left = ((Date.parse(slot.start) - dayStart.value) / 60000) * pxPerMinute.value;
     const width = Math.max(
         ((Date.parse(slot.end) - Date.parse(slot.start)) / 60000) * pxPerMinute.value,
         MIN_BLOCK_WIDTH
@@ -180,37 +242,79 @@ const blockStyle = (slot) => {
     return { left: `${left}px`, width: `${width}px` };
 };
 
-const load = async () => {
-    loading.value = true;
+// Fetches the selected day plus its neighbours and merges them per channel. Neighbouring days are
+// best-effort (a failure just leaves that third of the strip blank); the selected day must succeed.
+let loadToken = 0;
+const load = async (silent = false) => {
+    const token = ++loadToken;
+    if (!silent) loading.value = true;
     error.value = null;
     try {
-        channels.value = await browseFetch(`schedule?date=${selectedDate.value}`);
+        const dates = [-1, 0, 1].map((delta) => dateAdd(selectedDate.value, delta));
+        const results = await Promise.allSettled(dates.map((date) => browseFetch(`schedule?date=${date}`)));
+        if (results[1].status === 'rejected') throw results[1].reason;
+        if (token !== loadToken) return;
+
+        const merged = new Map();
+        for (const result of results) {
+            if (result.status !== 'fulfilled') continue;
+            for (const row of result.value) {
+                const entry = merged.get(row.channel.id) ?? { channel: row.channel, slots: [], seen: new Set() };
+                for (const slot of row.slots) {
+                    const key = `${slot.item.pid}|${slot.start}`;
+                    if (entry.seen.has(key)) continue;
+                    entry.seen.add(key);
+                    entry.slots.push(slot);
+                }
+                merged.set(row.channel.id, entry);
+            }
+        }
+        const startMs = dayStart.value.getTime();
+        const endMs = dayEnd.value.getTime();
+        channels.value = [...merged.values()].map(({ channel, slots }) => ({
+            channel,
+            slots: slots
+                .filter((s) => Date.parse(s.end) > startMs && Date.parse(s.start) < endMs)
+                .sort((a, b) => Date.parse(a.start) - Date.parse(b.start)),
+        }));
     } catch (e) {
-        error.value = e.message;
+        if (token === loadToken) error.value = e.message;
     } finally {
-        loading.value = false;
+        if (token === loadToken) loading.value = false;
     }
 };
 
 const scrollToNow = () => {
     nextTick(() => {
-        if (scrollEl.value && nowLeft.value != null) {
-            scrollEl.value.scrollLeft = Math.max(0, nowLeft.value - scrollEl.value.clientWidth / 2);
+        const el = scrollEl.value;
+        if (!el) return;
+        if (nowLeft.value != null) {
+            el.scrollLeft = Math.max(0, nowLeft.value - el.clientWidth / 2);
+        } else {
+            // Not today: land on the start of the selected (middle) day.
+            el.scrollLeft = ((selectedStart.value - dayStart.value) / 60000) * pxPerMinute.value;
         }
     });
 };
 
 const shiftDay = (delta) => {
-    const next = new Date(`${selectedDate.value}T12:00:00`);
-    next.setDate(next.getDate() + delta);
-    selectedDate.value = ukDate(next);
+    const target = dateAdd(viewDate.value, delta);
+    if (target === selectedDate.value) scrollToNow();
+    else selectedDate.value = target;
 };
 
 const goToday = () => {
-    selectedDate.value = ukDate(now.value);
+    const today = ukDate(now.value);
+    if (today === selectedDate.value) scrollToNow();
+    else selectedDate.value = today;
 };
 
 watch(selectedDate, async () => {
+    if (recentering) {
+        recentering = false;
+        await load(true);
+        return;
+    }
     await load();
     scrollToNow();
 });
@@ -225,6 +329,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
     clearInterval(nowTimer);
+    clearTimeout(settleTimer);
 });
 </script>
 
@@ -370,6 +475,17 @@ onBeforeUnmount(() => {
 
 .timelineInner {
     position: relative;
+    overflow: hidden;
+}
+
+// Previous/next day are tinted slightly lighter than the selected day.
+.adjacentDay {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.06);
+    pointer-events: none;
+    z-index: 1;
 }
 
 .hourRuler {
@@ -390,6 +506,12 @@ onBeforeUnmount(() => {
     font-size: 11px;
     color: @subtle-text-color;
     border-left: 1px solid @settings-button-border-color;
+    white-space: nowrap;
+
+    &.midnight {
+        font-weight: 600;
+        border-left-color: @brand-color;
+    }
 }
 
 .channelRow {

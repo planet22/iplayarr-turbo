@@ -122,6 +122,20 @@ describe('iplayerDetailsService', () => {
         expect(result).toHaveLength(2);
     });
 
+    it('getSeriesEpisodes requests the given page and page size', async () => {
+        mockedAxios.get.mockResolvedValueOnce({ data: { programme_episodes: { elements: [] } } });
+        await iplayerDetailsService.getSeriesEpisodes('b1234567', 3, 30);
+        expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('per_page=30&page=3'));
+    });
+
+    it('getSeriesEpisodes defaults to the search result limit on page 1', async () => {
+        mockedAxios.get.mockResolvedValueOnce({ data: { programme_episodes: { elements: [] } } });
+        await iplayerDetailsService.getSeriesEpisodes('b1234567');
+        const url = mockedAxios.get.mock.calls[mockedAxios.get.mock.calls.length - 1][0] as string;
+        expect(url).toContain('per_page=150');
+        expect(url).not.toContain('&page=');
+    });
+
     it('getSeriesEpisodes returns [] on error', async () => {
         mockedAxios.get.mockRejectedValueOnce(new Error('fail'));
         const result = await iplayerDetailsService.getSeriesEpisodes('badid');

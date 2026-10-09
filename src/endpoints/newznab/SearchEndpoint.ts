@@ -19,6 +19,9 @@ interface SearchRequest {
 
 export default async (req: Request, res: Response) => {
     const { q, season, ep, cat: catList, app: queryApp } = req.query as any as SearchRequest;
+    if (queryApp) {
+        await appService.touchApp(queryApp);
+    }
     const app: string | undefined =
         queryApp ?? (await appService.findAppByUserAgent(req.headers['user-agent']))?.id;
     const cat: string[] | undefined = catList ? catList.split(',') : undefined;

@@ -53,10 +53,23 @@ class ThumbnailCacheService {
             // which never approaches native 1080p width, and every other use (table row
             // thumbnails) is a 64x36 CSS box the browser downscales further. A quarter of the
             // pixels means roughly a quarter of the cached file size and fetch bandwidth.
-            const response = await axios.get(`https://ichef.bbci.co.uk/images/ic/960x540/${imagePid}.jpg`, {
-                responseType: 'arraybuffer',
-            });
-            await fs.promises.writeFile(tmpPath, Buffer.from(response.data));
+            // Not every image exists at every size (some older/odd images 404 at 960x540), so
+            // step down through smaller recipes before giving up.
+            let data: ArrayBuffer | undefined;
+            let lastError: unknown;
+            for (const size of ['960x540', '640x360', '480x270', '320x180']) {
+                try {
+                    const response = await axios.get(`https://ichef.bbci.co.uk/images/ic/${size}/${imagePid}.jpg`, {
+                        responseType: 'arraybuffer',
+                    });
+                    data = response.data;
+                    break;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            if (!data) throw lastError;
+            await fs.promises.writeFile(tmpPath, Buffer.from(data));
             await fs.promises.rename(tmpPath, filePath);
             return filePath;
         } catch (error) {

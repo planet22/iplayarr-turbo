@@ -303,4 +303,32 @@ describe('subscriptionService', () => {
             expect(await subscriptionService.list()).toEqual([]);
         });
     });
+
+    describe('arrOnly', () => {
+        it('records the show but never queues or checks it, even with downloadAll', async () => {
+            const sub = await subscriptionService.subscribe('m00episode', { arrOnly: true, downloadAll: true });
+            expect(sub.arrOnly).toBe(true);
+            await subscriptionService.whenIdle();
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+            details.getSeriesEpisodes.mockClear();
+            expect(await subscriptionService.checkOne(sub.id)).toEqual({ id: sub.id, title: sub.title, queued: [] });
+            expect(details.getSeriesEpisodes).not.toHaveBeenCalled();
+        });
+
+        it('leaves arrOnly unset for a normal subscription', async () => {
+            expect((await subscriptionService.subscribe('m00episode')).arrOnly).toBeUndefined();
+        });
+    });
+
+    describe('setArrLink', () => {
+        it('sets and clears the link, returning false for an unknown id', async () => {
+            const sub = await subscriptionService.subscribe('m00episode');
+            const arr = { appId: 'a1', arrId: 5, title: 'Show', addedByUs: true };
+            expect(await subscriptionService.setArrLink(sub.id, arr)).toBe(true);
+            expect((await subscriptionService.list())[0].arr).toEqual(arr);
+            expect(await subscriptionService.setArrLink(sub.id, undefined)).toBe(true);
+            expect((await subscriptionService.list())[0].arr).toBeUndefined();
+            expect(await subscriptionService.setArrLink('nope', arr)).toBe(false);
+        });
+    });
 });

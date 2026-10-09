@@ -56,6 +56,7 @@
                             class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
                             @click="openInfo(session.pid)"
+                            @error="hideBrokenImage"
                         />
                     </td>
                     <td class="text">
@@ -104,6 +105,7 @@
 
         <SettingsPageToolbar :icons="['delete']" delete-label="Clear History" @delete-queue-item="clearHistory" />
         <legend>Stream History</legend>
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
@@ -149,6 +151,7 @@
                             class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
                             @click="openInfo(session.pid)"
+                            @error="hideBrokenImage"
                         />
                     </td>
                     <td class="text">
@@ -200,7 +203,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import {
-    formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl,
+    formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
@@ -337,6 +340,25 @@ async function clearHistory() {
         border-radius: 4px;
         background-color: @input-background-color;
         color: @input-text-color;
+    }
+
+    // Phone width: shrink the text filter and both date boxes so they share one row
+    // instead of wrapping onto three.
+    @media (max-width: @mobile-breakpoint) {
+        flex-wrap: nowrap;
+        gap: 6px;
+
+        .tableFilter {
+            min-width: 0;
+            flex: 0.7 1 0;
+            padding: 4px 6px;
+            font-size: 12px;
+        }
+
+        .dateRangeFilter {
+            flex: 2.3 1 0;
+            min-width: 0;
+        }
     }
 }
 
