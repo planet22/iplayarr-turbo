@@ -48,8 +48,11 @@ jest.mock('../../src/service/socketService', () => ({
 const mockStorage = (QueuedStorage as jest.Mock).mock.results[0].value;
 
 describe('appService', () => {
+    let clock = 1_000_000;
     beforeEach(() => {
         jest.clearAllMocks();
+        // touchApp is throttled per app; step the clock past the window for each test.
+        jest.spyOn(Date, 'now').mockReturnValue((clock += 120_000));
         Object.keys(mockStorageData).forEach((k) => delete mockStorageData[k]);
     });
 
@@ -144,6 +147,15 @@ describe('appService', () => {
         await appService.touchApp('missing');
 
         expect(mockStorage.setItem).not.toHaveBeenCalled();
+    });
+
+    it('touchApp is throttled and never throws', async () => {
+        await appService.addApp({ id: 'a', name: 'A', type: AppType.SONARR } as any);
+        await appService.touchApp('a');
+        const first = (await appService.getApp('a'))?.lastSeen;
+        (Date.now as jest.Mock).mockReturnValue(clock + 1000);
+        await appService.touchApp('a');
+        expect((await appService.getApp('a'))?.lastSeen).toBe(first);
     });
 
     it('updateApp does not let a stale form overwrite lastSeen', async () => {

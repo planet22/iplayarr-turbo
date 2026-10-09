@@ -73,6 +73,10 @@ router.get('/search', async (req: Request, res: Response) => {
 // found, then a final {"done":true} line (or {"error":"..."} if it failed part-way).
 router.get('/search/stream', async (req: Request, res: Response) => {
     const { q } = req.query as any;
+    if (typeof q !== 'string' || !q.trim()) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A search term is required' } as ApiResponse);
+        return;
+    }
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
