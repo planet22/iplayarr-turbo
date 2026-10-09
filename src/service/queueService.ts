@@ -1,4 +1,4 @@
-import { ChildProcess, spawn } from 'child_process';
+import { spawn } from 'child_process';
 
 import downloadFacade from '../facade/downloadFacade';
 import { DownloadDetails } from '../types/DownloadDetails';
