@@ -1,5 +1,9 @@
 <template>
-    <SettingsPageToolbar :icons="['delete']" delete-label="Remove" @delete-queue-item="deleteItems" />
+    <SettingsPageToolbar
+        :icons="['delete', 'filterToggle']" delete-label="Remove"
+        :filters-shown="queueTable?.showFilters" :filters-active="queueTable?.filtersActive"
+        @delete-queue-item="deleteItems" @toggle-filters="queueTable.showFilters = !queueTable.showFilters"
+    />
     <div class="inner-content scroll-x">
         <QueueTable ref="queueTable" :queue="queue" :history="history" />
     </div>

@@ -56,6 +56,15 @@
             </button>
         </div>
         <div>
+            <button
+                v-if="icons.some((i) => i == 'filterToggle')"
+                :class="['SettingsPageToolbar-button clickable', filtersActive ? 'enabled' : '']"
+                :aria-pressed="filtersShown"
+                @click="emit('toggleFilters')"
+            >
+                <font-awesome-icon :icon="['fas', 'filter']" />
+                <div class="SettingsPageToolbar-label">Filter</div>
+            </button>
             <template v-if="icons.some((i) => i == 'filter')">
                 <button
                     :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
@@ -97,6 +106,7 @@ const emit = defineEmits([
     'selectFilter',
     'deleteQueueItem',
     'arrImport',
+    'toggleFilters',
 ]);
 const showFilterDropdown = ref(false);
 const dropdownDiv = ref(null);
@@ -127,6 +137,18 @@ defineProps({
         required: false,
     },
     filterEnabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    // filterToggle icon: whether the page's filter bar is currently visible, and whether any
+    // filter in it is actually narrowing the list (lights the icon even while the bar is hidden).
+    filtersShown: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    filtersActive: {
         type: Boolean,
         required: false,
         default: false,

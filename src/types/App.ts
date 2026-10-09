@@ -11,6 +11,7 @@ export interface App {
     password?: string;
     priority?: number;
     tags?: string[];
+    lastSeen?: number;
     iplayarr: {
         host: string;
         port: number;

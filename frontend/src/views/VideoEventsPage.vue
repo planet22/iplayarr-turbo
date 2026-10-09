@@ -1,7 +1,11 @@
 <template>
-    <SettingsPageToolbar :icons="['delete']" delete-label="Clear Log" @delete-queue-item="clearEvents" />
+    <SettingsPageToolbar
+        :icons="['delete', 'filterToggle']" delete-label="Clear Log"
+        :filters-shown="showFilters" :filters-active="filtersActive"
+        @delete-queue-item="clearEvents" @toggle-filters="showFilters = !showFilters"
+    />
     <div class="inner-content scroll-x">
-        <div class="tableToolbar">
+        <div v-if="showFilters" class="tableToolbar">
             <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
             <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
         </div>
@@ -78,7 +82,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onMounted, reactive, watch } from 'vue';
+import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
@@ -124,6 +128,10 @@ const {
     dateAccessor: (event) => event.timestamp,
     storageKey: 'videoEventsTable',
 });
+
+// Filter bar sits behind the toolbar's filter icon; start open if a persisted filter is applied.
+const filtersActive = computed(() => !!(filterText.value || dateFrom.value || dateTo.value));
+const showFilters = ref(filtersActive.value);
 
 const {
     page: eventsPage, pageSize: eventsPageSize, pagedItems: pagedEvents,

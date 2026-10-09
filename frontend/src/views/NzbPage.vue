@@ -1,13 +1,15 @@
 <template>
     <div class="inner-content scroll-x">
-        <InfoBar>
-            Diagnostics for the Newznab/SABnzbd integration - only reflects searches and grabs from Sonarr, Radarr, or
-            Prowlarr, not manual searches/downloads from within iPlayarr Turbo itself.
+        <InfoBar clazz="warning small">
+            NZB clients need the category "iplayer" for NZB forwarding to work.
         </InfoBar>
-
-        <SettingsPageToolbar :icons="['delete']" delete-label="Clear Searches" @delete-queue-item="clearSearches" />
+        <SettingsPageToolbar
+            :icons="['delete', 'filterToggle']" delete-label="Clear Searches"
+            :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
+            @delete-queue-item="clearSearches" @toggle-filters="searchShowFilters = !searchShowFilters"
+        />
         <legend>Recent Searches</legend>
-        <div class="tableToolbar">
+        <div v-if="searchShowFilters" class="tableToolbar">
             <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
             <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
         </div>
@@ -61,9 +63,13 @@
         </table>
         <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
 
-        <SettingsPageToolbar :icons="['delete']" delete-label="Clear Grabs" @delete-queue-item="clearGrabs" />
+        <SettingsPageToolbar
+            :icons="['delete', 'filterToggle']" delete-label="Clear Grabs"
+            :filters-shown="grabShowFilters" :filters-active="grabFiltersActive"
+            @delete-queue-item="clearGrabs" @toggle-filters="grabShowFilters = !grabShowFilters"
+        />
         <legend>Recent Grabs</legend>
-        <div class="tableToolbar">
+        <div v-if="grabShowFilters" class="tableToolbar">
             <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
             <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
         </div>
@@ -127,9 +133,13 @@
         </table>
         <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
 
-        <SettingsPageToolbar :icons="['delete']" delete-label="Clear Failed" @delete-queue-item="clearFailedGrabs" />
+        <SettingsPageToolbar
+            :icons="['delete', 'filterToggle']" delete-label="Clear Failed"
+            :filters-shown="failedGrabShowFilters" :filters-active="failedGrabFiltersActive"
+            @delete-queue-item="clearFailedGrabs" @toggle-filters="failedGrabShowFilters = !failedGrabShowFilters"
+        />
         <legend>Failed Grabs</legend>
-        <div class="tableToolbar">
+        <div v-if="failedGrabShowFilters" class="tableToolbar">
             <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
             <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
         </div>
@@ -178,7 +188,7 @@
 </template>
 
 <script setup>
-import { inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
@@ -265,6 +275,9 @@ const {
     storageKey: 'nzbSearchTable',
 });
 
+const searchFiltersActive = computed(() => !!(searchFilterText.value || searchDateFrom.value || searchDateTo.value));
+const searchShowFilters = ref(searchFiltersActive.value);
+
 const {
     filterText: grabFilterText, sortBy: grabSortBy, sortOrder: grabSortOrder,
     dateFrom: grabDateFrom, dateTo: grabDateTo, sorted: sortedGrabs, toggleSort: toggleGrabSort,
@@ -282,6 +295,9 @@ const {
     storageKey: 'nzbGrabTable',
 });
 
+const grabFiltersActive = computed(() => !!(grabFilterText.value || grabDateFrom.value || grabDateTo.value));
+const grabShowFilters = ref(grabFiltersActive.value);
+
 const {
     filterText: failedGrabFilterText, sortBy: failedGrabSortBy, sortOrder: failedGrabSortOrder,
     dateFrom: failedGrabDateFrom, dateTo: failedGrabDateTo, sorted: sortedFailedGrabs, toggleSort: toggleFailedGrabSort,
@@ -298,6 +314,9 @@ const {
     dateAccessor: (entry) => entry.time,
     storageKey: 'nzbFailedGrabTable',
 });
+
+const failedGrabFiltersActive = computed(() => !!(failedGrabFilterText.value || failedGrabDateFrom.value || failedGrabDateTo.value));
+const failedGrabShowFilters = ref(failedGrabFiltersActive.value);
 
 const {
     page: searchPage, pageSize: searchPageSize, pagedItems: pagedSearches,

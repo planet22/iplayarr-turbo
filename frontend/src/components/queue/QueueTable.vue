@@ -1,5 +1,5 @@
 <template>
-    <div class="tableToolbar">
+    <div v-if="showFilters" class="tableToolbar">
         <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter queue..." />
         <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
     </div>
@@ -112,6 +112,11 @@ const {
     defaultSortOrder: 'desc',
 });
 
+// Filter bar is hidden behind the page toolbar's filter icon; start open if a persisted filter is
+// already narrowing the list so it isn't silently applied.
+const filtersActive = computed(() => !!(filterText.value || dateFrom.value || dateTo.value));
+const showFilters = ref(filtersActive.value);
+
 const filteredQueue = computed(() => {
     const query = filterText.value.trim().toLowerCase();
     const from = dateFrom.value ? new Date(`${dateFrom.value}T00:00:00`) : null;
@@ -179,6 +184,8 @@ const selectedQueue = computed(() => {
 });
 
 defineExpose({
+    showFilters,
+    filtersActive,
     selectedHistory,
     selectedQueue,
 });

@@ -341,6 +341,25 @@ async function clearHistory() {
         background-color: @input-background-color;
         color: @input-text-color;
     }
+
+    // Phone width: shrink the text filter and both date boxes so they share one row
+    // instead of wrapping onto three.
+    @media (max-width: @mobile-breakpoint) {
+        flex-wrap: nowrap;
+        gap: 6px;
+
+        .tableFilter {
+            min-width: 0;
+            flex: 0.7 1 0;
+            padding: 4px 6px;
+            font-size: 12px;
+        }
+
+        .dateRangeFilter {
+            flex: 2.3 1 0;
+            min-width: 0;
+        }
+    }
 }
 
 .dataTable {
