@@ -118,6 +118,44 @@ describe('appService', () => {
         expect(mapping.lastSeen).toEqual(expect.any(Number));
     });
 
+    it('stamps lastSeen on the app resolved via User-Agent', async () => {
+        await appService.addApp({ id: 'sonarr-1', name: 'Iplayarr-sonarr', type: AppType.SONARR } as any);
+        await userAgentMappingService.addMapping({ id: 'map-1', userAgent: 'Sonarr', appName: 'Iplayarr-sonarr' });
+
+        await appService.findAppByUserAgent('Sonarr/4.0.0.0 (linux)');
+
+        expect((await appService.getApp('sonarr-1'))?.lastSeen).toEqual(expect.any(Number));
+    });
+
+    it('touchApp stamps only the given app', async () => {
+        await appService.addApp({ id: 'a', name: 'A', type: AppType.SONARR } as any);
+        await appService.addApp({ id: 'b', name: 'B', type: AppType.RADARR } as any);
+
+        await appService.touchApp('a');
+
+        expect((await appService.getApp('a'))?.lastSeen).toEqual(expect.any(Number));
+        expect((await appService.getApp('b'))?.lastSeen).toBeUndefined();
+    });
+
+    it('touchApp ignores unknown app IDs without writing', async () => {
+        await appService.addApp({ id: 'a', name: 'A', type: AppType.SONARR } as any);
+        mockStorage.setItem.mockClear();
+
+        await appService.touchApp('missing');
+
+        expect(mockStorage.setItem).not.toHaveBeenCalled();
+    });
+
+    it('updateApp does not let a stale form overwrite lastSeen', async () => {
+        await appService.addApp({ id: 'a', name: 'A', type: AppType.SONARR, lastSeen: 2000 } as any);
+
+        await appService.updateApp({ id: 'a', name: 'Renamed', lastSeen: 1000 });
+
+        const app = await appService.getApp('a');
+        expect(app?.name).toBe('Renamed');
+        expect(app?.lastSeen).toBe(2000);
+    });
+
     it('returns undefined when no mapping matches', async () => {
         const app: App = { id: 'sonarr-1', name: 'Iplayarr-sonarr', type: AppType.SONARR } as any;
         await appService.addApp(app);

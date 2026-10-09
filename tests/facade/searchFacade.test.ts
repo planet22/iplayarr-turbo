@@ -53,6 +53,67 @@ describe('SearchFacade', () => {
     expect(results[0].episode).toBe(1);
   });
 
+  describe('searchStreaming', () => {
+    const result = (pid: string) => ({ pid, title: pid, pubDate: new Date('2020-01-01') }) as IPlayerSearchResult;
+
+    beforeEach(() => {
+      (configService.getParameter as jest.Mock).mockResolvedValue('true');
+      (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
+    });
+
+    it('hands batches to the callback as the service reports them, each result once', async () => {
+      const batches: string[][] = [];
+      (nativeSearchService.search as jest.Mock).mockImplementation(async (_t, _s, onBatch) => {
+        await onBatch([result('a'), result('b')]);
+        await onBatch([result('c')]);
+        return [result('a'), result('b'), result('c')];
+      });
+
+      const all = await searchFacade.searchStreaming('Show', (batch) => batches.push(batch.map(({ pid }) => pid)));
+
+      expect(batches).toEqual([['a', 'b'], ['c']]);
+      expect(all.map(({ pid }) => pid)).toEqual(['a', 'b', 'c']);
+    });
+
+    it('delivers results the batches never reported once the search finishes', async () => {
+      const batches: string[][] = [];
+      (nativeSearchService.search as jest.Mock).mockImplementation(async (_t, _s, onBatch) => {
+        await onBatch([result('a')]);
+        return [result('a'), result('late')];
+      });
+
+      await searchFacade.searchStreaming('Show', (batch) => batches.push(batch.map(({ pid }) => pid)));
+
+      expect(batches).toEqual([['a'], ['late']]);
+    });
+
+    it('delivers a cached search as a single batch', async () => {
+      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue([result('a'), result('b')]);
+      const batches: string[][] = [];
+
+      await searchFacade.searchStreaming('Show', (batch) => batches.push(batch.map(({ pid }) => pid)));
+
+      expect(batches).toEqual([['a', 'b']]);
+      expect(nativeSearchService.search).not.toHaveBeenCalled();
+    });
+
+    it('does not deliver results dated in the future', async () => {
+      const future = { pid: 'f', title: 'f', pubDate: new Date(Date.now() + 86400000) } as IPlayerSearchResult;
+      (nativeSearchService.search as jest.Mock).mockImplementation(async (_t, _s, onBatch) => {
+        await onBatch([result('a'), future]);
+        return [result('a'), future];
+      });
+      const delivered: string[] = [];
+
+      await searchFacade.searchStreaming('Show', (batch) => delivered.push(...batch.map(({ pid }) => pid)));
+
+      expect(delivered).toEqual(['a']);
+    });
+  });
+
   it('should use cached results if available', async () => {
     (configService.getParameter as jest.Mock).mockResolvedValue('true');
     (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);

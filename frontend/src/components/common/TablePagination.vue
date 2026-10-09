@@ -4,7 +4,7 @@
         <nav class="pageControls" aria-label="pagination">
             <button
                 v-if="!compact"
-                class="clickable navButton" aria-label="go to first page" :disabled="modelValue <= 1"
+                class="clickable navButton edgeButton" aria-label="go to first page" :disabled="modelValue <= 1"
                 @click="emit('update:modelValue', 1)"
             >
                 <font-awesome-icon :icon="['fas', 'angles-left']" />
@@ -35,7 +35,7 @@
             </button>
             <button
                 v-if="!compact"
-                class="clickable navButton" aria-label="go to last page" :disabled="modelValue >= totalPages"
+                class="clickable navButton edgeButton" aria-label="go to last page" :disabled="modelValue >= totalPages"
                 @click="emit('update:modelValue', totalPages)"
             >
                 <font-awesome-icon :icon="['fas', 'angles-right']" />
@@ -130,6 +130,14 @@ const onPageSizeChange = (event) => {
 }
 
 .navButton {
+    // First/last jumps are dropped on phones so the page buttons and the per-page
+    // dropdown fit on one row.
+    &.edgeButton {
+        @media (max-width: @mobile-breakpoint) {
+            display: none;
+        }
+    }
+
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -174,11 +182,6 @@ const onPageSizeChange = (event) => {
     display: flex;
     align-items: center;
     gap: 6px;
-
-    @media (max-width: @mobile-breakpoint) {
-        flex-basis: 100%;
-        justify-content: center;
-    }
 
     .perPageLabel {
         font-size: 13px;

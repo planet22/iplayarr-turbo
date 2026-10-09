@@ -1,13 +1,14 @@
 <template>
     <div class="inner-content">
+        <InfoBar clazz="warning small">
+            NZB clients need the category "iplayer" for NZB forwarding to work.
+        </InfoBar>
         <legend>Apps</legend>
         <p class="mb-0">Manage your integrations with Apps (including Arr and NZB Clients) here</p>
-        <InfoBar clazz="warning">
-            In order for NZB Forwarding to work successfully, your NZB Client needs the category "iplayer"
-        </InfoBar>
         <div class="block-reset" />
         <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm">
-            <a @click="openForm(item)">
+            <a class="appBox" @click="openForm(item)">
+                <span class="lastSeen" title="Last Seen">{{ formatRelativeTime(item.lastSeen, now) }}</span>
                 <div class="major">
                     <img class="appImg" :src="`/img/${item.type.toLowerCase()}.svg`" />
                     <span class="appName">
@@ -229,6 +230,18 @@ const removeMapping = async ({ id, userAgent }) => {
 </script>
 
 <style lang="less" scoped>
+.appBox {
+    position: relative;
+
+    .lastSeen {
+        position: absolute;
+        top: 0;
+        right: 0;
+        font-size: 12px;
+        opacity: 0.7;
+    }
+}
+
 .major {
     display: flex;
     align-items: center;

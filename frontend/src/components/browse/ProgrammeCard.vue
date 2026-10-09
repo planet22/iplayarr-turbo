@@ -1,7 +1,7 @@
 <template>
     <RouterLink class="programmeCard" :to="`/browse/programme/${item.seriesPid ?? item.pid}`">
         <div class="thumb">
-            <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" />
+            <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" @error="hideBrokenImage" />
             <div v-else class="noThumb">
                 <font-awesome-icon :icon="['fas', 'tv']" size="2x" />
             </div>
@@ -28,7 +28,7 @@ import { computed, defineProps } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import { useBrowseActions } from '@/lib/useBrowseActions';
-import { getThumbnailUrl } from '@/lib/utils';
+import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const props = defineProps({
     item: {

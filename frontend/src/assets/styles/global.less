@@ -86,6 +86,9 @@ body {
                 text-overflow: clip !important;
                 width: auto !important;
                 max-width: 100%;
+                min-width: 0;
+                // Long unbroken strings (dotted release names etc.) must wrap instead of overflowing the card
+                overflow-wrap: anywhere;
             }
 
             td:empty {
@@ -145,6 +148,11 @@ legend {
     border-color: @warn-color;
     color: @warn-text-color;
     text-align: center;
+
+    // Space between a leading icon and the pill's text, everywhere pills are used.
+    svg {
+        margin-right: 0.35em;
+    }
 
     &.TV {
         background-color: @primary-color;

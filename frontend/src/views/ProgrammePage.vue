@@ -5,7 +5,7 @@
         <div class="programmeBanner">
             <div class="bannerBackdrop" :style="bannerStyle" />
             <div class="programmeBannerContent">
-                <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" />
+                <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
                 <div class="programmeText">
                 <h1>{{ programme.title }}</h1>
                 <div class="programmeMeta">
@@ -24,14 +24,32 @@
                     </span>
                 </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>
-                <button
-                    v-if="programme.kind !== 'episode' || subscription"
-                    :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
-                    @click="toggleSubscription"
-                >
-                    <font-awesome-icon :icon="['fas', subscribing ? 'circle-notch' : 'bell']" :spin="subscribing" />
-                    {{ subscription ? 'Subscribed' : 'Subscribe' }}
-                </button>
+                <div v-if="programme.kind !== 'episode' || subscription" class="subscribeRow">
+                    <button
+                        :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
+                        @click="toggleSubscription"
+                    >
+                        <font-awesome-icon :icon="['fas', subscribing ? 'circle-notch' : 'bell']" :spin="subscribing" />
+                        {{ subscription ? 'Subscribed' : 'Subscribe' }}
+                    </button>
+                    <button
+                        v-if="subscription && !subscription.arrOnly"
+                        class="clickable subscribeButton"
+                        :disabled="subscribing"
+                        @click="toggleArrWithBusy"
+                    >
+                        <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
+                        {{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}
+                    </button>
+                    <span
+                        v-if="subscription && subscription.arr"
+                        class="subscribeButton on arrChip"
+                        :title="`In ${arrAppName(subscription.arr.appId)} as ${subscription.arr.title}`"
+                    >
+                        <font-awesome-icon :icon="['fas', 'check']" />
+                        {{ arrAppName(subscription.arr.appId) }}
+                    </span>
+                </div>
                 </div>
             </div>
         </div>
@@ -44,21 +62,26 @@
                         v-for="(season, index) in programme.seasons"
                         :key="index"
                         :class="['clickable', 'seasonTab', index === selected ? 'active' : '']"
-                        @click="selected = index"
+                        @click="selectSeason(index)"
                     >
                         {{ seasonLabel(season) }}
                     </button>
                 </div>
                 <div class="seasonActions">
-                    <button class="clickable seasonDownload" :disabled="downloadingSeason" @click="downloadSeason">
+                    <span v-if="loadingMore" class="loadingMore">
+                        <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
+                        Loading more episodes… ({{ loadedCount }} so far)
+                    </span>
+                    <button class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
                         <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-download']" :spin="downloadingSeason" />
                         Download {{ programme.seasons.length > 1 ? seasonLabel(programme.seasons[selected]) : 'all' }}
                         ({{ episodes.length }})
                     </button>
                 </div>
+                <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length" />
                 <div class="episodeList">
-                    <div v-for="episode in episodes" :key="episode.pid" class="episodeRow">
-                        <img v-if="episode.thumbnail" :src="getThumbnailUrl(episode.thumbnail)" :alt="episode.title" loading="lazy" />
+                    <div v-for="episode in pagedEpisodes" :key="episode.pid" class="episodeRow">
+                        <img v-if="episode.thumbnail" :src="getThumbnailUrl(episode.thumbnail)" :alt="episode.title" loading="lazy" @error="hideBrokenImage" />
                         <div v-else class="episodeNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                         <div class="episodeInfo">
                             <div class="episodeTitle">
@@ -81,6 +104,7 @@
                         </div>
                     </div>
                 </div>
+                <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length" />
             </template>
         </div>
     </template>
@@ -93,12 +117,15 @@ import { useRoute, useRouter } from 'vue-router';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
-import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
+import { usePagination } from '@/lib/usePagination';
+import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();
@@ -112,7 +139,8 @@ const { canPlay, play, download } = useBrowseActions();
 
 // Subscribing is per show: after the server climbs an episode to its brand, programme.pid is the
 // brand pid that subscriptions are keyed by.
-const { load: loadSubscriptions, findByPid, subscribe, unsubscribe } = useSubscriptions();
+const { load: loadSubscriptions, findByPid, subscribe, unsubscribe, toggleArr } = useSubscriptions();
+const { loadAppNames, arrAppName } = useArrAppNames();
 const subscribing = ref(false);
 const subscription = computed(() => (programme.value ? findByPid(programme.value.pid) : undefined));
 
@@ -131,9 +159,50 @@ const toggleSubscription = async () => {
         subscribing.value = false;
     }
 };
-loadSubscriptions();
 
-const episodes = computed(() => programme.value?.seasons[selected.value]?.episodes ?? []);
+const toggleArrWithBusy = async () => {
+    subscribing.value = true;
+    try {
+        await toggleArr(subscription.value);
+    } finally {
+        subscribing.value = false;
+    }
+};
+loadSubscriptions();
+loadAppNames();
+
+// Newest first: by first broadcast when both have one, otherwise by episode number.
+const newestFirst = (a, b) => {
+    const ta = Date.parse(a.firstBroadcast);
+    const tb = Date.parse(b.firstBroadcast);
+    if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return tb - ta;
+    return (b.episode ?? -1) - (a.episode ?? -1);
+};
+
+const episodes = computed(() => [...(programme.value?.seasons[selected.value]?.episodes ?? [])].sort(newestFirst));
+
+const {
+    page: episodePage, pageSize: episodePageSize, pagedItems: pagedEpisodes,
+} = usePagination(episodes);
+const selectSeason = (index) => {
+    selected.value = index;
+    episodePage.value = 1;
+};
+
+const loadingMore = ref(false);
+const loadedCount = computed(() => programme.value?.seasons.reduce((n, season) => n + season.episodes.length, 0) ?? 0);
+
+// Fold a later page into the seasons already shown, de-duplicating by pid.
+const mergeSeasons = (current, incoming) => {
+    const bySeries = new Map(current.map((s) => [s.series, { series: s.series, episodes: [...s.episodes] }]));
+    for (const { series, episodes: added } of incoming) {
+        const target = bySeries.get(series) ?? { series, episodes: [] };
+        const seen = new Set(target.episodes.map((e) => e.pid));
+        target.episodes.push(...added.filter((e) => !seen.has(e.pid)));
+        bySeries.set(series, target);
+    }
+    return [...bySeries.values()].sort((a, b) => (a.series ?? Infinity) - (b.series ?? Infinity));
+};
 
 const posterUrl = computed(() => getThumbnailUrl(programme.value?.thumbnail));
 
@@ -175,23 +244,52 @@ const downloadSeason = async () => {
     }
 };
 
+// The first page shows straight away; the rest of the show's episodes stream in behind it. The
+// selected season is followed by its series number, since seasons can appear before it.
+const loadRemainingPages = async (pid, first) => {
+    let { page, hasMore } = first;
+    loadingMore.value = hasMore;
+    while (hasMore && route.params.pid === pid) {
+        let next;
+        try {
+            next = await browseFetch(`programme/${encodeURIComponent(pid)}?page=${page + 1}`);
+        } catch {
+            return; // keep what has loaded rather than replacing the page with an error
+        }
+        if (route.params.pid !== pid) return;
+        const selectedSeries = programme.value.seasons[selected.value]?.series;
+        const seasons = mergeSeasons(programme.value.seasons, next.seasons);
+        programme.value = { ...programme.value, seasons };
+        selected.value = Math.max(0, seasons.findIndex(({ series }) => series === selectedSeries));
+        ({ page, hasMore } = next);
+    }
+};
+
 watch(
     () => route.params.pid,
     async (pid) => {
         if (!pid) return;
         loading.value = true;
+        loadingMore.value = false;
         error.value = null;
         selected.value = 0;
         try {
-            programme.value = await browseFetch(`programme/${encodeURIComponent(pid)}`);
+            const first = await browseFetch(`programme/${encodeURIComponent(pid)}`);
+            if (route.params.pid !== pid) return;
+            programme.value = first;
             // Land on the newest numbered series rather than Specials (series 0), which sorts first.
-            const { seasons } = programme.value;
+            const { seasons } = first;
             const latest = seasons.reduce((best, { series }, i) => (series > (seasons[best].series ?? -1) ? i : best), 0);
             selected.value = latest;
-        } catch (e) {
-            error.value = e.message;
-        } finally {
             loading.value = false;
+            await loadRemainingPages(pid, first);
+        } catch (e) {
+            if (route.params.pid === pid) error.value = e.message;
+        } finally {
+            if (route.params.pid === pid) {
+                loading.value = false;
+                loadingMore.value = false;
+            }
         }
     },
     { immediate: true }
@@ -227,11 +325,14 @@ watch(
 
     .programmeMeta {
         margin-bottom: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
 
         .pill.grey,
         .pill.channelPill {
             padding: 3px 7px;
-            margin-right: 10px;
+            margin-right: 0;
             font-size: 15px;
             font-weight: 300;
 
@@ -285,8 +386,15 @@ watch(
     }
 }
 
-.subscribeButton {
+.subscribeRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
     margin-top: 14px;
+}
+
+.subscribeButton {
     padding: 8px 16px;
     font-size: 15px;
     border-radius: 4px;
@@ -306,12 +414,28 @@ watch(
         background-color: @brand-color;
         border-color: @brand-color;
     }
+
+    // Same size as the buttons, but a status label rather than something to press.
+    &.arrChip,
+    &.arrChip:hover:not(:disabled) {
+        background-color: @brand-color;
+        border-color: @brand-color;
+        cursor: default;
+        user-select: none;
+    }
 }
 
 .seasonActions {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    gap: 14px;
     margin-bottom: 4px;
+
+    .loadingMore {
+        color: @subtle-text-color;
+        font-size: 14px;
+    }
 
     .seasonDownload {
         padding: 6px 14px;

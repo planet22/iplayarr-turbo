@@ -22,6 +22,7 @@
                 </option>
             </select>
         </div>
+        <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
         <div v-if="pagedItems.length" class="browseGrid">
             <ProgrammeCard v-for="item in pagedItems" :key="item.pid" :item="item" />
         </div>

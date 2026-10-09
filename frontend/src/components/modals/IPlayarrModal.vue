@@ -51,6 +51,26 @@ const emit = defineEmits(['cancel', 'confirm']);
 .modalTitle {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
     width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0;
+
+    // Long titles (e.g. dotted release names with no spaces) must wrap rather than push the
+    // close button off-screen on narrow viewports.
+    .modalTitleText {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .modalTitleActions {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
 }
 </style>

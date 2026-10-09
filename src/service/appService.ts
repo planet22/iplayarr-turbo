@@ -39,7 +39,23 @@ const appService = {
             return undefined;
         }
         const allApps: App[] = await appService.getAllApps();
-        return allApps.find(({ name }) => name.toLowerCase() == mapping.appName.toLowerCase());
+        const app = allApps.find(({ name }) => name.toLowerCase() == mapping.appName.toLowerCase());
+        if (app) {
+            await appService.touchApp(app.id);
+        }
+        return app;
+    },
+
+    // Records when an app last made a request, shown on the Apps page.
+    touchApp: async (id: string): Promise<void> => {
+        const allApps: App[] = await appService.getAllApps();
+        if (!allApps.some(({ id: app_id }) => app_id == id)) {
+            return;
+        }
+        await storage.setItem(
+            'apps',
+            allApps.map((saved) => (saved.id == id ? { ...saved, lastSeen: Date.now() } : saved))
+        );
     },
 
     removeApp: async (id: string): Promise<boolean> => {
@@ -56,6 +72,8 @@ const appService = {
                 app = {
                     ...app,
                     ...form,
+                    // Server-managed - a stale copy from the edit form must not overwrite it.
+                    lastSeen: app.lastSeen,
                 };
                 await appService.removeApp(form.id);
                 await appService.addApp(app);

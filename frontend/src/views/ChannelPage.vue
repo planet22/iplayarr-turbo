@@ -9,7 +9,7 @@
                     v-for="slot in slots" :key="slot.label" :to="`/browse/programme/${slot.data.item.pid}`"
                     class="nowNextCard"
                 >
-                    <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail)" :alt="slot.data.item.title" />
+                    <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail)" :alt="slot.data.item.title" @error="hideBrokenImage" />
                     <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                     <div class="nowNextInfo">
                         <span :class="['nowNextLabel', slot.label === 'Now' ? 'live' : '']">{{ slot.label }}</span>
@@ -33,7 +33,7 @@ import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import { browseFetch } from '@/lib/browse';
-import { getThumbnailUrl } from '@/lib/utils';
+import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const channel = ref(null);

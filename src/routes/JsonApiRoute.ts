@@ -22,6 +22,7 @@ import QueueRoute from './json-api/QueueRoute';
 import SettingsRoute from './json-api/SettingsRoute';
 import StatisticsRoute from './json-api/StatisticsRoute';
 import StreamRoute from './json-api/StreamRoute';
+import SubscriptionArrRoute from './json-api/SubscriptionArrRoute';
 import SubscriptionsRoute from './json-api/SubscriptionsRoute';
 import SynonymsRoute from './json-api/SynonymsRoute';
 import VersionRoute from './json-api/VersionRoute';
@@ -38,6 +39,7 @@ router.use('/streams', StreamRoute);
 router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
+router.use('/subscriptions/arr', SubscriptionArrRoute);
 router.use('/subscriptions', SubscriptionsRoute);
 router.use('/maintenance', MaintenanceRoute);
 
@@ -65,6 +67,32 @@ router.get('/search', async (req: Request, res: Response) => {
     } catch (error: any) {
         res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: error?.message || 'Search failed' } as ApiResponse);
     }
+});
+
+// Same search as /search, sent as newline-delimited JSON: one array of results per line as they are
+// found, then a final {"done":true} line (or {"error":"..."} if it failed part-way).
+router.get('/search/stream', async (req: Request, res: Response) => {
+    const { q } = req.query as any;
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    let open = true;
+    res.on('close', () => {
+        open = false;
+    });
+    const send = (line: unknown) => {
+        if (open) res.write(`${JSON.stringify(line)}\n`);
+    };
+
+    try {
+        await searchFacade.searchStreaming(q, (batch) => send(batch));
+        send({ done: true });
+    } catch (error: any) {
+        send({ error: error?.message || 'Search failed' });
+    }
+    res.end();
 });
 
 router.get('/details', async (req: Request, res: Response) => {

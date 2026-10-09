@@ -31,6 +31,10 @@
     />
     <div v-if="!loading" class="inner-content scroll-x">
         <div v-if="searchResults.length" class="viewToggle">
+            <span v-if="loadingMore" class="loadingMoreNote">
+                <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
+                Loading more results… ({{ searchResults.length }} so far)
+            </span>
             <select v-if="channelOptions.length > 2" v-model="channelFilter" class="channelFilter" title="Filter by channel">
                 <option v-for="option in channelOptions" :key="option" :value="option">
                     {{ option === 'All' ? 'All channels' : option }}
@@ -51,6 +55,7 @@
                 <font-awesome-icon :icon="['fas', 'table-cells-large']" />
             </button>
         </div>
+        <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
         <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
             <ProgrammeCard v-for="item in posterItems" :key="item.pid" :item="item" />
         </div>
@@ -140,7 +145,7 @@
             </tbody>
         </table>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
-        <template v-if="filteredResults.length == 0">
+        <template v-if="filteredResults.length == 0 && !loadingMore">
             <p>No Results Found</p>
         </template>
     </div>
@@ -163,6 +168,7 @@ import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
+import { streamSearch } from '@/lib/searchStream';
 import { usePagination } from '@/lib/usePagination';
 import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 
@@ -173,6 +179,7 @@ const searchResults = ref([]);
 const searchTerm = ref('');
 const searchInput = ref(route.query.searchTerm ?? '');
 const loading = ref(searchTerm.value !== '');
+const loadingMore = ref(false); // results still arriving after the first batch has been shown
 const availableFilters = ref(['All', 'TV', 'Movie']);
 const filter = ref('All');
 const allChecked = ref(false);
@@ -334,18 +341,39 @@ const posterItems = computed(() =>
     }))
 );
 
+// Results stream in: the table appears with the first batch while the rest keep arriving behind it.
+// A new search aborts the previous stream so its late batches can't land in the new results.
+let searchAbort = null;
 watch(
     () => route.query.searchTerm,
     async (newSearchTerm) => {
         if (newSearchTerm) {
+            searchAbort?.abort();
+            const abort = (searchAbort = new AbortController());
             filter.value = 'All';
             channelFilter.value = 'All';
             loading.value = true;
+            loadingMore.value = true;
             searchResults.value = [];
             searchTerm.value = newSearchTerm;
             searchInput.value = newSearchTerm;
-            searchResults.value = (await ipFetch(`json-api/search?q=${searchTerm.value}`)).data;
-            loading.value = false;
+            try {
+                await streamSearch(
+                    newSearchTerm,
+                    (batch) => {
+                        if (abort.signal.aborted) return;
+                        searchResults.value.push(...batch);
+                        loading.value = false;
+                    },
+                    abort.signal
+                );
+            } catch {
+                // Keep whatever arrived; an empty list reads as "No Results Found".
+            }
+            if (!abort.signal.aborted) {
+                loading.value = false;
+                loadingMore.value = false;
+            }
         }
     },
     { immediate: true }
@@ -488,6 +516,12 @@ watch(
     align-items: center;
     gap: 6px;
     margin-bottom: 10px;
+
+    .loadingMoreNote {
+        margin-right: 8px;
+        color: @subtle-text-color;
+        font-size: 13px;
+    }
 
     .channelFilter {
         height: 30px;

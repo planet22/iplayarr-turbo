@@ -99,6 +99,35 @@ const heroStyle = computed(() => {
         margin-top: 16px;
     }
 
+    @media (max-width: @mobile-breakpoint) {
+        min-height: 200px;
+        margin-bottom: 1rem;
+
+        .heroContent {
+            padding: 1rem;
+
+            h2 {
+                font-size: 16px;
+            }
+
+            p {
+                font-size: 14px;
+                -webkit-line-clamp: 2;
+                line-clamp: 2;
+            }
+        }
+
+        .heroActions {
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .heroButton {
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+    }
+
     .heroButton {
         display: inline-flex;
         align-items: center;

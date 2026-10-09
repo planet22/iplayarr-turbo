@@ -12,12 +12,14 @@
                 class="thumbnail clickable"
                 :src="getThumbnailUrl(details.thumbnail)"
                 @click="openInfo(item)"
+                @error="hideBrokenImage"
             />
             <font-awesome-icon
                 v-else
                 class="thumbnail-placeholder clickable"
                 :icon="['fas', item.type == 'TV' ? 'tv' : 'film']"
                 @click="openInfo(item)"
+                @error="hideBrokenImage"
             />
         </td>
         <td class="text" data-title="Filename">
@@ -58,7 +60,7 @@
         <td data-title="ETA">
             {{ item.details.eta }}
         </td>
-        <td data-title="Speed">{{ item.details.speed || '' }} {{ item.details.speed != '' ? 'Mb/s' : '' }}</td>
+        <td data-title="Speed">{{ item.details.speed ? `${item.details.speed} Mb/s` : '' }}</td>
         <td class="actionCol" data-title="Action">
             <span>
                 <font-awesome-icon
@@ -80,7 +82,7 @@ import { useModal } from 'vue-final-modal';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
-import { formatDate, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
+import { formatDate, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
 import ProgressBar from '../common/ProgressBar.vue';

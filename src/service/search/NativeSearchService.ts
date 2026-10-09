@@ -13,9 +13,11 @@ import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
 import AbstractSearchService from './AbstractSearchService';
 
+const maxEpisodePages = 10;
+
 class NativeSearchService implements AbstractSearchService {
 
-    async search(term: string, synonym?: Synonym): Promise<IPlayerSearchResult[]> {
+    async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
         const url = `https://ibl.api.bbc.co.uk/ibl/v1/new-search?q=${encodeURIComponent(term)}`;
         let response: AxiosResponse<IPlayerNewSearchResponse>;
@@ -34,7 +36,20 @@ class NativeSearchService implements AbstractSearchService {
             const pidLedger: string[] = [];
             const infoPidLedger: Set<string> = new Set();
 
-            const infos: IPlayerDetails[] = [];
+            const searchResults: IPlayerSearchResult[] = [];
+
+            // Turns newly found details into results and reports them as soon as they exist.
+            const collect = async (found: IPlayerDetails[]) => {
+                const fresh = found.filter(({ pid }) => !infoPidLedger.has(pid));
+                const batch: IPlayerSearchResult[] = [];
+                for (const info of fresh) {
+                    if (infoPidLedger.has(info.pid)) continue;
+                    infoPidLedger.add(info.pid);
+                    batch.push(await this.createSearchResult(info.title, info, sizeFactor, synonym));
+                }
+                searchResults.push(...batch);
+                if (batch.length) onBatch?.(batch);
+            };
 
             for (const { ref } of lunrResults) {
                 const brandPid = await iplayerDetailsService.findBrandForPid(ref);
@@ -49,42 +64,32 @@ class NativeSearchService implements AbstractSearchService {
                         const episodes = await this.#expandEpisodesFromContainer(containerPid);
                         const chunks = splitArrayIntoChunks(episodes, 5);
                         for (const chunk of chunks) {
-                            const results: IPlayerDetails[] = await iplayerDetailsService.detailsForEpisodeMetadata(chunk);
-                            for (const info of results) {
-                                if (!infoPidLedger.has(info.pid)) {
-                                    infos.push(info);
-                                    infoPidLedger.add(info.pid);
-                                }
-                            }
+                            await collect(await iplayerDetailsService.detailsForEpisodeMetadata(chunk));
                         }
                         pidLedger.push(containerPid);
                     }
                 } else {
-                    const pidInfos = await iplayerDetailsService.details([ref]);
-                    for (const info of pidInfos) {
-                        if (!infoPidLedger.has(info.pid)) {
-                            infos.push(info);
-                            infoPidLedger.add(info.pid);
-                        }
-                    }
+                    await collect(await iplayerDetailsService.details([ref]));
                 }
 
                 //Limit to only 150 results
-                if (infos.length >= searchResultLimit) {
+                if (searchResults.length >= searchResultLimit) {
                     break;
                 }
             }
 
-            return await Promise.all(
-                infos.map((info: IPlayerDetails) => this.createSearchResult(info.title, info, sizeFactor, synonym))
-            );
+            return searchResults;
         } else {
             return [];
         }
     }
 
     async #expandEpisodesFromContainer(containerPid: string): Promise<IPlayerEpisodeMetadata[]> {
+        // The BBC list is paged (searchResultLimit per page), so keep fetching until a short page
         const containerChildren: IPlayerEpisodeMetadata[] = await iplayerDetailsService.getSeriesEpisodes(containerPid);
+        for (let page = 2; page <= maxEpisodePages && containerChildren.length == (page - 1) * searchResultLimit; page++) {
+            containerChildren.push(...await iplayerDetailsService.getSeriesEpisodes(containerPid, page));
+        }
         const directEpisodes = containerChildren.filter(({ type, release_date_time }) => type == 'episode' && release_date_time != null);
         const childContainers = containerChildren.filter(({ type }) => type == 'series' || type == 'brand');
 
