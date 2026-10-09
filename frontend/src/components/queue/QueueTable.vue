@@ -108,6 +108,8 @@ const {
     },
     dateAccessor: (item) => item.details?.start,
     storageKey: 'queueTable',
+    defaultSortBy: 'start',
+    defaultSortOrder: 'desc',
 });
 
 const filteredQueue = computed(() => {

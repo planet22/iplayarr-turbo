@@ -10,12 +10,12 @@ import { computed, ref, watch } from 'vue';
 // storageKey (optional): when set, filterText/sortBy/sortOrder/dateFrom/dateTo are persisted to
 // localStorage under this key and restored on load, so a table's filter/sort survives navigating
 // away and back - each table passes its own unique key (e.g. 'queueTable', 'nzbTable').
-export function useSortFilter(itemsRef, { filterFn, sortAccessors = {}, dateAccessor = null, storageKey = null } = {}) {
+export function useSortFilter(itemsRef, { filterFn, sortAccessors = {}, dateAccessor = null, storageKey = null, defaultSortBy = null, defaultSortOrder = 'asc' } = {}) {
     const stored = loadStored(storageKey);
 
     const filterText = ref(stored?.filterText ?? '');
-    const sortBy = ref(stored?.sortBy ?? null);
-    const sortOrder = ref(stored?.sortOrder ?? 'asc');
+    const sortBy = ref(stored?.sortBy ?? defaultSortBy);
+    const sortOrder = ref(stored?.sortOrder ?? defaultSortOrder);
     const dateFrom = ref(stored?.dateFrom ?? null);
     const dateTo = ref(stored?.dateTo ?? null);
 
