@@ -20,7 +20,7 @@
         <div v-if="loaded && subscriptions.length" class="subscriptionList">
             <div v-for="subscription in pagedItems" :key="subscription.id" class="subscriptionRow">
                 <RouterLink :to="`/browse/programme/${subscription.pid}`" class="thumbLink">
-                    <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail)" :alt="subscription.title" loading="lazy" />
+                    <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
                     <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                 </RouterLink>
                 <div class="info">
@@ -59,7 +59,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { usePagination } from '@/lib/usePagination';
-import { formatRelativeTime, getThumbnailUrl } from '@/lib/utils';
+import { formatRelativeTime, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const { subscriptions, loaded, load, unsubscribe } = useSubscriptions();
 const { page, pageSize, pagedItems } = usePagination(subscriptions);

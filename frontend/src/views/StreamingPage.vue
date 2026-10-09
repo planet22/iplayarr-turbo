@@ -56,6 +56,7 @@
                             class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
                             @click="openInfo(session.pid)"
+                            @error="hideBrokenImage"
                         />
                     </td>
                     <td class="text">
@@ -150,6 +151,7 @@
                             class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
                             @click="openInfo(session.pid)"
+                            @error="hideBrokenImage"
                         />
                     </td>
                     <td class="text">
@@ -201,7 +203,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import {
-    formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl,
+    formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';

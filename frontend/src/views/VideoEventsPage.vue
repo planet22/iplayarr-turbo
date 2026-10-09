@@ -45,12 +45,14 @@
                             class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(event.pid).thumbnail)"
                             @click="openInfo(event.pid)"
+                            @error="hideBrokenImage"
                         />
                         <font-awesome-icon
                             v-else-if="event.pid"
                             class="thumbnail-placeholder clickable"
                             :icon="['fas', 'film']"
                             @click="openInfo(event.pid)"
+                            @error="hideBrokenImage"
                         />
                     </td>
                     <td class="text">
@@ -88,7 +90,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
-import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
+import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const events = inject('videoEvents');
 const details = reactive({});

@@ -5,7 +5,7 @@
         <div class="programmeBanner">
             <div class="bannerBackdrop" :style="bannerStyle" />
             <div class="programmeBannerContent">
-                <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" />
+                <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
                 <div class="programmeText">
                 <h1>{{ programme.title }}</h1>
                 <div class="programmeMeta">
@@ -63,7 +63,7 @@
                 <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length" />
                 <div class="episodeList">
                     <div v-for="episode in pagedEpisodes" :key="episode.pid" class="episodeRow">
-                        <img v-if="episode.thumbnail" :src="getThumbnailUrl(episode.thumbnail)" :alt="episode.title" loading="lazy" />
+                        <img v-if="episode.thumbnail" :src="getThumbnailUrl(episode.thumbnail)" :alt="episode.title" loading="lazy" @error="hideBrokenImage" />
                         <div v-else class="episodeNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                         <div class="episodeInfo">
                             <div class="episodeTitle">
@@ -106,7 +106,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { usePagination } from '@/lib/usePagination';
-import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl } from '@/lib/utils';
+import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();

@@ -104,6 +104,7 @@
                             class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(entry.pid).thumbnail)"
                             @click="openInfo(entry.pid)"
+                            @error="hideBrokenImage"
                         />
                     </td>
                     <td data-title="PID">{{ entry.pid }}</td>
@@ -192,7 +193,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import {
-    formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl,
+    formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 const searchHistory = ref([]);
