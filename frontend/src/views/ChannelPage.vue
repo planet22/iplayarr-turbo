@@ -1,6 +1,11 @@
 <template>
     <div class="browsePage">
-        <h1 class="browseTitle">{{ channel?.title ?? route.params.id }}</h1>
+        <div class="channelHeader">
+            <h1 class="browseTitle">{{ channel?.title ?? route.params.id }}</h1>
+            <button v-if="channel?.live" class="watchLive" type="button" @click="watchLive">
+                <font-awesome-icon :icon="['fas', 'play']" /> Watch Live
+            </button>
+        </div>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
         <template v-else>
@@ -11,6 +16,12 @@
                 >
                     <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail)" :alt="slot.data.item.title" @error="hideBrokenImage" />
                     <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    <button
+                        v-if="slot.label === 'Now' && channel?.live" class="nowPlay" type="button"
+                        title="Watch live" @click.prevent.stop="watchLive"
+                    >
+                        <font-awesome-icon :icon="['fas', 'play']" />
+                    </button>
                     <div class="nowNextInfo">
                         <span :class="['nowNextLabel', slot.label === 'Now' ? 'live' : '']">{{ slot.label }}</span>
                         <div class="nowNextTitle">{{ slot.data.item.title }}</div>
@@ -33,10 +44,12 @@ import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import { browseFetch } from '@/lib/browse';
+import { playInPip } from '@/lib/pipPlayer';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const channel = ref(null);
+const watchLive = () => playInPip(channel.value.id, `${channel.value.title} (Live)`, true);
 const rails = ref([]);
 const nowNext = ref(null);
 
@@ -72,6 +85,35 @@ watch(
 </script>
 
 <style lang="less" scoped>
+.channelHeader {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 1rem;
+
+    .browseTitle {
+        margin: 0;
+    }
+}
+
+.watchLive {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    background-color: @brand-color;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+
+    &:hover {
+        opacity: 0.85;
+    }
+}
+
 .nowNext {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -79,7 +121,25 @@ watch(
     margin-bottom: 1.75rem;
 }
 
+.nowPlay {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: @brand-color;
+    color: #fff;
+    cursor: pointer;
+}
+
 .nowNextCard {
+    position: relative;
     display: flex;
     gap: 12px;
     padding: 10px;

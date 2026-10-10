@@ -44,7 +44,11 @@ let hls = null;
 
 const isActive = computed(() => pipPlayerState.pid !== null);
 const statusLabel = computed(() => STATUS_LABELS[pipPlayerState.status] ?? '');
-const iplayerUrl = computed(() => `https://www.bbc.co.uk/iplayer/episode/${pipPlayerState.pid}`);
+const iplayerUrl = computed(() =>
+    pipPlayerState.live
+        ? 'https://www.bbc.co.uk/iplayer/live/channels'
+        : `https://www.bbc.co.uk/iplayer/episode/${pipPlayerState.pid}`
+);
 
 function cleanup() {
     if (hls) {

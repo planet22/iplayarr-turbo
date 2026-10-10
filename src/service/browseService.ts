@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { BrowseChannels, BrowseHomeRails } from '../constants/BrowseChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
+import { isLiveChannel } from '../constants/LiveChannels';
 import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
@@ -99,6 +100,7 @@ export function toBrowseItems(elements: any[]): BrowseItem[] {
 const withLogo = (channel: BrowseChannel): BrowseChannel => ({
     ...channel,
     logo: channel.masterBrand ? `json-api/browse/channel-logo/${channel.masterBrand}.svg` : undefined,
+    live: isLiveChannel(channel.id),
 });
 
 const PROGRAMME_PAGE_SIZE = 30;

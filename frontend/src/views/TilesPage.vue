@@ -16,6 +16,12 @@
                     />
                     <!-- Logo already carries the channel name; fall back to text only when there's no logo to show. -->
                     <span v-else class="channelName">{{ tile.title }}</span>
+                    <button
+                        v-if="tile.live" class="liveButton" type="button" :title="`Watch ${tile.title} live`"
+                        @click.prevent.stop="watchLive(tile)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'play']" />
+                    </button>
                 </template>
                 <span v-else class="tileTitle">{{ tile.title }}</span>
             </RouterLink>
@@ -30,6 +36,7 @@ import { useRoute } from 'vue-router';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import { browseFetch } from '@/lib/browse';
+import { playInPip } from '@/lib/pipPlayer';
 import { getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
@@ -41,6 +48,8 @@ const error = ref(null);
 
 // One view for both listings: the route's meta says which.
 const isChannels = computed(() => route.meta.tiles === 'channels');
+
+const watchLive = (tile) => playInPip(tile.id, `${tile.title} (Live)`, true);
 
 watch(
     isChannels,
@@ -71,6 +80,7 @@ watch(
 }
 
 .tile {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -106,6 +116,33 @@ watch(
 
     .channelName {
         font-size: 16px;
+    }
+
+    .liveButton {
+        position: absolute;
+        right: 8px;
+        bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background-color: rgba(0, 0, 0, 0.45);
+        color: #fff;
+        cursor: pointer;
+        opacity: 0.9;
+
+        // Beats the generic `.tile svg` subtle colour above.
+        svg {
+            color: #fff;
+        }
+
+        &:hover {
+            opacity: 1;
+        }
     }
 
     &:not(.imageTile) {

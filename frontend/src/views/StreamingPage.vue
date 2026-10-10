@@ -55,13 +55,13 @@
                             v-if="detailsFor(session.pid)?.thumbnail"
                             class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
-                            @click="openInfo(session.pid)"
+                            @click="openInfo(session)"
                             @error="hideBrokenImage"
                         />
                     </td>
                     <td class="text">
-                        <a class="clickable" @click="openInfo(session.pid)">
-                            {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        <a class="clickable" @click="openInfo(session)">
+                            {{ session.title ?? detailsFor(session.pid)?.title ?? session.pid }}
                         </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
@@ -79,8 +79,9 @@
                     <td data-title="Duration">{{ formatDuration(session.startedAt) }}</td>
                     <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
                     <td data-title="Segments">
+                        <span v-if="session.live" class="liveBadge"><span class="liveDot" />Live</span>
                         <SegmentActivityStrip
-                            v-if="session.totalSegments"
+                            v-else-if="session.totalSegments"
                             :total="session.totalSegments"
                             :delivered="session.deliveredSegments ?? []"
                             :current-segment-index="session.currentSegmentIndex ?? null"
@@ -150,13 +151,13 @@
                             v-if="detailsFor(session.pid)?.thumbnail"
                             class="thumbnail clickable"
                             :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
-                            @click="openInfo(session.pid)"
+                            @click="openInfo(session)"
                             @error="hideBrokenImage"
                         />
                     </td>
                     <td class="text">
-                        <a class="clickable" @click="openInfo(session.pid)">
-                            {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        <a class="clickable" @click="openInfo(session)">
+                            {{ session.title ?? detailsFor(session.pid)?.title ?? session.pid }}
                         </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
@@ -174,8 +175,9 @@
                     <td data-title="Duration">{{ formatDuration(session.startedAt, session.endedAt) }}</td>
                     <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
                     <td data-title="Segments">
+                        <span v-if="session.live" class="liveBadge">Live</span>
                         <SegmentActivityStrip
-                            v-if="session.totalSegments"
+                            v-else-if="session.totalSegments"
                             :total="session.totalSegments"
                             :delivered="session.deliveredSegments ?? []"
                             :current-segment-index="session.currentSegmentIndex ?? null"
@@ -242,7 +244,7 @@ async function loadDetails(pid) {
 }
 
 function loadMissingDetails() {
-    const pids = [...streams.value.active, ...streams.value.history].map(({ pid }) => pid);
+    const pids = [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid);
     [...new Set(pids)].filter(Boolean).forEach(loadDetails);
 }
 
@@ -264,7 +266,11 @@ function modeLabel(session) {
     return client ? `${session.mode} (${client})` : session.mode;
 }
 
-function openInfo(pid) {
+function openInfo(session) {
+    if (session.live) {
+        return;
+    }
+    const pid = session.pid;
     const infoModal = useModal({
         component: VideoInfoModal,
         attrs: { pid },
@@ -323,6 +329,36 @@ async function clearHistory() {
 </script>
 
 <style lang="less">
+.liveBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: @brand-color;
+
+    .liveDot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: currentColor;
+        animation: livePulse 1.4s ease-in-out infinite;
+    }
+}
+
+@keyframes livePulse {
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.35;
+        transform: scale(0.7);
+    }
+}
+
 .tableToolbar {
     display: flex;
     justify-content: flex-start;
