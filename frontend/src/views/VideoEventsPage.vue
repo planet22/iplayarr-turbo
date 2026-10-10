@@ -51,13 +51,9 @@
                             @click="openInfo(event.pid)"
                             @error="hideBrokenImage"
                         />
-                        <font-awesome-icon
-                            v-else-if="event.pid"
-                            class="thumbnail-placeholder clickable"
-                            :icon="['fas', 'film']"
-                            @click="openInfo(event.pid)"
-                            @error="hideBrokenImage"
-                        />
+                        <div v-else-if="event.pid" class="thumbnail-placeholder clickable" @click="openInfo(event.pid)">
+                                <font-awesome-icon :icon="['fas', 'film']" />
+                            </div>
                     </td>
                     <td class="text">
                         <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">
@@ -207,11 +203,6 @@ const clearEvents = async () => {
         display: block;
     }
 
-    .thumbnail-placeholder {
-        width: 64px;
-        text-align: center;
-        color: @subtle-text-color;
-    }
 
     .subtle {
         font-size: 12px;

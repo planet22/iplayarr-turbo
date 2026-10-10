@@ -109,6 +109,7 @@
                             @click="openInfo(entry.pid)"
                             @error="hideBrokenImage"
                         />
+                        <div v-else class="thumbnail-placeholder"></div>
                     </td>
                     <td data-title="PID">{{ entry.pid }}</td>
                     <td class="text">

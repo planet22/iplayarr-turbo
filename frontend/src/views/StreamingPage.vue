@@ -58,6 +58,7 @@
                             @click="openInfo(session)"
                             @error="hideBrokenImage"
                         />
+                        <div v-else class="thumbnail-placeholder"></div>
                     </td>
                     <td class="text">
                         <a class="clickable" @click="openInfo(session)">
@@ -154,6 +155,7 @@
                             @click="openInfo(session)"
                             @error="hideBrokenImage"
                         />
+                        <div v-else class="thumbnail-placeholder"></div>
                     </td>
                     <td class="text">
                         <a class="clickable" @click="openInfo(session)">
