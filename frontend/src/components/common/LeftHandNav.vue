@@ -119,6 +119,10 @@ const handleClickOutside = (event) => {
     background-color: @nav-background-color;
     color: @nav-text-color;
     height: calc(100vh - 60px);
+    height: calc(100dvh - 60px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     z-index: 1;
     font-size: 14px;
     flex-shrink: 0;
@@ -199,6 +203,8 @@ const handleClickOutside = (event) => {
         position: fixed;
         top: 0px;
         bottom: 0;
+        height: auto;
+        box-sizing: border-box;
         transform: translateX(-100%);
         transition: transform 0.3s ease-in-out;
         padding-top: 60px;
