@@ -47,12 +47,23 @@ class SubscriptionArrService {
         if (subscription.arr) throw new SubscriptionArrError('This subscription is already linked - unlink it first');
         const app = await this.#getApp(request.appId);
         const { id, created } = await arrLibraryService.add(app, request.externalId, request);
-        await subscriptionService.setArrLink(subscriptionId, {
+        const linked = await subscriptionService.setArrLink(subscriptionId, {
             appId: app.id,
             arrId: id,
             title: request.title,
             addedByUs: created,
         });
+        if (!linked) {
+            // The subscription vanished meanwhile - don't leave an entry we added with no link to it.
+            if (created) {
+                try {
+                    await arrLibraryService.remove(app, id);
+                } catch {
+                    // Best effort.
+                }
+            }
+            throw new SubscriptionArrError('Subscription not found');
+        }
     }
 
     // Always clears the link. Removes the entry from Sonarr/Radarr only when asked to and only if
@@ -62,8 +73,14 @@ class SubscriptionArrService {
         if (!subscription?.arr) throw new SubscriptionArrError('This subscription is not linked');
         const { appId, arrId, addedByUs } = subscription.arr;
         if (removeFromArr && addedByUs) {
-            const app = await this.#getApp(appId);
-            await arrLibraryService.remove(app, arrId);
+            let app: App | undefined;
+            try {
+                app = await this.#getApp(appId);
+            } catch {
+                // The app is gone or no longer Sonarr/Radarr - nothing to remove from, so don't let
+                // the link get stuck; fall through and clear it.
+            }
+            if (app) await arrLibraryService.remove(app, arrId);
         }
         await subscriptionService.setArrLink(subscriptionId, undefined);
     }

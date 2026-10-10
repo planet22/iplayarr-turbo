@@ -20,6 +20,7 @@ describe('subscriptionArrService', () => {
         jest.resetAllMocks();
         apps.getApp.mockResolvedValue(app);
         library.supports.mockReturnValue(true);
+        subs.setArrLink.mockResolvedValue(true);
     });
 
     it('lists only supported apps, trimmed to id/name/type', async () => {
@@ -72,6 +73,14 @@ describe('subscriptionArrService', () => {
             expect(library.add).not.toHaveBeenCalled();
         });
 
+        it('removes an entry it just added when the subscription vanished mid-link', async () => {
+            subs.list.mockResolvedValue([{ id: 's1' } as any]);
+            library.add.mockResolvedValue({ id: 5, created: true });
+            subs.setArrLink.mockResolvedValue(false);
+            await expect(subscriptionArrService.link('s1', request)).rejects.toThrow('not found');
+            expect(library.remove).toHaveBeenCalledWith(app, 5);
+        });
+
         it('does not store a link when the add fails', async () => {
             subs.list.mockResolvedValue([{ id: 's1' } as any]);
             library.add.mockRejectedValue(new Error('nope'));
@@ -109,6 +118,14 @@ describe('subscriptionArrService', () => {
             library.remove.mockRejectedValue(new Error('down'));
             await expect(subscriptionArrService.unlink('s1', true)).rejects.toThrow('down');
             expect(subs.setArrLink).not.toHaveBeenCalled();
+        });
+
+        it('clears the link when the linked app is gone', async () => {
+            subs.list.mockResolvedValue(linked(true));
+            apps.getApp.mockResolvedValue(undefined);
+            await subscriptionArrService.unlink('s1', true);
+            expect(library.remove).not.toHaveBeenCalled();
+            expect(subs.setArrLink).toHaveBeenCalledWith('s1', undefined);
         });
 
         it('rejects an unlinked subscription', async () => {

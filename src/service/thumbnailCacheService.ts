@@ -66,6 +66,8 @@ class ThumbnailCacheService {
                     break;
                 } catch (error) {
                     lastError = error;
+                    // Only a missing size is worth a smaller retry; anything else won't improve.
+                    if (!(axios.isAxiosError(error) && error.response?.status === 404)) break;
                 }
             }
             if (!data) throw lastError;
