@@ -11,6 +11,7 @@ import ApiRoute from './routes/ApiRoute';
 import AuthRoute, { addAuthMiddleware } from './routes/AuthRoute';
 import JsonApiRoute from './routes/JsonApiRoute';
 import configService from './service/configService';
+import liveSubscriptionService from './service/liveSubscriptionService';
 import loggingService from './service/loggingService';
 import { redis } from './service/redis/redisService';
 import socketService from './service/socketService';
@@ -97,3 +98,5 @@ server.listen(port, () => {
 
 //Cron
 taskService.init();
+
+liveSubscriptionService.resync();

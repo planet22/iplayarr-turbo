@@ -16,6 +16,7 @@ import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../ut
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import EventsRoute from './json-api/EventsRoute';
+import LiveSubscriptionsRoute from './json-api/LiveSubscriptionsRoute';
 import MaintenanceRoute from './json-api/MaintenanceRoute';
 import OffScheduleRoute from './json-api/OffScheduleRoute';
 import QueueRoute from './json-api/QueueRoute';
@@ -40,6 +41,7 @@ router.use('/streams', StreamRoute);
 router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
+router.use('/subscriptions/live', LiveSubscriptionsRoute);
 router.use('/subscriptions/arr', SubscriptionArrRoute);
 router.use('/subscriptions', SubscriptionsRoute);
 router.use('/maintenance', MaintenanceRoute);

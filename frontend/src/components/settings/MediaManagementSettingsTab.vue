@@ -18,6 +18,12 @@
         tooltip="Overrides Complete Directory for Sonarr/Radarr-queued TV only. Blank = Complete Directory for everything."
         :error="validationErrors.config?.ARR_COMPLETE_DIR"
     />
+    <TextInput
+        v-model="config.LIVE_STRM_DIR"
+        name="Live Channels Directory"
+        tooltip="Where .strm files for subscribed live channels are written - point a Jellyfin library at this folder. Blank = Complete Directory."
+        :error="validationErrors.config?.LIVE_STRM_DIR"
+    />
     <SelectInput
         v-model="config.VIDEO_QUALITY"
         name="Video Quality"
