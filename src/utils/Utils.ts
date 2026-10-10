@@ -126,6 +126,18 @@ export async function createStrmContent(pid: string, streamKey: string): Promise
     return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}`;
 }
 
+// Inverse of createStrmContent, for the STRM Watchdog: returns the BBC pid a .strm file points at, or
+// undefined for any .strm that isn't ours (e.g. another tool's). Accepts an iPlayarr stream URL
+// (mode=stream&pid=...) or a BBC iPlayer/programmes URL carrying a pid.
+export function parseStrmPid(content: string): string | undefined {
+    const text = content.trim().split(/\r?\n/)[0] ?? '';
+    const pid = String.raw`[a-z]\d{3}[a-z0-9]{4}`;
+    const iplayarr = text.match(new RegExp(`[?&]pid=(${pid})(?:&|$)`, 'i'));
+    if (iplayarr && /mode=stream/i.test(text)) return iplayarr[1];
+    const bbc = text.match(new RegExp(String.raw`bbc\.co\.uk/(?:iplayer|programmes)/(?:[a-z-]+/)*(${pid})(?:[/?#]|$)`, 'i'));
+    return bbc?.[1];
+}
+
 function removeTrailingSlash(url: string): string {
     return url?.endsWith('/') ? url.slice(0, -1) : url;
 }

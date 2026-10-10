@@ -14,6 +14,7 @@
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Video Events" icon="film" path="/events" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" @option-clicked="closeLHN" />
 
             <li class="sectionLabel">Integrations</li>
             <LeftHandNavLink label="Apps" icon="laptop-code" path="/apps" @option-clicked="closeLHN" />

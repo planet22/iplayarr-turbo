@@ -9,6 +9,7 @@ import { QueuedStorage } from '../types/QueuedStorage';
 import { CreateDownloadClientForm } from '../types/requests/form/CreateDownloadClientForm';
 import { CreateIndexerForm } from '../types/requests/form/CreateIndexerForm';
 import configService from './configService';
+import jellyfinService from './jellyfinService';
 import socketService from './socketService';
 import userAgentMappingService from './userAgentMappingService';
 
@@ -161,6 +162,8 @@ const appService = {
             case AppType.SONARR: {
                 return await arrFacade.testConnection(form);
             }
+            case AppType.JELLYFIN:
+                return await jellyfinService.testConnection(form);
             case AppType.NZBGET:
             case AppType.SABNZBD: {
                 return await nzbFacade.testConnection(
