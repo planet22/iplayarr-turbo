@@ -69,6 +69,13 @@ export const formatStorageSize = (mb) => {
     return;
 };
 
+// Programme runtimes arrive as fractional minutes (e.g. 117.0333) - round up to a whole minute
+// for display. Returns undefined when there's no usable runtime.
+export const roundUpMinutes = (minutes) => {
+    const value = Number(minutes);
+    return Number.isFinite(value) && value > 0 ? Math.ceil(value - 1e-9) : undefined;
+};
+
 export const enforceMaxLength = (arr, maxLength) => {
     if (arr.length > maxLength) {
         arr.splice(0, arr.length - maxLength);
