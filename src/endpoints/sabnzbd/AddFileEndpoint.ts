@@ -14,6 +14,7 @@ import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueLibraryMetadata } from '../../types/QueueEntry';
 import { NZBMetaEntry } from '../../types/responses/newznab/NZBFileResponse';
 import { VideoEventType } from '../../types/VideoEvent';
+import { isValidPid } from '../../utils/pathSafety';
 
 const parser = new Parser();
 
@@ -41,6 +42,10 @@ export default async (req: Request, res: Response) => {
         for (const file of files) {
             const xmlString = file.buffer.toString('utf-8');
             const { pid, nzbName, type, appId, library } = await getDetails(xmlString);
+            if (!isValidPid(pid)) {
+                res.status(400).json({ status: false, error: 'Invalid programme id in NZB' });
+                return;
+            }
             // This endpoint only ever receives files from the SABnzbd-compatible protocol
             // (Sonarr/Radarr/Prowlarr handing off a grab) - the one legitimate NZB source.
             if (library) {

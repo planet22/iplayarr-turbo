@@ -17,6 +17,7 @@ import { StreamMode } from '../../types/enums/StreamMode';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { isValidPid } from '../../utils/pathSafety';
 
 // Media-server library scans (ffprobe) hit .strm URLs on every scan. Probing doesn't need a
 // transcode - just enough of the stream to read its headers/codec info - so probes are always
@@ -91,7 +92,7 @@ export default async (req: Request, res: Response): Promise<void> => {
         return;
     }
 
-    if (!pid) {
+    if (!isValidPid(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'pid or token is required' } as ApiResponse);
         return;
     }

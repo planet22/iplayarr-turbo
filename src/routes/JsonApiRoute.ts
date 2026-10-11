@@ -12,6 +12,7 @@ import { QueueLibraryMetadata } from '../types/QueueEntry';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { VideoEventType } from '../types/VideoEvent';
+import { isValidPid } from '../utils/pathSafety';
 import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../utils/Utils';
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
@@ -107,6 +108,10 @@ router.get('/search/stream', async (req: Request, res: Response) => {
 
 router.get('/details', async (req: Request, res: Response) => {
     const { pid } = req.query as any;
+    if (!isValidPid(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
+        return;
+    }
     const details = await iplayerDetailsService.details([pid]);
     res.json(details[0]);
 });
@@ -114,6 +119,10 @@ router.get('/details', async (req: Request, res: Response) => {
 router.get('/download', async (req: Request, res: Response) => {
     const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime } = req.query as any;
     let { nzbName, type } = req.query as any;
+    if (!isValidPid(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
+        return;
+    }
 
     // Structured metadata for library folder/nfo generation (libraryPathBuilder.ts /
     // nfoBuilder.ts) - sent by the frontend's Search/Download pages, which already have

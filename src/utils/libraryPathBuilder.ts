@@ -3,6 +3,7 @@ import path from 'path';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
+import { resolveInside, sanitizeFileName } from './pathSafety';
 
 // Picks which configured complete directory a completed item should land under.
 // ARR_COMPLETE_DIR (set via the *arr Complete Directory setting) is an
@@ -25,7 +26,8 @@ export function resolveCompleteDir(
 const illegalCharsRegex = /[<>:"/\\|?*\x00-\x1F]/g;
 
 function sanitizeSegment(segment: string): string {
-    return segment.replace(illegalCharsRegex, '').trim();
+    // Leading dots would let a title of ".." name the parent directory.
+    return segment.replace(illegalCharsRegex, '').replace(/^[.s]+/, '').trim() || 'Unknown';
 }
 
 export interface LibraryFilePath {
@@ -56,7 +58,19 @@ export function buildLibraryFilePath(
     extension: string,
     useFolderStructure: boolean
 ): LibraryFilePath {
-    const flatFileName = `${item.nzbName}.${extension}`;
+    const result = buildUncheckedLibraryFilePath(completeDir, item, extension, useFolderStructure);
+    // Belt and braces: whatever the metadata said, the file must land inside the complete directory.
+    resolveInside(completeDir, result.relativePath);
+    return result;
+}
+
+function buildUncheckedLibraryFilePath(
+    completeDir: string,
+    item: QueueEntry,
+    extension: string,
+    useFolderStructure: boolean
+): LibraryFilePath {
+    const flatFileName = `${sanitizeFileName(item.nzbName)}.${extension}`;
     if (!useFolderStructure || !item.library?.title) {
         return {
             directory: completeDir,

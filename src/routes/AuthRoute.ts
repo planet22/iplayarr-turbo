@@ -226,7 +226,7 @@ router.get('/oidc/callback', async (req: Request, res: Response) => {
 
         if (isTest) {
             delete req.session.oidcTest;
-            res.set('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'");
+            res.set('Content-Security-Policy', 'default-src \'none\'; script-src \'unsafe-inline\'');
             res.send(`
     <html>
       <body>
