@@ -7,19 +7,20 @@ A read-only discovery UI for finding something to watch, without already knowing
 | Page | Route | What it shows |
 | --- | --- | --- |
 | Discover | `/browse` | A hero banner for the lead programme, then horizontal rails: **Featured**, **Recently Added**, **Most Popular**. Also has the **Colour channel pills by logo** toggle (see below). |
-| Channels | `/browse/channels` | A tile per channel, filled edge-to-edge with that channel's own coloured BBC logo. A channel without a usable logo falls back to its plain name on a plain tile. |
+| Channels | `/browse/channels` | A tile per channel, filled edge-to-edge with that channel's own coloured BBC logo. A channel without a usable logo falls back to its plain name on a plain tile. Live channels have a **Watch Live** button and a **+** (and **Add all**) to add them to your media library as `.strm` files, see [STREAMING.md](STREAMING.md#live-channels). |
 | Channel | `/browse/channel/:id` | A **Now / Next** strip for what is on the channel, then **Featured** and **All Programmes** rails. |
-| Schedule | `/browse/schedule` | A multi-channel TV guide: every channel as a row, programmes laid out on a shared scrollable timeline sized by actual duration, a live "now" indicator, zoom in/out, and day navigation (prev/next/Today). |
+| Schedule | `/browse/schedule` | A multi-channel TV guide: every channel as a row, programmes laid out on a shared scrollable timeline sized by actual duration, a live "now" indicator, zoom in/out, and day navigation (prev/next/Today). It is a continuous 3-day strip in UK time (previous, selected and next day load together, adjacent days shaded) and the date label follows the timeline as you scroll. |
 | Categories | `/browse/categories` | Artwork tiles, one per category. |
 | Category | `/browse/category/:id` | iPlayer's own curated rails for the category (e.g. "Panel Show Palooza!"), then every programme in a grid with **Load more**, a title filter and a channel filter. |
 | A to Z | `/browse/atoz/:letter?` | Letter bar (`0-9`, `A`-`Z`) and a grid for the chosen letter. Opens on `0-9`. |
-| Programme | `/browse/programme/:pid` | Blurred backdrop and poster, series tabs (opening on the newest series, with Specials last), an episode list, **Download series**, and **Subscribe** (see [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md)). |
+| Programme | `/browse/programme/:pid` | Blurred backdrop and poster, series tabs (opening on the newest series, with Specials last), an episode list (the newest 30 load first and the rest follow in the background, with pagination above and below), **Download series**, and **Subscribe** (see [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md)). |
 
 Opening an *episode* card takes you to its whole show, not just that one episode.
 
 ### Search
 
 - **Type-ahead:** the search box suggests programme titles as you type (two or more characters, debounced). Arrow keys move through the list, **Enter** opens the highlighted show, and **Enter** with nothing highlighted runs the normal search. Pasting an iPlayer URL still downloads it directly, as before.
+- **Streaming results:** results arrive in batches so the table appears with the first batch rather than after the full search. A brand's whole BBC episode list is searched (up to 1,500 episodes), not just its first page. Sonarr/Radarr (Newznab) searches are unchanged.
 - **Posters view:** the Search page has a Table / Posters toggle (remembered per browser; Table is the default). Posters shows the same results as cards with Play and Download on hover. Bulk-select checkboxes exist in Table view only.
 - **Channel filter:** a channel dropdown appears when results span more than one channel. It combines with the existing TV / Movie filter.
 

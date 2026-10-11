@@ -10,7 +10,7 @@ A browse-first way in: a hero banner and rows of programmes (Featured, Recently 
 
 ## Subscriptions (`/subscriptions`)
 
-Shows you have subscribed to, whose new episodes are queued automatically (checked hourly, or on demand). See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md).
+Shows you have subscribed to, whose new episodes are queued automatically (checked hourly, or on demand), optionally linked to Sonarr/Radarr, plus the live channels added to your library. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md).
 
 ## Search (`/search`)
 
@@ -27,6 +27,10 @@ The main day-to-day view: active downloads and completed history, combined (`Que
 ## Streaming (`/streaming`)
 
 Only relevant when `MEDIA_MODE=strm`. Shows **Active Streams** currently being served, and **Stream History** — past sessions, retained per `STREAM_HISTORY_RETENTION_DAYS` (or cleared on demand with the Clear History button). The two tables share column widths/positions so they line up, even where one table has a column the other doesn't (e.g. Stream History's Started column, Active Streams' Action column) — those just render blank in the table that lacks them. See [STREAMING.md](STREAMING.md) for setup and [CONFIG.md](CONFIG.md) for the full field reference.
+
+## Watchdog (`/watchdog`)
+
+Dashboard for the optional STRM Watchdog: live progress, valid/invalid counts and charts, Library Access checks and a per-link table. See [WATCHDOG.md](WATCHDOG.md).
 
 ## NZB (`/nzb`)
 

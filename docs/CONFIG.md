@@ -71,6 +71,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Output Format? | `OUTPUT_FORMAT` | `mp4` | `mp4` or `mkv`. |
 | Archive Downloads? | `ARCHIVE_ENABLED` | `false` | Keep cancelled/removed queue and history items instead of discarding them. See `src/facade/downloadFacade.ts` and `historyService.addArchive`. |
 | Organize into Folder Structure? | `LIBRARY_FOLDER_STRUCTURE` | `true` | Jellyfin-style `Show/Season NN/...` and `Movie/...` nesting under `COMPLETE_DIR`. See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
+| Live Channels Directory | `LIVE_STRM_DIR` | _(unset)_ | Where `.strm` files for live channels added to the library are written; point a Jellyfin library at it. Blank uses `COMPLETE_DIR`. See [STREAMING.md](STREAMING.md#live-channels). |
 | Write .nfo Metadata Files? | `WRITE_NFO_STRM` | `manual` | `none` / `all` / `nzb` (Sonarr/Radarr-triggered only) / `manual` (UI-triggered only). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
 | Write .strmtool.json Files? | `WRITE_STRMTOOL_JSON` | `false` | Also writes a `.strmtool.json` sidecar next to each `.strm` file, for the StrmTool Jellyfin plugin's probe-skip cache. Only takes effect when `WRITE_NFO_STRM` is enabled and the completed item is a `.strm` (Media Mode = Streaming). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
 | TV Filename Template _(advanced)_ | `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC` | Handlebars template; only affects the flat (non-folder-structure) filename. Must compile against `{title, season, episode, episodeTitle, synonym, quality}`. |
@@ -93,6 +94,10 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
 | Stream Cache Directory _(advanced)_ | `STREAM_CACHE_DIR` | temp folder | Scratch space for in-flight streams. |
 | — | `THUMBNAIL_CACHE_DIR` | temp folder | Where cached BBC episode thumbnails are stored. Env-only. |
+
+## STRM Watchdog (Settings → Streaming)
+
+Daily check that `.strm` links still resolve on BBC. Off by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_WEBHOOK_URL`.
 
 ## Archive & Retention (Settings → Maintenance / Media Management)
 
