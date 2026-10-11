@@ -5,12 +5,18 @@ import queueService from '../../service/queueService';
 import videoEventService from '../../service/videoEventService';
 import { VideoType } from '../../types/IPlayerSearchResult';
 import { QueueLibraryMetadata } from '../../types/QueueEntry';
+import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { IPlayerMetadataResponse } from '../../types/responses/IPlayerMetadataResponse';
 import { VideoEventType } from '../../types/VideoEvent';
+import { isValidPid } from '../../utils/pathSafety';
 import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../../utils/Utils';
 
 export default async (req: Request, res: Response) => {
     const { pid } = req.query as any;
+    if (!isValidPid(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
+        return;
+    }
 
     const metadata: IPlayerMetadataResponse | undefined = await iplayerDetailsService.getMetadata(pid);
     let name: string = '';

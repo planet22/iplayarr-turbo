@@ -4,6 +4,7 @@ import historyService from './historyService';
 import loggingService from './loggingService';
 import queueService from './queueService';
 import streamSessionService from './stream/streamSessionService';
+import strmWatchdogService from './strmWatchdogService';
 import videoEventService from './videoEventService';
 
 const sockets: {
@@ -33,6 +34,7 @@ const socketService = {
             history: await streamSessionService.getHistory(),
         });
         socket.emit('videoEvents', await videoEventService.getEvents());
+        socket.emit('strmWatchdog', await strmWatchdogService.getStatus());
 
         socket.on('disconnect', () => {
             delete sockets[socket.id];

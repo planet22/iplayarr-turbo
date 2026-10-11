@@ -12,6 +12,9 @@ const redirectStatusCodes = [301, 302, 303, 307, 308];
 const playlistContentTypeRegex = /mpegurl/i;
 const uriAttrRegex = /URI="([^"]+)"/;
 const defaultSegmentExtension = '.ts';
+// The Live TV playlist's channel URLs end /api/live.m3u8 (liveTvService.ts) - the one entry point that
+// gets a single-variant master; library .strm files keep the full multi-variant one.
+const liveTvManifestRegex = /\/live\.m3u8$/;
 
 // ffmpeg's HLS demuxer enforces an allow-list on segment reference extensions and rejects a pure
 // query-string URL outright ("is not in allowed_segment_extensions") - confirmed live against a
@@ -37,9 +40,16 @@ interface RewrittenPlaylist {
 // rewritten again when the player requests it). Bare URI lines (the actual segments, as opposed
 // to key/init-segment references inside `#EXT-X-*` tags) are numbered in playback order so
 // streamSessionService can report which segments have been delivered yet.
-function rewritePlaylist(text: string, baseUrl: string, streamKey: string, sessionId?: string): RewrittenPlaylist {
+function rewritePlaylist(
+    text: string,
+    baseUrl: string,
+    streamKey: string,
+    sessionId?: string,
+    highestVariantFirst = false,
+    topVariantOnly = false
+): RewrittenPlaylist {
     let segmentIndex = 0;
-    const body = text
+    const body = (topVariantOnly ? sortVariantsHighestFirst(text, true) : highestVariantFirst ? sortVariantsHighestFirst(text) : text)
         .split(/\r?\n/)
         .map((line) => {
             const trimmed = line.trim();
@@ -59,6 +69,33 @@ function rewritePlaylist(text: string, baseUrl: string, streamKey: string, sessi
         .join('\n');
 
     return { body, segmentCount: segmentIndex };
+}
+
+// BBC lists a master playlist's variants lowest-bitrate first. hls.js sorts them itself, but ffprobe
+// and ffmpeg (so Jellyfin's probe of a .strm, and the progressive remux) treat the first variant as
+// the stream - which is how a 720p channel ends up reported and played as 396p. Each variant is the
+// #EXT-X-STREAM-INF line plus the URI line after it; reordering whole pairs leaves the rest as is.
+//
+// `topOnly` drops every variant but the best. Jellyfin's Live TV probe lists the first (720p) variant
+// of the full master as an empty 0x0 / level -99 stream - ffprobe never gets data from it in time -
+// and its browser transcode request then echoes that level into a codec string hls.js rejects
+// (manifestIncompatibleCodecsError). A one-variant master probes cleanly, and in ~1s instead of ~11s.
+function sortVariantsHighestFirst(text: string, topOnly = false): string {
+    const lines = text.split(/\r?\n/);
+    const first = lines.findIndex((l) => l.startsWith('#EXT-X-STREAM-INF'));
+    if (first === -1) {
+        return text;
+    }
+    const variants: { bandwidth: number; lines: string[] }[] = [];
+    let i = first;
+    while (i < lines.length && lines[i].startsWith('#EXT-X-STREAM-INF')) {
+        const bandwidth = parseInt(/BANDWIDTH=(\d+)/.exec(lines[i])?.[1] ?? '0', 10);
+        variants.push({ bandwidth, lines: [lines[i], lines[i + 1]] });
+        i += 2;
+    }
+    variants.sort((a, b) => b.bandwidth - a.bandwidth);
+    const kept = topOnly ? variants.slice(0, 1) : variants;
+    return [...lines.slice(0, first), ...kept.flatMap((v) => v.lines), ...lines.slice(i)].join('\n');
 }
 
 function resolveReference(reference: string, baseUrl: string): string {
@@ -94,7 +131,14 @@ function buildPassthroughUrl(resolvedUrl: string, streamKey: string, sessionId?:
 // mode=stream&url= passthrough entry point that serves the references a rewritten playlist points
 // back at. `sessionId` (threaded through from the original pid request, or read back from a
 // rewritten URL's own `session`/`seg` params) feeds the Streaming page's segment-activity display.
-export async function proxyUrl(url: string, req: Request, res: Response, redirectsLeft = 5, sessionId?: string): Promise<void> {
+export async function proxyUrl(
+    url: string,
+    req: Request,
+    res: Response,
+    redirectsLeft = 5,
+    sessionId?: string,
+    highestVariantFirst = false
+): Promise<void> {
     const client = url.startsWith('https') ? https : http;
     const headers: Record<string, string> = {};
     if (req.headers.range) {
@@ -109,7 +153,7 @@ export async function proxyUrl(url: string, req: Request, res: Response, redirec
                 redirectsLeft > 0
             ) {
                 upstreamRes.resume();
-                proxyUrl(upstreamRes.headers.location, req, res, redirectsLeft - 1, sessionId).then(resolve, reject);
+                proxyUrl(upstreamRes.headers.location, req, res, redirectsLeft - 1, sessionId, highestVariantFirst).then(resolve, reject);
                 return;
             }
 
@@ -125,7 +169,9 @@ export async function proxyUrl(url: string, req: Request, res: Response, redirec
                             Buffer.concat(chunks).toString('utf8'),
                             url,
                             (req.query.streamkey as string) ?? '',
-                            sessionId
+                            sessionId,
+                            highestVariantFirst,
+                            liveTvManifestRegex.test((req.originalUrl ?? '').split('?')[0])
                         );
                         if (sessionId && segmentCount > 0) {
                             streamSessionService.setSegmentCount(sessionId, segmentCount);

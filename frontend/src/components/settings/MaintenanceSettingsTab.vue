@@ -4,14 +4,14 @@
         v-model="config.THUMBNAIL_RETENTION_DAYS"
         type-override="number"
         name="Thumbnail Cache Retention (Days)"
-        tooltip="Cached episode thumbnails not viewed for this many days are deleted. Runs automatically every night."
+        tooltip="Delete cached thumbnails unused for this many days (runs nightly)."
         :error="validationErrors.config?.THUMBNAIL_RETENTION_DAYS"
     />
     <TextInput
         v-model="config.STREAM_HISTORY_RETENTION_DAYS"
         type-override="number"
         name="Stream History Retention (Days)"
-        tooltip="Stream history entries older than this many days are deleted. Runs automatically every night."
+        tooltip="Delete stream history older than this many days (runs nightly)."
         :error="validationErrors.config?.STREAM_HISTORY_RETENTION_DAYS"
     />
 

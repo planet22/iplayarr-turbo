@@ -3,14 +3,19 @@
 </template>
 
 <script setup>
-import { computed, defineProps } from 'vue';
+import { computed, defineProps, ref, watch } from 'vue';
 
-const props = defineProps({ title: String, data: Object });
+const props = defineProps({
+    title: String,
+    data: Object,
+    // Turn off for charts that update live, where re-animating on every push looks like flashing.
+    animate: { type: Boolean, default: true },
+});
 
 const MAX_ITEMS = 5;
 
-const processedData = computed(() => {
-    const entries = Object.entries(props.data)
+const buildData = (data) => {
+    const entries = Object.entries(data)
         .sort((a, b) => b[1] - a[1]);
     const topItems = entries.slice(0, MAX_ITEMS);
     const otherSum = entries.slice(MAX_ITEMS).reduce((acc, [, val]) => acc + val, 0);
@@ -23,7 +28,17 @@ const processedData = computed(() => {
         labels: topItems.map(([label]) => label),
         series: topItems.map(([, val]) => val)
     };
-});
+};
+
+// Only rebuilt when the values actually change: a parent that hands over a fresh-but-equal object on
+// every update (e.g. a live socket push) must not make the chart redraw.
+const processedData = ref(buildData(props.data));
+watch(
+    () => JSON.stringify(props.data),
+    () => {
+        processedData.value = buildData(props.data);
+    }
+);
 
 const options = computed(() => {
     return {
@@ -50,7 +65,8 @@ const options = computed(() => {
             enabled: false
         },
         chart: {
-            background: 'transparent'
+            background: 'transparent',
+            animations: { enabled: props.animate }
         },
         legend: {
             position: 'right',

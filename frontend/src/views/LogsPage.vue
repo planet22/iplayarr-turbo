@@ -1,14 +1,15 @@
 <template>
-    <SettingsPageToolbar
-        :icons="['follow', 'filter']"
-        :follow-status="followlog"
-        :filter-enabled="filter != null"
-        :filter-options="availableFilters"
-        :selected-filter="selectedFilter"
-        @toggle-follow="toggleFollow"
-        @select-filter="selectFilter"
-    />
     <div class="inner-content">
+        <PageHeader title="Logs" />
+        <SettingsPageToolbar
+            :icons="['follow', 'filter']"
+            :follow-status="followlog"
+            :filter-enabled="filter != null"
+            :filter-options="availableFilters"
+            :selected-filter="selectedFilter"
+            @toggle-follow="toggleFollow"
+            @select-filter="selectFilter"
+        />
         <LogPanel :filter="filter" :follow="followlog" />
     </div>
 </template>
@@ -17,6 +18,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import LogPanel from '@/components/log/LogPanel.vue';
 

@@ -4,6 +4,7 @@ export enum AppType {
     PROWLARR = 'PROWLARR',
     SABNZBD = 'SABNZBD',
     NZBGET = 'NZBGET',
+    JELLYFIN = 'JELLYFIN',
     // LIDARR = 'LIDARR'
 }
 
@@ -24,6 +25,7 @@ export const appCategories: Record<AppType, number[]> = {
     [AppType.PROWLARR]: [5030, 5040, 2010, 2020, 2030, 2040, 2045, 2050, 2060],
     [AppType.SABNZBD]: [],
     [AppType.NZBGET]: [],
+    [AppType.JELLYFIN]: [],
 };
 
 export const appFeatures: Record<AppType, AppFeature[]> = {
@@ -49,4 +51,6 @@ export const appFeatures: Record<AppType, AppFeature[]> = {
     ],
     [AppType.SABNZBD]: [AppFeature.API_KEY, AppFeature.PRIORITY, AppFeature.LINK],
     [AppType.NZBGET]: [AppFeature.USERNAME_PASSWORD, AppFeature.PRIORITY, AppFeature.LINK],
+    // URL + API key + Test button only; used as a library source by the STRM Watchdog.
+    [AppType.JELLYFIN]: [AppFeature.API_KEY],
 };

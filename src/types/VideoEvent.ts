@@ -11,6 +11,15 @@ export enum VideoEventType {
     NZB_RELAY_FAILED = 'nzb_relay_failed',
     CANCELLED = 'cancelled',
     HISTORY_REMOVED = 'history_removed',
+    STRM_INVALID = 'strm_invalid',
+    STRM_RESTORED = 'strm_restored',
+    STRM_WEBHOOK_SENT = 'strm_webhook_sent',
+    STRM_WEBHOOK_FAILED = 'strm_webhook_failed',
+    STRM_UNMONITORED = 'strm_unmonitored',
+    STRM_SEARCH = 'strm_search',
+    STRM_ARR_FAILED = 'strm_arr_failed',
+    STRM_DELETED = 'strm_deleted',
+    STRM_DELETE_FAILED = 'strm_delete_failed',
 }
 
 export type VideoEventLevel = 'info' | 'warn' | 'error';

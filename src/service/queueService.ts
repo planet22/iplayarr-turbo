@@ -8,11 +8,14 @@ import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry, QueueLibraryMetadata } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
+import { isValidPid, sanitizeFileName } from '../utils/pathSafety';
 import configService from './configService';
 import historyService from './historyService';
 import socketService from './socketService';
 import StatisticsService from './stats/StatisticsService';
 import videoEventService from './videoEventService';
+
+export class InvalidQueueInputError extends Error {}
 
 let queue: QueueEntry[] = [];
 
@@ -30,6 +33,12 @@ const queueService = {
         // should fail safe into the shared directory, not the *arr-only one.
         source: QueueEntrySource = QueueEntrySource.MANUAL
     ): void => {
+        // pid and nzbName end up in directory and file names (and the pid in upstream URLs and
+        // process arguments), so they are checked at the one place everything enters the queue.
+        if (!isValidPid(pid)) {
+            throw new InvalidQueueInputError('Invalid programme id');
+        }
+        nzbName = sanitizeFileName(nzbName) || pid;
         const queueEntry: QueueEntry = {
             pid,
             status: QueueEntryStatus.QUEUED,
@@ -74,7 +83,13 @@ const queueService = {
             next.status = QueueEntryStatus.DOWNLOADING;
             next.details = { ...next.details, start: new Date() };
             try {
-                next.process = await downloadFacade.download(next.pid);
+                const process = await downloadFacade.download(next.pid);
+                if (queue.includes(next)) {
+                    next.process = process;
+                } else if (process?.pid) {
+                    // Cancelled while starting - cancelItem had no process to kill yet.
+                    spawn('kill', ['-9', String(process.pid)]);
+                }
             } catch (error) {
                 videoEventService.record(
                     VideoEventType.DOWNLOAD_FAILED,

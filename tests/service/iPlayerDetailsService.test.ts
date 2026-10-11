@@ -75,6 +75,19 @@ describe('iplayerDetailsService', () => {
         expect(result[0].firstBroadcast).toBe('2024-01-01');
     });
 
+    it('getMetadata remembers a 404 so the id is not re-fetched from BBC', async () => {
+        const notFound = { isAxiosError: true, response: { status: 404 } };
+        mockedAxios.isAxiosError.mockReturnValue(true);
+        mockedAxios.get.mockRejectedValue(notFound);
+        jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        await expect(iplayerDetailsService.getMetadata('bbc_two_england')).rejects.toBeDefined();
+        await expect(iplayerDetailsService.getMetadata('bbc_two_england')).rejects.toThrow('cached 404');
+
+        expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        iplayerDetailsService.notFound.clear();
+    });
+
     it('getMetadata returns data from axios', async () => {
         mockedAxios.get.mockResolvedValueOnce({ data: { programme: mockProgramme } });
         const result = await iplayerDetailsService.getMetadata('b1234567');

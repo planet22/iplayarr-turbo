@@ -23,6 +23,7 @@ import SubscriptionsPage from '@/views/SubscriptionsPage.vue';
 import SynonymsPage from '@/views/SynonymsPage.vue';
 import TilesPage from '@/views/TilesPage.vue';
 import VideoEventsPage from '@/views/VideoEventsPage.vue';
+import WatchdogPage from '@/views/WatchdogPage.vue';
 
 const routes = [
     { path: '/', redirect: '/browse' },
@@ -40,6 +41,7 @@ const routes = [
     { path: '/stats', component: StatisticsPage },
     { path: '/streaming', component: StreamingPage },
     { path: '/events', component: VideoEventsPage },
+    { path: '/watchdog', component: WatchdogPage },
     { path: '/nzb', component: NzbPage },
     { path: '/browse', component: DiscoverPage },
     { path: '/browse/channels', component: TilesPage, meta: { tiles: 'channels' } },

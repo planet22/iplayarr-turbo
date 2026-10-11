@@ -35,8 +35,7 @@
                 </div>
                 <div v-if="forgot" class="panel-body">
                     <div class="sign-in">{{loginMethod === 'form' ? 'FORGOT PASSWORD' : 'LOCKED OUT'}}</div>
-                    <p>A unique code has been printed into the logs, enter it below to reset the password to default{{ loginMethod === 'oidc' ? ' and disable OIDC' : ''}}</p>
-                    <pre>admin : password</pre>
+                    <p>A unique code has been printed into the logs, enter it below. A new random password is then printed into the logs{{ loginMethod === 'oidc' ? ' and OIDC is disabled' : ''}}</p>
                     <div class="form-group">
                         <input
                             v-model="forgotForm.key"

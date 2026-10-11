@@ -20,9 +20,13 @@
             v-model="config.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
             :advanced="true"
             name="Additional Download Parameters"
-            tooltip="Extra parameters to pass to get_iplayer for download"
+            :tooltip="paramsLocked ? lockedReason : 'Extra parameters to pass to get_iplayer for download'"
+            :disabled="paramsLocked"
             :error="validationErrors.config?.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
         />
+        <button v-if="paramsLocked" type="button" class="clickable resetOverride" @click="resetParams">
+            Clear saved value (use environment / default)
+        </button>
     </template>
 
     <InfoBar>
@@ -65,7 +69,7 @@ type="button" class="clickable" :disabled="updating.ytdlp || !toolVersions.ytdlp
 </template>
 
 <script setup>
-import { defineProps, inject, reactive } from 'vue';
+import { computed, defineProps, inject, onMounted, reactive, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 
 import SelectInput from '@/components/common/form/SelectInput.vue';
@@ -87,6 +91,26 @@ const showAdvanced = inject('settingsShowAdvanced');
 const toolVersions = inject('toolVersions');
 const refreshToolVersions = inject('refreshToolVersions');
 
+// Executable-related settings are locked while login is disabled (see SettingsGuard on the server).
+const lockedSettings = ref([]);
+const lockedReason = ref('');
+const paramsLocked = computed(() => lockedSettings.value.includes('ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS'));
+
+onMounted(async () => {
+    try {
+        const { data } = await ipFetch('json-api/config/lockedSettings');
+        lockedSettings.value = data.locked ?? [];
+        lockedReason.value = data.reason ?? '';
+    } catch {
+        // Server still enforces the lock; this only affects whether the field looks editable.
+    }
+});
+
+async function resetParams() {
+    const { data } = await ipFetch('json-api/config/executableOverride/ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', 'DELETE');
+    config.value.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS = data.value ?? '';
+}
+
 const updating = reactive({ getIplayer: false, ytdlp: false });
 const updatingKey = { GET_IPLAYER: 'getIplayer', YTDLP: 'ytdlp' };
 
@@ -104,6 +128,10 @@ async function update(tool) {
 </script>
 
 <style lang="less" scoped>
+.resetOverride {
+    margin: 0 0 1rem;
+}
+
 .toolVersionRow {
     display: flex;
     align-items: center;

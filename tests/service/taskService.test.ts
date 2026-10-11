@@ -5,9 +5,12 @@ import cronJobService from '../../src/service/cronJobService';
 import episodeCacheService from '../../src/service/episodeCacheService';
 import libraryCleanupService from '../../src/service/libraryCleanupService';
 import streamSessionService from '../../src/service/stream/streamSessionService';
+import strmWatchdogService from '../../src/service/strmWatchdogService';
 import subscriptionService from '../../src/service/subscriptionService';
 import TaskService from '../../src/service/taskService';
 import thumbnailCacheService from '../../src/service/thumbnailCacheService';
+
+jest.mock('../../src/service/strmWatchdogService', () => ({ run: jest.fn() }));
 
 jest.mock('../../src/service/cronJobService', () => ({
     defineTask: jest.fn(),
@@ -100,6 +103,7 @@ describe('TaskService', () => {
         expect(tasks['thumbnail-cleanup'].definition.cron).toBe('35 3 * * *');
         expect(tasks['stream-history-cleanup'].definition.cron).toBe('40 3 * * *');
         expect(tasks['library-cleanup'].definition.cron).toBe('45 3 * * *');
+        expect(tasks['strm-watchdog'].definition.cron).toBe('15 4 * * *');
 
         await tasks['subscriptions-check'].run();
         expect(subscriptionService.checkAll).toHaveBeenCalled();
@@ -112,5 +116,8 @@ describe('TaskService', () => {
 
         await tasks['library-cleanup'].run();
         expect(libraryCleanupService.cleanup).toHaveBeenCalled();
+
+        await tasks['strm-watchdog'].run();
+        expect(strmWatchdogService.run).toHaveBeenCalled();
     });
 });

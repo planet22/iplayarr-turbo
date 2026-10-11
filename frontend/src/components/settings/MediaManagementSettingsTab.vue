@@ -15,8 +15,14 @@
     <TextInput
         v-model="config.ARR_COMPLETE_DIR"
         name="*arr Complete Directory"
-        tooltip="Overrides Complete Directory for Sonarr/Radarr-queued TV only. Blank = Complete Directory for everything."
+        tooltip="Overrides Complete Directory for Sonarr/Radarr TV. Blank = Complete Directory."
         :error="validationErrors.config?.ARR_COMPLETE_DIR"
+    />
+    <TextInput
+        v-model="config.LIVE_STRM_DIR"
+        name="Live Channels Directory"
+        tooltip="Where subscribed live-channel .strm files go (point a Jellyfin library here). Blank = Complete Directory."
+        :error="validationErrors.config?.LIVE_STRM_DIR"
     />
     <SelectInput
         v-model="config.VIDEO_QUALITY"
@@ -42,14 +48,14 @@
     <SelectInput
         v-model="config.LIBRARY_FOLDER_STRUCTURE"
         name="Organize into Folder Structure?"
-        tooltip="Organizes completed downloads into Jellyfin-style Show/Season (or Movie) folders instead of one flat folder."
+        tooltip="Organise completed downloads into Show/Season (or Movie) folders."
         :error="validationErrors.config?.LIBRARY_FOLDER_STRUCTURE"
         :options="trueOrFalse"
     />
     <SelectInput
         v-model="config.WRITE_NFO_STRM"
         name="Write .nfo Metadata Files?"
-        tooltip="Writes a Jellyfin-compatible .nfo file alongside each completed item. Can be scoped to Sonarr/Radarr or manual downloads only."
+        tooltip="Write a Jellyfin-compatible .nfo beside each completed item."
         :error="validationErrors.config?.WRITE_NFO_STRM"
         :options="nfoWriteModes"
     />
@@ -57,7 +63,7 @@
         v-if="config.WRITE_NFO_STRM !== 'none'"
         v-model="config.WRITE_STRMTOOL_JSON"
         name="Write .strmtool.json Files?"
-        tooltip="Writes a .strmtool.json sidecar for the StrmTool Jellyfin plugin, so it can skip probing .strm files. Codec/resolution are informed guesses, not measurements."
+        tooltip="Write a .strmtool.json sidecar so the StrmTool Jellyfin plugin can skip probing .strm files."
         :error="validationErrors.config?.WRITE_STRMTOOL_JSON"
         :options="trueOrFalse"
     />

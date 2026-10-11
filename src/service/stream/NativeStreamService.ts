@@ -342,6 +342,13 @@ class NativeStreamService implements AbstractStreamService {
         return hrefs;
     }
 
+    // Cheap "is this programme still playable" check for the STRM Watchdog: resolves the vpid and
+    // the master playlist URL (mediaselector) exactly like a real stream would, without fetching any
+    // media. Throws if BBC no longer serves it.
+    async checkAvailable(pid: string): Promise<void> {
+        await this.#resolveMasterPlaylistUrl(await this.#resolveVpid(pid));
+    }
+
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
         const url = await this.#resolveUrl(pid, sessionId);
         await proxyUrl(url, req, res, 5, sessionId);

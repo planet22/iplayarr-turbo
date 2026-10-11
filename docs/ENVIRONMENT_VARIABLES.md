@@ -26,6 +26,7 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | `SCHEDULE_FULL_REFRESH` | `false` | No | Re-fetch every day in the window instead of caching passed days. |
 | `RSS_FEED_HOURS` | `48` | No | Lookback window for the RSS feed endpoint. |
 | `NATIVE_SEARCH` | `true` | No | Use BBC's native search API instead of `get_iplayer --search`. |
+| `NATIVE_SEARCH_ENGINE` | `V1` | No | `V1` (stable) or `V2` (experimental: concurrent lookups, retries); only used when `NATIVE_SEARCH` is on. |
 | `ARCHIVE_ENABLED` | `false` | No | Keep cancelled/removed queue+history items as archive records. |
 | `AUTH_TYPE` | `form` | No | `form` / `oidc` / `none`. |
 | `AUTH_USERNAME` | `admin` | No | Login username (`form` auth). |
@@ -44,6 +45,22 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | `STREAM_NATIVE_ADAPTIVE` | `false` | No | Adaptive bitrate for native streaming. |
 | `STREAM_NATIVE_HQ_PROBE` | `false` | No | Verify real connection quality before playing. |
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | No | 1080p unlock trick for native streaming. |
+| `LIVE_STRM_DIR` | _(unset)_ | No | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR`. |
+| `LIVE_TV_ENABLED` | `false` | No | Serve the live channels as an M3U tuner + XMLTV guide for Jellyfin Live TV. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
+| `LIVE_TV_EPG_OFFSET` | `0` | No | Minutes to shift the Live TV guide, on top of the server-timezone times. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
+| `LIVE_TV_LOGO_SHAPE` | `landscape` | No | Live TV channel logo shape: `landscape` (16:9) or `square`. |
+| `LIVE_TV_GUIDE_CATEGORIES` | `true` | No | Tag Live TV guide programmes with BBC categories (Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
+| `LIVE_TV_GUIDE_FLAGS` | `true` | No | Tag Live TV guide programmes as live / new / repeat. |
+| `LIVE_TV_GUIDE_HD` | `true` | No | Mark Live TV guide programmes as HD. |
+| `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | No | Comma-separated Jellyfin app ids (from the Apps page) asked to refresh their guide when the Live TV channel list changes. Normally set by ticking servers in Settings. |
+| `STRM_WATCHDOG_ENABLED` | `false` | No | Daily check that `.strm` links still resolve. See [WATCHDOG.md](WATCHDOG.md). |
+| `STRM_WATCHDOG_SOURCES` | `history` | No | Comma-separated: `subscribed`, `history`, `app:<id>`. |
+| `STRM_WATCHDOG_ACTION` | `notify` | No | `notify` or `delete` for an expired link. |
+| `STRM_WATCHDOG_PATH_MAP` | _(unset)_ | No | Sonarr/Jellyfin path to in-container path, e.g. `/tv=/library/tv` (`;` separated). |
+| `STRM_WATCHDOG_ARR_ACTION` | `none` | No | `none` / `unmonitor` / `search` in Sonarr/Radarr. |
+| `STRM_WATCHDOG_CONCURRENCY` | `4` | No | Parallel checks, 1-10. |
+| `STRM_WATCHDOG_FAIL_THRESHOLD` | `10` | No | Links that must validate before any action is taken; also the consecutive-failure outage cutoff. |
+| `STRM_WATCHDOG_WEBHOOK_URL` | _(unset)_ | No | JSON `POST` when a link first becomes invalid. |
 | `THUMBNAIL_CACHE_DIR` | temp folder | No | Where cached BBC thumbnails are stored. |
 | `THUMBNAIL_RETENTION_DAYS` | `30` | No | Thumbnail cache cleanup window. |
 | `STREAM_HISTORY_RETENTION_DAYS` | `30` | No | Native stream history cleanup window. |
@@ -57,7 +74,11 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | --- | --- | --- | --- |
 | `PORT` | `4404` | No | HTTP port, read directly from `process.env` before the config store is available. |
 | `DEBUG` | `false` | No | Verbose request logging + permissive CORS for local frontend-dev-server use. |
-| `SESSION_SECRET` | `default_secret_key` | No, but should be changed in production | Express session signing secret (`src/routes/AuthRoute.ts`). |
+| `SECRETS_KEY` | _(unset)_ | No | Key used to encrypt stored credentials (app API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) in Redis. If unset a key file is generated. Keep it with your Redis backups; see [SECURITY.md](SECURITY.md). |
+| `SECRETS_KEY_FILE` | `<CACHE_LOCATION>/secrets.key` | No | Where the generated encryption key file is stored when `SECRETS_KEY` is not set. |
+| `SESSION_SECRET` | _(generated, kept in Redis)_ | No | Secret used to sign login cookies. |
+| `SESSION_COOKIE_SECURE` | `false` | No | Set `true` when the UI is only reached over HTTPS to mark the login cookie `Secure`. |
+| `ALLOW_EMBEDDING` | `false` | No | Set `true` to allow the UI to be framed by other sites (dashboards). |
 | `LOG_DIR` | `/logs` (Docker image) | No | Directory for rotated log files. |
 | `NODE_ENV` | _(unset)_ | No | Set to `test` by the test runner to suppress file logging. |
 | `REDIS_HOST` | `127.0.0.1` | No | External Redis hostname; if unset the bundled Redis starts instead. |

@@ -49,6 +49,11 @@ export interface BrowseSlot {
     item: BrowseItem;
     start: string;
     end: string;
+    // Broadcast facts only the schedule carries; undefined when false/unknown.
+    repeat?: boolean;
+    live?: boolean;
+    childrens?: boolean;
+    categories?: string[];
 }
 
 export interface BrowseNowNext {
@@ -69,6 +74,8 @@ export interface BrowseChannel {
     masterBrand?: string;
     // json-api/browse/channel-logo/<masterBrand>.svg (fetched from iPlayer and cached server-side).
     logo?: string;
+    // True when the channel can be watched live through LiveStreamService (see LiveChannels.ts).
+    live?: boolean;
 }
 
 export interface BrowseSeason {

@@ -8,19 +8,15 @@
         </td>
         <td>
             <img
-                v-if="details?.thumbnail"
+                v-if="getProgrammeThumbnailUrl(item.pid)"
                 class="thumbnail clickable"
-                :src="getThumbnailUrl(details.thumbnail)"
+                :src="getProgrammeThumbnailUrl(item.pid)"
                 @click="openInfo(item)"
                 @error="hideBrokenImage"
             />
-            <font-awesome-icon
-                v-else
-                class="thumbnail-placeholder clickable"
-                :icon="['fas', item.type == 'TV' ? 'tv' : 'film']"
-                @click="openInfo(item)"
-                @error="hideBrokenImage"
-            />
+            <div v-else class="thumbnail-placeholder clickable" @click="openInfo(item)">
+                    <font-awesome-icon :icon="['fas', item.type == 'TV' ? 'tv' : 'film']" />
+                </div>
         </td>
         <td class="text" data-title="Filename">
             <a v-if="item.status != 'Forwarded'" class="clickable" @click="openInfo(item)">
@@ -82,7 +78,7 @@ import { useModal } from 'vue-final-modal';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
-import { formatDate, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { formatDate, formatStorageSize, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
 import ProgressBar from '../common/ProgressBar.vue';
@@ -181,11 +177,6 @@ const getDeleteIcon = ({ status }) => {
     display: block;
 }
 
-.thumbnail-placeholder {
-    width: 64px;
-    text-align: center;
-    color: @subtle-text-color;
-}
 
 .subtle {
     font-size: 12px;

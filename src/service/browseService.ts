@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { BrowseChannels, BrowseHomeRails } from '../constants/BrowseChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
+import { isLiveChannel } from '../constants/LiveChannels';
 import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
@@ -83,6 +84,20 @@ export function toBrowseItem(element: any): BrowseItem | undefined {
     };
 }
 
+export function toBrowseSlot(broadcast: any): BrowseSlot | undefined {
+    const item = toBrowseItem(broadcast?.episode);
+    if (!item || !broadcast.scheduled_start || !broadcast.scheduled_end) return undefined;
+    return {
+        item,
+        start: broadcast.scheduled_start,
+        end: broadcast.scheduled_end,
+        repeat: broadcast.repeat || undefined,
+        live: broadcast.episode.live || undefined,
+        childrens: broadcast.episode.childrens || undefined,
+        categories: Array.isArray(broadcast.episode.categories) ? broadcast.episode.categories : undefined,
+    };
+}
+
 export function toBrowseItems(elements: any[]): BrowseItem[] {
     const seen = new Set<string>();
     const items: BrowseItem[] = [];
@@ -99,6 +114,7 @@ export function toBrowseItems(elements: any[]): BrowseItem[] {
 const withLogo = (channel: BrowseChannel): BrowseChannel => ({
     ...channel,
     logo: channel.masterBrand ? `json-api/browse/channel-logo/${channel.masterBrand}.svg` : undefined,
+    live: isLiveChannel(channel.id),
 });
 
 const PROGRAMME_PAGE_SIZE = 30;
@@ -253,10 +269,8 @@ class BrowseService {
             const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
             const data = await this.#ibl(`channels/${encodeURIComponent(channelId)}/schedule/${date}`);
             for (const broadcast of extractElements(data)) {
-                const item = toBrowseItem(broadcast.episode);
-                if (item && broadcast.scheduled_start && broadcast.scheduled_end) {
-                    slots.push({ item, start: broadcast.scheduled_start, end: broadcast.scheduled_end });
-                }
+                const slot = toBrowseSlot(broadcast);
+                if (slot) slots.push(slot);
             }
             const found = this.#pickNowNext(slots, at);
             if (found.now && found.next) return found;
@@ -281,10 +295,8 @@ class BrowseService {
                 const slots: BrowseSlot[] = [];
                 const data = await this.#ibl(`channels/${encodeURIComponent(channel.id)}/schedule/${day}`);
                 for (const broadcast of extractElements(data)) {
-                    const item = toBrowseItem(broadcast.episode);
-                    if (item && broadcast.scheduled_start && broadcast.scheduled_end) {
-                        slots.push({ item, start: broadcast.scheduled_start, end: broadcast.scheduled_end });
-                    }
+                    const slot = toBrowseSlot(broadcast);
+                    if (slot) slots.push(slot);
                 }
                 slots.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
                 return { channel: withLogo(channel), slots };

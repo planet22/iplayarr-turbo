@@ -1,8 +1,4 @@
 <template>
-    <div v-if="showFilters" class="tableToolbar">
-        <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter queue..." />
-        <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
-    </div>
     <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
     <table class="queueTable responsive-table" summary="Hed">
         <colgroup>
@@ -65,13 +61,12 @@
 </template>
 
 <script setup>
-import { computed, defineExpose, defineProps, onMounted, reactive, ref, watch } from 'vue';
+import { computed, defineExpose, defineProps, onMounted, ref, watch } from 'vue';
 
-import { ipFetch } from '@/lib/ipFetch';
+import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 
-import DateRangeFilter from '../common/DateRangeFilter.vue';
 import CheckInput from '../common/form/CheckInput.vue';
 import SortIcon from '../common/SortIcon.vue';
 import TablePagination from '../common/TablePagination.vue';
@@ -141,34 +136,31 @@ const {
     page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
 } = usePagination(sortedHistory);
 
-const details = reactive({});
+
 
 function detailsFor(pid) {
     return details[pid];
 }
 
-async function loadDetails(pid) {
-    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
-        return;
-    }
-    details[pid] = null;
-    try {
-        const response = await ipFetch(`json-api/details?pid=${pid}`);
-        details[pid] = response.ok ? response.data : null;
-    } catch {
-        details[pid] = null;
-    }
-}
-
 function loadMissingDetails() {
-    [...props.queue, ...props.history]
+    // Only what is on screen - history can run to hundreds of rows but one page is shown at a time.
+    [...props.queue, ...pagedHistory.value]
         .map(({ pid }) => pid)
         .filter(Boolean)
         .forEach(loadDetails);
 }
 
-onMounted(loadMissingDetails);
-watch([() => props.queue, () => props.history], loadMissingDetails);
+// Once the visible page is requested, quietly warm the rest of the history in the background.
+function prefetchRest() {
+    prefetchThumbnails(props.history.map(({ pid }) => pid));
+}
+
+onMounted(() => {
+    loadMissingDetails();
+    prefetchRest();
+});
+watch([() => props.queue, pagedHistory], loadMissingDetails);
+watch(() => props.history, prefetchRest);
 
 const allChecked = ref(false);
 
@@ -185,6 +177,9 @@ const selectedQueue = computed(() => {
 
 defineExpose({
     showFilters,
+    filterText,
+    dateFrom,
+    dateTo,
     filtersActive,
     selectedHistory,
     selectedQueue,

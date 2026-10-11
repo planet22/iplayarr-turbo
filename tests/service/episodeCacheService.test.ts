@@ -106,6 +106,45 @@ describe('episodeCacheService', () => {
         expect(final.length).toBe(0);
     });
 
+    describe('cached episodes follow their definition', () => {
+        const url = 'https://www.bbc.co.uk/programmes/abcd';
+        const cachedCount = async () => (await episodeCacheService.searchEpisodeCache('test')).length;
+
+        beforeEach(async () => {
+            for (const { id } of await episodeCacheService.getCachedSeries()) {
+                await episodeCacheService.removeCachedSeries(id);
+            }
+            await episodeCacheService.addCachedSeries(url, 'My Name For It');
+            await episodeCacheService.cacheEpisodesForUrl(url);
+        });
+
+        it('removes the cached episodes when the definition is deleted', async () => {
+            expect(await cachedCount()).toBeGreaterThan(0);
+            const [{ id }] = await episodeCacheService.getCachedSeries();
+
+            await episodeCacheService.removeCachedSeries(id);
+
+            expect(await cachedCount()).toBe(0);
+        });
+
+        it('keeps the cached episodes when the definition is only renamed', async () => {
+            const [series] = await episodeCacheService.getCachedSeries();
+
+            await episodeCacheService.updateCachedSeries({ ...series, name: 'Renamed' });
+
+            expect(await cachedCount()).toBeGreaterThan(0);
+            expect((await episodeCacheService.getCachedSeries()).map(({ name }) => name)).toEqual(['Renamed']);
+        });
+
+        it('drops the cached episodes when the definition URL changes', async () => {
+            const [series] = await episodeCacheService.getCachedSeries();
+
+            await episodeCacheService.updateCachedSeries({ ...series, url: 'https://www.bbc.co.uk/programmes/zzzz' });
+
+            expect(await cachedCount()).toBe(0);
+        });
+    });
+
     it('should recache all series', async () => {
         await episodeCacheService.addCachedSeries('url', 'Test Show');
         const result = await episodeCacheService.recacheAllSeries();

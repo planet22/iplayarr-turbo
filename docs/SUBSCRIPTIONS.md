@@ -25,12 +25,28 @@ The third choice starts the subscription with *nothing* seen, so the first check
 - It can be a lot of data (or a lot of `.strm` files, in `strm` mode). The dialog says how many episodes it will queue. If you pick it by mistake, remove the items from the Queue and Unsubscribe.
 - Only the *first* check is special: later checks behave as normal, and a second check cannot start while the first is still working through the list.
 
+### Sonarr/Radarr only
+
+The subscribe dialog also offers **Sonarr/Radarr only**: the show is recorded but iPlayarr never checks or queues anything for it, leaving downloads to Sonarr/Radarr. It only makes sense together with a Sonarr/Radarr link (below).
+
+## Linking to Sonarr/Radarr
+
+A subscription can be added to a Sonarr or Radarr library from the Programme and Subscriptions pages (needs the app set up on the Apps page).
+
+- A poster-card match dialog looks the show up in the app (editable search, retry if the lookup fails) and lets you pick the **root folder** and **quality profile**.
+- The subscription then shows the app-name chip; press it again to unlink. Unsubscribing a linked show offers to **remove it from Sonarr/Radarr or keep it**.
+- Only entries iPlayarr itself added can be removed from Sonarr/Radarr, and their files are always kept.
+
 ## Subscriptions page (`/subscriptions`)
 
 Lists every subscription with its artwork, channel, when it was last checked, and when and how many episodes were last downloaded. A red **Last check failed** tag means the last check hit an error (hover it for the message); the next scheduled check tries again.
 
 - **Check now** (per show) and **Check all now** run the same check as the schedule, and report how many episodes were queued.
 - **Unsubscribe** (trash) stops the subscription. Episodes already downloaded are not touched.
+
+## Live channels
+
+The Subscriptions page also has a **Live channels** section listing the BBC live channels you added to your media library (with logos and a remove button). These are separate from programme subscriptions: there is nothing to check or download, only a `.strm` file kept in `LIVE_STRM_DIR`. See [STREAMING.md](STREAMING.md#live-channels).
 
 ## How it works
 
@@ -70,6 +86,18 @@ Subscriptions live in Redis under the `subscriptions` key (see [REDIS.md](REDIS.
 | --- | --- |
 | `GET /` | List subscriptions |
 | `POST /` with `{ "pid": "...", "downloadLatest": false, "downloadAll": false }` | Subscribe (an episode or show pid; returns the existing subscription if there is one). `downloadAll` wins over `downloadLatest`, and both are only honoured when exactly `true`. |
+| `POST /` with `"arrOnly": true` | Subscribe without iPlayarr checking or queuing (Sonarr/Radarr handles downloads) |
 | `POST /check` | Check every subscription now |
 | `POST /:id/check` | Check one subscription now |
 | `DELETE /:id` | Unsubscribe |
+
+Further endpoints:
+
+| Endpoint | Does |
+| --- | --- |
+| `GET /json-api/subscriptions/arr/apps` | Sonarr/Radarr apps available to link |
+| `GET /json-api/subscriptions/arr/apps/:appId/lookup` | Search the app for a matching show |
+| `GET /json-api/subscriptions/arr/apps/:appId/options` | Root folders and quality profiles |
+| `POST /json-api/subscriptions/arr/:id` | Link (add to Sonarr/Radarr) |
+| `DELETE /json-api/subscriptions/arr/:id` | Unlink (optionally removing what iPlayarr added) |
+| `GET/POST/DELETE /json-api/subscriptions/live` | List, add (`POST /all` for every channel) and remove (`/:channelId`) live channels |

@@ -26,6 +26,12 @@ export interface ArrLibraryItem {
     existingId?: number;
 }
 
+// An imported library file plus the Sonarr episode ids / Radarr movie id it belongs to.
+export interface ArrFileRef {
+    path: string;
+    ids: number[];
+}
+
 export interface ArrRootFolder {
     path: string;
     freeSpace?: number;
@@ -152,6 +158,65 @@ class ArrLibraryService {
         try {
             const { data } = await axios.post(this.#url(app, this.#resource(app)), body, this.#headers(app));
             return { id: data.id, created: true };
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
+    // Every imported file path Sonarr/Radarr knows about, for the STRM Watchdog (which filters to
+    // .strm itself). Sonarr has no "all episode files" endpoint, hence the per-series fan-out;
+    // Radarr's movie resource embeds its movieFile.
+    async getFilePaths(app: App): Promise<ArrFileRef[]> {
+        try {
+            const { data } = await axios.get(this.#url(app, this.#resource(app)), this.#headers(app));
+            const items: any[] = Array.isArray(data) ? data : [];
+            if (!this.#isSonarr(app)) {
+                return items
+                    .filter((movie) => movie.movieFile?.path)
+                    .map((movie) => ({ path: movie.movieFile.path, ids: [movie.id] }));
+            }
+            const refs: ArrFileRef[] = [];
+            for (const series of items) {
+                const [{ data: files }, { data: episodes }] = await Promise.all([
+                    axios.get(this.#url(app, `episodefile?seriesId=${series.id}`), this.#headers(app)),
+                    axios.get(this.#url(app, `episode?seriesId=${series.id}`), this.#headers(app)),
+                ]);
+                for (const file of Array.isArray(files) ? files : []) {
+                    if (!file.path) continue;
+                    const ids = (Array.isArray(episodes) ? episodes : [])
+                        .filter((episode) => episode.episodeFileId === file.id)
+                        .map((episode) => episode.id);
+                    refs.push({ path: file.path, ids });
+                }
+            }
+            return refs;
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
+    // Stops Sonarr/Radarr from wanting the episode(s)/movie again (ids from ArrFileRef).
+    async unmonitor(app: App, ids: number[]): Promise<void> {
+        if (!ids.length) return;
+        try {
+            if (this.#isSonarr(app)) {
+                await axios.put(this.#url(app, 'episode/monitor'), { episodeIds: ids, monitored: false }, this.#headers(app));
+            } else {
+                await axios.put(this.#url(app, 'movie/editor'), { movieIds: ids, monitored: false }, this.#headers(app));
+            }
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
+    // Asks Sonarr/Radarr to search for the episode(s)/movie again, e.g. for a replacement release.
+    async search(app: App, ids: number[]): Promise<void> {
+        if (!ids.length) return;
+        try {
+            const body = this.#isSonarr(app)
+                ? { name: 'EpisodeSearch', episodeIds: ids }
+                : { name: 'MoviesSearch', movieIds: ids };
+            await axios.post(this.#url(app, 'command'), body, this.#headers(app));
         } catch (error) {
             throw new Error(extractArrErrorMessage(error));
         }

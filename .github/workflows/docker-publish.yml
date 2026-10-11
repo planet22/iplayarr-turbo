@@ -30,7 +30,13 @@ jobs:
 
             - name: Extract Git tag
               id: extract_tag
-              run: echo "git_tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+              run: |
+                  # Releases use their tag; a manual run (workflow_dispatch) has no tag, so use branch-sha.
+                  if [ "${{ github.event_name }}" = "release" ]; then
+                      echo "git_tag=${{ github.event.release.tag_name }}" >> $GITHUB_ENV
+                  else
+                      echo "git_tag=${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}" >> $GITHUB_ENV
+                  fi
 
             - name: Write version to JSON
               run: |
@@ -51,6 +57,11 @@ jobs:
                   TAGS="ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:${{ env.git_tag }}"
                   if [ "${{ github.event.release.target_commitish }}" = "main" ]; then
                       TAGS="$TAGS"$'\n'"ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:latest"
+                  fi
+                  # :dev-latest tracks the newest build from the dev branch (a prerelease targeting
+                  # dev, or a manual run of this workflow on dev).
+                  if [ "${{ github.event.release.target_commitish }}" = "dev" ] || [ "${{ github.event_name }}-${{ github.ref_name }}" = "workflow_dispatch-dev" ]; then
+                      TAGS="$TAGS"$'\n'"ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:dev-latest"
                   fi
                   {
                       echo "list<<EOF"

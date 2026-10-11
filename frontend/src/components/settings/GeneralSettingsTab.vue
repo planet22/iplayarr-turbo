@@ -18,9 +18,17 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="config.NATIVE_SEARCH == 'true'"
+        v-model="config.NATIVE_SEARCH_ENGINE"
+        name="Native Search Engine"
+        tooltip="1.0 is stable. 2.0 (experimental) fetches in parallel and retries failed lookups."
+        :error="validationErrors.config?.NATIVE_SEARCH_ENGINE"
+        :options="nativeSearchEngines"
+    />
+    <SelectInput
         v-model="pillColorsEnabled"
         name="Colour Channel Pills by Logo"
-        tooltip="Colours channel pills using each channel's BBC logo. Applies instantly, not saved with this page."
+        tooltip="Colour channel pills from each BBC logo. Applies instantly."
         :options="trueOrFalse"
     />
 
@@ -44,7 +52,7 @@
             v-model="config.SCHEDULE_FULL_REFRESH"
             :advanced="true"
             name="Full Schedule Refresh"
-            tooltip="Off (default) only re-fetches today's schedule, reusing cached past days. Turn on to always re-fetch everything."
+            tooltip="Off re-fetches only today's schedule. On re-fetches everything."
             :error="validationErrors.config?.SCHEDULE_FULL_REFRESH"
             :options="trueOrFalse"
         />
@@ -64,6 +72,11 @@ defineProps({
         required: true,
     },
 });
+
+const nativeSearchEngines = [
+    { key: 'V1', value: 'Native 1.0 (stable)' },
+    { key: 'V2', value: 'Native 2.0 (experimental)' },
+];
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');

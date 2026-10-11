@@ -13,7 +13,7 @@ class GetIplayerScheduleService implements AbstractScheduleService {
 
         //Refresh the cache
         loggingService.debug(`Executing get_iplayer with args: ${[...args].join(' ')} --cache-rebuild`);
-        const refreshService = spawn(exec as string, [...args, '--cache-rebuild'], { shell: true });
+        const refreshService = spawn(exec as string, [...args, '--cache-rebuild']);
 
         refreshService.stdout.on('data', (data) => {
             loggingService.debug(data.toString());

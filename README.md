@@ -6,13 +6,42 @@ iPlayarr Turbo is a companion tool for **Sonarr** and **Radarr**, making it easy
 ![Test Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/test.yml?logo=github&label=tests)
 <!--- istanbul-badges-readme:start --->
 
-![Statements](https://img.shields.io/badge/statements-93.34%25-brightgreen.svg?style=flat)
-![Branches](https://img.shields.io/badge/branches-83.95%25-yellow.svg?style=flat)
-![Functions](https://img.shields.io/badge/functions-93.14%25-brightgreen.svg?style=flat)
-![Lines](https://img.shields.io/badge/lines-93.63%25-brightgreen.svg?style=flat)
+![Statements](https://img.shields.io/badge/statements-93.15%25-brightgreen.svg?style=flat)
+![Branches](https://img.shields.io/badge/branches-82.73%25-yellow.svg?style=flat)
+![Functions](https://img.shields.io/badge/functions-93.01%25-brightgreen.svg?style=flat)
+![Lines](https://img.shields.io/badge/lines-93.51%25-brightgreen.svg?style=flat)
 <!--- istanbul-badges-readme:end --->
 
 > **This is iPlayarr Turbo**, a fork of upstream iPlayarr (based on v0.11.6) with a modernized Docker build and dependency stack — see [TURBO.md](TURBO.md) for everything this fork changes on top of what's described below.
+
+## 🔐 First login and upgrading (read this first)
+
+**New install:** there is **no default password**. On first start iPlayarr generates a random one for the user `admin` and prints it **once** in the container log:
+
+```bash
+docker logs iplayarr 2>&1 | grep "Web UI login"
+# Web UI login -> username: admin  password: Xk3...   (change it in Settings)
+```
+
+Log in with that, then set your own under **Settings → Authentication**. It is never shown again or sent over HTTP; if you lose it, use the [password reset](docs/AUTHENTICATION.md#forgotten-password-reset).
+
+**Upgrading from an older version — do I have to change my password?**
+
+| Your situation | What happens on upgrade |
+| --- | --- |
+| You **changed** the password from the old default (`admin` / `password`) | Nothing. Your password is kept. |
+| You **never changed it** (still `admin` / `password`) | The old default is retired. A new random password is generated and printed once in the container log (same `Web UI login` line). Log in with that. |
+| `AUTH_TYPE=none` (no login) | No login to change. The password is still rotated in the background for the day you switch back to `form`, and a warning is logged that the UI is open to everyone. |
+| `AUTH_TYPE=oidc` | Not affected. |
+
+Other things you will notice after upgrading (details in [docs/SECURITY.md](docs/SECURITY.md)):
+
+- Everyone is signed out once (the login-cookie secret is now generated instead of a built-in default).
+- Your stored credentials (Sonarr/Radarr/Jellyfin API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) are **encrypted in Redis** with a key kept outside Redis — `secrets.key` in your `/data` (cache) volume, or `SECRETS_KEY` if you set it. **Back that key up with your Redis data.** Without it, stored keys can't be read after a restore.
+- The Apps and Settings pages show saved keys/passwords as `********`; leave them as they are to keep the saved value.
+- After 10 wrong logins from one address you are locked out for 15 minutes.
+- The UI can't be embedded in other sites by default; set `ALLOW_EMBEDDING=true` if you embed it in a dashboard.
+- With login disabled (`AUTH_TYPE=none`) the executable-related settings (`GET_IPLAYER_EXEC`, `YTDLP_EXEC`, additional download parameters) can't be changed from the UI; set them as environment variables.
 
 ## 📚 Further documentation
 
@@ -20,13 +49,15 @@ This README covers the basics. For more detail, see `docs/`:
 
 - [CONFIG.md](docs/CONFIG.md) / [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) — full settings reference
 - [INSTALLATION.md](docs/INSTALLATION.md) — Docker deployment, volumes, PUID/PGID, updating
-- [AUTHENTICATION.md](docs/AUTHENTICATION.md) — auth types, password reset, OIDC
+- [AUTHENTICATION.md](docs/AUTHENTICATION.md) — auth types, initial password, upgrading, password reset, OIDC
+- [SECURITY.md](docs/SECURITY.md) — security review, what was hardened, credential encryption, residual risks
 - [REDIS.md](docs/REDIS.md) — what's stored in Redis, backup/restore
 - [SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) — how the dual-protocol trick works, troubleshooting a failed Test
 - [STREAMING.md](docs/STREAMING.md) and [LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) — `.strm` mode and Jellyfin-style library layout
 - [GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md) — from a running container to watching and downloading BBC programmes
 - [BROWSE.md](docs/BROWSE.md) — Discover, Channels, Categories, A to Z, type-ahead search
-- [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show
+- [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show, link shows to Sonarr/Radarr, live channels
+- [WATCHDOG.md](docs/WATCHDOG.md) — daily check that `.strm` links still resolve on BBC
 - [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common issues
 - [DEVELOPMENT.md](docs/DEVELOPMENT.md) — contributor setup, testing, linting
@@ -64,6 +95,7 @@ iPlayer offers a wide range of high-quality content, but integrating it with Son
 - Presenting as a SABnzbd-compatible download client, allowing automatic downloads and post-processing
 - Handling the full download lifecycle, from fetching content with get_iplayer to organizing completed files
 - Streaming content on demand to Jellyfin/Plex/Emby via small `.strm` pointer files, instead of pre-downloading everything
+- Watching BBC live channels, in the browser or as `.strm` entries in your media library, and a Watchdog that flags expired `.strm` links
 - Works standalone too - Browse/Discover, Channels, Categories, A to Z, search, and Subscriptions are all usable from the web UI without Sonarr/Radarr at all
 
 Unlike torrents and Usenet, iPlayarr Turbo operates in a less legally ambiguous space by only downloading content that is freely available for streaming.
@@ -156,6 +188,7 @@ There's a few more optional settings too:
 | HIDE_DONATE                    | If you don't like the Kofi donate links you can hide them                                                                                                                                                                                                                                                                                                                                  |
 | PUID                           | Host User ID for file permissions                                                                                                                                                                                                                                                                                                                                                          |
 | PGID                           | Host Group ID for file permissions                                                                                                                                                                                                                                                                                                                                                         |
+| NATIVE_SEARCH_ENGINE           | `V1` (stable, default) or `V2` (experimental: concurrent lookups and retries). Only used when NATIVE_SEARCH is true |
 | NATIVE_SEARCH                  | Search BBC's own search API directly instead of shelling out to get_iplayer. Faster, and the default. Defaults to true                                                                                                                                                                                                                                                                     |
 | ARCHIVE_ENABLED                | Keep a record of cancelled/removed downloads instead of discarding them outright. Defaults to false                                                                                                                                                                                                                                                                                        |
 | OUTPUT_FORMAT                  | Output container format passed to get_iplayer (e.g. mp4). Defaults to mp4                                                                                                                                                                                                                                                                                                                  |
@@ -174,16 +207,20 @@ There's a few more optional settings too:
 | THUMBNAIL_CACHE_DIR            | Where cached BBC episode thumbnails are stored                                                                                                                                                                                                                                                                                                                                             |
 | THUMBNAIL_RETENTION_DAYS       | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                                      |
 | STREAM_HISTORY_RETENTION_DAYS  | How many days to keep native streaming session history before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                              |
+| LIVE_STRM_DIR                  | Where `.strm` files for live channels added to the library are written. Blank uses COMPLETE_DIR. See [docs/STREAMING.md](docs/STREAMING.md#live-channels) |
+| LIVE_TV_ENABLED                | Serve BBC live channels as an M3U tuner and XMLTV guide for Jellyfin Live TV. Defaults to false. See [docs/STREAMING.md](docs/STREAMING.md#jellyfin-live-tv-tuner--guide) |
+| LIVE_TV_EPG_OFFSET             | Minutes to shift the Jellyfin Live TV guide (default 0). Guide times are sent in the server's timezone. See [docs/STREAMING.md](docs/STREAMING.md#jellyfin-live-tv-tuner--guide) |
+| LIVE_TV_LOGO_SHAPE             | Live TV channel logo shape, `landscape` (16:9, default) or `square` |
+| LIVE_TV_GUIDE_CATEGORIES       | Tag Live TV guide programmes with BBC categories for Jellyfin's colours and filters. Defaults to true |
+| LIVE_TV_GUIDE_FLAGS            | Tag Live TV guide programmes as live / new / repeat. Defaults to true |
+| LIVE_TV_GUIDE_HD               | Mark Live TV guide programmes as HD. Defaults to true |
+| STRM_WATCHDOG_ENABLED          | Daily check that `.strm` links still resolve on BBC. Defaults to false. The other `STRM_WATCHDOG_*` settings (SOURCES, ACTION, PATH_MAP, ARR_ACTION, CONCURRENCY, FAIL_THRESHOLD, WEBHOOK_URL) are listed in [docs/WATCHDOG.md](docs/WATCHDOG.md) |
 
 ### Usage
 
 **Authentication**
 
-The default details are:
-
-| Username | Password |
-| -------- | -------- |
-| admin    | password |
+**There is no default password.** On first start iPlayarr generates a random one for the `admin` user and prints it **once** in the container log (`docker logs <container> 2>&1 | grep "Web UI login"`). Change it under Settings -> Authentication. Upgrading and never changed the old `admin` / `password`? It is replaced the same way — see [First login and upgrading](#-first-login-and-upgrading-read-this-first).
 
 See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for auth types (form/OIDC/none), changing credentials, and password reset.
 
@@ -226,6 +263,17 @@ See [docs/SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) for h
 
 To access the web frontend, visit `http://Your_Docker_Host:4404`.
 From here, you can manage settings, view logs, and monitor downloads. See [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md) for a tour of each page.
+
+## ⚖️ Legal Disclaimer
+
+iPlayarr Turbo is an independent, community-built project. It has no connection to the BBC, and the BBC has not reviewed, approved or endorsed it. "BBC", "BBC iPlayer" and related names and logos belong to the British Broadcasting Corporation and are used here only to describe what the software works with.
+
+- **TV Licence:** In the UK you need a valid TV Licence to watch or download BBC iPlayer content. This tool does not change that, and you are responsible for holding one.
+- **Personal use only:** Use this software only to time-shift programmes for your own private viewing, within the BBC iPlayer terms of use and the copyright law that applies where you live. Do not redistribute, share or publish anything you download.
+- **No circumvention:** iPlayarr Turbo does not remove DRM or bypass paywalls. It only fetches streams the BBC already serves openly to ordinary viewers. If you use it to get around geographic restrictions, that is your decision and your risk.
+- **Your responsibility:** You are solely responsible for how you use this software. The authors and contributors accept no liability for misuse, for any breach of the BBC's terms, or for any loss or damage that results. The software is provided "as is", without warranty of any kind, as set out in the project licence.
+
+If you are not sure what is permitted in your country, check before you use it.
 
 ## Development Setup
 

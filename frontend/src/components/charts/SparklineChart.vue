@@ -28,7 +28,7 @@ const options = computed(() => ({
     },
     stroke: {
         curve: 'smooth',
-        width: 2
+        width: 1.5
     },
     fill: {
         opacity: 0.25

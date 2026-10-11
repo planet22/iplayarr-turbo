@@ -72,25 +72,32 @@ const episodeCacheService = {
     },
 
     updateCachedSeries: async (def: EpisodeCacheDefinition): Promise<void> => {
-        //Move old record
+        //Episodes are stored under the first episode's title, not the definition name, so a rename leaves
+        //them alone; only a changed URL makes them stale.
         const oldRecord = await episodeCacheService.getCachedSeriesForId(def.id);
-        if (oldRecord) {
-            const oldEpisodes = await storage.getItem(oldRecord.name);
-            await storage.setItem(def.name, oldEpisodes);
-            await storage.removeItem(oldRecord.name);
+        if (oldRecord && removeAllQueryParams(oldRecord.url) != removeAllQueryParams(def.url)) {
+            await episodeCacheService.removeEpisodesForUrl(oldRecord.url);
         }
 
-        await episodeCacheService.removeCachedSeries(def.id);
-        const cachedSeries = await episodeCacheService.getCachedSeries();
+        const cachedSeries = (await episodeCacheService.getCachedSeries()).filter(({ id }) => id != def.id);
         cachedSeries.push(def);
         await storage.setItem('series-cache-definition', cachedSeries);
     },
 
+    removeEpisodesForUrl: async (url: string): Promise<void> => {
+        const target = removeAllQueryParams(url);
+        const keys = (await storage.keys()).filter((k) => k.startsWith('offSchedule_'));
+        for (const key of keys) {
+            if ((await storage.getItem(key))?.url == target) {
+                await storage.removeItem(key);
+            }
+        }
+    },
+
     removeCachedSeries: async (id: string): Promise<void> => {
-        //Remove old record
         const oldRecord = await episodeCacheService.getCachedSeriesForId(id);
         if (oldRecord) {
-            await storage.removeItem(oldRecord.name);
+            await episodeCacheService.removeEpisodesForUrl(oldRecord.url);
         }
 
         let cachedSeries = await episodeCacheService.getCachedSeries();

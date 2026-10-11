@@ -48,4 +48,9 @@ export interface StreamSession {
     // Left unset where a service can't determine this cheaply (e.g. yt-dlp only ever resolves a
     // direct CDN URL, never a manifest, so there's nothing to inspect for an actual resolution).
     resolution?: string;
+    // A BBC live channel (see LiveStreamService): the pid is a channel id, there are no meaningful
+    // segment counts for an endless playlist, and `title` is the channel name to show instead of
+    // looking the pid up as a programme.
+    live?: boolean;
+    title?: string;
 }

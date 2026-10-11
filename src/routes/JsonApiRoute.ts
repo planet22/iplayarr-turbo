@@ -12,10 +12,13 @@ import { QueueLibraryMetadata } from '../types/QueueEntry';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { VideoEventType } from '../types/VideoEvent';
+import { isValidPid } from '../utils/pathSafety';
 import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../utils/Utils';
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import EventsRoute from './json-api/EventsRoute';
+import LiveSubscriptionsRoute from './json-api/LiveSubscriptionsRoute';
+import LiveTvRoute from './json-api/LiveTvRoute';
 import MaintenanceRoute from './json-api/MaintenanceRoute';
 import OffScheduleRoute from './json-api/OffScheduleRoute';
 import QueueRoute from './json-api/QueueRoute';
@@ -26,6 +29,7 @@ import SubscriptionArrRoute from './json-api/SubscriptionArrRoute';
 import SubscriptionsRoute from './json-api/SubscriptionsRoute';
 import SynonymsRoute from './json-api/SynonymsRoute';
 import VersionRoute from './json-api/VersionRoute';
+import WatchdogRoute from './json-api/WatchdogRoute';
 
 const router: Router = Router();
 
@@ -39,9 +43,12 @@ router.use('/streams', StreamRoute);
 router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
+router.use('/live-tv', LiveTvRoute);
+router.use('/subscriptions/live', LiveSubscriptionsRoute);
 router.use('/subscriptions/arr', SubscriptionArrRoute);
 router.use('/subscriptions', SubscriptionsRoute);
 router.use('/maintenance', MaintenanceRoute);
+router.use('/watchdog', WatchdogRoute);
 
 router.post('/nzb/test', async (req: Request, res: Response) => {
     const { NZB_URL, NZB_API_KEY, NZB_TYPE, NZB_USERNAME, NZB_PASSWORD } = req.body;
@@ -73,6 +80,10 @@ router.get('/search', async (req: Request, res: Response) => {
 // found, then a final {"done":true} line (or {"error":"..."} if it failed part-way).
 router.get('/search/stream', async (req: Request, res: Response) => {
     const { q } = req.query as any;
+    if (typeof q !== 'string' || !q.trim()) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A search term is required' } as ApiResponse);
+        return;
+    }
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');
@@ -97,6 +108,10 @@ router.get('/search/stream', async (req: Request, res: Response) => {
 
 router.get('/details', async (req: Request, res: Response) => {
     const { pid } = req.query as any;
+    if (!isValidPid(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
+        return;
+    }
     const details = await iplayerDetailsService.details([pid]);
     res.json(details[0]);
 });
@@ -104,6 +119,10 @@ router.get('/details', async (req: Request, res: Response) => {
 router.get('/download', async (req: Request, res: Response) => {
     const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime } = req.query as any;
     let { nzbName, type } = req.query as any;
+    if (!isValidPid(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
+        return;
+    }
 
     // Structured metadata for library folder/nfo generation (libraryPathBuilder.ts /
     // nfoBuilder.ts) - sent by the frontend's Search/Download pages, which already have
@@ -203,14 +222,29 @@ router.get('/cache-refresh', async (_, res: Response) => {
 // /json-api/thumbnail/<imagePid>.jpg - the cached BBC episode still image that IPlayerDetails.thumbnail
 // points at. Behind the same /json-api/* session auth as everything else, so an <img>/background-image
 // referencing it works as-is (session cookie is sent same-site with credentials: 'include').
-router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Response) => {
-    const imagePid = req.params[0];
-    const filePath = await thumbnailCacheService.getOrFetch(imagePid);
+// /json-api/thumbnail/pid/<programmePid> - same image, keyed by the programme id the page already has,
+// so an <img> can point straight at it with no details lookup first (like the channel logos).
+router.get('/thumbnail/pid/:pid', async (req: Request, res: Response) => {
+    const { pid } = req.params;
+    const filePath = isValidPid(pid) ? await thumbnailCacheService.getOrFetchForProgramme(pid, req.query.size === 'small') : undefined;
     if (!filePath) {
         res.status(404).json({ error: ApiError.INTERNAL_ERROR, message: 'Thumbnail not found' } as ApiResponse);
         return;
     }
-    res.sendFile(filePath);
+    res.sendFile(filePath, { maxAge: '7d', immutable: true, headers: { 'Cache-Control': 'private, max-age=604800, immutable' } });
+});
+
+router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Response) => {
+    const imagePid = req.params[0];
+    const filePath = await thumbnailCacheService.getOrFetch(imagePid, req.query.size === 'small');
+    if (!filePath) {
+        res.status(404).json({ error: ApiError.INTERNAL_ERROR, message: 'Thumbnail not found' } as ApiResponse);
+        return;
+    }
+    // An image pid's content never changes, so let the browser keep it for a week instead of
+    // revalidating (sendFile's default is max-age=0) on every card render. 'private' because the
+    // route is behind session auth.
+    res.sendFile(filePath, { maxAge: '7d', immutable: true, headers: { 'Cache-Control': 'private, max-age=604800, immutable' } });
 });
 
 export default router;

@@ -1,14 +1,22 @@
 <template>
     <div class="browsePage schedulePage">
-        <div class="scheduleToolbar">
-            <h1 class="browseTitle">Schedule</h1>
+        <PageHeader title="Guide">
+            <template #center>
             <div class="dateNav">
                 <button type="button" @click="shiftDay(-1)"><font-awesome-icon :icon="['fas', 'chevron-left']" /></button>
                 <span class="currentDate">{{ dateLabel }}</span>
                 <button type="button" @click="shiftDay(1)"><font-awesome-icon :icon="['fas', 'chevron-right']" /></button>
                 <button v-if="!isToday" type="button" class="todayButton" @click="goToday">Today</button>
             </div>
+            </template>
             <div class="zoomNav">
+                <button
+                    type="button" :class="['zoneButton', useLocalTime ? 'active' : '']" :title="zoneTooltip"
+                    @click="toggleZone"
+                >
+                    <font-awesome-icon :icon="['fas', 'globe']" />
+                    <span>{{ useLocalTime ? 'Local' : 'UK' }}</span>
+                </button>
                 <button type="button" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
                 </button>
@@ -16,7 +24,7 @@
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" />
                 </button>
             </div>
-        </div>
+        </PageHeader>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
         <InfoBar v-else-if="channels.length === 0">Nothing scheduled for this day.</InfoBar>
@@ -72,6 +80,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import { browseFetch } from '@/lib/browse';
 import { getThumbnailUrl } from '@/lib/utils';
 
@@ -137,8 +146,34 @@ const ukMidnight = (date) => {
     const utc = Date.parse(`${date}T00:00:00Z`);
     return new Date(utc - ukOffsetMs(utc - ukOffsetMs(utc)));
 };
-const ukTime = (ms) =>
-    new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/London' });
+// The globe button switches the times shown (ruler, programme times) between UK time and the
+// browser's own timezone. Only the labels change - days are still iPlayer's UK schedule days.
+const ZONE_KEY = 'scheduleLocalTime';
+const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const readZonePref = () => {
+    try {
+        return localStorage.getItem(ZONE_KEY) === 'true';
+    } catch {
+        return false;
+    }
+};
+const useLocalTime = ref(readZonePref());
+const displayZone = computed(() => (useLocalTime.value ? localZone : 'Europe/London'));
+const zoneTooltip = computed(() =>
+    useLocalTime.value
+        ? `Showing your local time (${localZone}) - click for UK time`
+        : `Showing UK time - click for your local time (${localZone})`
+);
+const toggleZone = () => {
+    useLocalTime.value = !useLocalTime.value;
+    try {
+        localStorage.setItem(ZONE_KEY, String(useLocalTime.value));
+    } catch {
+        // Preference just won't persist.
+    }
+};
+const displayTime = (ms) =>
+    new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: displayZone.value });
 
 // The date shown in the toolbar follows whichever day is in the middle of the viewport, so it
 // updates as you scroll across midnight. selectedDate (which anchors the loaded window) catches up
@@ -203,13 +238,13 @@ const adjacentShades = computed(() => {
 const hourMarks = computed(() => {
     const marks = [];
     for (let ms = dayStart.value.getTime(); ms < dayEnd.value.getTime(); ms += 3600000) {
-        const label = ukTime(ms);
+        const label = displayTime(ms);
         const midnight = label === '00:00';
         marks.push({
             left: ((ms - dayStart.value) / 60000) * pxPerMinute.value,
             label: midnight
                 ? new Date(ms).toLocaleDateString('en-GB', {
-                    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London',
+                    weekday: 'short', day: 'numeric', month: 'short', timeZone: displayZone.value,
                 })
                 : label,
             midnight,
@@ -226,7 +261,7 @@ const nowLeft = computed(() => {
     return ((time - dayStart.value) / 60000) * pxPerMinute.value;
 });
 
-const formatTime = (iso) => ukTime(Date.parse(iso));
+const formatTime = (iso) => displayTime(Date.parse(iso));
 
 const isLive = (slot) => {
     const time = now.value.getTime();
@@ -379,6 +414,17 @@ onBeforeUnmount(() => {
             opacity: 0.4;
             cursor: default;
         }
+    }
+}
+
+.zoomNav .zoneButton {
+    width: auto;
+    gap: 6px;
+    padding: 0 10px;
+    font-size: 13px;
+
+    &.active {
+        border-color: @brand-color;
     }
 }
 

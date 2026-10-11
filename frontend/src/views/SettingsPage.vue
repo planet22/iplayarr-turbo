@@ -1,10 +1,13 @@
 <template>
-    <SettingsPageToolbar
-        :save-enabled="saveEnabled"
-        :icons="['save', 'advanced']"
-        @save="saveConfig"
-        @toggle-advanced="toggleAdvanced"
-    />
+    <div class="inner-content">
+        <PageHeader title="Settings" />
+        <SettingsPageToolbar
+            :save-enabled="saveEnabled"
+            :icons="['save', 'advanced']"
+            @save="saveConfig"
+            @toggle-advanced="toggleAdvanced"
+        />
+    </div>
     <SettingsTabs v-model="activeTab" :tabs="tabs" />
     <div v-if="!loading" class="inner-content">
         <GeneralSettingsTab
@@ -27,6 +30,7 @@
             :stream-clients="streamClients"
             @generate-stream-key="generateStreamKey"
         />
+        <LiveTvSettingsTab v-if="activeTab == 'liveTv'" @generate-stream-key="generateStreamKey" />
         <AuthenticationSettingsTab
             v-if="activeTab == 'authentication'"
             :auth-types="authTypes"
@@ -46,11 +50,13 @@ import { useModal } from 'vue-final-modal';
 import { onBeforeRouteLeave } from 'vue-router';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import UpdateAppDialog from '@/components/modals/UpdateAppDialog.vue';
 import AuthenticationSettingsTab from '@/components/settings/AuthenticationSettingsTab.vue';
 import DownloadClientSettingsTab from '@/components/settings/DownloadClientSettingsTab.vue';
 import GeneralSettingsTab from '@/components/settings/GeneralSettingsTab.vue';
+import LiveTvSettingsTab from '@/components/settings/LiveTvSettingsTab.vue';
 import MaintenanceSettingsTab from '@/components/settings/MaintenanceSettingsTab.vue';
 import MediaManagementSettingsTab from '@/components/settings/MediaManagementSettingsTab.vue';
 import SettingsTabs from '@/components/settings/SettingsTabs.vue';
@@ -72,6 +78,7 @@ const tabs = [
     { key: 'mediaManagement', label: 'Media Management' },
     { key: 'downloadClient', label: 'Download Client' },
     { key: 'streaming', label: 'Streaming' },
+    { key: 'liveTv', label: 'Live TV' },
     { key: 'authentication', label: 'Authentication' },
     { key: 'maintenance', label: 'Maintenance' },
 ];

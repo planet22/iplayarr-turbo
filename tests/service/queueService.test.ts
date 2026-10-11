@@ -64,6 +64,23 @@ describe('queueService', () => {
     });
 
     describe('addToQueue', () => {
+        it('kills a download that was cancelled while it was still starting', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('1');
+            let resolveStart: (p: any) => void = () => undefined;
+            (downloadFacade.download as jest.Mock).mockReturnValue(new Promise((r) => (resolveStart = r)));
+
+            queueService.addToQueue('slow', 'Slow NZB', VideoType.TV);
+            await new Promise((r) => setTimeout(r, 10));
+            queueService.cancelItem('slow');
+            expect((spawn as jest.Mock)).not.toHaveBeenCalledWith('kill', ['-9', '4321']);
+
+            resolveStart({ pid: 4321 });
+            await new Promise((r) => setTimeout(r, 10));
+
+            expect((spawn as jest.Mock)).toHaveBeenCalledWith('kill', ['-9', '4321']);
+            expect(queueService.getFromQueue('slow')).toBeUndefined();
+        });
+
         it('adds a queue item and starts moveQueue', async () => {
             (configService.getParameter as jest.Mock).mockResolvedValue('1');
             (downloadFacade.download as jest.Mock).mockResolvedValue({ pid: 999 });

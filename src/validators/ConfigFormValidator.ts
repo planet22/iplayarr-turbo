@@ -61,8 +61,18 @@ export class ConfigFormValidator extends Validator {
                 validatorError['NZB_PASSWORD'] = response as string;
             }
         }
-        if (input.MEDIA_MODE === 'strm' && !this.isValidUrl(input.STREAM_BASE_URL)) {
+        if (
+            (input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true') &&
+            !this.isValidUrl(input.STREAM_BASE_URL)
+        ) {
             validatorError['STREAM_BASE_URL'] = 'Please provide a valid base URL (e.g. http://jellyfin-host:4404)';
+        }
+        if (
+            input.LIVE_TV_EPG_OFFSET !== undefined &&
+            input.LIVE_TV_EPG_OFFSET !== '' &&
+            !(/^-?\d+$/.test(String(input.LIVE_TV_EPG_OFFSET)) && Math.abs(Number(input.LIVE_TV_EPG_OFFSET)) <= 1440)
+        ) {
+            validatorError['LIVE_TV_EPG_OFFSET'] = 'Please provide a whole number of minutes between -1440 and 1440';
         }
         if (input.AUTH_TYPE === 'oidc') {
             if (!input.OIDC_CONFIG_URL) {

@@ -6,7 +6,7 @@
                 {{ details.episodeTitle ?? subtitle }}
             </h2>
             <div v-if="details.category" class="seriesDetails">
-                <span>{{ details.runtime }} Minutes</span>
+                <span v-if="roundUpMinutes(details.runtime)">{{ roundUpMinutes(details.runtime) }} Minutes</span>
                 <span>{{ details.category }}</span>
                 <span>{{ formatDate(details.firstBroadcast, 'full', 'long') }}</span>
             </div>
@@ -41,7 +41,7 @@
 import { computed, defineProps, inject, ref, watch } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
-import { formatDate, getThumbnailUrl } from '@/lib/utils';
+import { formatDate, getThumbnailUrl, roundUpMinutes } from '@/lib/utils';
 
 import ChannelPill from './ChannelPill.vue';
 import LoadingIndicator from './LoadingIndicator.vue';

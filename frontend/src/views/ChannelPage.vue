@@ -1,6 +1,15 @@
 <template>
     <div class="browsePage">
-        <h1 class="browseTitle">{{ channel?.title ?? route.params.id }}</h1>
+        <PageHeader :title="channel?.title ?? route.params.id">
+            <button v-if="channel?.live" class="watchLive" type="button" @click="watchLive">
+                <font-awesome-icon :icon="['fas', 'play']" /> Watch Live
+            </button>
+            <!-- Read-only status; the toggles live on the Channels page's edit mode. -->
+            <span v-if="channel?.live" class="statusIcons">
+                <font-awesome-icon v-if="isSubscribed(channel.id)" :icon="['fas', 'bell']" title="Live channel subscribed" />
+                <font-awesome-icon v-if="liveTvEnabled && isLiveTvSelected(channel.id)" :icon="['fas', 'tv']" title="In Jellyfin Live TV" />
+            </span>
+        </PageHeader>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
         <template v-else>
@@ -9,8 +18,14 @@
                     v-for="slot in slots" :key="slot.label" :to="`/browse/programme/${slot.data.item.pid}`"
                     class="nowNextCard"
                 >
-                    <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail)" :alt="slot.data.item.title" @error="hideBrokenImage" />
+                    <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail, true)" :alt="slot.data.item.title" @error="hideBrokenImage" />
                     <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    <button
+                        v-if="slot.label === 'Now' && channel?.live" class="nowPlay" type="button"
+                        title="Watch live" @click.prevent.stop="watchLive"
+                    >
+                        <font-awesome-icon :icon="['fas', 'play']" />
+                    </button>
                     <div class="nowNextInfo">
                         <span :class="['nowNextLabel', slot.label === 'Now' ? 'live' : '']">{{ slot.label }}</span>
                         <div class="nowNextTitle">{{ slot.data.item.title }}</div>
@@ -32,11 +47,20 @@ import { useRoute } from 'vue-router';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import { browseFetch } from '@/lib/browse';
+import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
+import { useLiveTv } from '@/lib/liveTv';
+import { playInPip } from '@/lib/pipPlayer';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const channel = ref(null);
+const { enabled: liveTvEnabled, load: loadLiveTv, isSelected: isLiveTvSelected } = useLiveTv();
+loadLiveTv();
+const { load: loadLive, isSubscribed } = useLiveSubscriptions();
+loadLive();
+const watchLive = () => playInPip(channel.value.id, `${channel.value.title} (Live)`, true);
 const rails = ref([]);
 const nowNext = ref(null);
 
@@ -72,6 +96,35 @@ watch(
 </script>
 
 <style lang="less" scoped>
+.channelHeader {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 1rem;
+
+    .browseTitle {
+        margin: 0;
+    }
+}
+
+.watchLive {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    background-color: @brand-color;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+
+    &:hover {
+        opacity: 0.85;
+    }
+}
+
 .nowNext {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -79,7 +132,29 @@ watch(
     margin-bottom: 1.75rem;
 }
 
+.nowPlay {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    cursor: pointer;
+
+    &:hover {
+        background-color: @brand-color;
+    }
+}
+
 .nowNextCard {
+    position: relative;
     display: flex;
     gap: 12px;
     padding: 10px;
@@ -147,5 +222,13 @@ watch(
             color: @subtle-text-color;
         }
     }
+}
+
+.statusIcons {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 12px;
+    color: #fff;
 }
 </style>
