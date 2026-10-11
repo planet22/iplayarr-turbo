@@ -45,7 +45,9 @@ import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import { useLiveTv } from '@/lib/liveTv';
 
+const { loadConfigured } = useLiveTv();
 const servers = ref([]);
 const loaded = ref(false);
 const config = inject('settingsConfig');
@@ -88,6 +90,7 @@ const act = async (serverId, what, method) => {
         const { ok, data } = await ipFetch(url, method, method === 'POST' ? { appId: serverId } : undefined);
         if (ok) {
             statuses[serverId] = data;
+            loadConfigured();
             report(serverId, true, `${what === 'tuner' ? 'Tuner' : 'Guide'} ${method === 'POST' ? 'saved to' : 'removed from'} Jellyfin.`);
         } else {
             report(serverId, false, data?.message || 'Request failed');

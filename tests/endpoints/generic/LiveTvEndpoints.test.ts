@@ -54,7 +54,7 @@ describe.each([
 describe('Live logo endpoint', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it('404s when disabled or logo missing, serves SVG otherwise', async () => {
+    it('404s when disabled or logo missing, serves a PNG otherwise', async () => {
         (liveTvService.isEnabled as jest.Mock).mockResolvedValue(false);
         let res = makeRes();
         await LiveLogoEndpoint({ query: { channel: 'bbc_one_london' } } as any, res);
@@ -66,9 +66,10 @@ describe('Live logo endpoint', () => {
         await LiveLogoEndpoint({ query: { channel: 'x' } } as any, res);
         expect(res.status).toHaveBeenCalledWith(404);
 
-        (liveTvService.logo as jest.Mock).mockResolvedValue('<svg/>');
+        (liveTvService.logo as jest.Mock).mockResolvedValue(Buffer.from('png'));
         res = makeRes();
         await LiveLogoEndpoint({ query: { channel: 'bbc_one_london' } } as any, res);
-        expect(res.send).toHaveBeenCalledWith('<svg/>');
+        expect(res.set).toHaveBeenCalledWith(expect.objectContaining({ 'Content-Type': 'image/png' }));
+        expect(res.send).toHaveBeenCalledWith(Buffer.from('png'));
     });
 });

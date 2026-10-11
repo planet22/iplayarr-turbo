@@ -38,14 +38,25 @@ class LiveTvSyncService {
         const apps = (await Promise.all((await this.selected()).map((id) => appService.getApp(id)))).filter(
             (app): app is App => !!app && jellyfinService.supports(app)
         );
+        const epgUrl = apps.length > 0 ? await liveTvService.epgUrl() : '';
         await Promise.all(
             apps.map((app) =>
-                jellyfinService
-                    .refreshGuide(app)
-                    .catch((error: any) => loggingService.error(`Unable to refresh Jellyfin "${app.name}": ${error?.message}`))
+                this.#syncApp(app, epgUrl).catch((error: any) =>
+                    loggingService.error(`Unable to refresh Jellyfin "${app.name}": ${error?.message}`)
+                )
             )
         );
         return apps.length;
+    }
+
+    // Re-points our guide at the current (hashed) guide URL when the channels have changed, so Jellyfin
+    // re-downloads it instead of reusing its cached copy, then asks it to refresh.
+    async #syncApp(app: App, epgUrl: string): Promise<void> {
+        const guide = (await jellyfinService.liveTvStatus(app)).guide;
+        if (guide && guide.path !== epgUrl) {
+            await jellyfinService.upsertGuide(app, epgUrl);
+        }
+        await jellyfinService.refreshGuide(app);
     }
 }
 

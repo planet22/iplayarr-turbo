@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 import { BrowseChannels } from '../constants/BrowseChannels';
 import { isLiveChannel } from '../constants/LiveChannels';
 import { IplayarrParameter } from '../types/IplayarrParameters';
@@ -5,6 +7,7 @@ import browseService from './browseService';
 import configService from './configService';
 import liveTvChannelService from './liveTvChannelService';
 
+const LOGO_SIZE = 1000;
 const GUIDE_DAYS_BEFORE = 1; // iPlayer's schedule day runs 05:00-05:00, so the small hours sit in yesterday's
 // Today + 6 = the 7 days Jellyfin's guide asks for by default (BBC publishes ~8 days ahead).
 const GUIDE_DAYS_AFTER = 6;
@@ -102,9 +105,17 @@ class LiveTvService {
         return `${baseUrl}/api?mode=live_playlist&streamkey=${encodeURIComponent(streamKey)}`;
     }
 
+    // Jellyfin reuses its downloaded XMLTV for up to a day while the guide URL is unchanged, so the URL
+    // carries a short hash of what the guide contains (enabled channels + EPG offset): change either and
+    // the URL changes, which makes Jellyfin fetch the guide afresh.
     async epgUrl(): Promise<string> {
         const { baseUrl, streamKey } = await this.#keyAndBase();
-        return `${baseUrl}/api?mode=live_epg&streamkey=${encodeURIComponent(streamKey)}`;
+        const ids = (await this.channels()).map(({ id }) => id).sort();
+        const version = createHash('sha1')
+            .update(JSON.stringify([ids, await this.epgOffsetMinutes()]))
+            .digest('hex')
+            .slice(0, 8);
+        return `${baseUrl}/api?mode=live_epg&streamkey=${encodeURIComponent(streamKey)}&v=${version}`;
     }
 
     async #baseUrl(): Promise<string> {
@@ -125,7 +136,7 @@ class LiveTvService {
             ];
             if (channel.masterBrand) {
                 attrs.push(
-                    `tvg-logo="${baseUrl}/api?mode=live_logo&channel=${encodeURIComponent(channel.id)}&streamkey=${encodeURIComponent(streamKey)}"`
+                    `tvg-logo="${baseUrl}/api?mode=live_logo&channel=${encodeURIComponent(channel.id)}&v=png&streamkey=${encodeURIComponent(streamKey)}"`
                 );
             }
             attrs.push('group-title="BBC"');
@@ -178,9 +189,23 @@ class LiveTvService {
         return xml + '</tv>\n';
     }
 
-    async logo(channelId: string): Promise<string | undefined> {
+    // The channel logo as a LOGO_SIZE-px square PNG. iPlayer's icon is a tiny SVG (viewBox ~24 units), which
+    // Jellyfin would either not render or upscale to a blur, so it is rasterised here on the logo's own
+    // background colour. sharp is loaded lazily so a missing native binary only costs the logos.
+    async logo(channelId: string): Promise<Buffer | undefined> {
         const masterBrand = this.allChannels().find(({ id }) => id === channelId)?.masterBrand;
-        return masterBrand ? browseService.channelLogo(masterBrand) : undefined;
+        const svg = masterBrand ? await browseService.channelLogo(masterBrand) : undefined;
+        if (!svg) return undefined;
+        const background = /fill="(#[0-9a-f]{3,8})"/i.exec(svg)?.[1] ?? '#000000';
+        const viewBoxWidth = Number(/viewBox="[-\d.]+[ ,]+[-\d.]+[ ,]+([\d.]+)/.exec(svg)?.[1]) || 24;
+        // Module name via a variable so ts-node does not need sharp's types (or the package) at compile time.
+        const moduleName = 'sharp';
+        const { default: sharp } = await import(moduleName);
+        // Rasterise at the target size (72 dpi = 1 SVG unit per px) so the vectors are sharp, not upscaled.
+        return sharp(Buffer.from(svg), { density: Math.min(2000, (72 * LOGO_SIZE) / viewBoxWidth) })
+            .resize(LOGO_SIZE, LOGO_SIZE, { fit: 'contain', background })
+            .png()
+            .toBuffer();
     }
 }
 

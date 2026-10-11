@@ -50,7 +50,7 @@ describe('liveTvService', () => {
         expect(m3u.startsWith('#EXTM3U\n')).toBe(true);
         expect(m3u).toContain('tvg-id="bbc_two_england" tvg-name="BBC Two" tvg-chno="2"');
         expect(m3u).toContain('tvg-id="bbc_four" tvg-name="BBC Four" tvg-chno="4"');
-        expect(m3u).toContain('tvg-logo="http://host:4404/api?mode=live_logo&channel=bbc_two_england&streamkey=sk"');
+        expect(m3u).toContain('tvg-logo="http://host:4404/api?mode=live_logo&channel=bbc_two_england&v=png&streamkey=sk"');
         expect(m3u).toContain('http://host:4404/api/live.m3u8?mode=stream&pid=bbc_two_england&streamkey=sk');
         expect(m3u).not.toContain('bbc_one_london');
     });
@@ -65,11 +65,24 @@ describe('liveTvService', () => {
 
     it('builds the tuner and guide URLs, and needs a base URL', async () => {
         expect(await liveTvService.playlistUrl()).toBe('http://host:4404/api?mode=live_playlist&streamkey=sk');
-        expect(await liveTvService.epgUrl()).toBe('http://host:4404/api?mode=live_epg&streamkey=sk');
+        expect(await liveTvService.epgUrl()).toMatch(/^http:\/\/host:4404\/api\?mode=live_epg&streamkey=sk&v=[0-9a-f]{8}$/);
         const saved = params.STREAM_BASE_URL;
         params.STREAM_BASE_URL = '';
         await expect(liveTvService.playlistUrl()).rejects.toThrow('Stream Base URL');
         params.STREAM_BASE_URL = saved;
+    });
+
+    it('changes the guide URL when the enabled channels or EPG offset change, and not otherwise', async () => {
+        const before = await liveTvService.epgUrl();
+        expect(await liveTvService.epgUrl()).toBe(before);
+        (liveTvChannelService.list as jest.Mock).mockResolvedValue(['bbc_four', 'bbc_two_england']);
+        expect(await liveTvService.epgUrl()).toBe(before); // order doesn't matter
+        (liveTvChannelService.list as jest.Mock).mockResolvedValue(['bbc_four']);
+        const fewer = await liveTvService.epgUrl();
+        expect(fewer).not.toBe(before);
+        params.LIVE_TV_EPG_OFFSET = '30';
+        expect(await liveTvService.epgUrl()).not.toBe(fewer);
+        params.LIVE_TV_EPG_OFFSET = '0';
     });
 
     it('builds XMLTV from the browse schedule, deduping overlapping days', async () => {
@@ -113,8 +126,13 @@ describe('liveTvService', () => {
     });
 
     it('serves a logo only for live channels', async () => {
-        (browseService.channelLogo as jest.Mock).mockResolvedValue('<svg/>');
-        expect(await liveTvService.logo('bbc_one_london')).toBe('<svg/>');
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#bb1919"/><rect x="6" y="6" width="12" height="12" fill="#ffffff"/></svg>';
+        (browseService.channelLogo as jest.Mock).mockResolvedValue(svg);
+        const png = await liveTvService.logo('bbc_one_london');
+        expect(png?.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+        // 1000px square, not the SVG's native 24px.
+        const { default: sharp } = await import('sharp');
+        expect(await sharp(png).metadata()).toMatchObject({ width: 1000, height: 1000 });
         expect(await liveTvService.logo('nope')).toBeUndefined();
     });
 });

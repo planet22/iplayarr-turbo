@@ -30,7 +30,7 @@ jest.mock('../../../src/service/liveTvChannelService', () => {
 });
 jest.mock('../../../src/service/liveTvSyncService', () => ({
     __esModule: true,
-    default: { notifyChanged: jest.fn() },
+    default: { notifyChanged: jest.fn(), selected: jest.fn() },
 }));
 jest.mock('../../../src/service/liveTvService', () => ({
     __esModule: true,
@@ -47,6 +47,17 @@ describe('LiveTvRoute', () => {
         (appService.getApp as jest.Mock).mockResolvedValue({ id: 'a', url: 'u', api_key: 'k' });
         (jellyfinService.supports as jest.Mock).mockReturnValue(true);
         (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({ tuner: { id: 't', url: 'P' } });
+    });
+
+    it('reports whether a ticked Jellyfin server has a tuner or guide yet', async () => {
+        (liveTvSyncService.selected as jest.Mock).mockResolvedValue(['a']);
+        expect((await request(app).get('/configured')).body).toEqual({ configured: true });
+        (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({});
+        expect((await request(app).get('/configured')).body).toEqual({ configured: false });
+        (jellyfinService.liveTvStatus as jest.Mock).mockRejectedValue(new Error('down'));
+        expect((await request(app).get('/configured')).status).toBe(502);
+        (liveTvSyncService.selected as jest.Mock).mockResolvedValue([]);
+        expect((await request(app).get('/configured')).body).toEqual({ configured: false });
     });
 
     it('manages the channel selection', async () => {

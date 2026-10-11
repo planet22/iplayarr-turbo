@@ -63,6 +63,32 @@ router.delete('/channels/:channelId', async (req: Request, res: Response) => {
     res.json(channels);
 });
 
+// Whether any ticked Jellyfin server has our tuner or guide yet - the UI hides its Live TV controls until so.
+// A server that cannot be reached counts as "not known" (502) rather than "not configured", so the UI keeps
+// whatever it last knew.
+router.get('/configured', async (_, res: Response) => {
+    const apps = (await Promise.all((await liveTvSyncService.selected()).map((id) => appService.getApp(id)))).filter(
+        (app): app is App => !!app && jellyfinService.supports(app)
+    );
+    let failed = false;
+    for (const app of apps) {
+        try {
+            const { tuner, guide } = await jellyfinService.liveTvStatus(app);
+            if (tuner || guide) {
+                res.json({ configured: true });
+                return;
+            }
+        } catch {
+            failed = true;
+        }
+    }
+    if (failed) {
+        res.status(502).json({ error: ApiError.INTERNAL_ERROR, message: 'Unable to reach Jellyfin' } as ApiResponse);
+        return;
+    }
+    res.json({ configured: false });
+});
+
 // --- Jellyfin setup: one add/remove pair for the tuner and one for the guide.
 
 const withApp = async (req: Request, res: Response, action: (app: App) => Promise<unknown>, fallback: string) => {

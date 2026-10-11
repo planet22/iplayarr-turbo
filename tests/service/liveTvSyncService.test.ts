@@ -6,8 +6,8 @@ import liveTvSyncService, { REFRESH_DEBOUNCE_MS } from '../../src/service/liveTv
 
 jest.mock('../../src/service/configService');
 jest.mock('../../src/service/appService', () => ({ __esModule: true, default: { getApp: jest.fn() } }));
-jest.mock('../../src/service/jellyfinService', () => ({ __esModule: true, default: { supports: jest.fn(), refreshGuide: jest.fn() } }));
-jest.mock('../../src/service/liveTvService', () => ({ __esModule: true, default: { isEnabled: jest.fn() } }));
+jest.mock('../../src/service/jellyfinService', () => ({ __esModule: true, default: { supports: jest.fn(), refreshGuide: jest.fn(), liveTvStatus: jest.fn(), upsertGuide: jest.fn() } }));
+jest.mock('../../src/service/liveTvService', () => ({ __esModule: true, default: { isEnabled: jest.fn(), epgUrl: jest.fn() } }));
 jest.mock('../../src/service/loggingService', () => ({ __esModule: true, default: { error: jest.fn() } }));
 
 let selected = '';
@@ -21,6 +21,8 @@ describe('liveTvSyncService', () => {
         (liveTvService.isEnabled as jest.Mock).mockResolvedValue(true);
         (appService.getApp as jest.Mock).mockResolvedValue(app);
         (jellyfinService.supports as jest.Mock).mockReturnValue(true);
+        (liveTvService.epgUrl as jest.Mock).mockResolvedValue('http://x/api?mode=live_epg&v=new');
+        (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({ guide: { id: 'g', path: 'http://x/api?mode=live_epg&v=new' } });
     });
 
     it('reads the ticked servers from the setting', async () => {
@@ -39,6 +41,23 @@ describe('liveTvSyncService', () => {
         expect(await liveTvSyncService.refreshNow()).toBe(2);
         expect(jellyfinService.refreshGuide).toHaveBeenCalledWith(app);
         expect(jellyfinService.refreshGuide).toHaveBeenCalledWith(other);
+    });
+
+    it('re-points the guide at the new URL when the channel list changed, so Jellyfin re-downloads it', async () => {
+        selected = 'a';
+        (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({ guide: { id: 'g', path: 'http://x/api?mode=live_epg&v=old' } });
+        await liveTvSyncService.refreshNow();
+        expect(jellyfinService.upsertGuide).toHaveBeenCalledWith(app, 'http://x/api?mode=live_epg&v=new');
+        expect(jellyfinService.refreshGuide).toHaveBeenCalledWith(app);
+    });
+
+    it('leaves the guide alone when its URL is current or no guide was ever added', async () => {
+        selected = 'a';
+        await liveTvSyncService.refreshNow();
+        (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({});
+        await liveTvSyncService.refreshNow();
+        expect(jellyfinService.upsertGuide).not.toHaveBeenCalled();
+        expect(jellyfinService.refreshGuide).toHaveBeenCalledTimes(2);
     });
 
     it('does nothing when disabled, nothing is ticked, or the apps are gone', async () => {
