@@ -12,13 +12,9 @@ Set under Settings → Authentication → **Authentication Enabled?**, or the `A
 | `oidc` | OpenID Connect login via an external identity provider. |
 | `none` | No login — every request to `/json-api/*` is treated as the configured `AUTH_USERNAME` (or `admin` if unset). Only use this if iPlayarr's web UI isn't exposed anywhere untrusted. |
 
-## Default credentials
+## Initial credentials
 
-| Username | Password |
-| --- | --- |
-| `admin` | `password` |
-
-The default password is stored as a bcrypt hash in `configService.defaultConfigMap.AUTH_PASSWORD` — there's no plaintext default sitting in the config, only the hash that `password` happens to match. Change it immediately on any instance reachable outside your own network: Settings → Authentication → Username/Password.
+There is **no default password**. On first start (or on an install still using the old well-known `admin` / `password` default) iPlayarr generates a random password for the `admin` user, stores its bcrypt hash, and prints the plaintext **once** to the server/container console log (`Web UI login -> username: admin  password: ...`). It is never sent over HTTP. Change it under Settings → Authentication → Username/Password.
 
 ### Legacy MD5 hashes
 
@@ -33,7 +29,7 @@ Settings → Authentication → Username / Password. Changes apply to the next l
 There's a token-based reset flow that doesn't require being logged in:
 
 1. `GET /auth/generateToken` generates a one-time reset token and prints it to the **server/container console logs** (`FORGOT PASSWORD TOKEN: ... This expires in 5 minutes`) — it is never shown in the UI or sent anywhere, so you need access to the container logs to use it.
-2. `POST /auth/resetPassword` with `{ "key": "<token>" }` resets `AUTH_USERNAME`, `AUTH_PASSWORD`, and `AUTH_TYPE` back to their defaults (`admin` / `password` / `form`) if the token matches and hasn't expired.
+2. `POST /auth/resetPassword` with `{ "key": "<token>" }` resets `AUTH_USERNAME` and `AUTH_TYPE` to their defaults (`admin` / `form`) and sets a **new random password**, printed to the console log (never returned in the response), if the token matches and hasn't expired. A token is single-use, and `generateToken` can only be called once a minute so it can't be spammed to invalidate the token you just read.
 
 This is a deliberate "break glass" path for someone who already has access to the host/container (and its logs) but has locked themselves out of the UI — it isn't exposed as a button anywhere in the frontend.
 

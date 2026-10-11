@@ -16,7 +16,7 @@ This is the quickest route from "container running" to "watching or downloading 
 
 - **Be in the UK.** The BBC only serves iPlayer to UK addresses, so the machine running iPlayarr needs a UK IP address. If the browse pages say "Nothing to show yet", this is the first thing to check.
 - **Run the container** following the [README](../README.md) or [INSTALLATION.md](INSTALLATION.md), then open `http://<your-host>:4404`.
-- **Log in.** The default is `admin` / `password` unless you changed it. Change it under Settings → Authentication ([AUTHENTICATION.md](AUTHENTICATION.md)).
+- **Log in.** On first start a random password for `admin` is generated and printed once in the container log (look for `Web UI login`). Change it under Settings → Authentication ([AUTHENTICATION.md](AUTHENTICATION.md)).
 
 ## 2. The settings that matter
 

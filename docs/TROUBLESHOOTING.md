@@ -4,7 +4,7 @@ Grounded in iPlayarr's actual error paths — check the Logs page (or `/logs` on
 
 ## Locked out of the web UI
 
-- **Forgot the password**: see [AUTHENTICATION.md](AUTHENTICATION.md#forgotten-password-reset) — `GET /auth/generateToken` prints a one-time reset token to the **container console logs** (`docker logs <container>`), valid 5 minutes, then `POST /auth/resetPassword` with that token resets username/password/auth-type back to defaults (`admin`/`password`/`form`).
+- **Forgot the password**: see [AUTHENTICATION.md](AUTHENTICATION.md#forgotten-password-reset) — `GET /auth/generateToken` prints a one-time reset token to the **container console logs** (`docker logs <container>`), valid 5 minutes, then `POST /auth/resetPassword` with that token resets username/auth-type to defaults (`admin`/`form`) and prints a new random password in the same logs.
 - **Session won't stick / keeps logging out**: sessions are stored in Redis (`connect-redis`). If Redis is unreachable or was just flushed/recreated, every session is invalidated — see the Redis checks below. The session cookie also expires after 24 hours regardless (`src/routes/AuthRoute.ts`).
 - **Switched to OIDC and now can't log in**: your email must be in `OIDC_ALLOWED_EMAILS` (comma-separated, case-insensitive) even if the OIDC provider itself authenticates you successfully (`ApiError.INVALID_CREDENTIALS` otherwise). Use the **Test OIDC** button in Settings before saving to catch this.
 

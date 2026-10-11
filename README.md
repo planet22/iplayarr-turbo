@@ -185,11 +185,7 @@ There's a few more optional settings too:
 
 **Authentication**
 
-The default details are:
-
-| Username | Password |
-| -------- | -------- |
-| admin    | password |
+There is no default password. On first start iPlayarr generates a random one for the `admin` user and prints it **once** in the container log (look for `Web UI login`). Change it under Settings -> Authentication.
 
 See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for auth types (form/OIDC/none), changing credentials, and password reset.
 

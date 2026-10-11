@@ -1,8 +1,10 @@
 import { RedisStore } from 'connect-redis';
 import { Express, NextFunction, Request, Response, Router } from 'express';
 import session from 'express-session';
+import crypto from 'crypto';
 import { v4 } from 'uuid';
 
+import { setGeneratedPassword } from '../service/auth/initialCredentialsService';
 import OIDCService from '../service/auth/OIDCService';
 import configService from '../service/configService';
 import { redis } from '../service/redis/redisService';
@@ -29,6 +31,17 @@ const router: Router = Router();
 
 let token: string = '';
 let resetTimer: NodeJS.Timeout | undefined;
+let tokenIssuedAt = 0;
+// An unauthenticated caller can ask for a token, so asking repeatedly mustn't keep replacing (and
+// so invalidating) the one an operator has just read from the log.
+const TOKEN_COOLDOWN_MS = 60_000;
+
+const tokenMatches = (supplied: unknown): boolean => {
+    if (token === '' || typeof supplied !== 'string') return false;
+    const a = Buffer.from(supplied);
+    const b = Buffer.from(token);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
 
 export const addAuthMiddleware = (app: Express) => {
     const sessionCookieSettings: any = { secure: false, maxAge: 1000 * 60 * 60 * 24 };
@@ -206,6 +219,11 @@ router.get('/me', async (req: Request, res: Response) => {
 });
 
 router.get('/generateToken', (_: Request, res: Response) => {
+    if (Date.now() - tokenIssuedAt < TOKEN_COOLDOWN_MS) {
+        res.status(429).json({ error: ApiError.INVALID_INPUT, message: 'A reset token was issued recently' } as ApiResponse);
+        return;
+    }
+    tokenIssuedAt = Date.now();
     token = v4();
     console.log(`FORGOT PASSWORD TOKEN: ${token} This expires in 5 minutes`);
     if (resetTimer) {
@@ -218,12 +236,13 @@ router.get('/generateToken', (_: Request, res: Response) => {
 router.post('/resetPassword', async (req: Request, res: Response) => {
     const { key } = req.body;
 
-    if (token != '' && key == token) {
+    if (tokenMatches(key)) {
         token = '';
         clearTimeout(resetTimer);
         await configService.setParameter(IplayarrParameter.AUTH_USERNAME, configService.defaultConfigMap.AUTH_USERNAME);
-        await configService.setParameter(IplayarrParameter.AUTH_PASSWORD, configService.defaultConfigMap.AUTH_PASSWORD);
         await configService.setParameter(IplayarrParameter.AUTH_TYPE, configService.defaultConfigMap.AUTH_TYPE);
+        // A random password printed to the container log, never the old well-known default.
+        await setGeneratedPassword('Password reset.');
     }
 
     res.json({ status: true });

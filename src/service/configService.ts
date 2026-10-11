@@ -33,7 +33,7 @@ const configService = {
         ACTIVE_LIMIT: '3',
         REFRESH_SCHEDULE: '0 * * * *',
         AUTH_USERNAME: 'admin',
-        AUTH_PASSWORD: '$2b$10$4fiP4.TMyY3v08NQaQGPR.8HBbqXUlTNbQ11YWpTT9ptMCZFCRoeq',
+        // No default password: initialCredentialsService generates a random one on first boot.
         FALLBACK_FILENAME_SUFFIX: 'WEB.H264-BBC',
         MOVIE_FILENAME_TEMPLATE: '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC',
         TV_FILENAME_TEMPLATE:

@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import ApiRoute from './routes/ApiRoute';
 import AuthRoute, { addAuthMiddleware } from './routes/AuthRoute';
 import JsonApiRoute from './routes/JsonApiRoute';
+import { ensureNonDefaultPassword } from './service/auth/initialCredentialsService';
 import configService from './service/configService';
 import liveSubscriptionService from './service/liveSubscriptionService';
 import loggingService from './service/loggingService';
@@ -77,6 +78,12 @@ const io = isDebug ? new SocketIOServer(server, { cors: {} }) : new SocketIOServ
 socketService.registerIo(io);
 
 (async () => {
+    await ensureNonDefaultPassword();
+    if ((await configService.getParameter(IplayarrParameter.AUTH_TYPE)) === 'none') {
+        loggingService.error(
+            'AUTH_TYPE is "none": anyone who can reach this port has full admin access to the web UI, including the ability to change which executables are run. Only use this on a trusted network.'
+        );
+    }
     // Without this, a fresh install has no API key until a user opens Settings and
     // generates one manually, so the Apps auto-setup flow fails with an empty apikey.
     if (!(await configService.getParameter(IplayarrParameter.API_KEY))) {

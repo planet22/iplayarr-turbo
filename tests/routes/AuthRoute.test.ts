@@ -163,38 +163,79 @@ describe('AuthRoute', () => {
     });
 
     describe('GET /generateToken', () => {
+        let now = 1_000_000_000_000;
+        beforeEach(() => {
+            // Each test starts well past the previous test's cooldown.
+            now += 10 * 60 * 1000;
+            jest.spyOn(Date, 'now').mockImplementation(() => now);
+            jest.spyOn(console, 'log').mockImplementation(() => undefined);
+        });
+
         it('should generate a token and return success', async () => {
             const res = await request(app).get('/generateToken');
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ status: true });
         });
+
+        it('refuses to issue another token inside the cooldown', async () => {
+            await request(app).get('/generateToken');
+            now += 5_000;
+            const res = await request(app).get('/generateToken');
+            expect(res.status).toBe(429);
+            now += 61_000;
+            expect((await request(app).get('/generateToken')).status).toBe(200);
+        });
     });
 
     describe('POST /resetPassword', () => {
-        it('should reset password if token matches', async () => {
-            const res1 = await request(app).get('/generateToken');
-            expect(res1.body).toEqual({ status: true });
+        let now = 2_000_000_000_000;
+        beforeEach(() => {
+            now += 10 * 60 * 1000;
+            jest.spyOn(Date, 'now').mockImplementation(() => now);
+            jest.spyOn(console, 'log').mockImplementation(() => undefined);
+            (configService.setParameter as jest.Mock).mockReset().mockResolvedValue(undefined);
+            (configService.getParameter as jest.Mock).mockResolvedValue('admin');
+            (configService.defaultConfigMap as any) = { AUTH_USERNAME: 'admin', AUTH_TYPE: 'form' };
+        });
 
-            (configService.setParameter as jest.Mock).mockResolvedValue(undefined);
-            (configService.defaultConfigMap as any) = {
-                AUTH_USERNAME: 'admin',
-                AUTH_PASSWORD: '5f4dcc3b5aa765d61d8327deb882cf99',
-            };
+        it('resets to a generated password (not a fixed default) if token matches', async () => {
+            await request(app).get('/generateToken');
 
-            const res2 = await request(app).post('/resetPassword').send({ key: 'mock-token' });
-            expect(res2.status).toBe(200);
-            expect(res2.body).toEqual({ status: true });
+            const res = await request(app).post('/resetPassword').send({ key: 'mock-token' });
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ status: true });
             expect(configService.setParameter).toHaveBeenCalledWith(IplayarrParameter.AUTH_USERNAME, 'admin');
-            expect(configService.setParameter).toHaveBeenCalledWith(
-                IplayarrParameter.AUTH_PASSWORD,
-                '5f4dcc3b5aa765d61d8327deb882cf99'
+            expect(configService.setParameter).toHaveBeenCalledWith(IplayarrParameter.AUTH_TYPE, 'form');
+            const call = (configService.setParameter as jest.Mock).mock.calls.find(
+                ([key]) => key === IplayarrParameter.AUTH_PASSWORD
             );
+            expect(call[1]).toMatch(/^\$2[aby]\$/);
+            expect(await Utils.comparePassword('password', call[1])).toBe(false);
+            // The new password goes to the log only, never the HTTP response.
+            expect(JSON.stringify(res.body)).not.toMatch(/password/i);
+        });
+
+        it('only accepts a token once', async () => {
+            await request(app).get('/generateToken');
+            await request(app).post('/resetPassword').send({ key: 'mock-token' });
+            (configService.setParameter as jest.Mock).mockClear();
+            await request(app).post('/resetPassword').send({ key: 'mock-token' });
+            expect(configService.setParameter).not.toHaveBeenCalled();
         });
 
         it('should do nothing if token is invalid', async () => {
+            await request(app).get('/generateToken');
             const res = await request(app).post('/resetPassword').send({ key: 'invalid' });
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ status: true });
+            expect(configService.setParameter).not.toHaveBeenCalled();
+        });
+
+        it('does not throw on a non-string key', async () => {
+            await request(app).get('/generateToken');
+            const res = await request(app).post('/resetPassword').send({ key: ['mock-token'] });
+            expect(res.status).toBe(200);
+            expect(configService.setParameter).not.toHaveBeenCalled();
         });
     });
 });
