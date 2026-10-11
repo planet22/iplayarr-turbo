@@ -1,7 +1,7 @@
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntry } from '../../src/types/QueueEntry';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
-import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../../src/utils/nfoBuilder';
+import { buildEpisodeNfo, buildLiveChannelNfo, buildMovieNfo, buildShowNfo } from '../../src/utils/nfoBuilder';
 
 function baseItem(overrides: Partial<QueueEntry> = {}): QueueEntry {
     return {
@@ -83,6 +83,19 @@ describe('nfoBuilder', () => {
             const xml = buildShowNfo('Show & Co');
             expect(xml).toContain('<tvshow>');
             expect(xml).toContain('<title>Show &amp; Co</title>');
+        });
+    });
+
+    describe('buildLiveChannelNfo', () => {
+        it('builds a locked movie NFO with the escaped channel title', () => {
+            const xml = buildLiveChannelNfo('BBC R&D');
+            expect(xml).toContain('<movie>');
+            expect(xml).toContain('<title>BBC R&amp;D</title>');
+            expect(xml).toContain('<sorttitle>BBC R&amp;D</sorttitle>');
+            expect(xml).toContain('<plot>Live stream of BBC R&amp;D.</plot>');
+            expect(xml).toContain('<studio>BBC</studio>');
+            expect(xml).toContain('<lockdata>true</lockdata>');
+            expect(xml.trimEnd().endsWith('</movie>')).toBe(true);
         });
     });
 });

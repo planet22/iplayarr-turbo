@@ -254,6 +254,7 @@ const onEnter = () => {
 };
 
 const runSearch = () => {
+    closeSuggestions();
     filter.value = 'All';
     channelFilter.value = 'All';
     router.push({ name: 'search', query: { searchTerm: searchInput.value } });

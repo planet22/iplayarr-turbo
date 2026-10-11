@@ -1,9 +1,12 @@
 import { Request, Response } from 'express';
 
+import { BrowseChannels } from '../../constants/BrowseChannels';
+import { isLiveChannel } from '../../constants/LiveChannels';
 import configService from '../../service/configService';
 import loggingService from '../../service/loggingService';
 import AbstractStreamService from '../../service/stream/AbstractStreamService';
 import GetIplayerStreamService from '../../service/stream/GetIplayerStreamService';
+import LiveStreamService from '../../service/stream/LiveStreamService';
 import NativeStreamService from '../../service/stream/NativeStreamService';
 import { resolve as resolveSegmentUrl } from '../../service/stream/segmentUrlRegistry';
 import { proxyUrl } from '../../service/stream/streamProxyUtils';
@@ -93,13 +96,19 @@ export default async (req: Request, res: Response): Promise<void> => {
         return;
     }
 
-    const { client, service }: { client: StreamClient; service: AbstractStreamService } = await getStreamService();
+    // Live channels are served by their own standalone service regardless of the configured client
+    // (neither get_iplayer nor yt-dlp are used for them) - see LiveStreamService.ts.
+    const live: boolean = isLiveChannel(pid);
+    const { client, service }: { client: StreamClient; service: AbstractStreamService } = live
+        ? { client: StreamClient.NATIVE, service: LiveStreamService }
+        : await getStreamService();
     const isProbe: boolean = probeUserAgentRegex.test(req.headers['user-agent'] ?? '');
     const configuredMode: StreamMode = (await configService.getParameter(IplayarrParameter.STREAM_MODE)) as StreamMode;
     const mode: StreamMode = isProbe ? StreamMode.DIRECT : configuredMode;
 
-    const settings = await buildSettingsSnapshot(client);
-    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings);
+    const settings = live ? { Quality: 'Live' } : await buildSettingsSnapshot(client);
+    const liveInfo = live ? { title: BrowseChannels.find((c) => c.id === pid)?.title ?? pid } : undefined;
+    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings, liveInfo);
     // progressive-mkv's ffmpeg process/response is the one mode with a real connection for the
     // Streaming page's Stop button to tear down - destroying it triggers this same res.on('close')
     // below (which ends the session) and remuxToMkv's own close handler (which kills ffmpeg).

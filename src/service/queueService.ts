@@ -74,7 +74,13 @@ const queueService = {
             next.status = QueueEntryStatus.DOWNLOADING;
             next.details = { ...next.details, start: new Date() };
             try {
-                next.process = await downloadFacade.download(next.pid);
+                const process = await downloadFacade.download(next.pid);
+                if (queue.includes(next)) {
+                    next.process = process;
+                } else if (process?.pid) {
+                    // Cancelled while starting - cancelItem had no process to kill yet.
+                    spawn('kill', ['-9', String(process.pid)]);
+                }
             } catch (error) {
                 videoEventService.record(
                     VideoEventType.DOWNLOAD_FAILED,

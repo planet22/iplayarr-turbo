@@ -227,6 +227,17 @@ See [docs/SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) for h
 To access the web frontend, visit `http://Your_Docker_Host:4404`.
 From here, you can manage settings, view logs, and monitor downloads. See [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md) for a tour of each page.
 
+## ⚖️ Legal Disclaimer
+
+iPlayarr Turbo is an independent, community-built project. It has no connection to the BBC, and the BBC has not reviewed, approved or endorsed it. "BBC", "BBC iPlayer" and related names and logos belong to the British Broadcasting Corporation and are used here only to describe what the software works with.
+
+- **TV Licence:** In the UK you need a valid TV Licence to watch or download BBC iPlayer content. This tool does not change that, and you are responsible for holding one.
+- **Personal use only:** Use this software only to time-shift programmes for your own private viewing, within the BBC iPlayer terms of use and the copyright law that applies where you live. Do not redistribute, share or publish anything you download.
+- **No circumvention:** iPlayarr Turbo does not remove DRM or bypass paywalls. It only fetches streams the BBC already serves openly to ordinary viewers. If you use it to get around geographic restrictions, that is your decision and your risk.
+- **Your responsibility:** You are solely responsible for how you use this software. The authors and contributors accept no liability for misuse, for any breach of the BBC's terms, or for any loss or damage that results. The software is provided "as is", without warranty of any kind, as set out in the project licence.
+
+If you are not sure what is permitted in your country, check before you use it.
+
 ## Development Setup
 
 To run iPlayarr Turbo locally for development:

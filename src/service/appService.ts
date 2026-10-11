@@ -9,14 +9,23 @@ import { QueuedStorage } from '../types/QueuedStorage';
 import { CreateDownloadClientForm } from '../types/requests/form/CreateDownloadClientForm';
 import { CreateIndexerForm } from '../types/requests/form/CreateIndexerForm';
 import configService from './configService';
+import jellyfinService from './jellyfinService';
 import socketService from './socketService';
 import userAgentMappingService from './userAgentMappingService';
 
 const storage: QueuedStorage = new QueuedStorage();
 
+// lastSeen lives under its own key so touching it never read-modify-writes the apps list (which
+// could resurrect a deleted app or overwrite an edit), and is throttled as it is hit on every search.
+const LAST_SEEN_KEY = 'apps_last_seen';
+const LAST_SEEN_THROTTLE_MS = 60_000;
+const lastTouched = new Map<string, number>();
+
 const appService = {
     getAllApps: async (): Promise<App[]> => {
-        return (await storage.getItem('apps')) || [];
+        const apps: App[] = (await storage.getItem('apps')) || [];
+        const lastSeen: Record<string, number> = (await storage.getItem(LAST_SEEN_KEY)) || {};
+        return apps.map((app) => (lastSeen[app.id] ? { ...app, lastSeen: lastSeen[app.id] } : app));
     },
 
     getApp: async (id: string): Promise<App | undefined> => {
@@ -48,14 +57,20 @@ const appService = {
 
     // Records when an app last made a request, shown on the Apps page.
     touchApp: async (id: string): Promise<void> => {
-        const allApps: App[] = await appService.getAllApps();
-        if (!allApps.some(({ id: app_id }) => app_id == id)) {
+        const now = Date.now();
+        if (now - (lastTouched.get(id) ?? 0) < LAST_SEEN_THROTTLE_MS) {
             return;
         }
-        await storage.setItem(
-            'apps',
-            allApps.map((saved) => (saved.id == id ? { ...saved, lastSeen: Date.now() } : saved))
-        );
+        try {
+            if (!(await appService.getAllApps()).some(({ id: app_id }) => app_id == id)) {
+                return;
+            }
+            lastTouched.set(id, now);
+            const lastSeen: Record<string, number> = (await storage.getItem(LAST_SEEN_KEY)) || {};
+            await storage.setItem(LAST_SEEN_KEY, { ...lastSeen, [id]: now });
+        } catch {
+            // Bookkeeping only - never let it fail a request.
+        }
     },
 
     removeApp: async (id: string): Promise<boolean> => {
@@ -146,6 +161,13 @@ const appService = {
             case AppType.RADARR:
             case AppType.SONARR: {
                 return await arrFacade.testConnection(form);
+            }
+            case AppType.JELLYFIN: {
+                const result = await jellyfinService.testConnection(form);
+                if (result === true && form.id) {
+                    await appService.touchApp(form.id);
+                }
+                return result;
             }
             case AppType.NZBGET:
             case AppType.SABNZBD: {

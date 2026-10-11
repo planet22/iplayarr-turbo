@@ -1,16 +1,14 @@
 <template>
     <div class="inner-content">
-        <legend>Subscriptions</legend>
+        <PageHeader title="Subscriptions" />
+        <SettingsPageToolbar
+            :icons="['refresh']" :refresh-label="checkingAll ? 'Checking…' : 'Check All Now'"
+            :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"
+        />
         <p>
             New episodes of these shows are queued for download automatically. They are checked every hour, or on
             demand.
         </p>
-        <div class="subscriptionActions">
-            <button class="clickable checkAll" :disabled="checkingAll || !subscriptions.length" @click="checkAll">
-                <font-awesome-icon :icon="['fas', 'rotate']" :spin="checkingAll" />
-                Check all now
-            </button>
-        </div>
         <LoadingIndicator v-if="!loaded" />
         <p v-else-if="subscriptions.length === 0">
             No subscriptions yet. Open a show from
@@ -56,6 +54,37 @@
             </div>
         </div>
         <TablePagination v-if="loaded && subscriptions.length" v-model="page" v-model:page-size="pageSize" :total="subscriptions.length" />
+
+        <template v-if="liveSubscriptions.length">
+            <legend class="liveLegend">Live channels</legend>
+            <p>
+                These BBC live channels have a .strm file in your library folder, so your media server lists them.
+                Add more from <RouterLink to="/browse/channels">Channels</RouterLink>.
+            </p>
+            <div class="subscriptionList">
+                <div v-for="live in liveSubscriptions" :key="live.channelId" class="subscriptionRow">
+                    <div class="thumbLink liveLogo">
+                        <img
+                            v-if="live.logo && !failedLogos[live.channelId]" :src="getThumbnailUrl(live.logo)"
+                            :alt="live.title" @error="failedLogos[live.channelId] = true"
+                        />
+                        <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    </div>
+                    <div class="info">
+                        <span class="title">{{ live.title }}</span>
+                        <div class="details">
+                            <span class="pill">Live</span>
+                            <span>{{ live.file }}</span>
+                        </div>
+                    </div>
+                    <div class="rowActions">
+                        <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="unsubscribeLive(live.channelId)">
+                            <font-awesome-icon :icon="['fas', 'trash']" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
     </div>
 </template>
 
@@ -64,9 +93,12 @@ import { onMounted, reactive, ref } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { usePagination } from '@/lib/usePagination';
@@ -75,12 +107,22 @@ import { formatRelativeTime, getThumbnailUrl, hideBrokenImage } from '@/lib/util
 const { subscriptions, loaded, load, unsubscribe, toggleArr } = useSubscriptions();
 const { page, pageSize, pagedItems } = usePagination(subscriptions);
 const busy = reactive({});
+// Live channel logos that failed to load fall back to the TV icon.
+const failedLogos = reactive({});
 const checkingAll = ref(false);
 
 const { loadAppNames, arrAppName } = useArrAppNames();
 
+const {
+    liveSubscriptions,
+    load: loadLive,
+    isBusy: isLiveBusy,
+    unsubscribe: unsubscribeLive,
+} = useLiveSubscriptions();
+
 onMounted(() => {
     load();
+    loadLive();
     loadAppNames();
 });
 
@@ -136,23 +178,15 @@ const remove = (subscription) => unsubscribe(subscription);
 </script>
 
 <style lang="less" scoped>
-.subscriptionActions {
-    margin-bottom: 12px;
+.liveLegend {
+    margin-top: 28px;
+}
 
-    .checkAll {
-        padding: 6px 14px;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-
-        svg {
-            margin-right: 6px;
-        }
-
-        &:hover:not(:disabled) {
-            background-color: @settings-button-hover-background-color;
-        }
+// Channel logos are wide (76x32) rather than 16:9 artwork - sized to their own shape so nothing crops.
+.subscriptionRow .liveLogo {
+    img,
+    .noThumb {
+        aspect-ratio: 2.375 / 1;
     }
 }
 

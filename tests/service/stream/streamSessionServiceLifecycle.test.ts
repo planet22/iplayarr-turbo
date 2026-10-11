@@ -39,6 +39,13 @@ describe('streamSessionService lifecycle', () => {
         expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_STARTED, expect.any(String), { pid: 'p1' });
     });
 
+    it('start marks a live channel session with its title', async () => {
+        const id = await streamSessionService.start('bbc_one_london', mode, client, undefined, undefined, { title: 'BBC One' });
+        expect(find(id)).toMatchObject({ live: true, title: 'BBC One' });
+        const plain = await streamSessionService.start('p1', mode, client);
+        expect(find(plain)?.live).toBeUndefined();
+    });
+
     it('setResolution only emits on change', async () => {
         const id = await streamSessionService.start('p1', mode, client);
         (socketService.emit as jest.Mock).mockClear();

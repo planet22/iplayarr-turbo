@@ -80,7 +80,8 @@ const streamSessionService = {
         mode: StreamMode,
         client: StreamClient,
         clientIp?: string,
-        settings?: Record<string, string>
+        settings?: Record<string, string>,
+        live?: { title: string }
     ): Promise<string> => {
         const session: StreamSession = {
             id: uuidv4(),
@@ -91,6 +92,7 @@ const streamSessionService = {
             startedAt: new Date(),
             lastActivityAt: new Date(),
             settings,
+            ...(live ? { live: true, title: live.title } : {}),
         };
         active.push(session);
         await streamSessionService.emitStreams();

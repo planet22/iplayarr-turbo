@@ -1,9 +1,17 @@
 <template>
     <div class="browsePage">
-        <h1 class="browseTitle">{{ isChannels ? 'Channels' : 'Categories' }}</h1>
+        <PageHeader :title="isChannels ? 'Channels' : 'Categories'">
+            <button
+                v-if="isChannels && !loading && !error && tiles.some((t) => t.live)" type="button" class="addAll"
+                title="Subscribe to all live channels (adds them to the library)" :disabled="allBusy" @click="subscribeAll"
+            >
+                <font-awesome-icon :icon="['fas', allBusy ? 'circle-notch' : 'bell']" :spin="allBusy" />
+                Subscribe all
+            </button>
+        </PageHeader>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
-        <div v-else class="tileGrid">
+        <div v-if="!loading && !error" class="tileGrid">
             <RouterLink
                 v-for="tile in tiles" :key="tile.id" :to="`/browse/${isChannels ? 'channel' : 'category'}/${tile.id}`"
                 :class="['tile', isChannels ? '' : 'imageTile']"
@@ -16,6 +24,19 @@
                     />
                     <!-- Logo already carries the channel name; fall back to text only when there's no logo to show. -->
                     <span v-else class="channelName">{{ tile.title }}</span>
+                    <button
+                        v-if="tile.live" class="liveButton libraryButton" type="button" :disabled="isBusy(tile.id)"
+                        :title="isSubscribed(tile.id) ? `${tile.title} is in the library - click to remove` : `Add ${tile.title} to the library`"
+                        @click.prevent.stop="toggleLibrary(tile)"
+                    >
+                        <font-awesome-icon :icon="['fas', isSubscribed(tile.id) ? 'check' : 'plus']" />
+                    </button>
+                    <button
+                        v-if="tile.live" class="liveButton" type="button" :title="`Watch ${tile.title} live`"
+                        @click.prevent.stop="watchLive(tile)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'play']" />
+                    </button>
                 </template>
                 <span v-else class="tileTitle">{{ tile.title }}</span>
             </RouterLink>
@@ -29,7 +50,10 @@ import { useRoute } from 'vue-router';
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import { browseFetch } from '@/lib/browse';
+import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
+import { playInPip } from '@/lib/pipPlayer';
 import { getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
@@ -41,6 +65,12 @@ const error = ref(null);
 
 // One view for both listings: the route's meta says which.
 const isChannels = computed(() => route.meta.tiles === 'channels');
+
+const watchLive = (tile) => playInPip(tile.id, `${tile.title} (Live)`, true);
+
+const { allBusy, load: loadLive, isSubscribed, isBusy, subscribe, unsubscribe, subscribeAll } = useLiveSubscriptions();
+loadLive();
+const toggleLibrary = (tile) => (isSubscribed(tile.id) ? unsubscribe(tile.id) : subscribe(tile.id));
 
 watch(
     isChannels,
@@ -60,6 +90,40 @@ watch(
 </script>
 
 <style lang="less" scoped>
+// Title and Add all share one line (including on mobile) - the title block's own bottom margin
+// moves to the row so the button stays vertically centred on the heading.
+.tilesHeader {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 1rem;
+
+    // Needs h1 + class to outrank global.less's `h1.browseTitle` bottom margin, which would
+    // otherwise push the heading above the button's centre line.
+    h1.browseTitle {
+        margin: 0;
+    }
+
+    .addAll {
+        margin-left: auto;
+        padding: 6px 14px;
+        border-radius: 4px;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+        cursor: pointer;
+        white-space: nowrap;
+
+        svg {
+            margin-right: 6px;
+        }
+
+        &:hover:not(:disabled) {
+            background-color: @settings-button-hover-background-color;
+        }
+    }
+}
+
 .tileGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -71,6 +135,7 @@ watch(
 }
 
 .tile {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -106,6 +171,43 @@ watch(
 
     .channelName {
         font-size: 16px;
+    }
+
+    .liveButton {
+        position: absolute;
+        right: 8px;
+        bottom: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background-color: rgba(0, 0, 0, 0.45);
+        color: #fff;
+        cursor: pointer;
+        opacity: 0.9;
+
+        &.libraryButton {
+            right: auto;
+            left: 8px;
+
+            &:disabled {
+                cursor: default;
+                opacity: 0.5;
+            }
+        }
+
+        // Beats the generic `.tile svg` subtle colour above.
+        svg {
+            color: #fff;
+        }
+
+        &:hover {
+            opacity: 1;
+        }
     }
 
     &:not(.imageTile) {

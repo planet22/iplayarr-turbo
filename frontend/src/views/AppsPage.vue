@@ -3,7 +3,7 @@
         <InfoBar clazz="warning small">
             NZB clients need the category "iplayer" for NZB forwarding to work.
         </InfoBar>
-        <legend>Apps</legend>
+        <PageHeader title="Apps" />
         <p class="mb-0">Manage your integrations with Apps (including Arr and NZB Clients) here</p>
         <div class="block-reset" />
         <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm">
@@ -126,6 +126,7 @@ import { useModal } from 'vue-final-modal';
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';

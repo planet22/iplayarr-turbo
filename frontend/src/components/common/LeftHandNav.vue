@@ -14,6 +14,7 @@
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Video Events" icon="film" path="/events" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" @option-clicked="closeLHN" />
 
             <li class="sectionLabel">Integrations</li>
             <LeftHandNavLink label="Apps" icon="laptop-code" path="/apps" @option-clicked="closeLHN" />
@@ -42,12 +43,19 @@ label="Refresh Index" icon="address-book" :no-link="true"
                 <font-awesome-icon :icon="['fas', 'desktop']" fixed-width />
                 <span>Native Search</span>
             </div>
+            <div class="mobileOnly versionInfo">
+                <div v-for="line in versionLines" :key="line">{{ line }}</div>
+                <a href="https://github.com/planet22/iplayarr-turbo" aria-label="GitHub" target="_blank">
+                    <font-awesome-icon :icon="['fab', 'github']" fixed-width />
+                    <span>GitHub</span>
+                </a>
+            </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { defineEmits, defineExpose, inject, onBeforeUnmount, ref } from 'vue';
+import { computed, defineEmits, defineExpose, inject, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { onBeforeRouteLeave } from 'vue-router';
 
@@ -60,6 +68,16 @@ const router = useRouter();
 const lhn = ref(null);
 const emit = defineEmits(['clear-search']);
 const globalSettings = inject('globalSettings');
+const hiddenSettings = inject('hiddenSettings');
+const toolVersions = inject('toolVersions');
+
+const versionLines = computed(() => {
+    const lines = [];
+    if (hiddenSettings?.value?.VERSION) lines.push(`v${hiddenSettings.value.VERSION}`);
+    if (toolVersions?.value?.getIplayer?.current) lines.push(`get_iplayer: ${toolVersions.value.getIplayer.current}`);
+    if (toolVersions?.value?.ytdlp?.current) lines.push(`yt-dlp: ${toolVersions.value.ytdlp.current}`);
+    return lines;
+});
 
 const toggleLHN = () => {
     lhn.value.classList.toggle('show');
@@ -142,6 +160,17 @@ const handleClickOutside = (event) => {
             &:hover {
                 color: @nav-link-color;
             }
+        }
+    }
+
+    .versionInfo {
+        margin-top: 12px;
+        font-size: 12px;
+        color: @subtle-text-color;
+
+        a {
+            display: inline-block;
+            margin-top: 6px;
         }
     }
 

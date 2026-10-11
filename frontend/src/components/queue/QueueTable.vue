@@ -1,8 +1,4 @@
 <template>
-    <div v-if="showFilters" class="tableToolbar">
-        <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter queue..." />
-        <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
-    </div>
     <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
     <table class="queueTable responsive-table" summary="Hed">
         <colgroup>
@@ -71,7 +67,6 @@ import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 
-import DateRangeFilter from '../common/DateRangeFilter.vue';
 import CheckInput from '../common/form/CheckInput.vue';
 import SortIcon from '../common/SortIcon.vue';
 import TablePagination from '../common/TablePagination.vue';
@@ -185,6 +180,9 @@ const selectedQueue = computed(() => {
 
 defineExpose({
     showFilters,
+    filterText,
+    dateFrom,
+    dateTo,
     filtersActive,
     selectedHistory,
     selectedQueue,

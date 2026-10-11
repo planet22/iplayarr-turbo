@@ -16,6 +16,7 @@ import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../ut
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import EventsRoute from './json-api/EventsRoute';
+import LiveSubscriptionsRoute from './json-api/LiveSubscriptionsRoute';
 import MaintenanceRoute from './json-api/MaintenanceRoute';
 import OffScheduleRoute from './json-api/OffScheduleRoute';
 import QueueRoute from './json-api/QueueRoute';
@@ -26,6 +27,7 @@ import SubscriptionArrRoute from './json-api/SubscriptionArrRoute';
 import SubscriptionsRoute from './json-api/SubscriptionsRoute';
 import SynonymsRoute from './json-api/SynonymsRoute';
 import VersionRoute from './json-api/VersionRoute';
+import WatchdogRoute from './json-api/WatchdogRoute';
 
 const router: Router = Router();
 
@@ -39,9 +41,11 @@ router.use('/streams', StreamRoute);
 router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
+router.use('/subscriptions/live', LiveSubscriptionsRoute);
 router.use('/subscriptions/arr', SubscriptionArrRoute);
 router.use('/subscriptions', SubscriptionsRoute);
 router.use('/maintenance', MaintenanceRoute);
+router.use('/watchdog', WatchdogRoute);
 
 router.post('/nzb/test', async (req: Request, res: Response) => {
     const { NZB_URL, NZB_API_KEY, NZB_TYPE, NZB_USERNAME, NZB_PASSWORD } = req.body;
@@ -73,6 +77,10 @@ router.get('/search', async (req: Request, res: Response) => {
 // found, then a final {"done":true} line (or {"error":"..."} if it failed part-way).
 router.get('/search/stream', async (req: Request, res: Response) => {
     const { q } = req.query as any;
+    if (typeof q !== 'string' || !q.trim()) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A search term is required' } as ApiResponse);
+        return;
+    }
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('X-Accel-Buffering', 'no');

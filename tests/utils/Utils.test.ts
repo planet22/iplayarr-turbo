@@ -868,3 +868,21 @@ describe('Utils', () => {
         mockedAppService.getApp.mockClear();
     });
 });
+
+describe('parseStrmPid', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { parseStrmPid } = require('../../src/utils/Utils');
+
+    it('extracts the pid from an iPlayarr stream URL', () => {
+        expect(parseStrmPid('http://host:4404/api?mode=stream&pid=m001sx3h&streamkey=abc\n')).toBe('m001sx3h');
+    });
+
+    it('extracts the pid from a BBC iPlayer URL', () => {
+        expect(parseStrmPid('https://www.bbc.co.uk/iplayer/episode/m002tshj/pointless')).toBe('m002tshj');
+    });
+
+    it('ignores .strm files that are not ours', () => {
+        expect(parseStrmPid('https://www.youtube.com/watch?v=abcdefghijk')).toBeUndefined();
+        expect(parseStrmPid('http://other/stream?pid=m001sx3h')).toBeUndefined();
+    });
+});

@@ -90,7 +90,7 @@
                             </div>
                             <div v-if="episode.description" class="episodeDescription">{{ episode.description }}</div>
                             <div class="episodeDetails">
-                                <span v-if="episode.runtime">{{ Math.round(episode.runtime) }} min</span>
+                                <span v-if="episode.runtime">{{ roundUpMinutes(episode.runtime) }} min</span>
                                 <span v-if="episode.firstBroadcast">{{ formatDate(episode.firstBroadcast) }}</span>
                             </div>
                         </div>
@@ -125,7 +125,7 @@ import { useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { usePagination } from '@/lib/usePagination';
-import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage, roundUpMinutes } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();

@@ -27,8 +27,20 @@ export const hideBrokenImage = (event) => {
     event.target.style.visibility = 'hidden';
 };
 
+// Node reports IPv4 clients on its dual-stack socket as IPv4-mapped IPv6 (::ffff:1.2.3.4); show those
+// as plain IPv4 and leave real IPv6 addresses alone.
+export const formatClientIp = (ip) => {
+    return ip?.replace(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i, '$1');
+};
+
 export const getThumbnailUrl = (thumbnail) => {
     return thumbnail ? `${getHost()}/${thumbnail}` : undefined;
+};
+
+// A stream session's thumbnail: the programme's still from its details, or - for a live channel,
+// which has no programme details - the channel's logo (`channelLogos` maps channel id -> logo path).
+export const getSessionThumbnailUrl = (session, details, channelLogos) => {
+    return getThumbnailUrl(session.live ? channelLogos?.[session.pid] : details?.thumbnail);
 };
 
 // Builds the "Series X, Episode Y" identifier shown alongside a video's channel wherever
@@ -67,6 +79,13 @@ export const formatStorageSize = (mb) => {
         return (mb >= 100 ? Math.round(mb) : mb.toFixed(2)) + ' MB';
     }
     return;
+};
+
+// Programme runtimes arrive as fractional minutes (e.g. 117.0333) - round up to a whole minute
+// for display. Returns undefined when there's no usable runtime.
+export const roundUpMinutes = (minutes) => {
+    const value = Number(minutes);
+    return Number.isFinite(value) && value > 0 ? Math.ceil(value - 1e-9) : undefined;
 };
 
 export const enforceMaxLength = (arr, maxLength) => {

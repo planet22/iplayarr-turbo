@@ -61,6 +61,12 @@ const configService = {
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
+        STRM_WATCHDOG_ENABLED: 'false',
+        STRM_WATCHDOG_SOURCES: 'history',
+        STRM_WATCHDOG_ACTION: 'notify',
+        STRM_WATCHDOG_ARR_ACTION: 'none',
+        STRM_WATCHDOG_FAIL_THRESHOLD: '10',
+        STRM_WATCHDOG_CONCURRENCY: '4',
     } as ConfigMap,
 
     getParameter: async (parameter: IplayarrParameter): Promise<string | undefined> => {

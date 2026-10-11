@@ -1,18 +1,20 @@
 <template>
     <div class="inner-content scroll-x">
+        <PageHeader title="Recent Searches" />
         <SettingsPageToolbar
-            :icons="['delete', 'filterToggle']" delete-label="Clear Searches"
+            :icons="['delete', 'filterToggle']" delete-label="Clear searches"
             :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
             @delete-queue-item="clearSearches" @toggle-filters="searchShowFilters = !searchShowFilters"
-        />
-        <legend>Recent Searches</legend>
-        <div v-if="searchShowFilters" class="tableToolbar">
-            <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
-            <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
-        </div>
+        >
+            <template v-if="searchShowFilters" #filters>
+                <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
+                <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
+            </template>
+        </SettingsPageToolbar>
         <table class="dataTable responsive-table">
             <colgroup>
                 <col />
+                <col style="width: 10ch" />
                 <col style="width: 10ch" />
                 <col style="width: 10ch" />
                 <col style="width: 10ch" />
@@ -24,14 +26,17 @@
                     <th class="sortable" @click="toggleSearchSort('term')">
                         Term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSearchSort('results')">
-                        Results <SortIcon :active="searchSortBy == 'results'" :order="searchSortOrder" />
-                    </th>
                     <th class="sortable" @click="toggleSearchSort('series')">
                         Season <SortIcon :active="searchSortBy == 'series'" :order="searchSortOrder" />
                     </th>
                     <th class="sortable" @click="toggleSearchSort('episode')">
                         Episode <SortIcon :active="searchSortBy == 'episode'" :order="searchSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleSearchSort('results')">
+                        Results <SortIcon :active="searchSortBy == 'results'" :order="searchSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleSearchSort('type')">
+                        Type <SortIcon :active="searchSortBy == 'type'" :order="searchSortOrder" />
                     </th>
                     <th class="sortable" @click="toggleSearchSort('app')">
                         App <SortIcon :active="searchSortBy == 'app'" :order="searchSortOrder" />
@@ -44,32 +49,34 @@
             <tbody>
                 <tr v-for="(entry, index) in pagedSearches" :key="index">
                     <td class="text">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</td>
+                    <td data-title="Season">{{ entry.series ?? '' }}</td>
+                    <td data-title="Episode">{{ entry.episode ?? '' }}</td>
                     <td data-title="Results">
                         <a v-if="entry.items?.length" class="clickable" @click="showResults(entry)">{{ entry.results }}</a>
                         <template v-else>{{ entry.results }}</template>
                     </td>
-                    <td data-title="Season">{{ entry.series ?? '' }}</td>
-                    <td data-title="Episode">{{ entry.episode ?? '' }}</td>
+                    <td data-title="Type"><span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span></td>
                     <td data-title="App">{{ appName(entry.appId) }}</td>
                     <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedSearches.length == 0">
-                    <td colspan="6" class="empty">No searches recorded yet</td>
+                    <td colspan="7" class="empty">No searches recorded yet</td>
                 </tr>
             </tbody>
         </table>
         <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
 
+        <PageHeader title="Recent Grabs" />
         <SettingsPageToolbar
-            :icons="['delete', 'filterToggle']" delete-label="Clear Grabs"
+            :icons="['delete', 'filterToggle']" delete-label="Clear grabs"
             :filters-shown="grabShowFilters" :filters-active="grabFiltersActive"
             @delete-queue-item="clearGrabs" @toggle-filters="grabShowFilters = !grabShowFilters"
-        />
-        <legend>Recent Grabs</legend>
-        <div v-if="grabShowFilters" class="tableToolbar">
-            <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
-            <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
-        </div>
+        >
+            <template v-if="grabShowFilters" #filters>
+                <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
+                <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
+            </template>
+        </SettingsPageToolbar>
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
@@ -109,6 +116,7 @@
                             @click="openInfo(entry.pid)"
                             @error="hideBrokenImage"
                         />
+                        <div v-else class="thumbnail-placeholder"></div>
                     </td>
                     <td data-title="PID">{{ entry.pid }}</td>
                     <td class="text">
@@ -130,16 +138,17 @@
         </table>
         <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
 
+        <PageHeader title="Failed Grabs" />
         <SettingsPageToolbar
-            :icons="['delete', 'filterToggle']" delete-label="Clear Failed"
+            :icons="['delete', 'filterToggle']" delete-label="Clear failed grabs"
             :filters-shown="failedGrabShowFilters" :filters-active="failedGrabFiltersActive"
             @delete-queue-item="clearFailedGrabs" @toggle-filters="failedGrabShowFilters = !failedGrabShowFilters"
-        />
-        <legend>Failed Grabs</legend>
-        <div v-if="failedGrabShowFilters" class="tableToolbar">
-            <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
-            <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
-        </div>
+        >
+            <template v-if="failedGrabShowFilters" #filters>
+                <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
+                <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
+            </template>
+        </SettingsPageToolbar>
         <table class="dataTable responsive-table">
             <colgroup>
                 <col style="width: 14ch" />
@@ -189,6 +198,7 @@ import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } fr
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
@@ -251,12 +261,22 @@ function appName(appId) {
     return apps.value.find(({ id }) => id == appId)?.name ?? '';
 }
 
+// Searches don't record a type of their own: it is the type the results share (none when they are
+// mixed or unknown), or TV when the search named a season/episode.
+function searchType(entry) {
+    const types = new Set((entry.items ?? []).map(({ type }) => type).filter((type) => type && type != 'UNKNOWN'));
+    if (types.size == 1) return [...types][0];
+    if (!types.size && (entry.series != null || entry.episode != null)) return 'TV';
+    return '';
+}
+
 const {
     filterText: searchFilterText, sortBy: searchSortBy, sortOrder: searchSortOrder,
     dateFrom: searchDateFrom, dateTo: searchDateTo, sorted: sortedSearches, toggleSort: toggleSearchSort,
 } = useSortFilter(searchHistory, {
     filterFn: (entry, query) => [
         entry.term == '*' ? 'RSS Feed' : entry.term,
+        searchType(entry),
         appName(entry.appId),
     ].some((value) => String(value ?? '').toLowerCase().includes(query)),
     sortAccessors: {
@@ -264,6 +284,7 @@ const {
         results: (entry) => entry.results,
         series: (entry) => entry.series,
         episode: (entry) => entry.episode,
+        type: (entry) => searchType(entry),
         app: (entry) => appName(entry.appId),
         time: (entry) => entry.time,
     },

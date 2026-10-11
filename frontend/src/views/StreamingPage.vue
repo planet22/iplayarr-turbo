@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content scroll-x">
-        <legend>Active Streams</legend>
+        <PageHeader title="Active Streams" />
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
@@ -52,16 +52,18 @@
                 <tr v-for="session in streams.active" :key="session.id">
                     <td>
                         <img
-                            v-if="detailsFor(session.pid)?.thumbnail"
+                            v-if="thumbnailFor(session)"
                             class="thumbnail clickable"
-                            :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
-                            @click="openInfo(session.pid)"
+                            :class="{ channelLogo: session.live }"
+                            :src="thumbnailFor(session)"
+                            @click="openInfo(session)"
                             @error="hideBrokenImage"
                         />
+                        <div v-else class="thumbnail-placeholder"></div>
                     </td>
                     <td class="text">
-                        <a class="clickable" @click="openInfo(session.pid)">
-                            {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        <a class="clickable" @click="openInfo(session)">
+                            {{ session.title ?? detailsFor(session.pid)?.title ?? session.pid }}
                         </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
@@ -74,13 +76,14 @@
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td data-title="Client IP">{{ session.clientIp }}</td>
+                    <td data-title="Client IP">{{ formatClientIp(session.clientIp) }}</td>
                     <td />
                     <td data-title="Duration">{{ formatDuration(session.startedAt) }}</td>
                     <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
                     <td data-title="Segments">
+                        <span v-if="session.live" class="liveBadge"><span class="liveDot" />Live</span>
                         <SegmentActivityStrip
-                            v-if="session.totalSegments"
+                            v-else-if="session.totalSegments"
                             :total="session.totalSegments"
                             :delivered="session.deliveredSegments ?? []"
                             :current-segment-index="session.currentSegmentIndex ?? null"
@@ -103,8 +106,8 @@
             </tbody>
         </table>
 
-        <SettingsPageToolbar :icons="['delete']" delete-label="Clear History" @delete-queue-item="clearHistory" />
-        <legend>Stream History</legend>
+        <PageHeader title="Stream History" />
+        <SettingsPageToolbar :icons="['delete']" delete-label="Clear stream history" @delete-queue-item="clearHistory" />
         <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
@@ -147,16 +150,18 @@
                 <tr v-for="session in pagedHistory" :key="session.id">
                     <td>
                         <img
-                            v-if="detailsFor(session.pid)?.thumbnail"
+                            v-if="thumbnailFor(session)"
                             class="thumbnail clickable"
-                            :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
-                            @click="openInfo(session.pid)"
+                            :class="{ channelLogo: session.live }"
+                            :src="thumbnailFor(session)"
+                            @click="openInfo(session)"
                             @error="hideBrokenImage"
                         />
+                        <div v-else class="thumbnail-placeholder"></div>
                     </td>
                     <td class="text">
-                        <a class="clickable" @click="openInfo(session.pid)">
-                            {{ detailsFor(session.pid)?.title ?? session.pid }}
+                        <a class="clickable" @click="openInfo(session)">
+                            {{ session.title ?? detailsFor(session.pid)?.title ?? session.pid }}
                         </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
                             {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
@@ -169,13 +174,14 @@
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td data-title="Client IP">{{ session.clientIp }}</td>
+                    <td data-title="Client IP">{{ formatClientIp(session.clientIp) }}</td>
                     <td data-title="Started">{{ formatDate(session.startedAt) }}</td>
                     <td data-title="Duration">{{ formatDuration(session.startedAt, session.endedAt) }}</td>
                     <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
                     <td data-title="Segments">
+                        <span v-if="session.live" class="liveBadge">Live</span>
                         <SegmentActivityStrip
-                            v-if="session.totalSegments"
+                            v-else-if="session.totalSegments"
                             :total="session.totalSegments"
                             :delivered="session.deliveredSegments ?? []"
                             :current-segment-index="session.currentSegmentIndex ?? null"
@@ -197,13 +203,14 @@
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import {
-    formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage,
+formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
@@ -224,6 +231,24 @@ function detailsFor(pid) {
     return details[pid];
 }
 
+// Live rows show the channel's logo, from the same Browse channel list the Channels page uses.
+const channelLogos = ref({});
+
+async function loadChannelLogos() {
+    try {
+        const response = await ipFetch('json-api/browse/channels');
+        if (response.ok) {
+            channelLogos.value = Object.fromEntries(response.data.map(({ id, logo }) => [id, logo]));
+        }
+    } catch {
+        // logos are decoration - rows fall back to the placeholder
+    }
+}
+
+function thumbnailFor(session) {
+    return getSessionThumbnailUrl(session, detailsFor(session.pid), channelLogos.value);
+}
+
 function seriesEpisodeLabel(pid) {
     return getSeriesEpisodeLabel(detailsFor(pid));
 }
@@ -242,11 +267,14 @@ async function loadDetails(pid) {
 }
 
 function loadMissingDetails() {
-    const pids = [...streams.value.active, ...streams.value.history].map(({ pid }) => pid);
+    const pids = [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid);
     [...new Set(pids)].filter(Boolean).forEach(loadDetails);
 }
 
-onMounted(loadMissingDetails);
+onMounted(() => {
+    loadMissingDetails();
+    loadChannelLogos();
+});
 watch(streams, loadMissingDetails);
 
 const clientLabels = {
@@ -264,7 +292,11 @@ function modeLabel(session) {
     return client ? `${session.mode} (${client})` : session.mode;
 }
 
-function openInfo(pid) {
+function openInfo(session) {
+    if (session.live) {
+        return;
+    }
+    const pid = session.pid;
     const infoModal = useModal({
         component: VideoInfoModal,
         attrs: { pid },
@@ -323,6 +355,36 @@ async function clearHistory() {
 </script>
 
 <style lang="less">
+.liveBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: @brand-color;
+
+    .liveDot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: currentColor;
+        animation: livePulse 1.4s ease-in-out infinite;
+    }
+}
+
+@keyframes livePulse {
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.35;
+        transform: scale(0.7);
+    }
+}
+
 .tableToolbar {
     display: flex;
     justify-content: flex-start;
@@ -441,6 +503,11 @@ async function clearHistory() {
         object-fit: cover;
         border-radius: 2px;
         display: block;
+    }
+
+    // Channel logos are already their own coloured tile - show whole, not cropped to the 16:9 still.
+    .thumbnail.channelLogo {
+        object-fit: contain;
     }
 
     .text {

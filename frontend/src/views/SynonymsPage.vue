@@ -1,7 +1,7 @@
 <template>
-    <SettingsPageToolbar :icons="['arrImport']" @arr-import="openImportWizard" />
     <div class="inner-content">
-        <legend>Synonyms</legend>
+        <PageHeader title="Synonyms" />
+        <SettingsPageToolbar :icons="['arrImport']" @arr-import="openImportWizard" />
         <p>iPlayer don't save their videos in an *arr friendly way. You can use synonyms to help you bridge the gap</p>
         <ListEditor v-slot="{ item }" :items="synonyms" :actions="[['trash', removeSynonym]]" @create="openForm">
             <div class="major" @click="openForm(item)">
@@ -33,6 +33,7 @@ import { onMounted, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import ListEditor from '@/components/common/ListEditor.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import AppSelectDialog from '@/components/modals/AppSelectDialog.vue';
 import ArrLookupDialog from '@/components/modals/ArrLookupDialog.vue';

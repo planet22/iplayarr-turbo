@@ -1,14 +1,16 @@
 <template>
-    <SettingsPageToolbar
-        :icons="['delete', 'filterToggle']" delete-label="Clear Log"
-        :filters-shown="showFilters" :filters-active="filtersActive"
-        @delete-queue-item="clearEvents" @toggle-filters="showFilters = !showFilters"
-    />
     <div class="inner-content scroll-x">
-        <div v-if="showFilters" class="tableToolbar">
-            <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
-            <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
-        </div>
+        <PageHeader title="Video Events" />
+        <SettingsPageToolbar
+            :icons="['delete', 'filterToggle']" delete-label="Clear video events"
+            :filters-shown="showFilters" :filters-active="filtersActive"
+            @delete-queue-item="clearEvents" @toggle-filters="showFilters = !showFilters"
+        >
+            <template v-if="showFilters" #filters>
+                <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
+                <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
+            </template>
+        </SettingsPageToolbar>
         <TablePagination v-model="eventsPage" v-model:page-size="eventsPageSize" :total="sortedEvents.length" />
         <table class="dataTable eventLogTable responsive-table">
             <colgroup>
@@ -45,23 +47,20 @@
                 <tr v-for="event in pagedEvents" :key="event.id">
                     <td>
                         <img
-                            v-if="event.pid && detailsFor(event.pid)?.thumbnail"
+                            v-if="event.pid && thumbnailFor(event.pid)"
                             class="thumbnail clickable"
-                            :src="getThumbnailUrl(detailsFor(event.pid).thumbnail)"
+                            :class="{ channelLogo: channelLogos[event.pid] }"
+                            :src="thumbnailFor(event.pid)"
                             @click="openInfo(event.pid)"
                             @error="hideBrokenImage"
                         />
-                        <font-awesome-icon
-                            v-else-if="event.pid"
-                            class="thumbnail-placeholder clickable"
-                            :icon="['fas', 'film']"
-                            @click="openInfo(event.pid)"
-                            @error="hideBrokenImage"
-                        />
+                        <div v-else-if="event.pid" class="thumbnail-placeholder clickable" @click="openInfo(event.pid)">
+                                <font-awesome-icon :icon="['fas', 'film']" />
+                            </div>
                     </td>
                     <td class="text">
                         <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">
-                            {{ detailsFor(event.pid)?.title ?? event.pid }}
+                            {{ titleFor(event.pid) }}
                         </a>
                         <div v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" class="subtle">
                             {{ [detailsFor(event.pid)?.channel, seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
@@ -86,6 +85,7 @@ import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
@@ -94,7 +94,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
-import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const events = inject('videoEvents');
 const details = reactive({});
@@ -108,7 +108,7 @@ function seriesEpisodeLabel(pid) {
 }
 
 function videoLabel(event) {
-    return (event.pid && detailsFor(event.pid)?.title) || event.pid || '';
+    return (event.pid && titleFor(event.pid)) || '';
 }
 
 const reversedEvents = computed(() => [...events.value].reverse());
@@ -150,14 +150,46 @@ async function loadDetails(pid) {
     }
 }
 
+// Live channel events (the pid is a channel id) show the channel's logo, from the same Browse
+// channel list the Channels page uses; there are no programme details for them.
+const channelLogos = ref({});
+const channelTitles = ref({});
+
+async function loadChannelLogos() {
+    try {
+        const response = await ipFetch('json-api/browse/channels');
+        if (response.ok) {
+            channelLogos.value = Object.fromEntries(response.data.map(({ id, logo }) => [id, logo]));
+            channelTitles.value = Object.fromEntries(response.data.map(({ id, title }) => [id, title]));
+        }
+    } catch {
+        // logos are decoration - rows fall back to the placeholder
+    }
+}
+
+function titleFor(pid) {
+    return channelTitles.value[pid] ?? detailsFor(pid)?.title ?? pid;
+}
+
+function thumbnailFor(pid) {
+    return getSessionThumbnailUrl({ pid, live: !!channelLogos.value[pid] }, detailsFor(pid), channelLogos.value);
+}
+
 function loadMissingDetails() {
     [...new Set(events.value.map(({ pid }) => pid).filter(Boolean))].forEach(loadDetails);
 }
 
-onMounted(loadMissingDetails);
+onMounted(() => {
+    loadChannelLogos();
+    loadMissingDetails();
+});
 watch(events, loadMissingDetails);
 
 function openInfo(pid) {
+    // Live channels have no programme details to show.
+    if (channelTitles.value[pid]) {
+        return;
+    }
     const infoModal = useModal({
         component: VideoInfoModal,
         attrs: { pid },
@@ -207,10 +239,8 @@ const clearEvents = async () => {
         display: block;
     }
 
-    .thumbnail-placeholder {
-        width: 64px;
-        text-align: center;
-        color: @subtle-text-color;
+    .thumbnail.channelLogo {
+        object-fit: contain;
     }
 
     .subtle {

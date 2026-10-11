@@ -1,13 +1,14 @@
 <template>
     <div class="browsePage schedulePage">
-        <div class="scheduleToolbar">
-            <h1 class="browseTitle">Schedule</h1>
+        <PageHeader title="Schedule">
+            <template #center>
             <div class="dateNav">
                 <button type="button" @click="shiftDay(-1)"><font-awesome-icon :icon="['fas', 'chevron-left']" /></button>
                 <span class="currentDate">{{ dateLabel }}</span>
                 <button type="button" @click="shiftDay(1)"><font-awesome-icon :icon="['fas', 'chevron-right']" /></button>
                 <button v-if="!isToday" type="button" class="todayButton" @click="goToday">Today</button>
             </div>
+            </template>
             <div class="zoomNav">
                 <button type="button" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
@@ -16,7 +17,7 @@
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" />
                 </button>
             </div>
-        </div>
+        </PageHeader>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
         <InfoBar v-else-if="channels.length === 0">Nothing scheduled for this day.</InfoBar>
@@ -72,6 +73,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import { browseFetch } from '@/lib/browse';
 import { getThumbnailUrl } from '@/lib/utils';
 

@@ -6,6 +6,7 @@ import cronJobService from './cronJobService';
 import episodeCacheService from './episodeCacheService';
 import libraryCleanupService from './libraryCleanupService';
 import streamSessionService from './stream/streamSessionService';
+import strmWatchdogService from './strmWatchdogService';
 import subscriptionService from './subscriptionService';
 import thumbnailCacheService from './thumbnailCacheService';
 
@@ -80,6 +81,18 @@ class TaskService {
                 cron: '45 3 * * *',
             },
             () => libraryCleanupService.cleanup()
+        );
+
+        // STRM Watchdog - 4:15 AM daily. Does nothing unless STRM_WATCHDOG_ENABLED; "Run now" on
+        // the Maintenance tab runs the same pass on demand.
+        cronJobService.defineTask(
+            {
+                id: 'strm-watchdog',
+                label: 'STRM Watchdog',
+                description: 'Checks that .strm links still resolve on BBC iPlayer and reports or removes expired ones.',
+                cron: '15 4 * * *',
+            },
+            () => strmWatchdogService.run()
         );
     }
 }
