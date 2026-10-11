@@ -1,5 +1,5 @@
 import { RedisStore } from 'connect-redis';
-import { Express, NextFunction, Request, Response, Router } from 'express';
+import { Express, NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import session from 'express-session';
 import crypto from 'crypto';
 import { v4 } from 'uuid';
@@ -43,21 +43,31 @@ const tokenMatches = (supplied: unknown): boolean => {
     return a.length === b.length && crypto.timingSafeEqual(a, b);
 };
 
+// Exposed so Socket.IO can read the same session cookie the HTTP routes use.
+export let sessionMiddleware: RequestHandler | undefined;
+
+// True when the request carries a logged-in session (or auth is switched off entirely).
+export const isAuthenticatedRequest = async (req: { session?: { user?: User } }): Promise<boolean> => {
+    if ((await configService.getParameter(IplayarrParameter.AUTH_TYPE)) == 'none') {
+        return true;
+    }
+    return !!req.session?.user;
+};
+
 export const addAuthMiddleware = (app: Express) => {
     const sessionCookieSettings: any = { secure: false, maxAge: 1000 * 60 * 60 * 24 };
     if (isDebug) {
         sessionCookieSettings.sameSite = 'lax';
     }
 
-    app.use(
-        session({
-            secret: process.env.SESSION_SECRET || 'default_secret_key', // Replace in production
-            resave: false,
-            saveUninitialized: false,
-            cookie: sessionCookieSettings,
-            store: redisStore,
-        })
-    );
+    sessionMiddleware = session({
+        secret: process.env.SESSION_SECRET || 'default_secret_key', // Replace in production
+        resave: false,
+        saveUninitialized: false,
+        cookie: sessionCookieSettings,
+        store: redisStore,
+    });
+    app.use(sessionMiddleware);
 
     app.use('/json-api/*', async (req: Request, res: Response, next: NextFunction) => {
         const [authType, username] = await Promise.all([

@@ -8,7 +8,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 
 import ApiRoute from './routes/ApiRoute';
-import AuthRoute, { addAuthMiddleware } from './routes/AuthRoute';
+import AuthRoute, { addAuthMiddleware, isAuthenticatedRequest, sessionMiddleware } from './routes/AuthRoute';
 import JsonApiRoute from './routes/JsonApiRoute';
 import { ensureNonDefaultPassword } from './service/auth/initialCredentialsService';
 import configService from './service/configService';
@@ -19,6 +19,7 @@ import socketService from './service/socketService';
 import StatisticsService from './service/stats/StatisticsService';
 import taskService from './service/taskService';
 import { IplayarrParameter } from './types/IplayarrParameters';
+import { redactBody, redactHeaders, redactUrl } from './utils/logRedaction';
 
 const isDebug = process.env.DEBUG == 'true';
 
@@ -58,9 +59,11 @@ app.use(express.static(path.join(process.cwd(), 'frontend', 'dist')));
 app.use((req: Request, _: Response, next: NextFunction) => {
     loggingService.debug('Request received:');
     loggingService.debug('Method:', req.method);
-    loggingService.debug('URL:', req.url);
-    loggingService.debug('Headers:', req.headers);
-    loggingService.debug('Body:', req.body);
+    // Credentials (API/stream keys in the query, cookies, passwords in bodies) must not reach the
+    // debug log: it is persisted to Redis and pushed over sockets to the UI.
+    loggingService.debug('URL:', redactUrl(req.url));
+    loggingService.debug('Headers:', redactHeaders(req.headers));
+    loggingService.debug('Body:', redactBody(req.body));
     next();
 });
 
@@ -74,7 +77,21 @@ app.get('*', (req, res) => {
 // Start the server
 const server: Server = http.createServer(app);
 
-const io = isDebug ? new SocketIOServer(server, { cors: {} }) : new SocketIOServer(server);
+const io = isDebug
+    ? new SocketIOServer(server, { cors: { origin: true, credentials: true } })
+    : new SocketIOServer(server);
+// The queue, history, stream and log feeds carry the same data as the authenticated /json-api, so a
+// socket needs the same login: read the session cookie off the handshake and refuse without one.
+if (sessionMiddleware) {
+    io.engine.use(sessionMiddleware);
+}
+io.use(async (socket, next) => {
+    try {
+        next((await isAuthenticatedRequest(socket.request as any)) ? undefined : new Error('Not authorised'));
+    } catch {
+        next(new Error('Not authorised'));
+    }
+});
 socketService.registerIo(io);
 
 (async () => {
