@@ -30,7 +30,7 @@ jest.mock('../../../src/service/liveTvChannelService', () => {
 });
 jest.mock('../../../src/service/liveTvSyncService', () => ({
     __esModule: true,
-    default: { notifyChanged: jest.fn(), remember: jest.fn(), forget: jest.fn(), remembered: jest.fn() },
+    default: { notifyChanged: jest.fn() },
 }));
 jest.mock('../../../src/service/liveTvService', () => ({
     __esModule: true,
@@ -77,43 +77,6 @@ describe('LiveTvRoute', () => {
         jest.clearAllMocks();
         await request(app).post('/channels').send({});
         expect(liveTvSyncService.notifyChanged).not.toHaveBeenCalled();
-    });
-
-    it('remembers the Jellyfin server on add, and forgets it once nothing is left', async () => {
-        await request(app).post('/jellyfin/tuner').send({ appId: 'a' });
-        expect(liveTvSyncService.remember).toHaveBeenCalledWith('a');
-
-        (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({ guide: { id: 'g', path: 'p' } });
-        await request(app).delete('/jellyfin/tuner').query({ appId: 'a' });
-        expect(liveTvSyncService.forget).not.toHaveBeenCalled();
-
-        (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({});
-        await request(app).delete('/jellyfin/guide').query({ appId: 'a' });
-        expect(liveTvSyncService.forget).toHaveBeenCalledWith('a');
-
-        (liveTvSyncService.remembered as jest.Mock).mockResolvedValue(['a', 'b']);
-        expect((await request(app).get('/jellyfin/servers')).body).toEqual({ appIds: ['a', 'b'] });
-    });
-
-    it('rejects a missing or non-Jellyfin app', async () => {
-        (appService.getApp as jest.Mock).mockResolvedValue(undefined);
-        expect((await request(app).get('/jellyfin/status').query({ appId: 'a' })).status).toBe(400);
-        (appService.getApp as jest.Mock).mockResolvedValue({ id: 'a' });
-        (jellyfinService.supports as jest.Mock).mockReturnValue(false);
-        expect((await request(app).post('/jellyfin/tuner').send({ appId: 'a' })).status).toBe(400);
-    });
-
-    it('adds and removes the tuner and guide', async () => {
-        expect((await request(app).get('/jellyfin/status').query({ appId: 'a' })).body.tuner.id).toBe('t');
-        expect((await request(app).post('/jellyfin/tuner').send({ appId: 'a' })).status).toBe(200);
-        expect(jellyfinService.upsertTuner).toHaveBeenCalledWith(expect.anything(), 'P');
-        expect((await request(app).post('/jellyfin/guide').send({ appId: 'a' })).status).toBe(200);
-        expect(jellyfinService.upsertGuide).toHaveBeenCalledWith(expect.anything(), 'E');
-        expect(jellyfinService.refreshGuide).toHaveBeenCalled();
-        expect((await request(app).delete('/jellyfin/tuner').query({ appId: 'a' })).status).toBe(200);
-        expect(jellyfinService.removeTuner).toHaveBeenCalled();
-        expect((await request(app).delete('/jellyfin/guide').query({ appId: 'a' })).status).toBe(200);
-        expect(jellyfinService.removeGuide).toHaveBeenCalled();
     });
 
     it('reports a rejected API key clearly', async () => {

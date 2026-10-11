@@ -7,10 +7,11 @@
         </InfoBar>
         <template v-else-if="servers.length">
             <MultiSelectInput
-                v-model="selectedIds"
+                :model-value="selectedIds"
                 name="Jellyfin Servers"
-                tooltip="Servers the tuner and guide are added to (tick as many as you like). Each needs an administrator API key. Uses the saved Stream Base URL, Stream Key and EPG offset - save settings first. Once added, changing the Live TV channel list asks every server you've added to refresh its guide."
+                tooltip="Your Jellyfin servers to use for Live TV (tick as many as you like; each needs an administrator API key). Ticked servers get the Add/Update/Remove buttons below, and are asked to refresh their guide whenever the Live TV channel list changes. Save settings to keep the selection; the buttons use the saved Stream Base URL, Stream Key and EPG offset."
                 :options="serverOptions"
+                @update:model-value="config.LIVE_TV_JELLYFIN_APPS = $event"
             />
             <div v-for="server in chosen" :key="server.id" class="serverBlock">
                 <div class="serverName">{{ server.name }}</div>
@@ -39,7 +40,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 
 import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
@@ -47,8 +48,9 @@ import { ipFetch } from '@/lib/ipFetch';
 
 const servers = ref([]);
 const loaded = ref(false);
-// Comma-separated app ids, as MultiSelectInput expects.
-const selectedIds = ref('');
+const config = inject('settingsConfig');
+// Comma-separated app ids (the LIVE_TV_JELLYFIN_APPS setting), as MultiSelectInput expects.
+const selectedIds = computed(() => config.LIVE_TV_JELLYFIN_APPS ?? '');
 const statuses = reactive({});
 const messages = reactive({});
 const busy = ref('');
@@ -101,11 +103,6 @@ watch(chosen, (list) => list.forEach(({ id }) => !(id in statuses) && loadStatus
 onMounted(async () => {
     servers.value = (await ipFetch('json-api/apps')).data.filter(({ type, api_key: apiKey }) => type === 'JELLYFIN' && apiKey);
     loaded.value = true;
-    // Start with the servers the tuner/guide was already set up on (the ones channel changes are pushed
-    // to), or the first server if there are none yet.
-    const { data } = await ipFetch('json-api/live-tv/jellyfin/servers');
-    const known = servers.value.map(({ id }) => id).filter((id) => (data?.appIds ?? []).includes(id));
-    selectedIds.value = (known.length ? known : servers.value.slice(0, 1).map(({ id }) => id)).join(',');
 });
 </script>
 
