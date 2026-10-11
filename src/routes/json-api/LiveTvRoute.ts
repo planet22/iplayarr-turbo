@@ -79,16 +79,16 @@ const withApp = async (req: Request, res: Response, action: (app: App) => Promis
     }
 };
 
-// The Jellyfin server the tuner/guide was last set up on - the one channel changes are pushed to.
-router.get('/jellyfin/server', async (_, res: Response) => {
-    res.json({ appId: (await liveTvSyncService.remembered()) ?? null });
+// The Jellyfin servers the tuner/guide was set up on - the ones channel changes are pushed to.
+router.get('/jellyfin/servers', async (_, res: Response) => {
+    res.json({ appIds: await liveTvSyncService.remembered() });
 });
 
 // Once neither the tuner nor the guide is left on the server there is nothing to keep in step.
 const forgetWhenEmpty = async (app: App) => {
     const status = await jellyfinService.liveTvStatus(app);
-    if (!status.tuner && !status.guide && (await liveTvSyncService.remembered()) === app.id) {
-        await liveTvSyncService.forget();
+    if (!status.tuner && !status.guide) {
+        await liveTvSyncService.forget(app.id);
     }
     return status;
 };

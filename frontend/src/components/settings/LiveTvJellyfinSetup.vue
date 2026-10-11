@@ -6,97 +6,120 @@
             automatically, or paste the URLs above into Jellyfin yourself.
         </InfoBar>
         <template v-else-if="servers.length">
-            <SelectInput
-                v-model="serverId"
-                name="Jellyfin Server"
-                tooltip="Server the tuner and guide are added to. Needs an administrator API key. Uses the saved Stream Base URL, Stream Key and EPG offset - save settings first. Once added, changing the Live TV channel list asks this server to refresh its guide."
+            <MultiSelectInput
+                v-model="selectedIds"
+                name="Jellyfin Servers"
+                tooltip="Servers the tuner and guide are added to (tick as many as you like). Each needs an administrator API key. Uses the saved Stream Base URL, Stream Key and EPG offset - save settings first. Once added, changing the Live TV channel list asks every server you've added to refresh its guide."
                 :options="serverOptions"
             />
-            <div v-for="item in items" :key="item.key" class="setupRow">
-                <label>{{ item.label }}</label>
-                <span :class="['state', item.present ? 'on' : '']">{{ item.present ? 'In Jellyfin' : 'Not added' }}</span>
-                <button type="button" :disabled="busy" @click="act(item.key, 'POST')">
-                    <font-awesome-icon :icon="['fas', busy === item.key + 'POST' ? 'circle-notch' : 'plus']" :spin="busy === item.key + 'POST'" />
-                    {{ item.present ? 'Update' : 'Add' }}
-                </button>
-                <button type="button" :disabled="busy || !item.present" @click="act(item.key, 'DELETE')">
-                    <font-awesome-icon :icon="['fas', busy === item.key + 'DELETE' ? 'circle-notch' : 'trash']" :spin="busy === item.key + 'DELETE'" />
-                    Remove
-                </button>
+            <div v-for="server in chosen" :key="server.id" class="serverBlock">
+                <div class="serverName">{{ server.name }}</div>
+                <div v-for="item in itemsFor(server.id)" :key="item.key" class="setupRow">
+                    <label>{{ item.label }}</label>
+                    <span :class="['state', item.present ? 'on' : '']">{{ item.present ? 'In Jellyfin' : 'Not added' }}</span>
+                    <button type="button" :disabled="!!busy" @click="act(server.id, item.key, 'POST')">
+                        <font-awesome-icon
+                            :icon="['fas', busy === key(server.id, item.key, 'POST') ? 'circle-notch' : 'plus']"
+                            :spin="busy === key(server.id, item.key, 'POST')"
+                        />
+                        {{ item.present ? 'Update' : 'Add' }}
+                    </button>
+                    <button type="button" :disabled="!!busy || !item.present" @click="act(server.id, item.key, 'DELETE')">
+                        <font-awesome-icon
+                            :icon="['fas', busy === key(server.id, item.key, 'DELETE') ? 'circle-notch' : 'trash']"
+                            :spin="busy === key(server.id, item.key, 'DELETE')"
+                        />
+                        Remove
+                    </button>
+                </div>
+                <InfoBar v-if="messages[server.id]" :clazz="messages[server.id].clazz">{{ messages[server.id].text }}</InfoBar>
             </div>
-            <InfoBar v-if="message" :clazz="messageClass">{{ message }}</InfoBar>
         </template>
     </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 
-import SelectInput from '@/components/common/form/SelectInput.vue';
+import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import { ipFetch } from '@/lib/ipFetch';
 
 const servers = ref([]);
 const loaded = ref(false);
-const serverId = ref('');
-const status = ref({});
+// Comma-separated app ids, as MultiSelectInput expects.
+const selectedIds = ref('');
+const statuses = reactive({});
+const messages = reactive({});
 const busy = ref('');
-const message = ref('');
-const messageClass = ref('info');
 
 const serverOptions = computed(() => servers.value.map(({ id, name }) => ({ key: id, value: name })));
-const items = computed(() => [
-    { key: 'tuner', label: 'Channels (M3U tuner)', present: !!status.value.tuner },
-    { key: 'guide', label: 'Guide (XMLTV)', present: !!status.value.guide },
-]);
+const chosen = computed(() => {
+    const ids = selectedIds.value.split(',').filter(Boolean);
+    return servers.value.filter(({ id }) => ids.includes(id));
+});
 
-const report = (ok, text) => {
-    message.value = text;
-    messageClass.value = ok ? 'info' : 'danger';
+const key = (serverId, what, method) => `${serverId}:${what}:${method}`;
+const itemsFor = (serverId) => [
+    { key: 'tuner', label: 'Channels (M3U tuner)', present: !!statuses[serverId]?.tuner },
+    { key: 'guide', label: 'Guide (XMLTV)', present: !!statuses[serverId]?.guide },
+];
+
+const report = (serverId, ok, text) => {
+    messages[serverId] = { clazz: ok ? 'info' : 'danger', text };
 };
 
-const loadStatus = async () => {
-    if (!serverId.value) return;
-    const { ok, data } = await ipFetch(`json-api/live-tv/jellyfin/status?appId=${encodeURIComponent(serverId.value)}`);
-    status.value = ok ? data : {};
-    if (!ok) report(false, data?.message || 'Unable to read Jellyfin Live TV settings');
+const loadStatus = async (serverId) => {
+    const { ok, data } = await ipFetch(`json-api/live-tv/jellyfin/status?appId=${encodeURIComponent(serverId)}`);
+    statuses[serverId] = ok ? data : {};
+    if (!ok) report(serverId, false, data?.message || 'Unable to read Jellyfin Live TV settings');
 };
 
-const act = async (what, method) => {
-    busy.value = what + method;
-    message.value = '';
+const act = async (serverId, what, method) => {
+    busy.value = key(serverId, what, method);
+    delete messages[serverId];
     try {
         const url =
             method === 'POST'
                 ? `json-api/live-tv/jellyfin/${what}`
-                : `json-api/live-tv/jellyfin/${what}?appId=${encodeURIComponent(serverId.value)}`;
-        const { ok, data } = await ipFetch(url, method, method === 'POST' ? { appId: serverId.value } : undefined);
+                : `json-api/live-tv/jellyfin/${what}?appId=${encodeURIComponent(serverId)}`;
+        const { ok, data } = await ipFetch(url, method, method === 'POST' ? { appId: serverId } : undefined);
         if (ok) {
-            status.value = data;
-            report(true, `${what === 'tuner' ? 'Tuner' : 'Guide'} ${method === 'POST' ? 'saved to' : 'removed from'} Jellyfin.`);
+            statuses[serverId] = data;
+            report(serverId, true, `${what === 'tuner' ? 'Tuner' : 'Guide'} ${method === 'POST' ? 'saved to' : 'removed from'} Jellyfin.`);
         } else {
-            report(false, data?.message || 'Request failed');
+            report(serverId, false, data?.message || 'Request failed');
         }
     } finally {
         busy.value = '';
     }
 };
 
-watch(serverId, () => {
-    message.value = '';
-    loadStatus();
-});
+// Read each server's state as it is ticked (once).
+watch(chosen, (list) => list.forEach(({ id }) => !(id in statuses) && loadStatus(id)), { immediate: true });
 
 onMounted(async () => {
-    servers.value = (await ipFetch('json-api/apps')).data.filter(({ type, api_key: key }) => type === 'JELLYFIN' && key);
+    servers.value = (await ipFetch('json-api/apps')).data.filter(({ type, api_key: apiKey }) => type === 'JELLYFIN' && apiKey);
     loaded.value = true;
-    // Prefer the server the tuner/guide was set up on - it is the one channel changes are pushed to.
-    const { data } = await ipFetch('json-api/live-tv/jellyfin/server');
-    serverId.value = servers.value.find(({ id }) => id === data?.appId)?.id ?? servers.value[0]?.id ?? '';
+    // Start with the servers the tuner/guide was already set up on (the ones channel changes are pushed
+    // to), or the first server if there are none yet.
+    const { data } = await ipFetch('json-api/live-tv/jellyfin/servers');
+    const known = servers.value.map(({ id }) => id).filter((id) => (data?.appIds ?? []).includes(id));
+    selectedIds.value = (known.length ? known : servers.value.slice(0, 1).map(({ id }) => id)).join(',');
 });
 </script>
 
 <style lang="less" scoped>
+.serverBlock {
+    margin-bottom: 1.5rem;
+
+    .serverName {
+        margin: 0 0 0.75rem 266px;
+        font-weight: bold;
+        font-size: 14px;
+    }
+}
+
 .setupRow {
     display: flex;
     align-items: center;

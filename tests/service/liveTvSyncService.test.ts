@@ -30,28 +30,44 @@ describe('liveTvSyncService', () => {
         (jellyfinService.supports as jest.Mock).mockReturnValue(true);
     });
 
-    it('remembers and forgets the server', async () => {
-        expect(await liveTvSyncService.remembered()).toBeUndefined();
+    it('remembers and forgets several servers', async () => {
+        expect(await liveTvSyncService.remembered()).toEqual([]);
         await liveTvSyncService.remember('a');
-        expect(await liveTvSyncService.remembered()).toBe('a');
-        await liveTvSyncService.forget();
-        expect(await liveTvSyncService.remembered()).toBeUndefined();
+        await liveTvSyncService.remember('b');
+        await liveTvSyncService.remember('a');
+        expect(await liveTvSyncService.remembered()).toEqual(['a', 'b']);
+        await liveTvSyncService.forget('a');
+        expect(await liveTvSyncService.remembered()).toEqual(['b']);
     });
 
-    it('refreshes the remembered server', async () => {
+    it('reads the single id an earlier version stored', async () => {
+        store.liveTvJellyfinApp = 'old';
+        expect(await liveTvSyncService.remembered()).toEqual(['old']);
+        store.liveTvJellyfinApp = '';
+        expect(await liveTvSyncService.remembered()).toEqual([]);
+    });
+
+    it('refreshes every remembered server, and one failing does not stop the others', async () => {
+        const other = { id: 'b', name: 'B', url: 'u2', api_key: 'k2' };
+        (appService.getApp as jest.Mock).mockImplementation(async (id: string) => (id === 'a' ? app : other));
+        (jellyfinService.refreshGuide as jest.Mock).mockImplementation(async (a: any) => {
+            if (a.id === 'a') throw new Error('down');
+        });
         await liveTvSyncService.remember('a');
-        expect(await liveTvSyncService.refreshNow()).toBe(true);
+        await liveTvSyncService.remember('b');
+        expect(await liveTvSyncService.refreshNow()).toBe(2);
         expect(jellyfinService.refreshGuide).toHaveBeenCalledWith(app);
+        expect(jellyfinService.refreshGuide).toHaveBeenCalledWith(other);
     });
 
-    it('does nothing when disabled, nothing is remembered, or the app is gone', async () => {
-        expect(await liveTvSyncService.refreshNow()).toBe(false);
+    it('does nothing when disabled, nothing is remembered, or the apps are gone', async () => {
+        expect(await liveTvSyncService.refreshNow()).toBe(0);
         await liveTvSyncService.remember('a');
         (liveTvService.isEnabled as jest.Mock).mockResolvedValue(false);
-        expect(await liveTvSyncService.refreshNow()).toBe(false);
+        expect(await liveTvSyncService.refreshNow()).toBe(0);
         (liveTvService.isEnabled as jest.Mock).mockResolvedValue(true);
         (appService.getApp as jest.Mock).mockResolvedValue(undefined);
-        expect(await liveTvSyncService.refreshNow()).toBe(false);
+        expect(await liveTvSyncService.refreshNow()).toBe(0);
         expect(jellyfinService.refreshGuide).not.toHaveBeenCalled();
     });
 

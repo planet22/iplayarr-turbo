@@ -83,17 +83,16 @@ describe('LiveTvRoute', () => {
         await request(app).post('/jellyfin/tuner').send({ appId: 'a' });
         expect(liveTvSyncService.remember).toHaveBeenCalledWith('a');
 
-        (liveTvSyncService.remembered as jest.Mock).mockResolvedValue('a');
         (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({ guide: { id: 'g', path: 'p' } });
         await request(app).delete('/jellyfin/tuner').query({ appId: 'a' });
         expect(liveTvSyncService.forget).not.toHaveBeenCalled();
 
         (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({});
         await request(app).delete('/jellyfin/guide').query({ appId: 'a' });
-        expect(liveTvSyncService.forget).toHaveBeenCalled();
+        expect(liveTvSyncService.forget).toHaveBeenCalledWith('a');
 
-        (liveTvSyncService.remembered as jest.Mock).mockResolvedValue('a');
-        expect((await request(app).get('/jellyfin/server')).body).toEqual({ appId: 'a' });
+        (liveTvSyncService.remembered as jest.Mock).mockResolvedValue(['a', 'b']);
+        expect((await request(app).get('/jellyfin/servers')).body).toEqual({ appIds: ['a', 'b'] });
     });
 
     it('rejects a missing or non-Jellyfin app', async () => {
