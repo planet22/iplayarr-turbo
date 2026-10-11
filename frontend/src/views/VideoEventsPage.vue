@@ -45,9 +45,10 @@
                 <tr v-for="event in pagedEvents" :key="event.id">
                     <td>
                         <img
-                            v-if="event.pid && detailsFor(event.pid)?.thumbnail"
+                            v-if="event.pid && thumbnailFor(event.pid)"
                             class="thumbnail clickable"
-                            :src="getThumbnailUrl(detailsFor(event.pid).thumbnail)"
+                            :class="{ channelLogo: channelLogos[event.pid] }"
+                            :src="thumbnailFor(event.pid)"
                             @click="openInfo(event.pid)"
                             @error="hideBrokenImage"
                         />
@@ -90,7 +91,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
-import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const events = inject('videoEvents');
 const details = reactive({});
@@ -146,11 +147,33 @@ async function loadDetails(pid) {
     }
 }
 
+// Live channel events (the pid is a channel id) show the channel's logo, from the same Browse
+// channel list the Channels page uses; there are no programme details for them.
+const channelLogos = ref({});
+
+async function loadChannelLogos() {
+    try {
+        const response = await ipFetch('json-api/browse/channels');
+        if (response.ok) {
+            channelLogos.value = Object.fromEntries(response.data.map(({ id, logo }) => [id, logo]));
+        }
+    } catch {
+        // logos are decoration - rows fall back to the placeholder
+    }
+}
+
+function thumbnailFor(pid) {
+    return getSessionThumbnailUrl({ pid, live: !!channelLogos.value[pid] }, detailsFor(pid), channelLogos.value);
+}
+
 function loadMissingDetails() {
     [...new Set(events.value.map(({ pid }) => pid).filter(Boolean))].forEach(loadDetails);
 }
 
-onMounted(loadMissingDetails);
+onMounted(() => {
+    loadChannelLogos();
+    loadMissingDetails();
+});
 watch(events, loadMissingDetails);
 
 function openInfo(pid) {
@@ -203,6 +226,9 @@ const clearEvents = async () => {
         display: block;
     }
 
+    .thumbnail.channelLogo {
+        object-fit: contain;
+    }
 
     .subtle {
         font-size: 12px;
