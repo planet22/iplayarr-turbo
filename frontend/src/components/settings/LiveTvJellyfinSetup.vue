@@ -9,7 +9,7 @@
             <MultiSelectInput
                 :model-value="selectedIds"
                 name="Automatic Configuration"
-                tooltip="Jellyfin servers iPlayarr sets up for Live TV automatically (tick as many as you like; each needs an administrator API key). Ticked servers get the Add/Update/Remove buttons below, and are asked to refresh their guide whenever the Live TV channel list changes. Save settings to keep the selection; the buttons use the saved Stream Base URL, Stream Key and EPG offset."
+                tooltip="Jellyfin servers to configure automatically (admin API key needed). Ticked servers get the buttons below and refresh their guide when channels change. Save first - the buttons use saved settings."
                 :options="serverOptions"
                 @update:model-value="config.LIVE_TV_JELLYFIN_APPS = $event"
             />

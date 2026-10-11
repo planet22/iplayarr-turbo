@@ -49,6 +49,11 @@ export interface BrowseSlot {
     item: BrowseItem;
     start: string;
     end: string;
+    // Broadcast facts only the schedule carries; undefined when false/unknown.
+    repeat?: boolean;
+    live?: boolean;
+    childrens?: boolean;
+    categories?: string[];
 }
 
 export interface BrowseNowNext {

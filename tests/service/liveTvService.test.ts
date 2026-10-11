@@ -1,7 +1,7 @@
 import browseService from '../../src/service/browseService';
 import configService from '../../src/service/configService';
 import liveTvChannelService from '../../src/service/liveTvChannelService';
-import liveTvService, { escapeXml, xmltvTime } from '../../src/service/liveTvService';
+import liveTvService, { escapeXml, guideTags, xmltvTime } from '../../src/service/liveTvService';
 
 jest.mock('../../src/service/configService');
 jest.mock('../../src/service/liveTvChannelService', () => ({ __esModule: true, default: { list: jest.fn() } }));
@@ -156,5 +156,41 @@ describe('liveTvService', () => {
         expect(await liveTvService.playlist()).toContain('v=png-square');
         delete params.LIVE_TV_LOGO_SHAPE;
         expect(await liveTvService.logo('nope')).toBeUndefined();
+    });
+
+    describe('guideTags', () => {
+        const slot = {
+            item: { pid: 'p1', kind: 'episode', type: 'tv', title: 'Match', category: 'Sport' },
+            start: '2026-10-11T10:00:00Z',
+            end: '2026-10-11T11:00:00Z',
+            live: true,
+            categories: ['sport'],
+        } as any;
+        const all = { categories: true, flags: true, hd: true };
+
+        it('emits category, HD and live/new tags', () => {
+            const xml = guideTags(slot, all);
+            expect(xml).toContain('<category lang="en">Sport</category>');
+            expect(xml).toContain('<category lang="en">Sports</category>');
+            expect(xml).toContain('<video><quality>HDTV</quality></video>');
+            expect(xml).toContain('<live/>');
+            expect(xml).toContain('<new/>');
+            expect(xml).not.toContain('previously-shown');
+        });
+
+        it('marks repeats and maps film and kids categories', () => {
+            const xml = guideTags(
+                { ...slot, live: undefined, repeat: true, childrens: true, item: { ...slot.item, category: 'Film - Family' } },
+                all
+            );
+            expect(xml).toContain('<previously-shown/>');
+            expect(xml).toContain('>Movie<');
+            expect(xml).toContain('>Kids<');
+            expect(xml).not.toContain('<new/>');
+        });
+
+        it('emits nothing when every option is off', () => {
+            expect(guideTags(slot, { categories: false, flags: false, hd: false })).toBe('');
+        });
     });
 });

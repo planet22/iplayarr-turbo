@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 
 import { BrowseChannels } from '../constants/BrowseChannels';
 import { isLiveChannel } from '../constants/LiveChannels';
+import { BrowseSlot } from '../types/Browse';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import browseService from './browseService';
 import configService from './configService';
@@ -11,7 +12,7 @@ import liveTvChannelService from './liveTvChannelService';
 const LOGO_SHAPES = { square: [1000, 1000], landscape: [1600, 900] } as const;
 type LogoShape = keyof typeof LOGO_SHAPES;
 // Bumped when the guide gains new content, so Jellyfin re-downloads it even if the channels are unchanged.
-const GUIDE_FORMAT = 'icons1';
+const GUIDE_FORMAT = 'icons2';
 const GUIDE_DAYS_BEFORE = 1; // iPlayer's schedule day runs 05:00-05:00, so the small hours sit in yesterday's
 // Today + 6 = the 7 days Jellyfin's guide asks for by default (BBC publishes ~8 days ahead).
 const GUIDE_DAYS_AFTER = 6;
@@ -71,6 +72,35 @@ function ukDate(offsetDays: number): string {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
 }
 
+// Jellyfin derives its guide indicators and category filters from these XMLTV tags: <category> text
+// (it matches "movie"/"sport"/"news"/"kids" itself, hence the extra keyword), <live/>, <new/>,
+// <previously-shown/> and <video><quality>HDTV</quality></video>.
+export function guideTags(
+    slot: BrowseSlot,
+    options: { categories: boolean; flags: boolean; hd: boolean }
+): string {
+    let xml = '';
+    if (options.categories) {
+        const label = slot.item.category;
+        const slugs = slot.categories ?? [];
+        const categories = new Set<string>();
+        if (label) categories.add(label);
+        if (/^film/i.test(label ?? '') || slugs.includes('films')) categories.add('Movie');
+        if (slugs.includes('sport') || /sport/i.test(label ?? '')) categories.add('Sports');
+        if (slugs.includes('news') || /news/i.test(label ?? '')) categories.add('News');
+        if (slot.childrens) categories.add('Kids');
+        for (const category of categories) {
+            xml += `    <category lang="en">${escapeXml(category)}</category>\n`;
+        }
+    }
+    if (options.hd) xml += '    <video><quality>HDTV</quality></video>\n';
+    if (options.flags) {
+        if (slot.live) xml += '    <live/>\n';
+        xml += slot.repeat ? '    <previously-shown/>\n' : '    <new/>\n';
+    }
+    return xml;
+}
+
 // Jellyfin Live TV adapter: presents the live channels that already exist (LiveChannels.ts /
 // LiveStreamService) as an M3U tuner plus an XMLTV guide built from browseService's schedule.
 class LiveTvService {
@@ -100,6 +130,15 @@ class LiveTvService {
         return value === 'square' ? 'square' : 'landscape';
     }
 
+    async guideOptions(): Promise<{ categories: boolean; flags: boolean; hd: boolean }> {
+        const on = async (parameter: IplayarrParameter) => (await configService.getParameter(parameter)) !== 'false';
+        return {
+            categories: await on(IplayarrParameter.LIVE_TV_GUIDE_CATEGORIES),
+            flags: await on(IplayarrParameter.LIVE_TV_GUIDE_FLAGS),
+            hd: await on(IplayarrParameter.LIVE_TV_GUIDE_HD),
+        };
+    }
+
     async #keyAndBase(): Promise<{ baseUrl: string; streamKey: string }> {
         const baseUrl = await this.#baseUrl();
         const streamKey = ((await configService.getParameter(IplayarrParameter.STREAM_KEY)) as string | undefined) ?? '';
@@ -115,13 +154,13 @@ class LiveTvService {
     }
 
     // Jellyfin reuses its downloaded XMLTV for up to a day while the guide URL is unchanged, so the URL
-    // carries a short hash of what the guide contains (enabled channels + EPG offset): change either and
+    // carries a short hash of what the guide contains (enabled channels, EPG offset + guide options): change either and
     // the URL changes, which makes Jellyfin fetch the guide afresh.
     async epgUrl(): Promise<string> {
         const { baseUrl, streamKey } = await this.#keyAndBase();
         const ids = (await this.channels()).map(({ id }) => id).sort();
         const version = createHash('sha1')
-            .update(JSON.stringify([ids, await this.epgOffsetMinutes(), GUIDE_FORMAT]))
+            .update(JSON.stringify([ids, await this.epgOffsetMinutes(), await this.guideOptions(), GUIDE_FORMAT]))
             .digest('hex')
             .slice(0, 8);
         return `${baseUrl}/api?mode=live_epg&streamkey=${encodeURIComponent(streamKey)}&v=${version}`;
@@ -165,6 +204,7 @@ class LiveTvService {
         const { baseUrl, streamKey } = await this.#keyAndBase();
         const channels = await this.channels();
         const offset = await this.epgOffsetMinutes();
+        const guide = await this.guideOptions();
         const days: string[] = [];
         for (let offset = -GUIDE_DAYS_BEFORE; offset <= GUIDE_DAYS_AFTER; offset++) {
             days.push(ukDate(offset));
@@ -199,6 +239,7 @@ class LiveTvService {
                     const src = `${baseUrl}/api?mode=live_thumb&pid=${imagePid}&streamkey=${encodeURIComponent(streamKey)}`;
                     xml += `    <icon src="${escapeXml(src)}"/>\n`;
                 }
+                xml += guideTags(slot, guide);
                 xml += '  </programme>\n';
             }
         }

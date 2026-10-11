@@ -30,6 +30,7 @@
             :stream-clients="streamClients"
             @generate-stream-key="generateStreamKey"
         />
+        <LiveTvSettingsTab v-if="activeTab == 'liveTv'" @generate-stream-key="generateStreamKey" />
         <AuthenticationSettingsTab
             v-if="activeTab == 'authentication'"
             :auth-types="authTypes"
@@ -55,6 +56,7 @@ import UpdateAppDialog from '@/components/modals/UpdateAppDialog.vue';
 import AuthenticationSettingsTab from '@/components/settings/AuthenticationSettingsTab.vue';
 import DownloadClientSettingsTab from '@/components/settings/DownloadClientSettingsTab.vue';
 import GeneralSettingsTab from '@/components/settings/GeneralSettingsTab.vue';
+import LiveTvSettingsTab from '@/components/settings/LiveTvSettingsTab.vue';
 import MaintenanceSettingsTab from '@/components/settings/MaintenanceSettingsTab.vue';
 import MediaManagementSettingsTab from '@/components/settings/MediaManagementSettingsTab.vue';
 import SettingsTabs from '@/components/settings/SettingsTabs.vue';
@@ -76,6 +78,7 @@ const tabs = [
     { key: 'mediaManagement', label: 'Media Management' },
     { key: 'downloadClient', label: 'Download Client' },
     { key: 'streaming', label: 'Streaming' },
+    { key: 'liveTv', label: 'Live TV' },
     { key: 'authentication', label: 'Authentication' },
     { key: 'maintenance', label: 'Maintenance' },
 ];

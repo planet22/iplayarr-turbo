@@ -12,7 +12,7 @@
         <TextInput
             v-model="config.STREAM_BASE_URL"
             name="Stream Base URL"
-            tooltip="The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
+            tooltip="Address your media server uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
             :error="validationErrors.config?.STREAM_BASE_URL"
         />
         <TextInput
@@ -28,7 +28,7 @@
         <SelectInput
             v-model="config.STREAM_CLIENT"
             name="Stream Client"
-            tooltip="Tool that starts .strm playback. Native is fastest with adaptive quality; get_iplayer/yt-dlp pin to Video Quality."
+            tooltip="Tool that plays .strm links. Native is fastest; get_iplayer/yt-dlp use Video Quality."
             :error="validationErrors.config?.STREAM_CLIENT"
             :options="streamClients"
         />
@@ -44,7 +44,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_HQ_PROBE"
             name="Native Quality Probe"
-            tooltip="Verifies real stream quality before playing. Better results, adds a short delay."
+            tooltip="Verify real stream quality before playing (adds a short delay)."
             :error="validationErrors.config?.STREAM_NATIVE_HQ_PROBE"
             :options="hqProbeOptions"
         />
@@ -73,77 +73,17 @@
                 v-model="config.STREAM_CACHE_DIR"
                 :advanced="true"
                 name="Stream Cache Directory"
-                tooltip="Where temporary files are stored while streaming. Leave blank to use a temp folder."
+                tooltip="Temporary streaming files. Blank = system temp folder."
                 :error="validationErrors.config?.STREAM_CACHE_DIR"
             />
         </template>
-    </template>
-
-    <legend class="liveTvLegend">Live TV (Jellyfin)</legend>
-    <SelectInput
-        v-model="config.LIVE_TV_ENABLED"
-        name="Live TV"
-        tooltip="Expose the BBC live channels as an M3U tuner and XMLTV guide for Jellyfin Live TV. Needs a Stream Base URL; uses the Stream Key."
-        :error="validationErrors.config?.LIVE_TV_ENABLED"
-        :options="liveTvOptions"
-    />
-    <template v-if="config.LIVE_TV_ENABLED == 'true'">
-        <template v-if="config.MEDIA_MODE != 'strm'">
-            <TextInput
-                v-model="config.STREAM_BASE_URL"
-                name="Stream Base URL"
-                tooltip="The address Jellyfin uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
-                :error="validationErrors.config?.STREAM_BASE_URL"
-            />
-            <TextInput
-                v-model="config.STREAM_KEY"
-                name="Stream Key"
-                tooltip="Secures the tuner, guide and playback links, separate from your API Key."
-                :error="validationErrors.config?.STREAM_KEY"
-                :copyable="true"
-                icon-button="qrcode"
-                button-tooltip="Regenerate Stream Key"
-                @action="emit('generate-stream-key')"
-            />
-        </template>
-        <TextInput
-            :model-value="liveTvUrl('live_playlist')"
-            name="M3U Tuner URL"
-            tooltip="Jellyfin: Dashboard → Live TV → Tuner Devices → add an M3U Tuner and paste this."
-            :copyable="true"
-        />
-        <TextInput
-            :model-value="liveTvUrl('live_epg')"
-            name="XMLTV Guide URL"
-            tooltip="Jellyfin: Dashboard → Live TV → TV Guide Data Providers → add XMLTV and paste this."
-            :copyable="true"
-        />
-        <TextInput
-            v-model="config.LIVE_TV_EPG_OFFSET"
-            type-override="number"
-            name="EPG Time Offset (minutes)"
-            tooltip="Guide times are sent in this server's own timezone, so what is live now lines up. If Jellyfin still shows the guide early or late, shift it here (e.g. 60 or -60). 0 for no shift."
-            :error="validationErrors.config?.LIVE_TV_EPG_OFFSET"
-        />
-        <SelectInput
-            v-model="config.LIVE_TV_LOGO_SHAPE"
-            name="Channel Logo Shape"
-            tooltip="Landscape (16:9) fills Jellyfin's wide guide cards; Square suits the small channel tiles. After changing it, save settings and press Update on the tuner so Jellyfin fetches the new logos."
-            :options="logoShapeOptions"
-        />
-        <LiveTvJellyfinSetup />
-        <InfoBar>
-            Only channels you pick with the TV icon on the Channels page (or a channel's own page) appear in the
-            tuner and guide. Playback needs a UK IP address, like the rest of iPlayarr. Save settings before
-            adding to Jellyfin or copying the URLs if you changed the Stream Base URL, Stream Key or offset.
-        </InfoBar>
     </template>
 
     <legend class="watchdogLegend">STRM Watchdog</legend>
     <SelectInput
         v-model="config.STRM_WATCHDOG_ENABLED"
         name="STRM Watchdog"
-        tooltip="Daily check that .strm links still resolve on BBC iPlayer. Only links pointing at iPlayarr or a BBC pid are checked."
+        tooltip="Daily check that .strm links still resolve on BBC iPlayer."
         :error="validationErrors.config?.STRM_WATCHDOG_ENABLED"
         :options="watchdogEnabledOptions"
     />
@@ -151,7 +91,7 @@
         <MultiSelectInput
             v-model="config.STRM_WATCHDOG_SOURCES"
             name="Watchdog Sources"
-            tooltip="Where to find .strm files. iPlayarr reads its own list (subscriptions only, or everything it has downloaded) without scanning folders. Sonarr/Jellyfin files need the library mounted into this container (see Path Mapping)."
+            tooltip="Where to find .strm files. Sonarr/Jellyfin sources need the library mounted into this container (see Path Mapping)."
             :error="validationErrors.config?.STRM_WATCHDOG_SOURCES"
             :options="watchdogSourceOptions"
         />
@@ -166,7 +106,7 @@
             v-if="hasType('arr') || hasType('jellyfin')"
             v-model="config.STRM_WATCHDOG_PATH_MAP"
             name="Watchdog Path Mapping"
-            tooltip="Sonarr/Jellyfin path to the same folder inside this container, e.g. /tv=/library/tv (separate several with ;)."
+            tooltip="Sonarr/Jellyfin path = path inside this container, e.g. /tv=/library/tv (separate with ;)."
             :error="validationErrors.config?.STRM_WATCHDOG_PATH_MAP"
         />
         <template v-if="hasType('jellyfin')">
@@ -185,7 +125,7 @@
             v-if="hasType('arr')"
             v-model="config.STRM_WATCHDOG_ARR_ACTION"
             name="Sonarr/Radarr Action"
-            tooltip="Also tell Sonarr/Radarr about an expired link. Only applies to links found through the Sonarr/Radarr source."
+            tooltip="Also tell Sonarr/Radarr about an expired link (Sonarr/Radarr source only)."
             :error="validationErrors.config?.STRM_WATCHDOG_ARR_ACTION"
             :options="watchdogArrActionOptions"
         />
@@ -193,20 +133,20 @@
             v-model="config.STRM_WATCHDOG_CONCURRENCY"
             type-override="number"
             name="Parallel Checks"
-            tooltip="How many links are checked against BBC at once (1-10, default 4). 1 is gentlest on BBC; 4 is about three times faster. Results are applied in order, so the rules below behave the same."
+            tooltip="Links checked against BBC at once (1-10, default 4). Lower is gentler on BBC."
             :error="validationErrors.config?.STRM_WATCHDOG_CONCURRENCY"
         />
         <TextInput
             v-model="config.STRM_WATCHDOG_FAIL_THRESHOLD"
             type-override="number"
             name="Minimum Valid Before Action"
-            tooltip="Failing links are only counted and acted on after this many links have validated OK in the same run (half your links, if you have fewer), proving BBC is up. Also: this many failures in a row abandons the run as a BBC outage."
+            tooltip="Failures are only acted on once this many links have validated OK in the run (proves BBC is up). This many failures in a row abandons the run."
             :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
         />
         <TextInput
             v-model="config.STRM_WATCHDOG_WEBHOOK_URL"
             name="Watchdog Webhook URL"
-            tooltip="Optional. Receives a JSON POST ({event, pid, files, message}) when a link first becomes invalid."
+            tooltip="Optional. Receives a JSON POST when a link first becomes invalid."
             :error="validationErrors.config?.STRM_WATCHDOG_WEBHOOK_URL"
         />
     </template>
@@ -219,7 +159,6 @@ import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
-import LiveTvJellyfinSetup from '@/components/settings/LiveTvJellyfinSetup.vue';
 import { ipFetch } from '@/lib/ipFetch';
 
 defineProps({
@@ -239,11 +178,6 @@ defineProps({
 
 const emit = defineEmits(['generate-stream-key']);
 
-const logoShapeOptions = [
-    { key: 'landscape', value: 'Landscape (16:9)' },
-    { key: 'square', value: 'Square' },
-];
-
 const adaptiveOptions = [
     { key: 'true', value: 'Adaptive' },
     { key: 'false', value: 'Fixed (uses Video Quality, recommended)' },
@@ -258,16 +192,6 @@ const experimentalFhdOptions = [
     { key: 'false', value: 'Disabled' },
     { key: 'true', value: 'Enabled (recommended)' },
 ];
-
-const liveTvOptions = [
-    { key: 'false', value: 'Disabled' },
-    { key: 'true', value: 'Enabled' },
-];
-
-const liveTvUrl = (mode) => {
-    const base = (config.value.STREAM_BASE_URL || '').replace(/\/$/, '');
-    return `${base}/api?mode=${mode}&streamkey=${encodeURIComponent(config.value.STREAM_KEY || '')}`;
-};
 
 const watchdogEnabledOptions = [
     { key: 'false', value: 'Disabled' },
@@ -340,8 +264,7 @@ const showAdvanced = inject('settingsShowAdvanced');
 </script>
 
 <style lang="less" scoped>
-.watchdogLegend,
-.liveTvLegend {
+.watchdogLegend {
     margin-top: 2rem;
 }
 
