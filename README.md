@@ -26,7 +26,8 @@ This README covers the basics. For more detail, see `docs/`:
 - [STREAMING.md](docs/STREAMING.md) and [LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) — `.strm` mode and Jellyfin-style library layout
 - [GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md) — from a running container to watching and downloading BBC programmes
 - [BROWSE.md](docs/BROWSE.md) — Discover, Channels, Categories, A to Z, type-ahead search
-- [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show
+- [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show, link shows to Sonarr/Radarr, live channels
+- [WATCHDOG.md](docs/WATCHDOG.md) — daily check that `.strm` links still resolve on BBC
 - [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common issues
 - [DEVELOPMENT.md](docs/DEVELOPMENT.md) — contributor setup, testing, linting
@@ -64,6 +65,7 @@ iPlayer offers a wide range of high-quality content, but integrating it with Son
 - Presenting as a SABnzbd-compatible download client, allowing automatic downloads and post-processing
 - Handling the full download lifecycle, from fetching content with get_iplayer to organizing completed files
 - Streaming content on demand to Jellyfin/Plex/Emby via small `.strm` pointer files, instead of pre-downloading everything
+- Watching BBC live channels, in the browser or as `.strm` entries in your media library, and a Watchdog that flags expired `.strm` links
 - Works standalone too - Browse/Discover, Channels, Categories, A to Z, search, and Subscriptions are all usable from the web UI without Sonarr/Radarr at all
 
 Unlike torrents and Usenet, iPlayarr Turbo operates in a less legally ambiguous space by only downloading content that is freely available for streaming.
@@ -174,6 +176,8 @@ There's a few more optional settings too:
 | THUMBNAIL_CACHE_DIR            | Where cached BBC episode thumbnails are stored                                                                                                                                                                                                                                                                                                                                             |
 | THUMBNAIL_RETENTION_DAYS       | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                                      |
 | STREAM_HISTORY_RETENTION_DAYS  | How many days to keep native streaming session history before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                              |
+| LIVE_STRM_DIR                  | Where `.strm` files for live channels added to the library are written. Blank uses COMPLETE_DIR. See [docs/STREAMING.md](docs/STREAMING.md#live-channels) |
+| STRM_WATCHDOG_ENABLED          | Daily check that `.strm` links still resolve on BBC. Defaults to false. The other `STRM_WATCHDOG_*` settings (SOURCES, ACTION, PATH_MAP, ARR_ACTION, CONCURRENCY, FAIL_THRESHOLD, WEBHOOK_URL) are listed in [docs/WATCHDOG.md](docs/WATCHDOG.md) |
 
 ### Usage
 

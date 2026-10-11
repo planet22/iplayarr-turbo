@@ -22,4 +22,6 @@ With `MEDIA_MODE=strm`, completed items are a small pointer file instead of the 
 - Jellyfin must be able to reach iPlayarr at the address set in `STREAM_BASE_URL` (Settings → Streaming) — not `localhost`, unless Jellyfin and iPlayarr genuinely share a network namespace.
 - The link baked into each `.strm` file is signed with `STREAM_KEY`. If you regenerate the Stream Key, existing `.strm` files keep the old one and will fail to play until re-downloaded/regenerated.
 
+Live BBC channels can also be added as `.strm` entries (point a library at `LIVE_STRM_DIR`), and the [STRM Watchdog](../WATCHDOG.md) can use Jellyfin as a source (add it on the Apps page with a URL and API key) to find expired links.
+
 See [STREAMING.md](../STREAMING.md) for the full setup, including the three stream client options (`STREAM_CLIENT`) and their tradeoffs.
