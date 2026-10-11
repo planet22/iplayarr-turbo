@@ -1,13 +1,13 @@
 import { BrowseChannels } from '../constants/BrowseChannels';
 import { isLiveChannel } from '../constants/LiveChannels';
 import { IplayarrParameter } from '../types/IplayarrParameters';
-import { createStrmContent } from '../utils/Utils';
 import browseService from './browseService';
 import configService from './configService';
 import liveTvChannelService from './liveTvChannelService';
 
 const GUIDE_DAYS_BEFORE = 1; // iPlayer's schedule day runs 05:00-05:00, so the small hours sit in yesterday's
-const GUIDE_DAYS_AFTER = 1;
+// Today + 6 = the 7 days Jellyfin's guide asks for by default (BBC publishes ~8 days ahead).
+const GUIDE_DAYS_AFTER = 6;
 
 export function escapeXml(value: string | undefined): string {
     return (value ?? '')
@@ -130,7 +130,12 @@ class LiveTvService {
             }
             attrs.push('group-title="BBC"');
             lines.push(`#EXTINF:-1 ${attrs.join(' ')},${channel.title}`);
-            lines.push(await createStrmContent(channel.id, streamKey));
+            // The .m3u8 path matters: Jellyfin only recognises an HLS manifest by the URL path's
+            // extension, and without it marks the channel direct-playable - browsers then try to
+            // play the BBC manifest themselves and never start. ApiRoute serves any /api/* path.
+            lines.push(
+                `${baseUrl}/api/live.m3u8?mode=stream&pid=${encodeURIComponent(channel.id)}&streamkey=${encodeURIComponent(streamKey)}`
+            );
         }
         return lines.join('\n') + '\n';
     }
@@ -142,7 +147,12 @@ class LiveTvService {
         for (let offset = -GUIDE_DAYS_BEFORE; offset <= GUIDE_DAYS_AFTER; offset++) {
             days.push(ukDate(offset));
         }
-        const schedules = channels.length === 0 ? [] : (await Promise.all(days.map((day) => browseService.schedule(day).catch(() => [])))).flat();
+        // One day at a time: each day is already a request per channel, and firing a whole week at
+        // the BBC at once gets TLS connections dropped. Responses are Redis-cached either way.
+        const schedules: Awaited<ReturnType<typeof browseService.schedule>> = [];
+        for (const day of channels.length === 0 ? [] : days) {
+            schedules.push(...(await browseService.schedule(day).catch(() => [])));
+        }
 
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="iPlayarr">\n';
         for (const channel of channels) {

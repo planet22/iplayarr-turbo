@@ -12,6 +12,9 @@ const redirectStatusCodes = [301, 302, 303, 307, 308];
 const playlistContentTypeRegex = /mpegurl/i;
 const uriAttrRegex = /URI="([^"]+)"/;
 const defaultSegmentExtension = '.ts';
+// The Live TV playlist's channel URLs end /api/live.m3u8 (liveTvService.ts) - the one entry point that
+// gets a single-variant master; library .strm files keep the full multi-variant one.
+const liveTvManifestRegex = /\/live\.m3u8$/;
 
 // ffmpeg's HLS demuxer enforces an allow-list on segment reference extensions and rejects a pure
 // query-string URL outright ("is not in allowed_segment_extensions") - confirmed live against a
@@ -42,10 +45,11 @@ function rewritePlaylist(
     baseUrl: string,
     streamKey: string,
     sessionId?: string,
-    highestVariantFirst = false
+    highestVariantFirst = false,
+    topVariantOnly = false
 ): RewrittenPlaylist {
     let segmentIndex = 0;
-    const body = (highestVariantFirst ? sortVariantsHighestFirst(text) : text)
+    const body = (topVariantOnly ? sortVariantsHighestFirst(text, true) : highestVariantFirst ? sortVariantsHighestFirst(text) : text)
         .split(/\r?\n/)
         .map((line) => {
             const trimmed = line.trim();
@@ -71,7 +75,12 @@ function rewritePlaylist(
 // and ffmpeg (so Jellyfin's probe of a .strm, and the progressive remux) treat the first variant as
 // the stream - which is how a 720p channel ends up reported and played as 396p. Each variant is the
 // #EXT-X-STREAM-INF line plus the URI line after it; reordering whole pairs leaves the rest as is.
-function sortVariantsHighestFirst(text: string): string {
+//
+// `topOnly` drops every variant but the best. Jellyfin's Live TV probe lists the first (720p) variant
+// of the full master as an empty 0x0 / level -99 stream - ffprobe never gets data from it in time -
+// and its browser transcode request then echoes that level into a codec string hls.js rejects
+// (manifestIncompatibleCodecsError). A one-variant master probes cleanly, and in ~1s instead of ~11s.
+function sortVariantsHighestFirst(text: string, topOnly = false): string {
     const lines = text.split(/\r?\n/);
     const first = lines.findIndex((l) => l.startsWith('#EXT-X-STREAM-INF'));
     if (first === -1) {
@@ -85,7 +94,8 @@ function sortVariantsHighestFirst(text: string): string {
         i += 2;
     }
     variants.sort((a, b) => b.bandwidth - a.bandwidth);
-    return [...lines.slice(0, first), ...variants.flatMap((v) => v.lines), ...lines.slice(i)].join('\n');
+    const kept = topOnly ? variants.slice(0, 1) : variants;
+    return [...lines.slice(0, first), ...kept.flatMap((v) => v.lines), ...lines.slice(i)].join('\n');
 }
 
 function resolveReference(reference: string, baseUrl: string): string {
@@ -160,7 +170,8 @@ export async function proxyUrl(
                             url,
                             (req.query.streamkey as string) ?? '',
                             sessionId,
-                            highestVariantFirst
+                            highestVariantFirst,
+                            liveTvManifestRegex.test((req.originalUrl ?? '').split('?')[0])
                         );
                         if (sessionId && segmentCount > 0) {
                             streamSessionService.setSegmentCount(sessionId, segmentCount);

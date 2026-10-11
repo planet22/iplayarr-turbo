@@ -51,7 +51,7 @@ describe('liveTvService', () => {
         expect(m3u).toContain('tvg-id="bbc_two_england" tvg-name="BBC Two" tvg-chno="2"');
         expect(m3u).toContain('tvg-id="bbc_four" tvg-name="BBC Four" tvg-chno="4"');
         expect(m3u).toContain('tvg-logo="http://host:4404/api?mode=live_logo&channel=bbc_two_england&streamkey=sk"');
-        expect(m3u).toContain('http://host:4404/api?mode=stream&pid=bbc_two_england&streamkey=sk');
+        expect(m3u).toContain('http://host:4404/api/live.m3u8?mode=stream&pid=bbc_two_england&streamkey=sk');
         expect(m3u).not.toContain('bbc_one_london');
     });
 

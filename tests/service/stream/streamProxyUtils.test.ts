@@ -120,6 +120,25 @@ describe('proxyUrl', () => {
             expect(out.indexOf('BANDWIDTH=5')).toBeLessThan(out.indexOf('RESOLUTION=1x1'));
         });
 
+        it('keeps only the best variant for the Live TV /api/live.m3u8 entry point', async () => {
+            mockGet(https, [{ status: 200, headers: { 'content-type': 'application/vnd.apple.mpegurl' }, body: master }]);
+            const res = makeRes();
+            const req = { ...makeReq(), originalUrl: '/api/live.m3u8?mode=stream&pid=bbc_one_london' };
+            await proxyUrl('https://cdn/master.m3u8', req, res, 5, undefined, true);
+            const out = res.send.mock.calls[0][0] as string;
+            expect(bandwidths(out)).toEqual([3000000]);
+            expect(out).toContain('#EXT-X-VERSION:3');
+            expect(out).toContain('#EXT-X-ENDLIST');
+        });
+
+        it('keeps every variant for the normal /api entry point', async () => {
+            mockGet(https, [{ status: 200, headers: { 'content-type': 'application/vnd.apple.mpegurl' }, body: master }]);
+            const res = makeRes();
+            const req = { ...makeReq(), originalUrl: '/api?mode=stream&pid=bbc_one_london' };
+            await proxyUrl('https://cdn/master.m3u8', req, res, 5, undefined, true);
+            expect(bandwidths(res.send.mock.calls[0][0])).toEqual([3000000, 1500000, 800000]);
+        });
+
         it('keeps the preference across redirects', async () => {
             mockGet(https, [
                 { status: 302, headers: { location: 'https://cdn/final.m3u8' } },
