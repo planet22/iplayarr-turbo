@@ -77,6 +77,33 @@ describe('SettingsRoute', () => {
             mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'form' });
         });
 
+        describe('locked settings', () => {
+            it('lists the executable settings as locked while login is disabled', async () => {
+                mockedConfigService.getParameter.mockResolvedValue('none');
+                const res = await request(app).get('/lockedSettings');
+                expect(res.body.locked).toEqual(['GET_IPLAYER_EXEC', 'YTDLP_EXEC', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS']);
+            });
+
+            it('locks nothing when login is enabled', async () => {
+                mockedConfigService.getParameter.mockResolvedValue('form');
+                expect((await request(app).get('/lockedSettings')).body.locked).toEqual([]);
+            });
+
+            it('clears a saved executable override and reports the value now in effect', async () => {
+                mockedConfigService.removeParameter.mockResolvedValue();
+                mockedConfigService.getParameter.mockResolvedValue('--from-env');
+                const res = await request(app).delete('/executableOverride/ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS');
+                expect(res.body).toEqual({ status: true, value: '--from-env' });
+                expect(mockedConfigService.removeParameter).toHaveBeenCalledWith('ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS');
+            });
+
+            it('refuses to clear anything that is not an executable setting', async () => {
+                const res = await request(app).delete('/executableOverride/DOWNLOAD_DIR');
+                expect(res.status).toBe(400);
+                expect(mockedConfigService.removeParameter).not.toHaveBeenCalled();
+            });
+        });
+
         describe('settings guard', () => {
             const put = (body: unknown) => request(app).put('/').send(body as object);
 

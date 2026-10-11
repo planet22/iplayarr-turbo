@@ -3,7 +3,7 @@
         <label v-if="name">{{ name }}</label>
         <div class="inputBox">
             <div :class="['inputWithButton', error ? 'error' : '']">
-                <input v-model="localValue" :type="typeOverride" :placeholder="placeholder" />
+                <input v-model="localValue" :type="typeOverride" :placeholder="placeholder" :disabled="disabled" />
                 <div class="buttonGroup">
                     <button v-if="copyable" type="button" title="Copy to clipboard" @click="copyValue">
                         <font-awesome-icon :icon="['fas', copied ? 'check' : 'copy']" />
@@ -55,6 +55,11 @@ const props = defineProps({
     placeholder: {
         type: String,
         required: false,
+    },
+    disabled: {
+        type: Boolean,
+        required: false,
+        default: false,
     },
     advanced: {
         type: Boolean,
