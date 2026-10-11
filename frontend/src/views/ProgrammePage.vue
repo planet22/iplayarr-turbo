@@ -33,6 +33,15 @@
                         {{ subscription ? 'Subscribed' : 'Subscribe' }}
                     </button>
                     <button
+                        v-if="programme.seasons.length > 0"
+                        class="clickable subscribeButton"
+                        :disabled="downloadingSeason || loadingMore"
+                        @click="downloadAll"
+                    >
+                        <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-download']" :spin="downloadingSeason" />
+                        Download all ({{ loadedCount }})
+                    </button>
+                    <button
                         v-if="subscription && !subscription.arrOnly"
                         class="clickable subscribeButton"
                         :disabled="subscribing"
@@ -215,10 +224,19 @@ const seasonLabel = ({ series }) => (series == null ? 'Episodes' : series === 0 
 
 // Queue every episode of the selected series, one request at a time like the Search page's bulk
 // download, then report any that were refused instead of failing silently.
-const downloadSeason = async () => {
-    const batch = episodes.value;
-    if (batch.length === 0) return;
+const downloadSeason = () => {
     const label = programme.value.seasons.length > 1 ? seasonLabel(programme.value.seasons[selected.value]) : programme.value.title;
+    return downloadBatch(episodes.value, label);
+};
+
+// Every episode of every series, oldest first so they reach the library in broadcast order.
+const downloadAll = () => {
+    const batch = programme.value.seasons.flatMap((season) => season.episodes).sort((a, b) => -newestFirst(a, b));
+    return downloadBatch(batch, programme.value.title);
+};
+
+const downloadBatch = async (batch, label) => {
+    if (batch.length === 0) return;
     if (!(await dialogService.confirm('Download', `Download ${batch.length} episodes of ${label}?`))) return;
 
     downloadingSeason.value = true;
