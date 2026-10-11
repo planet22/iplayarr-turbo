@@ -12,6 +12,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import User from '../types/User';
 import { FailureLimiter } from '../utils/FailureLimiter';
+import { SECRET_MASK } from '../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../utils/Utils';
 
 declare module 'express-session' {
@@ -178,7 +179,11 @@ router.post('/oidc/test', async (req: Request, res: Response) => {
         res.status(401).json({ error: ApiError.NOT_AUTHORISED } as ApiResponse);
         return;
     }
-    const { OIDC_CONFIG_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_CALLBACK_HOST } = req.body ?? {};
+    const { OIDC_CONFIG_URL, OIDC_CLIENT_ID, OIDC_CALLBACK_HOST } = req.body ?? {};
+    let { OIDC_CLIENT_SECRET } = req.body ?? {};
+    if (OIDC_CLIENT_SECRET === SECRET_MASK) {
+        OIDC_CLIENT_SECRET = await configService.getParameter(IplayarrParameter.OIDC_CLIENT_SECRET);
+    }
     if (![OIDC_CONFIG_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_CALLBACK_HOST].every((v) => typeof v === 'string' && v)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT } as ApiResponse);
         return;

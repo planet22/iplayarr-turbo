@@ -13,6 +13,7 @@ import { QueueEntry } from '../../types/QueueEntry';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { VideoEventType } from '../../types/VideoEvent';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
+import { maskConfig, restoreConfig } from '../../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../../utils/Utils';
 import { ConfigFormValidator } from '../../validators/ConfigFormValidator';
 import { checkSettingsUpdate } from '../../validators/SettingsGuard';
@@ -29,11 +30,15 @@ router.get('/hiddenSettings', (_, res: Response) => {
 
 router.get('/', async (_, res: Response) => {
     const configMap: ConfigMap = await configService.getAllConfig();
-    res.json(configMap);
+    res.json(maskConfig(configMap));
 });
 
 router.put('/', async (req: Request, res: Response) => {
     const currentConfig: ConfigMap = (await configService.getAllConfig()) ?? {};
+    // The GET above hands secrets out masked; a masked value coming back means "unchanged".
+    if (req.body && typeof req.body === 'object') {
+        req.body = restoreConfig(req.body, currentConfig);
+    }
     const guardErrors = checkSettingsUpdate(req.body, currentConfig, currentConfig[IplayarrParameter.AUTH_TYPE]);
     if (Object.keys(guardErrors).length > 0) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, invalid_fields: guardErrors } as ApiResponse);

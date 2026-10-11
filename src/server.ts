@@ -89,6 +89,17 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(process.cwd(), 'frontend', 'dist', 'index.html'));
 });
 
+// Last-resort error handler: Express's default one sends a stack trace to the client.
+app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) {
+        next(err);
+        return;
+    }
+    loggingService.error('Request failed', err?.message ?? err);
+    const status: number = err?.code === 'LIMIT_FILE_SIZE' ? 413 : err?.status >= 400 && err?.status < 500 ? err.status : 500;
+    res.status(status).json({ error: status === 500 ? 'Internal Error' : 'Bad Request' });
+});
+
 // Start the server
 const server: Server = http.createServer(app);
 
