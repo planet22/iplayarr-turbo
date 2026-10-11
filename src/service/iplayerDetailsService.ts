@@ -8,6 +8,10 @@ import RedisCacheService from './redis/redisCacheService';
 
 class IPlayerDetailsService {
     metadataCache: RedisCacheService<IPlayerMetadataResponse> = new RedisCacheService('metadata_cache', 86400); // 24 hours
+    // ids BBC answered 404 for (e.g. live channel ids like bbc_two_england, which several pages
+    // ask details for) mapped to when to try again - otherwise every request repeats the BBC round trip.
+    notFound: Map<string, number> = new Map();
+    static readonly NOT_FOUND_TTL_MS = 60 * 60 * 1000;
 
     async detailsForEpisodeMetadata(episodes: IPlayerEpisodeMetadata[]): Promise<IPlayerDetails[]> {
         const results = await Promise.allSettled(
@@ -66,12 +70,20 @@ class IPlayerDetailsService {
     }
 
     async getMetadata(pid: string, axiosInstance: Axios = axios): Promise<IPlayerMetadataResponse> {
+        const retryAt = this.notFound.get(pid);
+        if (retryAt !== undefined) {
+            if (retryAt > Date.now()) throw new Error(`No programme metadata for PID ${pid} (cached 404)`);
+            this.notFound.delete(pid);
+        }
         try {
             return await this.metadataCache.getOr(pid, async () => {
                 const response: { data: IPlayerMetadataResponse } = await axiosInstance.get(`https://www.bbc.co.uk/programmes/${pid}.json`);
                 return response.data;
             });
         } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 404) {
+                this.notFound.set(pid, Date.now() + IPlayerDetailsService.NOT_FOUND_TTL_MS);
+            }
             console.error(`Error fetching metadata for PID ${pid}: ${error}`);
             throw error;
         }

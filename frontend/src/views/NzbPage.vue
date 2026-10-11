@@ -113,9 +113,9 @@
                 <tr v-for="(entry, index) in pagedGrabs" :key="index">
                     <td>
                         <img
-                            v-if="detailsFor(entry.pid)?.thumbnail"
+                            v-if="getProgrammeThumbnailUrl(entry.pid)"
                             class="thumbnail clickable"
-                            :src="getThumbnailUrl(detailsFor(entry.pid).thumbnail)"
+                            :src="getProgrammeThumbnailUrl(entry.pid)"
                             @click="openInfo(entry.pid)"
                             @error="hideBrokenImage"
                         />
@@ -197,7 +197,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
@@ -207,19 +207,20 @@ import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
+import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import {
-    formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage,
+    formatDateTimeWithMillis, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage,
 } from '@/lib/utils';
 
 const searchHistory = ref([]);
 const grabHistory = ref([]);
 const failedGrabHistory = ref([]);
 const apps = ref([]);
-const details = reactive({});
+
 
 const socket = inject('socket');
 
@@ -229,19 +230,6 @@ function detailsFor(pid) {
 
 function seriesEpisodeLabel(pid) {
     return getSeriesEpisodeLabel(detailsFor(pid));
-}
-
-async function loadDetails(pid) {
-    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
-        return;
-    }
-    details[pid] = null;
-    try {
-        const response = await ipFetch(`json-api/details?pid=${pid}`);
-        details[pid] = response.ok ? response.data : null;
-    } catch {
-        details[pid] = null;
-    }
 }
 
 function loadMissingDetails() {

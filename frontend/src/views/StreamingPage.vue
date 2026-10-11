@@ -200,12 +200,13 @@
 </template>
 
 <script setup>
-import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
@@ -219,7 +220,7 @@ import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.v
 import SettingsChips from '../components/streaming/SettingsChips.vue';
 
 const streams = inject('streams');
-const details = reactive({});
+
 const stopping = ref(new Set());
 
 const reversedHistory = computed(() => [...streams.value.history].reverse());
@@ -251,19 +252,6 @@ function thumbnailFor(session) {
 
 function seriesEpisodeLabel(pid) {
     return getSeriesEpisodeLabel(detailsFor(pid));
-}
-
-async function loadDetails(pid) {
-    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
-        return;
-    }
-    details[pid] = null;
-    try {
-        const response = await ipFetch(`json-api/details?pid=${pid}`);
-        details[pid] = response.ok ? response.data : null;
-    } catch {
-        details[pid] = null;
-    }
 }
 
 function loadMissingDetails() {

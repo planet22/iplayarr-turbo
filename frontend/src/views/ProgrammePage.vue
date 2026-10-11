@@ -81,7 +81,7 @@
                 <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length" />
                 <div class="episodeList">
                     <div v-for="episode in pagedEpisodes" :key="episode.pid" class="episodeRow">
-                        <img v-if="episode.thumbnail" :src="getThumbnailUrl(episode.thumbnail)" :alt="episode.title" loading="lazy" @error="hideBrokenImage" />
+                        <img v-if="episode.thumbnail" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title" loading="lazy" @error="hideBrokenImage" />
                         <div v-else class="episodeNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                         <div class="episodeInfo">
                             <div class="episodeTitle">

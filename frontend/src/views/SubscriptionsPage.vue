@@ -18,7 +18,7 @@
         <div v-if="loaded && subscriptions.length" class="subscriptionList">
             <div v-for="subscription in pagedItems" :key="subscription.id" class="subscriptionRow">
                 <RouterLink :to="`/browse/programme/${subscription.pid}`" class="thumbLink">
-                    <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
+                    <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
                     <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                 </RouterLink>
                 <div class="info">

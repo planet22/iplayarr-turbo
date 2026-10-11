@@ -5,47 +5,74 @@ import path from 'path';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { getThumbnailCacheDir } from '../utils/Utils';
 import configService from './configService';
+import iplayerDetailsService from './iplayerDetailsService';
 
 const IMAGE_PID_PATTERN = /^[a-z0-9]+$/i;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Recipes tried in order (not every image exists at every size). Small is for list/card/table
+// thumbnails; full is for hero banners.
+const FULL_SIZES = ['960x540', '640x360', '480x270', '320x180'];
+const SMALL_SIZES = ['320x180', '240x135'];
 
 // One home for BBC episode thumbnails (<cacheDir>/<imagePid>.jpg): serve the local copy if
 // there is one, otherwise fetch BBC's still once and keep it so every later view (and every
 // other row referencing the same image) is served from disk instead of ichef.bbci.co.uk.
 class ThumbnailCacheService {
     inFlight: Map<string, Promise<string | undefined>> = new Map();
+    // programme pid -> image pid; a programme's image doesn't change, so look it up once.
+    imagePids: Map<string, string> = new Map();
 
     isValidImagePid(imagePid: string): boolean {
         return typeof imagePid === 'string' && IMAGE_PID_PATTERN.test(imagePid);
     }
 
-    async localPath(imagePid: string): Promise<string> {
+    async localPath(imagePid: string, small = false): Promise<string> {
         const cacheDir = await getThumbnailCacheDir();
-        return path.join(cacheDir, `${imagePid}.jpg`);
+        return path.join(cacheDir, small ? `${imagePid}.small.jpg` : `${imagePid}.jpg`);
     }
 
-    async getOrFetch(imagePid: string): Promise<string | undefined> {
+    async getOrFetch(imagePid: string, small = false): Promise<string | undefined> {
         if (!this.isValidImagePid(imagePid)) return undefined;
 
-        const filePath = await this.localPath(imagePid);
+        const filePath = await this.localPath(imagePid, small);
         try {
-            await fs.promises.access(filePath);
-            const now = new Date();
-            fs.promises.utimes(filePath, now, now).catch(() => { /* best effort */ });
+            const stat = await fs.promises.stat(filePath);
+            // Only refresh the "last viewed" time once a day: touching on every hit costs a disk
+            // write per thumbnail and keeps changing Last-Modified, defeating browser revalidation.
+            if (Date.now() - stat.mtimeMs > MS_PER_DAY) {
+                const now = new Date();
+                fs.promises.utimes(filePath, now, now).catch(() => { /* best effort */ });
+            }
             return filePath;
         } catch {
             // Not cached yet - fall through to fetch.
         }
 
-        if (!this.inFlight.has(imagePid)) {
-            const pending = this.fetchAndStore(imagePid).finally(() => this.inFlight.delete(imagePid));
-            this.inFlight.set(imagePid, pending);
+        const key = small ? `${imagePid}:small` : imagePid;
+        if (!this.inFlight.has(key)) {
+            const pending = this.fetchAndStore(imagePid, small).finally(() => this.inFlight.delete(key));
+            this.inFlight.set(key, pending);
         }
-        return this.inFlight.get(imagePid);
+        return this.inFlight.get(key);
     }
 
-    async fetchAndStore(imagePid: string): Promise<string | undefined> {
-        const filePath = await this.localPath(imagePid);
+    async getOrFetchForProgramme(programmePid: string, small = false): Promise<string | undefined> {
+        let imagePid = this.imagePids.get(programmePid);
+        if (!imagePid) {
+            try {
+                imagePid = (await iplayerDetailsService.getMetadata(programmePid)).programme?.image?.pid;
+            } catch {
+                return undefined;
+            }
+            if (!imagePid) return undefined;
+            this.imagePids.set(programmePid, imagePid);
+        }
+        return this.getOrFetch(imagePid, small);
+    }
+
+    async fetchAndStore(imagePid: string, small = false): Promise<string | undefined> {
+        const filePath = await this.localPath(imagePid, small);
         const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
         try {
             // 960x540 (BBC's ichef CDN resizes on request, so this costs nothing extra) rather
@@ -57,7 +84,7 @@ class ThumbnailCacheService {
             // step down through smaller recipes before giving up.
             let data: ArrayBuffer | undefined;
             let lastError: unknown;
-            for (const size of ['960x540', '640x360', '480x270', '320x180']) {
+            for (const size of small ? SMALL_SIZES : FULL_SIZES) {
                 try {
                     const response = await axios.get(`https://ichef.bbci.co.uk/images/ic/${size}/${imagePid}.jpg`, {
                         responseType: 'arraybuffer',

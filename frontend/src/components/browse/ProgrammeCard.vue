@@ -38,7 +38,7 @@ const props = defineProps({
 });
 
 const { canPlay, play, download } = useBrowseActions();
-const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail));
+const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
 </script>
 
 <style lang="less" scoped>

@@ -81,7 +81,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
@@ -90,6 +90,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
+import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
@@ -97,7 +98,7 @@ import { useSortFilter } from '@/lib/useSortFilter';
 import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const events = inject('videoEvents');
-const details = reactive({});
+
 
 function detailsFor(pid) {
     return details[pid];
@@ -136,19 +137,6 @@ const showFilters = ref(filtersActive.value);
 const {
     page: eventsPage, pageSize: eventsPageSize, pagedItems: pagedEvents,
 } = usePagination(sortedEvents);
-
-async function loadDetails(pid) {
-    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
-        return;
-    }
-    details[pid] = null;
-    try {
-        const response = await ipFetch(`json-api/details?pid=${pid}`);
-        details[pid] = response.ok ? response.data : null;
-    } catch {
-        details[pid] = null;
-    }
-}
 
 // Live channel events (the pid is a channel id) show the channel's logo, from the same Browse
 // channel list the Channels page uses; there are no programme details for them.

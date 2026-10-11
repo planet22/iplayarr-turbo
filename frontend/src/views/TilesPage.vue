@@ -32,7 +32,7 @@
             <RouterLink
                 v-for="tile in tiles" :key="tile.id" :to="`/browse/${isChannels ? 'channel' : 'category'}/${tile.id}`"
                 :class="['tile', isChannels ? '' : 'imageTile']"
-                :style="!isChannels && tile.thumbnail ? { 'background-image': `url(${getThumbnailUrl(tile.thumbnail)})` } : {}"
+                :style="!isChannels && tile.thumbnail ? { 'background-image': `url(${getThumbnailUrl(tile.thumbnail, true)})` } : {}"
             >
                 <template v-if="isChannels">
                     <img

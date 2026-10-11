@@ -222,14 +222,29 @@ router.get('/cache-refresh', async (_, res: Response) => {
 // /json-api/thumbnail/<imagePid>.jpg - the cached BBC episode still image that IPlayerDetails.thumbnail
 // points at. Behind the same /json-api/* session auth as everything else, so an <img>/background-image
 // referencing it works as-is (session cookie is sent same-site with credentials: 'include').
-router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Response) => {
-    const imagePid = req.params[0];
-    const filePath = await thumbnailCacheService.getOrFetch(imagePid);
+// /json-api/thumbnail/pid/<programmePid> - same image, keyed by the programme id the page already has,
+// so an <img> can point straight at it with no details lookup first (like the channel logos).
+router.get('/thumbnail/pid/:pid', async (req: Request, res: Response) => {
+    const { pid } = req.params;
+    const filePath = isValidPid(pid) ? await thumbnailCacheService.getOrFetchForProgramme(pid, req.query.size === 'small') : undefined;
     if (!filePath) {
         res.status(404).json({ error: ApiError.INTERNAL_ERROR, message: 'Thumbnail not found' } as ApiResponse);
         return;
     }
-    res.sendFile(filePath);
+    res.sendFile(filePath, { maxAge: '7d', immutable: true, headers: { 'Cache-Control': 'private, max-age=604800, immutable' } });
+});
+
+router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Response) => {
+    const imagePid = req.params[0];
+    const filePath = await thumbnailCacheService.getOrFetch(imagePid, req.query.size === 'small');
+    if (!filePath) {
+        res.status(404).json({ error: ApiError.INTERNAL_ERROR, message: 'Thumbnail not found' } as ApiResponse);
+        return;
+    }
+    // An image pid's content never changes, so let the browser keep it for a week instead of
+    // revalidating (sendFile's default is max-age=0) on every card render. 'private' because the
+    // route is behind session auth.
+    res.sendFile(filePath, { maxAge: '7d', immutable: true, headers: { 'Cache-Control': 'private, max-age=604800, immutable' } });
 });
 
 export default router;
