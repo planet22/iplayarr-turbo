@@ -19,6 +19,7 @@ declare module 'express-session' {
         user: User;
         codeVerifier?: string;
         state?: string;
+        oidcTest?: { configUrl: string; clientId: string; clientSecret: string };
     }
 }
 
@@ -167,53 +168,75 @@ router.get('/oidc/login', async (req: Request, res: Response) => {
     res.json({ url });
 });
 
+// Safe to embed inside an inline <script>: escapes everything that could close it or break the literal.
+const toScriptLiteral = (value: unknown): string =>
+    JSON.stringify(value ?? null).replace(/[<>&\u2028\u2029]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+
 router.post('/oidc/test', async (req: Request, res: Response) => {
-    const { OIDC_CONFIG_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_CALLBACK_HOST } = req.body;
-    const authUrl = await OIDCService.oidcConnection(
-        req,
-        OIDC_CONFIG_URL,
-        OIDC_CLIENT_ID,
-        OIDC_CLIENT_SECRET,
-        OIDC_CALLBACK_HOST,
-        'test'
-    );
-    res.redirect(authUrl);
-});
-
-router.get('/oidc/callback', async (req: Request, res: Response) => {
-    const allowedEmailsList = (await configService.getParameter(IplayarrParameter.OIDC_ALLOWED_EMAILS)) || '';
-    const allowedEmails = allowedEmailsList.split(',').map((email) => email.trim().toLowerCase());
-    const code = req.query.code as string;
-    const codeVerifier = req.session.codeVerifier;
-
-    if (!code || !codeVerifier) {
+    // Starts a discovery request to an address the caller supplies, so it is for logged-in admins only.
+    if (!(await isAuthenticatedRequest(req))) {
+        res.status(401).json({ error: ApiError.NOT_AUTHORISED } as ApiResponse);
+        return;
+    }
+    const { OIDC_CONFIG_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_CALLBACK_HOST } = req.body ?? {};
+    if (![OIDC_CONFIG_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_CALLBACK_HOST].every((v) => typeof v === 'string' && v)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT } as ApiResponse);
         return;
     }
+    try {
+        const authUrl = await OIDCService.oidcConnection(
+            req,
+            OIDC_CONFIG_URL,
+            OIDC_CLIENT_ID,
+            OIDC_CLIENT_SECRET,
+            OIDC_CALLBACK_HOST,
+            'test'
+        );
+        res.redirect(authUrl);
+    } catch (err: any) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: err?.message ?? 'OIDC discovery failed' } as ApiResponse);
+    }
+});
 
-    const stateParam = req.query.state as string;
-    const stateData = JSON.parse(Buffer.from(stateParam, 'base64url').toString());
-    const isTest = stateData.mode === 'test';
-    const email: string | undefined = isTest
-        ? await OIDCService.getUserEmail(
-              req,
-              stateData.details.configUrl,
-              stateData.details.clientId,
-              stateData.details.clientSecret
-          )
-        : await OIDCService.validateUser(req);
-    const validUser = email && allowedEmails.includes(email.toLowerCase());
+router.get('/oidc/callback', async (req: Request, res: Response) => {
+    try {
+        const allowedEmailsList = (await configService.getParameter(IplayarrParameter.OIDC_ALLOWED_EMAILS)) || '';
+        const allowedEmails = allowedEmailsList.split(',').map((email) => email.trim().toLowerCase());
+        const code = req.query.code;
+        const codeVerifier = req.session.codeVerifier;
+        const stateParam = req.query.state;
 
-    if (isTest) {
-        res.send(`
+        // The state must be the very value this session was issued when the login started.
+        if (typeof code !== 'string' || !code || !codeVerifier || typeof stateParam !== 'string' || stateParam !== req.session.state) {
+            res.status(400).json({ error: ApiError.INVALID_INPUT } as ApiResponse);
+            return;
+        }
+
+        const stateData = JSON.parse(Buffer.from(stateParam, 'base64url').toString());
+        const isTest = stateData?.mode === 'test';
+        const testDetails = req.session.oidcTest;
+        if (isTest && !testDetails) {
+            res.status(400).json({ error: ApiError.INVALID_INPUT } as ApiResponse);
+            return;
+        }
+        const email: string | undefined = isTest
+            ? await OIDCService.getUserEmail(req, testDetails!.configUrl, testDetails!.clientId, testDetails!.clientSecret)
+            : await OIDCService.validateUser(req);
+        const validUser = email && allowedEmails.includes(email.toLowerCase());
+
+        if (isTest) {
+            delete req.session.oidcTest;
+            res.set('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'");
+            res.send(`
     <html>
       <body>
         <script>
           const channel = new BroadcastChannel('oidc-test');
           channel.postMessage({
             type: 'oidc-test-result',
-            success: true,
-            email: "${email}"
+            success: ${email ? 'true' : 'false'},
+            email: ${toScriptLiteral(email)},
+            error: ${toScriptLiteral(email ? undefined : 'No verified email was returned by the provider')}
           });
           setTimeout(() => window.close(), 500);
         </script>
@@ -221,17 +244,21 @@ router.get('/oidc/callback', async (req: Request, res: Response) => {
       </body>
     </html>
 `);
-        return;
-    }
+            return;
+        }
 
-    if (!validUser) {
-        res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
-        return;
-    } else {
+        if (!validUser) {
+            res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
+            return;
+        }
         await startSession(req, { username: email });
         const host = process.env.DEBUG == 'true' ? `${req.protocol}://${req.headers.host?.split(':')[0]}:8080` : '';
         res.redirect(`${host}/queue`);
-        return;
+    } catch {
+        // A malformed state or a failed provider exchange is a bad request, never a crashed process.
+        if (!res.headersSent) {
+            res.status(400).json({ error: ApiError.INVALID_INPUT } as ApiResponse);
+        }
     }
 });
 

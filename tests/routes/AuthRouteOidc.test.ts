@@ -26,6 +26,8 @@ const makeApp = () => {
     // Test hook: lets a test seed session state via headers.
     app.use((req, _res, next) => {
         if (req.headers['x-verifier']) req.session.codeVerifier = req.headers['x-verifier'] as string;
+        if (req.headers['x-state']) req.session.state = req.headers['x-state'] as string;
+        if (req.headers['x-oidc-test']) req.session.oidcTest = { configUrl: 'https://idp', clientId: 'c', clientSecret: 's' };
         if (req.headers['x-user']) req.session.user = { username: req.headers['x-user'] as string };
         next();
     });
@@ -38,7 +40,7 @@ const makeApp = () => {
 };
 
 const state = (mode: string) =>
-    Buffer.from(JSON.stringify({ mode, details: { configUrl: 'https://idp', clientId: 'c', clientSecret: 's' } })).toString('base64url');
+    Buffer.from(JSON.stringify({ mode, nonce: 'n' })).toString('base64url');
 
 describe('AuthRoute (method, OIDC and middleware)', () => {
     let app: express.Express;
@@ -99,7 +101,7 @@ describe('AuthRoute (method, OIDC and middleware)', () => {
     describe('POST /oidc/test', () => {
         it('redirects to the provider in test mode', async () => {
             mockedOidc.oidcConnection.mockResolvedValue('https://idp/auth');
-            const res = await request(app).post('/oidc/test').send({
+            const res = await request(app).post('/oidc/test').set('x-user', 'bob').send({
                 OIDC_CONFIG_URL: 'u',
                 OIDC_CLIENT_ID: 'c',
                 OIDC_CLIENT_SECRET: 's',
@@ -108,6 +110,51 @@ describe('AuthRoute (method, OIDC and middleware)', () => {
             expect(res.status).toBe(302);
             expect(res.headers.location).toBe('https://idp/auth');
             expect(mockedOidc.oidcConnection).toHaveBeenCalledWith(expect.anything(), 'u', 'c', 's', 'h', 'test');
+        });
+    });
+
+    describe('OIDC hardening', () => {
+        it('POST /oidc/test refuses an unauthenticated caller (no SSRF probe)', async () => {
+            config({ AUTH_TYPE: 'form' });
+            const res = await request(app).post('/oidc/test').send({ OIDC_CONFIG_URL: 'http://169.254.169.254', OIDC_CLIENT_ID: 'c', OIDC_CLIENT_SECRET: 's', OIDC_CALLBACK_HOST: 'h' });
+            expect(res.status).toBe(401);
+            expect(mockedOidc.oidcConnection).not.toHaveBeenCalled();
+        });
+
+        it('a malformed state is a 400, not an unhandled rejection', async () => {
+            config({});
+            const res = await request(app).get('/oidc/callback?code=x&state=%%%').set('x-verifier', 'v').set('x-state', '%%%');
+            expect(res.status).toBe(400);
+            const res2 = await request(app).get('/oidc/callback?code=x&state=bm90LWpzb24').set('x-verifier', 'v').set('x-state', 'bm90LWpzb24');
+            expect(res2.status).toBe(400);
+        });
+
+        it('rejects a state that is not the one issued to this session', async () => {
+            config({ OIDC_ALLOWED_EMAILS: 'a@b.c' });
+            mockedOidc.validateUser.mockResolvedValue('a@b.c');
+            const res = await request(app).get(`/oidc/callback?code=x&state=${state('login')}`).set('x-verifier', 'v').set('x-state', 'something-else');
+            expect(res.status).toBe(400);
+            expect(mockedOidc.validateUser).not.toHaveBeenCalled();
+        });
+
+        it('escapes the provider-supplied email in the test page', async () => {
+            config({});
+            mockedOidc.getUserEmail.mockResolvedValue('</script><script>alert(1)</script>');
+            const res = await request(app).get(`/oidc/callback?code=x&state=${state('test')}`).set('x-verifier', 'v').set('x-state', state('test')).set('x-oidc-test', '1');
+            expect(res.status).toBe(200);
+            expect(res.text).not.toContain('</script><script>');
+            expect(res.text).toContain('u003c/script');
+        });
+
+        it('reports failure in the test page when no email comes back', async () => {
+            config({});
+            mockedOidc.getUserEmail.mockResolvedValue(undefined);
+            const res = await request(app).get(`/oidc/callback?code=x&state=${state('test')}`).set('x-verifier', 'v').set('x-state', state('test')).set('x-oidc-test', '1');
+            expect(res.text).toContain('success: false');
+        });
+
+        it('the client secret never appears in the state sent to the provider', async () => {
+            expect(Buffer.from(state('test'), 'base64url').toString()).not.toMatch(/clientSecret|"s"/);
         });
     });
 
@@ -121,7 +168,7 @@ describe('AuthRoute (method, OIDC and middleware)', () => {
         it('returns the test page with the email in test mode', async () => {
             config({ OIDC_ALLOWED_EMAILS: 'a@b.c' });
             mockedOidc.getUserEmail.mockResolvedValue('a@b.c');
-            const res = await request(app).get(`/oidc/callback?code=x&state=${state('test')}`).set('x-verifier', 'v');
+            const res = await request(app).get(`/oidc/callback?code=x&state=${state('test')}`).set('x-verifier', 'v').set('x-state', state('test')).set('x-oidc-test', '1');
             expect(res.status).toBe(200);
             expect(res.text).toContain('oidc-test-result');
             expect(res.text).toContain('a@b.c');
@@ -131,7 +178,7 @@ describe('AuthRoute (method, OIDC and middleware)', () => {
         it('logs in an allowed email (case-insensitive) and redirects to the queue', async () => {
             config({ OIDC_ALLOWED_EMAILS: 'x@y.z, A@B.C' });
             mockedOidc.validateUser.mockResolvedValue('a@b.c');
-            const res = await request(app).get(`/oidc/callback?code=x&state=${state('login')}`).set('x-verifier', 'v');
+            const res = await request(app).get(`/oidc/callback?code=x&state=${state('login')}`).set('x-verifier', 'v').set('x-state', state('login'));
             expect(res.status).toBe(302);
             expect(res.headers.location).toBe('/queue');
         });
@@ -139,7 +186,7 @@ describe('AuthRoute (method, OIDC and middleware)', () => {
         it('rejects emails that are not allowed', async () => {
             config({ OIDC_ALLOWED_EMAILS: 'x@y.z' });
             mockedOidc.validateUser.mockResolvedValue('a@b.c');
-            const res = await request(app).get(`/oidc/callback?code=x&state=${state('login')}`).set('x-verifier', 'v');
+            const res = await request(app).get(`/oidc/callback?code=x&state=${state('login')}`).set('x-verifier', 'v').set('x-state', state('login'));
             expect(res.status).toBe(401);
             expect(res.body.error).toBe(ApiError.INVALID_CREDENTIALS);
         });
@@ -147,7 +194,7 @@ describe('AuthRoute (method, OIDC and middleware)', () => {
         it('rejects when no email could be validated and no allow list is set', async () => {
             config({});
             mockedOidc.validateUser.mockResolvedValue(undefined);
-            const res = await request(app).get(`/oidc/callback?code=x&state=${state('login')}`).set('x-verifier', 'v');
+            const res = await request(app).get(`/oidc/callback?code=x&state=${state('login')}`).set('x-verifier', 'v').set('x-state', state('login'));
             expect(res.status).toBe(401);
         });
     });
