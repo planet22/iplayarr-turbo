@@ -8,8 +8,8 @@
         <template v-else-if="servers.length">
             <MultiSelectInput
                 :model-value="selectedIds"
-                name="Jellyfin Servers"
-                tooltip="Your Jellyfin servers to use for Live TV (tick as many as you like; each needs an administrator API key). Ticked servers get the Add/Update/Remove buttons below, and are asked to refresh their guide whenever the Live TV channel list changes. Save settings to keep the selection; the buttons use the saved Stream Base URL, Stream Key and EPG offset."
+                name="Automatic Configuration"
+                tooltip="Jellyfin servers iPlayarr sets up for Live TV automatically (tick as many as you like; each needs an administrator API key). Ticked servers get the Add/Update/Remove buttons below, and are asked to refresh their guide whenever the Live TV channel list changes. Save settings to keep the selection; the buttons use the saved Stream Base URL, Stream Key and EPG offset."
                 :options="serverOptions"
                 @update:model-value="config.LIVE_TV_JELLYFIN_APPS = $event"
             />
@@ -50,7 +50,7 @@ const servers = ref([]);
 const loaded = ref(false);
 const config = inject('settingsConfig');
 // Comma-separated app ids (the LIVE_TV_JELLYFIN_APPS setting), as MultiSelectInput expects.
-const selectedIds = computed(() => config.LIVE_TV_JELLYFIN_APPS ?? '');
+const selectedIds = computed(() => config.value.LIVE_TV_JELLYFIN_APPS ?? '');
 const statuses = reactive({});
 const messages = reactive({});
 const busy = ref('');
@@ -131,8 +131,9 @@ onMounted(async () => {
         margin-right: 8px;
     }
 
+    // Fixed widths so the buttons line up whatever the state text / Add-vs-Update label says.
     .state {
-        min-width: 90px;
+        flex: 0 0 100px;
         color: @subtle-text-color;
 
         &.on {
@@ -147,6 +148,7 @@ onMounted(async () => {
         font-size: 14px;
         color: @primary-text-color;
         border-radius: 4px;
+        min-width: 105px;
 
         &:hover:not(:disabled) {
             border-color: @settings-button-hover-border-color;

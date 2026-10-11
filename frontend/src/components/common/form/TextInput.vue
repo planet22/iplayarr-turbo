@@ -88,17 +88,52 @@ watch(
     }
 );
 
-const copyValue = async () => {
+// navigator.clipboard only exists in secure contexts, so over plain http on the LAN (the usual
+// setup, and always the case on phones) fall back to selecting a temporary textarea and execCommand.
+const legacyCopy = (text) => {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.top = '0';
+    area.style.left = '0';
+    area.style.opacity = '0';
+    area.style.fontSize = '16px'; // stops iOS zooming in on focus
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    area.setSelectionRange(0, text.length); // iOS ignores select() alone
     try {
-        await navigator.clipboard.writeText(localValue.value ?? '');
+        return document.execCommand('copy');
+    } finally {
+        document.body.removeChild(area);
+    }
+};
+
+const copyValue = async () => {
+    const text = localValue.value ?? '';
+    let ok = false;
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            ok = true;
+        }
+    } catch {
+        // Permission refused - try the fallback below.
+    }
+    if (!ok) {
+        try {
+            ok = legacyCopy(text);
+        } catch {
+            ok = false;
+        }
+    }
+    if (ok) {
         copied.value = true;
         clearTimeout(copiedTimeout);
         copiedTimeout = setTimeout(() => {
             copied.value = false;
         }, 1500);
-    } catch {
-        // Clipboard API can be unavailable (insecure context, permissions) - nothing sensible to
-        // do beyond leaving the field selectable for a manual copy.
     }
 };
 </script>

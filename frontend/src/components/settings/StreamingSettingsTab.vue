@@ -254,8 +254,8 @@ const liveTvOptions = [
 ];
 
 const liveTvUrl = (mode) => {
-    const base = (config.STREAM_BASE_URL || '').replace(/\/$/, '');
-    return `${base}/api?mode=${mode}&streamkey=${encodeURIComponent(config.STREAM_KEY || '')}`;
+    const base = (config.value.STREAM_BASE_URL || '').replace(/\/$/, '');
+    return `${base}/api?mode=${mode}&streamkey=${encodeURIComponent(config.value.STREAM_KEY || '')}`;
 };
 
 const watchdogEnabledOptions = [
@@ -283,7 +283,7 @@ const watchdogSourceOptions = computed(() => [
 ]);
 
 const selectedSources = computed(() =>
-    (config.STRM_WATCHDOG_SOURCES || '')
+    (config.value.STRM_WATCHDOG_SOURCES || '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)
