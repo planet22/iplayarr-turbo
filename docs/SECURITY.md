@@ -55,7 +55,7 @@ Branch `security-hardening` (from `dev-work`). Review date: 2026-10-11. Every it
 
 ## Smoke test
 
-Run against the **compiled server** (`tsc` output), with an in-memory Redis (ioredis-mock) and a fake `get_iplayer` that records its argv, over real HTTP and WebSocket. Three server instances: normal login, `DEBUG=true` (log redaction), `AUTH_TYPE=none`. Harness: `docs/security/smoke-harness/` (paths are hard-coded to `C:/dev/...`; edit the constants at the top of `smoke.js`). Run `npm run build:backend`, then `node smoke.js`.
+Run against the **compiled server** (`tsc` output), with an in-memory Redis (ioredis-mock) and a fake `get_iplayer` that records its argv, over real HTTP and WebSocket. Three server instances: normal login, `DEBUG=true` (log redaction), `AUTH_TYPE=none`. The harness scripts are not kept in the repo.
 
 Unit tests: 1095 run, 5 failing (the pre-existing `versionService` ones).
 
