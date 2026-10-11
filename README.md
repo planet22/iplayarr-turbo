@@ -14,13 +14,43 @@ iPlayarr Turbo is a companion tool for **Sonarr** and **Radarr**, making it easy
 
 > **This is iPlayarr Turbo**, a fork of upstream iPlayarr (based on v0.11.6) with a modernized Docker build and dependency stack — see [TURBO.md](TURBO.md) for everything this fork changes on top of what's described below.
 
+## 🔐 First login and upgrading (read this first)
+
+**New install:** there is **no default password**. On first start iPlayarr generates a random one for the user `admin` and prints it **once** in the container log:
+
+```bash
+docker logs iplayarr 2>&1 | grep "Web UI login"
+# Web UI login -> username: admin  password: Xk3...   (change it in Settings)
+```
+
+Log in with that, then set your own under **Settings → Authentication**. It is never shown again or sent over HTTP; if you lose it, use the [password reset](docs/AUTHENTICATION.md#forgotten-password-reset).
+
+**Upgrading from an older version — do I have to change my password?**
+
+| Your situation | What happens on upgrade |
+| --- | --- |
+| You **changed** the password from the old default (`admin` / `password`) | Nothing. Your password is kept. |
+| You **never changed it** (still `admin` / `password`) | The old default is retired. A new random password is generated and printed once in the container log (same `Web UI login` line). Log in with that. |
+| `AUTH_TYPE=none` (no login) | No login to change. The password is still rotated in the background for the day you switch back to `form`, and a warning is logged that the UI is open to everyone. |
+| `AUTH_TYPE=oidc` | Not affected. |
+
+Other things you will notice after upgrading (details in [docs/SECURITY.md](docs/SECURITY.md)):
+
+- Everyone is signed out once (the login-cookie secret is now generated instead of a built-in default).
+- Your stored credentials (Sonarr/Radarr/Jellyfin API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) are **encrypted in Redis** with a key kept outside Redis — `secrets.key` in your `/data` (cache) volume, or `SECRETS_KEY` if you set it. **Back that key up with your Redis data.** Without it, stored keys can't be read after a restore.
+- The Apps and Settings pages show saved keys/passwords as `********`; leave them as they are to keep the saved value.
+- After 10 wrong logins from one address you are locked out for 15 minutes.
+- The UI can't be embedded in other sites by default; set `ALLOW_EMBEDDING=true` if you embed it in a dashboard.
+- With login disabled (`AUTH_TYPE=none`) the executable-related settings (`GET_IPLAYER_EXEC`, `YTDLP_EXEC`, additional download parameters) can't be changed from the UI; set them as environment variables.
+
 ## 📚 Further documentation
 
 This README covers the basics. For more detail, see `docs/`:
 
 - [CONFIG.md](docs/CONFIG.md) / [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) — full settings reference
 - [INSTALLATION.md](docs/INSTALLATION.md) — Docker deployment, volumes, PUID/PGID, updating
-- [AUTHENTICATION.md](docs/AUTHENTICATION.md) — auth types, password reset, OIDC
+- [AUTHENTICATION.md](docs/AUTHENTICATION.md) — auth types, initial password, upgrading, password reset, OIDC
+- [SECURITY.md](docs/SECURITY.md) — security review, what was hardened, credential encryption, residual risks
 - [REDIS.md](docs/REDIS.md) — what's stored in Redis, backup/restore
 - [SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) — how the dual-protocol trick works, troubleshooting a failed Test
 - [STREAMING.md](docs/STREAMING.md) and [LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) — `.strm` mode and Jellyfin-style library layout
@@ -185,7 +215,7 @@ There's a few more optional settings too:
 
 **Authentication**
 
-There is no default password. On first start iPlayarr generates a random one for the `admin` user and prints it **once** in the container log (look for `Web UI login`). Change it under Settings -> Authentication.
+**There is no default password.** On first start iPlayarr generates a random one for the `admin` user and prints it **once** in the container log (`docker logs <container> 2>&1 | grep "Web UI login"`). Change it under Settings -> Authentication. Upgrading and never changed the old `admin` / `password`? It is replaced the same way — see [First login and upgrading](#-first-login-and-upgrading-read-this-first).
 
 See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for auth types (form/OIDC/none), changing credentials, and password reset.
 

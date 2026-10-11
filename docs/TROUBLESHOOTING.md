@@ -2,8 +2,13 @@
 
 Grounded in iPlayarr's actual error paths — check the Logs page (or `/logs` on the host, see [REDIS.md](REDIS.md) and [INSTALLATION.md](INSTALLATION.md)) for the exact message before assuming any of these.
 
-## Locked out of the web UI
+## Locked out of the web UI / login and security issues
 
+- **Don't know the initial / upgraded password**: it was printed once at startup. `docker logs <container> 2>&1 | grep "Web UI login"` (if the log has rotated, use the reset below). A fresh install and an install upgraded from the old `admin` / `password` default both get a random one — the old default no longer works.
+- **"Too many failed logins" (HTTP 429)**: 10 wrong passwords from one address locks that address out for 15 minutes. Wait, or restart the container to clear the in-memory counter.
+- **Settings save fails with "Locked while login is disabled" / "Unknown setting" / "Program must be get_iplayer, yt-dlp or perl"**: `GET_IPLAYER_EXEC`, `YTDLP_EXEC` and the additional download parameters can't be changed from the UI while `AUTH_TYPE=none` — set them as environment variables (use "Clear saved value" on the field to drop a value saved earlier). Executables other than get_iplayer, yt-dlp and perl, and get_iplayer's `--exec`/`--command` options, are always refused.
+- **UI blank when embedded in a dashboard (Homepage, Organizr...)**: the UI now refuses to be framed by other sites. Set `ALLOW_EMBEDDING=true`.
+- **Saved keys show as `********`, or a Sonarr/Radarr/Jellyfin key stopped working after a restore**: stored credentials are encrypted with `SECRETS_KEY` or `secrets.key` in the `/data` (cache) volume. If the key was lost or changed, the log says "A stored credential could not be decrypted" — re-enter the affected app keys / OIDC secret, and a new `API_KEY` / `STREAM_KEY` is generated (re-run the Apps setup and re-import `.strm` files). Keep the key with your Redis backups.
 - **Forgot the password**: see [AUTHENTICATION.md](AUTHENTICATION.md#forgotten-password-reset) — `GET /auth/generateToken` prints a one-time reset token to the **container console logs** (`docker logs <container>`), valid 5 minutes, then `POST /auth/resetPassword` with that token resets username/auth-type to defaults (`admin`/`form`) and prints a new random password in the same logs.
 - **Session won't stick / keeps logging out**: sessions are stored in Redis (`connect-redis`). If Redis is unreachable or was just flushed/recreated, every session is invalidated — see the Redis checks below. The session cookie also expires after 24 hours regardless (`src/routes/AuthRoute.ts`).
 - **Switched to OIDC and now can't log in**: your email must be in `OIDC_ALLOWED_EMAILS` (comma-separated, case-insensitive) even if the OIDC provider itself authenticates you successfully (`ApiError.INVALID_CREDENTIALS` otherwise). Use the **Test OIDC** button in Settings before saving to catch this.

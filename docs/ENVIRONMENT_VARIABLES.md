@@ -69,7 +69,6 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | --- | --- | --- | --- |
 | `PORT` | `4404` | No | HTTP port, read directly from `process.env` before the config store is available. |
 | `DEBUG` | `false` | No | Verbose request logging + permissive CORS for local frontend-dev-server use. |
-| `SESSION_SECRET` | `default_secret_key` | No, but should be changed in production | Express session signing secret (`src/routes/AuthRoute.ts`). |
 | `SECRETS_KEY` | _(unset)_ | No | Key used to encrypt stored credentials (app API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) in Redis. If unset a key file is generated. Keep it with your Redis backups; see [SECURITY.md](SECURITY.md). |
 | `SECRETS_KEY_FILE` | `<CACHE_LOCATION>/secrets.key` | No | Where the generated encryption key file is stored when `SECRETS_KEY` is not set. |
 | `SESSION_SECRET` | _(generated, kept in Redis)_ | No | Secret used to sign login cookies. |

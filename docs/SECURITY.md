@@ -40,6 +40,10 @@ Branch `security-hardening` (from `dev-work`). Review date: 2026-10-11. Every it
 * `multer` is now 2.x (upload parsing); behaviour is unchanged for NZB uploads.
 * Dev (`DEBUG=true`): the Vite dev server's socket now sends credentials (`withCredentials`), required because sockets are authenticated.
 
+## Later follow-up
+
+* The executable-related settings are now locked in the UI while `AUTH_TYPE=none` (field disabled with an explanation, plus a "Clear saved value" button that drops a saved override so the environment variable applies). `GET /json-api/config/lockedSettings` reports the locked fields; `DELETE /json-api/config/executableOverride/<key>` clears an override.
+
 ## Not done / residual risk
 
 * Encryption at rest needs the key kept separate from the Redis data (above); where both live on the same volume that is backed up as one, it adds little.

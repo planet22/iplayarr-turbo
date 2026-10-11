@@ -34,7 +34,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | --- | --- | --- | --- |
 | Authentication Enabled? (`AUTH_TYPE`) | `AUTH_TYPE` | `form` | `form` (username/password), `oidc` (OpenID Connect), or `none` (no login). |
 | Username | `AUTH_USERNAME` | `admin` | Only shown/used when `AUTH_TYPE=form`. |
-| Password | `AUTH_PASSWORD` | bcrypt hash of `password` | Stored as a bcrypt hash; legacy MD5 hashes are transparently upgraded to bcrypt on next successful login. |
+| Password | `AUTH_PASSWORD` | _(none — generated on first start)_ | Stored as a bcrypt hash; legacy MD5 hashes are transparently upgraded to bcrypt on next successful login. With no password set (or the retired `admin` / `password` default) a random one is generated on start and printed once in the log; see [AUTHENTICATION.md](AUTHENTICATION.md#upgrading-from-an-older-version). |
 | OIDC Configuration URL | `OIDC_CONFIG_URL` | _(unset)_ | OIDC discovery/config URL. Required when `AUTH_TYPE=oidc`. |
 | OIDC Callback Host | `OIDC_CALLBACK_HOST` | _(unset)_ | Must match what you register as the callback URL with your OIDC provider (`<host>/auth/oidc/callback`). |
 | OIDC Client ID | `OIDC_CLIENT_ID` | _(unset)_ | Required when `AUTH_TYPE=oidc`. |

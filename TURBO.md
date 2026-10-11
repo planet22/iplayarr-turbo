@@ -130,6 +130,10 @@ redis (source image) ─────────────┤  │
 - `public/index.html` → `index.html` at the project root — Vite only treats `public/` as static passthrough assets, unlike Vue CLI/webpack's `htmlWebpackPlugin` templating.
 - Net result: 423 packages instead of ~1,100+, and the frontend's `npm audit` findings went from 21 (all rooted in `@vue/cli-plugin-*`) to 0.
 
+## Security hardening
+
+A full review and fix pass (command injection, default credentials, settings/RCE, sessions, sockets, OIDC, path traversal, credential masking and encryption at rest, framing, multer 2) is written up in [docs/SECURITY.md](docs/SECURITY.md). Headline change for users: **there is no default password any more** — see [First login and upgrading](README.md#-first-login-and-upgrading-read-this-first).
+
 ## Dependency/security posture
 
 Both `package.json`s now carry an explicit `engines.node` (`24.x`), matching the Dockerfile and `.node-version`. `npm audit` is clean (0 vulnerabilities) on both the backend and frontend as of this fork's current `dev` branch — re-run `npm audit` before assuming that still holds after any future dependency bump.
