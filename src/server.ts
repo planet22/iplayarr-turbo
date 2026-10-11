@@ -24,6 +24,20 @@ import { redactBody, redactHeaders, redactUrl } from './utils/logRedaction';
 const isDebug = process.env.DEBUG == 'true';
 
 const app: Express = express();
+app.disable('x-powered-by');
+
+// Express 4 does not catch a rejected promise in an async route; without this a single bad request
+// that makes one reject would terminate the whole process.
+process.on('unhandledRejection', (reason) => {
+    loggingService.error('Unhandled promise rejection', reason);
+});
+
+// API keys travel in URLs, so never leak them through the Referer header.
+app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+});
 const port: number = parseInt(process.env[IplayarrParameter.PORT.toString()] || '4404');
 
 if (isDebug) {

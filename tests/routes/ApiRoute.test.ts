@@ -79,4 +79,40 @@ describe('API Route Tests', () => {
         const good = await request(app).get('/api').query({ mode: 'live_playlist', streamkey: 'stream-key' });
         expect(good.status).toBe(200);
     });
+
+    it('rejects a repeated apikey param (array) instead of coercing it', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('correct-api-key');
+        const response = await request(app).post('/api?apikey=correct-api-key&apikey=correct-api-key&mode=someEndpoint');
+        expect(response.status).toBe(401);
+    });
+
+    it('does not resolve prototype properties as endpoints', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('correct-api-key');
+        for (const mode of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+            const response = await request(app).post('/api').query({ apikey: 'correct-api-key', mode });
+            expect(response.status).toBe(404);
+        }
+    });
+
+    it('rejects when no key is configured, even if the caller sends an empty one', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+        const response = await request(app).post('/api').query({ apikey: '', mode: 'someEndpoint' });
+        expect(response.status).toBe(401);
+    });
+
+    it('turns away an unauthenticated multipart upload before parsing it', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('correct-api-key');
+        const response = await request(app)
+            .post('/api?mode=someEndpoint&apikey=nope')
+            .attach('nzbfile', Buffer.from('x'.repeat(1024)), 'a.nzb');
+        expect(response.status).toBe(401);
+    });
+
+    it('rejects an oversized upload even with a valid key', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('correct-api-key');
+        const response = await request(app)
+            .post('/api?mode=someEndpoint&apikey=correct-api-key')
+            .attach('nzbfile', Buffer.alloc(6 * 1024 * 1024), 'big.nzb');
+        expect(response.status).toBeGreaterThanOrEqual(400);
+    });
 });
