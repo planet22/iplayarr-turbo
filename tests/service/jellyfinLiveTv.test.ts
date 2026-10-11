@@ -36,6 +36,14 @@ describe('jellyfinService Live TV', () => {
         expect(body).toMatchObject({ Id: 't1', Type: 'm3u', Url: 'http://ip/api?mode=live_playlist&streamkey=new' });
     });
 
+    it('reads at native framerate and keeps the existing tuner settings it does not manage', async () => {
+        mocked.get.mockResolvedValue({
+            data: { ...options, TunerHosts: [{ Id: 't1', Url: 'http://ip/api?mode=live_playlist', UserAgent: 'custom', ReadAtNativeFramerate: false }] },
+        });
+        await jellyfinService.upsertTuner(app, 'http://ip/api?mode=live_playlist&streamkey=new');
+        expect(mocked.post.mock.calls[0][1]).toMatchObject({ Id: 't1', UserAgent: 'custom', ReadAtNativeFramerate: true });
+    });
+
     it('adds a tuner and guide when none exist', async () => {
         mocked.get.mockResolvedValue({ data: { TunerHosts: [], ListingProviders: [] } });
         await jellyfinService.upsertTuner(app, 'u');

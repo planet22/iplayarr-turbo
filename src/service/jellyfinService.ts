@@ -88,12 +88,14 @@ class JellyfinService {
     }
 
     // Adds the M3U tuner, or updates it in place when one of ours already exists.
+    // On update, the existing entry's other fields (e.g. a custom UserAgent) are carried over.
     async upsertTuner(app: Pick<App, 'url' | 'api_key'>, playlistUrl: string): Promise<void> {
-        const existing = (await this.liveTvStatus(app)).tuner;
+        const options = await this.#liveTvOptions(app);
+        const existing = (options.TunerHosts ?? []).find((t: any) => String(t.Url ?? '').includes(TUNER_MARKER));
         await axios.post(
             `${baseUrl(app.url)}/LiveTv/TunerHosts`,
             {
-                ...(existing ? { Id: existing.id } : {}),
+                ...(existing ?? {}),
                 Type: 'm3u',
                 Url: playlistUrl,
                 FriendlyName: FRIENDLY_NAME,
@@ -103,6 +105,9 @@ class JellyfinService {
                 FallbackMaxStreamingBitrate: 30000000,
                 EnableStreamLooping: false,
                 IgnoreDts: true,
+                // Without this Jellyfin skips its pre-playback probe of the BBC HLS stream, gets
+                // placeholder 0x0 / 0ch media info and never starts playback (manual setup ticks it).
+                ReadAtNativeFramerate: true,
                 Source: '',
                 TunerCount: 0,
             },
