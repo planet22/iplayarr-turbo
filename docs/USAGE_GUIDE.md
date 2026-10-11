@@ -42,7 +42,7 @@ Manage Sonarr/Radarr/Prowlarr/Jellyfin integrations and NZB-client forwarding. T
 
 ## Off Schedule (`/offSchedule`)
 
-Deleting an entry also removes its cached episodes. By default, only content broadcast in the last 30 days is indexed from the BBC schedule. To search/grab older content, you index specific iPlayer URLs here (`ListEditor` with refresh/remove actions per entry) — this extends what's searchable beyond the normal rolling window without changing `RSS_FEED_HOURS` or the schedule refresh behavior itself.
+By default, only content broadcast in the last 30 days is indexed from the BBC schedule. To search/grab older content, you index specific iPlayer URLs here (`ListEditor` with refresh/remove actions per entry) — this extends what's searchable beyond the normal rolling window without changing `RSS_FEED_HOURS` or the schedule refresh behavior itself. Deleting an entry also removes its cached episodes.
 
 ## Synonyms (`/synonyms`)
 
