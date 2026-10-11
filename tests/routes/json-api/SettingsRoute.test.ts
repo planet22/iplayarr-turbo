@@ -73,24 +73,85 @@ describe('SettingsRoute', () => {
     });
 
     describe('PUT /', () => {
+        beforeEach(() => {
+            mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'form' });
+        });
+
+        describe('settings guard', () => {
+            const put = (body: unknown) => request(app).put('/').send(body as object);
+
+            it('rejects unknown setting names without saving anything', async () => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                const response = await put({ DOWNLOAD_DIR: '/dl', EVIL: 'x' });
+                expect(response.statusCode).toBe(400);
+                expect(response.body.invalid_fields).toEqual({ EVIL: 'Unknown setting' });
+                expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
+            });
+
+            it('rejects object values', async () => {
+                const response = await put({ DOWNLOAD_DIR: { a: 1 } });
+                expect(response.statusCode).toBe(400);
+                expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
+            });
+
+            it('rejects a non-allowed executable', async () => {
+                const response = await put({ GET_IPLAYER_EXEC: '/bin/sh -c id' });
+                expect(response.statusCode).toBe(400);
+                expect(response.body.invalid_fields.GET_IPLAYER_EXEC).toMatch(/Program must be/);
+                expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
+            });
+
+            it('rejects get_iplayer options that run commands', async () => {
+                const response = await put({ ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: '--no-tag --exec=id' });
+                expect(response.statusCode).toBe(400);
+            });
+
+            it('allows a legitimate executable change when login is enabled', async () => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                mockedConfigService.setParameter.mockResolvedValue();
+                const response = await put({ GET_IPLAYER_EXEC: '/usr/bin/perl /opt/get_iplayer.pl' });
+                expect(response.statusCode).toBe(200);
+            });
+
+            it('blocks executable changes when login is disabled (auth none)', async () => {
+                mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'none' });
+                const response = await put({ YTDLP_EXEC: 'yt-dlp --foo' });
+                expect(response.statusCode).toBe(400);
+                expect(response.body.invalid_fields.YTDLP_EXEC).toMatch(/AUTH_TYPE=none/);
+            });
+
+            it('still allows saving an unchanged executable value when auth is none', async () => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                mockedConfigService.setParameter.mockResolvedValue();
+                mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'none', GET_IPLAYER_EXEC: 'get_iplayer' });
+                const response = await put({ GET_IPLAYER_EXEC: 'get_iplayer', DOWNLOAD_DIR: '/dl' });
+                expect(response.statusCode).toBe(200);
+            });
+
+            it('blocks perl -e', async () => {
+                const response = await put({ GET_IPLAYER_EXEC: 'perl -e system(1)' });
+                expect(response.statusCode).toBe(400);
+            });
+        });
+
         it('saves if body valid', async () => {
             mockedConfigFormValidator.validate.mockResolvedValue({});
             mockedConfigService.setParameter.mockResolvedValue();
-            const body = { FOO: 'BAR', BAZ: 'QUX' };
+            const body = { DOWNLOAD_DIR: '/dl', COMPLETE_DIR: '/done' };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual(body);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(body);
             expect(mockedConfigService.setParameter).toHaveBeenCalledTimes(2);
-            expect(mockedConfigService.setParameter).toHaveBeenCalledWith('FOO', 'BAR');
-            expect(mockedConfigService.setParameter).toHaveBeenCalledWith('BAZ', 'QUX');
+            expect(mockedConfigService.setParameter).toHaveBeenCalledWith('DOWNLOAD_DIR', '/dl');
+            expect(mockedConfigService.setParameter).toHaveBeenCalledWith('COMPLETE_DIR', '/done');
         });
 
         it('errors if body is invalid', async () => {
-            const validation_result = { FOO: 'Must be BAR', BAZ: 'Must be QUX' };
+            const validation_result = { DOWNLOAD_DIR: 'Must exist', COMPLETE_DIR: 'Must exist' };
             mockedConfigFormValidator.validate.mockResolvedValue(validation_result);
-            const body = { FOO: 'FOOBAR', BAZ: 'QUUX' };
+            const body = { DOWNLOAD_DIR: 'x', COMPLETE_DIR: 'y' };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(400);
             expect(response.body).toEqual({

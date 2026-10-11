@@ -15,6 +15,7 @@ import { VideoEventType } from '../../types/VideoEvent';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../../utils/Utils';
 import { ConfigFormValidator } from '../../validators/ConfigFormValidator';
+import { checkSettingsUpdate } from '../../validators/SettingsGuard';
 import { Validator } from '../../validators/Validator';
 
 const router = Router();
@@ -32,6 +33,12 @@ router.get('/', async (_, res: Response) => {
 });
 
 router.put('/', async (req: Request, res: Response) => {
+    const currentConfig: ConfigMap = (await configService.getAllConfig()) ?? {};
+    const guardErrors = checkSettingsUpdate(req.body, currentConfig, currentConfig[IplayarrParameter.AUTH_TYPE]);
+    if (Object.keys(guardErrors).length > 0) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, invalid_fields: guardErrors } as ApiResponse);
+        return;
+    }
     const validator: Validator = new ConfigFormValidator();
     const validationResult: { [key: string]: string } = await validator.validate(req.body);
     if (Object.keys(validationResult).length > 0) {
