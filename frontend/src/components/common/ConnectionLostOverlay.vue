@@ -12,7 +12,7 @@
 </template>
 
 <script setup>
-import { inject, ref, watch } from 'vue';
+import { inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import LoadingIndicator from './LoadingIndicator.vue';
 
@@ -25,22 +25,35 @@ const visible = ref(false);
 
 let timer = null;
 
-watch(
-    isConnected,
-    (connected) => {
-        clearTimeout(timer);
+const schedule = () => {
+    clearTimeout(timer);
 
-        if (connected) {
-            visible.value = false;
-            return;
-        }
+    if (isConnected.value) {
+        visible.value = false;
+        return;
+    }
 
-        timer = setTimeout(() => {
-            visible.value = true;
-        }, SHOW_DELAY_MS);
-    },
-    { immediate: true }
-);
+    // iOS Safari suspends the socket (and throttles timers) while backgrounded;
+    // only start the countdown once the page is actually visible again.
+    if (document.hidden) {
+        visible.value = false;
+        return;
+    }
+
+    timer = setTimeout(() => {
+        visible.value = true;
+    }, SHOW_DELAY_MS);
+};
+
+const onVisibilityChange = () => schedule();
+
+watch(isConnected, schedule, { immediate: true });
+
+onMounted(() => document.addEventListener('visibilitychange', onVisibilityChange));
+onBeforeUnmount(() => {
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    clearTimeout(timer);
+});
 </script>
 
 <style scoped lang="less">

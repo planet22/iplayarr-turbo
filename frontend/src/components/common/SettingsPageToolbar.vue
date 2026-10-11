@@ -47,6 +47,25 @@
                 </div>
             </button>
             <button
+                v-if="icons.some((i) => i == 'run')"
+                :class="['SettingsPageToolbar-button clickable', running ? 'enabled' : '']"
+                :disabled="runDisabled"
+                @click="emit(running ? 'stop' : 'run')"
+            >
+                <font-awesome-icon :icon="['fas', running ? 'stop' : 'play']" />
+                <div class="SettingsPageToolbar-label">{{ running ? stopLabel : runLabel }}</div>
+            </button>
+            <button
+                v-if="icons.some((i) => i == 'refresh')"
+                class="SettingsPageToolbar-button clickable"
+                :disabled="refreshDisabled"
+                :title="refreshTitle"
+                @click="emit('refresh')"
+            >
+                <font-awesome-icon :icon="['fas', 'arrows-rotate']" />
+                <div class="SettingsPageToolbar-label">{{ refreshLabel }}</div>
+            </button>
+            <button
                 v-if="icons.some((i) => i == 'arrImport')"
                 class="SettingsPageToolbar-button clickable"
                 @click="emit('arrImport')"
@@ -107,6 +126,9 @@ const emit = defineEmits([
     'deleteQueueItem',
     'arrImport',
     'toggleFilters',
+    'run',
+    'stop',
+    'refresh',
 ]);
 const showFilterDropdown = ref(false);
 const dropdownDiv = ref(null);
@@ -157,6 +179,42 @@ defineProps({
         type: String,
         required: false,
         default: 'Stop',
+    },
+    // run icon: a play button that becomes a stop button while `running`.
+    running: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    runDisabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    runLabel: {
+        type: String,
+        required: false,
+        default: 'Run Now',
+    },
+    stopLabel: {
+        type: String,
+        required: false,
+        default: 'Stop',
+    },
+    refreshDisabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    refreshLabel: {
+        type: String,
+        required: false,
+        default: 'Refresh',
+    },
+    refreshTitle: {
+        type: String,
+        required: false,
+        default: undefined,
     },
 });
 
@@ -223,6 +281,15 @@ const handleClickOutside = (event) => {
             svg {
                 color: @toolbar-text-color;
                 height: 21px;
+            }
+
+            &:disabled {
+                opacity: 0.4;
+                cursor: default;
+
+                &:hover svg {
+                    color: @toolbar-text-color;
+                }
             }
 
             &.enabled {

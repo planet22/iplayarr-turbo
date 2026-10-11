@@ -66,6 +66,8 @@ export interface WatchdogLive {
     // Network-level failures - say nothing about the programme, so not counted as ok or invalid.
     inconclusive: number;
     currentPid?: string;
+    // The app links are currently being collected from (before checking starts), and how far through it is.
+    collecting?: { name: string; done: number; total: number };
     // The last run was cut short by the Stop button.
     stopped?: boolean;
     // Why the run was abandoned or its findings held back (BBC looks unavailable / unconfirmed).
@@ -227,7 +229,11 @@ class StrmWatchdogService {
         // One app being down or erroring is flagged, never fatal: the other sources still run.
         for (const app of selected((a) => arrLibraryService.supports(a), 'arr')) {
             try {
-                for (const ref of (await arrLibraryService.getFilePaths(app)).filter(({ path: f }) => f.toLowerCase().endsWith('.strm'))) {
+                const refs = (await arrLibraryService.getFilePaths(app)).filter(({ path: f }) => f.toLowerCase().endsWith('.strm'));
+                let done = 0;
+                await this.#collecting(app.name, 0, refs.length, true);
+                for (const ref of refs) {
+                    await this.#collecting(app.name, done++, refs.length);
                     const local = mapPath(ref.path, pathMap);
                     try {
                         add('arr', app.name, parseStrmPid(fs.readFileSync(local, 'utf8')), local, { app, ids: ref.ids });
@@ -242,7 +248,11 @@ class StrmWatchdogService {
         }
         for (const server of selected((a) => jellyfinService.supports(a), 'jellyfin')) {
             try {
-                for (const item of (await jellyfinService.getItems(server)).filter(({ path }) => path.toLowerCase().endsWith('.strm'))) {
+                const items = (await jellyfinService.getItems(server)).filter(({ path }) => path.toLowerCase().endsWith('.strm'));
+                let done = 0;
+                await this.#collecting(server.name, 0, items.length, true);
+                for (const item of items) {
+                    await this.#collecting(server.name, done++, items.length);
                     const local = mapPath(item.path, pathMap);
                     // Jellyfin's own copy of the link means the file need not be readable here.
                     let pid = item.link ? parseStrmPid(item.link) : undefined;
@@ -263,7 +273,17 @@ class StrmWatchdogService {
         for (const [name, count] of Object.entries(unreadable)) {
             this.#warn(`${name}: ${count} .strm file(s) could not be read from here and were skipped - see Library Access`);
         }
+        this.#live.collecting = undefined;
         return found;
+    }
+
+    #lastCollectingEmit = 0;
+    // Tells the dashboard which app is being listed and how far through it is (emitted at most every 250ms).
+    async #collecting(name: string, done: number, total: number, force = false): Promise<void> {
+        this.#live.collecting = { name, done, total };
+        if (!force && Date.now() - this.#lastCollectingEmit < 250) return;
+        this.#lastCollectingEmit = Date.now();
+        await this.#emit();
     }
 
     #warn(message: string): void {

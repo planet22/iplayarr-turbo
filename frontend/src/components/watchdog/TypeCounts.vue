@@ -25,14 +25,14 @@ const labels = { HISTORY: 'iPlayarr', SONARR: 'Sonarr', RADARR: 'Radarr', JELLYF
 .typeCounts {
     display: grid;
     grid-template-columns: repeat(2, auto);
-    gap: 6px 16px;
-    font-size: 15px;
+    gap: 8px 6px;
+    font-size: 14px;
     color: @subtle-text-color;
 
     > span {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
+        gap: 5px;
     }
 
     .none {
@@ -43,6 +43,23 @@ const labels = { HISTORY: 'iPlayarr', SONARR: 'Sonarr', RADARR: 'Radarr', JELLYF
         height: 22px;
         width: 22px;
         object-fit: contain;
+    }
+}
+
+// Cards are full width on mobile, so there's room for a bigger grid.
+@media (max-width: @mobile-breakpoint) {
+    .typeCounts {
+        gap: 10px 18px;
+        font-size: 17px;
+
+        > span {
+            gap: 6px;
+        }
+
+        .typeLogo {
+            height: 28px;
+            width: 28px;
+        }
     }
 }
 </style>

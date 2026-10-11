@@ -58,7 +58,7 @@
                     </td>
                     <td class="text">
                         <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">
-                            {{ detailsFor(event.pid)?.title ?? event.pid }}
+                            {{ titleFor(event.pid) }}
                         </a>
                         <div v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" class="subtle">
                             {{ [detailsFor(event.pid)?.channel, seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
@@ -105,7 +105,7 @@ function seriesEpisodeLabel(pid) {
 }
 
 function videoLabel(event) {
-    return (event.pid && detailsFor(event.pid)?.title) || event.pid || '';
+    return (event.pid && titleFor(event.pid)) || '';
 }
 
 const reversedEvents = computed(() => [...events.value].reverse());
@@ -150,16 +150,22 @@ async function loadDetails(pid) {
 // Live channel events (the pid is a channel id) show the channel's logo, from the same Browse
 // channel list the Channels page uses; there are no programme details for them.
 const channelLogos = ref({});
+const channelTitles = ref({});
 
 async function loadChannelLogos() {
     try {
         const response = await ipFetch('json-api/browse/channels');
         if (response.ok) {
             channelLogos.value = Object.fromEntries(response.data.map(({ id, logo }) => [id, logo]));
+            channelTitles.value = Object.fromEntries(response.data.map(({ id, title }) => [id, title]));
         }
     } catch {
         // logos are decoration - rows fall back to the placeholder
     }
+}
+
+function titleFor(pid) {
+    return channelTitles.value[pid] ?? detailsFor(pid)?.title ?? pid;
 }
 
 function thumbnailFor(pid) {
@@ -177,6 +183,10 @@ onMounted(() => {
 watch(events, loadMissingDetails);
 
 function openInfo(pid) {
+    // Live channels have no programme details to show.
+    if (channelTitles.value[pid]) {
+        return;
+    }
     const infoModal = useModal({
         component: VideoInfoModal,
         attrs: { pid },

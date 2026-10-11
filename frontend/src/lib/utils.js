@@ -27,6 +27,12 @@ export const hideBrokenImage = (event) => {
     event.target.style.visibility = 'hidden';
 };
 
+// Node reports IPv4 clients on its dual-stack socket as IPv4-mapped IPv6 (::ffff:1.2.3.4); show those
+// as plain IPv4 and leave real IPv6 addresses alone.
+export const formatClientIp = (ip) => {
+    return ip?.replace(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i, '$1');
+};
+
 export const getThumbnailUrl = (thumbnail) => {
     return thumbnail ? `${getHost()}/${thumbnail}` : undefined;
 };

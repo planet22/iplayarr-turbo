@@ -76,7 +76,7 @@
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td data-title="Client IP">{{ session.clientIp }}</td>
+                    <td data-title="Client IP">{{ formatClientIp(session.clientIp) }}</td>
                     <td />
                     <td data-title="Duration">{{ formatDuration(session.startedAt) }}</td>
                     <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
@@ -174,7 +174,7 @@
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td data-title="Client IP">{{ session.clientIp }}</td>
+                    <td data-title="Client IP">{{ formatClientIp(session.clientIp) }}</td>
                     <td data-title="Started">{{ formatDate(session.startedAt) }}</td>
                     <td data-title="Duration">{{ formatDuration(session.startedAt, session.endedAt) }}</td>
                     <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
@@ -209,7 +209,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import {
-    formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
+formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';

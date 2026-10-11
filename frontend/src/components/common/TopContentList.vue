@@ -91,10 +91,10 @@ watch(
         }
 
         .topContentThumb {
-            width: 40px;
-            height: 40px;
+            width: 64px;
+            height: 36px;
             flex-shrink: 0;
-            border-radius: 4px;
+            border-radius: 2px;
             object-fit: cover;
             background-color: @nav-background-color;
 

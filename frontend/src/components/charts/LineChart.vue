@@ -83,7 +83,8 @@ const options = computed(() => ({
         }
     },
     stroke: {
-        curve: 'straight'
+        curve: 'straight',
+        width: 1.5
     },
     colors: props.series.map(({ color }) => color),
     tooltip: {

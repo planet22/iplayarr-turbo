@@ -4,10 +4,10 @@
             <h1 class="browseTitle">{{ isChannels ? 'Channels' : 'Categories' }}</h1>
             <button
                 v-if="isChannels && !loading && !error && tiles.some((t) => t.live)" type="button" class="addAll"
-                title="Add all live channels to the library" :disabled="allBusy" @click="subscribeAll"
+                title="Subscribe to all live channels (adds them to the library)" :disabled="allBusy" @click="subscribeAll"
             >
-                <font-awesome-icon :icon="['fas', allBusy ? 'circle-notch' : 'plus']" :spin="allBusy" />
-                Add all
+                <font-awesome-icon :icon="['fas', allBusy ? 'circle-notch' : 'bell']" :spin="allBusy" />
+                Subscribe all
             </button>
         </div>
         <LoadingIndicator v-if="loading" />

@@ -16,6 +16,7 @@
                 <col style="width: 10ch" />
                 <col style="width: 10ch" />
                 <col style="width: 10ch" />
+                <col style="width: 10ch" />
                 <col style="width: 14ch" />
                 <col style="width: 22ch" />
             </colgroup>
@@ -24,14 +25,17 @@
                     <th class="sortable" @click="toggleSearchSort('term')">
                         Term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSearchSort('results')">
-                        Results <SortIcon :active="searchSortBy == 'results'" :order="searchSortOrder" />
-                    </th>
                     <th class="sortable" @click="toggleSearchSort('series')">
                         Season <SortIcon :active="searchSortBy == 'series'" :order="searchSortOrder" />
                     </th>
                     <th class="sortable" @click="toggleSearchSort('episode')">
                         Episode <SortIcon :active="searchSortBy == 'episode'" :order="searchSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleSearchSort('results')">
+                        Results <SortIcon :active="searchSortBy == 'results'" :order="searchSortOrder" />
+                    </th>
+                    <th class="sortable" @click="toggleSearchSort('type')">
+                        Type <SortIcon :active="searchSortBy == 'type'" :order="searchSortOrder" />
                     </th>
                     <th class="sortable" @click="toggleSearchSort('app')">
                         App <SortIcon :active="searchSortBy == 'app'" :order="searchSortOrder" />
@@ -44,17 +48,18 @@
             <tbody>
                 <tr v-for="(entry, index) in pagedSearches" :key="index">
                     <td class="text">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</td>
+                    <td data-title="Season">{{ entry.series ?? '' }}</td>
+                    <td data-title="Episode">{{ entry.episode ?? '' }}</td>
                     <td data-title="Results">
                         <a v-if="entry.items?.length" class="clickable" @click="showResults(entry)">{{ entry.results }}</a>
                         <template v-else>{{ entry.results }}</template>
                     </td>
-                    <td data-title="Season">{{ entry.series ?? '' }}</td>
-                    <td data-title="Episode">{{ entry.episode ?? '' }}</td>
+                    <td data-title="Type"><span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span></td>
                     <td data-title="App">{{ appName(entry.appId) }}</td>
                     <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedSearches.length == 0">
-                    <td colspan="6" class="empty">No searches recorded yet</td>
+                    <td colspan="7" class="empty">No searches recorded yet</td>
                 </tr>
             </tbody>
         </table>
@@ -252,12 +257,22 @@ function appName(appId) {
     return apps.value.find(({ id }) => id == appId)?.name ?? '';
 }
 
+// Searches don't record a type of their own: it is the type the results share (none when they are
+// mixed or unknown), or TV when the search named a season/episode.
+function searchType(entry) {
+    const types = new Set((entry.items ?? []).map(({ type }) => type).filter((type) => type && type != 'UNKNOWN'));
+    if (types.size == 1) return [...types][0];
+    if (!types.size && (entry.series != null || entry.episode != null)) return 'TV';
+    return '';
+}
+
 const {
     filterText: searchFilterText, sortBy: searchSortBy, sortOrder: searchSortOrder,
     dateFrom: searchDateFrom, dateTo: searchDateTo, sorted: sortedSearches, toggleSort: toggleSearchSort,
 } = useSortFilter(searchHistory, {
     filterFn: (entry, query) => [
         entry.term == '*' ? 'RSS Feed' : entry.term,
+        searchType(entry),
         appName(entry.appId),
     ].some((value) => String(value ?? '').toLowerCase().includes(query)),
     sortAccessors: {
@@ -265,6 +280,7 @@ const {
         results: (entry) => entry.results,
         series: (entry) => entry.series,
         episode: (entry) => entry.episode,
+        type: (entry) => searchType(entry),
         app: (entry) => appName(entry.appId),
         time: (entry) => entry.time,
     },

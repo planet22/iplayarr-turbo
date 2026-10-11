@@ -1,18 +1,15 @@
 <template>
+    <SettingsPageToolbar
+        :icons="['run', 'refresh']"
+        :running="live.running" :run-disabled="live.running ? stopping : !canRun"
+        :stop-label="stopping ? 'Stopping…' : 'Stop'"
+        :refresh-disabled="live.running || refreshing" :refresh-label="refreshing ? 'Refreshing…' : 'Refresh Links'"
+        refresh-title="Re-list links from the sources and update the counts, without checking them against BBC"
+        @run="runNow" @stop="stopRun" @refresh="refreshCounts"
+    />
     <div class="inner-content">
         <div class="legendRow">
             <legend>STRM Watchdog</legend>
-            <button v-if="!live.running" class="rssToggle clickable" :disabled="!canRun" @click="runNow">Run Now</button>
-            <button v-else class="rssToggle clickable active" :disabled="stopping" @click="stopRun">
-                {{ stopping ? 'Stopping…' : 'Stop' }}
-            </button>
-            <button
-                class="rssToggle clickable" :disabled="live.running || refreshing"
-                title="Re-list links from the sources and update the counts, without checking them against BBC"
-                @click="refreshCounts"
-            >
-                {{ refreshing ? 'Refreshing…' : 'Refresh Counts' }}
-            </button>
         </div>
         <InfoBar v-if="!status.enabled">
             The STRM Watchdog is disabled. Enable it under Settings → Streaming.
@@ -27,7 +24,7 @@
                 <div class="statBody">
                     <span class="statLabel">Links Tracked</span>
                     <div class="valueRow">
-                        <span class="statValue">{{ tracked.total }}</span>
+                        <span class="statValue">{{ tracked.total }}<span class="dedupMark" title="After de-duplicating links across libraries">*</span></span>
                         <TypeCounts :counts="tracked.types" />
                     </div>
                 </div>
@@ -37,7 +34,7 @@
                 <div class="statBody">
                     <span class="statLabel">Valid</span>
                     <div class="valueRow">
-                        <span class="statValue">{{ validCount }}</span>
+                        <span class="statValue">{{ validCount }}<span class="dedupMark" title="After de-duplicating links across libraries">*</span></span>
                         <TypeCounts :counts="validTypes" />
                     </div>
                 </div>
@@ -47,7 +44,7 @@
                 <div class="statBody">
                     <span class="statLabel">Invalid</span>
                     <div class="valueRow">
-                        <span class="statValue">{{ invalidCount }}</span>
+                        <span class="statValue">{{ invalidCount }}<span class="dedupMark" title="After de-duplicating links across libraries">*</span></span>
                         <TypeCounts :counts="invalidTypes" />
                     </div>
                 </div>
@@ -67,6 +64,8 @@
             </div>
         </div>
 
+        <p class="dedupNote">* Totals are after de-duplicating libraries; a link listed by several sources counts under each in the per-source counts.</p>
+
         <legend>Live</legend>
         <div class="statRow">
             <div class="statCard progressCard">
@@ -81,7 +80,10 @@
                     <template v-if="live.running && live.currentPid">
                         Checking <router-link :to="`/browse/programme/${live.currentPid}`">{{ live.currentPid }}</router-link>
                     </template>
-                    <template v-else-if="live.running">Listing links from the selected sources...</template>
+                    <template v-else-if="live.running && live.collecting">
+                        Collecting from {{ live.collecting.name }} {{ live.collecting.done }} / {{ live.collecting.total }}
+                    </template>
+                    <template v-else-if="live.running">Collecting from sources...</template>
                     <template v-else>{{ live.stopped ? 'Last run was stopped.' : 'Nothing running.' }}</template>
                     <span class="liveCounts">
                         {{ live.ok }} ok · {{ live.invalid }} invalid · {{ live.inconclusive }} inconclusive
@@ -234,6 +236,7 @@ import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import LineChart from '@/components/charts/LineChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import TypeCounts from '@/components/watchdog/TypeCounts.vue';
 import { ipFetch } from '@/lib/ipFetch';
@@ -443,8 +446,23 @@ onBeforeUnmount(() => {
     }
 }
 
-.statValue.small {
+.dedupMark {
+    margin-left: 2px;
+    font-size: 0.6em;
+    vertical-align: super;
+    color: @subtle-text-color;
+}
+
+.dedupNote {
+    margin: -0.5rem 0 1.5rem;
+    font-size: 12px;
+    color: @subtle-text-color;
+}
+
+.statRow .statCard .statValue.small {
     font-size: 18px;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 // The big number with its per-source icon counts in a 2 x 2 grid to its right.
@@ -460,6 +478,11 @@ onBeforeUnmount(() => {
     min-width: 0;
 }
 
+// Same icon column width on every card so the label and number line up between them.
+.statRow .statCard > .statIcon {
+    flex: none;
+    width: 36px;
+}
 .statRow .statCard.progressCard {
     flex-direction: column;
     align-items: stretch;
