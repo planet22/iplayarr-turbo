@@ -46,6 +46,7 @@ const configService = {
         // window on every refresh, in case the caching ever causes stale/missing results.
         SCHEDULE_FULL_REFRESH: 'false',
         NATIVE_SEARCH: 'true',
+        NATIVE_SEARCH_ENGINE: 'V1',
         ARCHIVE_ENABLED: 'false',
         THUMBNAIL_RETENTION_DAYS: '30',
         STREAM_HISTORY_RETENTION_DAYS: '30',
@@ -87,7 +88,7 @@ const configService = {
         const oldValue = configMap[parameter];
         configMap[parameter] = value;
         await storage.setItem('config', configMap);
-        if (parameter == IplayarrParameter.NATIVE_SEARCH && oldValue != value) {
+        if ((parameter == IplayarrParameter.NATIVE_SEARCH || parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE) && oldValue != value) {
             searchFacade.clearSearchCache();
         }
     },

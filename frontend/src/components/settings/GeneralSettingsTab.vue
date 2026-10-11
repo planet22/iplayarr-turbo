@@ -18,6 +18,14 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="config.NATIVE_SEARCH == 'true'"
+        v-model="config.NATIVE_SEARCH_ENGINE"
+        name="Native Search Engine"
+        tooltip="Native 1.0 is the stable engine. Native 2.0 (experimental) fetches episode details in parallel and retries failed lookups; results should be identical. Switch back if anything looks wrong."
+        :error="validationErrors.config?.NATIVE_SEARCH_ENGINE"
+        :options="nativeSearchEngines"
+    />
+    <SelectInput
         v-model="pillColorsEnabled"
         name="Colour Channel Pills by Logo"
         tooltip="Colours channel pills using each channel's BBC logo. Applies instantly, not saved with this page."
@@ -64,6 +72,11 @@ defineProps({
         required: true,
     },
 });
+
+const nativeSearchEngines = [
+    { key: 'V1', value: 'Native 1.0 (stable)' },
+    { key: 'V2', value: 'Native 2.0 (experimental)' },
+];
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');

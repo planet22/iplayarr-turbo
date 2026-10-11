@@ -5,6 +5,7 @@ import configService from '../../src/service/configService';
 import RedisCacheService from '../../src/service/redis/redisCacheService';
 import getIplayerSearchService from '../../src/service/search/GetIplayerSearchService';
 import nativeSearchService from '../../src/service/search/NativeSearchService';
+import nativeSearchV2Service from '../../src/service/search/NativeSearchV2Service';
 import synonymService from '../../src/service/synonymService';
 import { IPlayerSearchResult } from '../../src/types/IPlayerSearchResult';
 
@@ -13,6 +14,7 @@ jest.mock('../../src/service/configService');
 jest.mock('../../src/service/redis/redisCacheService');
 jest.mock('../../src/service/synonymService');
 jest.mock('../../src/service/search/NativeSearchService');
+jest.mock('../../src/service/search/NativeSearchV2Service');
 jest.mock('../../src/service/search/GetIplayerSearchService');
 
 describe('SearchFacade', () => {
@@ -175,5 +177,35 @@ describe('SearchFacade', () => {
 
     expect(synonymService.getSynonym).toHaveBeenCalledTimes(1);
     expect(synonymService.getSynonym).toHaveBeenCalledWith('Test Show 2024');
+  });
+
+  describe('engine selection', () => {
+    const arrange = (config: Record<string, string>) => {
+      (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => config[key]);
+      (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      for (const service of [getIplayerSearchService, nativeSearchService, nativeSearchV2Service]) {
+        (service.search as jest.Mock).mockResolvedValue([]);
+        (service.processCompletedSearch as jest.Mock).mockImplementation((results) => results);
+      }
+    };
+
+    it.each([
+      ['native search with the default engine', { NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V1' }, nativeSearchService],
+      ['native search with no engine configured', { NATIVE_SEARCH: 'true' }, nativeSearchService],
+      ['native search with an unknown engine', { NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V9' }, nativeSearchService],
+      ['native search with the 2.0 engine', { NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V2' }, nativeSearchV2Service],
+      ['native search off, even if 2.0 is selected', { NATIVE_SEARCH: 'false', NATIVE_SEARCH_ENGINE: 'V2' }, getIplayerSearchService],
+    ])('uses the right service for %s', async (_name, config, expected) => {
+      arrange(config);
+
+      await searchFacade.search('Test Show');
+
+      for (const service of [getIplayerSearchService, nativeSearchService, nativeSearchV2Service]) {
+        if (service === expected) expect(service.search).toHaveBeenCalled();
+        else expect(service.search).not.toHaveBeenCalled();
+      }
+    });
   });
 });

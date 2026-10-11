@@ -102,6 +102,21 @@ class IPlayerDetailsService {
         }
     }
 
+    // Like getSeriesEpisodes, but retries once and says whether the page actually loaded, so a caller
+    // can tell a failed page from a genuinely short (final) one. Used by Native Search V2.
+    async getSeriesEpisodesChecked(pid: string, page: number = 1, perPage: number = searchResultLimit): Promise<{ elements: IPlayerEpisodeMetadata[]; failed: boolean }> {
+        const url = `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const response: AxiosResponse<IPlayerEpisodesResponse> = await axios.get(url);
+                return { elements: response.data.programme_episodes.elements ?? [], failed: false };
+            } catch {
+                // fall through to the single retry
+            }
+        }
+        return { elements: [], failed: true };
+    }
+
     async findBrandForUrl(url: string): Promise<string | undefined> {
         const match = url.replace('/episodes', '').match(pidRegex);
         if (match) {
