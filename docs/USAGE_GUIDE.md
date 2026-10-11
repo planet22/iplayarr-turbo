@@ -10,7 +10,7 @@ A browse-first way in: a hero banner and rows of programmes (Featured, Recently 
 
 ## Subscriptions (`/subscriptions`)
 
-Shows you have subscribed to, whose new episodes are queued automatically (checked hourly, or on demand). See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md).
+Shows you have subscribed to, whose new episodes are queued automatically (checked hourly, or on demand), optionally linked to Sonarr/Radarr, plus the live channels added to your library. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md).
 
 ## Search (`/search`)
 
@@ -28,13 +28,17 @@ The main day-to-day view: active downloads and completed history, combined (`Que
 
 Only relevant when `MEDIA_MODE=strm`. Shows **Active Streams** currently being served, and **Stream History** — past sessions, retained per `STREAM_HISTORY_RETENTION_DAYS` (or cleared on demand with the Clear History button). The two tables share column widths/positions so they line up, even where one table has a column the other doesn't (e.g. Stream History's Started column, Active Streams' Action column) — those just render blank in the table that lacks them. See [STREAMING.md](STREAMING.md) for setup and [CONFIG.md](CONFIG.md) for the full field reference.
 
+## Watchdog (`/watchdog`)
+
+Dashboard for the optional STRM Watchdog: live progress, valid/invalid counts and charts, Library Access checks and a per-link table. See [WATCHDOG.md](WATCHDOG.md).
+
 ## NZB (`/nzb`)
 
 Diagnostics for the Newznab/SABnzbd integration specifically — recent searches and grabs *from Sonarr, Radarr, or Prowlarr*, not from manual Search/Download in the UI. Useful for confirming what a connected Arr instance is actually asking for, and for spotting a misbehaving search (e.g. wrong season/episode parsing). Each of Recent Searches, Recent Grabs and Failed Grabs can be cleared independently (confirmation required). See [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md) for the protocol this reflects.
 
 ## Apps (`/apps`)
 
-Manage Sonarr/Radarr/Prowlarr integrations and NZB-client forwarding. Covered in full in [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md), including the User-Agent attribution table and deleting an Indexer/Download Client from the form.
+Manage Sonarr/Radarr/Prowlarr/Jellyfin integrations and NZB-client forwarding. A Jellyfin app (URL + API key, with a Test button) is used as a source by the [STRM Watchdog](WATCHDOG.md). Covered in full in [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md), including the User-Agent attribution table and deleting an Indexer/Download Client from the form.
 
 ## Off Schedule (`/offSchedule`)
 

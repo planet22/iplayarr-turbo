@@ -60,6 +60,21 @@ These only apply when `STREAM_CLIENT=NATIVE`:
 
 `STREAM_CACHE_DIR` is where temporary files live while a stream is in flight. Leave it blank to use a system temp folder, or point it at a specific directory if you want more control over where that scratch data lands.
 
+## Live channels
+
+Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC One, Two, Three, Four, News, Parliament, CBBC, CBeebies, BBC Alba, BBC Scotland and S4C.
+
+- **Watch live:** the Channels tiles and each channel page have a Play / Watch Live button that uses the in-app player. Live playback does not depend on `STREAM_CLIENT` (it has its own resolver) and needs a Stream Key, like any other playback.
+- **In your media library:** press **+** on a channel tile (or **Add all**) and iPlayarr writes one `<Channel>.strm` into the **Live Channels Directory** (`LIVE_STRM_DIR`, Settings → Media Management; blank falls back to `COMPLETE_DIR`), plus a locked `.nfo` and a logo poster, so Jellyfin lists it as a channel. `STREAM_BASE_URL` must be set first. Manage them in the **Live channels** section of the Subscriptions page ([SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#live-channels)).
+- iPlayarr only rewrites or deletes the live files it created, and rewrites them all at server start so a changed Stream Base URL or Key does not leave dead links.
+- The highest quality variant is listed first, so media servers probe and report 720p rather than the lowest listed.
+- The Streaming page shows live sessions with the channel name and logo and a **Live** badge.
+- The [STRM Watchdog](WATCHDOG.md) ignores live files.
+
+## Checking links still work
+
+Programmes expire from iPlayer. The optional [STRM Watchdog](WATCHDOG.md) checks daily that your `.strm` links still resolve and can report or remove dead ones.
+
 ## Testing it without downloading anything
 
 Every search result, Queue/History row, and video info modal (opened from Queue, History, Streaming, NZB, or Video Events) has a Play icon / "Play Video" button that streams that item straight through the browser using whatever `STREAM_CLIENT`/`STREAM_MODE` is currently configured. It works regardless of `MEDIA_MODE` — a quick way to confirm your streaming settings actually resolve and play before relying on `.strm` mode for real.
@@ -77,6 +92,7 @@ Every search result, Queue/History row, and video info modal (opened from Queue,
 | `STREAM_NATIVE_ADAPTIVE` | `false` | Native client only |
 | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only |
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only |
+| `LIVE_STRM_DIR` | _(unset)_ | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR` |
 | `STREAM_HISTORY_RETENTION_DAYS` | `30` | How long native streaming session history is kept before nightly cleanup |
 
 See [TURBO.md](../TURBO.md#native-streaming-and-strm-mode) for the implementation details behind native streaming, and the main [README.md](../README.md) for the full settings list.
