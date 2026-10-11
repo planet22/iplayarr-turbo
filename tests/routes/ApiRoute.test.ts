@@ -1,7 +1,7 @@
 import express, { Response } from 'express';
 import request from 'supertest';
 
-import { NewzNabEndpointDirectory } from '../../src/constants/EndpointDirectory';
+import { NewzNabEndpointDirectory, SabNZBDEndpointDirectory } from '../../src/constants/EndpointDirectory';
 import router from '../../src/routes/ApiRoute';  // Update with the correct path to your router
 import configService from '../../src/service/configService';
 import { ApiError } from '../../src/types/responses/ApiResponse';
@@ -65,5 +65,18 @@ describe('API Route Tests', () => {
 
         expect(response.status).toBe(200);
         expect((NewzNabEndpointDirectory as any).someEndpoint).toHaveBeenCalled();
+    });
+
+    it('gates the Live TV modes by the stream key, not the API key', async () => {
+        (configService.getParameter as jest.Mock).mockImplementation(async (p: string) =>
+            p === 'STREAM_KEY' ? 'stream-key' : 'api-key'
+        );
+        (SabNZBDEndpointDirectory as any).live_playlist = jest.fn((_: any, res: Response) => res.status(200).send('ok'));
+
+        const bad = await request(app).get('/api').query({ mode: 'live_playlist', apikey: 'api-key' });
+        expect(bad.status).toBe(401);
+
+        const good = await request(app).get('/api').query({ mode: 'live_playlist', streamkey: 'stream-key' });
+        expect(good.status).toBe(200);
     });
 });

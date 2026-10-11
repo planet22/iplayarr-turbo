@@ -61,6 +61,7 @@ const configService = {
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
+        LIVE_TV_ENABLED: 'false',
         STRM_WATCHDOG_ENABLED: 'false',
         STRM_WATCHDOG_SOURCES: 'history',
         STRM_WATCHDOG_ACTION: 'notify',
