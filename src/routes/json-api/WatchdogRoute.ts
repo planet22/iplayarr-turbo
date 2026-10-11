@@ -37,6 +37,14 @@ router.post('/refresh-counts', async (_: Request, res: Response) => {
     res.json(tracked);
 });
 
+router.delete('/items', async (_: Request, res: Response) => {
+    if (!(await strmWatchdogService.clearItems())) {
+        res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'Cannot clear the table while a run is in progress' } as ApiResponse);
+        return;
+    }
+    res.json({ status: true });
+});
+
 router.post('/stop', async (_: Request, res: Response) => {
     if (!strmWatchdogService.stop()) {
         res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'Watchdog is not running' } as ApiResponse);

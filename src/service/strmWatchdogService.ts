@@ -229,6 +229,7 @@ class StrmWatchdogService {
         // One app being down or erroring is flagged, never fatal: the other sources still run.
         for (const app of selected((a) => arrLibraryService.supports(a), 'arr')) {
             try {
+                await this.#collecting(app.name, 0, 0, true);
                 const refs = (await arrLibraryService.getFilePaths(app)).filter(({ path: f }) => f.toLowerCase().endsWith('.strm'));
                 let done = 0;
                 await this.#collecting(app.name, 0, refs.length, true);
@@ -242,12 +243,14 @@ class StrmWatchdogService {
                         unreadable[app.name] = (unreadable[app.name] ?? 0) + 1;
                     }
                 }
+                await this.#collecting(app.name, refs.length, refs.length, true);
             } catch (err: any) {
                 this.#warn(`${app.name}: ${err?.message ?? 'failed'} - skipped`);
             }
         }
         for (const server of selected((a) => jellyfinService.supports(a), 'jellyfin')) {
             try {
+                await this.#collecting(server.name, 0, 0, true);
                 const items = (await jellyfinService.getItems(server)).filter(({ path }) => path.toLowerCase().endsWith('.strm'));
                 await appService.touchApp(server.id);
                 let done = 0;
@@ -267,6 +270,7 @@ class StrmWatchdogService {
                     }
                     add('jellyfin', server.name, pid, local);
                 }
+                await this.#collecting(server.name, items.length, items.length, true);
             } catch (err: any) {
                 this.#warn(`${server.name}: ${err?.message ?? 'failed'} - skipped`);
             }
@@ -422,6 +426,14 @@ class StrmWatchdogService {
     stop(): boolean {
         if (!this.#live.running) return false;
         this.#stopRequested = true;
+        return true;
+    }
+
+    // Forgets every link's last result (the table). Not allowed mid-run, which keeps its own working copy.
+    async clearItems(): Promise<boolean> {
+        if (this.#live.running) return false;
+        await storage.setItem(STATE_KEY, {});
+        await this.#emit();
         return true;
     }
 

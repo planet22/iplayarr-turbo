@@ -1,16 +1,14 @@
 <template>
-    <SettingsPageToolbar
-        :icons="['run', 'refresh']"
-        :running="live.running" :run-disabled="live.running ? stopping : !canRun"
-        :stop-label="stopping ? 'Stopping…' : 'Stop'"
-        :refresh-disabled="live.running || refreshing" :refresh-label="refreshing ? 'Refreshing…' : 'Refresh Links'"
-        refresh-title="Re-list links from the sources and update the counts, without checking them against BBC"
-        @run="runNow" @stop="stopRun" @refresh="refreshCounts"
-    />
     <div class="inner-content">
-        <div class="legendRow">
-            <legend>STRM Watchdog</legend>
-        </div>
+        <PageHeader title="STRM Watchdog" />
+        <SettingsPageToolbar
+            :icons="['run', 'refresh']"
+            :running="live.running" :run-disabled="live.running ? stopping : !canRun"
+            :stop-label="stopping ? 'Stopping…' : 'Stop'"
+            :refresh-disabled="live.running || refreshing" :refresh-label="refreshing ? 'Refreshing…' : 'Refresh Links'"
+            refresh-title="Re-list links from the sources and update the counts, without checking them against BBC"
+            @run="runNow" @stop="stopRun" @refresh="refreshCounts"
+        />
         <InfoBar v-if="!status.enabled">
             The STRM Watchdog is disabled. Enable it under Settings → Streaming.
         </InfoBar>
@@ -64,9 +62,6 @@
             </div>
         </div>
 
-        <p class="dedupNote">* Totals are after de-duplicating libraries; a link listed by several sources counts under each in the per-source counts.</p>
-
-        <legend>Live</legend>
         <div class="statRow">
             <div class="statCard progressCard">
                 <div class="progressHeader">
@@ -81,7 +76,7 @@
                         Checking <router-link :to="`/browse/programme/${live.currentPid}`">{{ live.currentPid }}</router-link>
                     </template>
                     <template v-else-if="live.running && live.collecting">
-                        Collecting from {{ live.collecting.name }} {{ live.collecting.done }} / {{ live.collecting.total }}
+                        Collecting from {{ live.collecting.name }}<template v-if="live.collecting.total">{{ ' ' }}{{ live.collecting.done }} / {{ live.collecting.total }}</template>
                     </template>
                     <template v-else-if="live.running">Collecting from sources...</template>
                     <template v-else>{{ live.stopped ? 'Last run was stopped.' : 'Nothing running.' }}</template>
@@ -91,6 +86,8 @@
                 </div>
             </div>
         </div>
+
+        <p class="dedupNote">* Totals are after de-duplicating libraries; a link listed by several sources counts under each in the per-source counts.</p>
 
         <legend>Statistics</legend>
         <div class="statRow">
@@ -139,12 +136,11 @@
             </div>
         </div>
 
-        <div class="legendRow">
-            <legend>Library Access</legend>
-            <button class="rssToggle clickable" :disabled="checkingAccess" @click="checkAccess">
-                {{ checkingAccess ? 'Checking…' : 'Check Access' }}
-            </button>
-        </div>
+        <PageHeader title="Library Access" />
+        <SettingsPageToolbar
+            :icons="['refresh']" :refresh-label="checkingAccess ? 'Checking…' : 'Check Access'"
+            :refresh-disabled="checkingAccess" @refresh="checkAccess"
+        />
         <InfoBar v-if="accessError">{{ accessError }}</InfoBar>
         <p v-if="!access" class="empty">
             Checks that this container can read the .strm files Sonarr/Radarr and Jellyfin report, using the current Path Mapping.
@@ -192,7 +188,11 @@
             <p v-if="access.pathMap" class="detail">Current Path Mapping: {{ access.pathMap }}</p>
         </div>
 
-        <legend>Links</legend>
+        <PageHeader title="Links" />
+        <SettingsPageToolbar
+            :icons="['delete']" delete-label="Clear links" :delete-disabled="live.running || !sortedItems.length"
+            @delete-queue-item="clearItems"
+        />
         <p v-if="!sortedItems.length" class="empty">No links have been checked yet.</p>
         <template v-else>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
@@ -236,9 +236,11 @@ import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import LineChart from '@/components/charts/LineChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import TypeCounts from '@/components/watchdog/TypeCounts.vue';
+import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { formatRelativeTime } from '@/lib/utils';
@@ -336,6 +338,12 @@ const onStatus = (data) => {
     status.value = data;
     if (!data.live.running) stopping.value = false;
 };
+
+async function clearItems() {
+    if (!(await dialogService.confirm('Clear Table', 'Clear the list of checked links? They will be listed again on the next run.'))) return;
+    const { ok, data } = await ipFetch('json-api/watchdog/items', 'DELETE');
+    if (!ok) runError.value = data?.message ?? 'Could not clear the table';
+}
 
 async function stopRun() {
     stopping.value = true;
