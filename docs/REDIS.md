@@ -35,7 +35,7 @@ If Redis is unreachable, the `/ping` healthcheck endpoint reports `503` with the
 
 The bundled `redis-server` is started with `--dir /config`, so its RDB snapshot lives on whatever volume you've mounted at `/config` (see [INSTALLATION.md](INSTALLATION.md) for the standard volume layout). As long as that volume persists across container recreation, config, queue/history, sessions, and everything else above survives restarts and upgrades.
 
-**Backup**: back up the `/config` volume (it contains the Redis RDB file) the same way you'd back up any other bind-mounted directory — stop the container, copy the directory, restart. There's no in-app export/import; the config and queue state live entirely in that one Redis data file.
+**Backup**: stored credentials are encrypted with a key that is *not* in Redis (`SECRETS_KEY`, or the generated `secrets.key` in `CACHE_LOCATION`, `/data` in Docker) - back that up too or restored credentials will be unreadable. Back up the `/config` volume (it contains the Redis RDB file) the same way you'd back up any other bind-mounted directory — stop the container, copy the directory, restart. There's no in-app export/import; the config and queue state live entirely in that one Redis data file.
 
 **Restore**: stop the container, replace the `/config` directory's contents with your backup, start the container again. A fresh `/config` with no existing Redis data just means a fresh install — iPlayarr will auto-generate a new `API_KEY`/`STREAM_KEY` and fall back to default auth credentials, same as a brand-new deployment.
 

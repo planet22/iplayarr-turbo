@@ -10,8 +10,9 @@ import { v4 as uuidv4 } from 'uuid';
 import ApiRoute from './routes/ApiRoute';
 import AuthRoute, { addAuthMiddleware, isAuthenticatedRequest, sessionMiddleware } from './routes/AuthRoute';
 import JsonApiRoute from './routes/JsonApiRoute';
+import { encryptStoredApps } from './service/appService';
 import { ensureNonDefaultPassword } from './service/auth/initialCredentialsService';
-import configService from './service/configService';
+import configService, { encryptStoredSettings } from './service/configService';
 import liveSubscriptionService from './service/liveSubscriptionService';
 import loggingService from './service/loggingService';
 import { redis } from './service/redis/redisService';
@@ -32,10 +33,16 @@ process.on('unhandledRejection', (reason) => {
     loggingService.error('Unhandled promise rejection', reason);
 });
 
-// API keys travel in URLs, so never leak them through the Referer header.
+// API keys travel in URLs, so never leak them through the Referer header. The UI may only be framed
+// by itself (clickjacking); set ALLOW_EMBEDDING=true to let a dashboard embed it.
+const allowEmbedding = process.env.ALLOW_EMBEDDING === 'true';
 app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (!allowEmbedding) {
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        res.setHeader('Content-Security-Policy', 'frame-ancestors \'self\'');
+    }
     next();
 });
 const port: number = parseInt(process.env[IplayarrParameter.PORT.toString()] || '4404');
@@ -121,6 +128,8 @@ io.use(async (socket, next) => {
 socketService.registerIo(io);
 
 (async () => {
+    await encryptStoredSettings();
+    await encryptStoredApps();
     await ensureNonDefaultPassword();
     if ((await configService.getParameter(IplayarrParameter.AUTH_TYPE)) === 'none') {
         loggingService.error(

@@ -25,6 +25,7 @@ function startServer(port, extraEnv = {}) {
         COMPLETE_DIR: `${SMOKE}/done`,
         API_KEY: 'smoke-api-key',
         STREAM_KEY: 'smoke-stream-key',
+        SECRETS_KEY_FILE: `${SMOKE}/secrets-${port}.key`,
         STREAM_BASE_URL: `http://127.0.0.1:${port}`,
         LIVE_STRM_DIR: `${SMOKE}/done`,
         LOG_DIR: `${SMOKE}/logs${port}`,
@@ -224,6 +225,10 @@ async function main() {
         });
         record('#9 api', 'oversized upload refused with 413 and no stack trace', big.status === 413 && !big.text.includes('node_modules'), `status ${big.status} ${big.text.slice(0, 80)}`);
         const hdr = (await fetch(`${A.base}/ping`)).headers;
+        record('#11 framing', 'X-Frame-Options SAMEORIGIN and CSP frame-ancestors set', hdr.get('x-frame-options') === 'SAMEORIGIN' && /frame-ancestors 'self'/.test(hdr.get('content-security-policy') ?? ''), `xfo=${hdr.get('x-frame-options')} csp=${hdr.get('content-security-policy')}`);
+        const keyFile = fs.existsSync(SMOKE + '/secrets-4511.key') ? fs.readFileSync(SMOKE + '/secrets-4511.key', 'utf8') : '';
+        record('#12 encryption', 'a 32-byte secrets key file was generated outside Redis on first boot', /^[0-9a-f]{64}$/.test(keyFile));
+        record('#12 encryption', 'generated API key still authenticates (decrypts transparently)', goodKey.status === 200);
         record('#9 api', 'Referrer-Policy: no-referrer set, X-Powered-By removed', hdr.get('referrer-policy') === 'no-referrer' && !hdr.get('x-powered-by'), `referrer-policy=${hdr.get('referrer-policy')} x-powered-by=${hdr.get('x-powered-by')}`);
         const ping503 = await fetch(`${A.base}/ping`);
         record('#9 api', '/ping returns only status (no error text)', (await ping503.text()).indexOf('Redis error') === -1);

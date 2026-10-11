@@ -8,6 +8,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { CreateDownloadClientForm } from '../types/requests/form/CreateDownloadClientForm';
 import { CreateIndexerForm } from '../types/requests/form/CreateIndexerForm';
+import { decryptApp, encryptApp, hasPlainSecret } from '../utils/secretCrypto';
 import configService from './configService';
 import jellyfinService from './jellyfinService';
 import socketService from './socketService';
@@ -21,9 +22,17 @@ const LAST_SEEN_KEY = 'apps_last_seen';
 const LAST_SEEN_THROTTLE_MS = 60_000;
 const lastTouched = new Map<string, number>();
 
+// Rewrites any app credentials still stored in plaintext in their encrypted form (a no-op once done).
+export async function encryptStoredApps(): Promise<void> {
+    const raw: App[] = (await storage.getItem('apps')) || [];
+    if (raw.some(hasPlainSecret)) {
+        await storage.setItem('apps', raw.map((app) => encryptApp(decryptApp(app))));
+    }
+}
+
 const appService = {
     getAllApps: async (): Promise<App[]> => {
-        const apps: App[] = (await storage.getItem('apps')) || [];
+        const apps: App[] = ((await storage.getItem('apps')) || []).map(decryptApp);
         const lastSeen: Record<string, number> = (await storage.getItem(LAST_SEEN_KEY)) || {};
         return apps.map((app) => (lastSeen[app.id] ? { ...app, lastSeen: lastSeen[app.id] } : app));
     },
@@ -76,7 +85,7 @@ const appService = {
     removeApp: async (id: string): Promise<boolean> => {
         let allApps: App[] = await appService.getAllApps();
         allApps = allApps.filter(({ id: app_id }) => app_id != id);
-        await storage.setItem('apps', allApps);
+        await storage.setItem('apps', allApps.map(encryptApp));
         return true;
     },
 
@@ -105,7 +114,7 @@ const appService = {
         }
         const allApps: App[] = await appService.getAllApps();
         allApps.push(form);
-        await storage.setItem('apps', allApps);
+        await storage.setItem('apps', allApps.map(encryptApp));
         return form;
     },
 

@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import searchFacade from '../facade/searchFacade';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
+import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
 
 dotenv.config();
 
@@ -13,7 +14,15 @@ export interface ConfigMap {
 }
 
 async function getConfigMap(): Promise<ConfigMap> {
-    return (await storage.getItem('config')) || {};
+    return decryptSettings((await storage.getItem('config')) || {});
+}
+
+// Rewrites any credentials still stored in plaintext in their encrypted form (a no-op once done).
+export async function encryptStoredSettings(): Promise<void> {
+    const raw: ConfigMap = (await storage.getItem('config')) || {};
+    if (Object.keys(raw).some((key) => ENCRYPTED_SETTINGS.includes(key) && raw[key] && !isEncrypted(raw[key]))) {
+        await storage.setItem('config', encryptSettings(decryptSettings(raw)));
+    }
 }
 
 const configService = {
@@ -90,7 +99,7 @@ const configService = {
         const configMap = await getConfigMap();
         const oldValue = configMap[parameter];
         configMap[parameter] = value;
-        await storage.setItem('config', configMap);
+        await storage.setItem('config', encryptSettings(configMap));
         if ((parameter == IplayarrParameter.NATIVE_SEARCH || parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE) && oldValue != value) {
             searchFacade.clearSearchCache();
         }
@@ -99,7 +108,7 @@ const configService = {
     removeParameter: async (parameter: IplayarrParameter): Promise<void> => {
         const configMap = await getConfigMap();
         delete configMap[parameter];
-        await storage.setItem('config', configMap);
+        await storage.setItem('config', encryptSettings(configMap));
     },
 };
 
