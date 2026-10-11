@@ -13,18 +13,19 @@
         </SettingsPageToolbar>
         <table class="dataTable responsive-table">
             <colgroup>
-                <col />
+                <col style="width: 36ch" />
                 <col style="width: 10ch" />
                 <col style="width: 10ch" />
                 <col style="width: 10ch" />
                 <col style="width: 10ch" />
                 <col style="width: 14ch" />
                 <col style="width: 22ch" />
+                <col />
             </colgroup>
             <thead>
                 <tr>
                     <th class="sortable" @click="toggleSearchSort('term')">
-                        Term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
+                        Search term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
                     </th>
                     <th class="sortable" @click="toggleSearchSort('series')">
                         Season <SortIcon :active="searchSortBy == 'series'" :order="searchSortOrder" />
@@ -44,6 +45,7 @@
                     <th class="sortable" @click="toggleSearchSort('time')">
                         Time <SortIcon :active="searchSortBy == 'time'" :order="searchSortOrder" />
                     </th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -58,9 +60,10 @@
                     <td data-title="Type"><span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span></td>
                     <td data-title="App">{{ appName(entry.appId) }}</td>
                     <td data-title="Time">{{ formatDate(entry.time) }}</td>
+                    <td></td>
                 </tr>
                 <tr v-if="sortedSearches.length == 0">
-                    <td colspan="7" class="empty">No searches recorded yet</td>
+                    <td colspan="8" class="empty">No searches recorded yet</td>
                 </tr>
             </tbody>
         </table>
