@@ -1,7 +1,7 @@
 import { RedisStore } from 'connect-redis';
+import crypto from 'crypto';
 import { Express, NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import session from 'express-session';
-import crypto from 'crypto';
 import { v4 } from 'uuid';
 
 import { setGeneratedPassword } from '../service/auth/initialCredentialsService';
@@ -11,6 +11,7 @@ import { redis } from '../service/redis/redisService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import User from '../types/User';
+import { FailureLimiter } from '../utils/FailureLimiter';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../utils/Utils';
 
 declare module 'express-session' {
@@ -54,19 +55,83 @@ export const isAuthenticatedRequest = async (req: { session?: { user?: User } })
     return !!req.session?.user;
 };
 
-export const addAuthMiddleware = (app: Express) => {
-    const sessionCookieSettings: any = { secure: false, maxAge: 1000 * 60 * 60 * 24 };
-    if (isDebug) {
-        sessionCookieSettings.sameSite = 'lax';
-    }
+const SESSION_SECRET_KEY = 'iplayarr:session_secret';
 
-    sessionMiddleware = session({
-        secret: process.env.SESSION_SECRET || 'default_secret_key', // Replace in production
-        resave: false,
-        saveUninitialized: false,
-        cookie: sessionCookieSettings,
-        store: redisStore,
+// The cookie-signing secret. SESSION_SECRET wins if set; otherwise a random one is generated once
+// and kept in Redis, so there is never a publicly known fallback secret to forge cookies with.
+const getSessionSecret = async (): Promise<string> => {
+    if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+    const existing = await redis.get(SESSION_SECRET_KEY);
+    if (existing) return existing;
+    const generated = crypto.randomBytes(32).toString('hex');
+    await redis.set(SESSION_SECRET_KEY, generated, 'NX');
+    return (await redis.get(SESSION_SECRET_KEY)) ?? generated;
+};
+
+// Refuses requests a third-party site could be making on a logged-in user's behalf. Browsers label
+// every request with Sec-Fetch-Site; older clients fall back to an Origin/Host comparison. Requests
+// from non-browser clients (no such headers) are unaffected, so scripts and curl keep working.
+export const crossSiteGuard: RequestHandler = (req, res, next) => {
+    const site = req.get('sec-fetch-site');
+    const origin = req.get('origin');
+    const stateChanging = req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS';
+    let blocked = false;
+    if (site === 'cross-site') {
+        // Cross-site top-level navigations are the only way a SameSite=Lax cookie rides along on a GET.
+        blocked = stateChanging || req.get('sec-fetch-mode') === 'navigate';
+    } else if (!site && stateChanging && origin && !isDebug) {
+        try {
+            blocked = new URL(origin).host !== req.get('host');
+        } catch {
+            blocked = true;
+        }
+    }
+    if (blocked) {
+        res.status(403).json({ error: ApiError.NOT_AUTHORISED } as ApiResponse);
+        return;
+    }
+    next();
+};
+
+// Fresh session id on login, so an id planted before login (session fixation) is useless afterwards.
+const startSession = (req: Request, user: User): Promise<void> =>
+    new Promise((resolve, reject) => {
+        req.session.regenerate((err) => {
+            if (err) return reject(err);
+            req.session.user = user;
+            req.session.save((saveErr) => (saveErr ? reject(saveErr) : resolve()));
+        });
     });
+
+const loginLimiter = new FailureLimiter(10, 15 * 60 * 1000);
+
+export const addAuthMiddleware = (app: Express) => {
+    // Set SESSION_COOKIE_SECURE=true when the UI is only ever reached over HTTPS.
+    const sessionCookieSettings: session.CookieOptions = {
+        secure: process.env.SESSION_COOKIE_SECURE === 'true',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 1000 * 60 * 60 * 24,
+    };
+
+    let realSession: RequestHandler | undefined;
+    sessionMiddleware = async (req, res, next) => {
+        try {
+            realSession ??= session({
+                secret: await getSessionSecret(),
+                resave: false,
+                saveUninitialized: false,
+                cookie: sessionCookieSettings,
+                store: redisStore,
+            });
+            realSession(req, res, next);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    app.use('/json-api', crossSiteGuard);
+    app.use('/auth', (req, res, next) => (req.method === 'GET' ? next() : crossSiteGuard(req, res, next)));
     app.use(sessionMiddleware);
 
     app.use('/json-api/*', async (req: Request, res: Response, next: NextFunction) => {
@@ -163,7 +228,7 @@ router.get('/oidc/callback', async (req: Request, res: Response) => {
         res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
         return;
     } else {
-        req.session.user = { username: email };
+        await startSession(req, { username: email });
         const host = process.env.DEBUG == 'true' ? `${req.protocol}://${req.headers.host?.split(':')[0]}:8080` : '';
         res.redirect(`${host}/queue`);
         return;
@@ -175,9 +240,17 @@ router.post('/login', async (req: Request, res: Response) => {
         configService.getParameter(IplayarrParameter.AUTH_USERNAME),
         configService.getParameter(IplayarrParameter.AUTH_PASSWORD),
     ]);
-    const { username, password } = req.body;
+    const { username, password } = req.body ?? {};
+    const clientKey = req.ip ?? 'unknown';
 
-    if (username !== AUTH_USERNAME || !AUTH_PASSWORD) {
+    if (loginLimiter.isBlocked(clientKey)) {
+        res.setHeader('Retry-After', String(loginLimiter.retryAfterSeconds(clientKey)));
+        res.status(429).json({ error: ApiError.INVALID_CREDENTIALS, message: 'Too many failed logins, try again later' } as ApiResponse);
+        return;
+    }
+
+    if (typeof username !== 'string' || typeof password !== 'string' || username !== AUTH_USERNAME || !AUTH_PASSWORD) {
+        loginLimiter.recordFailure(clientKey);
         res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
         return;
     }
@@ -197,11 +270,13 @@ router.post('/login', async (req: Request, res: Response) => {
     }
 
     if (passwordValid) {
-        req.session.user = { username };
+        loginLimiter.reset(clientKey);
+        await startSession(req, { username });
         res.json({ status: true });
         return;
     }
 
+    loginLimiter.recordFailure(clientKey);
     res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
 });
 

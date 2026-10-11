@@ -1,9 +1,9 @@
-import configService from '../../../src/service/configService';
 import {
     ensureNonDefaultPassword,
     generatePassword,
     LEGACY_DEFAULT_PASSWORD_HASH,
 } from '../../../src/service/auth/initialCredentialsService';
+import configService from '../../../src/service/configService';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { comparePassword } from '../../../src/utils/Utils';
 

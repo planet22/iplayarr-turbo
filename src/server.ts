@@ -49,7 +49,8 @@ app.get('/ping', async (_req: Request, res: Response) => {
         await redis.ping();
         res.json({ status: 'OK' });
     } catch (error : any) {
-        res.status(503).json({ status: 'ERROR', message: `Redis error - ${error?.message}`});
+        loggingService.error('Healthcheck: Redis error', error?.message);
+        res.status(503).json({ status: 'ERROR' });
     }
 });
 
