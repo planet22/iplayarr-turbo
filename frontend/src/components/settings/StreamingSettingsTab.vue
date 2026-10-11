@@ -12,7 +12,7 @@
         <TextInput
             v-model="config.STREAM_BASE_URL"
             name="Stream Base URL"
-            tooltip="The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
+            tooltip="Address your media server uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
             :error="validationErrors.config?.STREAM_BASE_URL"
         />
         <TextInput
@@ -28,7 +28,7 @@
         <SelectInput
             v-model="config.STREAM_CLIENT"
             name="Stream Client"
-            tooltip="Tool that starts .strm playback. Native is fastest with adaptive quality; get_iplayer/yt-dlp pin to Video Quality."
+            tooltip="Tool that plays .strm links. Native is fastest; get_iplayer/yt-dlp use Video Quality."
             :error="validationErrors.config?.STREAM_CLIENT"
             :options="streamClients"
         />
@@ -44,7 +44,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_HQ_PROBE"
             name="Native Quality Probe"
-            tooltip="Verifies real stream quality before playing. Better results, adds a short delay."
+            tooltip="Verify real stream quality before playing (adds a short delay)."
             :error="validationErrors.config?.STREAM_NATIVE_HQ_PROBE"
             :options="hqProbeOptions"
         />
@@ -73,7 +73,7 @@
                 v-model="config.STREAM_CACHE_DIR"
                 :advanced="true"
                 name="Stream Cache Directory"
-                tooltip="Where temporary files are stored while streaming. Leave blank to use a temp folder."
+                tooltip="Temporary streaming files. Blank = system temp folder."
                 :error="validationErrors.config?.STREAM_CACHE_DIR"
             />
         </template>
@@ -83,7 +83,7 @@
     <SelectInput
         v-model="config.STRM_WATCHDOG_ENABLED"
         name="STRM Watchdog"
-        tooltip="Daily check that .strm links still resolve on BBC iPlayer. Only links pointing at iPlayarr or a BBC pid are checked."
+        tooltip="Daily check that .strm links still resolve on BBC iPlayer."
         :error="validationErrors.config?.STRM_WATCHDOG_ENABLED"
         :options="watchdogEnabledOptions"
     />
@@ -91,7 +91,7 @@
         <MultiSelectInput
             v-model="config.STRM_WATCHDOG_SOURCES"
             name="Watchdog Sources"
-            tooltip="Where to find .strm files. iPlayarr reads its own list (subscriptions only, or everything it has downloaded) without scanning folders. Sonarr/Jellyfin files need the library mounted into this container (see Path Mapping)."
+            tooltip="Where to find .strm files. Sonarr/Jellyfin sources need the library mounted into this container (see Path Mapping)."
             :error="validationErrors.config?.STRM_WATCHDOG_SOURCES"
             :options="watchdogSourceOptions"
         />
@@ -106,7 +106,7 @@
             v-if="hasType('arr') || hasType('jellyfin')"
             v-model="config.STRM_WATCHDOG_PATH_MAP"
             name="Watchdog Path Mapping"
-            tooltip="Sonarr/Jellyfin path to the same folder inside this container, e.g. /tv=/library/tv (separate several with ;)."
+            tooltip="Sonarr/Jellyfin path = path inside this container, e.g. /tv=/library/tv (separate with ;)."
             :error="validationErrors.config?.STRM_WATCHDOG_PATH_MAP"
         />
         <template v-if="hasType('jellyfin')">
@@ -125,7 +125,7 @@
             v-if="hasType('arr')"
             v-model="config.STRM_WATCHDOG_ARR_ACTION"
             name="Sonarr/Radarr Action"
-            tooltip="Also tell Sonarr/Radarr about an expired link. Only applies to links found through the Sonarr/Radarr source."
+            tooltip="Also tell Sonarr/Radarr about an expired link (Sonarr/Radarr source only)."
             :error="validationErrors.config?.STRM_WATCHDOG_ARR_ACTION"
             :options="watchdogArrActionOptions"
         />
@@ -133,20 +133,20 @@
             v-model="config.STRM_WATCHDOG_CONCURRENCY"
             type-override="number"
             name="Parallel Checks"
-            tooltip="How many links are checked against BBC at once (1-10, default 4). 1 is gentlest on BBC; 4 is about three times faster. Results are applied in order, so the rules below behave the same."
+            tooltip="Links checked against BBC at once (1-10, default 4). Lower is gentler on BBC."
             :error="validationErrors.config?.STRM_WATCHDOG_CONCURRENCY"
         />
         <TextInput
             v-model="config.STRM_WATCHDOG_FAIL_THRESHOLD"
             type-override="number"
             name="Minimum Valid Before Action"
-            tooltip="Failing links are only counted and acted on after this many links have validated OK in the same run (half your links, if you have fewer), proving BBC is up. Also: this many failures in a row abandons the run as a BBC outage."
+            tooltip="Failures are only acted on once this many links have validated OK in the run (proves BBC is up). This many failures in a row abandons the run."
             :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
         />
         <TextInput
             v-model="config.STRM_WATCHDOG_WEBHOOK_URL"
             name="Watchdog Webhook URL"
-            tooltip="Optional. Receives a JSON POST ({event, pid, files, message}) when a link first becomes invalid."
+            tooltip="Optional. Receives a JSON POST when a link first becomes invalid."
             :error="validationErrors.config?.STRM_WATCHDOG_WEBHOOK_URL"
         />
     </template>
@@ -218,7 +218,7 @@ const watchdogSourceOptions = computed(() => [
 ]);
 
 const selectedSources = computed(() =>
-    (config.STRM_WATCHDOG_SOURCES || '')
+    (config.value.STRM_WATCHDOG_SOURCES || '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)

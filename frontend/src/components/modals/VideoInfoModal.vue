@@ -7,7 +7,7 @@
         close-label="Close"
         @cancel="deleteItem"
     >
-        <MediaInfoHero :pid="pid" :title="item?.nzbName" :type="item?.type" />
+        <MediaInfoHero :pid="pid" :type="item?.type" />
 
         <div class="button-row">
             <button class="clickable preview-button" @click="preview">

@@ -78,6 +78,14 @@ describe('configService', () => {
     expect(searchFacade.clearSearchCache).toHaveBeenCalled();
   });
 
+  it('clears search cache when NATIVE_SEARCH_ENGINE changes', async () => {
+    mockStorage['config'] = {
+      [IplayarrParameter.NATIVE_SEARCH_ENGINE]: 'V1',
+    };
+    await configService.setParameter(IplayarrParameter.NATIVE_SEARCH_ENGINE, 'V2');
+    expect(searchFacade.clearSearchCache).toHaveBeenCalled();
+  });
+
   it('does not clear search cache when NATIVE_SEARCH is unchanged', async () => {
     mockStorage['config'] = {
       [IplayarrParameter.NATIVE_SEARCH]: 'true',

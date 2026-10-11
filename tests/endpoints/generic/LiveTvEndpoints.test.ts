@@ -1,0 +1,103 @@
+import LiveEpgEndpoint from '../../../src/endpoints/generic/LiveEpgEndpoint';
+import LiveLogoEndpoint from '../../../src/endpoints/generic/LiveLogoEndpoint';
+import LivePlaylistEndpoint from '../../../src/endpoints/generic/LivePlaylistEndpoint';
+import LiveThumbEndpoint from '../../../src/endpoints/generic/LiveThumbEndpoint';
+import liveTvService from '../../../src/service/liveTvService';
+import thumbnailCacheService from '../../../src/service/thumbnailCacheService';
+
+jest.mock('../../../src/service/thumbnailCacheService', () => ({ __esModule: true, default: { getOrFetch: jest.fn() } }));
+jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { error: jest.fn() } }));
+jest.mock('../../../src/service/liveTvService', () => ({
+    __esModule: true,
+    default: { isEnabled: jest.fn(), playlist: jest.fn(), epg: jest.fn(), logo: jest.fn() },
+}));
+
+const makeRes = (): any => {
+    const res: any = {};
+    res.status = jest.fn().mockReturnValue(res);
+    res.json = jest.fn().mockReturnValue(res);
+    res.type = jest.fn().mockReturnValue(res);
+    res.set = jest.fn().mockReturnValue(res);
+    res.send = jest.fn().mockReturnValue(res);
+    return res;
+};
+
+describe.each([
+    ['playlist', LivePlaylistEndpoint, 'playlist', 'audio/x-mpegurl'],
+    ['epg', LiveEpgEndpoint, 'epg', 'application/xml'],
+])('Live %s endpoint', (_name, endpoint, method, contentType) => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('404s when Live TV is disabled', async () => {
+        (liveTvService.isEnabled as jest.Mock).mockResolvedValue(false);
+        const res = makeRes();
+        await endpoint({} as any, res);
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect((liveTvService as any)[method]).not.toHaveBeenCalled();
+    });
+
+    it('serves content when enabled', async () => {
+        (liveTvService.isEnabled as jest.Mock).mockResolvedValue(true);
+        (liveTvService as any)[method].mockResolvedValue('body');
+        const res = makeRes();
+        await endpoint({} as any, res);
+        expect(res.type).toHaveBeenCalledWith(contentType);
+        expect(res.send).toHaveBeenCalledWith('body');
+    });
+
+    it('500s on failure', async () => {
+        (liveTvService.isEnabled as jest.Mock).mockResolvedValue(true);
+        (liveTvService as any)[method].mockRejectedValue(new Error('x'));
+        const res = makeRes();
+        await endpoint({} as any, res);
+        expect(res.status).toHaveBeenCalledWith(500);
+    });
+});
+
+describe('Live logo endpoint', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('404s when disabled or logo missing, serves a PNG otherwise', async () => {
+        (liveTvService.isEnabled as jest.Mock).mockResolvedValue(false);
+        let res = makeRes();
+        await LiveLogoEndpoint({ query: { channel: 'bbc_one_london' } } as any, res);
+        expect(res.status).toHaveBeenCalledWith(404);
+
+        (liveTvService.isEnabled as jest.Mock).mockResolvedValue(true);
+        (liveTvService.logo as jest.Mock).mockResolvedValue(undefined);
+        res = makeRes();
+        await LiveLogoEndpoint({ query: { channel: 'x' } } as any, res);
+        expect(res.status).toHaveBeenCalledWith(404);
+
+        (liveTvService.logo as jest.Mock).mockResolvedValue(Buffer.from('png'));
+        res = makeRes();
+        await LiveLogoEndpoint({ query: { channel: 'bbc_one_london' } } as any, res);
+        expect(res.set).toHaveBeenCalledWith(expect.objectContaining({ 'Content-Type': 'image/png' }));
+        expect(res.send).toHaveBeenCalledWith(Buffer.from('png'));
+    });
+});
+
+describe('Live thumb endpoint', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('404s when disabled or the image is missing, sends the cached file otherwise', async () => {
+        (liveTvService.isEnabled as jest.Mock).mockResolvedValue(false);
+        let res = makeRes();
+        res.sendFile = jest.fn();
+        await LiveThumbEndpoint({ query: { pid: 'p0abc' } } as any, res);
+        expect(res.status).toHaveBeenCalledWith(404);
+
+        (liveTvService.isEnabled as jest.Mock).mockResolvedValue(true);
+        (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValue(undefined);
+        res = makeRes();
+        res.sendFile = jest.fn();
+        await LiveThumbEndpoint({ query: { pid: 'p0abc' } } as any, res);
+        expect(res.status).toHaveBeenCalledWith(404);
+
+        (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValue('/cache/p0abc.jpg');
+        res = makeRes();
+        res.sendFile = jest.fn();
+        await LiveThumbEndpoint({ query: { pid: 'p0abc' } } as any, res);
+        expect(res.sendFile).toHaveBeenCalledWith('/cache/p0abc.jpg');
+    });
+});

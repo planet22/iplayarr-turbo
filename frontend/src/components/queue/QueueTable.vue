@@ -61,9 +61,9 @@
 </template>
 
 <script setup>
-import { computed, defineExpose, defineProps, onMounted, reactive, ref, watch } from 'vue';
+import { computed, defineExpose, defineProps, onMounted, ref, watch } from 'vue';
 
-import { ipFetch } from '@/lib/ipFetch';
+import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 
@@ -136,34 +136,31 @@ const {
     page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
 } = usePagination(sortedHistory);
 
-const details = reactive({});
+
 
 function detailsFor(pid) {
     return details[pid];
 }
 
-async function loadDetails(pid) {
-    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
-        return;
-    }
-    details[pid] = null;
-    try {
-        const response = await ipFetch(`json-api/details?pid=${pid}`);
-        details[pid] = response.ok ? response.data : null;
-    } catch {
-        details[pid] = null;
-    }
-}
-
 function loadMissingDetails() {
-    [...props.queue, ...props.history]
+    // Only what is on screen - history can run to hundreds of rows but one page is shown at a time.
+    [...props.queue, ...pagedHistory.value]
         .map(({ pid }) => pid)
         .filter(Boolean)
         .forEach(loadDetails);
 }
 
-onMounted(loadMissingDetails);
-watch([() => props.queue, () => props.history], loadMissingDetails);
+// Once the visible page is requested, quietly warm the rest of the history in the background.
+function prefetchRest() {
+    prefetchThumbnails(props.history.map(({ pid }) => pid));
+}
+
+onMounted(() => {
+    loadMissingDetails();
+    prefetchRest();
+});
+watch([() => props.queue, pagedHistory], loadMissingDetails);
+watch(() => props.history, prefetchRest);
 
 const allChecked = ref(false);
 

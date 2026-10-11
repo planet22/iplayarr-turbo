@@ -13,10 +13,11 @@
         </SettingsPageToolbar>
         <table class="dataTable responsive-table">
             <colgroup>
+                <col style="width: 36ch" />
+                <col style="width: 10ch" />
+                <col style="width: 10ch" />
+                <col style="width: 10ch" />
                 <col />
-                <col style="width: 10ch" />
-                <col style="width: 10ch" />
-                <col style="width: 10ch" />
                 <col style="width: 10ch" />
                 <col style="width: 14ch" />
                 <col style="width: 22ch" />
@@ -24,7 +25,7 @@
             <thead>
                 <tr>
                     <th class="sortable" @click="toggleSearchSort('term')">
-                        Term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
+                        Search term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
                     </th>
                     <th class="sortable" @click="toggleSearchSort('series')">
                         Season <SortIcon :active="searchSortBy == 'series'" :order="searchSortOrder" />
@@ -35,6 +36,7 @@
                     <th class="sortable" @click="toggleSearchSort('results')">
                         Results <SortIcon :active="searchSortBy == 'results'" :order="searchSortOrder" />
                     </th>
+                    <th></th>
                     <th class="sortable" @click="toggleSearchSort('type')">
                         Type <SortIcon :active="searchSortBy == 'type'" :order="searchSortOrder" />
                     </th>
@@ -55,12 +57,13 @@
                         <a v-if="entry.items?.length" class="clickable" @click="showResults(entry)">{{ entry.results }}</a>
                         <template v-else>{{ entry.results }}</template>
                     </td>
+                    <td></td>
                     <td data-title="Type"><span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span></td>
                     <td data-title="App">{{ appName(entry.appId) }}</td>
                     <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedSearches.length == 0">
-                    <td colspan="7" class="empty">No searches recorded yet</td>
+                    <td colspan="8" class="empty">No searches recorded yet</td>
                 </tr>
             </tbody>
         </table>
@@ -110,9 +113,9 @@
                 <tr v-for="(entry, index) in pagedGrabs" :key="index">
                     <td>
                         <img
-                            v-if="detailsFor(entry.pid)?.thumbnail"
+                            v-if="getProgrammeThumbnailUrl(entry.pid)"
                             class="thumbnail clickable"
-                            :src="getThumbnailUrl(detailsFor(entry.pid).thumbnail)"
+                            :src="getProgrammeThumbnailUrl(entry.pid)"
                             @click="openInfo(entry.pid)"
                             @error="hideBrokenImage"
                         />
@@ -194,7 +197,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
@@ -204,19 +207,20 @@ import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
+import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import {
-    formatDateTimeWithMillis, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage,
+    formatDateTimeWithMillis, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage,
 } from '@/lib/utils';
 
 const searchHistory = ref([]);
 const grabHistory = ref([]);
 const failedGrabHistory = ref([]);
 const apps = ref([]);
-const details = reactive({});
+
 
 const socket = inject('socket');
 
@@ -226,19 +230,6 @@ function detailsFor(pid) {
 
 function seriesEpisodeLabel(pid) {
     return getSeriesEpisodeLabel(detailsFor(pid));
-}
-
-async function loadDetails(pid) {
-    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
-        return;
-    }
-    details[pid] = null;
-    try {
-        const response = await ipFetch(`json-api/details?pid=${pid}`);
-        details[pid] = response.ok ? response.data : null;
-    } catch {
-        details[pid] = null;
-    }
 }
 
 function loadMissingDetails() {

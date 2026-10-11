@@ -43,7 +43,7 @@ describe('GetIplayerScheduleService', () => {
 
             await GetIplayerScheduleService.refreshCache();
 
-            expect(spawn).toHaveBeenCalledWith('get_iplayer', ['--type=tv', '--cache-rebuild'], { shell: true });
+            expect(spawn).toHaveBeenCalledWith('get_iplayer', ['--type=tv', '--cache-rebuild']);
             expect(cleanupSpy).toHaveBeenCalled();
         });
     });

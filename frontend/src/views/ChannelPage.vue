@@ -4,6 +4,11 @@
             <button v-if="channel?.live" class="watchLive" type="button" @click="watchLive">
                 <font-awesome-icon :icon="['fas', 'play']" /> Watch Live
             </button>
+            <!-- Read-only status; the toggles live on the Channels page's edit mode. -->
+            <span v-if="channel?.live" class="statusIcons">
+                <font-awesome-icon v-if="isSubscribed(channel.id)" :icon="['fas', 'bell']" title="Live channel subscribed" />
+                <font-awesome-icon v-if="liveTvEnabled && isLiveTvSelected(channel.id)" :icon="['fas', 'tv']" title="In Jellyfin Live TV" />
+            </span>
         </PageHeader>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
@@ -13,7 +18,7 @@
                     v-for="slot in slots" :key="slot.label" :to="`/browse/programme/${slot.data.item.pid}`"
                     class="nowNextCard"
                 >
-                    <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail)" :alt="slot.data.item.title" @error="hideBrokenImage" />
+                    <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail, true)" :alt="slot.data.item.title" @error="hideBrokenImage" />
                     <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                     <button
                         v-if="slot.label === 'Now' && channel?.live" class="nowPlay" type="button"
@@ -44,11 +49,17 @@ import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import { browseFetch } from '@/lib/browse';
+import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
+import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const channel = ref(null);
+const { enabled: liveTvEnabled, load: loadLiveTv, isSelected: isLiveTvSelected } = useLiveTv();
+loadLiveTv();
+const { load: loadLive, isSubscribed } = useLiveSubscriptions();
+loadLive();
 const watchLive = () => playInPip(channel.value.id, `${channel.value.title} (Live)`, true);
 const rails = ref([]);
 const nowNext = ref(null);
@@ -133,9 +144,13 @@ watch(
     padding: 0;
     border: none;
     border-radius: 50%;
-    background-color: @brand-color;
+    background-color: rgba(0, 0, 0, 0.45);
     color: #fff;
     cursor: pointer;
+
+    &:hover {
+        background-color: @brand-color;
+    }
 }
 
 .nowNextCard {
@@ -207,5 +222,13 @@ watch(
             color: @subtle-text-color;
         }
     }
+}
+
+.statusIcons {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 12px;
+    color: #fff;
 }
 </style>

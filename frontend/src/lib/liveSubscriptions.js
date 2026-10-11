@@ -51,5 +51,19 @@ export function useLiveSubscriptions() {
 
     const subscribeAll = () => run('all', () => ipFetch('json-api/subscriptions/live/all', 'POST'), 'Unable to add live channels');
 
-    return { liveSubscriptions, loaded, allBusy, load, isSubscribed, isBusy, subscribe, unsubscribe, subscribeAll };
+    // No bulk-delete endpoint, so remove each one in turn under the shared 'all' busy key.
+    const unsubscribeAll = () =>
+        run(
+            'all',
+            async () => {
+                for (const { channelId } of [...liveSubscriptions.value]) {
+                    const result = await ipFetch(`json-api/subscriptions/live/${encodeURIComponent(channelId)}`, 'DELETE');
+                    if (!result.ok) return result;
+                }
+                return { ok: true };
+            },
+            'Unable to remove live channels'
+        );
+
+    return { liveSubscriptions, loaded, allBusy, load, isSubscribed, isBusy, subscribe, unsubscribe, subscribeAll, unsubscribeAll };
 }

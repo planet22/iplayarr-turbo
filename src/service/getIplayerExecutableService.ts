@@ -10,6 +10,7 @@ import { LogLine, LogLineLevel } from '../types/LogLine';
 import { QueueEntry } from '../types/QueueEntry';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
+import { resolveInside, sanitizeFileName } from '../utils/pathSafety';
 import { calculateSeasonAndEpisode, copyWithFallback, createNZBName, parseEpisodeDetailStrings } from '../utils/Utils';
 import configService from './configService';
 import historyService from './historyService';
@@ -21,7 +22,11 @@ import synonymService from './synonymService';
 export class GetIplayerExecutableService {
     async getIPlayerExec(): Promise<SpawnExecutable> {
         const fullExec: string = (await configService.getParameter(IplayarrParameter.GET_IPLAYER_EXEC)) as string;
-        const args: RegExpMatchArray = fullExec?.match(/(?:[^\s"]+|"[^"]*")+/g) ?? ['get_iplayer'];
+        // Tokens are spawned directly (no shell), so surrounding quotes a shell would have
+        // stripped are removed here instead.
+        const args: string[] = (fullExec?.match(/(?:[^\s"]+|"[^"]*")+/g) ?? ['get_iplayer']).map((token) =>
+            token.replace(/"([^"]*)"/g, '$1')
+        );
 
         const exec: string = args.shift() as string;
 
@@ -115,15 +120,17 @@ export class GetIplayerExecutableService {
             const exemptions = synonym.exemptions.split(',');
             for (const exemption of exemptions) {
                 exemptionArgs.push('--exclude');
-                exemptionArgs.push(`"${exemption}"`);
+                exemptionArgs.push(exemption);
             }
         }
         if (term == '*') {
             const rssHours: string = (await configService.getParameter(IplayarrParameter.RSS_FEED_HOURS)) as string;
-            (args as RegExpMatchArray).push('--available-since');
-            (args as RegExpMatchArray).push(rssHours);
+            args.push('--available-since');
+            args.push(rssHours);
         }
-        const allArgs = [...args, '--listformat', `"${listFormat}"`, ...exemptionArgs, `"${term}"`];
+        // No shell is involved when this is spawned, so nothing is quoted. '--' stops a term that
+        // starts with '-' from being read as a get_iplayer option.
+        const allArgs = [...args, '--listformat', listFormat, ...exemptionArgs, '--', term];
 
         return {
             exec,
@@ -176,7 +183,7 @@ export class GetIplayerExecutableService {
             const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
             if (queueItem) {
                 try {
-                    const uuidPath = path.join(downloadDir, pid);
+                    const uuidPath = resolveInside(downloadDir, pid);
                     loggingService.debug(pid, `Looking for Video files in ${uuidPath}`);
                     const files = fs.readdirSync(uuidPath);
                     const videoFile = files.find((file) => file.endsWith('.mp4') || file.endsWith('.mkv'));
@@ -184,7 +191,7 @@ export class GetIplayerExecutableService {
                     if (videoFile) {
                         const oldPath = path.join(uuidPath, videoFile);
                         loggingService.debug(pid, `Found Video file ${oldPath}`);
-                        const newPath = path.join(completeDir, `${queueItem?.nzbName}.${outputFormat}`);
+                        const newPath = resolveInside(completeDir, `${sanitizeFileName(queueItem?.nzbName)}.${outputFormat}`);
                         loggingService.debug(pid, `Moving ${oldPath} to ${newPath}`);
 
                         copyWithFallback(oldPath, newPath);

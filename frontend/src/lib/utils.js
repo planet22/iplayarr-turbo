@@ -33,14 +33,26 @@ export const formatClientIp = (ip) => {
     return ip?.replace(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i, '$1');
 };
 
-export const getThumbnailUrl = (thumbnail) => {
-    return thumbnail ? `${getHost()}/${thumbnail}` : undefined;
+// `small` asks for the 320x180 copy (list/card/table use); omit it for hero banners.
+export const getThumbnailUrl = (thumbnail, small = false) => {
+    if (!thumbnail) return undefined;
+    const sizeParam = small && thumbnail.startsWith('json-api/thumbnail/') && !thumbnail.includes('?') ? '?size=small' : '';
+    return `${getHost()}/${thumbnail}${sizeParam}`;
+};
+
+// Thumbnail by programme id - the server resolves the image, so an <img> can use this straight
+// away with no details lookup first. Anything that is not a programme pid (live channel ids contain
+// underscores) has none.
+export const getProgrammeThumbnailUrl = (pid) => {
+    return typeof pid === 'string' && /^[a-z0-9]{8}$/i.test(pid)
+        ? `${getHost()}/json-api/thumbnail/pid/${pid}?size=small`
+        : undefined;
 };
 
 // A stream session's thumbnail: the programme's still from its details, or - for a live channel,
 // which has no programme details - the channel's logo (`channelLogos` maps channel id -> logo path).
 export const getSessionThumbnailUrl = (session, details, channelLogos) => {
-    return getThumbnailUrl(session.live ? channelLogos?.[session.pid] : details?.thumbnail);
+    return session.live || channelLogos?.[session.pid] ? getThumbnailUrl(channelLogos?.[session.pid], true) : getProgrammeThumbnailUrl(session.pid);
 };
 
 // Builds the "Series X, Episode Y" identifier shown alongside a video's channel wherever

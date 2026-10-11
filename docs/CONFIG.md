@@ -18,6 +18,7 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | --- | --- | --- | --- |
 | Api Key | `API_KEY` | _(auto-generated)_ | Secures the Newznab/SABnzbd API surface (`?apikey=`). Regenerate from the field's button; Settings will offer to push the new key out to configured Apps. |
 | Native Search | `NATIVE_SEARCH` | `true` | Queries BBC's own search API + local Lunr re-ranking (`NativeSearchService`) instead of shelling out to `get_iplayer --search`. Toggling it clears the search cache. |
+| Native Search Engine | `NATIVE_SEARCH_ENGINE` | `V1` | Only shown when Native Search is on. `V1` ("1.0") is the stable engine. `V2` ("2.0", experimental) looks hits up concurrently, fetches episode details several at a time, retries failed episode-list pages and pages nested series; results should be identical, so switch back if anything looks wrong. |
 | Refresh Schedule _(advanced)_ | `REFRESH_SCHEDULE` | `0 * * * *` | Cron expression for the proactive BBC schedule refresh. Must be a valid cron string (validated server-side). |
 | Hours in RSS Feed _(advanced)_ | `RSS_FEED_HOURS` | `48` | How far back the RSS feed endpoint looks. |
 | Full Schedule Refresh _(advanced)_ | `SCHEDULE_FULL_REFRESH` | `false` | `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh. |
@@ -34,7 +35,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | --- | --- | --- | --- |
 | Authentication Enabled? (`AUTH_TYPE`) | `AUTH_TYPE` | `form` | `form` (username/password), `oidc` (OpenID Connect), or `none` (no login). |
 | Username | `AUTH_USERNAME` | `admin` | Only shown/used when `AUTH_TYPE=form`. |
-| Password | `AUTH_PASSWORD` | bcrypt hash of `password` | Stored as a bcrypt hash; legacy MD5 hashes are transparently upgraded to bcrypt on next successful login. |
+| Password | `AUTH_PASSWORD` | _(none — generated on first start)_ | Stored as a bcrypt hash; legacy MD5 hashes are transparently upgraded to bcrypt on next successful login. With no password set (or the retired `admin` / `password` default) a random one is generated on start and printed once in the log; see [AUTHENTICATION.md](AUTHENTICATION.md#upgrading-from-an-older-version). |
 | OIDC Configuration URL | `OIDC_CONFIG_URL` | _(unset)_ | OIDC discovery/config URL. Required when `AUTH_TYPE=oidc`. |
 | OIDC Callback Host | `OIDC_CALLBACK_HOST` | _(unset)_ | Must match what you register as the callback URL with your OIDC provider (`<host>/auth/oidc/callback`). |
 | OIDC Client ID | `OIDC_CLIENT_ID` | _(unset)_ | Required when `AUTH_TYPE=oidc`. |
@@ -94,6 +95,20 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
 | Stream Cache Directory _(advanced)_ | `STREAM_CACHE_DIR` | temp folder | Scratch space for in-flight streams. |
 | — | `THUMBNAIL_CACHE_DIR` | temp folder | Where cached BBC episode thumbnails are stored. Env-only. |
+
+## Live TV (Settings → Live TV)
+
+Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). Needs `STREAM_BASE_URL` and a Stream Key.
+
+| Setting | Env var | Default | Notes |
+| --- | --- | --- | --- |
+| Live TV | `LIVE_TV_ENABLED` | `false` | Enables the tuner and guide endpoints and shows the tuner/guide URLs. |
+| EPG Time Offset | `LIVE_TV_EPG_OFFSET` | `0` | Minutes to shift the guide (whole number, -1440 to 1440). Guide times are already in the server's timezone. |
+| Channel Logo Shape | `LIVE_TV_LOGO_SHAPE` | `landscape` | `landscape` (16:9, suits guide cards) or `square` (suits channel tiles). Save and Update the tuner after changing. |
+| Guide Categories | `LIVE_TV_GUIDE_CATEGORIES` | `true` | Tag programmes with their BBC category (plus Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
+| Live / New / Repeat Flags | `LIVE_TV_GUIDE_FLAGS` | `true` | Tag programmes as live, new or repeat. |
+| HD Indicator | `LIVE_TV_GUIDE_HD` | `true` | Mark every programme as HD. |
+| Jellyfin Servers | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | Jellyfin apps used for Live TV: shown with Add/Remove buttons and refreshed when the channel list changes. |
 
 ## STRM Watchdog (Settings → Streaming)
 

@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import searchFacade from '../facade/searchFacade';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
+import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
 
 dotenv.config();
 
@@ -13,7 +14,15 @@ export interface ConfigMap {
 }
 
 async function getConfigMap(): Promise<ConfigMap> {
-    return (await storage.getItem('config')) || {};
+    return decryptSettings((await storage.getItem('config')) || {});
+}
+
+// Rewrites any credentials still stored in plaintext in their encrypted form (a no-op once done).
+export async function encryptStoredSettings(): Promise<void> {
+    const raw: ConfigMap = (await storage.getItem('config')) || {};
+    if (Object.keys(raw).some((key) => ENCRYPTED_SETTINGS.includes(key) && raw[key] && !isEncrypted(raw[key]))) {
+        await storage.setItem('config', encryptSettings(decryptSettings(raw)));
+    }
 }
 
 const configService = {
@@ -33,7 +42,7 @@ const configService = {
         ACTIVE_LIMIT: '3',
         REFRESH_SCHEDULE: '0 * * * *',
         AUTH_USERNAME: 'admin',
-        AUTH_PASSWORD: '$2b$10$4fiP4.TMyY3v08NQaQGPR.8HBbqXUlTNbQ11YWpTT9ptMCZFCRoeq',
+        // No default password: initialCredentialsService generates a random one on first boot.
         FALLBACK_FILENAME_SUFFIX: 'WEB.H264-BBC',
         MOVIE_FILENAME_TEMPLATE: '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC',
         TV_FILENAME_TEMPLATE:
@@ -46,6 +55,7 @@ const configService = {
         // window on every refresh, in case the caching ever causes stale/missing results.
         SCHEDULE_FULL_REFRESH: 'false',
         NATIVE_SEARCH: 'true',
+        NATIVE_SEARCH_ENGINE: 'V1',
         ARCHIVE_ENABLED: 'false',
         THUMBNAIL_RETENTION_DAYS: '30',
         STREAM_HISTORY_RETENTION_DAYS: '30',
@@ -61,6 +71,12 @@ const configService = {
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
+        LIVE_TV_ENABLED: 'false',
+        LIVE_TV_EPG_OFFSET: '0',
+        LIVE_TV_LOGO_SHAPE: 'landscape',
+        LIVE_TV_GUIDE_CATEGORIES: 'true',
+        LIVE_TV_GUIDE_FLAGS: 'true',
+        LIVE_TV_GUIDE_HD: 'true',
         STRM_WATCHDOG_ENABLED: 'false',
         STRM_WATCHDOG_SOURCES: 'history',
         STRM_WATCHDOG_ACTION: 'notify',
@@ -86,8 +102,8 @@ const configService = {
         const configMap = await getConfigMap();
         const oldValue = configMap[parameter];
         configMap[parameter] = value;
-        await storage.setItem('config', configMap);
-        if (parameter == IplayarrParameter.NATIVE_SEARCH && oldValue != value) {
+        await storage.setItem('config', encryptSettings(configMap));
+        if ((parameter == IplayarrParameter.NATIVE_SEARCH || parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE) && oldValue != value) {
             searchFacade.clearSearchCache();
         }
     },
@@ -95,7 +111,7 @@ const configService = {
     removeParameter: async (parameter: IplayarrParameter): Promise<void> => {
         const configMap = await getConfigMap();
         delete configMap[parameter];
-        await storage.setItem('config', configMap);
+        await storage.setItem('config', encryptSettings(configMap));
     },
 };
 

@@ -81,7 +81,17 @@ Points worth calling out:
 
 - **Use absolute host paths in `.env`** (`CONFIG_ROOT=/volume1/docker/iplayarr`, `DATA_ROOT=/volume1/media`), not relative (`./...`) ones, if this stack is managed by any tool that rewrites relative paths on deploy (Portainer, Dockhand, etc.) — a path that's only relative after variable substitution (e.g. `${CONFIG_ROOT:-.}/cache`) can silently resolve against that tool's own internal working directory instead of the real host path.
 - **`PUID`/`PGID` from `.env`** (`USER_ID`/`GROUP_ID`), matching the UID/GID that owns the media library on the host — see [PUID / PGID](#puid--pgid) below.
-- Because all persistent state is in Redis under `/config` (see [REDIS.md](REDIS.md)), the stack can be freely recreated/rebuilt without losing settings, queue/history, or sessions.
+- **Upgrading from a version before the security hardening:** if you never changed the old default password (`admin` / `password`), it is retired on first start and a new random one is printed once in the log (`Web UI login`). If you set your own password it is kept. Everyone is signed out once, and stored credentials are encrypted in place (see [SECURITY.md](SECURITY.md)). Details: [AUTHENTICATION.md](AUTHENTICATION.md#upgrading-from-an-older-version).
+
+Because all persistent state is in Redis under `/config` (see [REDIS.md](REDIS.md)), the stack can be freely recreated/rebuilt without losing settings, queue/history, or sessions.
+
+## First start
+
+1. Start the container and open `http://<host>:4404`.
+2. The login password is generated on first start and printed **once** in the container log: `docker logs <container> 2>&1 | grep "Web UI login"` (username `admin`). There is no default password.
+3. Log in and change it under Settings → Authentication.
+
+Also generated on first start, both persisted in Redis: the `API_KEY` (Sonarr/Radarr/Prowlarr) and `STREAM_KEY` (`.strm` links). A `secrets.key` file is created in the `/data` (cache) volume — the key that encrypts stored credentials in Redis. **Back it up together with `/config`.** To keep the key out of the volumes entirely, set `SECRETS_KEY` in the environment instead.
 
 ## Volume mounts explained
 
@@ -114,4 +124,4 @@ Because all persistent state is in Redis under `/config`, recreating the contain
 
 ## Backup and restore
 
-See [REDIS.md](REDIS.md#persistence-bundled-instance) — back up the `/config` volume; that's the entirety of iPlayarr's persistent application state. `/complete` and `/incomplete` are your media library itself, which you'd back up (or not) the same way you handle the rest of your media.
+See [REDIS.md](REDIS.md#persistence-bundled-instance) — back up the `/config` volume **and the credential key** (`secrets.key` in the `/data` cache volume, or your `SECRETS_KEY`); those two together are the entirety of iPlayarr's persistent application state, and restored credentials are unreadable without the key. `/complete` and `/incomplete` are your media library itself, which you'd back up (or not) the same way you handle the rest of your media.

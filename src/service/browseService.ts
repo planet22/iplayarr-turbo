@@ -84,6 +84,20 @@ export function toBrowseItem(element: any): BrowseItem | undefined {
     };
 }
 
+export function toBrowseSlot(broadcast: any): BrowseSlot | undefined {
+    const item = toBrowseItem(broadcast?.episode);
+    if (!item || !broadcast.scheduled_start || !broadcast.scheduled_end) return undefined;
+    return {
+        item,
+        start: broadcast.scheduled_start,
+        end: broadcast.scheduled_end,
+        repeat: broadcast.repeat || undefined,
+        live: broadcast.episode.live || undefined,
+        childrens: broadcast.episode.childrens || undefined,
+        categories: Array.isArray(broadcast.episode.categories) ? broadcast.episode.categories : undefined,
+    };
+}
+
 export function toBrowseItems(elements: any[]): BrowseItem[] {
     const seen = new Set<string>();
     const items: BrowseItem[] = [];
@@ -255,10 +269,8 @@ class BrowseService {
             const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
             const data = await this.#ibl(`channels/${encodeURIComponent(channelId)}/schedule/${date}`);
             for (const broadcast of extractElements(data)) {
-                const item = toBrowseItem(broadcast.episode);
-                if (item && broadcast.scheduled_start && broadcast.scheduled_end) {
-                    slots.push({ item, start: broadcast.scheduled_start, end: broadcast.scheduled_end });
-                }
+                const slot = toBrowseSlot(broadcast);
+                if (slot) slots.push(slot);
             }
             const found = this.#pickNowNext(slots, at);
             if (found.now && found.next) return found;
@@ -283,10 +295,8 @@ class BrowseService {
                 const slots: BrowseSlot[] = [];
                 const data = await this.#ibl(`channels/${encodeURIComponent(channel.id)}/schedule/${day}`);
                 for (const broadcast of extractElements(data)) {
-                    const item = toBrowseItem(broadcast.episode);
-                    if (item && broadcast.scheduled_start && broadcast.scheduled_end) {
-                        slots.push({ item, start: broadcast.scheduled_start, end: broadcast.scheduled_end });
-                    }
+                    const slot = toBrowseSlot(broadcast);
+                    if (slot) slots.push(slot);
                 }
                 slots.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
                 return { channel: withLogo(channel), slots };

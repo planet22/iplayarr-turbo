@@ -50,9 +50,9 @@ describe('OIDCService', () => {
             expect(url).toBe('https://idp/auth?x=1');
             expect(req.session.codeVerifier).toBe('ver');
             const payload = JSON.parse(Buffer.from(req.session.state, 'base64url').toString());
+            expect(JSON.stringify(payload)).not.toContain('sec'); // the client secret never travels in the state
             expect(payload).toEqual({
                 mode: 'link',
-                details: { configUrl: 'https://idp/.well-known', clientId: 'cid', clientSecret: 'sec', callback_host: 'https://me' },
                 nonce: 'nonce',
             });
             expect(mockedClient.buildAuthorizationUrl).toHaveBeenCalledWith(

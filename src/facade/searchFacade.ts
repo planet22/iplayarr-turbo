@@ -3,7 +3,9 @@ import RedisCacheService from '../service/redis/redisCacheService';
 import AbstractSearchService from '../service/search/AbstractSearchService';
 import getIplayerSearchService from '../service/search/GetIplayerSearchService';
 import nativeSearchService from '../service/search/NativeSearchService';
+import nativeSearchV2Service from '../service/search/NativeSearchV2Service';
 import synonymService from '../service/synonymService';
+import { NativeSearchEngine } from '../types/enums/NativeSearchEngine';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
 import { Synonym } from '../types/Synonym';
@@ -86,7 +88,10 @@ class SearchFacade {
 
     async #getService(): Promise<AbstractSearchService> {
         const nativeSearchEnabled = await configService.getParameter(IplayarrParameter.NATIVE_SEARCH);
-        return nativeSearchEnabled == 'true' ? nativeSearchService : getIplayerSearchService;
+        if (nativeSearchEnabled != 'true') return getIplayerSearchService;
+        // The one place the native engine is chosen: anything but an explicit V2 gets the original.
+        const engine = await configService.getParameter(IplayarrParameter.NATIVE_SEARCH_ENGINE);
+        return engine == NativeSearchEngine.V2 ? nativeSearchV2Service : nativeSearchService;
     }
 
     async #getTerm(inputTerm: string, season?: number): Promise<SearchTerm> {

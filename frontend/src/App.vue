@@ -91,7 +91,7 @@ const pageSetup = async () => {
             socket.value = io();
         } else {
             const socketUrl = `http://${window.location.hostname}:4404`;
-            socket.value = io(socketUrl);
+            socket.value = io(socketUrl, { withCredentials: true });
         }
 
         socket.value.on('queue', (data) => {

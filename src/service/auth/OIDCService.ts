@@ -15,9 +15,13 @@ class OIDCService {
         const codeVerifier = client.randomPKCECodeVerifier()
         req.session.codeVerifier = codeVerifier
         const code_challenge = await client.calculatePKCECodeChallenge(codeVerifier)
+        // Only a mode and a nonce travel through the browser. Anything sensitive (the client secret
+        // of a connection being tested) is kept server-side in the session instead of in the URL.
+        if (mode === 'test') {
+            req.session.oidcTest = { configUrl, clientId, clientSecret };
+        }
         const statePayload = {
             mode,
-            details: { configUrl, clientId, clientSecret, callback_host },
             nonce: client.randomState()
         };
         const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
@@ -72,9 +76,10 @@ class OIDCService {
                 'GET',
             )
 
-            const { email } = await protectedResourceResponse.json();
+            const { email, email_verified } = await protectedResourceResponse.json();
 
-            return email;
+            // An unverified address proves nothing about who owns it.
+            return email_verified === false ? undefined : email;
         } catch (e: any) {
             console.error('OIDC validation error:', e);
             return;
@@ -114,9 +119,10 @@ class OIDCService {
                 'GET',
             )
 
-            const { email } = await protectedResourceResponse.json();
+            const { email, email_verified } = await protectedResourceResponse.json();
 
-            return email;
+            // An unverified address proves nothing about who owns it.
+            return email_verified === false ? undefined : email;
         } catch (e: any) {
             console.error('OIDC validation error:', e);
             return;

@@ -6,19 +6,21 @@ import { App } from '../../types/App';
 import { appFeatures } from '../../types/AppType';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { UserAgentMapping } from '../../types/UserAgentMapping';
+import { maskApp, restoreApp } from '../../utils/secretMask';
 import { AppFormValidator } from '../../validators/AppFormValidator';
 
 const router = Router();
 
 router.get('/', async (_, res: Response) => {
     const allApps: App[] = await appService.getAllApps();
-    res.json(allApps);
+    res.json(allApps.map(maskApp));
 });
 
 const updateApp = async (req: Request, res: Response) => {
     const appServiceMethod = req.method === 'POST' ? 'addApp' : 'updateApp';
     const appFormValidator: AppFormValidator = new AppFormValidator();
-    const form: App = req.body as any as App;
+    const body = req.body as any as App;
+    const form: App = restoreApp(body, body?.id ? await appService.getApp(body.id) : undefined);
     const validationResult = await appFormValidator.validate(form);
     if (Object.keys(validationResult).length == 0) {
         const updatedForm: App | undefined = await appService[appServiceMethod](form);
@@ -45,7 +47,7 @@ const updateApp = async (req: Request, res: Response) => {
                 res.status(400).json(apiResponse);
                 return;
             }
-            res.json(updatedForm);
+            res.json(maskApp(updatedForm));
         } else {
             validationResult['name'] = 'Error Saving App';
             const apiResponse: ApiResponse = {
@@ -78,7 +80,10 @@ router.get('/types', async (_, res: Response) => {
 });
 
 router.post('/test', async (req: Request, res: Response) => {
-    const result = await appService.testAppConnection(req.body);
+    const body = req.body as App;
+    const result = await appService.testAppConnection(
+        restoreApp(body, body?.id ? await appService.getApp(body.id) : undefined)
+    );
     if (result == true) {
         res.json({ status: true });
     } else {

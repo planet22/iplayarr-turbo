@@ -13,8 +13,10 @@ import { QueueEntry } from '../../types/QueueEntry';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { VideoEventType } from '../../types/VideoEvent';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
+import { maskConfig, restoreConfig } from '../../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../../utils/Utils';
 import { ConfigFormValidator } from '../../validators/ConfigFormValidator';
+import { checkSettingsUpdate, EXECUTABLE_SETTINGS } from '../../validators/SettingsGuard';
 import { Validator } from '../../validators/Validator';
 
 const router = Router();
@@ -26,12 +28,44 @@ router.get('/hiddenSettings', (_, res: Response) => {
     });
 });
 
+// Settings the UI must not offer for editing right now (see SettingsGuard): the executable settings
+// while login is disabled.
+router.get('/lockedSettings', async (_, res: Response) => {
+    const authType = await configService.getParameter(IplayarrParameter.AUTH_TYPE);
+    res.json({
+        locked: authType === 'none' ? EXECUTABLE_SETTINGS : [],
+        reason: 'Locked while login is disabled (AUTH_TYPE=none). Set it as an environment variable instead.',
+    });
+});
+
+// Drops a saved UI value for an executable setting so the environment variable (or built-in default)
+// applies again. Always safe - it can only ever move back to operator-controlled values.
+router.delete('/executableOverride/:key', async (req: Request, res: Response) => {
+    const key = req.params.key as IplayarrParameter;
+    if (!EXECUTABLE_SETTINGS.includes(key)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Not an executable setting' } as ApiResponse);
+        return;
+    }
+    await configService.removeParameter(key);
+    res.json({ status: true, value: (await configService.getParameter(key)) ?? '' });
+});
+
 router.get('/', async (_, res: Response) => {
     const configMap: ConfigMap = await configService.getAllConfig();
-    res.json(configMap);
+    res.json(maskConfig(configMap));
 });
 
 router.put('/', async (req: Request, res: Response) => {
+    const currentConfig: ConfigMap = (await configService.getAllConfig()) ?? {};
+    // The GET above hands secrets out masked; a masked value coming back means "unchanged".
+    if (req.body && typeof req.body === 'object') {
+        req.body = restoreConfig(req.body, currentConfig);
+    }
+    const guardErrors = checkSettingsUpdate(req.body, currentConfig, currentConfig[IplayarrParameter.AUTH_TYPE]);
+    if (Object.keys(guardErrors).length > 0) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, invalid_fields: guardErrors } as ApiResponse);
+        return;
+    }
     const validator: Validator = new ConfigFormValidator();
     const validationResult: { [key: string]: string } = await validator.validate(req.body);
     if (Object.keys(validationResult).length > 0) {
