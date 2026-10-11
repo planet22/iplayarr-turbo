@@ -4,6 +4,14 @@
             <button v-if="channel?.live" class="watchLive" type="button" @click="watchLive">
                 <font-awesome-icon :icon="['fas', 'play']" /> Watch Live
             </button>
+            <button
+                v-if="channel?.live && liveTvEnabled" class="watchLive liveTvToggle" type="button"
+                :disabled="isLiveTvBusy(channel.id)" :title="isLiveTvSelected(channel.id) ? 'In Jellyfin Live TV - click to remove' : 'Add to Jellyfin Live TV'"
+                @click="liveTvToggle(channel.id)"
+            >
+                <font-awesome-icon :icon="['fas', 'tv']" />
+                {{ isLiveTvSelected(channel.id) ? 'In Live TV' : 'Add to Live TV' }}
+            </button>
         </PageHeader>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
@@ -44,11 +52,20 @@ import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import { browseFetch } from '@/lib/browse';
+import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const channel = ref(null);
+const {
+    enabled: liveTvEnabled,
+    load: loadLiveTv,
+    isSelected: isLiveTvSelected,
+    isBusy: isLiveTvBusy,
+    toggle: liveTvToggle,
+} = useLiveTv();
+loadLiveTv();
 const watchLive = () => playInPip(channel.value.id, `${channel.value.title} (Live)`, true);
 const rails = ref([]);
 const nowNext = ref(null);
@@ -206,6 +223,15 @@ watch(
             font-size: 12px;
             color: @subtle-text-color;
         }
+    }
+}
+
+.liveTvToggle {
+    margin-left: 8px;
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.6;
     }
 }
 </style>

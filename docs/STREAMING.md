@@ -73,12 +73,18 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 
 ### Jellyfin Live TV (tuner + guide)
 
-Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Streaming → Live TV (Jellyfin)** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set. Two URLs then appear, both secured by the Stream Key:
+Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Streaming → Live TV (Jellyfin)** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set. With the setting off, the endpoints return 404 and the TV buttons are hidden.
 
-- **M3U Tuner URL** (`/api?mode=live_playlist&streamkey=...`): Jellyfin → Dashboard → Live TV → Tuner Devices → add an **M3U Tuner**.
-- **XMLTV Guide URL** (`/api?mode=live_epg&streamkey=...`): Jellyfin → Dashboard → Live TV → TV Guide Data Providers → add **XMLTV**, then map channels (ids match the playlist).
+**Pick channels.** Only channels you select are offered to Jellyfin, in both the tuner and the guide (nothing selected means an empty tuner). Use the **TV icon** on a channel's tile on the Channels page, the **Add to Live TV** button on the channel's own page, or **Live TV all** on the Channels page. Channel numbers are fixed per channel, so they don't shuffle as you add and remove channels.
 
-Playback uses the existing live resolver, so it needs a UK IP, and the guide is built from the same iPlayer schedule as the Schedule page (yesterday to tomorrow). With the setting off the endpoints return 404 and nothing else changes. Channel logos are served as SVG under the same key (`mode=live_logo`); Jellyfin may ignore SVG logos.
+**Add it to Jellyfin.** Either press the buttons in the Live TV section, or paste the two URLs yourself (both are secured by the Stream Key):
+
+- **Jellyfin Server** picks one of the Jellyfin servers from the Apps page (it needs an *administrator* API key). **Channels (M3U tuner)** and **Guide (XMLTV)** each have their own **Add/Update** and **Remove** buttons, so the tuner and the guide can be managed separately. Only entries pointing at iPlayarr are touched; your other tuners and guide providers are left alone. Adding the guide also asks Jellyfin to refresh it. These buttons use the *saved* settings, so save first, and press Update again if you change the Stream Base URL or Stream Key.
+- By hand: **M3U Tuner URL** (`/api?mode=live_playlist&streamkey=...`) under Dashboard → Live TV → Tuner Devices → M3U Tuner, and **XMLTV Guide URL** (`/api?mode=live_epg&streamkey=...`) under TV Guide Data Providers → XMLTV.
+
+**Guide times.** The guide comes from the same iPlayer schedule as the Schedule page (yesterday to tomorrow). Times are written as wall-clock time in the timezone iPlayarr runs in (`TZ`, with its real UTC offset), so "live now" lines up. If Jellyfin still shows the guide early or late, set **EPG Time Offset** (`LIVE_TV_EPG_OFFSET`, minutes, default `0`).
+
+Playback uses the existing live resolver, so it needs a UK IP. Channel logos are served as SVG under the same key (`mode=live_logo`); Jellyfin may ignore SVG logos.
 
 ## Checking links still work
 

@@ -8,6 +8,13 @@
                 <font-awesome-icon :icon="['fas', allBusy ? 'circle-notch' : 'bell']" :spin="allBusy" />
                 Subscribe all
             </button>
+            <button
+                v-if="isChannels && liveTvEnabled && !loading && !error && tiles.some((t) => t.live)" type="button" class="addAll"
+                title="Offer every live channel to Jellyfin Live TV" :disabled="isLiveTvBusy('all')" @click="liveTvAddAll"
+            >
+                <font-awesome-icon :icon="['fas', isLiveTvBusy('all') ? 'circle-notch' : 'tv']" :spin="isLiveTvBusy('all')" />
+                Live TV all
+            </button>
         </PageHeader>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
@@ -32,6 +39,14 @@
                         <font-awesome-icon :icon="['fas', isSubscribed(tile.id) ? 'check' : 'plus']" />
                     </button>
                     <button
+                        v-if="tile.live && liveTvEnabled" class="liveButton liveTvButton" type="button"
+                        :disabled="isLiveTvBusy(tile.id)"
+                        :title="isLiveTvSelected(tile.id) ? `${tile.title} is in Jellyfin Live TV - click to remove` : `Add ${tile.title} to Jellyfin Live TV`"
+                        @click.prevent.stop="liveTvToggle(tile.id)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'tv']" :class="isLiveTvSelected(tile.id) ? 'liveTvOn' : ''" />
+                    </button>
+                    <button
                         v-if="tile.live" class="liveButton" type="button" :title="`Watch ${tile.title} live`"
                         @click.prevent.stop="watchLive(tile)"
                     >
@@ -53,6 +68,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import { browseFetch } from '@/lib/browse';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
+import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
 import { getThumbnailUrl } from '@/lib/utils';
 
@@ -70,6 +86,16 @@ const watchLive = (tile) => playInPip(tile.id, `${tile.title} (Live)`, true);
 
 const { allBusy, load: loadLive, isSubscribed, isBusy, subscribe, unsubscribe, subscribeAll } = useLiveSubscriptions();
 loadLive();
+
+const {
+    enabled: liveTvEnabled,
+    load: loadLiveTv,
+    isSelected: isLiveTvSelected,
+    isBusy: isLiveTvBusy,
+    toggle: liveTvToggle,
+    addAll: liveTvAddAll,
+} = useLiveTv();
+loadLiveTv();
 const toggleLibrary = (tile) => (isSubscribed(tile.id) ? unsubscribe(tile.id) : subscribe(tile.id));
 
 watch(
@@ -189,6 +215,20 @@ watch(
         color: #fff;
         cursor: pointer;
         opacity: 0.9;
+
+        // Sits just left of the play button; lit when the channel is offered to Jellyfin Live TV.
+        &.liveTvButton {
+            right: 44px;
+
+            &:disabled {
+                cursor: default;
+                opacity: 0.5;
+            }
+
+            svg.liveTvOn {
+                color: @brand-color;
+            }
+        }
 
         &.libraryButton {
             right: auto;

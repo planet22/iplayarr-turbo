@@ -4,6 +4,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { createStrmContent } from '../utils/Utils';
 import browseService from './browseService';
 import configService from './configService';
+import liveTvChannelService from './liveTvChannelService';
 
 const GUIDE_DAYS_BEFORE = 1; // iPlayer's schedule day runs 05:00-05:00, so the small hours sit in yesterday's
 const GUIDE_DAYS_AFTER = 1;
@@ -22,9 +23,40 @@ function m3uAttr(value: string): string {
     return value.replace(/"/g, '');
 }
 
-// XMLTV timestamps: YYYYMMDDHHMMSS +ZZZZ - always written in UTC.
-export function xmltvTime(iso: string): string {
-    return new Date(iso).toISOString().replace(/[-:T]/g, '').slice(0, 14) + ' +0000';
+const pad = (n: number): string => String(n).padStart(2, '0');
+
+// XMLTV timestamps: YYYYMMDDHHMMSS +ZZZZ. Written as wall-clock time in the server's own timezone
+// (the TZ iPlayarr runs in) with its real UTC offset, so the digits read as local time even to a
+// guide importer that ignores the offset, and are still the right instant to one that honours it.
+// `offsetMinutes` shifts every programme (the manual Live TV EPG Offset setting).
+export function xmltvTime(
+    iso: string,
+    offsetMinutes: number = 0,
+    timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone
+): string {
+    const instant = Date.parse(iso) + offsetMinutes * 60000;
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-GB', {
+            timeZone,
+            hourCycle: 'h23',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+        })
+            .formatToParts(instant)
+            .map(({ type, value }) => [type, value])
+    );
+    const wallAsUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+    const zone = Math.round((wallAsUtc - Math.floor(instant / 1000) * 1000) / 60000);
+    const sign = zone < 0 ? '-' : '+';
+    const abs = Math.abs(zone);
+    return (
+        `${parts.year}${parts.month}${parts.day}${parts.hour}${parts.minute}${parts.second}` +
+        ` ${sign}${pad(Math.floor(abs / 60))}${pad(abs % 60)}`
+    );
 }
 
 function ukDate(offsetDays: number): string {
@@ -39,8 +71,40 @@ class LiveTvService {
         return (await configService.getParameter(IplayarrParameter.LIVE_TV_ENABLED)) === 'true';
     }
 
-    channels() {
+    // Every channel that can be played live, regardless of selection - channel numbers come from here so
+    // they stay put as channels are added and removed.
+    allChannels() {
         return BrowseChannels.filter(({ id }) => isLiveChannel(id));
+    }
+
+    // Just the channels picked for Live TV.
+    async channels() {
+        const selected = await liveTvChannelService.list();
+        return this.allChannels().filter(({ id }) => selected.includes(id));
+    }
+
+    async epgOffsetMinutes(): Promise<number> {
+        const value = Number.parseInt((await configService.getParameter(IplayarrParameter.LIVE_TV_EPG_OFFSET)) ?? '', 10);
+        return Number.isFinite(value) ? value : 0;
+    }
+
+    async #keyAndBase(): Promise<{ baseUrl: string; streamKey: string }> {
+        const baseUrl = await this.#baseUrl();
+        const streamKey = ((await configService.getParameter(IplayarrParameter.STREAM_KEY)) as string | undefined) ?? '';
+        if (!baseUrl) {
+            throw new Error('Stream Base URL must be set before Live TV can be set up');
+        }
+        return { baseUrl, streamKey };
+    }
+
+    async playlistUrl(): Promise<string> {
+        const { baseUrl, streamKey } = await this.#keyAndBase();
+        return `${baseUrl}/api?mode=live_playlist&streamkey=${encodeURIComponent(streamKey)}`;
+    }
+
+    async epgUrl(): Promise<string> {
+        const { baseUrl, streamKey } = await this.#keyAndBase();
+        return `${baseUrl}/api?mode=live_epg&streamkey=${encodeURIComponent(streamKey)}`;
     }
 
     async #baseUrl(): Promise<string> {
@@ -52,9 +116,13 @@ class LiveTvService {
         const streamKey = ((await configService.getParameter(IplayarrParameter.STREAM_KEY)) as string | undefined) ?? '';
         const baseUrl = await this.#baseUrl();
         const lines: string[] = ['#EXTM3U'];
-        let number = 1;
-        for (const channel of this.channels()) {
-            const attrs = [`tvg-id="${m3uAttr(channel.id)}"`, `tvg-name="${m3uAttr(channel.title)}"`, `tvg-chno="${number++}"`];
+        const numbers = this.allChannels().map(({ id }) => id);
+        for (const channel of await this.channels()) {
+            const attrs = [
+                `tvg-id="${m3uAttr(channel.id)}"`,
+                `tvg-name="${m3uAttr(channel.title)}"`,
+                `tvg-chno="${numbers.indexOf(channel.id) + 1}"`,
+            ];
             if (channel.masterBrand) {
                 attrs.push(
                     `tvg-logo="${baseUrl}/api?mode=live_logo&channel=${encodeURIComponent(channel.id)}&streamkey=${encodeURIComponent(streamKey)}"`
@@ -68,12 +136,13 @@ class LiveTvService {
     }
 
     async epg(): Promise<string> {
-        const channels = this.channels();
+        const channels = await this.channels();
+        const offset = await this.epgOffsetMinutes();
         const days: string[] = [];
         for (let offset = -GUIDE_DAYS_BEFORE; offset <= GUIDE_DAYS_AFTER; offset++) {
             days.push(ukDate(offset));
         }
-        const schedules = (await Promise.all(days.map((day) => browseService.schedule(day).catch(() => [])))).flat();
+        const schedules = channels.length === 0 ? [] : (await Promise.all(days.map((day) => browseService.schedule(day).catch(() => [])))).flat();
 
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="iPlayarr">\n';
         for (const channel of channels) {
@@ -88,7 +157,7 @@ class LiveTvService {
             for (const slot of slots) {
                 if (seen.has(slot.start)) continue;
                 seen.add(slot.start);
-                xml += `  <programme start="${xmltvTime(slot.start)}" stop="${xmltvTime(slot.end)}" channel="${escapeXml(channel.id)}">\n`;
+                xml += `  <programme start="${xmltvTime(slot.start, offset)}" stop="${xmltvTime(slot.end, offset)}" channel="${escapeXml(channel.id)}">\n`;
                 xml += `    <title lang="en">${escapeXml(slot.item.title)}</title>\n`;
                 const subTitle = slot.item.episodeTitle ?? slot.item.subtitle;
                 if (subTitle) xml += `    <sub-title lang="en">${escapeXml(subTitle)}</sub-title>\n`;
@@ -100,7 +169,7 @@ class LiveTvService {
     }
 
     async logo(channelId: string): Promise<string | undefined> {
-        const masterBrand = this.channels().find(({ id }) => id === channelId)?.masterBrand;
+        const masterBrand = this.allChannels().find(({ id }) => id === channelId)?.masterBrand;
         return masterBrand ? browseService.channelLogo(masterBrand) : undefined;
     }
 }

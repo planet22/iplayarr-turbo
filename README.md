@@ -178,6 +178,7 @@ There's a few more optional settings too:
 | STREAM_HISTORY_RETENTION_DAYS  | How many days to keep native streaming session history before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                              |
 | LIVE_STRM_DIR                  | Where `.strm` files for live channels added to the library are written. Blank uses COMPLETE_DIR. See [docs/STREAMING.md](docs/STREAMING.md#live-channels) |
 | LIVE_TV_ENABLED                | Serve BBC live channels as an M3U tuner and XMLTV guide for Jellyfin Live TV. Defaults to false. See [docs/STREAMING.md](docs/STREAMING.md#jellyfin-live-tv-tuner--guide) |
+| LIVE_TV_EPG_OFFSET             | Minutes to shift the Jellyfin Live TV guide (default 0). Guide times are sent in the server's timezone. See [docs/STREAMING.md](docs/STREAMING.md#jellyfin-live-tv-tuner--guide) |
 | STRM_WATCHDOG_ENABLED          | Daily check that `.strm` links still resolve on BBC. Defaults to false. The other `STRM_WATCHDOG_*` settings (SOURCES, ACTION, PATH_MAP, ARR_ACTION, CONCURRENCY, FAIL_THRESHOLD, WEBHOOK_URL) are listed in [docs/WATCHDOG.md](docs/WATCHDOG.md) |
 
 ### Usage

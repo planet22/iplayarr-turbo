@@ -118,9 +118,18 @@
             tooltip="Jellyfin: Dashboard → Live TV → TV Guide Data Providers → add XMLTV and paste this."
             :copyable="true"
         />
+        <TextInput
+            v-model="config.LIVE_TV_EPG_OFFSET"
+            type-override="number"
+            name="EPG Time Offset (minutes)"
+            tooltip="Guide times are sent in this server's own timezone, so what is live now lines up. If Jellyfin still shows the guide early or late, shift it here (e.g. 60 or -60). 0 for no shift."
+            :error="validationErrors.config?.LIVE_TV_EPG_OFFSET"
+        />
+        <LiveTvJellyfinSetup />
         <InfoBar>
-            Playback needs a UK IP address, like the rest of iPlayarr. Save settings before copying the URLs if you
-            changed the Stream Base URL or Stream Key.
+            Only channels you pick with the TV icon on the Channels page (or a channel's own page) appear in the
+            tuner and guide. Playback needs a UK IP address, like the rest of iPlayarr. Save settings before
+            adding to Jellyfin or copying the URLs if you changed the Stream Base URL, Stream Key or offset.
         </InfoBar>
     </template>
 
@@ -204,6 +213,7 @@ import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
+import LiveTvJellyfinSetup from '@/components/settings/LiveTvJellyfinSetup.vue';
 import { ipFetch } from '@/lib/ipFetch';
 
 defineProps({

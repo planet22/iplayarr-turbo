@@ -93,6 +93,7 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Native FHD Upgrade | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only. |
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
 | Live TV | `LIVE_TV_ENABLED` | `false` | Jellyfin Live TV tuner (M3U) and guide (XMLTV) URLs, shown in the Live TV (Jellyfin) section. Needs `STREAM_BASE_URL`. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
+| EPG Time Offset | `LIVE_TV_EPG_OFFSET` | `0` | Minutes to shift the Live TV guide (whole number, -1440 to 1440). Guide times are already in the server's timezone. |
 | Stream Cache Directory _(advanced)_ | `STREAM_CACHE_DIR` | temp folder | Scratch space for in-flight streams. |
 | — | `THUMBNAIL_CACHE_DIR` | temp folder | Where cached BBC episode thumbnails are stored. Env-only. |
 
