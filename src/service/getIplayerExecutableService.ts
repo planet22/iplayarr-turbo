@@ -21,7 +21,11 @@ import synonymService from './synonymService';
 export class GetIplayerExecutableService {
     async getIPlayerExec(): Promise<SpawnExecutable> {
         const fullExec: string = (await configService.getParameter(IplayarrParameter.GET_IPLAYER_EXEC)) as string;
-        const args: RegExpMatchArray = fullExec?.match(/(?:[^\s"]+|"[^"]*")+/g) ?? ['get_iplayer'];
+        // Tokens are spawned directly (no shell), so surrounding quotes a shell would have
+        // stripped are removed here instead.
+        const args: string[] = (fullExec?.match(/(?:[^\s"]+|"[^"]*")+/g) ?? ['get_iplayer']).map((token) =>
+            token.replace(/"([^"]*)"/g, '$1')
+        );
 
         const exec: string = args.shift() as string;
 
@@ -115,15 +119,17 @@ export class GetIplayerExecutableService {
             const exemptions = synonym.exemptions.split(',');
             for (const exemption of exemptions) {
                 exemptionArgs.push('--exclude');
-                exemptionArgs.push(`"${exemption}"`);
+                exemptionArgs.push(exemption);
             }
         }
         if (term == '*') {
             const rssHours: string = (await configService.getParameter(IplayarrParameter.RSS_FEED_HOURS)) as string;
-            (args as RegExpMatchArray).push('--available-since');
-            (args as RegExpMatchArray).push(rssHours);
+            args.push('--available-since');
+            args.push(rssHours);
         }
-        const allArgs = [...args, '--listformat', `"${listFormat}"`, ...exemptionArgs, `"${term}"`];
+        // No shell is involved when this is spawned, so nothing is quoted. '--' stops a term that
+        // starts with '-' from being read as a get_iplayer option.
+        const allArgs = [...args, '--listformat', listFormat, ...exemptionArgs, '--', term];
 
         return {
             exec,

@@ -17,7 +17,7 @@ class GetIplayerSearchService implements AbstractSearchService {
             const { exec, args } = await getIplayerExecutableService.getSearchParameters(term, synonym);
 
             loggingService.debug(`Executing get_iplayer with args: ${args.join(' ')}`);
-            const searchProcess = spawn(exec as string, args, { shell: true });
+            const searchProcess = spawn(exec as string, args);
 
             searchProcess.stdout.on('data', (data) => {
                 loggingService.debug(data.toString().trim());

