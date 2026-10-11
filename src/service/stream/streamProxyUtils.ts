@@ -37,9 +37,15 @@ interface RewrittenPlaylist {
 // rewritten again when the player requests it). Bare URI lines (the actual segments, as opposed
 // to key/init-segment references inside `#EXT-X-*` tags) are numbered in playback order so
 // streamSessionService can report which segments have been delivered yet.
-function rewritePlaylist(text: string, baseUrl: string, streamKey: string, sessionId?: string): RewrittenPlaylist {
+function rewritePlaylist(
+    text: string,
+    baseUrl: string,
+    streamKey: string,
+    sessionId?: string,
+    highestVariantFirst = false
+): RewrittenPlaylist {
     let segmentIndex = 0;
-    const body = text
+    const body = (highestVariantFirst ? sortVariantsHighestFirst(text) : text)
         .split(/\r?\n/)
         .map((line) => {
             const trimmed = line.trim();
@@ -59,6 +65,27 @@ function rewritePlaylist(text: string, baseUrl: string, streamKey: string, sessi
         .join('\n');
 
     return { body, segmentCount: segmentIndex };
+}
+
+// BBC lists a master playlist's variants lowest-bitrate first. hls.js sorts them itself, but ffprobe
+// and ffmpeg (so Jellyfin's probe of a .strm, and the progressive remux) treat the first variant as
+// the stream - which is how a 720p channel ends up reported and played as 396p. Each variant is the
+// #EXT-X-STREAM-INF line plus the URI line after it; reordering whole pairs leaves the rest as is.
+function sortVariantsHighestFirst(text: string): string {
+    const lines = text.split(/\r?\n/);
+    const first = lines.findIndex((l) => l.startsWith('#EXT-X-STREAM-INF'));
+    if (first === -1) {
+        return text;
+    }
+    const variants: { bandwidth: number; lines: string[] }[] = [];
+    let i = first;
+    while (i < lines.length && lines[i].startsWith('#EXT-X-STREAM-INF')) {
+        const bandwidth = parseInt(/BANDWIDTH=(\d+)/.exec(lines[i])?.[1] ?? '0', 10);
+        variants.push({ bandwidth, lines: [lines[i], lines[i + 1]] });
+        i += 2;
+    }
+    variants.sort((a, b) => b.bandwidth - a.bandwidth);
+    return [...lines.slice(0, first), ...variants.flatMap((v) => v.lines), ...lines.slice(i)].join('\n');
 }
 
 function resolveReference(reference: string, baseUrl: string): string {
@@ -94,7 +121,14 @@ function buildPassthroughUrl(resolvedUrl: string, streamKey: string, sessionId?:
 // mode=stream&url= passthrough entry point that serves the references a rewritten playlist points
 // back at. `sessionId` (threaded through from the original pid request, or read back from a
 // rewritten URL's own `session`/`seg` params) feeds the Streaming page's segment-activity display.
-export async function proxyUrl(url: string, req: Request, res: Response, redirectsLeft = 5, sessionId?: string): Promise<void> {
+export async function proxyUrl(
+    url: string,
+    req: Request,
+    res: Response,
+    redirectsLeft = 5,
+    sessionId?: string,
+    highestVariantFirst = false
+): Promise<void> {
     const client = url.startsWith('https') ? https : http;
     const headers: Record<string, string> = {};
     if (req.headers.range) {
@@ -109,7 +143,7 @@ export async function proxyUrl(url: string, req: Request, res: Response, redirec
                 redirectsLeft > 0
             ) {
                 upstreamRes.resume();
-                proxyUrl(upstreamRes.headers.location, req, res, redirectsLeft - 1, sessionId).then(resolve, reject);
+                proxyUrl(upstreamRes.headers.location, req, res, redirectsLeft - 1, sessionId, highestVariantFirst).then(resolve, reject);
                 return;
             }
 
@@ -125,7 +159,8 @@ export async function proxyUrl(url: string, req: Request, res: Response, redirec
                             Buffer.concat(chunks).toString('utf8'),
                             url,
                             (req.query.streamkey as string) ?? '',
-                            sessionId
+                            sessionId,
+                            highestVariantFirst
                         );
                         if (sessionId && segmentCount > 0) {
                             streamSessionService.setSegmentCount(sessionId, segmentCount);

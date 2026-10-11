@@ -90,7 +90,7 @@ describe('LiveStreamService', () => {
 
         expect(requested.some((u) => u.includes('/vpid/bbc_one_hd/'))).toBe(true);
         expect(requested.some((u) => u.includes('playlist.json'))).toBe(false);
-        expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req, res, 5, 'sess');
+        expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req, res, 5, 'sess', true);
         expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Live');
     });
 

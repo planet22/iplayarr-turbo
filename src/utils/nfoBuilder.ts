@@ -100,3 +100,17 @@ export function buildShowNfo(title: string): string {
     xml += '</tvshow>\n';
     return xml;
 }
+
+// A live channel's .strm entry. lockdata stops Jellyfin's metadata refresh from overwriting the
+// title/plot with a provider match (there is none for a live channel) or discarding the poster.
+export function buildLiveChannelNfo(title: string): string {
+    let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    xml += '<movie>\n';
+    xml += `  <title>${escapeXml(title)}</title>\n`;
+    xml += `  <sorttitle>${escapeXml(title)}</sorttitle>\n`;
+    xml += `  <plot>${escapeXml(`Live stream of ${title}.`)}</plot>\n`;
+    xml += '  <studio>BBC</studio>\n';
+    xml += '  <lockdata>true</lockdata>\n';
+    xml += '</movie>\n';
+    return xml;
+}

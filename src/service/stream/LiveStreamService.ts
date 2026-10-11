@@ -112,7 +112,7 @@ class LiveStreamService implements AbstractStreamService {
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
-        await proxyUrl(await this.#resolveUrl(pid, sessionId), req, res, 5, sessionId);
+        await proxyUrl(await this.#resolveUrl(pid, sessionId), req, res, 5, sessionId, true);
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {

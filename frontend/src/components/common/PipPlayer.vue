@@ -113,8 +113,16 @@ function startPlayback(pid) {
     };
 
     if (Hls.isSupported()) {
-        hls = new Hls();
-        hls.on(Hls.Events.MANIFEST_PARSED, attemptPip);
+        // hls.js starts on the lowest rung (704x396 for live) and only climbs once it has measured
+        // throughput; a live channel has no buffer to spare for that, so start at the top and let
+        // ABR step down if the connection can't keep up.
+        hls = new Hls(pipPlayerState.live ? { abrEwmaDefaultEstimate: 20_000_000 } : {});
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (pipPlayerState.live) {
+                hls.startLevel = hls.levels.length - 1;
+            }
+            attemptPip();
+        });
         hls.on(Hls.Events.ERROR, (_event, data) => {
             if (!data.fatal) {
                 return;

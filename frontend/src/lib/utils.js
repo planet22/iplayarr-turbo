@@ -31,6 +31,12 @@ export const getThumbnailUrl = (thumbnail) => {
     return thumbnail ? `${getHost()}/${thumbnail}` : undefined;
 };
 
+// A stream session's thumbnail: the programme's still from its details, or - for a live channel,
+// which has no programme details - the channel's logo (`channelLogos` maps channel id -> logo path).
+export const getSessionThumbnailUrl = (session, details, channelLogos) => {
+    return getThumbnailUrl(session.live ? channelLogos?.[session.pid] : details?.thumbnail);
+};
+
 // Builds the "Series X, Episode Y" identifier shown alongside a video's channel wherever
 // IPlayerDetails is displayed (Streaming/Queue/Video Events), matching the SearchPage/
 // DownloadConfirmModal wording. Falls back to whichever of series/episode is present, e.g. for one-off programmes.

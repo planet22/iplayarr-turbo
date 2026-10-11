@@ -52,9 +52,10 @@
                 <tr v-for="session in streams.active" :key="session.id">
                     <td>
                         <img
-                            v-if="detailsFor(session.pid)?.thumbnail"
+                            v-if="thumbnailFor(session)"
                             class="thumbnail clickable"
-                            :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
+                            :class="{ channelLogo: session.live }"
+                            :src="thumbnailFor(session)"
                             @click="openInfo(session)"
                             @error="hideBrokenImage"
                         />
@@ -149,9 +150,10 @@
                 <tr v-for="session in pagedHistory" :key="session.id">
                     <td>
                         <img
-                            v-if="detailsFor(session.pid)?.thumbnail"
+                            v-if="thumbnailFor(session)"
                             class="thumbnail clickable"
-                            :src="getThumbnailUrl(detailsFor(session.pid).thumbnail)"
+                            :class="{ channelLogo: session.live }"
+                            :src="thumbnailFor(session)"
                             @click="openInfo(session)"
                             @error="hideBrokenImage"
                         />
@@ -207,7 +209,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import {
-    formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage,
+    formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
@@ -226,6 +228,24 @@ const {
 
 function detailsFor(pid) {
     return details[pid];
+}
+
+// Live rows show the channel's logo, from the same Browse channel list the Channels page uses.
+const channelLogos = ref({});
+
+async function loadChannelLogos() {
+    try {
+        const response = await ipFetch('json-api/browse/channels');
+        if (response.ok) {
+            channelLogos.value = Object.fromEntries(response.data.map(({ id, logo }) => [id, logo]));
+        }
+    } catch {
+        // logos are decoration - rows fall back to the placeholder
+    }
+}
+
+function thumbnailFor(session) {
+    return getSessionThumbnailUrl(session, detailsFor(session.pid), channelLogos.value);
 }
 
 function seriesEpisodeLabel(pid) {
@@ -250,7 +270,10 @@ function loadMissingDetails() {
     [...new Set(pids)].filter(Boolean).forEach(loadDetails);
 }
 
-onMounted(loadMissingDetails);
+onMounted(() => {
+    loadMissingDetails();
+    loadChannelLogos();
+});
 watch(streams, loadMissingDetails);
 
 const clientLabels = {
@@ -479,6 +502,11 @@ async function clearHistory() {
         object-fit: cover;
         border-radius: 2px;
         display: block;
+    }
+
+    // Channel logos are already their own coloured tile - show whole, not cropped to the 16:9 still.
+    .thumbnail.channelLogo {
+        object-fit: contain;
     }
 
     .text {
