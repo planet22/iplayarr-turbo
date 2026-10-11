@@ -50,7 +50,7 @@ describe('liveTvService', () => {
         expect(m3u.startsWith('#EXTM3U\n')).toBe(true);
         expect(m3u).toContain('tvg-id="bbc_two_england" tvg-name="BBC Two" tvg-chno="2"');
         expect(m3u).toContain('tvg-id="bbc_four" tvg-name="BBC Four" tvg-chno="4"');
-        expect(m3u).toContain('tvg-logo="http://host:4404/api?mode=live_logo&channel=bbc_two_england&v=png&streamkey=sk"');
+        expect(m3u).toContain('tvg-logo="http://host:4404/api?mode=live_logo&channel=bbc_two_england&v=png-landscape&streamkey=sk"');
         expect(m3u).toContain('http://host:4404/api/live.m3u8?mode=stream&pid=bbc_two_england&streamkey=sk');
         expect(m3u).not.toContain('bbc_one_london');
     });
@@ -103,6 +103,23 @@ describe('liveTvService', () => {
         expect(xml).toContain('<title lang="en">News &amp; Weather</title>');
         expect(xml).toContain('<sub-title lang="en">Late</sub-title>');
         expect(xml).toContain('<desc lang="en">Headlines</desc>');
+        // No image on the slot, so no <icon>.
+        expect(xml).not.toContain('<icon');
+    });
+
+    it('adds a stream-key programme image to slots that have one', async () => {
+        (browseService.schedule as jest.Mock).mockResolvedValue([
+            {
+                channel: { id: 'bbc_four' },
+                slots: [
+                    { item: { title: 'X', thumbnail: 'json-api/thumbnail/p0abc123.jpg' }, start: '2026-12-01T18:00:00Z', end: '2026-12-01T19:00:00Z' },
+                    { item: { title: 'Y' }, start: '2026-12-01T19:00:00Z', end: '2026-12-01T20:00:00Z' },
+                ],
+            },
+        ]);
+        const xml = await liveTvService.epg();
+        expect(xml).toContain('<icon src="http://host:4404/api?mode=live_thumb&amp;pid=p0abc123&amp;streamkey=sk"/>');
+        expect(xml.match(/<icon /g)).toHaveLength(1);
     });
 
     it('applies the manual EPG offset', async () => {
@@ -130,9 +147,14 @@ describe('liveTvService', () => {
         (browseService.channelLogo as jest.Mock).mockResolvedValue(svg);
         const png = await liveTvService.logo('bbc_one_london');
         expect(png?.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-        // 1000px square, not the SVG's native 24px.
+        // Landscape by default (and square on request), not the SVG's native 24px.
         const { default: sharp } = await import('sharp');
-        expect(await sharp(png).metadata()).toMatchObject({ width: 1000, height: 1000 });
+        expect(await sharp(png).metadata()).toMatchObject({ width: 1600, height: 900 });
+        params.LIVE_TV_LOGO_SHAPE = 'square';
+        const square = await liveTvService.logo('bbc_one_london');
+        expect(await sharp(square).metadata()).toMatchObject({ width: 1000, height: 1000 });
+        expect(await liveTvService.playlist()).toContain('v=png-square');
+        delete params.LIVE_TV_LOGO_SHAPE;
         expect(await liveTvService.logo('nope')).toBeUndefined();
     });
 });

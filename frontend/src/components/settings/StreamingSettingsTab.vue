@@ -125,6 +125,12 @@
             tooltip="Guide times are sent in this server's own timezone, so what is live now lines up. If Jellyfin still shows the guide early or late, shift it here (e.g. 60 or -60). 0 for no shift."
             :error="validationErrors.config?.LIVE_TV_EPG_OFFSET"
         />
+        <SelectInput
+            v-model="config.LIVE_TV_LOGO_SHAPE"
+            name="Channel Logo Shape"
+            tooltip="Landscape (16:9) fills Jellyfin's wide guide cards; Square suits the small channel tiles. After changing it, save settings and press Update on the tuner so Jellyfin fetches the new logos."
+            :options="logoShapeOptions"
+        />
         <LiveTvJellyfinSetup />
         <InfoBar>
             Only channels you pick with the TV icon on the Channels page (or a channel's own page) appear in the
@@ -232,6 +238,11 @@ defineProps({
 });
 
 const emit = defineEmits(['generate-stream-key']);
+
+const logoShapeOptions = [
+    { key: 'landscape', value: 'Landscape (16:9)' },
+    { key: 'square', value: 'Square' },
+];
 
 const adaptiveOptions = [
     { key: 'true', value: 'Adaptive' },

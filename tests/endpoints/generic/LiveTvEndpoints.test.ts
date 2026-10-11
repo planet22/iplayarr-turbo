@@ -1,8 +1,11 @@
 import LiveEpgEndpoint from '../../../src/endpoints/generic/LiveEpgEndpoint';
 import LiveLogoEndpoint from '../../../src/endpoints/generic/LiveLogoEndpoint';
 import LivePlaylistEndpoint from '../../../src/endpoints/generic/LivePlaylistEndpoint';
+import LiveThumbEndpoint from '../../../src/endpoints/generic/LiveThumbEndpoint';
 import liveTvService from '../../../src/service/liveTvService';
+import thumbnailCacheService from '../../../src/service/thumbnailCacheService';
 
+jest.mock('../../../src/service/thumbnailCacheService', () => ({ __esModule: true, default: { getOrFetch: jest.fn() } }));
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { error: jest.fn() } }));
 jest.mock('../../../src/service/liveTvService', () => ({
     __esModule: true,
@@ -71,5 +74,30 @@ describe('Live logo endpoint', () => {
         await LiveLogoEndpoint({ query: { channel: 'bbc_one_london' } } as any, res);
         expect(res.set).toHaveBeenCalledWith(expect.objectContaining({ 'Content-Type': 'image/png' }));
         expect(res.send).toHaveBeenCalledWith(Buffer.from('png'));
+    });
+});
+
+describe('Live thumb endpoint', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('404s when disabled or the image is missing, sends the cached file otherwise', async () => {
+        (liveTvService.isEnabled as jest.Mock).mockResolvedValue(false);
+        let res = makeRes();
+        res.sendFile = jest.fn();
+        await LiveThumbEndpoint({ query: { pid: 'p0abc' } } as any, res);
+        expect(res.status).toHaveBeenCalledWith(404);
+
+        (liveTvService.isEnabled as jest.Mock).mockResolvedValue(true);
+        (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValue(undefined);
+        res = makeRes();
+        res.sendFile = jest.fn();
+        await LiveThumbEndpoint({ query: { pid: 'p0abc' } } as any, res);
+        expect(res.status).toHaveBeenCalledWith(404);
+
+        (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValue('/cache/p0abc.jpg');
+        res = makeRes();
+        res.sendFile = jest.fn();
+        await LiveThumbEndpoint({ query: { pid: 'p0abc' } } as any, res);
+        expect(res.sendFile).toHaveBeenCalledWith('/cache/p0abc.jpg');
     });
 });

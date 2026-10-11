@@ -7,7 +7,11 @@ import browseService from './browseService';
 import configService from './configService';
 import liveTvChannelService from './liveTvChannelService';
 
-const LOGO_SIZE = 1000;
+// Jellyfin shows channel logos in square tiles and wide guide cards; landscape fills the wide ones.
+const LOGO_SHAPES = { square: [1000, 1000], landscape: [1600, 900] } as const;
+type LogoShape = keyof typeof LOGO_SHAPES;
+// Bumped when the guide gains new content, so Jellyfin re-downloads it even if the channels are unchanged.
+const GUIDE_FORMAT = 'icons1';
 const GUIDE_DAYS_BEFORE = 1; // iPlayer's schedule day runs 05:00-05:00, so the small hours sit in yesterday's
 // Today + 6 = the 7 days Jellyfin's guide asks for by default (BBC publishes ~8 days ahead).
 const GUIDE_DAYS_AFTER = 6;
@@ -91,6 +95,11 @@ class LiveTvService {
         return Number.isFinite(value) ? value : 0;
     }
 
+    async logoShape(): Promise<LogoShape> {
+        const value = await configService.getParameter(IplayarrParameter.LIVE_TV_LOGO_SHAPE);
+        return value === 'square' ? 'square' : 'landscape';
+    }
+
     async #keyAndBase(): Promise<{ baseUrl: string; streamKey: string }> {
         const baseUrl = await this.#baseUrl();
         const streamKey = ((await configService.getParameter(IplayarrParameter.STREAM_KEY)) as string | undefined) ?? '';
@@ -112,7 +121,7 @@ class LiveTvService {
         const { baseUrl, streamKey } = await this.#keyAndBase();
         const ids = (await this.channels()).map(({ id }) => id).sort();
         const version = createHash('sha1')
-            .update(JSON.stringify([ids, await this.epgOffsetMinutes()]))
+            .update(JSON.stringify([ids, await this.epgOffsetMinutes(), GUIDE_FORMAT]))
             .digest('hex')
             .slice(0, 8);
         return `${baseUrl}/api?mode=live_epg&streamkey=${encodeURIComponent(streamKey)}&v=${version}`;
@@ -127,6 +136,7 @@ class LiveTvService {
         const streamKey = ((await configService.getParameter(IplayarrParameter.STREAM_KEY)) as string | undefined) ?? '';
         const baseUrl = await this.#baseUrl();
         const lines: string[] = ['#EXTM3U'];
+        const shape = await this.logoShape();
         const numbers = this.allChannels().map(({ id }) => id);
         for (const channel of await this.channels()) {
             const attrs = [
@@ -136,7 +146,7 @@ class LiveTvService {
             ];
             if (channel.masterBrand) {
                 attrs.push(
-                    `tvg-logo="${baseUrl}/api?mode=live_logo&channel=${encodeURIComponent(channel.id)}&v=png&streamkey=${encodeURIComponent(streamKey)}"`
+                    `tvg-logo="${baseUrl}/api?mode=live_logo&channel=${encodeURIComponent(channel.id)}&v=png-${shape}&streamkey=${encodeURIComponent(streamKey)}"`
                 );
             }
             attrs.push('group-title="BBC"');
@@ -152,6 +162,7 @@ class LiveTvService {
     }
 
     async epg(): Promise<string> {
+        const { baseUrl, streamKey } = await this.#keyAndBase();
         const channels = await this.channels();
         const offset = await this.epgOffsetMinutes();
         const days: string[] = [];
@@ -183,13 +194,18 @@ class LiveTvService {
                 const subTitle = slot.item.episodeTitle ?? slot.item.subtitle;
                 if (subTitle) xml += `    <sub-title lang="en">${escapeXml(subTitle)}</sub-title>\n`;
                 if (slot.item.synopsis) xml += `    <desc lang="en">${escapeXml(slot.item.synopsis)}</desc>\n`;
+                const imagePid = /\/thumbnail\/([a-z0-9]+)\.jpg$/i.exec(slot.item.thumbnail ?? '')?.[1];
+                if (imagePid) {
+                    const src = `${baseUrl}/api?mode=live_thumb&pid=${imagePid}&streamkey=${encodeURIComponent(streamKey)}`;
+                    xml += `    <icon src="${escapeXml(src)}"/>\n`;
+                }
                 xml += '  </programme>\n';
             }
         }
         return xml + '</tv>\n';
     }
 
-    // The channel logo as a LOGO_SIZE-px square PNG. iPlayer's icon is a tiny SVG (viewBox ~24 units), which
+    // The channel logo as a PNG in the configured shape (square or 16:9). iPlayer's icon is a tiny SVG (viewBox ~24 units), which
     // Jellyfin would either not render or upscale to a blur, so it is rasterised here on the logo's own
     // background colour. sharp is loaded lazily so a missing native binary only costs the logos.
     async logo(channelId: string): Promise<Buffer | undefined> {
@@ -201,9 +217,11 @@ class LiveTvService {
         // Module name via a variable so ts-node does not need sharp's types (or the package) at compile time.
         const moduleName = 'sharp';
         const { default: sharp } = await import(moduleName);
-        // Rasterise at the target size (72 dpi = 1 SVG unit per px) so the vectors are sharp, not upscaled.
-        return sharp(Buffer.from(svg), { density: Math.min(2000, (72 * LOGO_SIZE) / viewBoxWidth) })
-            .resize(LOGO_SIZE, LOGO_SIZE, { fit: 'contain', background })
+        const [width, height] = LOGO_SHAPES[await this.logoShape()];
+        // Rasterise at the target size (72 dpi = 1 SVG unit per px) so the vectors are sharp, not upscaled;
+        // a landscape canvas centres the square icon on its own brand colour.
+        return sharp(Buffer.from(svg), { density: Math.min(2000, (72 * Math.min(width, height)) / viewBoxWidth) })
+            .resize(width, height, { fit: 'contain', background })
             .png()
             .toBuffer();
     }

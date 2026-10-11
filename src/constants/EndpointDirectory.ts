@@ -4,6 +4,7 @@ import DownloadEndpoint from '../endpoints/generic/DownloadEndpoint';
 import LiveEpgEndpoint from '../endpoints/generic/LiveEpgEndpoint';
 import LiveLogoEndpoint from '../endpoints/generic/LiveLogoEndpoint';
 import LivePlaylistEndpoint from '../endpoints/generic/LivePlaylistEndpoint';
+import LiveThumbEndpoint from '../endpoints/generic/LiveThumbEndpoint';
 import StreamEndpoint from '../endpoints/generic/StreamEndpoint';
 import CapsEndpoint from '../endpoints/newznab/CapsEndpoint';
 import SearchEndpoint from '../endpoints/newznab/SearchEndpoint';
@@ -24,6 +25,7 @@ export const GenericEndpointDirectory: EndpointDirectory = {
     live_playlist: LivePlaylistEndpoint,
     live_epg: LiveEpgEndpoint,
     live_logo: LiveLogoEndpoint,
+    live_thumb: LiveThumbEndpoint,
 };
 
 export const SabNZBDEndpointDirectory: EndpointDirectory = {

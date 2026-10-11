@@ -11,7 +11,7 @@ const upload: Multer = multer();
 
 // Modes gated by STREAM_KEY rather than API_KEY. The Live TV ones are fetched by Jellyfin (tuner,
 // guide and channel logos), which can only carry a key in the URL, same as a .strm file.
-const STREAM_KEY_MODES: string[] = ['stream', 'live_playlist', 'live_epg', 'live_logo'];
+const STREAM_KEY_MODES: string[] = ['stream', 'live_playlist', 'live_epg', 'live_logo', 'live_thumb'];
 
 interface ApiRequest {
     apikey?: string;

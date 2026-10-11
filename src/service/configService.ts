@@ -64,6 +64,7 @@ const configService = {
         WRITE_STRMTOOL_JSON: 'false',
         LIVE_TV_ENABLED: 'false',
         LIVE_TV_EPG_OFFSET: '0',
+        LIVE_TV_LOGO_SHAPE: 'landscape',
         STRM_WATCHDOG_ENABLED: 'false',
         STRM_WATCHDOG_SOURCES: 'history',
         STRM_WATCHDOG_ACTION: 'notify',
