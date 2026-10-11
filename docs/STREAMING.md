@@ -73,9 +73,9 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 
 ### Jellyfin Live TV (tuner + guide)
 
-Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Streaming → Live TV (Jellyfin)** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set. With the setting off, the endpoints return 404 and the TV buttons are hidden.
+Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Live TV** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set (the Live TV tab shows the Stream Base URL and Stream Key fields too, unless `MEDIA_MODE=strm`, where they are on the Streaming tab). With the setting off, the endpoints return 404 and the TV buttons are hidden.
 
-**Pick channels.** Only channels you select are offered to Jellyfin, in both the tuner and the guide (nothing selected means an empty tuner). Use the **TV icon** on a channel's tile on the Channels page, the **Add to Live TV** button on the channel's own page, or **Live TV all** on the Channels page. Channel numbers are fixed per channel, so they don't shuffle as you add and remove channels.
+**Pick channels.** Only channels you select are offered to Jellyfin, in both the tuner and the guide (nothing selected means an empty tuner). On the Channels page press **Edit**, then use the **TV icon** on a channel's tile or **Live TV all**; press **Done** when finished. Outside Edit mode the tiles and a channel's own page only show read-only TV (in Live TV) and bell (in your library) status icons. Channel numbers are fixed per channel, so they don't shuffle as you add and remove channels.
 
 **Add it to Jellyfin.** Either press the buttons in the Live TV section, or paste the two URLs yourself (both are secured by the Stream Key):
 
@@ -84,9 +84,19 @@ Library `.strm` entries above show up as videos. To get a real channel list and 
 
 **Keeping Jellyfin in step.** The playlist and guide always reflect your current selection. A few seconds after you last add or remove a channel, iPlayarr asks every Jellyfin server ticked in **Jellyfin Servers** to refresh its guide, which also re-reads the tuner. The tick list is a normal setting, so save settings to keep it. It's best-effort: if a server is unreachable the change still saves (and the other servers are still refreshed), and that server catches up at its next scheduled Refresh Guide. A Jellyfin server you added by pasting the URLs in by hand isn't in the list, so run Refresh Guide there (Dashboard → Scheduled Tasks) after changing channels.
 
-**Guide times.** The guide comes from the same iPlayer schedule as the Schedule page (yesterday to tomorrow). Times are written as wall-clock time in the timezone iPlayarr runs in (`TZ`, with its real UTC offset), so "live now" lines up. If Jellyfin still shows the guide early or late, set **EPG Time Offset** (`LIVE_TV_EPG_OFFSET`, minutes, default `0`).
+**Guide times.** The guide comes from the same iPlayer schedule as the Schedule page and covers yesterday through the next six days (7 days ahead, matching what Jellyfin asks for). Times are written as wall-clock time in the timezone iPlayarr runs in (`TZ`, with its real UTC offset), so "live now" lines up. If Jellyfin still shows the guide early or late, set **EPG Time Offset** (`LIVE_TV_EPG_OFFSET`, minutes, default `0`).
 
-Playback uses the existing live resolver, so it needs a UK IP. Channel logos are served as SVG under the same key (`mode=live_logo`); Jellyfin may ignore SVG logos.
+**Programme images and logos.** Each guide entry carries the programme's image. Channel logos are served as hi-res PNGs under the same key (`mode=live_logo`); **Channel Logo Shape** (`LIVE_TV_LOGO_SHAPE`) picks `landscape` (16:9, default, suits Jellyfin's guide cards) or `square` (suits its channel tiles). After changing it, save and press Update on the tuner.
+
+**Guide options.** Three switches (all on by default) control the extra tags written into the guide so Jellyfin can colour and filter it:
+
+- **Guide Categories** (`LIVE_TV_GUIDE_CATEGORIES`) - tags each programme with its BBC category, plus Movie / Sports / News / Kids where they apply, for Jellyfin's colours and category filters.
+- **Live / New / Repeat Flags** (`LIVE_TV_GUIDE_FLAGS`) - marks programmes as live, new or a repeat for Jellyfin's indicators.
+- **HD Indicator** (`LIVE_TV_GUIDE_HD`) - marks every programme as HD.
+
+Changing any of them (or the channel selection or offset) changes the guide URL's version hash, so Jellyfin re-downloads the guide instead of reusing its cached copy.
+
+Playback uses the existing live resolver, so it needs a UK IP.
 
 ## Checking links still work
 

@@ -62,7 +62,7 @@ Server info plus search/grab counters — a quick health-and-activity snapshot, 
 
 ## Settings (`/settings`)
 
-Tabbed: General, Media Management, Download Client, Streaming, Authentication, Maintenance. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
+Tabbed: General, Media Management, Download Client, Streaming, Live TV, Authentication, Maintenance. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
 
 ## About (`/about`)
 

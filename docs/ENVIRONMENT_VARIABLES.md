@@ -26,6 +26,7 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | `SCHEDULE_FULL_REFRESH` | `false` | No | Re-fetch every day in the window instead of caching passed days. |
 | `RSS_FEED_HOURS` | `48` | No | Lookback window for the RSS feed endpoint. |
 | `NATIVE_SEARCH` | `true` | No | Use BBC's native search API instead of `get_iplayer --search`. |
+| `NATIVE_SEARCH_ENGINE` | `V1` | No | `V1` (stable) or `V2` (experimental: concurrent lookups, retries); only used when `NATIVE_SEARCH` is on. |
 | `ARCHIVE_ENABLED` | `false` | No | Keep cancelled/removed queue+history items as archive records. |
 | `AUTH_TYPE` | `form` | No | `form` / `oidc` / `none`. |
 | `AUTH_USERNAME` | `admin` | No | Login username (`form` auth). |
@@ -47,6 +48,10 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | `LIVE_STRM_DIR` | _(unset)_ | No | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR`. |
 | `LIVE_TV_ENABLED` | `false` | No | Serve the live channels as an M3U tuner + XMLTV guide for Jellyfin Live TV. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
 | `LIVE_TV_EPG_OFFSET` | `0` | No | Minutes to shift the Live TV guide, on top of the server-timezone times. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
+| `LIVE_TV_LOGO_SHAPE` | `landscape` | No | Live TV channel logo shape: `landscape` (16:9) or `square`. |
+| `LIVE_TV_GUIDE_CATEGORIES` | `true` | No | Tag Live TV guide programmes with BBC categories (Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
+| `LIVE_TV_GUIDE_FLAGS` | `true` | No | Tag Live TV guide programmes as live / new / repeat. |
+| `LIVE_TV_GUIDE_HD` | `true` | No | Mark Live TV guide programmes as HD. |
 | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | No | Comma-separated Jellyfin app ids (from the Apps page) asked to refresh their guide when the Live TV channel list changes. Normally set by ticking servers in Settings. |
 | `STRM_WATCHDOG_ENABLED` | `false` | No | Daily check that `.strm` links still resolve. See [WATCHDOG.md](WATCHDOG.md). |
 | `STRM_WATCHDOG_SOURCES` | `history` | No | Comma-separated: `subscribed`, `history`, `app:<id>`. |
