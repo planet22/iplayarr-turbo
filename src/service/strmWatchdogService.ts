@@ -249,6 +249,7 @@ class StrmWatchdogService {
         for (const server of selected((a) => jellyfinService.supports(a), 'jellyfin')) {
             try {
                 const items = (await jellyfinService.getItems(server)).filter(({ path }) => path.toLowerCase().endsWith('.strm'));
+                await appService.touchApp(server.id);
                 let done = 0;
                 await this.#collecting(server.name, 0, items.length, true);
                 for (const item of items) {
@@ -321,6 +322,7 @@ class StrmWatchdogService {
         for (const server of servers) {
             try {
                 jellyfinItems.push(...(await jellyfinService.getItems(server)).filter(({ path }) => isStrm(path)));
+                await appService.touchApp(server.id);
             } catch (err: any) {
                 errors.jellyfin = [errors.jellyfin, `${server.name}: ${err?.message}`].filter(Boolean).join('; ');
             }

@@ -162,8 +162,13 @@ const appService = {
             case AppType.SONARR: {
                 return await arrFacade.testConnection(form);
             }
-            case AppType.JELLYFIN:
-                return await jellyfinService.testConnection(form);
+            case AppType.JELLYFIN: {
+                const result = await jellyfinService.testConnection(form);
+                if (result === true && form.id) {
+                    await appService.touchApp(form.id);
+                }
+                return result;
+            }
             case AppType.NZBGET:
             case AppType.SABNZBD: {
                 return await nzbFacade.testConnection(

@@ -22,7 +22,10 @@ jest.mock('../../src/service/arr/ArrLibraryService', () => ({
     unmonitor: jest.fn(async () => undefined),
     search: jest.fn(async () => undefined),
 }));
-jest.mock('../../src/service/appService', () => ({ getAllApps: jest.fn(async () => [{ id: 'a', name: 'Sonarr' }]) }));
+jest.mock('../../src/service/appService', () => ({
+    getAllApps: jest.fn(async () => [{ id: 'a', name: 'Sonarr' }]),
+    touchApp: jest.fn(async () => undefined),
+}));
 jest.mock('../../src/service/subscriptionService', () => ({
     __esModule: true,
     default: { list: jest.fn(async () => []) },
