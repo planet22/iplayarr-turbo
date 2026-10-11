@@ -1,16 +1,14 @@
 <template>
     <div class="inner-content">
-        <legend>Subscriptions</legend>
+        <PageHeader title="Subscriptions" />
+        <SettingsPageToolbar
+            :icons="['refresh']" :refresh-label="checkingAll ? 'Checking…' : 'Check All Now'"
+            :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"
+        />
         <p>
             New episodes of these shows are queued for download automatically. They are checked every hour, or on
             demand.
         </p>
-        <div class="subscriptionActions">
-            <button class="clickable checkAll" :disabled="checkingAll || !subscriptions.length" @click="checkAll">
-                <font-awesome-icon :icon="['fas', 'rotate']" :spin="checkingAll" />
-                Check all now
-            </button>
-        </div>
         <LoadingIndicator v-if="!loaded" />
         <p v-else-if="subscriptions.length === 0">
             No subscriptions yet. Open a show from
@@ -95,6 +93,8 @@ import { onMounted, reactive, ref } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
@@ -187,26 +187,6 @@ const remove = (subscription) => unsubscribe(subscription);
     img,
     .noThumb {
         aspect-ratio: 2.375 / 1;
-    }
-}
-
-.subscriptionActions {
-    margin-bottom: 12px;
-
-    .checkAll {
-        padding: 6px 14px;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-
-        svg {
-            margin-right: 6px;
-        }
-
-        &:hover:not(:disabled) {
-            background-color: @settings-button-hover-background-color;
-        }
     }
 }
 

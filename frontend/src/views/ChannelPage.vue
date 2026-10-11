@@ -1,11 +1,10 @@
 <template>
     <div class="browsePage">
-        <div class="channelHeader">
-            <h1 class="browseTitle">{{ channel?.title ?? route.params.id }}</h1>
+        <PageHeader :title="channel?.title ?? route.params.id">
             <button v-if="channel?.live" class="watchLive" type="button" @click="watchLive">
                 <font-awesome-icon :icon="['fas', 'play']" /> Watch Live
             </button>
-        </div>
+        </PageHeader>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
         <template v-else>
@@ -43,6 +42,7 @@ import { useRoute } from 'vue-router';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import { browseFetch } from '@/lib/browse';
 import { playInPip } from '@/lib/pipPlayer';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';

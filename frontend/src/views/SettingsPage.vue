@@ -1,10 +1,13 @@
 <template>
-    <SettingsPageToolbar
-        :save-enabled="saveEnabled"
-        :icons="['save', 'advanced']"
-        @save="saveConfig"
-        @toggle-advanced="toggleAdvanced"
-    />
+    <div class="inner-content">
+        <PageHeader title="Settings" />
+        <SettingsPageToolbar
+            :save-enabled="saveEnabled"
+            :icons="['save', 'advanced']"
+            @save="saveConfig"
+            @toggle-advanced="toggleAdvanced"
+        />
+    </div>
     <SettingsTabs v-model="activeTab" :tabs="tabs" />
     <div v-if="!loading" class="inner-content">
         <GeneralSettingsTab
@@ -46,6 +49,7 @@ import { useModal } from 'vue-final-modal';
 import { onBeforeRouteLeave } from 'vue-router';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import UpdateAppDialog from '@/components/modals/UpdateAppDialog.vue';
 import AuthenticationSettingsTab from '@/components/settings/AuthenticationSettingsTab.vue';

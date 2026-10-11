@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content scroll-x">
-        <legend>Active Streams</legend>
+        <PageHeader title="Active Streams" />
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
@@ -106,8 +106,8 @@
             </tbody>
         </table>
 
-        <SettingsPageToolbar :icons="['delete']" delete-label="Clear History" @delete-queue-item="clearHistory" />
-        <legend>Stream History</legend>
+        <PageHeader title="Stream History" />
+        <SettingsPageToolbar :icons="['delete']" delete-label="Clear stream history" @delete-queue-item="clearHistory" />
         <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
@@ -203,6 +203,7 @@
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import dialogService from '@/lib/dialogService';

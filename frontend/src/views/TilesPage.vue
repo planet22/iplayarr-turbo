@@ -1,7 +1,6 @@
 <template>
     <div class="browsePage">
-        <div class="tilesHeader">
-            <h1 class="browseTitle">{{ isChannels ? 'Channels' : 'Categories' }}</h1>
+        <PageHeader :title="isChannels ? 'Channels' : 'Categories'">
             <button
                 v-if="isChannels && !loading && !error && tiles.some((t) => t.live)" type="button" class="addAll"
                 title="Subscribe to all live channels (adds them to the library)" :disabled="allBusy" @click="subscribeAll"
@@ -9,7 +8,7 @@
                 <font-awesome-icon :icon="['fas', allBusy ? 'circle-notch' : 'bell']" :spin="allBusy" />
                 Subscribe all
             </button>
-        </div>
+        </PageHeader>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
         <div v-if="!loading && !error" class="tileGrid">
@@ -51,6 +50,7 @@ import { useRoute } from 'vue-router';
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import { browseFetch } from '@/lib/browse';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { playInPip } from '@/lib/pipPlayer';

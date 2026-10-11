@@ -1,14 +1,16 @@
 <template>
-    <SettingsPageToolbar
-        :icons="['delete', 'filterToggle']" delete-label="Clear Log"
-        :filters-shown="showFilters" :filters-active="filtersActive"
-        @delete-queue-item="clearEvents" @toggle-filters="showFilters = !showFilters"
-    />
     <div class="inner-content scroll-x">
-        <div v-if="showFilters" class="tableToolbar">
-            <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
-            <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
-        </div>
+        <PageHeader title="Video Events" />
+        <SettingsPageToolbar
+            :icons="['delete', 'filterToggle']" delete-label="Clear video events"
+            :filters-shown="showFilters" :filters-active="filtersActive"
+            @delete-queue-item="clearEvents" @toggle-filters="showFilters = !showFilters"
+        >
+            <template v-if="showFilters" #filters>
+                <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter events..." />
+                <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
+            </template>
+        </SettingsPageToolbar>
         <TablePagination v-model="eventsPage" v-model:page-size="eventsPageSize" :total="sortedEvents.length" />
         <table class="dataTable eventLogTable responsive-table">
             <colgroup>
@@ -83,6 +85,7 @@ import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';

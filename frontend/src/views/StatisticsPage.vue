@@ -1,8 +1,9 @@
 <template>
-    <SettingsPageToolbar
-        :icons="['filter']" :filter-enabled="range != 'All'" :filter-options="availableRanges"
-        :selected-filter="range" @select-filter="selectRange" />
     <div class="inner-content">
+        <PageHeader title="Statistics" />
+        <SettingsPageToolbar
+            :icons="['filter']" :filter-enabled="range != 'All'" :filter-options="availableRanges"
+            :selected-filter="range" @select-filter="selectRange" />
         <legend>Server</legend>
         <div class="statRow">
             <div class="statCard">
@@ -118,6 +119,7 @@ import BarChart from '@/components/charts/BarChart.vue';
 import LineChart from '@/components/charts/LineChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
 import { ipFetch } from '@/lib/ipFetch';

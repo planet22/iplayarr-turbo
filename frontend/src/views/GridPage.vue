@@ -1,6 +1,6 @@
 <template>
     <div class="browsePage">
-        <h1 class="browseTitle">{{ heading }}</h1>
+        <PageHeader :title="heading" />
         <div v-if="isAtoZ" class="letterBar">
             <RouterLink
                 v-for="l in letters"
@@ -11,10 +11,9 @@
                 {{ l === '0' ? '0-9' : l.toUpperCase() }}
             </RouterLink>
         </div>
-        <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
         <InfoBar v-if="error" clazz="danger">{{ error }}</InfoBar>
         <div v-if="items.length" class="gridFilters">
-            <h2 v-if="rails.length">All programmes</h2>
+            <span v-if="rails.length" class="gridFiltersTitle">All programmes</span>
             <input v-model="textFilter" type="text" class="gridFilter" placeholder="Filter by title" />
             <select v-if="channelOptions.length > 2" v-model="channelFilter" class="gridFilter">
                 <option v-for="option in channelOptions" :key="option" :value="option">
@@ -31,6 +30,7 @@
         <p v-else-if="!error && items.length === 0">No programmes found.</p>
         <p v-else-if="loadingAll" class="loadingMoreNote">Loading more ({{ items.length }} of {{ total ?? '…' }})&hellip;</p>
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
+        <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
     </div>
 </template>
 
@@ -42,6 +42,7 @@ import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch } from '@/lib/browse';
 import { usePagination } from '@/lib/usePagination';
@@ -172,13 +173,15 @@ watch(
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
-    margin: 0.5rem 0 1rem;
+    min-height: 44px;
+    padding: 6px 1rem;
+    margin: 0 0 1rem;
+    background-color: @toolbar-background-color;
 
-    h2 {
-        flex: 1 1 100%;
-        margin: 0;
-        font-size: 20px;
-        font-weight: 400;
+    .gridFiltersTitle {
+        margin-right: 6px;
+        font-size: 14px;
+        color: @primary-text-color;
     }
 
     .gridFilter {
@@ -188,6 +191,21 @@ watch(
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
+    }
+
+    @media (max-width: @mobile-breakpoint) {
+        flex-wrap: nowrap;
+        gap: 6px;
+
+        .gridFiltersTitle {
+            display: none;
+        }
+
+        .gridFilter {
+            flex: 1 1 0;
+            min-width: 0;
+            width: auto;
+        }
     }
 }
 

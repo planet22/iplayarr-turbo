@@ -2,15 +2,17 @@
     <div class="SettingsPageToolbar">
         <div>
             <button
-                v-if="icons.some((i) => i == 'delete')"
-                class="SettingsPageToolbar-button clickable"
-                @click="emit('deleteQueueItem')"
+                v-if="icons.some((i) => i == 'filterToggle')"
+                :class="['SettingsPageToolbar-button clickable', filtersActive ? 'enabled' : '']"
+                :aria-pressed="filtersShown"
+                @click="emit('toggleFilters')"
             >
-                <font-awesome-icon :icon="['fas', 'trash']" />
-                <div class="SettingsPageToolbar-label">
-                    {{ deleteLabel }}
-                </div>
+                <font-awesome-icon :icon="['fas', 'filter']" />
+                <div class="SettingsPageToolbar-label">Filter</div>
             </button>
+            <div v-if="$slots.filters" class="SettingsPageToolbar-filters">
+                <slot name="filters" />
+            </div>
             <button
                 v-if="icons.some((i) => i == 'save')"
                 class="SettingsPageToolbar-button clickable"
@@ -76,13 +78,14 @@
         </div>
         <div>
             <button
-                v-if="icons.some((i) => i == 'filterToggle')"
-                :class="['SettingsPageToolbar-button clickable', filtersActive ? 'enabled' : '']"
-                :aria-pressed="filtersShown"
-                @click="emit('toggleFilters')"
+                v-if="icons.some((i) => i == 'delete')"
+                class="SettingsPageToolbar-button clickable"
+                :disabled="deleteDisabled"
+                :title="deleteLabel"
+                :aria-label="deleteLabel"
+                @click="emit('deleteQueueItem')"
             >
-                <font-awesome-icon :icon="['fas', 'filter']" />
-                <div class="SettingsPageToolbar-label">Filter</div>
+                <font-awesome-icon :icon="['fas', 'trash']" />
             </button>
             <template v-if="icons.some((i) => i == 'filter')">
                 <button
@@ -175,6 +178,11 @@ defineProps({
         required: false,
         default: false,
     },
+    deleteDisabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     deleteLabel: {
         type: String,
         required: false,
@@ -250,27 +258,33 @@ const handleClickOutside = (event) => {
 
 <style lang="less">
 .SettingsPageToolbar {
-    height: 60px;
+    min-height: 44px;
     background-color: @toolbar-background-color;
     display: flex;
     padding: 0px 1rem;
 
     > div {
-        flex: 1;
+        flex: 1 1 auto;
         display: flex;
 
         &:nth-of-type(2) {
             justify-content: flex-end;
         }
 
+        flex-wrap: wrap;
+        align-items: stretch;
+
         button {
-            padding-top: 4px;
-            min-width: 60px;
-            width: min-content;
-            text-align: center;
+            // Icon with its label to the right, so the bar can be short and the text larger.
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 12px;
+            width: auto;
+            white-space: nowrap;
             background-color: transparent;
             border: 0px;
-            height: 100%;
+            min-height: 44px;
 
             &:hover {
                 svg {
@@ -299,14 +313,59 @@ const handleClickOutside = (event) => {
             }
         }
 
+        .SettingsPageToolbar-filters {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 0 6px 6px;
+
+            input.tableFilter,
+            .clearDates {
+                box-sizing: border-box;
+                min-height: 0;
+                height: 32px;
+                margin: 0;
+            }
+
+            input.tableFilter {
+                width: 100%;
+                max-width: 240px;
+                padding: 0 10px;
+                border: 1px solid @input-border-color;
+                border-radius: 4px;
+                background-color: @input-background-color;
+                color: @input-text-color;
+            }
+        }
+
         .SettingsPageToolbar-label {
             color: @primary-text-color;
-            font-size: 11px;
+            font-size: 14px;
+        }
+
+        @media (max-width: @mobile-breakpoint) {
+            .SettingsPageToolbar-filters {
+                flex: 1 1 100%;
+                padding-left: 0;
+                gap: 6px;
+
+                .tableFilter {
+                    min-width: 0;
+                    flex: 0.7 1 0;
+                    padding: 4px 6px;
+                    font-size: 12px;
+                }
+
+                .dateRangeFilter {
+                    flex: 2.3 1 0;
+                    min-width: 0;
+                }
+            }
         }
 
         .filterDropdown {
             position: absolute;
-            top: 120px;
+            top: 104px;
             background-color: @nav-background-color;
             width: 180px;
 
@@ -339,6 +398,27 @@ const handleClickOutside = (event) => {
                     }
                 }
             }
+        }
+    }
+}
+
+// Phone width: the filter boxes drop onto their own row under the toggle and the delete button.
+@media (max-width: @mobile-breakpoint) {
+    .SettingsPageToolbar {
+        flex-wrap: wrap;
+
+        > div:first-of-type {
+            display: contents;
+        }
+
+        > div:nth-of-type(2) {
+            flex: 0 0 auto;
+            margin-left: auto;
+        }
+
+        .SettingsPageToolbar-filters {
+            order: 3;
+            padding: 0 0 8px;
         }
     }
 }

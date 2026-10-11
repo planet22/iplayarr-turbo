@@ -1,15 +1,16 @@
 <template>
     <div class="inner-content scroll-x">
+        <PageHeader title="Recent Searches" />
         <SettingsPageToolbar
-            :icons="['delete', 'filterToggle']" delete-label="Clear Searches"
+            :icons="['delete', 'filterToggle']" delete-label="Clear searches"
             :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
             @delete-queue-item="clearSearches" @toggle-filters="searchShowFilters = !searchShowFilters"
-        />
-        <legend>Recent Searches</legend>
-        <div v-if="searchShowFilters" class="tableToolbar">
-            <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
-            <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
-        </div>
+        >
+            <template v-if="searchShowFilters" #filters>
+                <input v-model="searchFilterText" class="tableFilter" type="text" placeholder="Filter searches..." />
+                <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
+            </template>
+        </SettingsPageToolbar>
         <table class="dataTable responsive-table">
             <colgroup>
                 <col />
@@ -65,16 +66,17 @@
         </table>
         <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
 
+        <PageHeader title="Recent Grabs" />
         <SettingsPageToolbar
-            :icons="['delete', 'filterToggle']" delete-label="Clear Grabs"
+            :icons="['delete', 'filterToggle']" delete-label="Clear grabs"
             :filters-shown="grabShowFilters" :filters-active="grabFiltersActive"
             @delete-queue-item="clearGrabs" @toggle-filters="grabShowFilters = !grabShowFilters"
-        />
-        <legend>Recent Grabs</legend>
-        <div v-if="grabShowFilters" class="tableToolbar">
-            <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
-            <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
-        </div>
+        >
+            <template v-if="grabShowFilters" #filters>
+                <input v-model="grabFilterText" class="tableFilter" type="text" placeholder="Filter grabs..." />
+                <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
+            </template>
+        </SettingsPageToolbar>
         <table class="dataTable streamsTable responsive-table">
             <colgroup>
                 <col style="width: 70px" />
@@ -136,16 +138,17 @@
         </table>
         <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
 
+        <PageHeader title="Failed Grabs" />
         <SettingsPageToolbar
-            :icons="['delete', 'filterToggle']" delete-label="Clear Failed"
+            :icons="['delete', 'filterToggle']" delete-label="Clear failed grabs"
             :filters-shown="failedGrabShowFilters" :filters-active="failedGrabFiltersActive"
             @delete-queue-item="clearFailedGrabs" @toggle-filters="failedGrabShowFilters = !failedGrabShowFilters"
-        />
-        <legend>Failed Grabs</legend>
-        <div v-if="failedGrabShowFilters" class="tableToolbar">
-            <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
-            <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
-        </div>
+        >
+            <template v-if="failedGrabShowFilters" #filters>
+                <input v-model="failedGrabFilterText" class="tableFilter" type="text" placeholder="Filter failed grabs..." />
+                <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
+            </template>
+        </SettingsPageToolbar>
         <table class="dataTable responsive-table">
             <colgroup>
                 <col style="width: 14ch" />
@@ -195,6 +198,7 @@ import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } fr
 import { useModal } from 'vue-final-modal';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
