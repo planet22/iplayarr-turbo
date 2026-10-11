@@ -2,8 +2,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import browseService from '../../src/service/browseService';
 import configService from '../../src/service/configService';
 import service, { LiveSubscriptionError } from '../../src/service/liveSubscriptionService';
+import loggingService from '../../src/service/loggingService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 
 const mockStorageData: Record<string, any> = {};
@@ -18,6 +20,10 @@ jest.mock('../../src/types/QueuedStorage', () => {
     return { QueuedStorage: jest.fn(() => instance), __esModule: true };
 });
 jest.mock('../../src/service/configService');
+jest.mock('../../src/service/browseService', () => ({ __esModule: true, default: { channelLogo: jest.fn() } }));
+const mockToBuffer = jest.fn();
+const mockSharp = jest.fn();
+jest.mock('sharp', () => ({ __esModule: true, default: (...args: any[]) => mockSharp(...args) }), { virtual: true });
 jest.mock('../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn() } }));
 
 describe('liveSubscriptionService', () => {
@@ -25,6 +31,9 @@ describe('liveSubscriptionService', () => {
     let baseUrl: string | undefined;
 
     beforeEach(() => {
+        jest.clearAllMocks();
+        mockSharp.mockReset();
+        (browseService.channelLogo as jest.Mock).mockResolvedValue(undefined);
         dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'live-')), 'BBC Live');
         baseUrl = 'http://iplayarr:4404';
         Object.keys(mockStorageData).forEach((k) => delete mockStorageData[k]);
@@ -83,7 +92,7 @@ describe('liveSubscriptionService', () => {
     it('subscribeAll adds every live channel', async () => {
         const all = await service.subscribeAll();
         expect(all.length).toBeGreaterThan(5);
-        expect(fs.readdirSync(dir)).toHaveLength(all.length);
+        expect(fs.readdirSync(dir).filter((f) => f.endsWith('.strm'))).toHaveLength(all.length);
     });
 
     it('unsubscribe deletes only the tracked file', async () => {
@@ -92,7 +101,7 @@ describe('liveSubscriptionService', () => {
         fs.writeFileSync(path.join(dir, 'Other.strm'), 'x');
 
         expect(await service.unsubscribe('bbc_one_london')).toBe(true);
-        expect(fs.readdirSync(dir).sort()).toEqual(['BBC Four.strm', 'Other.strm']);
+        expect(fs.readdirSync(dir).sort()).toEqual(['BBC Four.nfo', 'BBC Four.strm', 'Other.strm']);
         expect(await service.unsubscribe('bbc_one_london')).toBe(false);
     });
 
@@ -101,5 +110,73 @@ describe('liveSubscriptionService', () => {
         baseUrl = 'http://new-host:1';
         await service.resync();
         expect(fs.readFileSync(path.join(dir, 'BBC One.strm'), 'utf8')).toContain('http://new-host:1/api');
+    });
+
+    describe('sidecar metadata', () => {
+        const chain = () => {
+            const c: any = {};
+            c.resize = jest.fn(() => c);
+            c.flatten = jest.fn(() => c);
+            c.jpeg = jest.fn(() => c);
+            c.toBuffer = mockToBuffer;
+            mockSharp.mockReturnValue(c);
+            return c;
+        };
+
+        it('writes a locked .nfo beside the .strm, with no poster when there is no logo', async () => {
+            await service.subscribe('bbc_one_london');
+            const nfo = fs.readFileSync(path.join(dir, 'BBC One.nfo'), 'utf8');
+            expect(nfo).toContain('<title>BBC One</title>');
+            expect(nfo).toContain('<lockdata>true</lockdata>');
+            expect(fs.existsSync(path.join(dir, 'BBC One-poster.jpg'))).toBe(false);
+        });
+
+        it('rasterises the channel logo onto its own background colour as the poster', async () => {
+            const c = chain();
+            mockToBuffer.mockResolvedValue(Buffer.from('jpegdata'));
+            (browseService.channelLogo as jest.Mock).mockResolvedValue('<svg><rect fill="#FF0000"/></svg>');
+
+            await service.subscribe('bbc_one_london');
+
+            expect(browseService.channelLogo).toHaveBeenCalledWith('bbc_one');
+            expect(mockSharp).toHaveBeenCalledWith(expect.any(Buffer), { density: 300 });
+            expect(c.resize).toHaveBeenCalledWith(1000, 1000, { fit: 'contain', background: '#FF0000' });
+            expect(c.flatten).toHaveBeenCalledWith({ background: '#FF0000' });
+            expect(fs.readFileSync(path.join(dir, 'BBC One-poster.jpg'), 'utf8')).toBe('jpegdata');
+        });
+
+        it('defaults to a black background when the logo has no fill', async () => {
+            const c = chain();
+            mockToBuffer.mockResolvedValue(Buffer.from('x'));
+            (browseService.channelLogo as jest.Mock).mockResolvedValue('<svg></svg>');
+
+            await service.subscribe('bbc_one_london');
+
+            expect(c.flatten).toHaveBeenCalledWith({ background: '#000000' });
+        });
+
+        it('still keeps the .strm and logs when the poster cannot be generated', async () => {
+            mockSharp.mockImplementation(() => {
+                throw new Error('no native binary');
+            });
+            (browseService.channelLogo as jest.Mock).mockResolvedValue('<svg></svg>');
+
+            await service.subscribe('bbc_one_london');
+
+            expect(fs.existsSync(path.join(dir, 'BBC One.strm'))).toBe(true);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('no native binary'));
+        });
+
+        it('unsubscribe removes the .nfo and poster too, but nothing else', async () => {
+            chain();
+            mockToBuffer.mockResolvedValue(Buffer.from('x'));
+            (browseService.channelLogo as jest.Mock).mockResolvedValue('<svg></svg>');
+            await service.subscribe('bbc_one_london');
+            fs.writeFileSync(path.join(dir, 'BBC One-fanart.jpg'), 'keep');
+
+            await service.unsubscribe('bbc_one_london');
+
+            expect(fs.readdirSync(dir)).toEqual(['BBC One-fanart.jpg']);
+        });
     });
 });

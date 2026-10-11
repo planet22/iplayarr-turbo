@@ -84,6 +84,53 @@ describe('proxyUrl', () => {
         expect(streamSessionService.setSegmentCount).not.toHaveBeenCalled();
     });
 
+    describe('highestVariantFirst', () => {
+        const master =
+            '#EXTM3U\n#EXT-X-VERSION:3\n' +
+            '#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=704x396\nlow.m3u8\n' +
+            '#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1280x720\nhigh.m3u8\n' +
+            '#EXT-X-STREAM-INF:BANDWIDTH=1500000,RESOLUTION=896x504\nmid.m3u8\n' +
+            '#EXT-X-ENDLIST\n';
+        const bandwidths = (out: string) => Array.from(out.matchAll(/BANDWIDTH=(\d+)/g)).map((m) => Number(m[1]));
+
+        const run = async (body: string, highestFirst?: boolean) => {
+            mockGet(https, [{ status: 200, headers: { 'content-type': 'application/vnd.apple.mpegurl' }, body }]);
+            const res = makeRes();
+            await proxyUrl('https://cdn/master.m3u8', makeReq(), res, 5, undefined, highestFirst);
+            return res.send.mock.calls[0][0] as string;
+        };
+
+        it('orders variants by descending bandwidth, keeping each tag with its URI', async () => {
+            const out = await run(master, true);
+            expect(bandwidths(out)).toEqual([3000000, 1500000, 800000]);
+            expect(out).toContain('#EXT-X-VERSION:3');
+            expect(out).toContain('#EXT-X-ENDLIST');
+            const lines = out.split('\n');
+            const idx = lines.findIndex((l) => l.includes('RESOLUTION=1280x720'));
+            expect(lines[idx + 1]).toContain('/api/');
+        });
+
+        it('leaves the original order alone by default', async () => {
+            expect(bandwidths(await run(master))).toEqual([800000, 3000000, 1500000]);
+        });
+
+        it('leaves a media playlist untouched and treats missing bandwidth as 0', async () => {
+            expect(await run('#EXTM3U\n#EXTINF:4,\nseg1.ts\n', true)).toContain('#EXTINF:4,');
+            const out = await run('#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1x1\na.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=5\nb.m3u8\n', true);
+            expect(out.indexOf('BANDWIDTH=5')).toBeLessThan(out.indexOf('RESOLUTION=1x1'));
+        });
+
+        it('keeps the preference across redirects', async () => {
+            mockGet(https, [
+                { status: 302, headers: { location: 'https://cdn/final.m3u8' } },
+                { status: 200, headers: { 'content-type': 'application/x-mpegURL' }, body: master },
+            ]);
+            const res = makeRes();
+            await proxyUrl('https://cdn/start', makeReq(), res, 5, undefined, true);
+            expect(bandwidths(res.send.mock.calls[0][0])).toEqual([3000000, 1500000, 800000]);
+        });
+    });
+
     it('follows redirects', async () => {
         mockGet(https, [
             { status: 302, headers: { location: 'https://cdn/final.m3u8' } },
