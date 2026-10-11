@@ -1,6 +1,6 @@
 <template>
     <div class="browsePage schedulePage">
-        <PageHeader title="Schedule">
+        <PageHeader title="Guide">
             <template #center>
             <div class="dateNav">
                 <button type="button" @click="shiftDay(-1)"><font-awesome-icon :icon="['fas', 'chevron-left']" /></button>
