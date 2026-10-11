@@ -9,6 +9,10 @@ import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 const router: Router = Router();
 const upload: Multer = multer();
 
+// Modes gated by STREAM_KEY rather than API_KEY. The Live TV ones are fetched by Jellyfin (tuner,
+// guide and channel logos), which can only carry a key in the URL, same as a .strm file.
+const STREAM_KEY_MODES: string[] = ['stream', 'live_playlist', 'live_epg', 'live_logo'];
+
 interface ApiRequest {
     apikey?: string;
     streamkey?: string;
@@ -27,7 +31,7 @@ router.all(['/', '/*'], upload.any(), async (req: Request, res: Response, next: 
     // the media library (readable by anything with filesystem access, not just Sonarr/Radarr), so
     // they must never embed the same key that gates the whole rest of this protocol (search,
     // grab, queue, history). Independently regenerable in Settings for the same reason.
-    const isStreamMode = mode === 'stream';
+    const isStreamMode = !!mode && STREAM_KEY_MODES.includes(mode);
     const expectedKey: string | undefined = await configService.getParameter(
         isStreamMode ? IplayarrParameter.STREAM_KEY : IplayarrParameter.API_KEY
     );

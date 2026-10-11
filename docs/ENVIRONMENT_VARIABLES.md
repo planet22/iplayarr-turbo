@@ -45,6 +45,7 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | `STREAM_NATIVE_HQ_PROBE` | `false` | No | Verify real connection quality before playing. |
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | No | 1080p unlock trick for native streaming. |
 | `LIVE_STRM_DIR` | _(unset)_ | No | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR`. |
+| `LIVE_TV_ENABLED` | `false` | No | Serve the live channels as an M3U tuner + XMLTV guide for Jellyfin Live TV. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
 | `STRM_WATCHDOG_ENABLED` | `false` | No | Daily check that `.strm` links still resolve. See [WATCHDOG.md](WATCHDOG.md). |
 | `STRM_WATCHDOG_SOURCES` | `history` | No | Comma-separated: `subscribed`, `history`, `app:<id>`. |
 | `STRM_WATCHDOG_ACTION` | `notify` | No | `notify` or `delete` for an expired link. |

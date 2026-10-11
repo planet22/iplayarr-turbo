@@ -92,6 +92,7 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Native Quality Probe | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only. |
 | Native FHD Upgrade | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only. |
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
+| Live TV | `LIVE_TV_ENABLED` | `false` | Jellyfin Live TV tuner (M3U) and guide (XMLTV) URLs, shown in the Live TV (Jellyfin) section. Needs `STREAM_BASE_URL`. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
 | Stream Cache Directory _(advanced)_ | `STREAM_CACHE_DIR` | temp folder | Scratch space for in-flight streams. |
 | — | `THUMBNAIL_CACHE_DIR` | temp folder | Where cached BBC episode thumbnails are stored. Env-only. |
 

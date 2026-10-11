@@ -71,6 +71,15 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 - The Streaming page shows live sessions with the channel name and logo and a **Live** badge.
 - The [STRM Watchdog](WATCHDOG.md) ignores live files.
 
+### Jellyfin Live TV (tuner + guide)
+
+Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Streaming → Live TV (Jellyfin)** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set. Two URLs then appear, both secured by the Stream Key:
+
+- **M3U Tuner URL** (`/api?mode=live_playlist&streamkey=...`): Jellyfin → Dashboard → Live TV → Tuner Devices → add an **M3U Tuner**.
+- **XMLTV Guide URL** (`/api?mode=live_epg&streamkey=...`): Jellyfin → Dashboard → Live TV → TV Guide Data Providers → add **XMLTV**, then map channels (ids match the playlist).
+
+Playback uses the existing live resolver, so it needs a UK IP, and the guide is built from the same iPlayer schedule as the Schedule page (yesterday to tomorrow). With the setting off the endpoints return 404 and nothing else changes. Channel logos are served as SVG under the same key (`mode=live_logo`); Jellyfin may ignore SVG logos.
+
 ## Checking links still work
 
 Programmes expire from iPlayer. The optional [STRM Watchdog](WATCHDOG.md) checks daily that your `.strm` links still resolve and can report or remove dead ones.

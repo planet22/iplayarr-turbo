@@ -61,7 +61,10 @@ export class ConfigFormValidator extends Validator {
                 validatorError['NZB_PASSWORD'] = response as string;
             }
         }
-        if (input.MEDIA_MODE === 'strm' && !this.isValidUrl(input.STREAM_BASE_URL)) {
+        if (
+            (input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true') &&
+            !this.isValidUrl(input.STREAM_BASE_URL)
+        ) {
             validatorError['STREAM_BASE_URL'] = 'Please provide a valid base URL (e.g. http://jellyfin-host:4404)';
         }
         if (input.AUTH_TYPE === 'oidc') {
