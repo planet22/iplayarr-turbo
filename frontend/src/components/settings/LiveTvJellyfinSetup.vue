@@ -9,7 +9,7 @@
             <SelectInput
                 v-model="serverId"
                 name="Jellyfin Server"
-                tooltip="Server the tuner and guide are added to. Needs an administrator API key. Uses the saved Stream Base URL, Stream Key and EPG offset - save settings first."
+                tooltip="Server the tuner and guide are added to. Needs an administrator API key. Uses the saved Stream Base URL, Stream Key and EPG offset - save settings first. Once added, changing the Live TV channel list asks this server to refresh its guide."
                 :options="serverOptions"
             />
             <div v-for="item in items" :key="item.key" class="setupRow">
@@ -90,7 +90,9 @@ watch(serverId, () => {
 onMounted(async () => {
     servers.value = (await ipFetch('json-api/apps')).data.filter(({ type, api_key: key }) => type === 'JELLYFIN' && key);
     loaded.value = true;
-    serverId.value = servers.value[0]?.id ?? '';
+    // Prefer the server the tuner/guide was set up on - it is the one channel changes are pushed to.
+    const { data } = await ipFetch('json-api/live-tv/jellyfin/server');
+    serverId.value = servers.value.find(({ id }) => id === data?.appId)?.id ?? servers.value[0]?.id ?? '';
 });
 </script>
 

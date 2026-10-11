@@ -5,6 +5,7 @@ import router from '../../../src/routes/json-api/LiveTvRoute';
 import appService from '../../../src/service/appService';
 import jellyfinService from '../../../src/service/jellyfinService';
 import liveTvChannelService from '../../../src/service/liveTvChannelService';
+import liveTvSyncService from '../../../src/service/liveTvSyncService';
 
 jest.mock('../../../src/service/appService', () => ({ __esModule: true, default: { getApp: jest.fn() } }));
 jest.mock('../../../src/service/jellyfinService', () => ({
@@ -27,6 +28,10 @@ jest.mock('../../../src/service/liveTvChannelService', () => {
         default: { list: jest.fn(), add: jest.fn(), remove: jest.fn(), addAll: jest.fn(), clear: jest.fn() },
     };
 });
+jest.mock('../../../src/service/liveTvSyncService', () => ({
+    __esModule: true,
+    default: { notifyChanged: jest.fn(), remember: jest.fn(), forget: jest.fn(), remembered: jest.fn() },
+}));
 jest.mock('../../../src/service/liveTvService', () => ({
     __esModule: true,
     default: { playlistUrl: jest.fn().mockResolvedValue('P'), epgUrl: jest.fn().mockResolvedValue('E') },
@@ -56,6 +61,39 @@ describe('LiveTvRoute', () => {
         expect((await request(app).delete('/channels/bbc_four')).status).toBe(200);
         (liveTvChannelService.clear as jest.Mock).mockResolvedValue([]);
         expect((await request(app).delete('/channels')).body).toEqual([]);
+    });
+
+    it('asks Jellyfin to refresh after every channel change, but not after a rejected one', async () => {
+        (liveTvChannelService.add as jest.Mock).mockResolvedValue([]);
+        (liveTvChannelService.remove as jest.Mock).mockResolvedValue([]);
+        (liveTvChannelService.addAll as jest.Mock).mockResolvedValue([]);
+        (liveTvChannelService.clear as jest.Mock).mockResolvedValue([]);
+        await request(app).post('/channels').send({ channelId: 'bbc_four' });
+        await request(app).delete('/channels/bbc_four');
+        await request(app).post('/channels/all');
+        await request(app).delete('/channels');
+        expect(liveTvSyncService.notifyChanged).toHaveBeenCalledTimes(4);
+
+        jest.clearAllMocks();
+        await request(app).post('/channels').send({});
+        expect(liveTvSyncService.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('remembers the Jellyfin server on add, and forgets it once nothing is left', async () => {
+        await request(app).post('/jellyfin/tuner').send({ appId: 'a' });
+        expect(liveTvSyncService.remember).toHaveBeenCalledWith('a');
+
+        (liveTvSyncService.remembered as jest.Mock).mockResolvedValue('a');
+        (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({ guide: { id: 'g', path: 'p' } });
+        await request(app).delete('/jellyfin/tuner').query({ appId: 'a' });
+        expect(liveTvSyncService.forget).not.toHaveBeenCalled();
+
+        (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({});
+        await request(app).delete('/jellyfin/guide').query({ appId: 'a' });
+        expect(liveTvSyncService.forget).toHaveBeenCalled();
+
+        (liveTvSyncService.remembered as jest.Mock).mockResolvedValue('a');
+        expect((await request(app).get('/jellyfin/server')).body).toEqual({ appId: 'a' });
     });
 
     it('rejects a missing or non-Jellyfin app', async () => {
