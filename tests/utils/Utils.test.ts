@@ -228,6 +228,46 @@ describe('Utils', () => {
         });
     });
 
+    describe('release language tag', () => {
+        it('maps the setting to a tag', () => {
+            expect(Utils.releaseLanguageTag('english')).toBe('ENGLISH');
+            expect(Utils.releaseLanguageTag('English')).toBe('ENGLISH');
+            expect(Utils.releaseLanguageTag('none')).toBe('');
+            expect(Utils.releaseLanguageTag(undefined)).toBe('');
+        });
+
+        it('inserts before the source token, else appends, and never duplicates', () => {
+            expect(Utils.insertLanguageTag('Show.S01E01.WEBDL.720p-BBC', 'ENGLISH')).toBe('Show.S01E01.ENGLISH.WEBDL.720p-BBC');
+            expect(Utils.insertLanguageTag('Show.S01E01.WEB-DL.720p-BBC', 'ENGLISH')).toBe('Show.S01E01.ENGLISH.WEB-DL.720p-BBC');
+            expect(Utils.insertLanguageTag('Show.S01E01.720p-BBC', 'ENGLISH')).toBe('Show.S01E01.720p-BBC.ENGLISH');
+            expect(Utils.insertLanguageTag('Show.ENGLISH.WEBDL.720p-BBC', 'ENGLISH')).toBe('Show.ENGLISH.WEBDL.720p-BBC');
+        });
+    });
+
+    describe('createNZBName release language', () => {
+        const tv = { title: 'Show', pid: '', type: VideoType.TV, series: 1, episode: 2 } as any;
+        const movie = { title: 'Film', pid: '', type: VideoType.MOVIE } as any;
+        const withConfig = (overrides: Record<string, string>) =>
+            mockedConfigService.getParameter.mockImplementation((parameter: IplayarrParameter) =>
+                Promise.resolve(overrides[parameter] ?? configService.defaultConfigMap[parameter])
+            );
+
+        it('is off by default', async () => {
+            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.WEBDL.1080p-BBC');
+        });
+
+        it('tags TV and movie releases when English is selected', async () => {
+            withConfig({ RELEASE_LANGUAGE: 'english' });
+            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.ENGLISH.WEBDL.1080p-BBC');
+            await expect(Utils.createNZBName(movie)).resolves.toBe('Film.ENGLISH.WEBDL.1080p-BBC');
+        });
+
+        it('respects a template that places {{language}} itself', async () => {
+            withConfig({ RELEASE_LANGUAGE: 'english', TV_FILENAME_TEMPLATE: '{{title}}.{{language}}.S{{season}}E{{episode}}.{{quality}}' });
+            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.ENGLISH.S01E02.1080p');
+        });
+    });
+
     describe('createNZBName', () => {
         describe('TV', () => {
             it('title only', async () => {

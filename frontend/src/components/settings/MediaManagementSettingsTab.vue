@@ -39,6 +39,13 @@
         :options="qualityProfiles"
     />
     <SelectInput
+        v-model="config.RELEASE_LANGUAGE"
+        name="Release Language"
+        tooltip="Adds an explicit language tag (e.g. ENGLISH) to release names, for when Sonarr/Radarr shows the language as Unknown and refuses automatic grabs. You can also place {{language}} yourself in the filename templates."
+        :error="validationErrors.config?.RELEASE_LANGUAGE"
+        :options="releaseLanguages"
+    />
+    <SelectInput
         v-model="config.AIRDATE_NUMBERING"
         name="Airdate Numbering"
         tooltip="Number episodes by their UK air date matched against TheTVDB (via Skyhook) instead of iPlayer's own Series/Episode labels, which often don't match. Falls back to iPlayer's numbering when no match is found. Manual overrides can be set through the numbering-overrides API."
@@ -125,6 +132,11 @@ defineProps({
         required: true,
     },
 });
+
+const releaseLanguages = [
+    { key: 'none', value: 'None' },
+    { key: 'english', value: 'English' },
+];
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');

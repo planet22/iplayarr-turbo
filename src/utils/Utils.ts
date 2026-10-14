@@ -33,6 +33,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
             : IplayarrParameter.TV_FILENAME_TEMPLATE;
     const template = (await configService.getParameter(templateKey)) as string;
     const qualityProfile = await getQualityProfile();
+    const language = releaseLanguageTag((await configService.getParameter(IplayarrParameter.RELEASE_LANGUAGE)) as string);
     const title = result.title.trim();
 
     let season: string | undefined = undefined;
@@ -46,7 +47,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
         }
     }
 
-    return Handlebars.compile(template)({
+    const name = Handlebars.compile(template)({
         title: title.replaceAll(removeUnsafeCharsRegex, ''),
         season,
         episode:
@@ -61,9 +62,26 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
                 ? (synonym.filenameOverride ?? synonym.from)?.trim().replaceAll(removeUnsafeCharsRegex, '')
                 : undefined,
         quality: qualityProfile.quality,
+        language,
     } as FilenameTemplateContext)
         .replaceAll(/[\s/]|[\s\\-_]{2,}/g, '.')
         .replaceAll(/\.{2,}/g, '.');
+
+    // Sonarr/Radarr read a release's language from its title, so tag it explicitly - unless the
+    // user's own template already places {{language}}.
+    return language && !/{{\s*language\s*}}/.test(template) ? insertLanguageTag(name, language) : name;
+}
+
+// RELEASE_LANGUAGE setting -> the title token Sonarr/Radarr's parser recognises ('' when off).
+export function releaseLanguageTag(setting: string | undefined): string {
+    return setting?.toLowerCase() === 'english' ? 'ENGLISH' : '';
+}
+
+// Places the tag before the source token (WEBDL/WEB/HDTV...) like scene names do, else appends it.
+export function insertLanguageTag(name: string, tag: string): string {
+    if (new RegExp(`(^|[.\\-_])${tag}([.\\-_]|$)`, 'i').test(name)) return name;
+    const source = /(^|\.)(WEB-?DL|WEBRip|WEB|HDTV)(?=[.-]|$)/i;
+    return source.test(name) ? name.replace(source, `$1${tag}.$2`) : `${name}.${tag}`;
 }
 
 export function getBaseUrl(req: Request): string {
