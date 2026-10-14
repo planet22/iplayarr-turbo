@@ -10,7 +10,8 @@ import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
 import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/responses/iplayer/IPlayerNewSearchResponse';
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
-import { titleMatchesAllTerms } from '../../utils/titleMatch';
+import { traceCandidate } from '../../utils/searchTrace';
+import { firstMissingTerm } from '../../utils/titleMatch';
 import { getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
 import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
@@ -191,9 +192,23 @@ class NativeSearchV2Service implements AbstractSearchService {
         }
         try {
             const hits = lunrIndex.search(sanitizedTerm);
-            if (!matchAllWords) return hits;
             const titles = new Map(results.map(({ id, title }) => [id, title]));
-            return hits.filter(({ ref }) => titleMatchesAllTerms(titles.get(ref) ?? '', term));
+            const hitRefs = new Set(hits.map(({ ref }) => ref));
+            for (const { id, title } of results) {
+                if (!hitRefs.has(id)) {
+                    traceCandidate({ title, stage: 'bbc', kept: false, reason: 'no-match', detail: 'None of the search words match this title' });
+                }
+            }
+            return hits.filter(({ ref }) => {
+                const title = titles.get(ref) ?? '';
+                const missing = matchAllWords ? firstMissingTerm(title, term) : undefined;
+                traceCandidate(
+                    missing === undefined
+                        ? { title, stage: 'bbc', kept: true }
+                        : { title, stage: 'bbc', kept: false, reason: 'missing-word', detail: `Missing the word "${missing}"` }
+                );
+                return missing === undefined;
+            });
         } catch (err: any) {
             if (err && err.name === 'QueryParseError') {
                 loggingService.error(`Lunr QueryParseError for term "${term}": ${err.message}`);

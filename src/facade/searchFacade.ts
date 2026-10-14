@@ -10,6 +10,8 @@ import { NativeSearchEngine } from '../types/enums/NativeSearchEngine';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
 import { Synonym } from '../types/Synonym';
+import { extractEpisodeMarkers } from '../utils/episodeMarkers';
+import { currentTraceCandidates, TraceCandidate, traceCandidate, traceNote } from '../utils/searchTrace';
 import { removeLastFourDigitNumber } from '../utils/Utils';
 import scheduleFacade from './scheduleFacade';
 
@@ -20,6 +22,7 @@ interface SearchTerm {
 
 class SearchFacade {
     searchCache: RedisCacheService<IPlayerSearchResult[]> = new RedisCacheService('search_cache', 300);
+    traceCache: RedisCacheService<TraceCandidate[]> = new RedisCacheService('search_trace_cache', 300);
 
     async search(inputTerm: string, season?: number, episode?: number): Promise<IPlayerSearchResult[]> {
         return this.#run(inputTerm, season, episode);
@@ -38,6 +41,15 @@ class SearchFacade {
         onBatch?: (batch: IPlayerSearchResult[]) => void,
         tryAliases: boolean = true
     ): Promise<IPlayerSearchResult[]> {
+        // "Show S02E03" / "Show Series 2" say which episode is wanted, not what the show is called:
+        // search for the show, and let the season/episode filters do the rest. Explicit season/ep
+        // parameters (Sonarr) win over anything typed in the text.
+        const markers = extractEpisodeMarkers(inputTerm);
+        if (inputTerm != '*') {
+            inputTerm = markers.text;
+            season ??= markers.season;
+            episode ??= markers.episode;
+        }
         if (inputTerm == '*') {
             const feed = await scheduleFacade.getFeed();
             if (feed.length) onBatch?.(feed);
@@ -54,6 +66,7 @@ class SearchFacade {
             if (fresh.length) onBatch?.(fresh);
         };
 
+        traceNote({ searchedAs: term, season, episode });
         let results: IPlayerSearchResult[] | undefined = await this.searchCache.get(term);
         if (!results) {
             results = onBatch
@@ -68,7 +81,14 @@ class SearchFacade {
                 })
                 : await service.search(term, synonym);
             this.searchCache.set(term, results as IPlayerSearchResult[]);
+            this.traceCache.set(term, currentTraceCandidates('bbc')).catch(() => undefined);
         } else {
+            // The search services don't run on a cache hit, so replay what they decided last time.
+            traceNote({ cached: true });
+            const earlier = await this.traceCache.get(term).catch(() => undefined);
+            if (Array.isArray(earlier)) {
+                earlier.filter((c) => c && typeof c.title === 'string').forEach(traceCandidate);
+            }
             //Fix the results which are stored as string
             results.forEach((result) => {
                 result.pubDate = result.pubDate ? new Date(result.pubDate as unknown as string) : undefined;
@@ -78,12 +98,20 @@ class SearchFacade {
         const filteredResults = await this.#filterForSeasonAndEpisode(
             results as IPlayerSearchResult[],
             season,
-            episode
+            episode,
+            true
         );
 
         const processedResults: IPlayerSearchResult[] = await service.processCompletedSearch(filteredResults, inputTerm, synonym, season, episode);
 
-        const finalResults = processedResults.filter(({ pubDate }) => !pubDate || pubDate < new Date());
+        const now = new Date();
+        const finalResults = processedResults.filter(({ pubDate, nzbName, title }) => {
+            const aired = !pubDate || pubDate < now;
+            if (!aired) {
+                traceCandidate({ title: nzbName ?? title, stage: 'episode', kept: false, reason: 'not-aired', detail: 'Not broadcast yet' });
+            }
+            return aired;
+        });
         deliver(finalResults); // whatever the per-batch pass couldn't know about (cache hits, cross-result merging)
         if (finalResults.length === 0 && tryAliases && !synonym) {
             // Sonarr/Radarr search by TVDB's English alias, which iPlayer may not use (e.g. Welsh
@@ -102,7 +130,7 @@ class SearchFacade {
     ): Promise<IPlayerSearchResult[]> {
         let aliases: string[] = [];
         try {
-            aliases = await skyhookService.getAliases(inputTerm);
+            aliases = (await skyhookService.getAliases(inputTerm)) ?? [];
         } catch {
             return [];
         }
@@ -137,9 +165,22 @@ class SearchFacade {
         };
     }
 
-    async #filterForSeasonAndEpisode(results: IPlayerSearchResult[], season?: number, episode?: number) {
+    async #filterForSeasonAndEpisode(results: IPlayerSearchResult[], season?: number, episode?: number, trace = false) {
         return results.filter((result) => {
-            return (!season || result.series == season) && (!episode || result.episode == episode);
+            const wrongSeason = !!season && result.series != season;
+            const wrongEpisode = !wrongSeason && !!episode && result.episode != episode;
+            if (trace && (wrongSeason || wrongEpisode)) {
+                traceCandidate({
+                    title: result.nzbName ?? result.title,
+                    stage: 'episode',
+                    kept: false,
+                    reason: wrongSeason ? 'wrong-season' : 'wrong-episode',
+                    detail: wrongSeason
+                        ? `Series ${result.series ?? 'unknown'}, wanted ${season}`
+                        : `Episode ${result.episode ?? 'unknown'}, wanted ${episode}`,
+                });
+            }
+            return !wrongSeason && !wrongEpisode;
         });
     }
 

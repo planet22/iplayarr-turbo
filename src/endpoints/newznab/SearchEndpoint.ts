@@ -9,6 +9,7 @@ import { SearchHistoryEntry, SearchHistoryResultItem } from '../../types/data/Se
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { IPlayerSearchResult, VideoType } from '../../types/IPlayerSearchResult';
 import { NewzNabAttr, NewzNabSearchResponse } from '../../types/responses/newznab/NewzNabSearchResponse';
+import { withSearchTrace } from '../../utils/searchTrace';
 import { createNZBDownloadLink, getQualityProfile } from '../../utils/Utils';
 import { expandQualityVariants, parseExtraQualities } from '../../utils/videoQuality';
 
@@ -29,7 +30,8 @@ export default async (req: Request, res: Response) => {
         queryApp ?? (await appService.findAppByUserAgent(req.headers['user-agent']))?.id;
     const cat: string[] | undefined = catList ? catList.split(',') : undefined;
     const searchTerm = q ?? '*';
-    let results: IPlayerSearchResult[] = await searchFacade.search(searchTerm, season, ep);
+    const { result: found, trace } = await withSearchTrace(() => searchFacade.search(searchTerm, season, ep));
+    let results: IPlayerSearchResult[] = found;
 
     if (cat) {
         results = results.filter(({ type }) => categoriesForType(type).some((category) => cat.includes(category)));
@@ -58,6 +60,8 @@ export default async (req: Request, res: Response) => {
         episode: ep,
         time: new Date().getTime(),
         items: historyItems,
+        // Only what was dropped: the kept ones are already in `items`, and history is stored per search.
+        trace: searchTerm == '*' ? undefined : { ...trace, candidates: trace.candidates.filter(({ kept }) => !kept) },
     };
     statisticsService.addSearch(historyEntry);
 

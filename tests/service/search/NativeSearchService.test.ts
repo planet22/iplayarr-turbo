@@ -6,6 +6,7 @@ import NativeSearchService from '../../../src/service/search/NativeSearchService
 import { IPlayerSearchResult, VideoType } from '../../../src/types/IPlayerSearchResult';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../../src/types/Synonym';
+import { withSearchTrace } from '../../../src/utils/searchTrace';
 import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
 
 jest.mock('axios');
@@ -122,6 +123,30 @@ describe('NativeSearchService', () => {
             const results = await NativeSearchService.search('Stickman');
 
             expect(results.map(({ pid }) => pid)).toEqual(['p0stick1']);
+        });
+
+        it('traces why each BBC hit was kept or dropped', async () => {
+            (axios.get as jest.Mock).mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    new_search: {
+                        results: [
+                            { id: 'p0doc001', title: 'Doctor Who' },
+                            { id: 'p0doc002', title: 'Doctor Strange' },
+                            { id: 'p0misc01', title: 'Gardeners World' },
+                        ],
+                    },
+                },
+            });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockResolvedValue([]);
+
+            const { trace } = await withSearchTrace(() => NativeSearchService.search('Doctor Who'));
+
+            const byTitle = Object.fromEntries(trace.candidates.map((c) => [c.title, c]));
+            expect(byTitle['Doctor Who']).toMatchObject({ kept: true });
+            expect(byTitle['Doctor Strange']).toMatchObject({ kept: false, reason: 'missing-word', detail: 'Missing the word "who"' });
+            expect(byTitle['Gardeners World']).toMatchObject({ kept: false, reason: 'no-match' });
         });
 
         it('should return an empty array when the response status is not 200', async () => {

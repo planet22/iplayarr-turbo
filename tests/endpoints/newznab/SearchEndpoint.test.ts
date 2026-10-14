@@ -84,6 +84,7 @@ describe('SearchEndpoint', () => {
                     pid: 'xyz123',
                 },
             ],
+            trace: { candidates: [] },
         });
     });
 

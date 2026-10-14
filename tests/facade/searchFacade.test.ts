@@ -9,6 +9,7 @@ import nativeSearchV2Service from '../../src/service/search/NativeSearchV2Servic
 import skyhookService from '../../src/service/skyhook/SkyhookService';
 import synonymService from '../../src/service/synonymService';
 import { IPlayerSearchResult } from '../../src/types/IPlayerSearchResult';
+import { withSearchTrace } from '../../src/utils/searchTrace';
 
 // Mock dependencies
 jest.mock('../../src/service/configService');
@@ -55,6 +56,45 @@ describe('SearchFacade', () => {
     expect(results[0].title).toBe('Test Show');
     expect(results[0].series).toBe(1);
     expect(results[0].episode).toBe(1);
+  });
+
+  describe('episode markers and tracing', () => {
+    beforeEach(() => {
+      (configService.getParameter as jest.Mock).mockResolvedValue('true');
+      (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
+    });
+
+    const ep = (series: number, episode: number) =>
+      ({ pid: `p${series}${episode}`, title: 'Show', nzbName: `Show.S0${series}E0${episode}`, series, episode, pubDate: new Date('2020-01-01') }) as IPlayerSearchResult;
+
+    it('searches for the show and filters by the typed season/episode', async () => {
+      (nativeSearchService.search as jest.Mock).mockResolvedValue([ep(1, 1), ep(2, 3), ep(2, 4)]);
+      const { result, trace } = await withSearchTrace(() => searchFacade.search('Show S02E03'));
+      expect(nativeSearchService.search).toHaveBeenCalledWith('Show', undefined);
+      expect(result.map(({ pid }) => pid)).toEqual(['p23']);
+      expect(trace).toMatchObject({ searchedAs: 'Show', season: 2, episode: 3 });
+      expect(trace.candidates.map(({ reason, detail }) => [reason, detail])).toEqual([
+        ['wrong-season', 'Series 1, wanted 2'],
+        ['wrong-episode', 'Episode 4, wanted 3'],
+      ]);
+    });
+
+    it('lets explicit season/ep parameters win over typed markers', async () => {
+      (nativeSearchService.search as jest.Mock).mockResolvedValue([ep(1, 1), ep(2, 3)]);
+      const result = await searchFacade.search('Show S02E03', 1, 1);
+      expect(result.map(({ pid }) => pid)).toEqual(['p11']);
+    });
+
+    it('records episodes that have not aired yet', async () => {
+      const future = { ...ep(1, 1), pubDate: new Date(Date.now() + 86400000) } as IPlayerSearchResult;
+      (nativeSearchService.search as jest.Mock).mockResolvedValue([future]);
+      const { result, trace } = await withSearchTrace(() => searchFacade.search('Show'));
+      expect(result).toEqual([]);
+      expect(trace.candidates[0]).toMatchObject({ reason: 'not-aired', stage: 'episode' });
+    });
   });
 
   describe('alias fallback', () => {
