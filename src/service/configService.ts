@@ -51,6 +51,7 @@ const configService = {
         EXTRA_VIDEO_QUALITIES: '',
         AIRDATE_NUMBERING: 'false',
         RELEASE_LANGUAGE: 'none',
+        SEARCH_MATCH_ALL_WORDS: 'true',
         RSS_FEED_HOURS: '48',
         // 'false' re-fetches/re-parses only today's BBC schedule page per channel each refresh,
         // reusing a cached result for any day that's already fully passed (it can't change once

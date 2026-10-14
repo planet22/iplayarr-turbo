@@ -63,7 +63,7 @@ describe('NativeSearchService', () => {
                 status: 200,
                 data: {
                     new_search: {
-                        results: [{ id: 'testId', title: 'Test' }],
+                        results: [{ id: 'testId', title: 'Test Term' }],
                     },
                 }
             });
@@ -100,6 +100,29 @@ describe('NativeSearchService', () => {
                 expect(results.map(({ pid }) => pid)).toEqual(['m000him1']);
             }
         );
+
+        it('drops hits that only share some of the query words (e.g. Stickman vs Spider-Man)', async () => {
+            (axios.get as jest.Mock).mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    new_search: {
+                        results: [
+                            { id: 'p0stick1', title: 'Stickman' },
+                            { id: 'p0spide1', title: 'Spider-Man' },
+                            { id: 'p0moon01', title: 'Man on the Moon' },
+                        ],
+                    },
+                },
+            });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockImplementation(async ([pid]: string[]) => [
+                { title: pid, pid, type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 },
+            ]);
+
+            const results = await NativeSearchService.search('Stickman');
+
+            expect(results.map(({ pid }) => pid)).toEqual(['p0stick1']);
+        });
 
         it('should return an empty array when the response status is not 200', async () => {
             (axios.get as jest.Mock).mockResolvedValue({
@@ -214,7 +237,7 @@ describe('NativeSearchService', () => {
                 status: 200,
                 data: {
                     new_search: {
-                        results: [{ id: 'brandId', title: 'Test Brand' }],
+                        results: [{ id: 'brandId', title: 'Test Term Brand' }],
                     },
                 }
             });
@@ -248,7 +271,7 @@ describe('NativeSearchService', () => {
             }));
             (axios.get as jest.Mock).mockResolvedValueOnce({
                 status: 200,
-                data: { new_search: { results: [{ id: 'brandId', title: 'Test Brand' }] } }
+                data: { new_search: { results: [{ id: 'brandId', title: 'Test Term Brand' }] } }
             });
             (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue('testBrandPid');
             (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockResolvedValue(manyEpisodes);
@@ -277,7 +300,7 @@ describe('NativeSearchService', () => {
             const arrange = () => {
                 (axios.get as jest.Mock).mockResolvedValueOnce({
                     status: 200,
-                    data: { new_search: { results: [{ id: 'brandId', title: 'Test Brand' }] } }
+                    data: { new_search: { results: [{ id: 'brandId', title: 'Test Term Brand' }] } }
                 });
                 (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue('testBrandPid');
                 (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockImplementation(
@@ -337,8 +360,8 @@ describe('NativeSearchService', () => {
                 data: {
                     new_search: {
                         results: [
-                            { id: 'brand1', title: 'Test Brand 1' },
-                            { id: 'brand2', title: 'Test Brand 2' }
+                            { id: 'brand1', title: 'Test Term Brand 1' },
+                            { id: 'brand2', title: 'Test Term Brand 2' }
                         ],
                     },
                 }

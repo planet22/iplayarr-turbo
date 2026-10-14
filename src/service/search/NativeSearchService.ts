@@ -3,12 +3,15 @@ import { Index } from 'lunr';
 import lunr from 'lunr';
 
 import { searchResultLimit } from '../../constants/iPlayarrConstants';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { IPlayerDetails } from '../../types/IPlayerDetails';
 import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
 import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/responses/iplayer/IPlayerNewSearchResponse';
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
+import { titleMatchesAllTerms } from '../../utils/titleMatch';
 import { createNZBName, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
+import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
 import AbstractSearchService from './AbstractSearchService';
@@ -19,6 +22,7 @@ class NativeSearchService implements AbstractSearchService {
 
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
+        const matchAllWords = (await configService.getParameter(IplayarrParameter.SEARCH_MATCH_ALL_WORDS)) !== 'false';
         const url = `https://ibl.api.bbc.co.uk/ibl/v1/new-search?q=${encodeURIComponent(term)}`;
         let response: AxiosResponse<IPlayerNewSearchResponse>;
         try {
@@ -32,7 +36,7 @@ class NativeSearchService implements AbstractSearchService {
                 new_search: { results },
             } = response.data;
 
-            const lunrResults: Index.Result[] = this.#indexAndReSearch(term, results);
+            const lunrResults: Index.Result[] = this.#indexAndReSearch(term, results, matchAllWords);
             const pidLedger: string[] = [];
             const infoPidLedger: Set<string> = new Set();
 
@@ -138,7 +142,7 @@ class NativeSearchService implements AbstractSearchService {
         };
     }
 
-    #indexAndReSearch(term: string, results: IPlayerNewSearchResult[]): Index.Result[] {
+    #indexAndReSearch(term: string, results: IPlayerNewSearchResult[], matchAllWords: boolean): Index.Result[] {
         //Index them each and search again, iPlayer's search is WAY to fuzzy
         const lunrIndex: lunr.Index = lunr(function (this: lunr.Builder) {
             // lunr's default stop words (him, her, and, the...) would erase titles like "Him & Her"
@@ -156,7 +160,10 @@ class NativeSearchService implements AbstractSearchService {
             return [];
         }
         try {
-            return lunrIndex.search(sanitizedTerm);
+            const hits = lunrIndex.search(sanitizedTerm);
+            if (!matchAllWords) return hits;
+            const titles = new Map(results.map(({ id, title }) => [id, title]));
+            return hits.filter(({ ref }) => titleMatchesAllTerms(titles.get(ref) ?? '', term));
         } catch (err: any) {
             if (err && err.name === 'QueryParseError') {
                 loggingService.error(`Lunr QueryParseError for term "${term}": ${err.message}`);
