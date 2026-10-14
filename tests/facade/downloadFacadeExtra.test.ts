@@ -150,6 +150,31 @@ describe('DownloadFacade (extra)', () => {
             expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid);
         });
 
+        it('records a FAILED history entry with an actionable reason for a geo-blocked exit', async () => {
+            const { close, stderr } = await startDownload(GetIplayerDownloadService);
+            const item: any = queueItem();
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(item);
+            stderr(Buffer.from('ERROR: [bbc.co.uk] m002q8ks: bbc.co.uk returned error: geolocation'));
+            await close(1);
+            expect(historyService.addHistory).toHaveBeenCalledWith(item, QueueEntryStatus.FAILED);
+            expect(item.failMessage).toMatch(/outside the UK/);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('geolocation'));
+            expect(videoEventService.record).toHaveBeenCalledWith(
+                VideoEventType.DOWNLOAD_FAILED,
+                expect.stringContaining('outside the UK'),
+                { pid, level: 'error' }
+            );
+        });
+
+        it('falls back to the exit code when the output is not recognised', async () => {
+            const { close } = await startDownload(GetIplayerDownloadService);
+            const item: any = queueItem();
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(item);
+            await close(2);
+            expect(item.failMessage).toBe('Download exited with code 2');
+            expect(historyService.addHistory).toHaveBeenCalledWith(item, QueueEntryStatus.FAILED);
+        });
+
         it('just clears the queue when the item is gone', async () => {
             const { close } = await startDownload(GetIplayerDownloadService);
             (queueService.getFromQueue as jest.Mock).mockReturnValue(undefined);

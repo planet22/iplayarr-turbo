@@ -23,6 +23,7 @@ import { LogLine, LogLineLevel } from '../types/LogLine';
 import { QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
+import { classifyDownloadFailure, recordDownloadOutput, takeDownloadOutput } from '../utils/downloadFailure';
 import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
 import { buildStrmToolJson } from '../utils/strmToolBuilder';
@@ -34,18 +35,22 @@ class DownloadFacade {
         const service: AbstractDownloadService = await this.#getService();
         const process: ChildProcess = await service.download(pid, pidDir);
 
-        process.stderr?.on('data', this.#processError);
+        process.stderr?.on('data', (data) => this.#processError(pid, data));
         process.stdout?.on('data', (data) => this.#processOutput(pid, data));
         process.on('close', (code) => this.#processComplete(pid, pidDir, code, service));
 
         return process;
     }
 
-    #processError(data: any): void {
-        loggingService.error(data);
+    #processError(pid: string, data: any): void {
+        // toString: a raw Buffer would be logged as a byte array.
+        const text = data.toString();
+        recordDownloadOutput(pid, text);
+        loggingService.error(text);
     }
 
     #processOutput(pid: string, data: any): void {
+        recordDownloadOutput(pid, data.toString());
         console.log(data.toString());
         const logLine: LogLine = { level: LogLineLevel.INFO, id: pid, message: data.toString(), timestamp: new Date() };
         socketService.emit('log', logLine);
@@ -64,6 +69,7 @@ class DownloadFacade {
         const writeStrmToolJson = (await configService.getParameter(IplayarrParameter.WRITE_STRMTOOL_JSON)) === 'true';
         const streamMode = await configService.getParameter(IplayarrParameter.STREAM_MODE);
         const videoQuality = await configService.getParameter(IplayarrParameter.VIDEO_QUALITY);
+        const output = takeDownloadOutput(pid);
 
         if (code === 0) {
             const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
@@ -140,6 +146,9 @@ class DownloadFacade {
                     loggingService.debug(pid, `Deleting old directory ${directory}`);
                     fs.rmSync(directory, { recursive: true, force: true });
 
+                    if (!videoFile) {
+                        queueItem.failMessage = classifyDownloadFailure(output) ?? 'get_iplayer produced no video file';
+                    }
                     await historyService.addHistory(
                         queueItem,
                         videoFile ? QueueEntryStatus.COMPLETE : QueueEntryStatus.FAILED
@@ -151,11 +160,20 @@ class DownloadFacade {
         } else {
             const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
             if (queueItem) {
+                const reason = classifyDownloadFailure(output);
                 videoEventService.record(
                     VideoEventType.DOWNLOAD_FAILED,
-                    `Download process for "${queueItem.nzbName}" exited with code ${code}`,
+                    `Download process for "${queueItem.nzbName}" exited with code ${code}${reason ? `: ${reason}` : ''}`,
                     { pid, level: 'error' }
                 );
+                // Tell Sonarr/Radarr it failed (so it can blocklist and look elsewhere) rather than
+                // letting the item silently vanish from the queue with no history entry.
+                queueItem.failMessage = reason ?? `Download exited with code ${code}`;
+                try {
+                    await historyService.addHistory(queueItem, QueueEntryStatus.FAILED);
+                } catch (err) {
+                    loggingService.error(err);
+                }
             }
         }
         queueService.removeFromQueue(pid);

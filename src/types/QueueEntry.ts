@@ -47,4 +47,6 @@ export interface QueueEntry {
     // if LIBRARY_FOLDER_STRUCTURE is toggled after the fact - see
     // HistoryEndpoint.ts.
     libraryPath?: string;
+    // Why a download ended up FAILED, shown to Sonarr/Radarr as the history fail_message.
+    failMessage?: string;
 }
