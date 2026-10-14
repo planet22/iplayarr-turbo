@@ -9,7 +9,8 @@ export interface TraceCandidate {
     title: string;
     stage: TraceStage;
     kept: boolean;
-    // no-match | missing-word | wrong-season | wrong-episode | not-aired
+    // no-match | missing-word | wrong-season | wrong-episode | not-aired | lookup-failed |
+    // page-failed | page-cap | hit-cap | result-limit
     reason?: string;
     detail?: string;
 }
@@ -20,6 +21,8 @@ export interface SearchTrace {
     season?: number;
     episode?: number;
     cached?: boolean;
+    // The shorter query the BBC search was retried with when the full one matched nothing.
+    retriedAs?: string;
     candidates: TraceCandidate[];
     truncated?: boolean;
 }

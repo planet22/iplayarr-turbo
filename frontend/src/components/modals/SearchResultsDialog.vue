@@ -4,6 +4,9 @@
             <span v-if="trace.searchedAs && trace.searchedAs !== term" class="pill" title="Season/episode text is searched separately">
                 Searched as: {{ trace.searchedAs }}
             </span>
+            <span v-if="trace.retriedAs" class="pill" title="Nothing matched the full search, so it was retried with fewer words">
+                Retried as: {{ trace.retriedAs }}
+            </span>
             <span v-if="trace.season != null" class="pill">Series {{ trace.season }}</span>
             <span v-if="trace.episode != null" class="pill">Episode {{ trace.episode }}</span>
             <span v-if="trace.cached" class="pill" title="Served from the 5 minute search cache">Cached</span>
@@ -78,6 +81,11 @@ const reasonLabels = {
     'wrong-season': 'Wrong series',
     'wrong-episode': 'Wrong episode',
     'not-aired': 'Not broadcast yet',
+    'lookup-failed': 'Programme lookup failed',
+    'page-failed': 'Episode list failed to load',
+    'page-cap': 'Episode list too long',
+    'hit-cap': 'BBC search limit reached',
+    'result-limit': 'Result limit reached',
 };
 
 const rejected = computed(() => (props.trace?.candidates ?? []).filter(({ kept }) => !kept));

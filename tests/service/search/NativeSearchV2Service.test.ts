@@ -6,6 +6,7 @@ import loggingService from '../../../src/service/loggingService';
 import NativeSearchService from '../../../src/service/search/NativeSearchService';
 import NativeSearchV2Service from '../../../src/service/search/NativeSearchV2Service';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
+import { withSearchTrace } from '../../../src/utils/searchTrace';
 import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
 
 jest.mock('axios');
@@ -205,6 +206,70 @@ describe('NativeSearchV2Service', () => {
 
         expect(results).toHaveLength(3);
         expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('lookup failed for bad1'));
+    });
+
+    describe('improvements', () => {
+        const hitsByQuery = (map: Record<string, { id: string; title: string }[]>) =>
+            (axios.get as jest.Mock).mockImplementation(async (url: string) => ({
+                status: 200,
+                data: { new_search: { results: map[decodeURIComponent(url.split('q=')[1])] ?? [] } },
+            }));
+
+        it('retries with fewer words when the full search matches nothing', async () => {
+            hitsByQuery({ 'Test Brand Some Long Episode Title': [], 'Test Brand Some Long Episode': [], 'Test Brand Some Long': [], 'Test Brand Some': [{ id: 'hit1', title: 'Test Brand Some' }] });
+            serveEpisodes({ brandPid: episodes('a', 2) });
+
+            const { result, trace } = await withSearchTrace(() => NativeSearchV2Service.search('Test Brand Some Long Episode Title'));
+
+            expect(result).toHaveLength(2);
+            expect(trace.retriedAs).toBe('Test Brand Some');
+        });
+
+        it('never shortens below two words', async () => {
+            hitsByQuery({});
+            await NativeSearchV2Service.search('Test Brand');
+            expect(axios.get).toHaveBeenCalledTimes(1);
+            (axios.get as jest.Mock).mockClear();
+            await NativeSearchV2Service.search('One Two Three Four Five Six');
+            const queried = (axios.get as jest.Mock).mock.calls.map(([url]) => decodeURIComponent(url.split('q=')[1]));
+            expect(queried).toEqual(['One Two Three Four Five Six', 'One Two Three Four Five', 'One Two Three Four', 'One Two Three']);
+        });
+
+        it('lists the exact title ahead of titles that merely start with it', async () => {
+            // The longer title repeats the words, so lunr alone scores it higher.
+            searchHits({ id: 'conf1', title: 'Test Brand Test Brand Test Brand Special' }, { id: 'exact1', title: 'Test Brand' });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockImplementation(async (ref: string) => `brand-${ref}`);
+            serveEpisodes({ 'brand-exact1': episodes('x', 1), 'brand-conf1': episodes('c', 1) });
+
+            const results = await NativeSearchV2Service.search(term);
+
+            expect(results.map(({ pid }) => pid)).toEqual(['x0', 'c0']);
+        });
+
+        it('records lookup failures, failed episode pages and the result limit in the trace', async () => {
+            searchHits({ id: 'bad1', title: 'Test Brand' }, { id: 'good1', title: 'Test Brand Too' });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockImplementation((ref: string) =>
+                ref == 'bad1' ? Promise.reject(new Error('boom')) : Promise.resolve('brandPid')
+            );
+            (iplayerDetailsService.getSeriesEpisodesChecked as jest.Mock)
+                .mockResolvedValueOnce({ elements: episodes('a', searchResultLimit), failed: false })
+                .mockResolvedValueOnce({ elements: [], failed: true });
+
+            const { trace } = await withSearchTrace(() => NativeSearchV2Service.search(term));
+
+            const reasons = trace.candidates.map(({ reason }) => reason);
+            expect(reasons).toEqual(expect.arrayContaining(['lookup-failed', 'page-failed', 'result-limit']));
+            expect(trace.candidates.find(({ reason }) => reason === 'lookup-failed')?.title).toBe('Test Brand');
+        });
+
+        it('records when BBC returned its maximum number of hits', async () => {
+            searchHits(...Array.from({ length: 24 }, (_, i) => ({ id: `h${i}`, title: `Test Brand ${i}` })));
+            serveEpisodes({ brandPid: [] });
+
+            const { trace } = await withSearchTrace(() => NativeSearchV2Service.search(term));
+
+            expect(trace.candidates.some(({ reason }) => reason === 'hit-cap')).toBe(true);
+        });
     });
 
     it('delegates exemption filtering to Native Search 1.0', async () => {

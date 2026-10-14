@@ -1,4 +1,4 @@
-import { queryTerms, titleMatchesAllTerms } from '../../src/utils/titleMatch';
+import { queryTerms, titleMatchesAllTerms, titleRank } from '../../src/utils/titleMatch';
 
 describe('titleMatch', () => {
     it('drops stop words, single characters and punctuation from the query', () => {
@@ -26,5 +26,15 @@ describe('titleMatch', () => {
     it('accepts anything when the query has no usable words', () => {
         expect(titleMatchesAllTerms('Whatever', 'the')).toBe(true);
         expect(titleMatchesAllTerms('Whatever', '')).toBe(true);
+    });
+});
+
+describe('titleRank', () => {
+    it('ranks exact, then prefix, then other matches', () => {
+        expect(titleRank('Doctor Who', 'doctor who')).toBe(0);
+        expect(titleRank('Doctor Who: Confidential', 'Doctor Who')).toBe(1);
+        expect(titleRank('The Making of Doctor Who', 'Doctor Who')).toBe(2);
+        expect(titleRank('Doctor Who', 'Doctor Who S02E03')).toBe(0);
+        expect(titleRank('Anything', '')).toBe(2);
     });
 });

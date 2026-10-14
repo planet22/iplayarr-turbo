@@ -34,3 +34,13 @@ export function firstMissingTerm(title: string, query: string): string | undefin
 export function titleMatchesAllTerms(title: string, query: string): boolean {
     return firstMissingTerm(title, query) === undefined;
 }
+
+// 0 = the title is the search (ignoring case/punctuation), 1 = starts with it, 2 = merely contains
+// the words. Used to list "Doctor Who" ahead of "Doctor Who Confidential" before the result cap.
+export function titleRank(title: string, query: string): number {
+    const wanted = normalizeForMatch(extractEpisodeMarkers(query).text);
+    const normalized = normalizeForMatch(title);
+    if (!wanted) return 2;
+    if (normalized === wanted) return 0;
+    return normalized.startsWith(`${wanted} `) ? 1 : 2;
+}
