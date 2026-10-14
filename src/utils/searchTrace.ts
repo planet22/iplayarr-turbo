@@ -23,6 +23,8 @@ export interface SearchTrace {
     cached?: boolean;
     // The shorter query the BBC search was retried with when the full one matched nothing.
     retriedAs?: string;
+    // Set when only the requested series' episodes were fetched (Native Search 2.0 option).
+    narrowedTo?: string;
     candidates: TraceCandidate[];
     truncated?: boolean;
 }

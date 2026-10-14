@@ -10,6 +10,7 @@ import skyhookService from '../../src/service/skyhook/SkyhookService';
 import synonymService from '../../src/service/synonymService';
 import { IPlayerSearchResult } from '../../src/types/IPlayerSearchResult';
 import { withSearchTrace } from '../../src/utils/searchTrace';
+import { seasonHint } from '../../src/utils/seasonHint';
 
 // Mock dependencies
 jest.mock('../../src/service/configService');
@@ -94,6 +95,39 @@ describe('SearchFacade', () => {
       const { result, trace } = await withSearchTrace(() => searchFacade.search('Show'));
       expect(result).toEqual([]);
       expect(trace.candidates[0]).toMatchObject({ reason: 'not-aired', stage: 'episode' });
+    });
+  });
+
+  describe('Native Search 2.0 requested series only', () => {
+    const v2Config = (key: string) => ({ NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V2' })[key];
+    let seenHint: number | undefined;
+
+    beforeEach(() => {
+      seenHint = undefined;
+      (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => v2Config(key));
+      (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (nativeSearchV2Service.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
+      (nativeSearchV2Service.search as jest.Mock).mockImplementation(async () => {
+        seenHint = seasonHint();
+        return [];
+      });
+    });
+
+    it('passes the season hint and caches under a season-specific key when the option applies', async () => {
+      (nativeSearchV2Service.narrowsBySeason as jest.Mock).mockResolvedValue(true);
+      await searchFacade.search('Show', 2, 3);
+      expect(seenHint).toBe(2);
+      expect(RedisCacheService.prototype.get).toHaveBeenCalledWith('Show#season2');
+      expect(RedisCacheService.prototype.set).toHaveBeenCalledWith('Show#season2', expect.anything());
+    });
+
+    it('uses the plain key and no hint when it does not apply', async () => {
+      (nativeSearchV2Service.narrowsBySeason as jest.Mock).mockResolvedValue(false);
+      await searchFacade.search('Show', 2, 3);
+      expect(seenHint).toBeUndefined();
+      expect(RedisCacheService.prototype.get).toHaveBeenCalledWith('Show');
     });
   });
 

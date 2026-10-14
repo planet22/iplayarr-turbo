@@ -7,6 +7,9 @@
             <span v-if="trace.retriedAs" class="pill" title="Nothing matched the full search, so it was retried with fewer words">
                 Retried as: {{ trace.retriedAs }}
             </span>
+            <span v-if="trace.narrowedTo" class="pill" title="Only this series' episodes were fetched (Native Search 2.0 option)">
+                Only fetched: {{ trace.narrowedTo }}
+            </span>
             <span v-if="trace.season != null" class="pill">Series {{ trace.season }}</span>
             <span v-if="trace.episode != null" class="pill">Episode {{ trace.episode }}</span>
             <span v-if="trace.cached" class="pill" title="Served from the 5 minute search cache">Cached</span>

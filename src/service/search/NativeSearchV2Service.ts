@@ -3,7 +3,7 @@ import { Index } from 'lunr';
 import lunr from 'lunr';
 import pLimit from 'p-limit';
 
-import { searchResultLimit } from '../../constants/iPlayarrConstants';
+import { nativeSeriesRegex, searchResultLimit } from '../../constants/iPlayarrConstants';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { IPlayerDetails } from '../../types/IPlayerDetails';
 import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
@@ -11,8 +11,9 @@ import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/re
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
 import { traceCandidate, traceNote } from '../../utils/searchTrace';
+import { seasonHint } from '../../utils/seasonHint';
 import { firstMissingTerm, titleRank } from '../../utils/titleMatch';
-import { getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
+import { getPotentialRoman, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
 import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
@@ -26,6 +27,11 @@ const lookupConcurrency = 5;
 // new-search answers with at most this many hits; hitting it means a short or generic term may have
 // had real matches crowded out.
 const newSearchHitCap = 24;
+
+function seriesNumberOf(title: string | undefined): number | undefined {
+    const match = title?.match(nativeSeriesRegex);
+    return match ? getPotentialRoman(match[1]) : undefined;
+}
 
 // "Show Name Episode Title" -> "Show Name Episode", "Show Name": at most three, never below two words.
 function shortenedTerms(term: string): string[] {
@@ -215,10 +221,33 @@ class NativeSearchV2Service implements AbstractSearchService {
         return all;
     }
 
+    // Whether a search for this season may fetch only that series' episodes. Off unless the option is
+    // on, and never when the numbers don't come straight from BBC's series containers: a synonym
+    // (season offsets) or airdate numbering renumbers episodes, so another container could match.
+    async narrowsBySeason(season?: number, synonym?: Synonym): Promise<boolean> {
+        if (!season || synonym) return false;
+        const enabled = (await configService.getParameter(IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY)) === 'true';
+        const airdateNumbering = (await configService.getParameter(IplayarrParameter.AIRDATE_NUMBERING)) === 'true';
+        return enabled && !airdateNumbering;
+    }
+
     async #expandEpisodesFromContainer(containerPid: string): Promise<IPlayerEpisodeMetadata[]> {
         const containerChildren = await this.#listContainer(containerPid);
-        const directEpisodes = containerChildren.filter(({ type, release_date_time }) => type == 'episode' && release_date_time != null);
-        const childContainers = containerChildren.filter(({ type }) => type == 'series' || type == 'brand');
+        let directEpisodes = containerChildren.filter(({ type, release_date_time }) => type == 'episode' && release_date_time != null);
+        let childContainers = containerChildren.filter(({ type }) => type == 'series' || type == 'brand');
+
+        // Only the requested series: its container is the one titled "Series 2" / "2" / "II". When no
+        // container matches (episodes listed directly, differently labelled series) fetch everything
+        // as usual rather than risk missing the episode.
+        const wanted = seasonHint();
+        if (wanted !== undefined) {
+            const matching = childContainers.filter(({ title }) => seriesNumberOf(title) === wanted);
+            if (matching.length) {
+                childContainers = matching;
+                directEpisodes = [];
+                traceNote({ narrowedTo: `Series ${wanted}` });
+            }
+        }
 
         const nestedChildren = (await Promise.all(childContainers.map(({ id }) => this.#listContainer(id)))).flat();
         const nestedEpisodes = nestedChildren.filter(({ type, release_date_time }) => type == 'episode' && release_date_time != null);

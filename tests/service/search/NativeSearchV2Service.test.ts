@@ -1,12 +1,14 @@
 import axios from 'axios';
 
 import { searchResultLimit } from '../../../src/constants/iPlayarrConstants';
+import configService from '../../../src/service/configService';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import loggingService from '../../../src/service/loggingService';
 import NativeSearchService from '../../../src/service/search/NativeSearchService';
 import NativeSearchV2Service from '../../../src/service/search/NativeSearchV2Service';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
 import { withSearchTrace } from '../../../src/utils/searchTrace';
+import { runWithSeasonHint } from '../../../src/utils/seasonHint';
 import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
 
 jest.mock('axios');
@@ -206,6 +208,74 @@ describe('NativeSearchV2Service', () => {
 
         expect(results).toHaveLength(3);
         expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('lookup failed for bad1'));
+    });
+
+    describe('requested series only', () => {
+        const brandChildren: IPlayerEpisodeMetadata[] = [
+            { type: 'series', id: 'seriesOne', title: 'Series 1' },
+            { type: 'series', id: 'seriesTwo', title: 'Series 2' },
+            { type: 'series', id: 'seriesThree', title: 'III' },
+            ...episodes('special', 1),
+        ];
+        const lists = () => ({
+            brandPid: brandChildren,
+            seriesOne: episodes('one', 2),
+            seriesTwo: episodes('two', 3),
+            seriesThree: episodes('three', 4),
+        });
+
+        it('fetches every series when no season is requested', async () => {
+            searchHits({ id: 'hit1', title: 'Test Brand' });
+            serveEpisodes(lists());
+            const results = await NativeSearchV2Service.search(term);
+            expect(results).toHaveLength(2 + 3 + 4 + 1);
+        });
+
+        it('fetches only the series container matching the requested season', async () => {
+            searchHits({ id: 'hit1', title: 'Test Brand' });
+            serveEpisodes(lists());
+
+            const { result, trace } = await withSearchTrace(() => runWithSeasonHint(2, () => NativeSearchV2Service.search(term)));
+
+            expect(result.map(({ pid }) => pid)).toEqual(['two0', 'two1', 'two2']);
+            expect(trace.narrowedTo).toBe('Series 2');
+            const listed = (iplayerDetailsService.getSeriesEpisodesChecked as jest.Mock).mock.calls.map(([pid]) => pid);
+            expect(listed).toEqual(['brandPid', 'seriesTwo']);
+        });
+
+        it('understands roman-numeral series labels', async () => {
+            searchHits({ id: 'hit1', title: 'Test Brand' });
+            serveEpisodes(lists());
+            const results = await runWithSeasonHint(3, () => NativeSearchV2Service.search(term));
+            expect(results.map(({ pid }) => pid)).toEqual(['three0', 'three1', 'three2', 'three3']);
+        });
+
+        it('falls back to everything when no container matches the season', async () => {
+            searchHits({ id: 'hit1', title: 'Test Brand' });
+            serveEpisodes(lists());
+            const results = await runWithSeasonHint(9, () => NativeSearchV2Service.search(term));
+            expect(results).toHaveLength(2 + 3 + 4 + 1);
+        });
+
+        describe('narrowsBySeason', () => {
+            const setConfig = (values: Record<string, string>) =>
+                jest.spyOn(configService, 'getParameter').mockImplementation(async (key: any) => values[key]);
+
+            afterEach(() => jest.restoreAllMocks());
+
+            it('needs the option, a season, no synonym and no airdate numbering', async () => {
+                setConfig({ NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'true' });
+                expect(await NativeSearchV2Service.narrowsBySeason(2)).toBe(true);
+                expect(await NativeSearchV2Service.narrowsBySeason(undefined)).toBe(false);
+                expect(await NativeSearchV2Service.narrowsBySeason(2, { target: 'x' } as any)).toBe(false);
+
+                setConfig({ NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'true', AIRDATE_NUMBERING: 'true' });
+                expect(await NativeSearchV2Service.narrowsBySeason(2)).toBe(false);
+
+                setConfig({ NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'false' });
+                expect(await NativeSearchV2Service.narrowsBySeason(2)).toBe(false);
+            });
+        });
     });
 
     describe('improvements', () => {

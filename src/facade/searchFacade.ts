@@ -12,6 +12,7 @@ import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
 import { Synonym } from '../types/Synonym';
 import { extractEpisodeMarkers } from '../utils/episodeMarkers';
 import { currentTraceCandidates, TraceCandidate, traceCandidate, traceNote } from '../utils/searchTrace';
+import { runWithSeasonHint } from '../utils/seasonHint';
 import { removeLastFourDigitNumber } from '../utils/Utils';
 import scheduleFacade from './scheduleFacade';
 
@@ -67,9 +68,13 @@ class SearchFacade {
         };
 
         traceNote({ searchedAs: term, season, episode });
-        let results: IPlayerSearchResult[] | undefined = await this.searchCache.get(term);
+        // Native Search 2.0 can fetch only the requested series' episodes (a config option). Such a
+        // result set is partial, so it is cached under its own key and never served to another season.
+        const narrowToSeason = service === nativeSearchV2Service && (await nativeSearchV2Service.narrowsBySeason(season, synonym));
+        const cacheKey = narrowToSeason ? `${term}#season${season}` : term;
+        let results: IPlayerSearchResult[] | undefined = await this.searchCache.get(cacheKey);
         if (!results) {
-            results = onBatch
+            results = await runWithSeasonHint(narrowToSeason ? season : undefined, async () => onBatch
                 ? await service.search(term, synonym, async (batch) => {
                     try {
                         const filtered = await this.#filterForSeasonAndEpisode(batch, season, episode);
@@ -79,13 +84,13 @@ class SearchFacade {
                         // The final pass below delivers anything a batch couldn't.
                     }
                 })
-                : await service.search(term, synonym);
-            this.searchCache.set(term, results as IPlayerSearchResult[]);
-            this.traceCache.set(term, currentTraceCandidates('bbc')).catch(() => undefined);
+                : await service.search(term, synonym));
+            this.searchCache.set(cacheKey, results as IPlayerSearchResult[]);
+            this.traceCache.set(cacheKey, currentTraceCandidates('bbc')).catch(() => undefined);
         } else {
             // The search services don't run on a cache hit, so replay what they decided last time.
             traceNote({ cached: true });
-            const earlier = await this.traceCache.get(term).catch(() => undefined);
+            const earlier = await this.traceCache.get(cacheKey).catch(() => undefined);
             if (Array.isArray(earlier)) {
                 earlier.filter((c) => c && typeof c.title === 'string').forEach(traceCandidate);
             }
