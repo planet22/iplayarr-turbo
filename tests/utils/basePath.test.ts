@@ -19,9 +19,9 @@ describe('basePath', () => {
     });
 
     it('rewrites index.html', () => {
-        const html = `<script>window.__BASE_PATH__ = '';</script><link href="/favicon.ico"><script src="/assets/a.js"></script><a href="//cdn/x">`;
+        const html = '<script>window.__BASE_PATH__ = \'\';</script><link href="/favicon.ico"><script src="/assets/a.js"></script><a href="//cdn/x">';
         const out = rewriteIndexHtml(html, '/x');
-        expect(out).toContain(`window.__BASE_PATH__ = "/x";`);
+        expect(out).toContain('window.__BASE_PATH__ = "/x";');
         expect(out).toContain('href="/x/favicon.ico"');
         expect(out).toContain('src="/x/assets/a.js"');
         expect(out).toContain('href="//cdn/x"');
