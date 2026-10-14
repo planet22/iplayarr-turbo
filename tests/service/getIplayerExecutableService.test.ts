@@ -37,6 +37,20 @@ describe('GetIplayerExecutableService', () => {
         jest.clearAllMocks();
     });
 
+    describe('getQualityFallbackChain', () => {
+        it('prefers the quality stored on the queue entry over VIDEO_QUALITY', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('hd');
+            queueService.getFromQueue = jest.fn().mockReturnValue({ library: { quality: 'sd' } });
+            expect(await service.getQualityFallbackChain('p0abc123')).toEqual(['sd', 'hd', 'web', 'mobile']);
+        });
+
+        it('falls back to VIDEO_QUALITY with no queue entry', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('fhd');
+            queueService.getFromQueue = jest.fn().mockReturnValue(undefined);
+            expect((await service.getQualityFallbackChain('p0abc123'))[0]).toBe('fhd');
+        });
+    });
+
     describe('getIPlayerExec', () => {
         it('should return exec and args with profile-dir if cacheLocation exists', async () => {
             const mockCacheLocation = '/mock/cache';

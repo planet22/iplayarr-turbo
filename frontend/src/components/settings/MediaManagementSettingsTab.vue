@@ -31,6 +31,13 @@
         :error="validationErrors.config?.VIDEO_QUALITY"
         :options="qualityProfiles"
     />
+    <MultiSelectInput
+        v-model="config.EXTRA_VIDEO_QUALITIES"
+        name="Additional Qualities"
+        tooltip="Also offer these qualities as separate search results, so Sonarr/Radarr can choose between them by quality profile. Leave empty to offer only the Video Quality above."
+        :error="validationErrors.config?.EXTRA_VIDEO_QUALITIES"
+        :options="qualityProfiles"
+    />
     <SelectInput
         v-model="config.OUTPUT_FORMAT"
         name="Output Format?"
@@ -89,6 +96,7 @@
 <script setup>
 import { defineProps, inject } from 'vue';
 
+import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 

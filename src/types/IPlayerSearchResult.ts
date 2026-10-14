@@ -23,6 +23,9 @@ export interface IPlayerSearchResult {
     // Utils.ts#createNZBDownloadLink / DownloadNZBEndpoint.ts) so QueueLibraryMetadata.runtimeSeconds
     // can populate the <runtime> NFO tag and the .strmtool.json runTimeTicks field.
     runtimeSeconds?: number;
+    // Set on extra-quality variants (EXTRA_VIDEO_QUALITIES): the profile id to download at. Unset
+    // means the VIDEO_QUALITY setting.
+    quality?: string;
 }
 
 export interface IplayerSearchResultRequest {

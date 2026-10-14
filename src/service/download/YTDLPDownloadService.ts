@@ -8,6 +8,7 @@ import { qualityProfiles } from '../../types/QualityProfiles';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
+import queueService from '../queueService';
 
 class YTDLPDownloadService implements AbstractDownloadService {
     async postProcess(pid: string, directory: string, code : any): Promise<void> {
@@ -26,7 +27,9 @@ class YTDLPDownloadService implements AbstractDownloadService {
 
     async download(pid: string, directory: string): Promise<ChildProcess> {
         const executable: SpawnExecutable = await this.#getExecutable();
-        const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
+        const videoQuality =
+            queueService.getFromQueue(pid)?.library?.quality ??
+            ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
         const width_str = qualityProfiles.find(({ id }) => id == videoQuality)?.quality;
 
         const outputFormat = await configService.getParameter(IplayarrParameter.OUTPUT_FORMAT) as string;

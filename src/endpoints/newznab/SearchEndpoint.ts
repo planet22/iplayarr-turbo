@@ -3,11 +3,14 @@ import { Builder } from 'xml2js';
 
 import searchFacade from '../../facade/searchFacade';
 import appService from '../../service/appService';
+import configService from '../../service/configService';
 import statisticsService from '../../service/stats/StatisticsService';
 import { SearchHistoryEntry, SearchHistoryResultItem } from '../../types/data/SearchHistoryEntry';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { IPlayerSearchResult, VideoType } from '../../types/IPlayerSearchResult';
 import { NewzNabAttr, NewzNabSearchResponse } from '../../types/responses/newznab/NewzNabSearchResponse';
-import { createNZBDownloadLink } from '../../utils/Utils';
+import { createNZBDownloadLink, getQualityProfile } from '../../utils/Utils';
+import { expandQualityVariants, parseExtraQualities } from '../../utils/videoQuality';
 
 interface SearchRequest {
     q: string;
@@ -31,6 +34,13 @@ export default async (req: Request, res: Response) => {
     if (cat) {
         results = results.filter(({ type }) => categoriesForType(type).some((category) => cat.includes(category)));
     }
+
+    const primaryQuality = await getQualityProfile();
+    const extraQualities = parseExtraQualities(
+        (await configService.getParameter(IplayarrParameter.EXTRA_VIDEO_QUALITIES)) as string,
+        primaryQuality.id
+    );
+    results = expandQualityVariants(results, primaryQuality, extraQualities);
 
     const historyItems: SearchHistoryResultItem[] = results.map(({ nzbName, title, type, size, pubDate, pid }) => ({
         title: nzbName ?? title,

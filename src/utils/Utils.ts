@@ -90,7 +90,7 @@ export function isLegacyMD5Hash(value: string): boolean {
 
 export async function createNZBDownloadLink(
     req: Request,
-    { pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds }: IPlayerSearchResult,
+    { pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds, quality }: IPlayerSearchResult,
     apiKey: string,
     app?: string
 ): Promise<string> {
@@ -113,7 +113,8 @@ export async function createNZBDownloadLink(
         (episodeTitle ? `&episodeTitle=${encodeURIComponent(episodeTitle)}` : '') +
         (channel ? `&channel=${encodeURIComponent(channel)}` : '') +
         (pubDate ? `&pubDate=${encodeURIComponent(pubDate.toISOString())}` : '') +
-        (runtimeSeconds != null ? `&runtime=${encodeURIComponent(runtimeSeconds)}` : '');
+        (runtimeSeconds != null ? `&runtime=${encodeURIComponent(runtimeSeconds)}` : '') +
+        (quality ? `&quality=${encodeURIComponent(quality)}` : '');
     return `${baseUrl}/api?mode=nzb-download&pid=${encodeURIComponent(pid)}&nzbName=${encodeURIComponent(nzbName ?? '')}&type=${encodeURIComponent(type)}&apikey=${encodeURIComponent(apiKey)}${app ? `&app=${encodeURIComponent(app)}` : ''}${libraryParams}`;
 }
 
