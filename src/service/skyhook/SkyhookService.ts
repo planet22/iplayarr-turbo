@@ -44,6 +44,34 @@ class SkyhookService {
         }
     }
 
+    // Other titles the series is known by (original-language title, TVDB aliases), for when Sonarr
+    // searches by an English alias iPlayer doesn't use. Reads whichever alias-bearing fields the
+    // lookup returns, only from results whose own title or aliases match the searched name.
+    async getAliases(seriesName: string, limit = 3): Promise<string[]> {
+        const normalise = (text: unknown) =>
+            typeof text === 'string' ? text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() : '';
+        const wanted = normalise(seriesName);
+        if (!wanted) return [];
+
+        const results = await this.searchSeries(seriesName);
+        const aliases = new Map<string, string>();
+        for (const result of Array.isArray(results) ? (results as any[]) : []) {
+            const names: string[] = [
+                result?.title,
+                result?.originalName,
+                result?.originalTitle,
+                ...(result?.alternateTitles ?? result?.alternativeTitles ?? result?.aliases ?? []).map((alias: any) =>
+                    typeof alias === 'string' ? alias : alias?.title
+                ),
+            ].filter((name): name is string => typeof name === 'string' && !!name.trim());
+            if (!names.some((name) => normalise(name) === wanted)) continue;
+            for (const name of names) {
+                if (normalise(name) !== wanted && !aliases.has(normalise(name))) aliases.set(normalise(name), name.trim());
+            }
+        }
+        return [...aliases.values()].slice(0, limit);
+    }
+
     async findEpisode(tvdbId: number, episodeName: string): Promise<{ title: string, seasonNumber: number, episodeNumber: number } | undefined> {
         const url = `https://skyhook.sonarr.tv/v1/tvdb/shows/en/${tvdbId}`;
         let data;

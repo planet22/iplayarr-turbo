@@ -4,6 +4,7 @@ import AbstractSearchService from '../service/search/AbstractSearchService';
 import getIplayerSearchService from '../service/search/GetIplayerSearchService';
 import nativeSearchService from '../service/search/NativeSearchService';
 import nativeSearchV2Service from '../service/search/NativeSearchV2Service';
+import skyhookService from '../service/skyhook/SkyhookService';
 import synonymService from '../service/synonymService';
 import { NativeSearchEngine } from '../types/enums/NativeSearchEngine';
 import { IplayarrParameter } from '../types/IplayarrParameters';
@@ -34,7 +35,8 @@ class SearchFacade {
         inputTerm: string,
         season?: number,
         episode?: number,
-        onBatch?: (batch: IPlayerSearchResult[]) => void
+        onBatch?: (batch: IPlayerSearchResult[]) => void,
+        tryAliases: boolean = true
     ): Promise<IPlayerSearchResult[]> {
         if (inputTerm == '*') {
             const feed = await scheduleFacade.getFeed();
@@ -83,7 +85,39 @@ class SearchFacade {
 
         const finalResults = processedResults.filter(({ pubDate }) => !pubDate || pubDate < new Date());
         deliver(finalResults); // whatever the per-batch pass couldn't know about (cache hits, cross-result merging)
+        if (finalResults.length === 0 && tryAliases && !synonym) {
+            // Sonarr/Radarr search by TVDB's English alias, which iPlayer may not use (e.g. Welsh
+            // originals), so retry under the series' other known titles.
+            const aliased = await this.#searchAliases(inputTerm, season, episode, onBatch);
+            if (aliased.length) return aliased;
+        }
         return finalResults;
+    }
+
+    async #searchAliases(
+        inputTerm: string,
+        season?: number,
+        episode?: number,
+        onBatch?: (batch: IPlayerSearchResult[]) => void
+    ): Promise<IPlayerSearchResult[]> {
+        let aliases: string[] = [];
+        try {
+            aliases = await skyhookService.getAliases(inputTerm);
+        } catch {
+            return [];
+        }
+        const seen = new Set<string>();
+        const merged: IPlayerSearchResult[] = [];
+        for (const alias of aliases) {
+            const found = await this.#run(alias, season, episode, onBatch, false);
+            for (const result of found) {
+                if (!seen.has(result.pid)) {
+                    seen.add(result.pid);
+                    merged.push(result);
+                }
+            }
+        }
+        return merged;
     }
 
     async #getService(): Promise<AbstractSearchService> {

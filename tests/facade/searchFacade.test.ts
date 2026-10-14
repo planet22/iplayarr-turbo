@@ -6,6 +6,7 @@ import RedisCacheService from '../../src/service/redis/redisCacheService';
 import getIplayerSearchService from '../../src/service/search/GetIplayerSearchService';
 import nativeSearchService from '../../src/service/search/NativeSearchService';
 import nativeSearchV2Service from '../../src/service/search/NativeSearchV2Service';
+import skyhookService from '../../src/service/skyhook/SkyhookService';
 import synonymService from '../../src/service/synonymService';
 import { IPlayerSearchResult } from '../../src/types/IPlayerSearchResult';
 
@@ -13,6 +14,7 @@ import { IPlayerSearchResult } from '../../src/types/IPlayerSearchResult';
 jest.mock('../../src/service/configService');
 jest.mock('../../src/service/redis/redisCacheService');
 jest.mock('../../src/service/synonymService');
+jest.mock('../../src/service/skyhook/SkyhookService');
 jest.mock('../../src/service/search/NativeSearchService');
 jest.mock('../../src/service/search/NativeSearchV2Service');
 jest.mock('../../src/service/search/GetIplayerSearchService');
@@ -53,6 +55,41 @@ describe('SearchFacade', () => {
     expect(results[0].title).toBe('Test Show');
     expect(results[0].series).toBe(1);
     expect(results[0].episode).toBe(1);
+  });
+
+  describe('alias fallback', () => {
+    beforeEach(() => {
+      (configService.getParameter as jest.Mock).mockResolvedValue('true');
+      (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
+    });
+
+    const hit = { pid: 'p1', title: 'Iaith ar Daith', pubDate: new Date('2020-01-01') } as IPlayerSearchResult;
+
+    it('retries under aliases when the first search finds nothing', async () => {
+      (skyhookService.getAliases as jest.Mock).mockResolvedValue(['Iaith ar Daith']);
+      (nativeSearchService.search as jest.Mock).mockImplementation(async (term: string) =>
+        term === 'Iaith ar Daith' ? [hit] : []
+      );
+      const results = await searchFacade.search('Welsh Language on Tour');
+      expect(results).toEqual([hit]);
+      expect(nativeSearchService.search).toHaveBeenCalledWith('Iaith ar Daith', undefined);
+    });
+
+    it('does not look up aliases when results were found', async () => {
+      (nativeSearchService.search as jest.Mock).mockResolvedValue([hit]);
+      await searchFacade.search('Iaith ar Daith');
+      expect(skyhookService.getAliases).not.toHaveBeenCalled();
+    });
+
+    it('does not chain alias lookups', async () => {
+      (skyhookService.getAliases as jest.Mock).mockResolvedValue(['Alias']);
+      (nativeSearchService.search as jest.Mock).mockResolvedValue([]);
+      expect(await searchFacade.search('Nothing')).toEqual([]);
+      expect(skyhookService.getAliases).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('searchStreaming', () => {

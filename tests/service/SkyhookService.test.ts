@@ -135,3 +135,28 @@ describe('SkyhookService URL construction', () => {
         expect(result).toBeUndefined();
     });
 });
+
+describe('SkyhookService.getAliases', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        SkyhookService.skyhookSeriesCache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() } as any;
+    });
+
+    it('returns other titles of results that match the searched name', async () => {
+        mockedAxios.get.mockResolvedValue({
+            data: [
+                { title: 'Welsh Language on Tour', originalName: 'Iaith ar Daith', alternateTitles: [{ title: 'Iaith Ar Daith' }, 'Another'] },
+                { title: 'Unrelated', originalName: 'Something Else' },
+            ],
+        });
+        expect(await SkyhookService.getAliases('Welsh Language on Tour')).toEqual(['Iaith ar Daith', 'Another']);
+    });
+
+    it('is empty when nothing matches or the lookup fails', async () => {
+        mockedAxios.get.mockResolvedValue({ data: [{ title: 'Other', originalName: 'X' }] });
+        expect(await SkyhookService.getAliases('Welsh Language on Tour')).toEqual([]);
+        mockedAxios.get.mockRejectedValue(new Error('down'));
+        expect(await SkyhookService.getAliases('Welsh Language on Tour')).toEqual([]);
+        expect(await SkyhookService.getAliases('  ')).toEqual([]);
+    });
+});
