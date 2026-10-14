@@ -82,6 +82,25 @@ describe('NativeSearchService', () => {
             expect(results[0]).toHaveProperty('nzbName', 'testNZBName');
         });
 
+        it.each(['Him and Her', 'Him & Her', 'Him Her'])(
+            'matches a title made only of stop words (e.g. "Him & Her") for the query %s',
+            async (query) => {
+                (axios.get as jest.Mock).mockResolvedValueOnce({
+                    status: 200,
+                    data: { new_search: { results: [{ id: 'm000him1', title: 'Him & Her' }] } },
+                });
+                (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { type: 'episode' } });
+                (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+                (iplayerDetailsService.details as jest.Mock).mockResolvedValue([
+                    { title: 'Him & Her', pid: 'm000him1', type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 },
+                ]);
+
+                const results = await NativeSearchService.search(query);
+
+                expect(results.map(({ pid }) => pid)).toEqual(['m000him1']);
+            }
+        );
+
         it('should return an empty array when the response status is not 200', async () => {
             (axios.get as jest.Mock).mockResolvedValue({
                 status: 500,

@@ -141,6 +141,10 @@ class NativeSearchService implements AbstractSearchService {
     #indexAndReSearch(term: string, results: IPlayerNewSearchResult[]): Index.Result[] {
         //Index them each and search again, iPlayer's search is WAY to fuzzy
         const lunrIndex: lunr.Index = lunr(function (this: lunr.Builder) {
+            // lunr's default stop words (him, her, and, the...) would erase titles like "Him & Her"
+            // from both the index and the query, so nothing could ever match them.
+            this.pipeline.remove(lunr.stopWordFilter);
+            this.searchPipeline.remove(lunr.stopWordFilter);
             this.ref('pid');
             this.field('pid');
             this.field('title');

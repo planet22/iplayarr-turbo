@@ -35,7 +35,7 @@ export function extractArrErrorMessage(error: unknown): string {
 export class V3ArrService implements AbstractArrService {
     async search(app: App, term?: string): Promise<ArrLookupResponse[]> {
         const endpoint: string = app.type == AppType.SONARR ? 'series' : 'movie';
-        const url: string = `${this.getApiUrl(app)}/${endpoint}${term ? `/lookup?term=${term}` : ''}`;
+        const url: string = `${this.getApiUrl(app)}/${endpoint}${term ? `/lookup?term=${encodeURIComponent(term)}` : ''}`;
 
         try {
             const response = await axios.get(url, {
