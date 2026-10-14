@@ -39,6 +39,13 @@
         :options="qualityProfiles"
     />
     <SelectInput
+        v-model="config.AIRDATE_NUMBERING"
+        name="Airdate Numbering"
+        tooltip="Number episodes by their UK air date matched against TheTVDB (via Skyhook) instead of iPlayer's own Series/Episode labels, which often don't match. Falls back to iPlayer's numbering when no match is found. Manual overrides can be set through the numbering-overrides API."
+        :error="validationErrors.config?.AIRDATE_NUMBERING"
+        :options="trueOrFalse"
+    />
+    <SelectInput
         v-model="config.OUTPUT_FORMAT"
         name="Output Format?"
         tooltip="Which Output Format to use"

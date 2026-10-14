@@ -160,3 +160,39 @@ describe('SkyhookService.getAliases', () => {
         expect(await SkyhookService.getAliases('  ')).toEqual([]);
     });
 });
+
+
+describe('SkyhookService.lookupByAirDate', () => {
+    const show = {
+        episodes: [
+            { title: 'Pilot', airDate: '2020-01-05', seasonNumber: 1, episodeNumber: 1 },
+            { title: 'Part A', airDate: '2020-01-12', seasonNumber: 1, episodeNumber: 2 },
+            { title: 'Part B', airDate: '2020-01-12', seasonNumber: 1, episodeNumber: 3 },
+        ],
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        SkyhookService.skyhookSeriesCache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() } as any;
+        SkyhookService.skyhookEpisodeCache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() } as any;
+        mockedAxios.get.mockImplementation(async (url: string) =>
+            url.includes('/search/') ? { data: [{ tvdbId: '9', title: 'Other' }, { tvdbId: '7', title: 'Some Show' }] } : { data: show }
+        );
+    });
+
+    it('matches a single episode on the date, only within the correctly titled show', async () => {
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-05')).toEqual({ series: 1, episode: 1 });
+        expect(mockedAxios.get).toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/7');
+        expect(mockedAxios.get).not.toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/9');
+    });
+
+    it('uses the episode title to split a same-day double bill, else gives up', async () => {
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12', 'part b')).toEqual({ series: 1, episode: 3 });
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12', 'Unknown')).toBeUndefined();
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12')).toBeUndefined();
+    });
+
+    it('returns nothing for a date with no episode', async () => {
+        expect(await SkyhookService.lookupByAirDate('Some Show', '1999-01-01')).toBeUndefined();
+    });
+});

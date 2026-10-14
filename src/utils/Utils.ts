@@ -11,6 +11,7 @@ import { pipeline } from 'stream';
 import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, nativeSeriesRegex } from '../constants/iPlayarrConstants';
 import appService from '../service/appService';
 import configService from '../service/configService';
+import numberingOverrideService from '../service/numberingOverrideService';
 import SkyhookService from '../service/skyhook/SkyhookService';
 import { NfoWriteMode } from '../types/enums/NfoWriteMode';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
@@ -21,6 +22,7 @@ import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
+import { londonDate } from './airDate';
 
 const removeUnsafeCharsRegex = /[^a-zA-Z0-9\s\\/._-]/g;
 
@@ -265,6 +267,21 @@ export async function calculateSeasonAndEpisode(
         if (skyhookResult) {
             series = skyhookResult.series ?? series;
             episode = skyhookResult.episode ?? episode;
+        }
+    }
+
+    // Opt-in: iPlayer's "Series N" labels are editorial and often don't match TVDB, so resolve the
+    // broadcast by UK air date instead (manual override first, then Skyhook), keeping the ordinal
+    // numbers above only as the fallback.
+    const airDate = parent ? londonDate(programme.first_broadcast_date) : undefined;
+    if (airDate && (await configService.getParameter(IplayarrParameter.AIRDATE_NUMBERING)) === 'true') {
+        const showTitle = programme.display_title?.title ?? programme.title;
+        const resolved =
+            (await numberingOverrideService.find(showTitle, airDate)) ??
+            (await SkyhookService.lookupByAirDate(showTitle, airDate, episodeTitle).catch(() => undefined));
+        if (resolved) {
+            series = resolved.series;
+            episode = resolved.episode;
         }
     }
 

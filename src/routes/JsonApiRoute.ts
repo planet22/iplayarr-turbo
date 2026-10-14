@@ -20,6 +20,7 @@ import EventsRoute from './json-api/EventsRoute';
 import LiveSubscriptionsRoute from './json-api/LiveSubscriptionsRoute';
 import LiveTvRoute from './json-api/LiveTvRoute';
 import MaintenanceRoute from './json-api/MaintenanceRoute';
+import NumberingOverridesRoute from './json-api/NumberingOverridesRoute';
 import OffScheduleRoute from './json-api/OffScheduleRoute';
 import QueueRoute from './json-api/QueueRoute';
 import RequestRoute from './json-api/RequestRoute';
@@ -36,6 +37,7 @@ const router: Router = Router();
 
 router.use('/config', SettingsRoute);
 router.use('/synonym', SynonymsRoute);
+router.use('/numbering-overrides', NumberingOverridesRoute);
 router.use('/queue', QueueRoute);
 router.use('/offSchedule', OffScheduleRoute);
 router.use('/apps', AppsRoute);
