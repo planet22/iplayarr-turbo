@@ -11,6 +11,7 @@ import YTDLPStreamService from '../../../src/service/stream/YTDLPStreamService';
 import { StreamClient } from '../../../src/types/enums/StreamClient';
 import { StreamMode } from '../../../src/types/enums/StreamMode';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
+import { requestedQuality } from '../../../src/utils/qualityContext';
 
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn() } }));
@@ -173,5 +174,39 @@ describe('StreamEndpoint live channel routing', () => {
             await StreamEndpoint(makeReq('m0032yps'), sent);
             expect(sent.status).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe('StreamEndpoint ?quality override', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (configService.getParameter as jest.Mock).mockImplementation(async (param: IplayarrParameter) => {
+            if (param === IplayarrParameter.STREAM_CLIENT) return StreamClient.GET_IPLAYER;
+            if (param === IplayarrParameter.STREAM_MODE) return StreamMode.DIRECT;
+            if (param === IplayarrParameter.VIDEO_QUALITY) return 'fhd';
+            return undefined;
+        });
+        (configService.getParameters as jest.Mock).mockResolvedValue([]);
+    });
+
+    it('makes a valid ?quality visible to the stream backend and the session snapshot', async () => {
+        let seen: string | undefined;
+        (GetIplayerStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedQuality();
+        });
+        const req = { ...makeReq('m0026fkl'), query: { pid: 'm0026fkl', quality: 'sd' } };
+        await StreamEndpoint(req, makeRes());
+        expect(seen).toBe('sd');
+        expect((streamSessionService.start as jest.Mock).mock.calls[0][4]).toEqual({ 'Video Quality': 'SD' });
+    });
+
+    it('ignores an unknown ?quality', async () => {
+        let seen: string | undefined = 'unset';
+        (GetIplayerStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedQuality();
+        });
+        const req = { ...makeReq('m0026fkl'), query: { pid: 'm0026fkl', quality: '../../x' } };
+        await StreamEndpoint(req, makeRes());
+        expect(seen).toBeUndefined();
     });
 });

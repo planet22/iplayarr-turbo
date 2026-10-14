@@ -116,7 +116,7 @@ class DownloadFacade {
                                 libraryPath,
                                 writeStrmToolJson,
                                 streamMode,
-                                videoQuality
+                                queueItem.library?.quality ?? videoQuality
                             );
                         }
 

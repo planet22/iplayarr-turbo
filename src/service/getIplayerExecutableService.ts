@@ -11,6 +11,7 @@ import { QueueEntry } from '../types/QueueEntry';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
 import { resolveInside, sanitizeFileName } from '../utils/pathSafety';
+import { requestedQuality } from '../utils/qualityContext';
 import { calculateSeasonAndEpisode, copyWithFallback, createNZBName, parseEpisodeDetailStrings } from '../utils/Utils';
 import configService from './configService';
 import historyService from './historyService';
@@ -61,6 +62,7 @@ export class GetIplayerExecutableService {
         // A grab made from an extra-quality variant carries its own quality on the queue entry.
         const videoQuality =
             (pid ? queueService.getFromQueue(pid)?.library?.quality : undefined) ??
+            requestedQuality() ??
             ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
         return [...new Set([videoQuality, 'hd', 'sd', 'web', 'mobile'])];
     }

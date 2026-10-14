@@ -188,6 +188,14 @@ describe('Utils', () => {
             expect(mockedConfigService.getParameter).toHaveBeenCalledWith(IplayarrParameter.STREAM_BASE_URL);
         });
 
+        it('appends a variant quality when given', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('http://h:4404');
+
+            await expect(Utils.createStrmContent('m0026fkl', 'k', 'sd')).resolves.toBe(
+                'http://h:4404/api?mode=stream&pid=m0026fkl&streamkey=k&quality=sd'
+            );
+        });
+
         it('strips a trailing slash from STREAM_BASE_URL', async () => {
             mockedConfigService.getParameter.mockResolvedValue('http://192.168.1.10:4404/');
 

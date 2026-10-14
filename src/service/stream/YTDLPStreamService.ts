@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { SpawnExecutable } from '../../types/GetIplayer/SpawnExecutable';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
+import { requestedQuality } from '../../utils/qualityContext';
 import { getStreamCacheDir } from '../../utils/Utils';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
@@ -24,7 +25,7 @@ class YTDLPStreamService implements AbstractStreamService {
     // pair) since a proxy/redirect needs one fetchable URL, not two streams to merge locally.
     async #resolveUrl(pid: string, sessionId?: string): Promise<string> {
         const executable: SpawnExecutable = await this.#getExecutable();
-        const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
+        const videoQuality = requestedQuality() ?? ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
         const widthStr = qualityProfiles.find(({ id }) => id == videoQuality)?.quality;
         const width = widthStr ? parseInt(widthStr) : NaN;
 

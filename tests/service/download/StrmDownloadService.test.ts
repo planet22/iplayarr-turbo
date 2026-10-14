@@ -3,6 +3,7 @@ import fs from 'fs';
 
 import configService from '../../../src/service/configService';
 import strmDownloadService from '../../../src/service/download/StrmDownloadService';
+import queueService from '../../../src/service/queueService';
 import { createStrmContent } from '../../../src/utils/Utils';
 
 jest.mock('child_process', () => ({
@@ -13,6 +14,10 @@ jest.mock('fs', () => ({
 }));
 jest.mock('../../../src/service/configService', () => ({
     getParameter: jest.fn(),
+}));
+jest.mock('../../../src/service/queueService', () => ({
+    __esModule: true,
+    default: { getFromQueue: jest.fn() },
 }));
 jest.mock('../../../src/utils/Utils', () => ({
     createStrmContent: jest.fn(),
@@ -43,12 +48,22 @@ describe('StrmDownloadService', () => {
             await strmDownloadService.postProcess('abc123', '/fake/dir');
 
             expect(configService.getParameter).toHaveBeenCalledWith('STREAM_KEY');
-            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'the-stream-key');
+            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'the-stream-key', undefined);
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 expect.stringContaining('stream.strm'),
                 'http://host:4404/api?mode=stream&pid=abc123&streamkey=the-stream-key',
                 'utf8'
             );
+        });
+
+        it('bakes the queue entry\'s variant quality into the stream URL', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('k');
+            (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { quality: 'sd' } });
+            (createStrmContent as jest.Mock).mockResolvedValue('url');
+
+            await strmDownloadService.postProcess('abc123', '/fake/dir');
+
+            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'k', 'sd');
         });
     });
 });
