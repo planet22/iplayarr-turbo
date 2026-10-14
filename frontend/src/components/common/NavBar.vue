@@ -3,7 +3,7 @@
         <div class="left">
             <div class="logoPanel">
                 <RouterLink to="/browse">
-                    <img src="/iplayarr.png" alt="Logo" />
+                    <img :src="logoUrl" alt="Logo" />
                     <p class="desktopOnly">iPlayarr Turbo</p>
                 </RouterLink>
                 <font-awesome-icon
@@ -49,6 +49,9 @@ v-if="authState.user && versionLabel" class="versionLabel desktopOnly"
 </template>
 
 <script setup>
+import { getBasePath } from '@/lib/utils';
+
+const logoUrl = `${getBasePath()}/iplayarr.png`;
 import { computed, defineExpose, inject, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 

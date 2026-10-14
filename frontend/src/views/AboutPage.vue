@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content about-content">
-        <img src="/iplayarr.png" alt="Logo" class="logo" />
+        <img :src="logoUrl" alt="Logo" class="logo" />
         <h3>iPlayarr Turbo</h3>
         <p>Version {{ hiddenSettings.VERSION }}</p>
         <p>2026</p>
@@ -41,6 +41,9 @@
 </template>
 
 <script setup>
+import { getBasePath } from '@/lib/utils';
+
+const logoUrl = `${getBasePath()}/iplayarr.png`;
 import { computed, inject } from 'vue';
 
 const hiddenSettings = inject('hiddenSettings');

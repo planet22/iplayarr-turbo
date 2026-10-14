@@ -1,7 +1,7 @@
 import { inject } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
-import { getHost } from '@/lib/utils';
+import { getBasePath, getHost } from '@/lib/utils';
 import AboutPage from '@/views/AboutPage.vue';
 import AppsPage from '@/views/AppsPage.vue';
 import ChannelPage from '@/views/ChannelPage.vue';
@@ -54,7 +54,7 @@ const routes = [
 ];
 
 const router = createRouter({
-    history: createWebHistory(),
+    history: createWebHistory(getBasePath() || '/'),
     routes,
     scrollBehavior() {
         return { top: 0, behaviour: 'smooth' };

@@ -18,6 +18,7 @@ import { ModalsContainer } from 'vue-final-modal';
 import { RouterView } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { getBasePath } from '@/lib/utils';
 
 import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue';
 import LeftHandNav from './components/common/LeftHandNav.vue';
@@ -88,7 +89,7 @@ const pageSetup = async () => {
         document.body.scrollTop = document.documentElement.scrollTop = 0;
         await updateQueue();
         if (import.meta.env.PROD) {
-            socket.value = io();
+            socket.value = io({ path: `${getBasePath()}/socket.io` });
         } else {
             const socketUrl = `http://${window.location.hostname}:4404`;
             socket.value = io(socketUrl, { withCredentials: true });
