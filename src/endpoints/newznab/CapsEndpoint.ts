@@ -25,6 +25,7 @@ export default async (_: Request, res: Response) => {
                         { $: { id: '2020', name: 'Movies/Other' } },
                         { $: { id: '2030', name: 'Movies/SD' } },
                         { $: { id: '2040', name: 'Movies/HD' } },
+                        { $: { id: '2045', name: 'Movies/UHD' } },
                         { $: { id: '2050', name: 'Movies/BluRay' } },
                         { $: { id: '2060', name: 'Movies/3D' } },
                     ],

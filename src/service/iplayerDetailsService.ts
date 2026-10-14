@@ -3,6 +3,7 @@ import axios, { Axios, AxiosResponse } from 'axios';
 import { pidRegex, searchResultLimit } from '../constants/iPlayarrConstants';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
+import { withRetry } from '../utils/retry';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
 import RedisCacheService from './redis/redisCacheService';
 
@@ -105,9 +106,9 @@ class IPlayerDetailsService {
 
     async getSeriesEpisodes(pid: string, page: number = 1, perPage: number = searchResultLimit): Promise<IPlayerEpisodeMetadata[]> {
         try {
-            const response: AxiosResponse<IPlayerEpisodesResponse> = await axios.get(
+            const response: AxiosResponse<IPlayerEpisodesResponse> = await withRetry(() => axios.get(
                 `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`
-            );
+            ));
             return response.data.programme_episodes.elements;
         } catch {
             return [];
