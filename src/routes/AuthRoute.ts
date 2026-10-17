@@ -11,6 +11,7 @@ import { redis } from '../service/redis/redisService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import User from '../types/User';
+import { basePath } from '../utils/basePath';
 import { FailureLimiter } from '../utils/FailureLimiter';
 import { SECRET_MASK } from '../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../utils/Utils';
@@ -258,7 +259,7 @@ router.get('/oidc/callback', async (req: Request, res: Response) => {
         }
         await startSession(req, { username: email });
         const host = process.env.DEBUG == 'true' ? `${req.protocol}://${req.headers.host?.split(':')[0]}:8080` : '';
-        res.redirect(`${host}/queue`);
+        res.redirect(`${host}${basePath()}/queue`);
     } catch {
         // A malformed state or a failed provider exchange is a bad request, never a crashed process.
         if (!res.headersSent) {

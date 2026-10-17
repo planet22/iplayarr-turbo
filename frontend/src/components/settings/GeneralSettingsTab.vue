@@ -26,6 +26,22 @@
         :options="nativeSearchEngines"
     />
     <SelectInput
+        v-if="config.NATIVE_SEARCH == 'true' && config.NATIVE_SEARCH_ENGINE == 'V2'"
+        v-model="config.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
+        name="Requested Series Only (2.0)"
+        tooltip="When Sonarr/Radarr asks for a specific season, fetch only that series' episodes instead of every episode of the show. Much faster for long-running shows. Falls back to fetching everything when no series matches, and is not used with synonyms or Airdate Numbering."
+        :error="validationErrors.config?.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="config.NATIVE_SEARCH == 'true'"
+        v-model="config.SEARCH_MATCH_ALL_WORDS"
+        name="Match All Search Words"
+        tooltip="Only return titles that contain every word you searched for (ignoring 'the', 'and', etc.), so a search for one title stops listing others that share a single word. Turn off for the older looser matching."
+        :error="validationErrors.config?.SEARCH_MATCH_ALL_WORDS"
+        :options="trueOrFalse"
+    />
+    <SelectInput
         v-model="pillColorsEnabled"
         name="Colour Channel Pills by Logo"
         tooltip="Colour channel pills from each BBC logo. Applies instantly."

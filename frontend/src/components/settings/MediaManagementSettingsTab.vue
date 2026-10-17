@@ -31,6 +31,27 @@
         :error="validationErrors.config?.VIDEO_QUALITY"
         :options="qualityProfiles"
     />
+    <MultiSelectInput
+        v-model="config.EXTRA_VIDEO_QUALITIES"
+        name="Additional Qualities"
+        tooltip="Also offer these qualities as separate search results, so Sonarr/Radarr can choose between them by quality profile. Leave empty to offer only the Video Quality above."
+        :error="validationErrors.config?.EXTRA_VIDEO_QUALITIES"
+        :options="qualityProfiles"
+    />
+    <SelectInput
+        v-model="config.RELEASE_LANGUAGE"
+        name="Release Language"
+        tooltip="Adds an explicit language tag (e.g. ENGLISH) to release names, for when Sonarr/Radarr shows the language as Unknown and refuses automatic grabs. You can also place {{language}} yourself in the filename templates."
+        :error="validationErrors.config?.RELEASE_LANGUAGE"
+        :options="releaseLanguages"
+    />
+    <SelectInput
+        v-model="config.AIRDATE_NUMBERING"
+        name="Airdate Numbering"
+        tooltip="Number episodes by their UK air date matched against TheTVDB (via Skyhook) instead of iPlayer's own Series/Episode labels, which often don't match. Falls back to iPlayer's numbering when no match is found. Manual overrides can be set through the numbering-overrides API."
+        :error="validationErrors.config?.AIRDATE_NUMBERING"
+        :options="trueOrFalse"
+    />
     <SelectInput
         v-model="config.OUTPUT_FORMAT"
         name="Output Format?"
@@ -89,6 +110,7 @@
 <script setup>
 import { defineProps, inject } from 'vue';
 
+import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 
@@ -110,6 +132,11 @@ defineProps({
         required: true,
     },
 });
+
+const releaseLanguages = [
+    { key: 'none', value: 'None' },
+    { key: 'english', value: 'English' },
+];
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');

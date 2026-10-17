@@ -54,7 +54,7 @@
                     <td data-title="Season">{{ entry.series ?? '' }}</td>
                     <td data-title="Episode">{{ entry.episode ?? '' }}</td>
                     <td data-title="Results">
-                        <a v-if="entry.items?.length" class="clickable" @click="showResults(entry)">{{ entry.results }}</a>
+                        <a v-if="entry.items?.length || entry.trace?.candidates?.length" class="clickable" @click="showResults(entry)">{{ entry.results }}</a>
                         <template v-else>{{ entry.results }}</template>
                     </td>
                     <td></td>
@@ -374,6 +374,7 @@ function showResults(entry) {
         attrs: {
             term: entry.term,
             items: entry.items,
+            trace: entry.trace,
         },
     });
     resultsModal.open();

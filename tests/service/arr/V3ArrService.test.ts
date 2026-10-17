@@ -25,6 +25,12 @@ describe('V3ArrService', () => {
                 ],
             });
 
+            await V3ArrService.search(app, 'Him & Her #1');
+            expect(mockedAxios.get).toHaveBeenCalledWith(
+                'http://localhost:8989/api/v3/series/lookup?term=Him%20%26%20Her%20%231',
+                expect.anything()
+            );
+
             const results = await V3ArrService.search(app, 'term');
             expect(results).toEqual([{ path: '/path/1' }]);
             expect(mockedAxios.get).toHaveBeenCalledWith(

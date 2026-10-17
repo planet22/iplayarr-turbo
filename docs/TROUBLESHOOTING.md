@@ -37,6 +37,15 @@ Both are spawned as child processes (`child_process.spawn`), not shelled through
 - Check `DOWNLOAD_DIR` and `COMPLETE_DIR` actually exist and are writable by the container's `PUID`/`PGID` — `ConfigFormValidator` refuses to save Settings if either directory doesn't exist on save, but a directory that existed at save-time and was later removed/unmounted (e.g. a dropped network share) will fail downloads silently from Sonarr/Radarr's point of view (stuck "downloading" in its queue).
 - Look at the item in iPlayarr's own Queue page (not just Sonarr/Radarr's) — iPlayarr reports real progress back over the SABnzbd protocol, so if iPlayarr's own Queue page shows it stuck too, the problem is in the actual `get_iplayer`/`yt-dlp` process, not the Sonarr/Radarr integration.
 
+## Downloads fail with `410 Gone`, "geolocation" or "No media streams found"
+
+BBC only serves UK addresses, and it also blocks many VPN/proxy exit addresses. The iPlayarr container's *own* outbound address is what counts, not your browser's — iPlayer playing fine on your PC proves nothing.
+
+- A failed download is reported to Sonarr/Radarr as **Failed** (so it can blocklist the release and look elsewhere), and the reason shows as the history `fail_message` and in the Video Events page, e.g. "BBC blocked this download as outside the UK".
+- Check the container's exit address is a UK one that BBC accepts: some VPN providers' UK servers are blocked while others work (a change of provider or server image has fixed this for other users).
+- Try yt-dlp as the download client (Settings → Download Client) — it reports geo-blocks explicitly.
+- "No media streams found for requested programme versions and recording quality" can also mean the programme has expired or isn't offered at the quality you chose; try a lower Video Quality.
+
 ## Streaming playback failures
 
 - **Native streaming silently falls back to normal quality instead of 1080p**: this is expected, not a bug, when `STREAM_NATIVE_EXPERIMENTAL_FHD` is enabled (the default). It's designed to fall back cleanly to the standard adaptive/fixed-quality path whenever the trick doesn't apply to a given title — see [STREAMING.md](STREAMING.md). A failed upgrade attempt logs `NativeStreamService: experimental FHD upgrade attempt failed - <message>` but still serves normal playback.

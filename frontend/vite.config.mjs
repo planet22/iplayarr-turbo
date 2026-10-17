@@ -8,6 +8,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 const srcDir = fileURLToPath(new URL('./src', import.meta.url)).replace(/\\/g, '/');
 
 export default defineConfig({
+    experimental: {
+        // Runtime-resolved asset URLs so a BASE_PATH set on the server (window.__BASE_PATH__ in
+        // index.html) also covers lazy chunks and imported assets, not just the HTML tags.
+        renderBuiltUrl(filename, { hostType }) {
+            return hostType === 'js' ? { runtime: `window.__assetUrl(${JSON.stringify(filename)})` } : { relative: true };
+        },
+    },
     plugins: [
         vue(),
         VitePWA({

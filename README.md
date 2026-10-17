@@ -41,6 +41,7 @@ Other things you will notice after upgrading (details in [docs/SECURITY.md](docs
 - The Apps and Settings pages show saved keys/passwords as `********`; leave them as they are to keep the saved value.
 - After 10 wrong logins from one address you are locked out for 15 minutes.
 - The UI can't be embedded in other sites by default; set `ALLOW_EMBEDDING=true` if you embed it in a dashboard.
+- Behind a reverse proxy that keeps a URL prefix (like Sonarr's URL Base)? Set `BASE_PATH=/iplayarr` and the UI, API and websocket are all served under it. The container healthcheck (`/ping`) stays unprefixed.
 - With login disabled (`AUTH_TYPE=none`) the executable-related settings (`GET_IPLAYER_EXEC`, `YTDLP_EXEC`, additional download parameters) can't be changed from the UI; set them as environment variables.
 
 ## 📚 Further documentation

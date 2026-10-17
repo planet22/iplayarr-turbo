@@ -92,7 +92,7 @@ function createHistoryEntry(completeDir: string, item: QueueEntry, outputFormat:
         url: `${item.nzbName}.nzb`,
         bytes: (item.details?.size as number) * sizeFactor,
         status: failed ? HistoryStatus.FAILED : HistoryStatus.COMPLETED,
-        fail_message: failed ? 'get_iplayer produced no video file' : '',
+        fail_message: failed ? (item.failMessage ?? 'get_iplayer produced no video file') : '',
     } as SABNZBDHistoryEntryResponse;
 }
 

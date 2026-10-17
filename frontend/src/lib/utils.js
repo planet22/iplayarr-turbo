@@ -1,5 +1,8 @@
+// URL prefix the server injects into index.html when it runs under BASE_PATH ('' otherwise).
+export const getBasePath = () => window.__BASE_PATH__ || '';
+
 export const getHost = () => {
-    return import.meta.env.DEV ? `http://${window.location.hostname}:4404` : '';
+    return import.meta.env.DEV ? `http://${window.location.hostname}:4404` : getBasePath();
 };
 
 // Builds the query string for json-api/download from a full search result, carrying the

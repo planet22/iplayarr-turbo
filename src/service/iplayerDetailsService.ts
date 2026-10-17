@@ -3,6 +3,7 @@ import axios, { Axios, AxiosResponse } from 'axios';
 import { pidRegex, searchResultLimit } from '../constants/iPlayarrConstants';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
+import { withRetry } from '../utils/retry';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
 import RedisCacheService from './redis/redisCacheService';
 
@@ -105,28 +106,29 @@ class IPlayerDetailsService {
 
     async getSeriesEpisodes(pid: string, page: number = 1, perPage: number = searchResultLimit): Promise<IPlayerEpisodeMetadata[]> {
         try {
-            const response: AxiosResponse<IPlayerEpisodesResponse> = await axios.get(
+            const response: AxiosResponse<IPlayerEpisodesResponse> = await withRetry(() => axios.get(
                 `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`
-            );
+            ));
             return response.data.programme_episodes.elements;
         } catch {
             return [];
         }
     }
 
-    // Like getSeriesEpisodes, but retries once and says whether the page actually loaded, so a caller
+    // Like getSeriesEpisodes, but retries (with backoff) and says whether the page actually loaded, so a caller
     // can tell a failed page from a genuinely short (final) one. Used by Native Search V2.
     async getSeriesEpisodesChecked(pid: string, page: number = 1, perPage: number = searchResultLimit): Promise<{ elements: IPlayerEpisodeMetadata[]; failed: boolean }> {
         const url = `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`;
-        for (let attempt = 0; attempt < 2; attempt++) {
-            try {
-                const response: AxiosResponse<IPlayerEpisodesResponse> = await axios.get(url);
-                return { elements: response.data.programme_episodes.elements ?? [], failed: false };
-            } catch {
-                // fall through to the single retry
-            }
+        try {
+            // Backs off and honours Retry-After on a 429, instead of retrying straight away.
+            const response: AxiosResponse<IPlayerEpisodesResponse> = await withRetry(() => axios.get(url), {
+                retries: 2,
+                retryUnknown: true,
+            });
+            return { elements: response.data.programme_episodes.elements ?? [], failed: false };
+        } catch {
+            return { elements: [], failed: true };
         }
-        return { elements: [], failed: true };
     }
 
     async findBrandForUrl(url: string): Promise<string | undefined> {

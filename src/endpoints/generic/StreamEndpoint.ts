@@ -18,6 +18,7 @@ import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { isValidPid } from '../../utils/pathSafety';
+import { requestedQuality, runWithQuality } from '../../utils/qualityContext';
 
 // Media-server library scans (ffprobe) hit .strm URLs on every scan. Probing doesn't need a
 // transcode - just enough of the stream to read its headers/codec info - so probes are always
@@ -43,7 +44,7 @@ async function buildSettingsSnapshot(client: StreamClient): Promise<Record<strin
             'FHD Upgrade': experimentalFhd === 'true' ? 'On' : 'Off',
         };
     }
-    const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
+    const videoQuality = requestedQuality() ?? ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
     const profile = qualityProfiles.find(({ id }) => id === videoQuality);
     // Just the name (e.g. "Full-HD") - kept short for the Streaming page's small chip columns,
     // same reasoning as FHD Upgrade's on-page label below.
@@ -63,7 +64,10 @@ async function getStreamService(): Promise<{ client: StreamClient; service: Abst
     }
 }
 
-export default async (req: Request, res: Response): Promise<void> => {
+export default (req: Request, res: Response): Promise<void> =>
+    runWithQuality(req.query.quality, () => handleStream(req, res));
+
+async function handleStream(req: Request, res: Response): Promise<void> {
     const { pid, token } = req.query as any;
 
     // A rewritten HLS playlist reference (segment/sub-playlist/key) from proxyUrl's own
@@ -145,4 +149,4 @@ export default async (req: Request, res: Response): Promise<void> => {
             res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: err?.message ?? 'Streaming failed' } as ApiResponse);
         }
     }
-};
+}

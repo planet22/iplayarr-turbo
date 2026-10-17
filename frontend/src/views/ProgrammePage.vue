@@ -42,6 +42,15 @@
                         Download all ({{ loadedCount }})
                     </button>
                     <button
+                        class="clickable subscribeButton"
+                        :disabled="requesting"
+                        title="Add to Sonarr/Radarr and let it pick the best release"
+                        @click="requestProgramme"
+                    >
+                        <font-awesome-icon :icon="['fas', requesting ? 'circle-notch' : 'plus']" :spin="requesting" />
+                        Request
+                    </button>
+                    <button
                         v-if="subscription && !subscription.arrOnly"
                         class="clickable subscribeButton"
                         :disabled="subscribing"
@@ -130,7 +139,7 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { useArrAppNames } from '@/lib/subscriptionArr';
+import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { usePagination } from '@/lib/usePagination';
@@ -166,6 +175,16 @@ const toggleSubscription = async () => {
         }
     } finally {
         subscribing.value = false;
+    }
+};
+
+const requesting = ref(false);
+const requestProgramme = async () => {
+    requesting.value = true;
+    try {
+        await requestFromArr(programme.value.title);
+    } finally {
+        requesting.value = false;
     }
 };
 

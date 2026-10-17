@@ -11,6 +11,7 @@ import { QueueEntry } from '../types/QueueEntry';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
 import { resolveInside, sanitizeFileName } from '../utils/pathSafety';
+import { requestedQuality } from '../utils/qualityContext';
 import { calculateSeasonAndEpisode, copyWithFallback, createNZBName, parseEpisodeDetailStrings } from '../utils/Utils';
 import configService from './configService';
 import historyService from './historyService';
@@ -49,16 +50,20 @@ export class GetIplayerExecutableService {
         };
     }
 
-    async #getQualityParam(): Promise<string> {
-        const chain: string[] = await this.getQualityFallbackChain();
+    async #getQualityParam(pid?: string): Promise<string> {
+        const chain: string[] = await this.getQualityFallbackChain(pid);
         return `--tv-quality=${chain.join(',')}`;
     }
 
     // Same preference order used for --tv-quality, exposed separately so callers that need to
     // pick a specific --streaminfo stream variant (rather than let get_iplayer itself download
     // the best available one) can walk the same fallback chain.
-    async getQualityFallbackChain(): Promise<string[]> {
-        const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
+    async getQualityFallbackChain(pid?: string): Promise<string[]> {
+        // A grab made from an extra-quality variant carries its own quality on the queue entry.
+        const videoQuality =
+            (pid ? queueService.getFromQueue(pid)?.library?.quality : undefined) ??
+            requestedQuality() ??
+            ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
         return [...new Set([videoQuality, 'hd', 'sd', 'web', 'mobile'])];
     }
 
@@ -72,7 +77,7 @@ export class GetIplayerExecutableService {
         const allArgs: string[] = [
             ...args,
             ...additionalParams,
-            await this.#getQualityParam(),
+            await this.#getQualityParam(pid),
             '--output',
             directory,
             '--overwrite',

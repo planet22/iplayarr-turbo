@@ -48,7 +48,16 @@ export interface ArrAddOptions {
     // Ask Sonarr/Radarr to search for the show straight away. Off by default: iPlayarr's
     // subscription already queues episodes itself.
     searchOnAdd?: boolean;
+    // Sonarr/Radarr monitor option; defaults to 'all' (Sonarr) / 'movieOnly' (Radarr).
+    monitor?: string;
+    tags?: number[];
 }
+
+export const SONARR_MONITOR_OPTIONS = [
+    'all', 'future', 'missing', 'existing', 'recent', 'pilot', 'firstSeason', 'lastSeason',
+    'monitorSpecials', 'unmonitorSpecials', 'none',
+];
+export const RADARR_MONITOR_OPTIONS = ['movieOnly', 'movieAndCollection', 'none'];
 
 // Looking up, adding and removing library entries in Sonarr/Radarr, for linking a subscription to
 // one. Deliberately independent of AbstractArrService (whose search() only returns items that are
@@ -127,6 +136,32 @@ class ArrLibraryService {
         }
     }
 
+    async getTags(app: App): Promise<{ id: number; label: string }[]> {
+        try {
+            const { data } = await axios.get(this.#url(app, 'tag'), this.#headers(app));
+            return (Array.isArray(data) ? data : []).map(({ id, label }: any) => ({ id, label }));
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
+    monitorOptions(app: App): string[] {
+        return this.#isSonarr(app) ? SONARR_MONITOR_OPTIONS : RADARR_MONITOR_OPTIONS;
+    }
+
+    // Triggers a normal Sonarr/Radarr search for a whole series / a movie, so the best release from
+    // any configured indexer wins by quality profile - nothing iPlayer-specific.
+    async searchItem(app: App, arrId: number): Promise<void> {
+        try {
+            const body = this.#isSonarr(app)
+                ? { name: 'SeriesSearch', seriesId: arrId }
+                : { name: 'MoviesSearch', movieIds: [arrId] };
+            await axios.post(this.#url(app, 'command'), body, this.#headers(app));
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
     // Adds the item to the library and returns its Sonarr/Radarr id. If it is already there, returns
     // the existing id with `created: false` so callers never remove something they did not add.
     async add(app: App, externalId: number, options: ArrAddOptions): Promise<{ id: number; created: boolean }> {
@@ -145,7 +180,8 @@ class ArrLibraryService {
                 qualityProfileId: options.qualityProfileId,
                 monitored: true,
                 seasonFolder: true,
-                addOptions: { monitor: 'all', searchForMissingEpisodes: !!options.searchOnAdd, searchForCutoffUnmetEpisodes: false },
+                tags: options.tags ?? [],
+                addOptions: { monitor: options.monitor ?? 'all', searchForMissingEpisodes: !!options.searchOnAdd, searchForCutoffUnmetEpisodes: false },
             }
             : {
                 ...raw,
@@ -153,7 +189,8 @@ class ArrLibraryService {
                 qualityProfileId: options.qualityProfileId,
                 monitored: true,
                 minimumAvailability: 'released',
-                addOptions: { monitor: 'movieOnly', searchForMovie: !!options.searchOnAdd },
+                tags: options.tags ?? [],
+                addOptions: { monitor: options.monitor ?? 'movieOnly', searchForMovie: !!options.searchOnAdd },
             };
         try {
             const { data } = await axios.post(this.#url(app, this.#resource(app)), body, this.#headers(app));

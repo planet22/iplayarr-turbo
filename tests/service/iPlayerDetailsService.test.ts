@@ -149,6 +149,36 @@ describe('iplayerDetailsService', () => {
         expect(url).not.toContain('&page=');
     });
 
+    describe('getSeriesEpisodesChecked', () => {
+        const ok = { data: { programme_episodes: { elements: [{ id: 'e1' }] } } };
+
+        beforeEach(() => jest.useFakeTimers());
+        afterEach(() => jest.useRealTimers());
+
+        it('backs off and retries after a 429, then succeeds', async () => {
+            const rateLimited = Object.assign(new Error('429'), { isAxiosError: true, response: { status: 429, headers: { 'retry-after': '2' } } });
+            mockedAxios.isAxiosError.mockImplementation((e: any) => !!e?.isAxiosError);
+            mockedAxios.get.mockRejectedValueOnce(rateLimited).mockResolvedValueOnce(ok);
+
+            const pending = iplayerDetailsService.getSeriesEpisodesChecked('b1234567');
+            await jest.advanceTimersByTimeAsync(2000);
+
+            await expect(pending).resolves.toEqual({ elements: [{ id: 'e1' }], failed: false });
+            expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+        });
+
+        it('still retries an unexpected (non-HTTP) failure once and reports failed when it persists', async () => {
+            mockedAxios.isAxiosError.mockReturnValue(false);
+            mockedAxios.get.mockRejectedValue(new Error('bad shape'));
+
+            const pending = iplayerDetailsService.getSeriesEpisodesChecked('b1234567');
+            await jest.advanceTimersByTimeAsync(10000);
+
+            await expect(pending).resolves.toEqual({ elements: [], failed: true });
+            expect(mockedAxios.get).toHaveBeenCalledTimes(3);
+        });
+    });
+
     it('getSeriesEpisodes returns [] on error', async () => {
         mockedAxios.get.mockRejectedValueOnce(new Error('fail'));
         const result = await iplayerDetailsService.getSeriesEpisodes('badid');

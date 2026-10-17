@@ -7,6 +7,7 @@ import { ChannelDefinition, ChannelSchedule } from '../../constants/ChannelSched
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { IPlayerDetails } from '../../types/IPlayerDetails';
 import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
+import { withRetry } from '../../utils/retry';
 import { getQualityProfile, splitArrayIntoChunks } from '../../utils/Utils';
 import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
@@ -151,7 +152,7 @@ class NativeScheduleService implements AbstractScheduleService {
 
     async getPidsFromSchedulePage(url: string): Promise<string[]> {
         try {
-            const response = await axios.get(url);
+            const response = await withRetry(() => axios.get(url));
             const dom = new JSDOM(response.data);
             const document = dom.window.document;
             const titles = Array.from(document.querySelectorAll('.programme__titles a'));

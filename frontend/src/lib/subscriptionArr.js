@@ -71,6 +71,32 @@ export async function linkToArr(subscription) {
     return ok ? true : fail('Unable to add', data);
 }
 
+// Overseerr-style request: add the title to Sonarr/Radarr and trigger a normal search. Sonarr/Radarr
+// then picks the best release from all its indexers - iPlayarr is only the discovery surface.
+export async function requestFromArr(title) {
+    const apps = await ipFetch(`${BASE}/apps`);
+    if (!apps.ok) return fail('Unable to load apps', apps.data);
+    if (!apps.data.length) return fail('No Sonarr or Radarr', { message: 'Add a Sonarr or Radarr app first.' });
+    const app = apps.data.length === 1
+        ? apps.data[0]
+        : await pick('Request in which app?', title, apps.data, ({ name }) => name);
+    if (!app) return false;
+
+    const choice = await chooseMatch(app, title);
+    if (!choice) return false;
+
+    const { ok, data } = await ipFetch('json-api/request', 'POST', {
+        appId: app.id,
+        externalId: choice.match.externalId,
+        title: choice.match.title,
+        rootFolderPath: choice.rootFolderPath,
+        qualityProfileId: choice.qualityProfileId,
+    });
+    if (!ok) return fail('Unable to request', data);
+    dialogService.alert('Requested', `${choice.match.title} was ${data.created ? 'added to' : 'searched again in'} ${app.name}. ${app.name} will pick the best release from your indexers.`);
+    return true;
+}
+
 // Names of the Sonarr/Radarr apps, by id, for labelling a linked subscription. Shared and loaded
 // once; a name that can't be resolved (app removed, request failed) falls back to a generic label.
 const appNames = ref({});

@@ -11,6 +11,7 @@ import { pipeline } from 'stream';
 import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, nativeSeriesRegex } from '../constants/iPlayarrConstants';
 import appService from '../service/appService';
 import configService from '../service/configService';
+import numberingOverrideService from '../service/numberingOverrideService';
 import SkyhookService from '../service/skyhook/SkyhookService';
 import { NfoWriteMode } from '../types/enums/NfoWriteMode';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
@@ -21,6 +22,7 @@ import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
+import { londonDate } from './airDate';
 
 const removeUnsafeCharsRegex = /[^a-zA-Z0-9\s\\/._-]/g;
 
@@ -31,6 +33,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
             : IplayarrParameter.TV_FILENAME_TEMPLATE;
     const template = (await configService.getParameter(templateKey)) as string;
     const qualityProfile = await getQualityProfile();
+    const language = releaseLanguageTag((await configService.getParameter(IplayarrParameter.RELEASE_LANGUAGE)) as string);
     const title = result.title.trim();
 
     let season: string | undefined = undefined;
@@ -44,7 +47,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
         }
     }
 
-    return Handlebars.compile(template)({
+    const name = Handlebars.compile(template)({
         title: title.replaceAll(removeUnsafeCharsRegex, ''),
         season,
         episode:
@@ -59,9 +62,26 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
                 ? (synonym.filenameOverride ?? synonym.from)?.trim().replaceAll(removeUnsafeCharsRegex, '')
                 : undefined,
         quality: qualityProfile.quality,
+        language,
     } as FilenameTemplateContext)
         .replaceAll(/[\s/]|[\s\\-_]{2,}/g, '.')
         .replaceAll(/\.{2,}/g, '.');
+
+    // Sonarr/Radarr read a release's language from its title, so tag it explicitly - unless the
+    // user's own template already places {{language}}.
+    return language && !/{{\s*language\s*}}/.test(template) ? insertLanguageTag(name, language) : name;
+}
+
+// RELEASE_LANGUAGE setting -> the title token Sonarr/Radarr's parser recognises ('' when off).
+export function releaseLanguageTag(setting: string | undefined): string {
+    return setting?.toLowerCase() === 'english' ? 'ENGLISH' : '';
+}
+
+// Places the tag before the source token (WEBDL/WEB/HDTV...) like scene names do, else appends it.
+export function insertLanguageTag(name: string, tag: string): string {
+    if (new RegExp(`(^|[.\\-_])${tag}([.\\-_]|$)`, 'i').test(name)) return name;
+    const source = /(^|\.)(WEB-?DL|WEBRip|WEB|HDTV)(?=[.-]|$)/i;
+    return source.test(name) ? name.replace(source, `$1${tag}.$2`) : `${name}.${tag}`;
 }
 
 export function getBaseUrl(req: Request): string {
@@ -90,7 +110,7 @@ export function isLegacyMD5Hash(value: string): boolean {
 
 export async function createNZBDownloadLink(
     req: Request,
-    { pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds }: IPlayerSearchResult,
+    { pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds, quality }: IPlayerSearchResult,
     apiKey: string,
     app?: string
 ): Promise<string> {
@@ -113,7 +133,8 @@ export async function createNZBDownloadLink(
         (episodeTitle ? `&episodeTitle=${encodeURIComponent(episodeTitle)}` : '') +
         (channel ? `&channel=${encodeURIComponent(channel)}` : '') +
         (pubDate ? `&pubDate=${encodeURIComponent(pubDate.toISOString())}` : '') +
-        (runtimeSeconds != null ? `&runtime=${encodeURIComponent(runtimeSeconds)}` : '');
+        (runtimeSeconds != null ? `&runtime=${encodeURIComponent(runtimeSeconds)}` : '') +
+        (quality ? `&quality=${encodeURIComponent(quality)}` : '');
     return `${baseUrl}/api?mode=nzb-download&pid=${encodeURIComponent(pid)}&nzbName=${encodeURIComponent(nzbName ?? '')}&type=${encodeURIComponent(type)}&apikey=${encodeURIComponent(apiKey)}${app ? `&app=${encodeURIComponent(app)}` : ''}${libraryParams}`;
 }
 
@@ -121,9 +142,9 @@ export async function createNZBDownloadLink(
 // queueService, not from an HTTP request), so the stream URL is built from the configured
 // STREAM_BASE_URL rather than derived per-request like createNZBDownloadLink above.
 // Uses STREAM_KEY, deliberately not API_KEY - see ApiRoute.ts's mode=stream branch for why.
-export async function createStrmContent(pid: string, streamKey: string): Promise<string> {
+export async function createStrmContent(pid: string, streamKey: string, quality?: string): Promise<string> {
     const streamBaseUrl: string = (await configService.getParameter(IplayarrParameter.STREAM_BASE_URL)) as string;
-    return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}`;
+    return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${quality ? `&quality=${encodeURIComponent(quality)}` : ''}`;
 }
 
 // Inverse of createStrmContent, for the STRM Watchdog: returns the BBC pid a .strm file points at, or
@@ -264,6 +285,21 @@ export async function calculateSeasonAndEpisode(
         if (skyhookResult) {
             series = skyhookResult.series ?? series;
             episode = skyhookResult.episode ?? episode;
+        }
+    }
+
+    // Opt-in: iPlayer's "Series N" labels are editorial and often don't match TVDB, so resolve the
+    // broadcast by UK air date instead (manual override first, then Skyhook), keeping the ordinal
+    // numbers above only as the fallback.
+    const airDate = parent ? londonDate(programme.first_broadcast_date) : undefined;
+    if (airDate && (await configService.getParameter(IplayarrParameter.AIRDATE_NUMBERING)) === 'true') {
+        const showTitle = programme.display_title?.title ?? programme.title;
+        const resolved =
+            (await numberingOverrideService.find(showTitle, airDate)) ??
+            (await SkyhookService.lookupByAirDate(showTitle, airDate, episodeTitle).catch(() => undefined));
+        if (resolved) {
+            series = resolved.series;
+            episode = resolved.episode;
         }
     }
 

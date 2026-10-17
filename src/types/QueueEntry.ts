@@ -19,6 +19,8 @@ export interface QueueLibraryMetadata {
     // Episode duration in seconds, when known - populates the .nfo <runtime> tag
     // (nfoBuilder.ts) and the .strmtool.json runTimeTicks field (strmToolBuilder.ts).
     runtimeSeconds?: number;
+    // Quality profile id this grab was made at, when it differs from VIDEO_QUALITY.
+    quality?: string;
     // Synopsis, fetched best-effort from iplayerDetailsService at NFO-write time
     // (not carried through the NZB round-trip like the other fields) - populates
     // the .nfo <plot> tag.
@@ -45,4 +47,6 @@ export interface QueueEntry {
     // if LIBRARY_FOLDER_STRUCTURE is toggled after the fact - see
     // HistoryEndpoint.ts.
     libraryPath?: string;
+    // Why a download ended up FAILED, shown to Sonarr/Radarr as the history fail_message.
+    failMessage?: string;
 }

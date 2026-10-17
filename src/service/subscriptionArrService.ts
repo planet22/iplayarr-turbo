@@ -41,6 +41,27 @@ class SubscriptionArrService {
         return { rootFolders, qualityProfiles };
     }
 
+    async tags(appId: string) {
+        return arrLibraryService.getTags(await this.#getApp(appId));
+    }
+
+    async monitorOptions(appId: string): Promise<string[]> {
+        return arrLibraryService.monitorOptions(await this.#getApp(appId));
+    }
+
+    // Overseerr-style request: add the title to the library and trigger a normal search. The
+    // release actually grabbed is chosen by Sonarr/Radarr across all its indexers, not by us.
+    async request(request: LinkRequest): Promise<{ arrId: number; created: boolean }> {
+        const app = await this.#getApp(request.appId);
+        if (request.monitor && !arrLibraryService.monitorOptions(app).includes(request.monitor)) {
+            throw new SubscriptionArrError('Unsupported monitor option');
+        }
+        // Searching is done explicitly below so an already-present title is searched too.
+        const { id, created } = await arrLibraryService.add(app, request.externalId, { ...request, searchOnAdd: false });
+        await arrLibraryService.searchItem(app, id);
+        return { arrId: id, created };
+    }
+
     async link(subscriptionId: string, request: LinkRequest): Promise<void> {
         const subscription = (await subscriptionService.list()).find((s) => s.id === subscriptionId);
         if (!subscription) throw new SubscriptionArrError('Subscription not found');
