@@ -1,7 +1,19 @@
-import { register, resolve, sweepExpired } from '../../../src/service/stream/segmentUrlRegistry';
+import { maxSegmentTokens, register, resolve, sweepExpired } from '../../../src/service/stream/segmentUrlRegistry';
 
 describe('segmentUrlRegistry token reuse and sweep', () => {
     afterEach(() => jest.useRealTimers());
+
+    it('holds the full ~1,900-segment playlists of many live channels at once without evicting any', () => {
+        const channels = 20;
+        const perChannel = 1900;
+        const first = register('https://cdn/live/ch0/seg0.ts');
+        for (let c = 0; c < channels; c++) {
+            for (let s = 0; s < perChannel; s++) register(`https://cdn/live/ch${c}/seg${s}.ts`);
+        }
+        expect(channels * perChannel).toBeLessThan(maxSegmentTokens);
+        expect(resolve(first)).toBe('https://cdn/live/ch0/seg0.ts');
+        expect(resolve(register('https://cdn/live/ch19/seg1899.ts'))).toBe('https://cdn/live/ch19/seg1899.ts');
+    });
 
     it('reuses the token when the same segment is registered again (a live playlist refetch)', () => {
         const token = register('https://cdn/live/reuse.ts');
@@ -30,7 +42,7 @@ describe('segmentUrlRegistry token reuse and sweep', () => {
 
     it('gives a url a new token after its old one was evicted by the size cap', () => {
         const old = register('https://cdn/live/evicted.ts');
-        for (let i = 0; i < 5000; i++) register(`https://cdn/live/flood${i}.ts`);
+        for (let i = 0; i < maxSegmentTokens; i++) register(`https://cdn/live/flood${i}.ts`);
         expect(resolve(old)).toBeUndefined();
         const fresh = register('https://cdn/live/evicted.ts');
         expect(fresh).not.toBe(old);
@@ -77,7 +89,7 @@ describe('segmentUrlRegistry', () => {
 
     it('evicts the oldest entry beyond the size cap', () => {
         const first = register('first');
-        for (let i = 0; i < 5000; i++) register(`u${i}`);
+        for (let i = 0; i < maxSegmentTokens; i++) register(`u${i}`);
         expect(resolve(first)).toBeUndefined();
     });
 });
@@ -107,7 +119,7 @@ describe('segmentUrlRegistry playlist references', () => {
 
     it('is not evicted by a flood of segment tokens', () => {
         const playlist = register('https://cdn/live/v4.m3u8');
-        for (let i = 0; i < 6000; i++) register(`https://cdn/live/s${i}.ts`);
+        for (let i = 0; i < maxSegmentTokens + 1000; i++) register(`https://cdn/live/s${i}.ts`);
         expect(resolve(playlist)).toBe('https://cdn/live/v4.m3u8');
     });
 });

@@ -122,6 +122,29 @@ describe('LiveStreamService', () => {
         expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req, res, 5, undefined, true);
     });
 
+    it('remuxes only the highest-bandwidth variant (relative uri resolved against the master) so ffmpeg starts quickly', async () => {
+        const base = route;
+        route = (url, method) =>
+            url === 'https://cdn/master.m3u8'
+                ? {
+                      body:
+                          '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1500000,RESOLUTION=640x360\nlow.m3u8?x=1\n' +
+                          '#EXT-X-STREAM-INF:BANDWIDTH=5509900,RESOLUTION=1280x720\n\nhd/v.m3u8\n' +
+                          '#EXT-X-STREAM-INF:BANDWIDTH=3116440\nmid.m3u8\n',
+                  }
+                : base(url, method);
+        await service.streamProgressiveMkv('bbc_one_london', res, 'sess');
+        expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/hd/v.m3u8', 'bbc_one_london', res, 'sess');
+        // the direct (HLS proxy) path is untouched and still gets the whole master
+        await service.streamDirect('bbc_one_london', req, res, 'sess');
+        expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, 'sess', true);
+    });
+
+    it('falls back to the master playlist when it lists no variants', async () => {
+        await service.streamProgressiveMkv('bbc_one_london', res, 'sess');
+        expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/master.m3u8', 'bbc_one_london', res, 'sess');
+    });
+
     it('rejects ids that are not live channels', async () => {
         await expect(service.streamDirect('nope', req, res)).rejects.toThrow('Unknown live channel');
         expect(proxyUrl).not.toHaveBeenCalled();

@@ -10,7 +10,13 @@ import { v4 as uuidv4 } from 'uuid';
 // handlers "cannot be used to reach any other URL". This does the same: the client only ever gets
 // a short-lived token; the real URL never leaves the server.
 const ttlMs = 10 * 60 * 1000; // generous for fetching every segment of one manifest, not indefinite
-const maxEntries = 5_000; // bounds memory under heavy concurrent streaming; oldest evicted first
+// Bounds memory under heavy concurrent streaming; oldest evicted first. A live variant playlist
+// lists ~1,900 segments (BBC keeps a ~2 hour window), and every one is registered when a viewer
+// fetches it, so the old 5,000 cap was exhausted by three live channels at once - evicting tokens
+// that were still in use and 404ing their segments. 50,000 covers ~25 such playlists for roughly
+// 10-15 MB (a uuid + a CDN url per entry).
+export const maxSegmentTokens = 50_000;
+const maxEntries = maxSegmentTokens;
 
 // A player fetches a VOD media playlist once, but re-fetches a live one every few seconds for as
 // long as it plays - through the very same token it was handed inside the master playlist. With
