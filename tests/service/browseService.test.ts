@@ -154,13 +154,17 @@ describe('browseService', () => {
     });
 
     it('home places Recently Added after Featured and adds channel and category rails', async () => {
-        const named = (pid: string) => ({ ...element(pid), title: `Show ${pid}` });
+        const named = (pid: string, channel = 'BBC One') => ({
+            ...element(pid),
+            title: `Show ${pid}`,
+            master_brand: { titles: { small: channel } },
+        });
         iblByPath({
             'channels/bbc_one_london': { elements: [named('a')] },
             'groups/popular': { elements: [named('b')] },
-            'channels/bbc_two_england': { elements: [named('c')] },
-            'channels/bbc_three': { elements: [named('d')] },
-            'channels/bbc_four': { elements: [named('e')] },
+            'channels/bbc_two_england': { elements: [named('c', 'BBC Two')] },
+            'channels/bbc_three': { elements: [named('d', 'BBC Three')] },
+            'channels/bbc_four': { elements: [named('e', 'BBC Four')] },
             'categories/comedy/programmes?per_page=30': { elements: [named('f')] },
             'categories/drama/programmes?per_page=30': { elements: [named('g')] },
             'categories/comedy/programmes?per_page=6': { elements: [] },
@@ -172,8 +176,19 @@ describe('browseService', () => {
         const rails = await browseService.home();
         const ids = rails.map((r) => r.id);
         expect(ids.slice(0, 3)).toEqual(['highlights', 'recent', 'popular']);
-        expect(ids).toEqual(expect.arrayContaining(['highlights_bbc_two', 'highlights_bbc_three', 'highlights_bbc_four']));
+        expect(ids).toEqual(expect.arrayContaining(['channel_bbc_two_england', 'channel_bbc_three', 'channel_bbc_four']));
         expect(ids.filter((id) => id.startsWith('category_'))).toHaveLength(2);
+    });
+
+    it('channelRail keeps only the channel own shows from highlights and programmes', async () => {
+        const on = (pid: string, channel: string) => ({ ...element(pid), master_brand: { titles: { small: channel } } });
+        iblByPath({
+            highlights: { elements: [on('h-own', 'BBC Four'), on('h-other', 'BBC Two')] },
+            programmes: { elements: [on('p-own', 'BBC Four'), on('h-own', 'BBC Four'), on('p-other', 'BBC One')] },
+        });
+        const rail = await browseService.channelRail('bbc_four');
+        expect(rail.title).toBe('On BBC Four');
+        expect(rail.items.map((i) => i.pid)).toEqual(['h-own', 'p-own']);
     });
 
     it('home drops programmes already shown in an earlier rail', async () => {
