@@ -35,7 +35,10 @@ describe('streamSessionService lifecycle', () => {
     it('start registers an active session and emits', async () => {
         const id = await streamSessionService.start('p1', mode, client, '1.2.3.4', { a: 'b' });
         expect(find(id)).toMatchObject({ pid: 'p1', clientIp: '1.2.3.4', settings: { a: 'b' } });
-        expect(socketService.emit).toHaveBeenCalledWith('streams', expect.objectContaining({ history: [] }));
+        // a session starting only changes `active`, so it goes out on the light event, without history
+        expect(socketService.emit).toHaveBeenCalledWith('streamsActive', { active: [expect.objectContaining({ id })] });
+        expect(socketService.emit).not.toHaveBeenCalledWith('streams', expect.anything());
+        expect(mockGetItem).not.toHaveBeenCalled();
         expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_STARTED, expect.any(String), { pid: 'p1' });
     });
 
@@ -180,7 +183,7 @@ describe('streamSessionService lifecycle', () => {
             expect(socket.emit).toHaveBeenCalledTimes(2);
         });
 
-        it('does not re-read stored history, and reflects a session archived since', async () => {
+        it('sends only the active sessions - no history, and no database read', async () => {
             const { svc, socket } = await load();
             const done = await svc.start('done', mode, client);
             await svc.end(done);
@@ -190,7 +193,35 @@ describe('streamSessionService lifecycle', () => {
 
             svc.addBytesTransferred(id, 1);
             expect(mockGetItem).not.toHaveBeenCalled();
-            expect((socket.emit as jest.Mock).mock.calls[0][1].history).toEqual([expect.objectContaining({ id: done })]);
+            expect(socket.emit).toHaveBeenCalledTimes(1);
+            const [event, payload] = (socket.emit as jest.Mock).mock.calls[0];
+            expect(event).toBe('streamsActive');
+            expect(Object.keys(payload)).toEqual(['active']);
+            expect(payload.active.map((s: any) => s.id)).toEqual([id]);
+        });
+
+        it('sends the full state (with history) only when a session is archived or history changes', async () => {
+            let stored: any[] = [];
+            mockGetItem.mockImplementation(async () => stored);
+            mockSetItem.mockImplementation(async (_key: string, value: any[]) => {
+                stored = value;
+            });
+            const { svc, socket } = await load();
+            const id = await svc.start('p1', mode, client);
+            (socket.emit as jest.Mock).mockClear();
+
+            await svc.end(id);
+            expect(socket.emit).toHaveBeenCalledWith('streams', {
+                active: [],
+                history: [expect.objectContaining({ id, endedAt: expect.any(Date) })],
+            });
+            const events = (socket.emit as jest.Mock).mock.calls.map((c) => c[0]);
+            expect(events.every((e) => e === 'streams')).toBe(true);
+
+            (socket.emit as jest.Mock).mockClear();
+            const other = await svc.start('p2', mode, client);
+            await svc.stop(other);
+            expect((socket.emit as jest.Mock).mock.calls.some((c) => c[0] === 'streams' && c[1].history.length === 2)).toBe(true);
         });
 
         it('still emits immediately for start, setResolution and setSegmentCount', async () => {

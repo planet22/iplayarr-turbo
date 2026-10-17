@@ -22,9 +22,6 @@ const emitThrottleMs = 750;
 const storage: QueuedStorage = new QueuedStorage();
 
 let active: StreamSession[] = [];
-// Last history we know of, so a throttled emit doesn't hit the database (read + JSON.parse of up to
-// 200 sessions) every time. Refreshed by every code path that reads or changes the stored history.
-let historySnapshot: StreamSession[] | undefined;
 let throttleTimer: NodeJS.Timeout | undefined;
 let throttleDirty = false;
 // Registered only by modes with a real underlying connection/process to tear down
@@ -34,9 +31,7 @@ let throttleDirty = false;
 const stopHandlers: Map<string, () => void> = new Map();
 
 async function getHistory(): Promise<StreamSession[]> {
-    const history: StreamSession[] = (await storage.getItem('streamHistory')) ?? [];
-    historySnapshot = history;
-    return history;
+    return (await storage.getItem('streamHistory')) ?? [];
 }
 
 async function archive(session: StreamSession, endReason?: string): Promise<void> {
@@ -44,9 +39,7 @@ async function archive(session: StreamSession, endReason?: string): Promise<void
     stopHandlers.delete(session.id);
     const history: StreamSession[] = await getHistory();
     history.push({ ...session, endedAt: new Date(), endReason });
-    const trimmed: StreamSession[] = history.slice(-historyLimit);
-    historySnapshot = trimmed;
-    await storage.setItem('streamHistory', trimmed);
+    await storage.setItem('streamHistory', history.slice(-historyLimit));
     videoEventService.record(
         VideoEventType.STREAM_ENDED,
         endReason === 'manual-stop' ? 'Stream stopped' : 'Stopped streaming',
@@ -66,14 +59,23 @@ async function sweepInactiveSessions(): Promise<void> {
     await streamSessionService.emitStreams();
 }
 
+// The 'streamsActive' event carries only the live sessions - no history. Anything that changes a
+// session while it is running (start, resolution, segment count, bytes, segments) only ever changes
+// `active`, and history is up to 200 sessions that would otherwise be re-read from the database and
+// re-sent in full each time. The full 'streams' event (active + history) is sent only when a session
+// is archived, the history is cleared, or a client connects - see emitStreams.
+function emitActive(): void {
+    socketService.emit('streamsActive', { active: streamSessionService.getActive() });
+}
+
 // Leading + trailing throttle: the first event emits straight away, anything arriving within the
-// interval is folded into one trailing emit. Start/end/stop still emit immediately via emitStreams.
+// interval is folded into one trailing emit. Start/end/stop still emit immediately.
 function emitThrottled(): void {
     if (throttleTimer) {
         throttleDirty = true;
         return;
     }
-    emitSnapshot();
+    emitActive();
     throttleTimer = setTimeout(() => {
         throttleTimer = undefined;
         if (throttleDirty) {
@@ -82,13 +84,6 @@ function emitThrottled(): void {
         }
     }, emitThrottleMs);
     throttleTimer.unref();
-}
-
-async function emitSnapshot(): Promise<void> {
-    socketService.emit('streams', {
-        active: streamSessionService.getActive(),
-        history: historySnapshot ?? (await getHistory()),
-    });
 }
 
 // unref() so this timer never keeps the process (or a test run) alive on its own.
@@ -132,7 +127,7 @@ const streamSessionService = {
             ...(live ? { live: true, title: live.title } : {}),
         };
         active.push(session);
-        await streamSessionService.emitStreams();
+        emitActive();
         videoEventService.record(VideoEventType.STREAM_STARTED, `Started streaming (${mode} via ${client})`, { pid });
         return session.id;
     },
@@ -144,7 +139,7 @@ const streamSessionService = {
         const session: StreamSession | undefined = active.find((s) => s.id === id);
         if (session && session.resolution !== resolution) {
             session.resolution = resolution;
-            streamSessionService.emitStreams();
+            emitActive();
         }
     },
 
@@ -195,7 +190,6 @@ const streamSessionService = {
     getHistory,
 
     clearHistory: async (): Promise<void> => {
-        historySnapshot = [];
         await storage.setItem('streamHistory', []);
     },
 
@@ -209,7 +203,6 @@ const streamSessionService = {
         const retained = history.filter((session) => !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
         const deleted = history.length - retained.length;
         if (deleted > 0) {
-            historySnapshot = retained;
             await storage.setItem('streamHistory', retained);
         }
         return deleted;
@@ -220,7 +213,7 @@ const streamSessionService = {
         if (session && session.totalSegments !== totalSegments) {
             session.totalSegments = totalSegments;
             session.lastActivityAt = new Date();
-            streamSessionService.emitStreams();
+            emitActive();
         }
     },
 
@@ -250,6 +243,8 @@ const streamSessionService = {
         }
     },
 
+    // Full state (active + history). Only for the moments history actually changes, or a client
+    // needs the whole picture; routine session updates use the lighter 'streamsActive' instead.
     emitStreams: async (): Promise<void> => {
         socketService.emit('streams', {
             active: streamSessionService.getActive(),
