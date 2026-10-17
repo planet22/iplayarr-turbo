@@ -381,7 +381,7 @@ watch(
     }
 }
 
-// Blurred full-width backdrop with the artwork also shown as a poster beside the details.
+// Blurred full-width backdrop with the artwork also shown as a 16:9 still beside the details.
 .programmeBanner {
     position: relative;
     overflow: hidden;
@@ -404,16 +404,16 @@ watch(
     }
 
     .poster {
-        flex: 0 0 150px;
-        width: 150px;
-        aspect-ratio: 2 / 3;
+        flex: 0 0 280px;
+        width: 280px;
+        aspect-ratio: 16 / 9;
         object-fit: cover;
         border-radius: 4px;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
 
         @media (max-width: @mobile-breakpoint) {
-            flex-basis: 90px;
-            width: 90px;
+            flex-basis: 130px;
+            width: 130px;
         }
     }
 
