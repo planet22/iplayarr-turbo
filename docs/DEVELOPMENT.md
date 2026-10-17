@@ -14,6 +14,8 @@ npm install   # one install at the root covers backend + the /frontend workspace
 npm run dev            # runs backend (nodemon) + frontend (vite dev server) concurrently, DEBUG=true
 ```
 
+npm workspaces link `frontend` into `node_modules` with a symlink, so run `npm install` on a local drive (or in WSL or a container). It fails with `EUNKNOWN ... symlink` on a mapped network share such as an SMB drive.
+
 - Frontend dev server: `http://localhost:8080`
 - Backend API: `http://localhost:4404`
 
