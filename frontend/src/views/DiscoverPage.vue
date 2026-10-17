@@ -13,7 +13,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 
 import BrowseHero from '@/components/browse/BrowseHero.vue';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
@@ -25,11 +25,18 @@ const rails = ref([]);
 const loading = ref(true);
 const error = ref(null);
 
-const heroItem = computed(() => rails.value.flatMap(({ items }) => items).find((item) => item.thumbnail));
+const heroItem = ref(null);
+
+// Pick once per load from the first few artwork-bearing items, so the banner varies between visits.
+const pickHero = () => {
+    const candidates = rails.value.flatMap(({ items }) => items).filter((item) => item.thumbnail).slice(0, 6);
+    return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
+};
 
 onMounted(async () => {
     try {
         rails.value = await browseFetch('home');
+        heroItem.value = pickHero();
     } catch (e) {
         error.value = e.message;
     } finally {

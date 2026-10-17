@@ -23,3 +23,10 @@ export const BrowseHomeRails: { id: string; title: string; path: string }[] = [
     { id: 'highlights', title: 'Featured', path: 'channels/bbc_one_london/highlights' },
     { id: 'popular', title: 'Most Popular', path: 'groups/popular/episodes?per_page=30' },
 ];
+
+// Channels that get their own home rail (ids from BrowseChannels). iPlayer's channel highlights are editorial
+// and mix in other channels' shows, so these rails keep only items whose channel matches.
+export const BrowseHomeChannelRails = ['bbc_two_england', 'bbc_three', 'bbc_four'];
+
+// How many randomly-chosen categories get their own rail on the home screen.
+export const BrowseHomeRandomCategories = 2;

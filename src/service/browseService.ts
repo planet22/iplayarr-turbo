@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import { BrowseChannels, BrowseHomeRails } from '../constants/BrowseChannels';
+import { BrowseChannels, BrowseHomeChannelRails, BrowseHomeRails, BrowseHomeRandomCategories } from '../constants/BrowseChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { isLiveChannel } from '../constants/LiveChannels';
 import scheduleFacade from '../facade/scheduleFacade';
@@ -119,6 +119,39 @@ const withLogo = (channel: BrowseChannel): BrowseChannel => ({
 
 const PROGRAMME_PAGE_SIZE = 30;
 
+export function shuffled<T>(list: T[]): T[] {
+    const copy = [...list];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+}
+
+// Earlier rails win: a programme already shown (by pid, or by title, since a series/brand tile and
+// one of its episodes are the same show to the viewer) is dropped from later rails, and rails left
+// empty disappear.
+export function dedupeRails(rails: BrowseRail[]): BrowseRail[] {
+    const seenPids = new Set<string>();
+    const seenTitles = new Set<string>();
+    const result: BrowseRail[] = [];
+    for (const rail of rails) {
+        const items: BrowseItem[] = [];
+        const railTitles = new Set<string>();
+        for (const item of rail.items) {
+            const title = item.title.trim().toLowerCase();
+            if (seenPids.has(item.pid) || seenTitles.has(title)) continue;
+            seenPids.add(item.pid);
+            railTitles.add(title);
+            items.push(item);
+        }
+        // Titles are only registered once the rail is done, so a rail can still show several episodes of one show.
+        railTitles.forEach((title) => seenTitles.add(title));
+        if (items.length) result.push({ ...rail, items });
+    }
+    return result;
+}
+
 class BrowseService {
     shortCache: DbCacheService<any> = new DbCacheService('browse_short', 900); // 15 minutes
     longCache: DbCacheService<any> = new DbCacheService('browse_long', 86400); // 24 hours
@@ -181,22 +214,67 @@ class BrowseService {
     }
 
     async home(): Promise<BrowseRail[]> {
-        const sources: { id: string; load: () => Promise<BrowseRail | undefined> }[] = BrowseHomeRails.map((rail) => ({
+        const sources: { id: string; load: () => Promise<BrowseRail[]> }[] = BrowseHomeRails.map((rail) => ({
             id: rail.id,
-            load: () => this.#iblRail(rail),
+            load: async () => [await this.#iblRail(rail)],
         }));
         // Slot "Recently Added" in right after the lead (Featured) rail.
-        sources.splice(1, 0, { id: 'recent', load: () => this.recentlyAdded() });
+        sources.splice(1, 0, {
+            id: 'recent',
+            load: async () => {
+                const recent = await this.recentlyAdded();
+                return recent ? [recent] : [];
+            },
+        });
+        BrowseHomeChannelRails.forEach((id) =>
+            sources.push({ id: `channel_${id}`, load: async () => [await this.channelRail(id)] })
+        );
+        sources.push({ id: 'categories', load: () => this.randomCategoryRails(BrowseHomeRandomCategories) });
         const settled = await Promise.allSettled(sources.map(({ load }) => load()));
         const rails: BrowseRail[] = [];
         settled.forEach((result, index) => {
             if (result.status === 'fulfilled') {
-                if (result.value?.items.length) rails.push(result.value);
+                rails.push(...result.value);
             } else {
                 loggingService.error(`Browse rail ${sources[index].id} failed: ${result.reason}`);
             }
         });
-        return rails;
+        // The upstream order barely changes, so mix up the ranked list on every visit.
+        rails.forEach((rail) => {
+            if (rail.id === 'popular') rail.items = shuffled(rail.items);
+        });
+        return dedupeRails(rails);
+    }
+
+    // A channel's own shows: its highlights first, then a shuffled sample of its programme list. Both feeds
+    // can include other channels' items, so only those whose channel matches are kept.
+    async channelRail(id: string): Promise<BrowseRail> {
+        const title = BrowseChannels.find((c) => c.id === id)?.title ?? id;
+        const own = (items: BrowseItem[]) => items.filter((item) => item.channel === title);
+        const encoded = encodeURIComponent(id);
+        const [highlights, programmes] = await Promise.allSettled([
+            this.#ibl(`channels/${encoded}/highlights`),
+            this.#ibl(`channels/${encoded}/programmes?per_page=60`),
+        ]);
+        const load = (result: PromiseSettledResult<any>) =>
+            result.status === 'fulfilled' ? own(toBrowseItems(extractElements(result.value))) : [];
+        const seen = new Set<string>();
+        const items = [...load(highlights), ...shuffled(load(programmes))]
+            .filter(({ pid }) => !seen.has(pid) && seen.add(pid))
+            .slice(0, 30);
+        return { id: `channel_${id}`, title: `On ${title}`, items };
+    }
+
+    // A rail for each of `count` categories picked at random, so the home screen differs between visits.
+    // Individual category failures are skipped; the listings themselves ride the normal IBL cache.
+    async randomCategoryRails(count: number): Promise<BrowseRail[]> {
+        const picked = shuffled(await this.categories()).slice(0, count);
+        const settled = await Promise.allSettled(
+            picked.map(({ id, title }) =>
+                this.#iblRail({ id: `category_${id}`, title, path: `categories/${encodeURIComponent(id)}/programmes?per_page=30` })
+            )
+        );
+        return settled.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
     }
 
     async #iblRail({ id, title, path }: { id: string; title: string; path: string }): Promise<BrowseRail> {

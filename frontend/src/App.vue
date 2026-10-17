@@ -108,8 +108,17 @@ const pageSetup = async () => {
             enforceMaxLength(logs.value, 5000);
         });
 
+        // Full state: on connect and whenever history changes (a session ended, history cleared).
         socket.value.on('streams', (data) => {
             streams.value = data;
+        });
+
+        // Lightweight, much more frequent updates (segments, bytes, resolution, a session starting):
+        // only the live sessions. Assigning just `active` (not a new `streams` object) means nothing
+        // that depends only on the history - its sorted copy, the paged table - is recomputed or
+        // re-rendered by these updates.
+        socket.value.on('streamsActive', (data) => {
+            streams.value.active = data.active;
         });
 
         socket.value.on('videoEvents', (data) => {

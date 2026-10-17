@@ -1,6 +1,16 @@
 import { StreamClient } from './enums/StreamClient';
 import { StreamMode } from './enums/StreamMode';
 
+// Bytes delivered to the player, bucketed over time: bytes[i] is the total for the `step` ms starting
+// at `start + i * step` (ms since epoch). Covers roughly the last minute; the Streaming page turns it
+// into a MB/s sparkline and a current rate. Buckets are 500ms while a session runs and merged to 1s
+// when it is archived, so the history it keeps stays small.
+export interface ThroughputSeries {
+    start: number;
+    step: number;
+    bytes: number[];
+}
+
 export interface StreamSession {
     id: string;
     pid: string;
@@ -32,6 +42,8 @@ export interface StreamSession {
     // no local encode/buffer/backfill state to show alongside it.
     currentSegmentIndex?: number;
     bytesTransferred?: number;
+    // The same bytes as bytesTransferred, over time - see ThroughputSeries.
+    throughput?: ThroughputSeries;
     // Set only when a session was ended via the Streaming page's Stop button (streamSessionService.stop),
     // as opposed to a natural end (connection closed / inactivity sweep) - mirrors Youtarr's
     // StreamHistory.end_reason ('manual-stop' vs a normal end).

@@ -2,8 +2,10 @@ import axios from 'axios';
 
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import browseService, {
+    dedupeRails,
     extractElements,
     parseIplayerState,
+    shuffled,
     toBrowseItem,
     toBrowseItems,
 } from '../../src/service/browseService';
@@ -37,6 +39,27 @@ const element = (id: string, extra: object = {}) => ({
     master_brand: { titles: { small: 'BBC One' } },
     labels: { category: 'Drama' },
     ...extra,
+});
+
+describe('dedupeRails / shuffled', () => {
+    const item = (pid: string, title: string) => ({ pid, title, kind: 'episode' as const, type: VideoType.TV });
+
+    it('drops repeats by pid and title across rails, keeping repeats within a rail', () => {
+        const rails = dedupeRails([
+            { id: 'a', title: 'A', items: [item('1', 'Show'), item('2', 'Show'), item('3', 'Other')] },
+            { id: 'b', title: 'B', items: [item('1', 'Show'), item('4', ' show '), item('5', 'New')] },
+            { id: 'c', title: 'C', items: [item('3', 'Other')] },
+        ]);
+        expect(rails.map((r) => r.id)).toEqual(['a', 'b']);
+        expect(rails[0].items.map((i) => i.pid)).toEqual(['1', '2', '3']);
+        expect(rails[1].items.map((i) => i.pid)).toEqual(['5']);
+    });
+
+    it('shuffled keeps the same members without mutating the input', () => {
+        const input = [1, 2, 3, 4, 5];
+        expect(shuffled(input).sort()).toEqual(input);
+        expect(input).toEqual([1, 2, 3, 4, 5]);
+    });
 });
 
 describe('browseService helpers', () => {
@@ -105,10 +128,24 @@ describe('browseService', () => {
         pubDate: new Date(Date.now() - daysAgo * 86400000),
     });
 
+    const iblByPath = (routes: Record<string, any>) =>
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            const key = Object.keys(routes).find((k) => url.includes(k));
+            if (!key) throw new Error(`unrouted ${url}`);
+            const value = routes[key];
+            if (value instanceof Error) throw value;
+            return { data: value };
+        });
+
     it('home returns non-empty rails and drops failed ones', async () => {
-        mockedAxios.get
-            .mockResolvedValueOnce({ data: { home_highlights: { elements: [element('h1')] } } })
-            .mockRejectedValueOnce(new Error('boom'));
+        iblByPath({
+            'channels/bbc_one_london/highlights': { home_highlights: { elements: [element('h1')] } },
+            'groups/popular': new Error('boom'),
+            'channels/bbc_two_england': { elements: [] },
+            'channels/bbc_three': new Error('boom'),
+            'channels/bbc_four': { elements: [] },
+            categories: { categories: [] },
+        });
         mockedSchedule.getFeed.mockResolvedValue([]);
         const rails = await browseService.home();
         expect(rails).toHaveLength(1);
@@ -116,12 +153,54 @@ describe('browseService', () => {
         expect(rails[0].items[0].pid).toBe('h1');
     });
 
-    it('home places Recently Added after Featured', async () => {
-        mockedAxios.get.mockResolvedValue({ data: { elements: [element('x1')] } });
+    it('home places Recently Added after Featured and adds channel and category rails', async () => {
+        const named = (pid: string, channel = 'BBC One') => ({
+            ...element(pid),
+            title: `Show ${pid}`,
+            master_brand: { titles: { small: channel } },
+        });
+        iblByPath({
+            'channels/bbc_one_london': { elements: [named('a')] },
+            'groups/popular': { elements: [named('b')] },
+            'channels/bbc_two_england': { elements: [named('c', 'BBC Two')] },
+            'channels/bbc_three': { elements: [named('d', 'BBC Three')] },
+            'channels/bbc_four': { elements: [named('e', 'BBC Four')] },
+            'categories/comedy/programmes?per_page=30': { elements: [named('f')] },
+            'categories/drama/programmes?per_page=30': { elements: [named('g')] },
+            'categories/comedy/programmes?per_page=6': { elements: [] },
+            'categories/drama/programmes?per_page=6': { elements: [] },
+            categories: { categories: [{ id: 'comedy', title: 'Comedy' }, { id: 'drama', title: 'Drama' }] },
+        });
         mockedSchedule.getFeed.mockResolvedValue([feedResult('f1', 1)]);
         mockedDetails.details.mockResolvedValue([]);
         const rails = await browseService.home();
-        expect(rails.map((r) => r.id)).toEqual(['highlights', 'recent', 'popular']);
+        const ids = rails.map((r) => r.id);
+        expect(ids.slice(0, 3)).toEqual(['highlights', 'recent', 'popular']);
+        expect(ids).toEqual(expect.arrayContaining(['channel_bbc_two_england', 'channel_bbc_three', 'channel_bbc_four']));
+        expect(ids.filter((id) => id.startsWith('category_'))).toHaveLength(2);
+    });
+
+    it('channelRail keeps only the channel own shows from highlights and programmes', async () => {
+        const on = (pid: string, channel: string) => ({ ...element(pid), master_brand: { titles: { small: channel } } });
+        iblByPath({
+            highlights: { elements: [on('h-own', 'BBC Four'), on('h-other', 'BBC Two')] },
+            programmes: { elements: [on('p-own', 'BBC Four'), on('h-own', 'BBC Four'), on('p-other', 'BBC One')] },
+        });
+        const rail = await browseService.channelRail('bbc_four');
+        expect(rail.title).toBe('On BBC Four');
+        expect(rail.items.map((i) => i.pid)).toEqual(['h-own', 'p-own']);
+    });
+
+    it('home drops programmes already shown in an earlier rail', async () => {
+        iblByPath({
+            'channels/bbc_one_london': { elements: [element('dup'), element('only-featured')] },
+            'groups/popular': { elements: [element('dup')] },
+            'channels/': { elements: [] },
+            categories: { categories: [] },
+        });
+        mockedSchedule.getFeed.mockResolvedValue([]);
+        const rails = await browseService.home();
+        expect(rails.map((r) => r.id)).toEqual(['highlights']);
     });
 
     it('recentlyAdded sorts newest first, caps the list and enriches from details', async () => {
