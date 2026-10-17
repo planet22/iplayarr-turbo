@@ -59,5 +59,13 @@ export default defineConfig({
     },
     server: {
         port: 8080,
+        // Same-origin in dev: the backend is reached through the dev server, so no CORS and cookies just work.
+        proxy: {
+            '/auth': 'http://localhost:4404',
+            '/api': 'http://localhost:4404',
+            '/json-api': 'http://localhost:4404',
+            '/ping': 'http://localhost:4404',
+            '/socket.io': { target: 'http://localhost:4404', ws: true },
+        },
     },
 });

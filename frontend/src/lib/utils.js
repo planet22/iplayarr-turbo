@@ -1,9 +1,8 @@
 // URL prefix the server injects into index.html when it runs under BASE_PATH ('' otherwise).
 export const getBasePath = () => window.__BASE_PATH__ || '';
 
-export const getHost = () => {
-    return import.meta.env.DEV ? `http://${window.location.hostname}:4404` : getBasePath();
-};
+// Requests are always same-origin: in dev the Vite proxy (vite.config.mjs) forwards them to the backend.
+export const getHost = () => getBasePath();
 
 // Builds the query string for json-api/download from a full search result, carrying the
 // structured show/season/episode metadata through so the backend can build a Jellyfin-style

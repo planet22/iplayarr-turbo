@@ -1,6 +1,5 @@
 import 'module-alias/register';
 
-import cors from 'cors';
 import express, { Express, NextFunction, Request, Response } from 'express';
 import fs from 'fs';
 import http, { Server } from 'http';
@@ -25,7 +24,6 @@ import { IplayarrParameter } from './types/IplayarrParameters';
 import { basePath, rewriteIndexHtml, stripBasePath } from './utils/basePath';
 import { redactBody, redactHeaders, redactUrl } from './utils/logRedaction';
 
-const isDebug = process.env.DEBUG == 'true';
 
 const app: Express = express();
 app.disable('x-powered-by');
@@ -68,17 +66,6 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
     next();
 });
 const port: number = parseInt(process.env[IplayarrParameter.PORT.toString()] || '4404');
-
-if (isDebug) {
-    app.use(
-        cors({
-            origin: (origin, callback) => {
-                callback(null, origin);
-            },
-            credentials: true,
-        })
-    );
-}
 
 // Session and Auth
 app.use(express.urlencoded({ extended: true }));
@@ -141,9 +128,7 @@ app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
 const server: Server = http.createServer(app);
 
 const ioPath = `${BASE_PATH}/socket.io`;
-const io = isDebug
-    ? new SocketIOServer(server, { path: ioPath, cors: { origin: true, credentials: true } })
-    : new SocketIOServer(server, { path: ioPath });
+const io = new SocketIOServer(server, { path: ioPath });
 // The queue, history, stream and log feeds carry the same data as the authenticated /json-api, so a
 // socket needs the same login: read the session cookie off the handshake and refuse without one.
 if (sessionMiddleware) {

@@ -88,12 +88,7 @@ const pageSetup = async () => {
     if (socket.value == null) {
         document.body.scrollTop = document.documentElement.scrollTop = 0;
         await updateQueue();
-        if (import.meta.env.PROD) {
-            socket.value = io({ path: `${getBasePath()}/socket.io` });
-        } else {
-            const socketUrl = `http://${window.location.hostname}:4404`;
-            socket.value = io(socketUrl, { withCredentials: true });
-        }
+        socket.value = io({ path: `${getBasePath()}/socket.io` });
 
         socket.value.on('queue', (data) => {
             queue.value = data;

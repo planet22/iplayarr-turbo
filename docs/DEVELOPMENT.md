@@ -10,14 +10,16 @@ Contributor-facing setup. See the main [README.md](../README.md#development-setu
 ## Setup
 
 ```bash
-npm run install:both   # installs deps for both / (backend) and /frontend
+npm install   # one install at the root covers backend + the /frontend workspace
 npm run dev            # runs backend (nodemon) + frontend (vite dev server) concurrently, DEBUG=true
 ```
+
+npm workspaces link `frontend` into `node_modules` with a symlink, so run `npm install` on a local drive (or in WSL or a container). It fails with `EUNKNOWN ... symlink` on a mapped network share such as an SMB drive.
 
 - Frontend dev server: `http://localhost:8080`
 - Backend API: `http://localhost:4404`
 
-`DEBUG=true` (set automatically by `npm run dev`) enables permissive CORS and verbose request/response logging (`src/server.ts`), so the two dev servers on different ports/origins can talk to each other.
+`DEBUG=true` (set automatically by `npm run dev`) enables verbose request/response logging (`src/server.ts`). The Vite dev server proxies backend routes to :4404, so there is no CORS in dev.
 
 ## Module resolution: module-alias, not TS paths
 

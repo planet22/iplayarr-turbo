@@ -289,7 +289,7 @@ To run iPlayarr Turbo locally for development:
 1. Install dependencies for both backend and frontend:
 
 ```bash
-npm run install:both
+npm install
 ```
 
 2. Start the development server (runs backend and frontend concurrently):

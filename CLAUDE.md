@@ -13,12 +13,12 @@ Underneath, it drives `get_iplayer` (Perl, bundled in the Docker image) and `yt-
 
 ## Commands
 
-Backend and frontend are separate npm projects (`/` and `/frontend`).
+The repo is an npm workspace: the root is the backend and `/frontend` is a workspace, sharing one `node_modules` and one `package-lock.json`.
 
 ```bash
-npm run install:both      # install deps for backend + frontend
+npm install              # one install at the root covers backend + frontend (npm workspaces)
 npm run dev                # run backend (nodemon) + frontend (vite dev server) concurrently, with DEBUG=true
-npm run build:both         # build backend (tsc) + frontend (vite build) for production
+npm run build:both         # build frontend workspace (vite build) + backend (tsc) for production
 npm start                  # run the built backend (dist/src/server.js)
 
 npm test                   # jest, with coverage, over src/**/*.{js,ts}
@@ -32,7 +32,7 @@ npm run prettier           # check formatting
 npm run prettier:fix
 ```
 
-Frontend-only dev server runs at `http://localhost:8080`; backend API at `http://localhost:4404`. Tests live under `tests/`, mirroring the `src/` structure, with fixture JSON under `tests/data/`.
+Frontend dev server runs at `http://localhost:8080` and proxies `/auth`, `/api`, `/json-api`, `/ping` and `/socket.io` to the backend on `http://localhost:4404`, so the browser stays same-origin (use :8080 in dev). Tests live under `tests/`, mirroring the `src/` structure, with fixture JSON under `tests/data/`.
 
 Node version is pinned in `.node-version`. The backend uses `module-alias` at runtime (`_moduleAliases` in package.json maps `src` → `dist/src`), not TypeScript path aliases.
 
