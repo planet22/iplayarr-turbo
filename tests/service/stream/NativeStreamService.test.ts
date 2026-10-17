@@ -5,6 +5,7 @@ import https from 'https';
 import configService from '../../../src/service/configService';
 import getIplayerExecutableService from '../../../src/service/getIplayerExecutableService';
 import { attemptFhdUpgrade } from '../../../src/service/stream/experimental/bbcFhdUpgrade';
+import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 import service from '../../../src/service/stream/NativeStreamService';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
@@ -103,6 +104,7 @@ describe('NativeStreamService', () => {
     beforeEach(() => {
         jest.resetAllMocks();
         clearResolveCache();
+        clearRememberedMediaSelectorPairs();
         installNetwork();
         route = defaultRoute;
         setConfig({});
@@ -358,6 +360,43 @@ describe('NativeStreamService', () => {
             expect(fetched('/playlist.json')).toBe(2);
             route = (url, m) => (url.includes('/playlist.json') ? { status: 404 } : defaultRoute(url, m));
             await expect(service.checkAvailable('p1')).rejects.toThrow('status 404');
+        });
+    });
+
+    describe('mediaselector pair memory', () => {
+        const unavailable = '<error id="geolocation"/>';
+        let selectorCalls: string[];
+        const answerOnlyFrom = (answers: (url: string) => boolean) => {
+            route = (url, m) => {
+                if (!url.includes('mediaselector')) return defaultRoute(url, m);
+                selectorCalls.push(url.replace(/^.*mediaselector\/(\d)\/.*mediaset\/([\w-]+)\/.*$/, '$2/v$1'));
+                return { body: answers(url) ? goodXml : unavailable };
+            };
+        };
+        beforeEach(() => (selectorCalls = []));
+
+        it('starts with the pair that answered last time, so later resolves skip the failing ones', async () => {
+            answerOnlyFrom((url) => url.includes('/mediaset/pc/') && url.includes('/mediaselector/6/'));
+            await service.streamDirect('p1', req, res);
+            expect(selectorCalls).toEqual(['iptv-all/v6', 'iptv-all/v5', 'pc/v6']);
+
+            selectorCalls.length = 0;
+            await service.streamDirect('p2', req, res);
+            expect(selectorCalls).toEqual(['pc/v6']);
+        });
+
+        it('falls back through the full list when the remembered pair stops answering', async () => {
+            answerOnlyFrom((url) => url.includes('/mediaset/pc/') && url.includes('/mediaselector/6/'));
+            await service.streamDirect('p1', req, res);
+
+            selectorCalls.length = 0;
+            answerOnlyFrom((url) => url.includes('/mediaset/iptv-all/') && url.includes('/mediaselector/6/'));
+            await service.streamDirect('p3', req, res);
+            expect(selectorCalls).toEqual(['pc/v6', 'iptv-all/v6']);
+
+            selectorCalls.length = 0;
+            await service.streamDirect('p4', req, res);
+            expect(selectorCalls).toEqual(['iptv-all/v6']);
         });
     });
 

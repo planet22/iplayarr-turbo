@@ -104,11 +104,12 @@ async function handleStream(req: Request, res: Response): Promise<void> {
     // Live channels are served by their own standalone service regardless of the configured client
     // (neither get_iplayer nor yt-dlp are used for them) - see LiveStreamService.ts.
     const live: boolean = isLiveChannel(pid);
-    const { client, service }: { client: StreamClient; service: AbstractStreamService } = live
-        ? { client: StreamClient.NATIVE, service: LiveStreamService }
-        : await getStreamService();
+    // Independent config reads, so they run together rather than one after the other.
+    const [{ client, service }, configuredMode]: [{ client: StreamClient; service: AbstractStreamService }, StreamMode] = await Promise.all([
+        live ? Promise.resolve({ client: StreamClient.NATIVE, service: LiveStreamService as AbstractStreamService }) : getStreamService(),
+        configService.getParameter(IplayarrParameter.STREAM_MODE) as Promise<StreamMode>,
+    ]);
     const isProbe: boolean = probeUserAgentRegex.test(req.headers['user-agent'] ?? '');
-    const configuredMode: StreamMode = (await configService.getParameter(IplayarrParameter.STREAM_MODE)) as StreamMode;
     const mode: StreamMode = isProbe ? StreamMode.DIRECT : configuredMode;
 
     const settings = live ? { Quality: 'Live' } : await buildSettingsSnapshot(client);

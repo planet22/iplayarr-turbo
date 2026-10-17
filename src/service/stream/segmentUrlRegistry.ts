@@ -31,6 +31,9 @@ const sweepIntervalMs = 60_000;
 interface RegistryEntry {
     url: string;
     expiresAt: number;
+    // The token of the segment that follows this one in its media playlist, so that serving a
+    // segment can prefetch the next (see segmentPrefetch.ts). Set by linkSegments.
+    next?: string;
 }
 
 const registry = new Map<string, RegistryEntry>();
@@ -100,6 +103,21 @@ function removeSegment(token: string): void {
 
 export function register(url: string): string {
     return isPlaylistUrl(url) ? registerPlaylist(url) : registerSegment(url);
+}
+
+// Records that `next` follows `token` in playback order. Only ever links segment tokens (a
+// playlist's own entry has no successor), and re-linking on every playlist refetch is harmless.
+export function linkSegments(token: string, next: string): void {
+    const entry = registry.get(token);
+    if (entry) {
+        entry.next = next;
+    }
+}
+
+// The upstream URL of the segment after `token`, if its playlist listed one that is still alive.
+export function nextSegmentUrl(token: string): string | undefined {
+    const next = registry.get(token)?.next;
+    return next ? resolve(next) : undefined;
 }
 
 export function resolve(token: string): string | undefined {

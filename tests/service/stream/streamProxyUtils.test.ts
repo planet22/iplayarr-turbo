@@ -4,8 +4,10 @@ import http from 'http';
 import https from 'https';
 
 import { ensureDnsRelayRunning } from '../../../src/service/dnsRelayService';
-import { resolve as resolveToken } from '../../../src/service/stream/segmentUrlRegistry';
-import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
+import { requestTimeoutMs } from '../../../src/service/stream/bbcHttp';
+import { clearPrefetch, takePrefetched } from '../../../src/service/stream/segmentPrefetch';
+import { linkSegments,register, resolve as resolveToken } from '../../../src/service/stream/segmentUrlRegistry';
+import { clearPlaylistCache, maxConcurrentRemuxes, proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
 
@@ -48,13 +50,19 @@ const makeRes = () => {
     res.status = jest.fn().mockReturnThis();
     res.setHeader = jest.fn();
     res.send = jest.fn();
+    res.end = jest.fn();
+    res.destroy = jest.fn();
     return res;
 };
 
 const makeReq = (query: any = {}, headers: any = {}) => ({ query, headers }) as any;
 
 describe('proxyUrl', () => {
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+        jest.clearAllMocks();
+        clearPlaylistCache();
+        clearPrefetch();
+    });
 
     it('rewrites an HLS playlist to opaque passthrough URLs', async () => {
         const playlist = '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\n\nseg1.ts\nhttps://other/seg2.m4s\n';
@@ -76,6 +84,7 @@ describe('proxyUrl', () => {
         expect((https.get as jest.Mock).mock.calls[0][1]).toEqual({
             headers: { range: 'bytes=0-1' },
             agent: expect.anything(),
+            timeout: requestTimeoutMs,
         });
     });
 
@@ -155,6 +164,162 @@ describe('proxyUrl', () => {
         });
     });
 
+    describe('VOD playlist cache', () => {
+        const vod = '#EXTM3U\n#EXTINF:4,\nseg1.ts\n#EXT-X-ENDLIST\n';
+        const live = '#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:7\n#EXTINF:4,\nseg1.ts\n';
+        const mpegurl = { 'content-type': 'application/vnd.apple.mpegurl' };
+
+        it('serves a finished playlist from memory on the next request, rewritten for that request\'s own session', async () => {
+            mockGet(https, [{ status: 200, headers: mpegurl, body: vod }]);
+            const first = makeRes();
+            await proxyUrl('https://cdn/v/media.m3u8', makeReq({ streamkey: 'k' }), first, 5, 'sess-a');
+            const second = makeRes();
+            await proxyUrl('https://cdn/v/media.m3u8', makeReq({ streamkey: 'k' }), second, 5, 'sess-b');
+
+            expect(https.get).toHaveBeenCalledTimes(1);
+            expect(first.send.mock.calls[0][0]).toContain('session=sess-a');
+            expect(second.send.mock.calls[0][0]).toContain('session=sess-b');
+            expect(second.send.mock.calls[0][0]).toContain('#EXT-X-ENDLIST');
+            expect(second.setHeader).toHaveBeenCalledWith('Content-Type', 'application/vnd.apple.mpegurl');
+            expect(streamSessionService.setSegmentCount).toHaveBeenCalledWith('sess-b', 1);
+        });
+
+        it('never caches a live playlist (no ENDLIST)', async () => {
+            mockGet(https, [
+                { status: 200, headers: mpegurl, body: live },
+                { status: 200, headers: mpegurl, body: live },
+            ]);
+            await proxyUrl('https://cdn/l/media.m3u8', makeReq(), makeRes());
+            await proxyUrl('https://cdn/l/media.m3u8', makeReq(), makeRes());
+            expect(https.get).toHaveBeenCalledTimes(2);
+        });
+
+        it('bypasses the cache for Range requests and does not cache non-200 responses', async () => {
+            mockGet(https, [
+                { status: 200, headers: mpegurl, body: vod },
+                { status: 200, headers: mpegurl, body: vod },
+                { status: 404, headers: mpegurl, body: vod },
+                { status: 200, headers: mpegurl, body: vod },
+            ]);
+            await proxyUrl('https://cdn/r/media.m3u8', makeReq({}, { range: 'bytes=0-9' }), makeRes());
+            await proxyUrl('https://cdn/r/media.m3u8', makeReq({}, { range: 'bytes=0-9' }), makeRes());
+            expect(https.get).toHaveBeenCalledTimes(2);
+            await proxyUrl('https://cdn/e/media.m3u8', makeReq(), makeRes());
+            await proxyUrl('https://cdn/e/media.m3u8', makeReq(), makeRes());
+            expect(https.get).toHaveBeenCalledTimes(4);
+        });
+    });
+
+    describe('segment read-ahead', () => {
+        const playlist = '#EXTM3U\n#EXTINF:4,\nseg0.ts\n#EXTINF:4,\nseg1.ts\n#EXTINF:4,\nseg2.ts\n';
+        const mpegurl = { 'content-type': 'application/vnd.apple.mpegurl' };
+        const tick = () => new Promise((r) => setImmediate(r));
+        const tokenOf = (body: string, index: number) =>
+            new RegExp(`token=([^&]+)[^\\n]*&seg=${index}`).exec(body)![1];
+
+        // Proxies the playlist (registering + linking its segments) and returns the segment tokens.
+        const loadPlaylist = async (responses: any[]) => {
+            mockGet(https, [{ status: 200, headers: mpegurl, body: playlist }, ...responses]);
+            const res = makeRes();
+            await proxyUrl('https://cdn/p/media.m3u8', makeReq({ streamkey: 'k' }), res, 5, 'sess');
+            const body = res.send.mock.calls[0][0] as string;
+            return [0, 1, 2].map((i) => tokenOf(body, i));
+        };
+
+        it('reads the next segment ahead once one is served, then answers its request from memory', async () => {
+            const tokens = await loadPlaylist([
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg1' },
+            ]);
+            await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }), makeRes(), 5, 'sess');
+            await tick();
+            await tick();
+            expect((https.get as jest.Mock).mock.calls.map((c) => c[0])).toEqual([
+                'https://cdn/p/media.m3u8',
+                'https://cdn/p/seg0.ts',
+                'https://cdn/p/seg1.ts',
+            ]);
+
+            (https.get as jest.Mock).mockClear();
+            const res = makeRes();
+            await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: '1' }), res, 5, 'sess');
+            // seg1 itself is never fetched again; the only request is the read-ahead of seg2
+            expect((https.get as jest.Mock).mock.calls.map((c) => c[0])).toEqual(['https://cdn/p/seg2.ts']);
+            expect(res.end).toHaveBeenCalledWith(Buffer.from('seg1'));
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.setHeader).toHaveBeenCalledWith('content-type', 'video/mp2t');
+            expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
+            expect(streamSessionService.recordSegmentDelivered).toHaveBeenCalledWith('sess', 1, 4);
+        });
+
+        it('does not read ahead for Range requests (a seek) or for the last segment', async () => {
+            const tokens = await loadPlaylist([{ status: 206, headers: { 'content-length': '4' } }, { status: 200, headers: { 'content-length': '4' } }]);
+            await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }, { range: 'bytes=0-3' }), makeRes(), 5, 'sess');
+            await tick();
+            expect(https.get).toHaveBeenCalledTimes(2); // playlist + seg0 only
+
+            await proxyUrl('https://cdn/p/seg2.ts', makeReq({ token: tokens[2], seg: '2' }), makeRes(), 5, 'sess');
+            await tick();
+            expect(https.get).toHaveBeenCalledTimes(3); // seg2 itself, nothing after it
+        });
+
+        it('ignores a prefetch that fails or is not a plain 200', async () => {
+            const tokens = await loadPlaylist([{ status: 200, headers: { 'content-length': '4' } }, { status: 503, body: 'nope' }]);
+            await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }), makeRes(), 5, 'sess');
+            await tick();
+            await tick();
+            expect(await takePrefetched('https://cdn/p/seg1.ts')).toBeUndefined();
+        });
+
+        it('only links segments that were registered, so unknown tokens never prefetch', async () => {
+            mockGet(https, [{ status: 200, headers: { 'content-length': '4' } }]);
+            const token = register('https://cdn/lonely.ts');
+            await proxyUrl('https://cdn/lonely.ts', makeReq({ token, seg: '0' }), makeRes(), 5, 'sess');
+            await tick();
+            expect(https.get).toHaveBeenCalledTimes(1);
+            linkSegments('missing-token', token); // a no-op, not a throw
+        });
+    });
+
+    describe('upstream failures', () => {
+        const hang = () => {
+            const upstream: any = new EventEmitter();
+            upstream.destroy = jest.fn();
+            (https.get as jest.Mock).mockImplementation(() => upstream);
+            return upstream;
+        };
+
+        it('destroys the upstream request when it goes idle', async () => {
+            const upstream = hang();
+            const p = proxyUrl('https://cdn/s.ts?sig=secret', makeReq(), makeRes());
+            upstream.emit('timeout');
+            expect(upstream.destroy).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/timed out after \d+ms/) }));
+            expect((upstream.destroy as jest.Mock).mock.calls[0][0].message).not.toContain('secret');
+            upstream.emit('error', new Error('timed out'));
+            await expect(p).rejects.toThrow('timed out');
+        });
+
+        it('tears down a response that already started instead of leaving it hanging', async () => {
+            const upstream = hang();
+            const res = makeRes();
+            res.headersSent = true;
+            const p = proxyUrl('https://cdn/s.ts', makeReq(), res);
+            upstream.emit('error', new Error('reset'));
+            await expect(p).rejects.toThrow('reset');
+            expect(res.destroy).toHaveBeenCalled();
+        });
+
+        it('leaves a response that has not started alone, so the caller can still send a 500', async () => {
+            const upstream = hang();
+            const res = makeRes();
+            res.headersSent = false;
+            const p = proxyUrl('https://cdn/s.ts', makeReq(), res);
+            upstream.emit('error', new Error('reset'));
+            await expect(p).rejects.toThrow('reset');
+            expect(res.destroy).not.toHaveBeenCalled();
+        });
+    });
+
     it('follows redirects', async () => {
         mockGet(https, [
             { status: 302, headers: { location: 'https://cdn/final.m3u8' } },
@@ -228,6 +393,60 @@ describe('remuxToMkv', () => {
         expect(ffmpeg.stdout.pipe).toHaveBeenCalledWith(res);
         expect(ffmpeg.kill).toHaveBeenCalled();
         expect(streamSessionService.addBytesTransferred).toHaveBeenCalledWith('sess', 10);
+    });
+
+    describe('concurrency cap', () => {
+        const fakeFfmpeg = () => {
+            const ffmpeg: any = new EventEmitter();
+            ffmpeg.stdout = Object.assign(new EventEmitter(), { pipe: jest.fn() });
+            ffmpeg.stderr = new EventEmitter();
+            ffmpeg.kill = jest.fn();
+            return ffmpeg;
+        };
+
+        it('answers 503 + Retry-After beyond the cap without spawning, and frees a slot when a remux ends', async () => {
+            const running: any[] = [];
+            (spawn as jest.Mock).mockImplementation(() => {
+                const f = fakeFfmpeg();
+                running.push(f);
+                return f;
+            });
+            const jobs = Array.from({ length: maxConcurrentRemuxes }, () => remuxToMkv('u', 'pid', makeRes()));
+            await new Promise((r) => setImmediate(r));
+            expect(spawn).toHaveBeenCalledTimes(maxConcurrentRemuxes);
+
+            const rejected = makeRes();
+            await remuxToMkv('u', 'pid', rejected);
+            expect(rejected.status).toHaveBeenCalledWith(503);
+            expect(rejected.setHeader).toHaveBeenCalledWith('Retry-After', '10');
+            expect(JSON.parse(rejected.send.mock.calls[0][0]).message).toContain(String(maxConcurrentRemuxes));
+            expect(spawn).toHaveBeenCalledTimes(maxConcurrentRemuxes);
+
+            running[0].emit('close', 0);
+            await jobs[0];
+            const next = remuxToMkv('u', 'pid', makeRes());
+            await new Promise((r) => setImmediate(r));
+            expect(spawn).toHaveBeenCalledTimes(maxConcurrentRemuxes + 1);
+
+            running.slice(1).forEach((f) => f.emit('close', 0));
+            await Promise.all([...jobs.slice(1), next]);
+        });
+
+        it('frees the slot when ffmpeg cannot start', async () => {
+            for (let i = 0; i < maxConcurrentRemuxes + 2; i++) {
+                (assertFfmpegAvailable as jest.Mock).mockRejectedValueOnce(new Error('no ffmpeg'));
+                await expect(remuxToMkv('u', 'pid', makeRes())).rejects.toThrow('no ffmpeg');
+            }
+            const res = makeRes();
+            (assertFfmpegAvailable as jest.Mock).mockResolvedValueOnce(undefined);
+            const ffmpeg = fakeFfmpeg();
+            (spawn as jest.Mock).mockReturnValue(ffmpeg);
+            const job = remuxToMkv('u', 'pid', res);
+            await new Promise((r) => setImmediate(r));
+            ffmpeg.emit('close', 0);
+            await job;
+            expect(res.status).not.toHaveBeenCalledWith(503);
+        });
     });
 
     it('starts the DNS relay before spawning ffmpeg, which resolves CDN hosts via the system resolver', async () => {

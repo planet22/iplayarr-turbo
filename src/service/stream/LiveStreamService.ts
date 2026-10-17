@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { LiveChannelVpids } from '../../constants/LiveChannels';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, parseAttributes, resolveRedirect } from './bbcHttp';
+import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
 import { cached, liveResolveTtlMs } from './resolveCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
@@ -13,8 +14,6 @@ import streamSessionService from './streamSessionService';
 // service id (see LiveChannels.ts), and what comes back is an endless sliding-window HLS playlist.
 // Only the generic proxy/remux helpers are shared. Always hands the full adaptive master playlist
 // through - there is no fixed-quality pinning or FHD upgrade for live.
-const mediaSelectorVersions = [6, 5];
-const mediaSets = ['iptv-all', 'pc'];
 const excludedSupplierRegex = /vbidi/i;
 const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 
@@ -53,17 +52,16 @@ class LiveStreamService implements AbstractStreamService {
         if (!vpid) {
             throw new Error(`Unknown live channel ${channelId}`);
         }
-        for (const mediaSet of mediaSets) {
-            for (const msVersion of mediaSelectorVersions) {
-                const url = `https://open.live.bbc.co.uk/mediaselector/${msVersion}/select/version/2.0/mediaset/${mediaSet}/vpid/${vpid}/format/xml?cb=${Date.now()}`;
-                const xml = await fetchText(url);
-                if (unavailableRegex.test(xml)) {
-                    continue;
-                }
-                const href = extractHlsHref(xml);
-                if (href) {
-                    return resolveRedirect(href);
-                }
+        // A channel is served by the same pair every time, so the one that worked last goes first.
+        for (const pair of orderedMediaSelectorPairs(`live:${channelId}`)) {
+            const xml = await fetchText(mediaSelectorUrl(pair, vpid));
+            if (unavailableRegex.test(xml)) {
+                continue;
+            }
+            const href = extractHlsHref(xml);
+            if (href) {
+                rememberMediaSelectorPair(`live:${channelId}`, pair);
+                return resolveRedirect(href);
             }
         }
         throw new Error(`No live HLS stream available for ${channelId} (${vpid})`);

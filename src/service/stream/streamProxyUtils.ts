@@ -4,8 +4,9 @@ import { Request, Response } from 'express';
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
-import { agentFor, clientFor, redirectStatusCodes } from './bbcHttp';
-import { register as registerSegmentUrl } from './segmentUrlRegistry';
+import { agentFor, clientFor, redirectStatusCodes, requestTimeoutMs } from './bbcHttp';
+import { prefetch, takePrefetched } from './segmentPrefetch';
+import { linkSegments, nextSegmentUrl, register as registerSegmentUrl } from './segmentUrlRegistry';
 import streamSessionService from './streamSessionService';
 
 const playlistContentTypeRegex = /mpegurl/i;
@@ -48,6 +49,8 @@ function rewritePlaylist(
     topVariantOnly = false
 ): RewrittenPlaylist {
     let segmentIndex = 0;
+    // Each segment is linked to the one before it so serving one can prefetch the next.
+    let previousToken: string | undefined;
     const body = (topVariantOnly ? sortVariantsHighestFirst(text, true) : highestVariantFirst ? sortVariantsHighestFirst(text) : text)
         .split(/\r?\n/)
         .map((line) => {
@@ -58,12 +61,17 @@ function rewritePlaylist(
             if (trimmed.startsWith('#')) {
                 const match = trimmed.match(uriAttrRegex);
                 if (match) {
-                    const passthrough = buildPassthroughUrl(resolveReference(match[1], baseUrl), streamKey, sessionId);
-                    return line.replace(match[1], passthrough);
+                    const { href } = buildPassthroughUrl(resolveReference(match[1], baseUrl), streamKey, sessionId);
+                    return line.replace(match[1], href);
                 }
                 return line;
             }
-            return buildPassthroughUrl(resolveReference(trimmed, baseUrl), streamKey, sessionId, segmentIndex++);
+            const { href, token } = buildPassthroughUrl(resolveReference(trimmed, baseUrl), streamKey, sessionId, segmentIndex++);
+            if (previousToken) {
+                linkSegments(previousToken, token);
+            }
+            previousToken = token;
+            return href;
         })
         .join('\n');
 
@@ -112,7 +120,12 @@ function resolveReference(reference: string, baseUrl: string): string {
 // `url=<anything>` param would be) is effectively an open proxy/SSRF vector to whatever the
 // key-holder wants to reach. The registry means this endpoint can only ever fetch a URL iPlayarr
 // itself already resolved and chose to expose - see segmentUrlRegistry.ts.
-function buildPassthroughUrl(resolvedUrl: string, streamKey: string, sessionId?: string, segIndex?: number): string {
+function buildPassthroughUrl(
+    resolvedUrl: string,
+    streamKey: string,
+    sessionId?: string,
+    segIndex?: number
+): { href: string; token: string } {
     const token = registerSegmentUrl(resolvedUrl);
     let href = `/api/seg${segmentExtension(resolvedUrl)}?mode=stream&token=${token}&streamkey=${encodeURIComponent(streamKey)}`;
     if (sessionId) {
@@ -121,7 +134,79 @@ function buildPassthroughUrl(resolvedUrl: string, streamKey: string, sessionId?:
     if (segIndex !== undefined) {
         href += `&seg=${segIndex}`;
     }
-    return href;
+    return { href, token };
+}
+
+// A finished (VOD) playlist - one ending in #EXT-X-ENDLIST - never changes, yet players and Jellyfin's
+// probe + transcode each re-fetch it, and every fetch is a round trip to the CDN. The raw upstream
+// text is kept briefly (not the rewritten body, which embeds the requesting session and key) so a
+// repeat is rewritten straight from memory. Live playlists have no ENDLIST and are never cached.
+const vodPlaylistTtlMs = 5 * 60_000;
+const maxVodPlaylists = 200;
+const vodPlaylistCache = new Map<string, { text: string; contentType: string; expiresAt: number }>();
+
+export function clearPlaylistCache(): void {
+    vodPlaylistCache.clear();
+}
+
+function rememberVodPlaylist(url: string, text: string, contentType: string): void {
+    if (!text.includes('#EXT-X-ENDLIST')) {
+        return;
+    }
+    vodPlaylistCache.delete(url);
+    vodPlaylistCache.set(url, { text, contentType, expiresAt: Date.now() + vodPlaylistTtlMs });
+    if (vodPlaylistCache.size > maxVodPlaylists) {
+        vodPlaylistCache.delete(vodPlaylistCache.keys().next().value as string);
+    }
+}
+
+function sendRewrittenPlaylist(
+    text: string,
+    url: string,
+    req: Request,
+    res: Response,
+    statusCode: number,
+    contentType: string,
+    sessionId?: string,
+    highestVariantFirst = false
+): void {
+    const { body, segmentCount } = rewritePlaylist(
+        text,
+        url,
+        (req.query.streamkey as string) ?? '',
+        sessionId,
+        highestVariantFirst,
+        liveTvManifestRegex.test((req.originalUrl ?? '').split('?')[0])
+    );
+    if (sessionId && segmentCount > 0) {
+        streamSessionService.setSegmentCount(sessionId, segmentCount);
+    }
+    res.status(statusCode);
+    res.setHeader('Content-Type', contentType || 'application/vnd.apple.mpegurl');
+    // BBC's segment URLs are short-lived/tokened - a cached copy of a rewritten
+    // manifest or segment could serve a stale, expired reference later.
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(body);
+}
+
+// Records delivery for the Streaming page and, for a segment that was linked to a successor in its
+// playlist, starts reading that successor ahead (see segmentPrefetch.ts). Only whole-segment
+// requests prefetch: a Range request is a seek, where the next segment is the wrong guess.
+function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: number): void {
+    const seg = req.query.seg !== undefined ? parseInt(req.query.seg as string) : undefined;
+    if (sessionId) {
+        if (seg !== undefined && !isNaN(seg)) {
+            streamSessionService.recordSegmentDelivered(sessionId, seg, bytes);
+        } else {
+            streamSessionService.addBytesTransferred(sessionId, bytes);
+        }
+    }
+    if (seg !== undefined && !isNaN(seg) && !req.headers.range && typeof req.query.token === 'string') {
+        const next = nextSegmentUrl(req.query.token);
+        if (next) {
+            prefetch(next);
+        }
+    }
 }
 
 // Proxies a resolved CDN URL through this server, forwarding Range for seeking, and rewriting the
@@ -143,8 +228,34 @@ export async function proxyUrl(
         headers.range = req.headers.range as string;
     }
 
+    if (!req.headers.range) {
+        const playlist = vodPlaylistCache.get(url);
+        if (playlist && playlist.expiresAt > Date.now()) {
+            sendRewrittenPlaylist(playlist.text, url, req, res, 200, playlist.contentType, sessionId, highestVariantFirst);
+            return;
+        }
+        // A segment the previous request read ahead is served from memory.
+        const segment = req.query.seg !== undefined ? await takePrefetched(url) : undefined;
+        if (segment) {
+            res.status(segment.status);
+            res.setHeader('Cache-Control', 'no-store');
+            Object.entries(segment.headers).forEach(([name, value]) => res.setHeader(name, value));
+            res.end(segment.body);
+            afterSegmentServed(req, sessionId, segment.body.length);
+            return;
+        }
+    }
+
     await new Promise<void>((resolve, reject) => {
-        const upstream = clientFor(url).get(url, { headers, agent: agentFor(url) }, (upstreamRes) => {
+        // A response that has already started can't be turned into a 500, so on any upstream failure
+        // it is torn down instead of left hanging for the player to time out on.
+        const fail = (err: Error) => {
+            if (res.headersSent) {
+                res.destroy?.();
+            }
+            reject(err);
+        };
+        const upstream = clientFor(url).get(url, { headers, agent: agentFor(url), timeout: requestTimeoutMs }, (upstreamRes) => {
             if (
                 redirectStatusCodes.includes(upstreamRes.statusCode ?? 0) &&
                 upstreamRes.headers.location &&
@@ -163,29 +274,18 @@ export async function proxyUrl(
                 upstreamRes.on('data', (chunk) => chunks.push(chunk));
                 upstreamRes.on('end', () => {
                     try {
-                        const { body, segmentCount } = rewritePlaylist(
-                            Buffer.concat(chunks).toString('utf8'),
-                            url,
-                            (req.query.streamkey as string) ?? '',
-                            sessionId,
-                            highestVariantFirst,
-                            liveTvManifestRegex.test((req.originalUrl ?? '').split('?')[0])
-                        );
-                        if (sessionId && segmentCount > 0) {
-                            streamSessionService.setSegmentCount(sessionId, segmentCount);
+                        const text = Buffer.concat(chunks).toString('utf8');
+                        const statusCode = upstreamRes.statusCode ?? 200;
+                        if (statusCode === 200 && !req.headers.range) {
+                            rememberVodPlaylist(url, text, contentType);
                         }
-                        res.status(upstreamRes.statusCode ?? 200);
-                        res.setHeader('Content-Type', contentType || 'application/vnd.apple.mpegurl');
-                        // BBC's segment URLs are short-lived/tokened - a cached copy of a rewritten
-                        // manifest or segment could serve a stale, expired reference later.
-                        res.setHeader('Cache-Control', 'no-store');
-                        res.send(body);
+                        sendRewrittenPlaylist(text, url, req, res, statusCode, contentType, sessionId, highestVariantFirst);
                         resolve();
                     } catch (err) {
                         reject(err);
                     }
                 });
-                upstreamRes.on('error', reject);
+                upstreamRes.on('error', fail);
                 return;
             }
 
@@ -199,29 +299,45 @@ export async function proxyUrl(
             });
             upstreamRes.pipe(res);
             upstreamRes.on('end', () => {
-                if (sessionId) {
-                    const bytes = parseInt((upstreamRes.headers['content-length'] as string) ?? '0') || 0;
-                    const seg = req.query.seg !== undefined ? parseInt(req.query.seg as string) : undefined;
-                    if (seg !== undefined && !isNaN(seg)) {
-                        streamSessionService.recordSegmentDelivered(sessionId, seg, bytes);
-                    } else {
-                        streamSessionService.addBytesTransferred(sessionId, bytes);
-                    }
-                }
+                afterSegmentServed(req, sessionId, parseInt((upstreamRes.headers['content-length'] as string) ?? '0') || 0);
                 resolve();
             });
-            upstreamRes.on('error', reject);
+            upstreamRes.on('error', fail);
         });
-        upstream.on('error', reject);
+        upstream.on('timeout', () => upstream.destroy(new Error(`Upstream ${url.split('?')[0]} timed out after ${requestTimeoutMs}ms`)));
+        upstream.on('error', fail);
         res.on('close', () => upstream.destroy());
     });
 }
+
+// Overridable for hosts with more (or less) headroom.
+export const maxConcurrentRemuxes: number = Number(process.env.STREAM_MAX_REMUXES) || 4;
+let activeRemuxes = 0;
 
 // Remuxes a resolved CDN URL into MKV via ffmpeg and pipes the result to `res`. No Range support -
 // a live remux has no fixed byte offsets to seek within. No manifest rewriting needed here either -
 // ffmpeg fetches every segment itself from inside this same (VPN'd) container, so there's nothing
 // to rewrite, only a total byte count to report once the remux finishes.
 export async function remuxToMkv(url: string, pid: string, res: Response, sessionId?: string): Promise<void> {
+    // Each remux is a long-lived ffmpeg process re-encoding audio, so a handful of viewers on a small
+    // host (a NAS) could starve everything else. Over the cap, answer 503 + Retry-After straight away
+    // rather than queueing a connection the player would just time out on.
+    if (activeRemuxes >= maxConcurrentRemuxes) {
+        res.status(503);
+        res.setHeader('Retry-After', '10');
+        res.setHeader('Content-Type', 'application/json');
+        res.send(JSON.stringify({ error: 'Too Many Requests', message: `At most ${maxConcurrentRemuxes} progressive-mkv streams at once` }));
+        return;
+    }
+    activeRemuxes++;
+    try {
+        await runRemux(url, pid, res, sessionId);
+    } finally {
+        activeRemuxes--;
+    }
+}
+
+async function runRemux(url: string, pid: string, res: Response, sessionId?: string): Promise<void> {
     await assertFfmpegAvailable();
     // ffmpeg fetches the CDN URLs itself through the system (musl) resolver, which hits the same
     // getaddrinfo bug as yt-dlp does in this VPN'd container - without the relay its lookups fail

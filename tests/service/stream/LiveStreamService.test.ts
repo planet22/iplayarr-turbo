@@ -4,6 +4,7 @@ import https from 'https';
 
 import { isLiveChannel, LiveChannelVpids } from '../../../src/constants/LiveChannels';
 import service from '../../../src/service/stream/LiveStreamService';
+import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
@@ -76,6 +77,7 @@ describe('LiveStreamService', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         clearResolveCache();
+        clearRememberedMediaSelectorPairs();
         requested.length = 0;
         installNetwork();
         route = (url, method) => {
@@ -111,6 +113,28 @@ describe('LiveStreamService', () => {
 
         await service.streamDirect('bbc_two_england', req, res);
         expect(requested.filter((u) => u.includes('mediaselector')).length).toBeGreaterThan(selectorCalls);
+    });
+
+    it('remembers, per channel, which mediaselector pair answered and tries it first next time', async () => {
+        const selectorPairs = () => requested.filter((u) => u.includes('mediaselector')).map((u) => u.replace(/^.*mediaselector\/(\d)\/.*mediaset\/([\w-]+)\/.*$/, '$2/v$1'));
+        const base = route;
+        route = (url, method) =>
+            url.includes('mediaselector')
+                ? { body: url.includes('/mediaset/pc/') && url.includes('/mediaselector/6/') ? liveXml : '<error id="geolocation"/>' }
+                : base(url, method);
+
+        await service.streamDirect('bbc_one_london', req, res);
+        expect(selectorPairs()).toEqual(['iptv-all/v6', 'iptv-all/v5', 'pc/v6']);
+
+        requested.length = 0;
+        clearResolveCache(); // forces a fresh resolve; the remembered pair is not part of the resolve cache
+        await service.streamDirect('bbc_one_london', req, res);
+        expect(selectorPairs()).toEqual(['pc/v6']);
+
+        // another channel has no history of its own yet
+        requested.length = 0;
+        await service.streamDirect('bbc_two_england', req, res);
+        expect(selectorPairs()[0]).toBe('iptv-all/v6');
     });
 
     it('does not cache a failed channel resolve', async () => {

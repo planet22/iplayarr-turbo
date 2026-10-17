@@ -1,4 +1,38 @@
-import { maxSegmentTokens, register, resolve, sweepExpired } from '../../../src/service/stream/segmentUrlRegistry';
+import { linkSegments, maxSegmentTokens, nextSegmentUrl, register, resolve, sweepExpired } from '../../../src/service/stream/segmentUrlRegistry';
+
+describe('segmentUrlRegistry next-segment links', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('returns the url of the segment linked after a token', () => {
+        const a = register('https://cdn/n/a.ts');
+        const b = register('https://cdn/n/b.ts');
+        linkSegments(a, b);
+        expect(nextSegmentUrl(a)).toBe('https://cdn/n/b.ts');
+        expect(nextSegmentUrl(b)).toBeUndefined();
+    });
+
+    it('has no successor for unknown tokens or playlist references, and linking them is a no-op', () => {
+        const playlist = register('https://cdn/n/list.m3u8');
+        const seg = register('https://cdn/n/c.ts');
+        linkSegments(playlist, seg);
+        linkSegments('nope', seg);
+        expect(nextSegmentUrl(playlist)).toBeUndefined();
+        expect(nextSegmentUrl('nope')).toBeUndefined();
+    });
+
+    it('stops pointing at a successor that has expired', () => {
+        jest.useFakeTimers();
+        const b = register('https://cdn/n/e.ts');
+        jest.advanceTimersByTime(9 * 60 * 1000);
+        const a = register('https://cdn/n/d.ts');
+        linkSegments(a, b);
+        expect(nextSegmentUrl(a)).toBe('https://cdn/n/e.ts');
+        // b is now 11 minutes old (expired); a is only 2
+        jest.advanceTimersByTime(2 * 60 * 1000);
+        expect(resolve(a)).toBe('https://cdn/n/d.ts');
+        expect(nextSegmentUrl(a)).toBeUndefined();
+    });
+});
 
 describe('segmentUrlRegistry token reuse and sweep', () => {
     afterEach(() => jest.useRealTimers());
