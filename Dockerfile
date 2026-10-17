@@ -12,25 +12,27 @@ RUN apk add --no-cache python3 make g++
 FROM base AS deps
 WORKDIR /app
 COPY package*.json ./
-COPY frontend/package*.json ./frontend/
-RUN npm run install:both
+COPY frontend/package.json ./frontend/
+RUN npm ci
 # The Prisma client is generated into node_modules, so every stage that installs deps needs this.
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 RUN npx prisma generate
 
-# ---- build: compile backend (tsc) and frontend (vue-cli-service) ----
+# ---- build: compile backend (tsc) and frontend (vite) ----
 FROM deps AS build
 COPY . .
 RUN npm run build:both
 
 # ---- prod-deps: production-only backend node_modules for the runtime image ----
 # Frontend has no runtime deps of its own - it ships as static files from the build
-# stage - so this only ever installs the backend's package.json.
+# stage - so --workspaces=false installs only the backend's dependencies. The frontend
+# manifest is still copied because the lockfile covers the whole workspace.
 FROM base AS prod-deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev
+COPY frontend/package.json ./frontend/
+RUN npm ci --omit=dev --workspaces=false
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 RUN npx prisma generate
