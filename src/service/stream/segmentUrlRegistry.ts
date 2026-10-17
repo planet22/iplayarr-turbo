@@ -20,6 +20,7 @@ const maxEntries = 5_000; // bounds memory under heavy concurrent streaming; old
 // them either. Registering the same playlist URL again reuses its token.
 const playlistTtlMs = 6 * 60 * 60 * 1000;
 const maxPlaylistEntries = 1_000;
+const sweepIntervalMs = 60_000;
 
 interface RegistryEntry {
     url: string;
@@ -27,6 +28,7 @@ interface RegistryEntry {
 }
 
 const registry = new Map<string, RegistryEntry>();
+const segmentTokens = new Map<string, string>(); // url -> token
 const playlistRegistry = new Map<string, RegistryEntry>();
 const playlistTokens = new Map<string, string>(); // url -> token
 
@@ -58,19 +60,40 @@ function registerPlaylist(url: string): string {
     return token;
 }
 
-export function register(url: string): string {
-    if (isPlaylistUrl(url)) {
-        return registerPlaylist(url);
+// A live playlist is re-fetched every few seconds and lists mostly the same segments each time, so
+// registering a segment URL that already has a live token reuses it (re-inserted so eviction, which
+// drops the oldest insertion, treats it as fresh) instead of minting a new UUID per refetch.
+function registerSegment(url: string): string {
+    const existing = segmentTokens.get(url);
+    const entry = existing ? registry.get(existing) : undefined;
+    if (existing && entry && entry.expiresAt > Date.now()) {
+        entry.expiresAt = Date.now() + ttlMs;
+        registry.delete(existing);
+        registry.set(existing, entry);
+        return existing;
     }
     const token = uuidv4();
     registry.set(token, { url, expiresAt: Date.now() + ttlMs });
+    segmentTokens.set(url, token);
     if (registry.size > maxEntries) {
         const oldest = registry.keys().next().value;
         if (oldest) {
-            registry.delete(oldest);
+            removeSegment(oldest);
         }
     }
     return token;
+}
+
+function removeSegment(token: string): void {
+    const entry = registry.get(token);
+    registry.delete(token);
+    if (entry && segmentTokens.get(entry.url) === token) {
+        segmentTokens.delete(entry.url);
+    }
+}
+
+export function register(url: string): string {
+    return isPlaylistUrl(url) ? registerPlaylist(url) : registerSegment(url);
 }
 
 export function resolve(token: string): string | undefined {
@@ -79,7 +102,7 @@ export function resolve(token: string): string | undefined {
         return undefined;
     }
     if (entry.expiresAt <= Date.now()) {
-        registry.delete(token);
+        removeSegment(token);
         if (playlistRegistry.delete(token)) {
             playlistTokens.delete(entry.url);
         }
@@ -87,3 +110,23 @@ export function resolve(token: string): string | undefined {
     }
     return entry.url;
 }
+
+// Entries were only ever dropped lazily (on resolve) or by the size cap, so tokens nobody fetches
+// again - every segment of an abandoned session - sat in memory until evicted. Exported for tests.
+export function sweepExpired(): void {
+    const now = Date.now();
+    for (const [token, entry] of registry) {
+        if (entry.expiresAt <= now) {
+            removeSegment(token);
+        }
+    }
+    for (const [token, entry] of playlistRegistry) {
+        if (entry.expiresAt <= now) {
+            playlistRegistry.delete(token);
+            playlistTokens.delete(entry.url);
+        }
+    }
+}
+
+// unref() so this timer never keeps the process (or a test run) alive on its own.
+setInterval(sweepExpired, sweepIntervalMs).unref();

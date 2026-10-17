@@ -1,14 +1,13 @@
 import { spawn } from 'child_process';
 import { Request, Response } from 'express';
-import http from 'http';
-import https from 'https';
 
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
+import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
+import { agentFor, clientFor, redirectStatusCodes } from './bbcHttp';
 import { register as registerSegmentUrl } from './segmentUrlRegistry';
 import streamSessionService from './streamSessionService';
 
-const redirectStatusCodes = [301, 302, 303, 307, 308];
 const playlistContentTypeRegex = /mpegurl/i;
 const uriAttrRegex = /URI="([^"]+)"/;
 const defaultSegmentExtension = '.ts';
@@ -139,14 +138,13 @@ export async function proxyUrl(
     sessionId?: string,
     highestVariantFirst = false
 ): Promise<void> {
-    const client = url.startsWith('https') ? https : http;
     const headers: Record<string, string> = {};
     if (req.headers.range) {
         headers.range = req.headers.range as string;
     }
 
     await new Promise<void>((resolve, reject) => {
-        const upstream = client.get(url, { headers }, (upstreamRes) => {
+        const upstream = clientFor(url).get(url, { headers, agent: agentFor(url) }, (upstreamRes) => {
             if (
                 redirectStatusCodes.includes(upstreamRes.statusCode ?? 0) &&
                 upstreamRes.headers.location &&
@@ -225,8 +223,17 @@ export async function proxyUrl(
 // to rewrite, only a total byte count to report once the remux finishes.
 export async function remuxToMkv(url: string, pid: string, res: Response, sessionId?: string): Promise<void> {
     await assertFfmpegAvailable();
+    // ffmpeg fetches the CDN URLs itself through the system (musl) resolver, which hits the same
+    // getaddrinfo bug as yt-dlp does in this VPN'd container - without the relay its lookups fail
+    // ("Failed to resolve hostname") and the response is empty. See dnsRelayService.ts.
+    await ensureDnsRelayRunning();
 
-    const ffmpeg = spawn('ffmpeg', ['-i', url, '-c', 'copy', '-f', 'matroska', 'pipe:1']);
+    // Video is copied untouched, but audio is re-encoded to AAC. BBC's HLS audio is raw ADTS AAC (in
+    // mpegts), and with `-c copy` Matroska can't write its header for it: ffmpeg fails with "Error
+    // parsing AAC extradata ... Could not write header" and the response ends after the 282-byte EBML
+    // header. Neither `-bsf:a aac_adtstoasc` nor an explicit -map fixes that (tried live against both
+    // on-demand and live inputs); re-encoding the audio does, at negligible CPU cost.
+    const ffmpeg = spawn('ffmpeg', ['-i', url, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-f', 'matroska', 'pipe:1']);
     let bytesWritten = 0;
 
     res.on('close', () => ffmpeg.kill());

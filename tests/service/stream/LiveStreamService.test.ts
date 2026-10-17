@@ -4,6 +4,7 @@ import https from 'https';
 
 import { isLiveChannel, LiveChannelVpids } from '../../../src/constants/LiveChannels';
 import service from '../../../src/service/stream/LiveStreamService';
+import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 
@@ -74,6 +75,7 @@ describe('LiveChannels', () => {
 describe('LiveStreamService', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        clearResolveCache();
         requested.length = 0;
         installNetwork();
         route = (url, method) => {
@@ -97,6 +99,27 @@ describe('LiveStreamService', () => {
     it('remuxes the same resolved url for progressive mkv', async () => {
         await service.streamProgressiveMkv('bbc_two_england', res, 'sess');
         expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/master.m3u8', 'bbc_two_england', res, 'sess');
+    });
+
+    it('reuses a resolved channel url briefly, still reporting Live to each session', async () => {
+        await service.streamDirect('bbc_one_london', req, res, 'a');
+        const selectorCalls = requested.filter((u) => u.includes('mediaselector')).length;
+        await service.streamDirect('bbc_one_london', req, res, 'b');
+        expect(requested.filter((u) => u.includes('mediaselector'))).toHaveLength(selectorCalls);
+        expect(streamSessionService.setResolution).toHaveBeenCalledWith('b', 'Live');
+        expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, 'b', true);
+
+        await service.streamDirect('bbc_two_england', req, res);
+        expect(requested.filter((u) => u.includes('mediaselector')).length).toBeGreaterThan(selectorCalls);
+    });
+
+    it('does not cache a failed channel resolve', async () => {
+        const good = route;
+        route = () => ({ body: '<error id="geolocation"/>' });
+        await expect(service.streamDirect('bbc_one_london', req, res)).rejects.toThrow('No live HLS stream available');
+        route = good;
+        await service.streamDirect('bbc_one_london', req, res);
+        expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req, res, 5, undefined, true);
     });
 
     it('rejects ids that are not live channels', async () => {

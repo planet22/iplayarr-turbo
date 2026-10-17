@@ -16,9 +16,17 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // nothing (manifest re-fetch, segment fetch) has touched it for this long.
 const inactivityTimeoutMs = 90_000;
 const sweepIntervalMs = 20_000;
+// Segment/byte events fire once per proxied segment per viewer - far more often than the Streaming
+// page needs a repaint - so those (and only those) are coalesced to at most one emit per interval.
+const emitThrottleMs = 750;
 const storage: QueuedStorage = new QueuedStorage();
 
 let active: StreamSession[] = [];
+// Last history we know of, so a throttled emit doesn't hit the database (read + JSON.parse of up to
+// 200 sessions) every time. Refreshed by every code path that reads or changes the stored history.
+let historySnapshot: StreamSession[] | undefined;
+let throttleTimer: NodeJS.Timeout | undefined;
+let throttleDirty = false;
 // Registered only by modes with a real underlying connection/process to tear down
 // (progressive-mkv's ffmpeg + response) - see StreamEndpoint.ts. direct/HLS sessions have
 // nothing to register (many short-lived proxy requests, no single thing to kill), so stop()
@@ -26,7 +34,9 @@ let active: StreamSession[] = [];
 const stopHandlers: Map<string, () => void> = new Map();
 
 async function getHistory(): Promise<StreamSession[]> {
-    return (await storage.getItem('streamHistory')) ?? [];
+    const history: StreamSession[] = (await storage.getItem('streamHistory')) ?? [];
+    historySnapshot = history;
+    return history;
 }
 
 async function archive(session: StreamSession, endReason?: string): Promise<void> {
@@ -34,7 +44,9 @@ async function archive(session: StreamSession, endReason?: string): Promise<void
     stopHandlers.delete(session.id);
     const history: StreamSession[] = await getHistory();
     history.push({ ...session, endedAt: new Date(), endReason });
-    await storage.setItem('streamHistory', history.slice(-historyLimit));
+    const trimmed: StreamSession[] = history.slice(-historyLimit);
+    historySnapshot = trimmed;
+    await storage.setItem('streamHistory', trimmed);
     videoEventService.record(
         VideoEventType.STREAM_ENDED,
         endReason === 'manual-stop' ? 'Stream stopped' : 'Stopped streaming',
@@ -52,6 +64,31 @@ async function sweepInactiveSessions(): Promise<void> {
         await archive(session);
     }
     await streamSessionService.emitStreams();
+}
+
+// Leading + trailing throttle: the first event emits straight away, anything arriving within the
+// interval is folded into one trailing emit. Start/end/stop still emit immediately via emitStreams.
+function emitThrottled(): void {
+    if (throttleTimer) {
+        throttleDirty = true;
+        return;
+    }
+    emitSnapshot();
+    throttleTimer = setTimeout(() => {
+        throttleTimer = undefined;
+        if (throttleDirty) {
+            throttleDirty = false;
+            emitThrottled();
+        }
+    }, emitThrottleMs);
+    throttleTimer.unref();
+}
+
+async function emitSnapshot(): Promise<void> {
+    socketService.emit('streams', {
+        active: streamSessionService.getActive(),
+        history: historySnapshot ?? (await getHistory()),
+    });
 }
 
 // unref() so this timer never keeps the process (or a test run) alive on its own.
@@ -158,6 +195,7 @@ const streamSessionService = {
     getHistory,
 
     clearHistory: async (): Promise<void> => {
+        historySnapshot = [];
         await storage.setItem('streamHistory', []);
     },
 
@@ -171,6 +209,7 @@ const streamSessionService = {
         const retained = history.filter((session) => !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
         const deleted = history.length - retained.length;
         if (deleted > 0) {
+            historySnapshot = retained;
             await storage.setItem('streamHistory', retained);
         }
         return deleted;
@@ -199,7 +238,7 @@ const streamSessionService = {
             session.bytesTransferred = (session.bytesTransferred ?? 0) + bytes;
         }
         session.lastActivityAt = new Date();
-        streamSessionService.emitStreams();
+        emitThrottled();
     },
 
     addBytesTransferred: (id: string, bytes: number): void => {
@@ -207,7 +246,7 @@ const streamSessionService = {
         if (session && bytes) {
             session.bytesTransferred = (session.bytesTransferred ?? 0) + bytes;
             session.lastActivityAt = new Date();
-            streamSessionService.emitStreams();
+            emitThrottled();
         }
     },
 

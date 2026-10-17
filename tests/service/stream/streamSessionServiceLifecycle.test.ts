@@ -137,6 +137,74 @@ describe('streamSessionService lifecycle', () => {
         expect(mockSetItem).toHaveBeenCalledWith('streamHistory', []);
     });
 
+    describe('throttled segment/byte emits', () => {
+        // A fresh module per test: the throttle timer is module state, and these need fake timers.
+        const load = async () => {
+            let svc: typeof streamSessionService = undefined as any;
+            let socket: typeof socketService = undefined as any;
+            await jest.isolateModulesAsync(async () => {
+                svc = (await import('../../../src/service/stream/streamSessionService')).default;
+                socket = (await import('../../../src/service/socketService')).default;
+            });
+            return { svc, socket };
+        };
+
+        beforeEach(() => jest.useFakeTimers());
+        afterEach(() => jest.useRealTimers());
+
+        it('emits the first event at once and folds a burst into one trailing emit', async () => {
+            const { svc, socket } = await load();
+            const id = await svc.start('p1', mode, client);
+            (socket.emit as jest.Mock).mockClear();
+
+            for (let i = 0; i < 50; i++) svc.recordSegmentDelivered(id, i, 10);
+            svc.addBytesTransferred(id, 5);
+            expect(socket.emit).toHaveBeenCalledTimes(1);
+
+            await jest.advanceTimersByTimeAsync(800);
+            expect(socket.emit).toHaveBeenCalledTimes(2);
+            const payload = (socket.emit as jest.Mock).mock.calls[1][1];
+            expect(payload.active[0]).toMatchObject({ currentSegmentIndex: 49, bytesTransferred: 505 });
+
+            await jest.advanceTimersByTimeAsync(5000);
+            expect(socket.emit).toHaveBeenCalledTimes(2);
+        });
+
+        it('emits again straight away once the quiet interval has passed', async () => {
+            const { svc, socket } = await load();
+            const id = await svc.start('p1', mode, client);
+            (socket.emit as jest.Mock).mockClear();
+            svc.addBytesTransferred(id, 1);
+            await jest.advanceTimersByTimeAsync(800);
+            svc.addBytesTransferred(id, 1);
+            expect(socket.emit).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not re-read stored history, and reflects a session archived since', async () => {
+            const { svc, socket } = await load();
+            const done = await svc.start('done', mode, client);
+            await svc.end(done);
+            const id = await svc.start('p2', mode, client);
+            mockGetItem.mockClear();
+            (socket.emit as jest.Mock).mockClear();
+
+            svc.addBytesTransferred(id, 1);
+            expect(mockGetItem).not.toHaveBeenCalled();
+            expect((socket.emit as jest.Mock).mock.calls[0][1].history).toEqual([expect.objectContaining({ id: done })]);
+        });
+
+        it('still emits immediately for start, setResolution and setSegmentCount', async () => {
+            const { svc, socket } = await load();
+            const id = await svc.start('p1', mode, client);
+            svc.addBytesTransferred(id, 1); // arms the throttle
+            (socket.emit as jest.Mock).mockClear();
+            svc.setResolution(id, '720');
+            svc.setSegmentCount(id, 4);
+            await jest.advanceTimersByTimeAsync(0);
+            expect(socket.emit).toHaveBeenCalledTimes(2);
+        });
+    });
+
     it('archives sessions idle past the timeout via the sweep timer', async () => {
         jest.useFakeTimers();
         try {

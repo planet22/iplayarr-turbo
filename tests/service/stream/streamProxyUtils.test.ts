@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import http from 'http';
 import https from 'https';
 
+import { ensureDnsRelayRunning } from '../../../src/service/dnsRelayService';
 import { resolve as resolveToken } from '../../../src/service/stream/segmentUrlRegistry';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
@@ -12,6 +13,7 @@ jest.mock('child_process', () => ({ spawn: jest.fn() }));
 jest.mock('http');
 jest.mock('https');
 jest.mock('../../../src/utils/ffmpegUtils', () => ({ assertFfmpegAvailable: jest.fn() }));
+jest.mock('../../../src/service/dnsRelayService', () => ({ ensureDnsRelayRunning: jest.fn() }));
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { debug: jest.fn(), log: jest.fn() } }));
 jest.mock('../../../src/service/stream/streamSessionService', () => ({
     __esModule: true,
@@ -71,7 +73,10 @@ describe('proxyUrl', () => {
         expect(resolveToken(token)).toBe('https://cdn.example/a/seg1.ts');
         expect(streamSessionService.setSegmentCount).toHaveBeenCalledWith('sess', 2);
         expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
-        expect((https.get as jest.Mock).mock.calls[0][1]).toEqual({ headers: { range: 'bytes=0-1' } });
+        expect((https.get as jest.Mock).mock.calls[0][1]).toEqual({
+            headers: { range: 'bytes=0-1' },
+            agent: expect.anything(),
+        });
     });
 
     it('detects playlists by extension, defaults the extension to .ts, and skips counting without a session', async () => {
@@ -223,6 +228,39 @@ describe('remuxToMkv', () => {
         expect(ffmpeg.stdout.pipe).toHaveBeenCalledWith(res);
         expect(ffmpeg.kill).toHaveBeenCalled();
         expect(streamSessionService.addBytesTransferred).toHaveBeenCalledWith('sess', 10);
+    });
+
+    it('starts the DNS relay before spawning ffmpeg, which resolves CDN hosts via the system resolver', async () => {
+        const ffmpeg: any = new EventEmitter();
+        ffmpeg.stdout = Object.assign(new EventEmitter(), { pipe: jest.fn() });
+        ffmpeg.stderr = new EventEmitter();
+        (spawn as jest.Mock).mockReturnValue(ffmpeg);
+        const p = remuxToMkv('u', 'pid', makeRes());
+        await new Promise((r) => setImmediate(r));
+        ffmpeg.emit('close', 0);
+        await p;
+        expect(ensureDnsRelayRunning).toHaveBeenCalled();
+        expect((ensureDnsRelayRunning as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+            (spawn as jest.Mock).mock.invocationCallOrder[0]
+        );
+    });
+
+    it('re-encodes audio to AAC, since copying BBC\'s ADTS AAC makes ffmpeg fail to write the Matroska header', async () => {
+        const ffmpeg: any = new EventEmitter();
+        ffmpeg.stdout = Object.assign(new EventEmitter(), { pipe: jest.fn() });
+        ffmpeg.stderr = new EventEmitter();
+        (spawn as jest.Mock).mockReturnValue(ffmpeg);
+        const p = remuxToMkv('https://cdn/x.m3u8', 'pid', makeRes());
+        await new Promise((r) => setImmediate(r));
+        ffmpeg.emit('close', 0);
+        await p;
+
+        const args: string[] = (spawn as jest.Mock).mock.calls[0][1];
+        expect(args.slice(0, 2)).toEqual(['-i', 'https://cdn/x.m3u8']);
+        expect(args.join(' ')).toContain('-c:v copy');
+        expect(args.join(' ')).toContain('-c:a aac');
+        expect(args).not.toContain('-bsf:a');
+        expect(args.slice(-3)).toEqual(['-f', 'matroska', 'pipe:1']);
     });
 
     it('does not report bytes without a session', async () => {

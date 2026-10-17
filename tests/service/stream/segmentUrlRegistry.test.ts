@@ -1,4 +1,59 @@
-import { register, resolve } from '../../../src/service/stream/segmentUrlRegistry';
+import { register, resolve, sweepExpired } from '../../../src/service/stream/segmentUrlRegistry';
+
+describe('segmentUrlRegistry token reuse and sweep', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('reuses the token when the same segment is registered again (a live playlist refetch)', () => {
+        const token = register('https://cdn/live/reuse.ts');
+        expect(register('https://cdn/live/reuse.ts')).toBe(token);
+        expect(resolve(token)).toBe('https://cdn/live/reuse.ts');
+    });
+
+    it('extends a reused segment token\'s life', () => {
+        jest.useFakeTimers();
+        const token = register('https://cdn/live/extend.ts');
+        jest.advanceTimersByTime(9 * 60 * 1000);
+        expect(register('https://cdn/live/extend.ts')).toBe(token);
+        jest.advanceTimersByTime(9 * 60 * 1000);
+        expect(resolve(token)).toBe('https://cdn/live/extend.ts');
+    });
+
+    it('issues a fresh token once the old one has expired', () => {
+        jest.useFakeTimers();
+        const old = register('https://cdn/live/expired.ts');
+        jest.advanceTimersByTime(10 * 60 * 1000 + 1);
+        const fresh = register('https://cdn/live/expired.ts');
+        expect(fresh).not.toBe(old);
+        expect(resolve(fresh)).toBe('https://cdn/live/expired.ts');
+        expect(resolve(old)).toBeUndefined();
+    });
+
+    it('gives a url a new token after its old one was evicted by the size cap', () => {
+        const old = register('https://cdn/live/evicted.ts');
+        for (let i = 0; i < 5000; i++) register(`https://cdn/live/flood${i}.ts`);
+        expect(resolve(old)).toBeUndefined();
+        const fresh = register('https://cdn/live/evicted.ts');
+        expect(fresh).not.toBe(old);
+        expect(resolve(fresh)).toBe('https://cdn/live/evicted.ts');
+    });
+
+    it('sweeps expired segment and playlist tokens, keeping live ones', () => {
+        jest.useFakeTimers();
+        const segment = register('https://cdn/live/sweep.ts');
+        const playlist = register('https://cdn/live/sweep.m3u8');
+        jest.advanceTimersByTime(11 * 60 * 1000);
+        const kept = register('https://cdn/live/sweep-new.ts');
+        sweepExpired();
+        expect(resolve(segment)).toBeUndefined();
+        expect(resolve(kept)).toBe('https://cdn/live/sweep-new.ts');
+        expect(resolve(playlist)).toBe('https://cdn/live/sweep.m3u8');
+        jest.advanceTimersByTime(6 * 60 * 60 * 1000);
+        sweepExpired();
+        expect(resolve(playlist)).toBeUndefined();
+        // the url is registrable again after being swept
+        expect(resolve(register('https://cdn/live/sweep.m3u8'))).toBe('https://cdn/live/sweep.m3u8');
+    });
+});
 
 describe('segmentUrlRegistry', () => {
     afterEach(() => jest.useRealTimers());
