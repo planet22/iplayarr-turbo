@@ -2,7 +2,7 @@
 
 Every runtime setting in iPlayarr is an `IplayarrParameter` (`src/types/IplayarrParameters.ts`), read through `configService.getParameter`. Precedence is:
 
-1. Value set via the Settings UI (persisted in Redis)
+1. Value set via the Settings UI (persisted in the database)
 2. The matching environment variable
 3. A built-in default, if one exists (`configService.ts`'s `defaultConfigMap`)
 
@@ -25,7 +25,7 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 
 Debug logging is controlled by the `DEBUG` env var (default `false`) — not exposed in the Settings UI, since it also flips permissive CORS for local frontend-dev-server use (`src/server.ts`). Set it in the container/process environment, not via Settings.
 
-`PORT` (default `4404`) is also env-only, read directly from `process.env` at startup before configService/Redis are available.
+`PORT` (default `4404`) is also env-only, read directly from `process.env` at startup before configService/the database are available.
 
 ## Authentication (Settings → Authentication)
 
@@ -122,15 +122,11 @@ Daily check that `.strm` links still resolve on BBC. Off by default; all fields 
 | Thumbnail Cache Retention (Days) | `THUMBNAIL_RETENTION_DAYS` | `30` | Nightly cleanup (3:35am) deletes cached thumbnails unused past this many days. "Run Thumbnail Cleanup Now" button triggers it on demand. |
 | Stream History Retention (Days) | `STREAM_HISTORY_RETENTION_DAYS` | `30` | Nightly cleanup (3:40am) deletes native streaming session history past this many days. Also has a manual "Run Now" button. |
 
-## Redis (env-only — not in the Settings UI)
+## Database (env-only — not in the Settings UI)
 
-See [REDIS.md](REDIS.md) for full detail. These are read directly from `process.env` in `src/service/redis/redisService.ts`, not through `configService` — Redis has to be reachable before `configService` can read anything out of it, so these can't themselves live in Redis-backed config.
+See [DATABASE.md](DATABASE.md) for full detail. Read directly from `process.env` in `src/service/db/prismaService.ts`, not through `configService`.
 
-| Env var | Default | Notes |
+| Variable | Default | Notes |
 | --- | --- | --- |
-| `REDIS_HOST` | `127.0.0.1` | Hostname of an external Redis instance. |
-| `REDIS_PORT` | `6379` | — |
-| `REDIS_PASSWORD` | _(unset)_ | Optional. |
-| `REDIS_SSL` | _(unset)_ | Set to `true` to connect over TLS. |
-
-If none of these are set, the container starts its own bundled `redis-server` instead (`docker_entry.sh`).
+| `DATABASE_URL` | `file:/config/iplayarr.db` (Docker) | SQLite file location. |
+| `CONFIG_LOCATION` | `/config`, else `./config` | Directory for `iplayarr.db` when `DATABASE_URL` is unset. |

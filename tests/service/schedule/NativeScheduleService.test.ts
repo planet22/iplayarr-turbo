@@ -13,7 +13,7 @@ jest.mock('axios');
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/iplayerDetailsService');
 jest.mock('../../../src/service/loggingService');
-jest.mock('../../../src/service/redis/redisCacheService');
+jest.mock('../../../src/service/db/dbCacheService');
 jest.mock('../../../src/service/search/NativeSearchService');
 jest.mock('../../../src/utils/Utils');
 jest.mock('../../../src/service/synonymService');
@@ -21,7 +21,7 @@ jest.mock('../../../src/service/synonymService');
 describe('NativeScheduleService', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        // Auto-mocked RedisCacheService.getOr returns undefined by default - simulate a cache miss
+        // Auto-mocked DbCacheService.getOr returns undefined by default - simulate a cache miss
         // that falls through to the fetch function, same as the real implementation does.
         NativeScheduleService.schedulePageCache.getOr = jest.fn((_key, fetchFunction) => fetchFunction(_key));
     });

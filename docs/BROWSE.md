@@ -52,7 +52,7 @@ Artwork is served through the existing thumbnail cache (`THUMBNAIL_CACHE_DIR`), 
 
 ## Caching
 
-Responses are cached in Redis so browsing does not hammer the BBC:
+Responses are cached in the database so browsing does not hammer the BBC:
 
 | Cache | Lifetime | Used for |
 | --- | --- | --- |

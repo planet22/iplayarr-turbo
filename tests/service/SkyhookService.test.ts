@@ -5,7 +5,7 @@ import SkyhookService from '../../src/service/skyhook/SkyhookService';
 // src/service/skyhook/SkyhookService.test.ts
 
 jest.mock('axios');
-jest.mock('../../src/service/redis/redisCacheService');
+jest.mock('../../src/service/db/dbCacheService');
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 

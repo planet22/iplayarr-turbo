@@ -2,10 +2,13 @@ import { FailedGrabEntry } from '../../types/data/FailedGrabEntry';
 import { GrabHistoryEntry } from '../../types/data/GrabHistoryEntry';
 import { SearchHistoryEntry } from '../../types/data/SearchHistoryEntry';
 import { AbstractFIFOQueue } from '../../types/utils/AbstractFIFOQueue';
-import { RedisFIFOQueue } from '../../types/utils/RedisFIFOQueue';
-import RedisCacheService from '../redis/redisCacheService';
-import { redis } from '../redis/redisService';
+import { DbFIFOQueue } from '../../types/utils/DbFIFOQueue';
+import DbCacheService from '../db/dbCacheService';
+import { dbReady, prisma } from '../db/prismaService';
 import socketService from '../socketService';
+
+// Not stored via QueuedStorage's JSON encoding: this is a bare epoch-millis string.
+const UPTIME_KEY = 'iplayarr_uptime';
 
 class StatisticsService {
     searchHistory: AbstractFIFOQueue<SearchHistoryEntry>;
@@ -13,9 +16,9 @@ class StatisticsService {
     failedGrabHistory: AbstractFIFOQueue<FailedGrabEntry>;
 
     constructor() {
-        this.searchHistory = new RedisFIFOQueue('search-history', 500);
-        this.grabHistory = new RedisFIFOQueue('grab-history', 500);
-        this.failedGrabHistory = new RedisFIFOQueue('failed-grab-history', 200);
+        this.searchHistory = new DbFIFOQueue('search-history', 500);
+        this.grabHistory = new DbFIFOQueue('grab-history', 500);
+        this.failedGrabHistory = new DbFIFOQueue('failed-grab-history', 200);
     }
 
     async addSearch(entry: SearchHistoryEntry): Promise<void> {
@@ -61,20 +64,23 @@ class StatisticsService {
     }
 
     async setUptime(): Promise<void> {
-        await redis.set('iplayarr_uptime', Date.now());
+        await dbReady();
+        const value = String(Date.now());
+        await prisma.keyValue.upsert({ where: { key: UPTIME_KEY }, create: { key: UPTIME_KEY, value }, update: { value } });
     }
 
     async getUptime(): Promise<number> {
-        const uptime = await redis.get('iplayarr_uptime');
-        if (uptime) {
-            return Date.now() - parseInt(uptime);
+        await dbReady();
+        const row = await prisma.keyValue.findUnique({ where: { key: UPTIME_KEY } });
+        if (row) {
+            return Date.now() - parseInt(row.value);
         } else {
             return 0;
         }
     }
 
     async getCacheSizes(): Promise<{ [key: string]: string }> {
-        const [search_size, schedule_size] = await Promise.all([RedisCacheService.getCacheSizeInMB(['search_cache_*']), RedisCacheService.getCacheSizeInMB(['schedule_cache_*'])]);
+        const [search_size, schedule_size] = await Promise.all([DbCacheService.getCacheSizeInMB(['search_cache_']), DbCacheService.getCacheSizeInMB(['schedule_cache_'])]);
 
         return {
             search: search_size,

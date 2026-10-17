@@ -21,9 +21,9 @@ import {
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { splitArrayIntoChunks } from '../utils/Utils';
+import DbCacheService from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
 import loggingService from './loggingService';
-import RedisCacheService from './redis/redisCacheService';
 
 const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
 const IMAGE_PID_REGEX = /\/([a-z0-9]{6,})\.(?:jpg|jpeg|png)(?:$|\?)/i;
@@ -120,10 +120,10 @@ const withLogo = (channel: BrowseChannel): BrowseChannel => ({
 const PROGRAMME_PAGE_SIZE = 30;
 
 class BrowseService {
-    shortCache: RedisCacheService<any> = new RedisCacheService('browse_short', 900); // 15 minutes
-    longCache: RedisCacheService<any> = new RedisCacheService('browse_long', 86400); // 24 hours
+    shortCache: DbCacheService<any> = new DbCacheService('browse_short', 900); // 15 minutes
+    longCache: DbCacheService<any> = new DbCacheService('browse_long', 86400); // 24 hours
 
-    async #ibl(path: string, cache: RedisCacheService<any> = this.shortCache): Promise<any> {
+    async #ibl(path: string, cache: DbCacheService<any> = this.shortCache): Promise<any> {
         return cache.getOr(path, async () => {
             const response = await axios.get(`${IBL_BASE}/${path}`);
             return response.data;

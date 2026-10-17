@@ -10,21 +10,21 @@ import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
 import { withRetry } from '../../utils/retry';
 import { getQualityProfile, splitArrayIntoChunks } from '../../utils/Utils';
 import configService from '../configService';
+import DbCacheService from '../db/dbCacheService';
 import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
-import RedisCacheService from '../redis/redisCacheService';
 import NativeSearchService from '../search/NativeSearchService';
 import synonymService from '../synonymService';
 import { AbstractScheduleService } from './AbstractScheduleService';
 
 class NativeScheduleService implements AbstractScheduleService {
-    scheduleCache: RedisCacheService<IPlayerSearchResult[]> = new RedisCacheService('schedule_cache', 5400);
-    cacheTime: RedisCacheService<number> = new RedisCacheService('schedule_cache_time', 5400);
+    scheduleCache: DbCacheService<IPlayerSearchResult[]> = new DbCacheService('schedule_cache', 5400);
+    cacheTime: DbCacheService<number> = new DbCacheService('schedule_cache_time', 5400);
     // A past day's BBC schedule page never changes once the day is over, so there's no reason to
     // re-fetch/re-parse it on every refresh cycle - only today's page is still being updated.
     // Cached indefinitely relative to a single refresh cycle (14 days comfortably outlives any
     // realistic RSS_FEED_HOURS window) and only ever written once a day has fully passed.
-    schedulePageCache: RedisCacheService<string[]> = new RedisCacheService('schedule_page_pids', 60 * 60 * 24 * 14);
+    schedulePageCache: DbCacheService<string[]> = new DbCacheService('schedule_page_pids', 60 * 60 * 24 * 14);
     caching: boolean = false;
 
 

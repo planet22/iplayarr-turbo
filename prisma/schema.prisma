@@ -1,0 +1,36 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "sqlite"
+}
+
+model KeyValue {
+    key   String @id
+    value String
+}
+
+model Cache {
+    key       String @id
+    value     String
+    expiresAt BigInt
+
+    @@index([expiresAt])
+}
+
+model QueueItem {
+    id    Int    @id @default(autoincrement())
+    queue String
+    value String
+
+    @@index([queue])
+}
+
+model Session {
+    sid       String @id
+    data      String
+    expiresAt BigInt
+
+    @@index([expiresAt])
+}

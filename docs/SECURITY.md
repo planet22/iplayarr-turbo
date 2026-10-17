@@ -10,8 +10,8 @@ Branch `security-hardening` (from `dev-work`). Review date: 2026-10-11. Every it
 | 2 | High | **Shipped default login** `admin` / `password` (bcrypt hash in `defaultConfigMap`). | No default. First boot (or an install still on the old default) generates a random password, stores the hash, prints it once to the container log. |
 | 3 | High | **Password reset** set credentials back to the well-known default; `generateToken` was unthrottled and could keep replacing the token; non-constant-time compare. | Reset sets a *new random* password (logged, never in the HTTP response). Token is single-use, compared in constant time, and `generateToken` is limited to once a minute. Loud startup warning when `AUTH_TYPE=none`. |
 | 4 | High | **Settings API = RCE**: PUT accepted any key; `GET_IPLAYER_EXEC`, `YTDLP_EXEC`, `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` become the executable and args. | Whitelist of known setting names, plain values only, `PORT` read-only. Executable must be get_iplayer, yt-dlp or perl (no `perl -e`); extra args may not use `--exec` / `--command`; while `AUTH_TYPE=none` those three cannot be changed from the UI at all (set them via environment). |
-| 5 | Medium | Hard-coded fallback session secret; cookie not httpOnly/SameSite; no login throttling; no session regeneration; state-changing GETs reachable by cross-site navigation. | Random 256-bit secret generated once and kept in Redis (`SESSION_SECRET` still wins). Cookie `HttpOnly; SameSite=Lax` (`SESSION_COOKIE_SECURE=true` adds `Secure`). New session id on login. 10 failures per 15 min per address gives 429. A Fetch-Metadata / Origin guard refuses cross-site requests to `/json-api` (and non-GET to `/auth`). |
-| 6 | Medium | Socket.IO had **no authentication** (queue, history, streams, logs). Debug log wrote full headers/URL/body (API keys, cookies, passwords) and broadcast them to sockets and Redis. | Sockets use the same session cookie and are refused without login. Credentials are redacted from request debug logs. `/ping` no longer returns Redis error text. |
+| 5 | Medium | Hard-coded fallback session secret; cookie not httpOnly/SameSite; no login throttling; no session regeneration; state-changing GETs reachable by cross-site navigation. | Random 256-bit secret generated once and kept in the database (`SESSION_SECRET` still wins). Cookie `HttpOnly; SameSite=Lax` (`SESSION_COOKIE_SECURE=true` adds `Secure`). New session id on login. 10 failures per 15 min per address gives 429. A Fetch-Metadata / Origin guard refuses cross-site requests to `/json-api` (and non-GET to `/auth`). |
+| 6 | Medium | Socket.IO had **no authentication** (queue, history, streams, logs). Debug log wrote full headers/URL/body (API keys, cookies, passwords) and broadcast them to sockets and the database. | Sockets use the same session cookie and are refused without login. Credentials are redacted from request debug logs. `/ping` no longer returns Redis error text. |
 | 7 | Medium | OIDC: `/auth/oidc/test` unauthenticated (SSRF to any URL); callback `JSON.parse` of attacker state crashed the process (Express 4 async); client secret travelled in the `state` URL; email interpolated into inline script; `email_verified` ignored. | Test endpoint requires login; test secrets live in the session; state is only mode + nonce and must equal the session's; callback wrapped (400, never a crash); output escaped; unverified emails rejected. Global `unhandledRejection` guard. |
 | 8 | Medium | **Path traversal**: `nzbName` and `pid` were used raw in file and directory paths and the pid in BBC URLs; a `..` title survived sanitising. | `pid` must match `[A-Za-z0-9_-]{1,64}` at every entry point; `nzbName` is stripped of separators, control chars and leading dots at the queue; library paths are asserted to stay inside the complete dir. |
 | 9 | Low-Med | API key compared with `==`, arrays accepted, key checked *after* the multipart parser, no upload limits, prototype names (`constructor`) resolvable as modes, default Express error pages with stack traces. | Constant-time, type-checked compare; key checked first; 5 MB / 10 file upload limit; own-property lookup; JSON error handler; `Referrer-Policy: no-referrer` (keys live in URLs); `X-Powered-By` removed. |
@@ -22,10 +22,10 @@ Branch `security-hardening` (from `dev-work`). Review date: 2026-10-11. Every it
 ## How credentials are stored (item 10)
 
 * The server has to be able to read these credentials to call Sonarr/Radarr/Jellyfin, so they cannot be hashed (only the web UI password is, with bcrypt). Instead they are now **encrypted at rest** (AES-256-GCM, field level): each app's API key / password / download-client and indexer keys, plus the `API_KEY`, `STREAM_KEY`, `OIDC_CLIENT_SECRET` and `STRM_WATCHDOG_WEBHOOK_URL` settings. Existing plaintext values are encrypted automatically on first start.
-* The key is **not in Redis**: it is `SECRETS_KEY` (any string, from the environment) or, if that is unset, a key file generated on first start at `SECRETS_KEY_FILE` (default `<CACHE_LOCATION>/secrets.key`, i.e. `/data/secrets.key` in the Docker image, mode 0600). A copy of the Redis data (RDB snapshot, backup, exposed Redis port) therefore no longer contains usable credentials.
-* **Back the key up** together with your Redis backups. If it is lost, encrypted values cannot be read: re-enter app keys and the OIDC secret, and a new `API_KEY` / `STREAM_KEY` is generated (so re-run the Apps setup and re-import `.strm` files).
+* The key is **not in the database**: it is `SECRETS_KEY` (any string, from the environment) or, if that is unset, a key file generated on first start at `SECRETS_KEY_FILE` (default `<CACHE_LOCATION>/secrets.key`, i.e. `/data/secrets.key` in the Docker image, mode 0600). A copy of the database file (`iplayarr.db`, or a backup of it) therefore no longer contains usable credentials.
+* **Back the key up** together with your database backups. If it is lost, encrypted values cannot be read: re-enter app keys and the OIDC secret, and a new `API_KEY` / `STREAM_KEY` is generated (so re-run the Apps setup and re-import `.strm` files).
 * This does not protect against someone who can read both the key and the data, or the running process. If no key can be obtained (read-only volume and no `SECRETS_KEY`), it logs an error and stores as before rather than failing to start.
-* Still worth doing: keep Redis off published ports and set `REDIS_PASSWORD` if it is shared.
+* Still worth doing: the database is a plain local file, so keep `/config` readable only by the user the app runs as.
 * What changed: the browser no longer receives them back (masked), which keeps them out of page loads, dev-tools, proxies and screenshots. The API key and stream key are deliberately still shown in Settings (you copy them into Sonarr and `.strm` files); they are only visible to a logged-in session.
 
 ## Behaviour changes you will notice
@@ -46,7 +46,7 @@ Branch `security-hardening` (from `dev-work`). Review date: 2026-10-11. Every it
 
 ## Not done / residual risk
 
-* Encryption at rest needs the key kept separate from the Redis data (above); where both live on the same volume that is backed up as one, it adds little.
+* Encryption at rest needs the key kept separate from the database file (above); where both live on the same volume that is backed up as one, it adds little.
 * `AUTH_TYPE=none` is still supported and gives every network client full admin (minus the executable settings). Do not expose it.
 * A stream key in a `.strm` file can be read by anyone with filesystem access; it only unlocks streaming and live endpoints.
 * The Apps / Jellyfin / NZB "test connection" features can still make the server request any URL for a logged-in admin (by design for an integrations UI).
@@ -55,7 +55,7 @@ Branch `security-hardening` (from `dev-work`). Review date: 2026-10-11. Every it
 
 ## Smoke test
 
-Run against the **compiled server** (`tsc` output), with an in-memory Redis (ioredis-mock) and a fake `get_iplayer` that records its argv, over real HTTP and WebSocket. Three server instances: normal login, `DEBUG=true` (log redaction), `AUTH_TYPE=none`. The harness scripts are not kept in the repo.
+Run against the **compiled server** (`tsc` output), with an in-memory Redis (ioredis-mock, as the app used at the time) and a fake `get_iplayer` that records its argv, over real HTTP and WebSocket. Three server instances: normal login, `DEBUG=true` (log redaction), `AUTH_TYPE=none`. The harness scripts are not kept in the repo.
 
 Unit tests: 1095 run, 5 failing (the pre-existing `versionService` ones).
 
@@ -101,7 +101,7 @@ Unit tests: 1095 run, 5 failing (the pre-existing `versionService` ones).
 | PASS | #9 api | stream mode rejects a path-like pid (400) |
 | PASS | #9 api | oversized upload refused with 413 and no stack trace |
 | PASS | #11 framing | X-Frame-Options SAMEORIGIN and CSP frame-ancestors set |
-| PASS | #12 encryption | a 32-byte secrets key file was generated outside Redis on first boot |
+| PASS | #12 encryption | a 32-byte secrets key file was generated outside the data store on first boot |
 | PASS | #12 encryption | generated API key still authenticates (decrypts transparently) |
 | PASS | #9 api | Referrer-Policy: no-referrer set, X-Powered-By removed |
 | PASS | #9 api | /ping returns only status (no error text) |

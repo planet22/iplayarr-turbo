@@ -2,7 +2,7 @@
 
 import searchFacade from '../../src/facade/searchFacade';
 import configService from '../../src/service/configService';
-import RedisCacheService from '../../src/service/redis/redisCacheService';
+import DbCacheService from '../../src/service/db/dbCacheService';
 import getIplayerSearchService from '../../src/service/search/GetIplayerSearchService';
 import nativeSearchService from '../../src/service/search/NativeSearchService';
 import nativeSearchV2Service from '../../src/service/search/NativeSearchV2Service';
@@ -14,7 +14,7 @@ import { seasonHint } from '../../src/utils/seasonHint';
 
 // Mock dependencies
 jest.mock('../../src/service/configService');
-jest.mock('../../src/service/redis/redisCacheService');
+jest.mock('../../src/service/db/dbCacheService');
 jest.mock('../../src/service/synonymService');
 jest.mock('../../src/service/skyhook/SkyhookService');
 jest.mock('../../src/service/search/NativeSearchService');
@@ -38,15 +38,15 @@ describe('SearchFacade', () => {
     // Mock synonym service to return no synonym
     (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
 
-    // Mock Redis cache to return undefined (no cache hit)
-    (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+    // Mock cache to return undefined (no cache hit)
+    (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
 
     // Mock native search service to return mock results
     (nativeSearchService.search as jest.Mock).mockResolvedValue(mockResults);
     (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation((results) => results);
 
     // Mock cache set
-    (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+    (DbCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
 
     const results = await searchFacade.search('Test Show', 1, 1);
 
@@ -63,8 +63,8 @@ describe('SearchFacade', () => {
     beforeEach(() => {
       (configService.getParameter as jest.Mock).mockResolvedValue('true');
       (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
       (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
     });
 
@@ -106,8 +106,8 @@ describe('SearchFacade', () => {
       seenHint = undefined;
       (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => v2Config(key));
       (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
       (nativeSearchV2Service.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
       (nativeSearchV2Service.search as jest.Mock).mockImplementation(async () => {
         seenHint = seasonHint();
@@ -119,15 +119,15 @@ describe('SearchFacade', () => {
       (nativeSearchV2Service.narrowsBySeason as jest.Mock).mockResolvedValue(true);
       await searchFacade.search('Show', 2, 3);
       expect(seenHint).toBe(2);
-      expect(RedisCacheService.prototype.get).toHaveBeenCalledWith('Show#season2');
-      expect(RedisCacheService.prototype.set).toHaveBeenCalledWith('Show#season2', expect.anything());
+      expect(DbCacheService.prototype.get).toHaveBeenCalledWith('Show#season2');
+      expect(DbCacheService.prototype.set).toHaveBeenCalledWith('Show#season2', expect.anything());
     });
 
     it('uses the plain key and no hint when it does not apply', async () => {
       (nativeSearchV2Service.narrowsBySeason as jest.Mock).mockResolvedValue(false);
       await searchFacade.search('Show', 2, 3);
       expect(seenHint).toBeUndefined();
-      expect(RedisCacheService.prototype.get).toHaveBeenCalledWith('Show');
+      expect(DbCacheService.prototype.get).toHaveBeenCalledWith('Show');
     });
   });
 
@@ -135,8 +135,8 @@ describe('SearchFacade', () => {
     beforeEach(() => {
       (configService.getParameter as jest.Mock).mockResolvedValue('true');
       (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
       (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
     });
 
@@ -172,8 +172,8 @@ describe('SearchFacade', () => {
     beforeEach(() => {
       (configService.getParameter as jest.Mock).mockResolvedValue('true');
       (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
       (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
     });
 
@@ -204,7 +204,7 @@ describe('SearchFacade', () => {
     });
 
     it('delivers a cached search as a single batch', async () => {
-      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue([result('a'), result('b')]);
+      (DbCacheService.prototype.get as jest.Mock).mockResolvedValue([result('a'), result('b')]);
       const batches: string[][] = [];
 
       await searchFacade.searchStreaming('Show', (batch) => batches.push(batch.map(({ pid }) => pid)));
@@ -231,13 +231,13 @@ describe('SearchFacade', () => {
     (configService.getParameter as jest.Mock).mockResolvedValue('true');
     (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
 
-    (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(mockResults);
+    (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(mockResults);
 
     (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation((results) => results);
 
     const results = await searchFacade.search('Test Show', 1, 1);
 
-    expect(RedisCacheService.prototype.get).toHaveBeenCalled();
+    expect(DbCacheService.prototype.get).toHaveBeenCalled();
     expect(nativeSearchService.search).not.toHaveBeenCalled(); // Should not call search if cached
     expect(results).toHaveLength(1);
   });
@@ -246,7 +246,7 @@ describe('SearchFacade', () => {
     (configService.getParameter as jest.Mock).mockResolvedValue('false');
     (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
 
-    (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+    (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
 
     (getIplayerSearchService.search as jest.Mock).mockResolvedValue(mockResults);
     (getIplayerSearchService.processCompletedSearch as jest.Mock).mockImplementation((results) => results);
@@ -265,7 +265,7 @@ describe('SearchFacade', () => {
       Promise.resolve(term === 'Test Show' ? { from: 'Test Show', target: 'Stripped Target' } : undefined)
     );
 
-    (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+    (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
     (nativeSearchService.search as jest.Mock).mockResolvedValue(mockResults);
     (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation((results) => results);
 
@@ -280,7 +280,7 @@ describe('SearchFacade', () => {
     (configService.getParameter as jest.Mock).mockResolvedValue('true');
     (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
 
-    (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+    (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
     (nativeSearchService.search as jest.Mock).mockResolvedValue(mockResults);
     (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation((results) => results);
 
@@ -294,8 +294,8 @@ describe('SearchFacade', () => {
     const arrange = (config: Record<string, string>) => {
       (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => config[key]);
       (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
-      (RedisCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
       for (const service of [getIplayerSearchService, nativeSearchService, nativeSearchV2Service]) {
         (service.search as jest.Mock).mockResolvedValue([]);
         (service.processCompletedSearch as jest.Mock).mockImplementation((results) => results);

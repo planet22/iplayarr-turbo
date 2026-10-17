@@ -1,6 +1,6 @@
 # Environment variables
 
-Quick-lookup reference. Every one of these (except the Redis connection and process-level ones noted below) can also be set or changed later via the Settings UI — `configService` reads a UI-set value first, then the environment variable, then falls back to a built-in default if neither is set (`src/service/configService.ts`'s `getParameter`). See [CONFIG.md](CONFIG.md) for what each one does and which Settings tab it lives under.
+Quick-lookup reference. Every one of these (except the database location and process-level ones noted below) can also be set or changed later via the Settings UI — `configService` reads a UI-set value first, then the environment variable, then falls back to a built-in default if neither is set (`src/service/configService.ts`'s `getParameter`). See [CONFIG.md](CONFIG.md) for what each one does and which Settings tab it lives under.
 
 | Variable | Default | Required? | Description |
 | --- | --- | --- | --- |
@@ -74,16 +74,15 @@ Quick-lookup reference. Every one of these (except the Redis connection and proc
 | --- | --- | --- | --- |
 | `PORT` | `4404` | No | HTTP port, read directly from `process.env` before the config store is available. |
 | `DEBUG` | `false` | No | Verbose request logging + permissive CORS for local frontend-dev-server use. |
-| `SECRETS_KEY` | _(unset)_ | No | Key used to encrypt stored credentials (app API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) in Redis. If unset a key file is generated. Keep it with your Redis backups; see [SECURITY.md](SECURITY.md). |
+| `SECRETS_KEY` | _(unset)_ | No | Key used to encrypt stored credentials (app API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) in the database. If unset a key file is generated. Keep it with your database backups; see [SECURITY.md](SECURITY.md). |
 | `SECRETS_KEY_FILE` | `<CACHE_LOCATION>/secrets.key` | No | Where the generated encryption key file is stored when `SECRETS_KEY` is not set. |
-| `SESSION_SECRET` | _(generated, kept in Redis)_ | No | Secret used to sign login cookies. |
+| `SESSION_SECRET` | _(generated, kept in the database)_ | No | Secret used to sign login cookies. |
 | `SESSION_COOKIE_SECURE` | `false` | No | Set `true` when the UI is only reached over HTTPS to mark the login cookie `Secure`. |
 | `ALLOW_EMBEDDING` | `false` | No | Set `true` to allow the UI to be framed by other sites (dashboards). |
 | `LOG_DIR` | `/logs` (Docker image) | No | Directory for rotated log files. |
 | `NODE_ENV` | _(unset)_ | No | Set to `test` by the test runner to suppress file logging. |
-| `REDIS_HOST` | `127.0.0.1` | No | External Redis hostname; if unset the bundled Redis starts instead. |
-| `REDIS_PORT` | `6379` | No | — |
-| `REDIS_PASSWORD` | _(unset)_ | No | — |
-| `REDIS_SSL` | _(unset)_ | No | Set to `true` for TLS. |
+| `DATABASE_URL` | `file:/config/iplayarr.db` (Docker) | No | SQLite database file. Env-only. |
+| `CONFIG_LOCATION` | `/config`, else `./config` | No | Directory for `iplayarr.db` when `DATABASE_URL` is unset. |
+| `REDIS_HOST` | _(unset)_ | No | Only for upgrading from a Redis-based version: set for the first start to import the old data, then remove. Also `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_SSL`. |
 
-See [REDIS.md](REDIS.md) for why the Redis connection variables can't themselves be stored in Redis-backed config.
+See [DATABASE.md](DATABASE.md) for the database and the one-time Redis import.

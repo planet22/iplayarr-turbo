@@ -210,7 +210,7 @@ class LiveTvService {
             days.push(ukDate(offset));
         }
         // One day at a time: each day is already a request per channel, and firing a whole week at
-        // the BBC at once gets TLS connections dropped. Responses are Redis-cached either way.
+        // the BBC at once gets TLS connections dropped. Responses are cached either way.
         const schedules: Awaited<ReturnType<typeof browseService.schedule>> = [];
         for (const day of channels.length === 0 ? [] : days) {
             schedules.push(...(await browseService.schedule(day).catch(() => [])));

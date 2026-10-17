@@ -1,14 +1,14 @@
 import axios from 'axios';
 
-import RedisCacheService from '../redis/redisCacheService';
+import DbCacheService from '../db/dbCacheService';
 
 class SkyhookService {
-    skyhookSeriesCache: RedisCacheService<{ tvdbId: string }[]>
-    skyhookEpisodeCache: RedisCacheService<{ episodes: any[] } | undefined>
+    skyhookSeriesCache: DbCacheService<{ tvdbId: string }[]>
+    skyhookEpisodeCache: DbCacheService<{ episodes: any[] } | undefined>
 
     constructor() {
-        this.skyhookSeriesCache = new RedisCacheService('skyhook_series_cache', 2700);
-        this.skyhookEpisodeCache = new RedisCacheService('skyhook_episode_cache', 86400);
+        this.skyhookSeriesCache = new DbCacheService('skyhook_series_cache', 2700);
+        this.skyhookEpisodeCache = new DbCacheService('skyhook_episode_cache', 86400);
     }
 
     async lookupSeriesDetails(seriesName: string, episodeTitle: string): Promise<{ series?: number, episode?: number } | undefined> {
