@@ -80,7 +80,7 @@ Subscribed downloads behave like any other download:
 
 ## Storage and API
 
-Subscriptions live in Redis under the `subscriptions` key (see [REDIS.md](REDIS.md)). The seen list is kept inside each subscription, so history pruning does not cause re-downloads. The UI uses these endpoints, under `/json-api/subscriptions`:
+Subscriptions live in the database under the `subscriptions` key (see [DATABASE.md](DATABASE.md)). The seen list is kept inside each subscription, so history pruning does not cause re-downloads. The UI uses these endpoints, under `/json-api/subscriptions`:
 
 | Endpoint | Does |
 | --- | --- |

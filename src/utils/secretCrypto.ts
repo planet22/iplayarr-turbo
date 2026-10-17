@@ -5,8 +5,8 @@ import path from 'path';
 import { App } from '../types/App';
 
 // Encryption of stored credentials (AES-256-GCM, field level). The point is that a copy of the
-// Redis data (an RDB snapshot, a backup, or an exposed Redis port) no longer contains usable
-// third-party credentials: the key lives OUTSIDE Redis - in the SECRETS_KEY environment variable, or
+// database file (iplayarr.db, or a backup of it) no longer contains usable
+// third-party credentials: the key lives OUTSIDE the database - in the SECRETS_KEY environment variable, or
 // a key file (SECRETS_KEY_FILE, default <CACHE_LOCATION>/secrets.key, created on first use).
 // It does not protect against someone who can read both the key and the data, or the running process.
 
@@ -39,7 +39,7 @@ function getKey(): Buffer | null {
         fs.mkdirSync(path.dirname(file), { recursive: true });
         const fresh = crypto.randomBytes(32);
         fs.writeFileSync(file, fresh.toString('hex'), { mode: 0o600, flag: 'wx' });
-        console.log(`Generated a new key for encrypting stored credentials at ${file}. Back it up with your Redis data; without it stored keys cannot be read.`);
+        console.log(`Generated a new key for encrypting stored credentials at ${file}. Back it up alongside your database backups; without it stored keys cannot be read.`);
         cachedKey = fresh;
     } catch (err: any) {
         console.error(`Credential encryption is OFF: ${err?.message ?? err}. Set SECRETS_KEY or make SECRETS_KEY_FILE writable.`);

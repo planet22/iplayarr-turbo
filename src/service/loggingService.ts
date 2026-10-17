@@ -3,7 +3,7 @@ import 'winston-daily-rotate-file';
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 
-import { redis } from '../service/redis/redisService';
+import { dbReady, prisma } from '../service/db/prismaService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { LogLine, LogLineLevel } from '../types/LogLine';
 import configService from './configService';
@@ -32,6 +32,23 @@ const fileLogger = isTest
     ),
         transports: [transport as DailyRotateFile],
 });
+
+const LOG_QUEUE = 'iplayarr_logs';
+const LOG_LIMIT = 250;
+
+const appendLog = async (logLine: LogLine): Promise<void> => {
+    await dbReady();
+    await prisma.queueItem.create({ data: { queue: LOG_QUEUE, value: JSON.stringify(logLine) } });
+    const overflow = await prisma.queueItem.findMany({
+        where: { queue: LOG_QUEUE },
+        orderBy: { id: 'desc' },
+        skip: LOG_LIMIT,
+        select: { id: true },
+    });
+    if (overflow.length) {
+        await prisma.queueItem.deleteMany({ where: { id: { in: overflow.map((r) => r.id) } } });
+    }
+};
 
 const loggingService = {
     log: (...params: any[]) => {
@@ -65,15 +82,13 @@ const loggingService = {
     publish: (logLine: LogLine) => {
         socketService.emit('log', logLine);
 
-        redis.multi()
-            .rpush('iplayarr_logs', JSON.stringify(logLine))
-            .ltrim('iplayarr_logs', -250, -1)
-            .exec();
+        appendLog(logLine).catch(() => undefined);
     },
 
     pushInitialLogs: async (socketId: string) => {
-        const logLines = await redis.lrange('iplayarr_logs', 0, -1);
-        logLines.map((line) => JSON.parse(line) as LogLine).forEach((logLine) => {
+        await dbReady();
+        const rows = await prisma.queueItem.findMany({ where: { queue: LOG_QUEUE }, orderBy: { id: 'asc' } });
+        rows.map((row) => JSON.parse(row.value) as LogLine).forEach((logLine) => {
             socketService.publish(socketId, 'log', logLine);
         });
     }

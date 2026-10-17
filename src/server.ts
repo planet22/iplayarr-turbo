@@ -14,9 +14,10 @@ import JsonApiRoute from './routes/JsonApiRoute';
 import { encryptStoredApps } from './service/appService';
 import { ensureNonDefaultPassword } from './service/auth/initialCredentialsService';
 import configService, { encryptStoredSettings } from './service/configService';
+import { dbReady, prisma } from './service/db/prismaService';
+import { importFromRedisIfNeeded } from './service/db/redisImportService';
 import liveSubscriptionService from './service/liveSubscriptionService';
 import loggingService from './service/loggingService';
-import { redis } from './service/redis/redisService';
 import socketService from './service/socketService';
 import StatisticsService from './service/stats/StatisticsService';
 import taskService from './service/taskService';
@@ -88,10 +89,11 @@ app.use('/auth', AuthRoute);
 // Healthcheck endpoint (unauthenticated)
 app.get('/ping', async (_req: Request, res: Response) => {
     try {
-        await redis.ping();
+        await dbReady();
+        await prisma.$queryRaw`SELECT 1`;
         res.json({ status: 'OK' });
     } catch (error : any) {
-        loggingService.error('Healthcheck: Redis error', error?.message);
+        loggingService.error('Healthcheck: database error', error?.message);
         res.status(503).json({ status: 'ERROR' });
     }
 });
@@ -104,7 +106,7 @@ app.use((req: Request, _: Response, next: NextFunction) => {
     loggingService.debug('Request received:');
     loggingService.debug('Method:', req.method);
     // Credentials (API/stream keys in the query, cookies, passwords in bodies) must not reach the
-    // debug log: it is persisted to Redis and pushed over sockets to the UI.
+    // debug log: it is persisted to the database and pushed over sockets to the UI.
     loggingService.debug('URL:', redactUrl(req.url));
     loggingService.debug('Headers:', redactHeaders(req.headers));
     loggingService.debug('Body:', redactBody(req.body));
@@ -156,7 +158,24 @@ io.use(async (socket, next) => {
 });
 socketService.registerIo(io);
 
+const startServer = () => {
+    server.listen(port, () => {
+        loggingService.log(`Server running at http://localhost:${port}`);
+        StatisticsService.setUptime();
+    });
+
+    //Cron
+    taskService.init();
+
+    liveSubscriptionService.resync();
+};
+
 (async () => {
+    await dbReady();
+    await importFromRedisIfNeeded(loggingService.log).catch((err) =>
+        loggingService.error('Redis import failed', err?.message ?? err)
+    );
+    startServer();
     await encryptStoredSettings();
     await encryptStoredApps();
     await ensureNonDefaultPassword();
@@ -178,13 +197,3 @@ socketService.registerIo(io);
         await configService.setParameter(IplayarrParameter.STREAM_KEY, uuidv4());
     }
 })();
-
-server.listen(port, () => {
-    loggingService.log(`Server running at http://localhost:${port}`);
-    StatisticsService.setUptime();
-});
-
-//Cron
-taskService.init();
-
-liveSubscriptionService.resync();

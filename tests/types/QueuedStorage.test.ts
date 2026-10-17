@@ -1,110 +1,57 @@
-import { redis } from '../../src/service/redis/redisService';
 import { QueuedStorage } from '../../src/types/QueuedStorage';
-
-jest.mock('../../src/service/redis/redisService', () => ({
-    redis: {
-        keys: jest.fn(),
-        mget: jest.fn(),
-        get: jest.fn(),
-        set: jest.fn(),
-        del: jest.fn(),
-        save: jest.fn(),
-    },
-}));
 
 describe('QueuedStorage', () => {
     let storage: QueuedStorage;
 
     beforeEach(() => {
         storage = new QueuedStorage();
-        jest.clearAllMocks();
     });
 
-    it('should get all values', async () => {
-        (redis.keys as jest.Mock).mockResolvedValue(['key1', 'key2']);
-        (redis.mget as jest.Mock).mockResolvedValue([JSON.stringify({ a: 1 }), JSON.stringify({ b: 2 })]);
-
-        const values = await storage.values();
-
-        expect(redis.keys).toHaveBeenCalled();
-        expect(redis.mget).toHaveBeenCalledWith(['key1', 'key2']);
-        expect(values).toEqual([{ a: 1 }, { b: 2 }]);
+    it('returns undefined for a missing key', async () => {
+        expect(await storage.getItem('missing')).toBeUndefined();
     });
 
-    it('should get all keys', async () => {
-        (redis.keys as jest.Mock).mockResolvedValue(['key1', 'key2']);
-
-        const keys = await storage.keys();
-
-        expect(redis.keys).toHaveBeenCalled();
-        expect(keys).toEqual(['key1', 'key2']);
-    });
-
-    it('should get a single item', async () => {
-        (redis.get as jest.Mock).mockResolvedValue(JSON.stringify({ a: 1 }));
-
-        const item = await storage.getItem('key1');
-
-        expect(redis.get).toHaveBeenCalledWith('key1');
-        expect(item).toEqual({ a: 1 });
-    });
-
-    it('should return undefined if getItem returns null', async () => {
-        (redis.get as jest.Mock).mockResolvedValue(null);
-
-        const item = await storage.getItem('missing');
-
-        expect(redis.get).toHaveBeenCalledWith('missing');
-        expect(item).toBeUndefined();
-    });
-
-    it('should set an item', async () => {
-        (redis.set as jest.Mock).mockResolvedValue('OK');
-        (redis.save as jest.Mock).mockResolvedValue('OK');
-
+    it('stores and reads back JSON values', async () => {
         await storage.setItem('key1', { a: 1 });
+        await storage.setItem('key2', [1, 2, 3]);
+        await storage.setItem('key3', 'text');
 
-        expect(redis.set).toHaveBeenCalledWith('key1', JSON.stringify({ a: 1 }));
+        expect(await storage.getItem('key1')).toEqual({ a: 1 });
+        expect(await storage.getItem('key2')).toEqual([1, 2, 3]);
+        expect(await storage.getItem('key3')).toBe('text');
     });
 
-    it('should remove an item', async () => {
-        (redis.del as jest.Mock).mockResolvedValue(1);
-        (redis.save as jest.Mock).mockResolvedValue('OK');
-
-        await storage.removeItem('key1');
-
-        expect(redis.del).toHaveBeenCalledWith('key1');
+    it('overwrites an existing key', async () => {
+        await storage.setItem('key', 1);
+        await storage.setItem('key', 2);
+        expect(await storage.getItem('key')).toBe(2);
+        expect(await storage.keys()).toEqual(['key']);
     });
 
-    it('should call save after altering changes', async () => {
-        (redis.set as jest.Mock).mockResolvedValue('OK');
-        (redis.del as jest.Mock).mockResolvedValue(1);
-        (redis.save as jest.Mock).mockResolvedValue('OK');
+    it('lists all keys and values', async () => {
+        await storage.setItem('key1', { a: 1 });
+        await storage.setItem('key2', { b: 2 });
 
-        await storage.setItem('a', { foo: 'bar' });
-        await storage.removeItem('a');
-
-        expect(redis.save).toHaveBeenCalledTimes(2);
+        expect((await storage.keys()).sort()).toEqual(['key1', 'key2']);
+        expect(await storage.values()).toEqual(expect.arrayContaining([{ a: 1 }, { b: 2 }]));
     });
 
-    it('should queue operations in order', async () => {
-        const order: string[] = [];
+    it('removes an item, and removing a missing key is not an error', async () => {
+        await storage.setItem('key', 1);
+        await storage.removeItem('key');
+        await storage.removeItem('never-existed');
+        expect(await storage.getItem('key')).toBeUndefined();
+    });
 
-        (redis.set as jest.Mock).mockImplementation(async (key) => {
-            order.push(`set:${key}`);
-            return 'OK';
-        });
-        (redis.save as jest.Mock).mockImplementation(async () => {
-            order.push('save');
-            return 'OK';
-        });
+    it('keeps writes in order when they are not awaited', async () => {
+        const writes = [1, 2, 3, 4, 5].map((n) => storage.setItem('key', n));
+        await Promise.all(writes);
+        expect(await storage.getItem('key')).toBe(5);
+    });
 
-        await Promise.all([
-            storage.setItem('key1', { a: 1 }),
-            storage.setItem('key2', { b: 2 }),
-            storage.setItem('key3', { c: 3 }),
-        ]);
-
-        expect(order).toEqual(['set:key1', 'save', 'set:key2', 'save', 'set:key3', 'save']);
+    it('a failed operation does not block later ones', async () => {
+        await expect(storage.setItem('key', 1n as any)).rejects.toThrow();
+        await storage.setItem('key', 'ok');
+        expect(await storage.getItem('key')).toBe('ok');
     });
 });

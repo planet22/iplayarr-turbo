@@ -14,7 +14,7 @@ jest.mock('axios');
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/facade/scheduleFacade');
 jest.mock('../../src/service/loggingService');
-jest.mock('../../src/service/redis/redisCacheService', () => ({
+jest.mock('../../src/service/db/dbCacheService', () => ({
     __esModule: true,
     default: class {
         async getOr(key: string, fn: (key: string) => Promise<unknown>) {

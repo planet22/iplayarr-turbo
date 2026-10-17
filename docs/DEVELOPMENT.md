@@ -5,13 +5,12 @@ Contributor-facing setup. See the main [README.md](../README.md#development-setu
 ## Prerequisites
 
 - Node.js — version pinned in `.node-version` (currently tracks Node 24, matching the Dockerfile's `node:24-alpine3.24`).
-- Docker — for a local Redis instance (`npm run serve:redis`). You can point at any other reachable Redis instead via `REDIS_HOST`/`REDIS_PORT` (see [REDIS.md](REDIS.md)).
+- Nothing else: the database is a SQLite file created automatically at `./config/iplayarr.db` (override with `DATABASE_URL`, see [DATABASE.md](DATABASE.md)). After changing `prisma/schema.prisma`, run `npm run prisma:generate` and update the matching statements in `src/service/db/prismaService.ts`.
 
 ## Setup
 
 ```bash
 npm run install:both   # installs deps for both / (backend) and /frontend
-npm run serve:redis    # starts Redis via docker-compose.redis.yml
 npm run dev            # runs backend (nodemon) + frontend (vite dev server) concurrently, DEBUG=true
 ```
 

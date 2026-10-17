@@ -14,6 +14,10 @@ WORKDIR /app
 COPY package*.json ./
 COPY frontend/package*.json ./frontend/
 RUN npm run install:both
+# The Prisma client is generated into node_modules, so every stage that installs deps needs this.
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npx prisma generate
 
 # ---- build: compile backend (tsc) and frontend (vue-cli-service) ----
 FROM deps AS build
@@ -27,8 +31,11 @@ FROM base AS prod-deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npx prisma generate
 
-# ---- redis: source of the bundled redis-server binary ----
+# ---- redis: only used to import data from older versions that stored it in Redis ----
 FROM redis:8-alpine3.23 AS redis
 
 # ---- runtime-base: everything the app needs to run, shared by both the dev and
@@ -68,6 +75,7 @@ RUN wget -qO- https://github.com/get-iplayer/get_iplayer/archive/v${GET_IPLAYER_
 ENV GET_IPLAYER_EXEC=/iplayer/get_iplayer
 ENV STORAGE_LOCATION=/node-persist
 ENV CACHE_LOCATION=/data
+ENV DATABASE_URL=file:/config/iplayarr.db
 
 WORKDIR /ytdlp
 
@@ -76,7 +84,8 @@ RUN wget -q https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && 
 
 ENV YTDLP_EXEC=/ytdlp/yt-dlp
 
-# Copy Redis binary from the Redis Alpine image
+# Redis binary: kept solely so docker_entry.sh can read an old /config/dump.rdb once, for the
+# one-time import into SQLite. Nothing runs Redis during normal operation any more.
 WORKDIR /redis
 COPY --from=redis /usr/local/bin/redis-server /redis/redis-server
 RUN chmod +x /redis/redis-server

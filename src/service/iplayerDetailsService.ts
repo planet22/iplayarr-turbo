@@ -5,10 +5,10 @@ import { IPlayerDetails } from '../types/IPlayerDetails';
 import { IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { withRetry } from '../utils/retry';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
-import RedisCacheService from './redis/redisCacheService';
+import DbCacheService from './db/dbCacheService';
 
 class IPlayerDetailsService {
-    metadataCache: RedisCacheService<IPlayerMetadataResponse> = new RedisCacheService('metadata_cache', 86400); // 24 hours
+    metadataCache: DbCacheService<IPlayerMetadataResponse> = new DbCacheService('metadata_cache', 86400); // 24 hours
     // ids BBC answered 404 for (e.g. live channel ids like bbc_two_england, which several pages
     // ask details for) mapped to when to try again - otherwise every request repeats the BBC round trip.
     notFound: Map<string, number> = new Map();
