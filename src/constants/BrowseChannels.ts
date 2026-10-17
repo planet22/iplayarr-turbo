@@ -22,4 +22,10 @@ export const BrowseHomeRails: { id: string; title: string; path: string }[] = [
     // IBL has no home/highlights (404, verified live); BBC One's channel highlights is the closest lead rail.
     { id: 'highlights', title: 'Featured', path: 'channels/bbc_one_london/highlights' },
     { id: 'popular', title: 'Most Popular', path: 'groups/popular/episodes?per_page=30' },
+    { id: 'highlights_bbc_two', title: 'On BBC Two', path: 'channels/bbc_two_england/highlights' },
+    { id: 'highlights_bbc_three', title: 'On BBC Three', path: 'channels/bbc_three/highlights' },
+    { id: 'highlights_bbc_four', title: 'On BBC Four', path: 'channels/bbc_four/highlights' },
 ];
+
+// How many randomly-chosen categories get their own rail on the home screen.
+export const BrowseHomeRandomCategories = 2;
