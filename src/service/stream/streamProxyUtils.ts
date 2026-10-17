@@ -197,7 +197,7 @@ function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: 
     if (sessionId) {
         if (seg !== undefined && !isNaN(seg)) {
             streamSessionService.recordSegmentDelivered(sessionId, seg, bytes);
-        } else {
+        } else if (bytes > 0) {
             streamSessionService.addBytesTransferred(sessionId, bytes);
         }
     }
@@ -298,8 +298,14 @@ export async function proxyUrl(
                 }
             });
             upstreamRes.pipe(res);
+            // Bytes are counted as they stream, so the Streaming page's Transferred figure moves while a
+            // segment downloads instead of jumping once it finishes - and it is the real count, where
+            // content-length is missing for a chunked response and wrong for an aborted one.
+            if (sessionId) {
+                upstreamRes.on('data', (chunk: Buffer) => streamSessionService.addBytesTransferred(sessionId, chunk.length));
+            }
             upstreamRes.on('end', () => {
-                afterSegmentServed(req, sessionId, parseInt((upstreamRes.headers['content-length'] as string) ?? '0') || 0);
+                afterSegmentServed(req, sessionId, 0);
                 resolve();
             });
             upstreamRes.on('error', fail);
@@ -313,6 +319,8 @@ export async function proxyUrl(
 // Overridable for hosts with more (or less) headroom.
 export const maxConcurrentRemuxes: number = Number(process.env.STREAM_MAX_REMUXES) || 4;
 let activeRemuxes = 0;
+// How long a remux's ffmpeg gets to exit after being asked to, before it is killed outright.
+export const ffmpegKillGraceMs = 3000;
 
 // Remuxes a resolved CDN URL into MKV via ffmpeg and pipes the result to `res`. No Range support -
 // a live remux has no fixed byte offsets to seek within. No manifest rewriting needed here either -
@@ -350,18 +358,41 @@ async function runRemux(url: string, pid: string, res: Response, sessionId?: str
     // header. Neither `-bsf:a aac_adtstoasc` nor an explicit -map fixes that (tried live against both
     // on-demand and live inputs); re-encoding the audio does, at negligible CPU cost.
     const ffmpeg = spawn('ffmpeg', ['-i', url, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-f', 'matroska', 'pipe:1']);
-    let bytesWritten = 0;
 
-    res.on('close', () => ffmpeg.kill());
+    // Ending ffmpeg when the client goes away needs more than a polite SIGTERM. With nobody reading
+    // its stdout any more, ffmpeg sits blocked writing into the full pipe and never gets round to
+    // acting on the signal - the process (and this remux's concurrency slot) then lives on for ever,
+    // which is what a plain client disconnect used to do. So: close our end of stdout first (its
+    // blocked write then fails and it exits), ask politely, and SIGKILL if it still hasn't gone.
+    let exited = false;
+    const stopFfmpeg = (): void => {
+        ffmpeg.stdout.unpipe?.(res);
+        ffmpeg.stdout.destroy?.();
+        ffmpeg.kill('SIGTERM');
+        setTimeout(() => {
+            if (!exited) {
+                ffmpeg.kill('SIGKILL');
+            }
+        }, ffmpegKillGraceMs).unref();
+    };
+    ffmpeg.on('close', () => (exited = true));
+    res.on('close', stopFfmpeg);
+    // The client can leave while we were still checking for ffmpeg / starting the relay above, before
+    // there was anything to attach a close handler to - that close has already happened.
+    if (res.destroyed || res.writableEnded) {
+        stopFfmpeg();
+    }
     ffmpeg.stderr.on('data', (data) => loggingService.debug(pid, data.toString()));
-    ffmpeg.stdout.on('data', (chunk: Buffer) => (bytesWritten += chunk.length));
+    // Counted as it streams, not once at the end: a remux can run for hours, and the Streaming page's
+    // Transferred figure and throughput graph need to move while it does.
+    ffmpeg.stdout.on('data', (chunk: Buffer) => {
+        if (sessionId) {
+            streamSessionService.addBytesTransferred(sessionId, chunk.length);
+        }
+    });
 
     res.setHeader('Content-Type', 'video/x-matroska');
     ffmpeg.stdout.pipe(res);
 
     await new Promise<void>((resolve) => ffmpeg.on('close', () => resolve()));
-
-    if (sessionId && bytesWritten > 0) {
-        streamSessionService.addBytesTransferred(sessionId, bytesWritten);
-    }
 }

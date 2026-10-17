@@ -4,7 +4,7 @@ import { StreamClient } from '../../types/enums/StreamClient';
 import { StreamMode } from '../../types/enums/StreamMode';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { QueuedStorage } from '../../types/QueuedStorage';
-import { StreamSession } from '../../types/StreamSession';
+import { StreamSession, ThroughputSeries } from '../../types/StreamSession';
 import { VideoEventType } from '../../types/VideoEvent';
 import configService from '../configService';
 import socketService from '../socketService';
@@ -16,9 +16,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // nothing (manifest re-fetch, segment fetch) has touched it for this long.
 const inactivityTimeoutMs = 90_000;
 const sweepIntervalMs = 20_000;
-// Segment/byte events fire once per proxied segment per viewer - far more often than the Streaming
-// page needs a repaint - so those (and only those) are coalesced to at most one emit per interval.
-const emitThrottleMs = 750;
+// Segment/byte events fire many times per second per viewer (bytes are reported as each chunk
+// streams), far more often than a repaint needs, so those (and only those) are coalesced to at most
+// one emit per interval. 250ms reads as live; it is affordable because an update is only the active
+// sessions (~1 KB), not the history - see emitActive.
+const emitThrottleMs = 250;
 const storage: QueuedStorage = new QueuedStorage();
 
 let active: StreamSession[] = [];
@@ -34,11 +36,56 @@ async function getHistory(): Promise<StreamSession[]> {
     return (await storage.getItem('streamHistory')) ?? [];
 }
 
+// Throughput is kept as fixed-width buckets over the last minute: fine enough (500ms) for a sparkline
+// that reads as live, bounded (120 numbers) so a long session can't grow without limit.
+export const throughputStepMs = 500;
+export const throughputWindowMs = 60_000;
+const throughputMaxBuckets = throughputWindowMs / throughputStepMs;
+
+export function sampleThroughput(session: StreamSession, bytes: number, at: number = Date.now()): void {
+    if (!(bytes > 0)) {
+        return;
+    }
+    const bucket = Math.floor(at / throughputStepMs);
+    let series = session.throughput;
+    // Quiet for a whole window or more: everything already held has aged out, so start afresh rather
+    // than zero-filling a long gap.
+    if (!series || bucket - Math.floor(series.start / series.step) - series.bytes.length >= throughputMaxBuckets) {
+        series = session.throughput = { start: bucket * throughputStepMs, step: throughputStepMs, bytes: [] };
+    }
+    const index = bucket - Math.floor(series.start / series.step);
+    if (index < 0) {
+        return;
+    }
+    while (series.bytes.length <= index) {
+        series.bytes.push(0);
+    }
+    series.bytes[index] += bytes;
+    if (series.bytes.length > throughputMaxBuckets) {
+        const drop = series.bytes.length - throughputMaxBuckets;
+        series.bytes.splice(0, drop);
+        series.start += drop * series.step;
+    }
+}
+
+// A finished session keeps the last minute at 1s resolution (merging pairs of buckets): the sparkline
+// of a past stream doesn't need the half-second detail, and the history holds up to 200 of these.
+export function downsampleThroughput(series?: ThroughputSeries): ThroughputSeries | undefined {
+    if (!series || series.bytes.length === 0) {
+        return undefined;
+    }
+    const merged: number[] = [];
+    for (let i = 0; i < series.bytes.length; i += 2) {
+        merged.push(series.bytes[i] + (series.bytes[i + 1] ?? 0));
+    }
+    return { start: series.start, step: series.step * 2, bytes: merged };
+}
+
 async function archive(session: StreamSession, endReason?: string): Promise<void> {
     active = active.filter((s) => s.id !== session.id);
     stopHandlers.delete(session.id);
     const history: StreamSession[] = await getHistory();
-    history.push({ ...session, endedAt: new Date(), endReason });
+    history.push({ ...session, throughput: downsampleThroughput(session.throughput), endedAt: new Date(), endReason });
     await storage.setItem('streamHistory', history.slice(-historyLimit));
     videoEventService.record(
         VideoEventType.STREAM_ENDED,
@@ -229,6 +276,7 @@ const streamSessionService = {
         session.currentSegmentIndex = index;
         if (bytes) {
             session.bytesTransferred = (session.bytesTransferred ?? 0) + bytes;
+            sampleThroughput(session, bytes);
         }
         session.lastActivityAt = new Date();
         emitThrottled();
@@ -238,6 +286,7 @@ const streamSessionService = {
         const session: StreamSession | undefined = active.find((s) => s.id === id);
         if (session && bytes) {
             session.bytesTransferred = (session.bytesTransferred ?? 0) + bytes;
+            sampleThroughput(session, bytes);
             session.lastActivityAt = new Date();
             emitThrottled();
         }

@@ -27,6 +27,8 @@
                 <col style="width: 26ch" />
                 <col style="width: 10ch" />
                 <col style="width: 13ch" />
+                <!-- Rate: the throughput sparkline + figure. Same width in the history table below. -->
+                <col style="width: 170px" />
                 <col style="width: 110px" />
                 <col style="width: 64px" />
             </colgroup>
@@ -44,6 +46,7 @@
                     <th />
                     <th>Duration</th>
                     <th>Transferred</th>
+                    <th title="Throughput over the last minute, and the rate right now (finished streams: their final minute, and the session average)">Rate</th>
                     <th>Segments</th>
                     <th>Action</th>
                 </tr>
@@ -80,6 +83,9 @@
                     <td />
                     <td data-title="Duration">{{ formatDuration(session.startedAt) }}</td>
                     <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
+                    <td data-title="Rate">
+                        <ThroughputSpark :throughput="session.throughput" :now="now" :bytes-transferred="session.bytesTransferred ?? 0" />
+                    </td>
                     <td data-title="Segments">
                         <span v-if="session.live" class="liveBadge"><span class="liveDot" />Live</span>
                         <SegmentActivityStrip
@@ -101,7 +107,7 @@
                     </td>
                 </tr>
                 <tr v-if="streams.active.length == 0">
-                    <td colspan="14" class="empty">No streams currently playing</td>
+                    <td colspan="15" class="empty">No streams currently playing</td>
                 </tr>
             </tbody>
         </table>
@@ -123,6 +129,7 @@
                 <col style="width: 26ch" />
                 <col style="width: 10ch" />
                 <col style="width: 13ch" />
+                <col style="width: 170px" />
                 <col style="width: 110px" />
                 <!-- No per-row action here (nothing to stop on a finished stream) - kept so this
                      column still lines up under the active-streams table's Action column. -->
@@ -142,6 +149,7 @@
                     <th>Started</th>
                     <th>Duration</th>
                     <th>Transferred</th>
+                    <th title="Throughput over the last minute, and the rate right now (finished streams: their final minute, and the session average)">Rate</th>
                     <th>Segments</th>
                     <th />
                 </tr>
@@ -178,10 +186,19 @@
                     <td data-title="Started">{{ formatDate(session.startedAt) }}</td>
                     <td data-title="Duration">{{ formatDuration(session.startedAt, session.endedAt) }}</td>
                     <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
+                    <td data-title="Rate">
+                        <ThroughputSpark
+                            :throughput="session.throughput"
+                            :now="now"
+                            :ended-at="session.endedAt"
+                            :started-at="session.startedAt"
+                            :bytes-transferred="session.bytesTransferred ?? 0"
+                        />
+                    </td>
                     <td data-title="Segments">
-                        <span v-if="session.live" class="liveBadge">Live</span>
+                        <!-- Live streams have no segment total to show once they've ended - left blank. -->
                         <SegmentActivityStrip
-                            v-else-if="session.totalSegments"
+                            v-if="!session.live && session.totalSegments"
                             :total="session.totalSegments"
                             :delivered="session.deliveredSegments ?? []"
                             :current-segment-index="session.currentSegmentIndex ?? null"
@@ -191,7 +208,7 @@
                     <td />
                 </tr>
                 <tr v-if="reversedHistory.length == 0">
-                    <td colspan="14" class="empty">No streaming history yet</td>
+                    <td colspan="15" class="empty">No streaming history yet</td>
                 </tr>
             </tbody>
         </table>
@@ -200,7 +217,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -218,6 +235,7 @@ import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
 import SettingsChips from '../components/streaming/SettingsChips.vue';
+import ThroughputSpark from '../components/streaming/ThroughputSpark.vue';
 
 const streams = inject('streams');
 
@@ -259,11 +277,25 @@ function loadMissingDetails() {
     [...new Set(pids)].filter(Boolean).forEach(loadDetails);
 }
 
+// Session details are only needed when a pid appears for the first time, not on every update (the
+// active sessions now change several times a second), so watch the set of pids rather than `streams`.
+const pidSignature = computed(() =>
+    [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid).join(',')
+);
+
+// A running session's Duration is wall-clock time since it started, so it needs a clock of its own:
+// computed only at render, it moved whenever a socket update happened to arrive - unevenly, and
+// not at all between updates.
+const now = ref(Date.now());
+let clock;
+
 onMounted(() => {
     loadMissingDetails();
     loadChannelLogos();
+    clock = setInterval(() => (now.value = Date.now()), 1000);
 });
-watch(streams, loadMissingDetails);
+onBeforeUnmount(() => clearInterval(clock));
+watch(pidSignature, loadMissingDetails);
 
 const clientLabels = {
     GET_IPLAYER: 'iplayer',
@@ -298,7 +330,7 @@ function formatDate(value) {
 
 function formatDuration(start, end) {
     if (!start) return '';
-    const totalSeconds = Math.max(0, Math.floor(((end ? new Date(end) : new Date()) - new Date(start)) / 1000));
+    const totalSeconds = Math.max(0, Math.floor(((end ? new Date(end) : now.value) - new Date(start)) / 1000));
     const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
     const seconds = String(totalSeconds % 60).padStart(2, '0');
     return `${minutes}:${seconds}`;

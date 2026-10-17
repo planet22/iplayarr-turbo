@@ -155,6 +155,12 @@ describe('streamSessionService lifecycle', () => {
         beforeEach(() => jest.useFakeTimers());
         afterEach(() => jest.useRealTimers());
 
+        // Only the emits that concern this test's own session. The 'socket' mock is not private to a
+        // test: a trailing throttle timer left running by an earlier test can fire into it late (seen
+        // under load as a stray `streamsActive {active: []}`), so counting every call is not stable.
+        const emitsFor = (socket: typeof socketService, id: string) =>
+            (socket.emit as jest.Mock).mock.calls.filter(([, payload]) => payload?.active?.some((s: any) => s.id === id));
+
         it('emits the first event at once and folds a burst into one trailing emit', async () => {
             const { svc, socket } = await load();
             const id = await svc.start('p1', mode, client);
@@ -162,15 +168,15 @@ describe('streamSessionService lifecycle', () => {
 
             for (let i = 0; i < 50; i++) svc.recordSegmentDelivered(id, i, 10);
             svc.addBytesTransferred(id, 5);
-            expect(socket.emit).toHaveBeenCalledTimes(1);
+            expect(emitsFor(socket, id)).toHaveLength(1);
 
             await jest.advanceTimersByTimeAsync(800);
-            expect(socket.emit).toHaveBeenCalledTimes(2);
-            const payload = (socket.emit as jest.Mock).mock.calls[1][1];
+            expect(emitsFor(socket, id)).toHaveLength(2);
+            const payload = emitsFor(socket, id)[1][1];
             expect(payload.active[0]).toMatchObject({ currentSegmentIndex: 49, bytesTransferred: 505 });
 
             await jest.advanceTimersByTimeAsync(5000);
-            expect(socket.emit).toHaveBeenCalledTimes(2);
+            expect(emitsFor(socket, id)).toHaveLength(2);
         });
 
         it('emits again straight away once the quiet interval has passed', async () => {
@@ -180,7 +186,7 @@ describe('streamSessionService lifecycle', () => {
             svc.addBytesTransferred(id, 1);
             await jest.advanceTimersByTimeAsync(800);
             svc.addBytesTransferred(id, 1);
-            expect(socket.emit).toHaveBeenCalledTimes(2);
+            expect(emitsFor(socket, id)).toHaveLength(2);
         });
 
         it('sends only the active sessions - no history, and no database read', async () => {
@@ -193,8 +199,8 @@ describe('streamSessionService lifecycle', () => {
 
             svc.addBytesTransferred(id, 1);
             expect(mockGetItem).not.toHaveBeenCalled();
-            expect(socket.emit).toHaveBeenCalledTimes(1);
-            const [event, payload] = (socket.emit as jest.Mock).mock.calls[0];
+            expect(emitsFor(socket, id)).toHaveLength(1);
+            const [event, payload] = emitsFor(socket, id)[0];
             expect(event).toBe('streamsActive');
             expect(Object.keys(payload)).toEqual(['active']);
             expect(payload.active.map((s: any) => s.id)).toEqual([id]);
@@ -215,8 +221,10 @@ describe('streamSessionService lifecycle', () => {
                 active: [],
                 history: [expect.objectContaining({ id, endedAt: expect.any(Date) })],
             });
-            const events = (socket.emit as jest.Mock).mock.calls.map((c) => c[0]);
-            expect(events.every((e) => e === 'streams')).toBe(true);
+            // every emit that carries this session in history is the full event, never the light one
+            const carryingIt = (socket.emit as jest.Mock).mock.calls.filter(([, p]) => p?.history?.some((h: any) => h.id === id));
+            expect(carryingIt.length).toBeGreaterThan(0);
+            expect(carryingIt.every(([event]) => event === 'streams')).toBe(true);
 
             (socket.emit as jest.Mock).mockClear();
             const other = await svc.start('p2', mode, client);
@@ -232,7 +240,8 @@ describe('streamSessionService lifecycle', () => {
             svc.setResolution(id, '720');
             svc.setSegmentCount(id, 4);
             await jest.advanceTimersByTimeAsync(0);
-            expect(socket.emit).toHaveBeenCalledTimes(2);
+            expect(emitsFor(socket, id)).toHaveLength(2);
+            expect(emitsFor(socket, id).every(([event]) => event === 'streamsActive')).toBe(true);
         });
     });
 

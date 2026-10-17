@@ -114,9 +114,11 @@ const pageSetup = async () => {
         });
 
         // Lightweight, much more frequent updates (segments, bytes, resolution, a session starting):
-        // only the live sessions, leaving the history already held untouched.
+        // only the live sessions. Assigning just `active` (not a new `streams` object) means nothing
+        // that depends only on the history - its sorted copy, the paged table - is recomputed or
+        // re-rendered by these updates.
         socket.value.on('streamsActive', (data) => {
-            streams.value = { ...streams.value, active: data.active };
+            streams.value.active = data.active;
         });
 
         socket.value.on('videoEvents', (data) => {

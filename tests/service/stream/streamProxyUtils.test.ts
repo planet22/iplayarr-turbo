@@ -7,7 +7,7 @@ import { ensureDnsRelayRunning } from '../../../src/service/dnsRelayService';
 import { requestTimeoutMs } from '../../../src/service/stream/bbcHttp';
 import { clearPrefetch, takePrefetched } from '../../../src/service/stream/segmentPrefetch';
 import { linkSegments,register, resolve as resolveToken } from '../../../src/service/stream/segmentUrlRegistry';
-import { clearPlaylistCache, maxConcurrentRemuxes, proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
+import { clearPlaylistCache, ffmpegKillGraceMs, maxConcurrentRemuxes, proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
 
@@ -332,17 +332,53 @@ describe('proxyUrl', () => {
     });
 
     it('passes binary segments through and records the delivery', async () => {
-        mockGet(https, [{ status: 206, headers: { 'content-type': 'video/mp2t', 'content-length': '100', other: 'x' } }]);
+        mockGet(https, [{ status: 206, headers: { 'content-type': 'video/mp2t', 'content-length': '100', other: 'x' }, body: 'x'.repeat(100) }]);
         const res = makeRes();
         await proxyUrl('https://cdn/s.ts', makeReq({ seg: '4' }), res, 5, 'sess');
         expect(res.status).toHaveBeenCalledWith(206);
         expect(res.setHeader).toHaveBeenCalledWith('content-length', '100');
-        expect(streamSessionService.recordSegmentDelivered).toHaveBeenCalledWith('sess', 4, 100);
+        // the 100 bytes were counted as they streamed; delivery adds the segment without recounting them
+        expect(streamSessionService.addBytesTransferred).toHaveBeenCalledWith('sess', 100);
+        expect(streamSessionService.recordSegmentDelivered).toHaveBeenCalledWith('sess', 4, 0);
     });
 
-    it('adds bytes when there is no segment index', async () => {
-        mockGet(https, [{ status: 200, headers: { 'content-length': '7' } }]);
+    it('counts bytes as each chunk streams, exactly once, and without content-length', async () => {
+        const reqs = mockGet(https, [{ status: 200, headers: { 'transfer-encoding': 'chunked' } }]);
+        const res = makeRes();
+        const p = proxyUrl('https://cdn/s.ts', makeReq(), res, 5, 'sess');
+        await new Promise((r) => setImmediate(r));
+        void reqs;
+        await p;
+        expect(streamSessionService.addBytesTransferred).not.toHaveBeenCalled();
+
+        // several chunks: each reported when it arrives (mockGet only emits one body, so drive it directly)
+        (https.get as jest.Mock).mockImplementation((_url: string, _opts: any, cb: any) => {
+            const upstreamRes: any = new EventEmitter();
+            upstreamRes.statusCode = 200;
+            upstreamRes.headers = {};
+            upstreamRes.pipe = jest.fn();
+            const upstream: any = new EventEmitter();
+            upstream.destroy = jest.fn();
+            setImmediate(() => {
+                cb(upstreamRes);
+                upstreamRes.emit('data', Buffer.alloc(10));
+                upstreamRes.emit('data', Buffer.alloc(25));
+                upstreamRes.emit('data', Buffer.alloc(5));
+                upstreamRes.emit('end');
+            });
+            return upstream;
+        });
+        jest.clearAllMocks();
+        await proxyUrl('https://cdn/t.ts', makeReq({ seg: '2' }), makeRes(), 5, 'sess');
+        const added = (streamSessionService.addBytesTransferred as jest.Mock).mock.calls.map((c) => c[1]);
+        expect(added).toEqual([10, 25, 5]);
+        expect(streamSessionService.recordSegmentDelivered).toHaveBeenCalledWith('sess', 2, 0);
+    });
+
+    it('adds no bytes at the end when there is no segment index (they were counted as they streamed)', async () => {
+        mockGet(https, [{ status: 200, headers: { 'content-length': '7' }, body: 'seven!!' }]);
         await proxyUrl('https://cdn/s.ts', makeReq(), makeRes(), 5, 'sess');
+        expect(streamSessionService.addBytesTransferred).toHaveBeenCalledTimes(1);
         expect(streamSessionService.addBytesTransferred).toHaveBeenCalledWith('sess', 7);
     });
 
@@ -393,6 +429,89 @@ describe('remuxToMkv', () => {
         expect(ffmpeg.stdout.pipe).toHaveBeenCalledWith(res);
         expect(ffmpeg.kill).toHaveBeenCalled();
         expect(streamSessionService.addBytesTransferred).toHaveBeenCalledWith('sess', 10);
+    });
+
+    describe('stopping ffmpeg when the client goes away', () => {
+        const fakeFfmpeg = () => {
+            const ffmpeg: any = new EventEmitter();
+            ffmpeg.stdout = Object.assign(new EventEmitter(), { pipe: jest.fn(), unpipe: jest.fn(), destroy: jest.fn() });
+            ffmpeg.stderr = new EventEmitter();
+            ffmpeg.kill = jest.fn();
+            (spawn as jest.Mock).mockReturnValue(ffmpeg);
+            return ffmpeg;
+        };
+        const started = () => new Promise((r) => setImmediate(r));
+
+        beforeEach(() => jest.useFakeTimers({ doNotFake: ['setImmediate'] }));
+        afterEach(() => jest.useRealTimers());
+
+        it('closes its end of stdout (so a blocked write fails) and then asks it to stop', async () => {
+            const ffmpeg = fakeFfmpeg();
+            const res = makeRes();
+            const job = remuxToMkv('u', 'pid', res);
+            await started();
+            res.emit('close');
+
+            expect(ffmpeg.stdout.unpipe).toHaveBeenCalledWith(res);
+            expect(ffmpeg.stdout.destroy).toHaveBeenCalled();
+            expect(ffmpeg.kill).toHaveBeenCalledWith('SIGTERM');
+            expect(ffmpeg.kill).not.toHaveBeenCalledWith('SIGKILL');
+            ffmpeg.emit('close', 0);
+            await job;
+        });
+
+        it('kills it outright if it still has not exited after the grace period', async () => {
+            const ffmpeg = fakeFfmpeg();
+            const res = makeRes();
+            const job = remuxToMkv('u', 'pid', res);
+            await started();
+            res.emit('close');
+
+            jest.advanceTimersByTime(ffmpegKillGraceMs - 1);
+            expect(ffmpeg.kill).not.toHaveBeenCalledWith('SIGKILL');
+            jest.advanceTimersByTime(2);
+            expect(ffmpeg.kill).toHaveBeenCalledWith('SIGKILL');
+            ffmpeg.emit('close', null);
+            await job;
+        });
+
+        it('does not kill one that exited on its own in time', async () => {
+            const ffmpeg = fakeFfmpeg();
+            const res = makeRes();
+            const job = remuxToMkv('u', 'pid', res);
+            await started();
+            res.emit('close');
+            ffmpeg.emit('close', 0);
+            await job;
+
+            jest.advanceTimersByTime(ffmpegKillGraceMs * 2);
+            expect(ffmpeg.kill).toHaveBeenCalledTimes(1);
+            expect(ffmpeg.kill).toHaveBeenCalledWith('SIGTERM');
+        });
+
+        it('stops it straight away if the client had already left while ffmpeg was being started', async () => {
+            const ffmpeg = fakeFfmpeg();
+            const res = makeRes();
+            res.destroyed = true; // closed during the awaits before spawn, so no 'close' event will follow
+            const job = remuxToMkv('u', 'pid', res);
+            await started();
+
+            expect(spawn).toHaveBeenCalled();
+            expect(ffmpeg.kill).toHaveBeenCalledWith('SIGTERM');
+            ffmpeg.emit('close', 0);
+            await job;
+        });
+
+        it('leaves a healthy remux alone', async () => {
+            const ffmpeg = fakeFfmpeg();
+            const job = remuxToMkv('u', 'pid', makeRes());
+            await started();
+            jest.advanceTimersByTime(ffmpegKillGraceMs * 5);
+            expect(ffmpeg.kill).not.toHaveBeenCalled();
+            expect(ffmpeg.stdout.destroy).not.toHaveBeenCalled();
+            ffmpeg.emit('close', 0);
+            await job;
+        });
     });
 
     describe('concurrency cap', () => {
