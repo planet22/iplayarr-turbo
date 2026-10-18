@@ -68,7 +68,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_LIVE_DASH_1080"
             name="Live 1080p (Experimental)"
-            tooltip="Live channels as 1080p HEVC instead of 720p, in Direct and Progressive MKV modes (MKV needs ffmpeg). HEVC needs a player that can decode it; subtitles are not offered on these channels. Falls back to 720p if unavailable."
+            tooltip="Live channels as 1080p HEVC instead of 720p, in Direct and Progressive MKV modes (MKV needs ffmpeg). HEVC needs a player that can decode it; subtitles are not offered on these channels. Jellyfin: clear its cached channel probes after changing this. Falls back to 720p if unavailable."
             :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
             :options="subtitlesOptions"
         />
