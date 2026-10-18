@@ -1,13 +1,21 @@
 <template>
     <legend>Maintenance</legend>
-    <TextInput
-        v-model="config.STREAM_HISTORY_RETENTION_DAYS"
-        type-override="number"
-        name="Stream History Retention (Days)"
-        inline-tooltip
-        tooltip="Delete stream history older than this many days (runs nightly)."
-        :error="validationErrors.config?.STREAM_HISTORY_RETENTION_DAYS"
-    />
+    <div class="scheduledTasks">
+        <div class="taskRow">
+            <div class="info">
+                <div class="label">
+                    Rebuild Logos
+                    <InfoTip text="Redraws every live channel logo: library posters are rewritten and Jellyfin is asked to refresh." />
+                </div>
+            </div>
+            <div class="rowActions">
+                <button class="clickable" type="button" :disabled="rebuilding" @click="rebuildLogos">
+                    <font-awesome-icon :icon="['fas', 'rotate']" :spin="rebuilding" />
+                    Rebuild
+                </button>
+            </div>
+        </div>
+    </div>
 
     <legend class="scheduledTasksHeading">Caches</legend>
     <SettingsPageToolbar
@@ -27,8 +35,10 @@
     <div v-else class="scheduledTasks">
         <div v-for="cache in caches" :key="cache.prefix" class="taskRow">
             <div class="info">
-                <div class="label">{{ cache.label }}</div>
-                <div class="description">{{ cache.description }}</div>
+                <div class="label">
+                    {{ cache.label }}
+                    <InfoTip :text="cache.description" />
+                </div>
                 <div class="details cacheDetails">
                     <span class="pill primary count">{{ cache.count.toLocaleString() }} {{ cache.count === 1 ? 'item' : 'items' }}</span>
                     <span class="pill grey size">{{ formatSize(cache.sizeBytes) }}</span>
@@ -57,6 +67,26 @@
                 </button>
             </div>
         </div>
+        <div class="taskRow">
+            <div class="info">
+                <div class="label">
+                    Stream History
+                    <InfoTip text="Delete stream history older than this many days (runs nightly). Saved with the Save button." />
+                </div>
+                <div class="details cacheDetails">
+                    <span class="count"></span>
+                    <span class="size"></span>
+                    <span class="ttlEditor">
+                        Keep for
+                        <input v-model="config.STREAM_HISTORY_RETENTION_DAYS" type="number" min="1" />
+                        days
+                    </span>
+                </div>
+                <div v-if="validationErrors.config?.STREAM_HISTORY_RETENTION_DAYS" class="cacheError">
+                    {{ validationErrors.config.STREAM_HISTORY_RETENTION_DAYS }}
+                </div>
+            </div>
+        </div>
         <ScheduledTaskRow v-for="task in cacheTasks" :key="task.id" :task="task" :busy="!!running[task.id]" @run="runNow" />
         <div v-if="cacheError" class="cacheError">{{ cacheError }}</div>
     </div>
@@ -71,16 +101,25 @@
 <script setup>
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 
-import TextInput from '@/components/common/form/TextInput.vue';
+import InfoTip from '@/components/common/form/InfoTip.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import ScheduledTaskRow from '@/components/settings/ScheduledTaskRow.vue';
 import dialogService from '@/lib/dialogService';
+import { ipFetch } from '@/lib/ipFetch';
 import { splitTtl, TTL_UNITS, useCaches } from '@/lib/useCaches';
 import { useScheduledTasks } from '@/lib/useScheduledTasks';
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
+
+const rebuilding = ref(false);
+const rebuildLogos = async () => {
+    rebuilding.value = true;
+    const { ok, data } = await ipFetch('json-api/live-channels/rebuild-logos', 'POST');
+    rebuilding.value = false;
+    dialogService.alert(ok ? 'Success' : 'Error', ok ? 'Logos rebuilt' : data?.message || 'Unable to rebuild the logos');
+};
 
 const { tasks, loaded, running, load, runNow } = useScheduledTasks();
 const cacheTasks = computed(() => tasks.value.filter((task) => task.group === 'cache'));
@@ -243,14 +282,11 @@ onMounted(() => {
         min-width: 0;
 
         .label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
             color: @primary-text-color;
             font-size: 15px;
-        }
-
-        .description {
-            margin-top: 2px;
-            font-size: 12px;
-            color: @subtle-text-color;
         }
 
         .details {

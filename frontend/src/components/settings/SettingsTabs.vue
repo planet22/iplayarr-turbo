@@ -3,6 +3,7 @@
         <button
 v-for="tab in tabs" :key="tab.key" type="button" :class="['settingsTab', modelValue === tab.key ? 'active' : '']"
             @click="emit('update:modelValue', tab.key)">
+            <font-awesome-icon v-if="tab.icon" :icon="['fas', tab.icon]" class="tabIcon" />
             {{ tab.label }}
         </button>
     </div>
@@ -42,6 +43,10 @@ const emit = defineEmits(['update:modelValue']);
         font-weight: bold;
         color: @subtle-text-color;
         cursor: pointer;
+
+        .tabIcon {
+            margin-right: 6px;
+        }
 
         &:hover {
             color: @primary-text-color;

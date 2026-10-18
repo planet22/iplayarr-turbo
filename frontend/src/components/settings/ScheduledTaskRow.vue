@@ -1,8 +1,10 @@
 <template>
     <div class="taskRow">
         <div class="info">
-            <div class="label">{{ task.label }}</div>
-            <div class="description">{{ task.description }}</div>
+            <div class="label">
+                {{ task.label }}
+                <InfoTip :text="task.description" />
+            </div>
             <div class="details">
                 <span class="pill grey" :title="'Cron expression'">{{ task.cron }}</span>
                 <span v-if="task.running" class="pill primary">Running&hellip;</span>
@@ -28,6 +30,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/common/form/InfoTip.vue';
 import { formatRelativeTime } from '@/lib/utils';
 
 defineProps({

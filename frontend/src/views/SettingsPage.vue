@@ -75,13 +75,13 @@ const showAdvanced = ref(false);
 const refreshGlobalSettings = inject('refreshGlobalSettings');
 
 const tabs = [
-    { key: 'general', label: 'General' },
-    { key: 'mediaManagement', label: 'Media Management' },
-    { key: 'downloadClient', label: 'Download Client' },
-    { key: 'streaming', label: 'Streaming' },
-    { key: 'liveTv', label: 'Live TV' },
-    { key: 'authentication', label: 'Authentication' },
-    { key: 'maintenance', label: 'Maintenance' },
+    { key: 'general', label: 'General', icon: 'sliders' },
+    { key: 'mediaManagement', label: 'Media Management', icon: 'folder-open' },
+    { key: 'downloadClient', label: 'Download Client', icon: 'download' },
+    { key: 'streaming', label: 'Streaming', icon: 'tower-broadcast' },
+    { key: 'liveTv', label: 'Live TV', icon: 'tv' },
+    { key: 'authentication', label: 'Authentication', icon: 'shield-halved' },
+    { key: 'maintenance', label: 'Maintenance', icon: 'wrench' },
 ];
 const activeTab = ref('general');
 
