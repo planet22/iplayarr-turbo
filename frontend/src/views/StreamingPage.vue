@@ -21,6 +21,7 @@
                 <col style="width: 10ch" />
                 <col style="width: 6ch" />
                 <col style="width: 6ch" />
+                <col style="width: 6ch" />
                 <col style="width: 18ch" />
                 <col style="width: 11ch" />
                 <col style="width: 20ch" />
@@ -40,6 +41,7 @@
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
                     <th class="chipCol" title="Native FHD upgrade">FHD</th>
+                    <th class="chipCol" title="Native subtitles (on-demand and live)">Subs</th>
                     <th class="chipCol" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
                     <th>Client IP</th>
@@ -107,7 +109,7 @@
                     </td>
                 </tr>
                 <tr v-if="streams.active.length == 0">
-                    <td colspan="15" class="empty">No streams currently playing</td>
+                    <td colspan="16" class="empty">No streams currently playing</td>
                 </tr>
             </tbody>
         </table>
@@ -121,6 +123,7 @@
                 <col style="width: 200px" />
                 <col style="width: 18ch" />
                 <col style="width: 10ch" />
+                <col style="width: 6ch" />
                 <col style="width: 6ch" />
                 <col style="width: 6ch" />
                 <col style="width: 18ch" />
@@ -143,6 +146,7 @@
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
                     <th class="chipCol" title="Native FHD upgrade">FHD</th>
+                    <th class="chipCol" title="Native subtitles (on-demand and live)">Subs</th>
                     <th class="chipCol" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
                     <th>Client IP</th>
@@ -208,7 +212,7 @@
                     <td />
                 </tr>
                 <tr v-if="reversedHistory.length == 0">
-                    <td colspan="15" class="empty">No streaming history yet</td>
+                    <td colspan="16" class="empty">No streaming history yet</td>
                 </tr>
             </tbody>
         </table>

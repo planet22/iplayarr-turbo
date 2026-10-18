@@ -35,15 +35,17 @@ const probeUserAgentRegex = /Lavf|ffprobe/i;
 // per-client type since each client's settings are genuinely different shapes.
 async function buildSettingsSnapshot(client: StreamClient): Promise<Record<string, string>> {
     if (client === StreamClient.NATIVE) {
-        const [adaptive, hqProbe, experimentalFhd] = await configService.getParameters(
+        const [adaptive, hqProbe, experimentalFhd, subtitles] = await configService.getParameters(
             IplayarrParameter.STREAM_NATIVE_ADAPTIVE,
             IplayarrParameter.STREAM_NATIVE_HQ_PROBE,
-            IplayarrParameter.STREAM_NATIVE_EXPERIMENTAL_FHD
+            IplayarrParameter.STREAM_NATIVE_EXPERIMENTAL_FHD,
+            IplayarrParameter.STREAM_SUBTITLES
         );
         return {
             Quality: (adaptive ?? 'true') !== 'false' ? 'Adaptive' : 'Fixed',
             'Quality Probe': hqProbe === 'true' ? 'On' : 'Off',
             'FHD Upgrade': experimentalFhd === 'true' ? 'On' : 'Off',
+            Subtitles: subtitles === 'true' ? 'On' : 'Off',
         };
     }
     const videoQuality = requestedQuality() ?? ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
@@ -163,7 +165,11 @@ async function handleStream(req: Request, res: Response): Promise<void> {
     const isProbe: boolean = probeUserAgentRegex.test(req.headers['user-agent'] ?? '');
     const mode: StreamMode = isProbe ? StreamMode.DIRECT : configuredMode;
 
-    const settings = live ? { Quality: 'Live' } : await buildSettingsSnapshot(client);
+    // Live channels are always Native, so they snapshot the same Subtitles setting as an on-demand
+    // Native session - keeping that column filled for both on the Streaming page.
+    const settings = live
+        ? { Quality: 'Live', Subtitles: (await configService.getParameter(IplayarrParameter.STREAM_SUBTITLES)) === 'true' ? 'On' : 'Off' }
+        : await buildSettingsSnapshot(client);
     const liveInfo = live ? { title: BrowseChannels.find((c) => c.id === pid)?.title ?? pid } : undefined;
     const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings, liveInfo);
     // progressive-mkv's ffmpeg process/response is the one mode with a real connection for the

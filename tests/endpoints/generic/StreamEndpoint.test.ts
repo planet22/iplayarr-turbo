@@ -58,7 +58,7 @@ describe('StreamEndpoint live channel routing', () => {
 
         expect(LiveStreamService.streamDirect).toHaveBeenCalledWith('bbc_one_london', req, res, 'sess');
         expect(GetIplayerStreamService.streamDirect).not.toHaveBeenCalled();
-        expect(streamSessionService.start).toHaveBeenCalledWith('bbc_one_london', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', { Quality: 'Live' }, {
+        expect(streamSessionService.start).toHaveBeenCalledWith('bbc_one_london', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', { Quality: 'Live', Subtitles: 'Off' }, {
             title: 'BBC One',
         });
     });
@@ -151,13 +151,14 @@ describe('StreamEndpoint live channel routing', () => {
 
             (streamSessionService.start as jest.Mock).mockClear();
             mockConfig({ [IplayarrParameter.STREAM_CLIENT]: StreamClient.NATIVE, [IplayarrParameter.STREAM_MODE]: StreamMode.DIRECT });
-            (configService.getParameters as jest.Mock).mockResolvedValue([undefined, 'true', 'true']);
+            (configService.getParameters as jest.Mock).mockResolvedValue([undefined, 'true', 'true', 'true']);
             await StreamEndpoint(makeReq('m0032yps'), makeRes());
             expect(NativeStreamService.streamDirect).toHaveBeenCalled();
             expect((streamSessionService.start as jest.Mock).mock.calls[0][4]).toEqual({
                 Quality: 'Adaptive',
                 'Quality Probe': 'On',
                 'FHD Upgrade': 'On',
+                Subtitles: 'On',
             });
         });
 
