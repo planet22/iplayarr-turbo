@@ -136,7 +136,7 @@ describe('LiveStreamService', () => {
             expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Live 1080p');
         });
 
-        describe('Direct mode DASH->HLS (STREAM_LIVE_DASH_BRIDGE)', () => {
+        describe('Direct mode DASH->HLS', () => {
             const reply = (): any => ({ status: jest.fn().mockReturnThis(), setHeader: jest.fn(), send: jest.fn() });
             const mpd = `<MPD type="dynamic" availabilityStartTime="1970-01-01T00:00:12Z"><Period>
                 <AdaptationSet contentType="video" mimeType="video/mp4"><Role value="main"/>
@@ -152,9 +152,8 @@ describe('LiveStreamService', () => {
                 route = (url, method) => (url.startsWith('https://dash/') ? { body: mpd } : base(url, method));
             });
 
-            it('answers with an HLS master built from the DASH manifest when both settings are on', async () => {
+            it('answers with an HLS master built from the DASH manifest when the setting is on', async () => {
                 await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
-                await configService.setParameter('STREAM_LIVE_DASH_BRIDGE' as any, 'true');
                 const out = reply();
                 await service.streamDirect('bbc_two_england', { headers: {}, query: { streamkey: 'k' } } as any, out, 'sess');
 
@@ -175,16 +174,14 @@ describe('LiveStreamService', () => {
                 expect(playlist).toContain('#EXTINF:3.840');
             });
 
-            it('stays on HLS when only the 1080p setting is on', async () => {
-                await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
-                await configService.setParameter('STREAM_LIVE_DASH_BRIDGE' as any, 'false');
+            it('stays on HLS when the setting is off', async () => {
+                await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'false');
                 await service.streamDirect('bbc_two_england', req, reply(), 'sess');
                 expect(proxyUrl).toHaveBeenCalled();
             });
 
             it('falls back to HLS when the manifest is not one it can present', async () => {
                 await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
-                await configService.setParameter('STREAM_LIVE_DASH_BRIDGE' as any, 'true');
                 const base = route;
                 route = (url, method) => (url.startsWith('https://dash/') ? { body: '<MPD type="static"/>' } : base(url, method));
                 const out = reply();

@@ -68,16 +68,8 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_LIVE_DASH_1080"
             name="Live 1080p (Experimental)"
-            tooltip="Live channels as 1080p HEVC instead of 720p. Progressive MKV mode needs ffmpeg; Direct mode also needs the Direct Mode option below. Falls back to 720p if unavailable."
+            tooltip="Live channels as 1080p HEVC instead of 720p, in Direct and Progressive MKV modes (MKV needs ffmpeg). HEVC needs a player that can decode it; subtitles are not offered on these channels. Falls back to 720p if unavailable."
             :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
-            :options="subtitlesOptions"
-        />
-        <SelectInput
-            v-if="config.STREAM_CLIENT == 'NATIVE' && config.STREAM_LIVE_DASH_1080 == 'true'"
-            v-model="config.STREAM_LIVE_DASH_BRIDGE"
-            name="Live 1080p in Direct Mode (Experimental)"
-            tooltip="Lets Direct mode play Live 1080p by presenting BBC's DASH feed as HLS (no ffmpeg, no re-encoding). Subtitles are not offered on these channels."
-            :error="validationErrors.config?.STREAM_LIVE_DASH_BRIDGE"
             :options="subtitlesOptions"
         />
         <SelectInput

@@ -213,13 +213,12 @@ class LiveStreamService implements AbstractStreamService {
         return cached(`live-mpd:${dashUrl}`, liveResolveTtlMs, async () => parseLiveMpd(await fetchText(dashUrl), dashUrl));
     }
 
-    // Direct mode's route to 1080p: needs both toggles. The player gets an HLS master built from BBC's
-    // DASH feed (liveDashHls.ts); the segments themselves stream through the usual segment proxy.
-    // Returns false - and the caller serves the normal 720p HLS - when either is off or the manifest
-    // isn't one we can present.
+    // Direct mode's route to 1080p (STREAM_LIVE_DASH_1080). The player gets an HLS master built from
+    // BBC's DASH feed (liveDashHls.ts); the segments themselves stream through the usual segment proxy.
+    // Returns false - and the caller serves the normal 720p HLS - when the setting is off or the
+    // manifest isn't one we can present.
     async #serveDashHls(channelId: string, req: Request, res: Response, sessionId?: string): Promise<boolean> {
-        const [dash, bridge] = await configService.getParameters(IplayarrParameter.STREAM_LIVE_DASH_1080, IplayarrParameter.STREAM_LIVE_DASH_BRIDGE);
-        if (dash !== 'true' || bridge !== 'true') {
+        if ((await configService.getParameter(IplayarrParameter.STREAM_LIVE_DASH_1080)) !== 'true') {
             return false;
         }
         try {

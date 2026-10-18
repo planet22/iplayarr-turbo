@@ -46,8 +46,7 @@ Quick-lookup reference. Every one of these (except the database location and pro
 | `STREAM_NATIVE_HQ_PROBE` | `false` | No | Verify real connection quality before playing. |
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | No | 1080p unlock trick for native streaming. |
 | `STREAM_SUBTITLES` | `false` | No | Offer the BBC's captions as an English subtitle track on native streams (on-demand and live). See [STREAMING.md](STREAMING.md#subtitles). |
-| `STREAM_LIVE_DASH_1080` | `false` | No | Experimental: serve live channels as 1080p HEVC DASH in Progressive MKV mode (ffmpeg). Direct mode stays 720p HLS unless `STREAM_LIVE_DASH_BRIDGE` is also on. |
-| `STREAM_LIVE_DASH_BRIDGE` | `false` | No | Experimental: with `STREAM_LIVE_DASH_1080`, also serve 1080p live in Direct mode by presenting BBC's DASH feed as HLS (no ffmpeg). |
+| `STREAM_LIVE_DASH_1080` | `false` | No | Experimental: serve live channels as 1080p HEVC (BBC's DASH feed) in Direct mode (as HLS playlists, no ffmpeg) and Progressive MKV mode (ffmpeg). Falls back to 720p HLS. |
 | `LIVE_STRM_DIR` | _(unset)_ | No | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR`. |
 | `LIVE_TV_ENABLED` | `false` | No | Serve the live channels as an M3U tuner + XMLTV guide for Jellyfin Live TV. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
 | `LIVE_TV_EPG_OFFSET` | `0` | No | Minutes to shift the Live TV guide, on top of the server-timezone times. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
