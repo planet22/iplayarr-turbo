@@ -28,9 +28,12 @@ class LiveSubscriptionService {
         return (await storage.getItem(STORAGE_KEY)) || [];
     }
 
-    // With each channel's logo (the same one the Channels tiles use) attached for display.
+    // With each channel's logo (the same one the Channels tiles use) attached for display, in the order
+    // set on the Channels page.
     async list(): Promise<LiveSubscription[]> {
-        return (await this.#stored()).map((s) => {
+        const order = await liveChannelService.order();
+        const stored = (await this.#stored()).sort((a, b) => order.indexOf(a.channelId) - order.indexOf(b.channelId));
+        return stored.map((s) => {
             const masterBrand = liveChannelInfo(s.channelId)?.masterBrand;
             return { ...s, logo: masterBrand ? `json-api/browse/channel-logo/${masterBrand}.svg` : undefined };
         });

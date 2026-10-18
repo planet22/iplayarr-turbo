@@ -4,6 +4,7 @@ import path from 'path';
 
 import browseService from '../../src/service/browseService';
 import configService from '../../src/service/configService';
+import liveChannelService from '../../src/service/liveChannelService';
 import service, { LiveSubscriptionError } from '../../src/service/liveSubscriptionService';
 import loggingService from '../../src/service/loggingService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
@@ -178,5 +179,12 @@ describe('liveSubscriptionService', () => {
 
             expect(fs.readdirSync(dir)).toEqual(['BBC One-fanart.jpg']);
         });
+    });
+
+    it('lists subscriptions in the Channels page order', async () => {
+        await liveChannelService.setOrder(['cbbc', 'bbc_one_london']);
+        await service.subscribe('bbc_one_london');
+        await service.subscribe('cbbc');
+        expect((await service.list()).map((s) => s.channelId)).toEqual(['cbbc', 'bbc_one_london']);
     });
 });
