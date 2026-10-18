@@ -1,6 +1,6 @@
-import { BrowseChannels } from '../constants/BrowseChannels';
-import { isLiveChannel } from '../constants/LiveChannels';
+import { allLiveChannels, isLiveChannel } from '../constants/LiveChannels';
 import { QueuedStorage } from '../types/QueuedStorage';
+import liveChannelService from './liveChannelService';
 
 const storage: QueuedStorage = new QueuedStorage();
 const STORAGE_KEY = 'liveTvChannels';
@@ -14,12 +14,15 @@ class LiveTvChannelService {
     async list(): Promise<string[]> {
         const stored: string[] = (await storage.getItem(STORAGE_KEY)) || [];
         // Kept in channel-list order, and ignoring anything no longer a live channel.
-        return BrowseChannels.map(({ id }) => id).filter((id) => isLiveChannel(id) && stored.includes(id));
+        return allLiveChannels().map(({ id }) => id).filter((id) => stored.includes(id));
     }
 
     async add(channelId: string): Promise<string[]> {
         if (!isLiveChannel(channelId)) {
             throw new LiveTvChannelError(`${channelId} is not a live channel`);
+        }
+        if (!(await liveChannelService.isEnabled(channelId))) {
+            throw new LiveTvChannelError(`${channelId} is disabled in Settings > Live Channels`);
         }
         const all = await this.list();
         if (!all.includes(channelId)) {
@@ -37,10 +40,11 @@ class LiveTvChannelService {
     }
 
     async addAll(): Promise<string[]> {
-        await storage.setItem(
-            STORAGE_KEY,
-            BrowseChannels.map(({ id }) => id).filter(isLiveChannel)
-        );
+        const enabled: string[] = [];
+        for (const { id } of allLiveChannels()) {
+            if (await liveChannelService.isEnabled(id)) enabled.push(id);
+        }
+        await storage.setItem(STORAGE_KEY, enabled);
         return this.list();
     }
 

@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 
-import { BrowseChannels } from '../../constants/BrowseChannels';
-import { isLiveChannel } from '../../constants/LiveChannels';
+import { isLiveChannel, liveChannelInfo } from '../../constants/LiveChannels';
 import configService from '../../service/configService';
+import liveChannelService from '../../service/liveChannelService';
 import loggingService from '../../service/loggingService';
 import AbstractStreamService from '../../service/stream/AbstractStreamService';
 import GetIplayerStreamService from '../../service/stream/GetIplayerStreamService';
@@ -68,11 +68,16 @@ async function getStreamService(): Promise<{ client: StreamClient; service: Abst
     }
 }
 
+// A live channel that is also switched on in Settings > Live Channels.
+async function isLiveEnabled(pid: string | undefined): Promise<boolean> {
+    return isLiveChannel(pid) && (await liveChannelService.isEnabled(pid as string));
+}
+
 async function handleLiveSubtitles(req: Request, res: Response): Promise<void> {
     const { pid, subs, n } = req.query as any;
     const streamKey = (req.query.streamkey as string) ?? '';
     let body: string | undefined;
-    if (isLiveChannel(pid)) {
+    if (await isLiveEnabled(pid)) {
         if (subs === 'livelist') {
             body = await LiveStreamService.getSubtitlePlaylist(pid, streamKey);
         } else if (isSegmentNumber(n)) {
@@ -97,7 +102,7 @@ async function handleDashPlaylist(req: Request, res: Response): Promise<void> {
         res.on('close', () => streamSessionService.touch(sessionId));
     }
     const playlist =
-        isLiveChannel(pid) && (dash === 'video' || dash === 'audio')
+        (await isLiveEnabled(pid)) && (dash === 'video' || dash === 'audio')
             ? await LiveStreamService.getDashPlaylist(pid, dash, (req.query.streamkey as string) ?? '', sessionId)
             : undefined;
     if (!playlist) {
@@ -189,7 +194,7 @@ async function handleStream(req: Request, res: Response): Promise<void> {
 
     // Live channels are served by their own standalone service regardless of the configured client
     // (neither get_iplayer nor yt-dlp are used for them) - see LiveStreamService.ts.
-    const live: boolean = isLiveChannel(pid);
+    const live: boolean = await isLiveEnabled(pid);
     // Independent config reads, so they run together rather than one after the other.
     const [{ client, service }, configuredMode]: [{ client: StreamClient; service: AbstractStreamService }, StreamMode] = await Promise.all([
         live ? Promise.resolve({ client: StreamClient.NATIVE, service: LiveStreamService as AbstractStreamService }) : getStreamService(),
@@ -203,7 +208,7 @@ async function handleStream(req: Request, res: Response): Promise<void> {
     const settings = live
         ? { Quality: 'Live', Subtitles: (await configService.getParameter(IplayarrParameter.STREAM_SUBTITLES)) === 'true' ? 'On' : 'Off' }
         : await buildSettingsSnapshot(client);
-    const liveInfo = live ? { title: BrowseChannels.find((c) => c.id === pid)?.title ?? pid } : undefined;
+    const liveInfo = live ? { title: liveChannelInfo(pid)?.title ?? pid } : undefined;
     const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings, liveInfo);
     // progressive-mkv's ffmpeg process/response is the one mode with a real connection for the
     // Streaming page's Stop button to tear down - destroying it triggers this same res.on('close')

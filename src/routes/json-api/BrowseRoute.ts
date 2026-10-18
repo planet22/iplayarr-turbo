@@ -1,6 +1,8 @@
 import { Request, Response, Router } from 'express';
 
+import { OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
 import browseService from '../../service/browseService';
+import liveChannelService from '../../service/liveChannelService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 
 const router = Router();
@@ -63,7 +65,25 @@ router.get(
     })
 );
 
-router.get('/channels', (_, res) => res.json(browseService.channels()));
+// A channel switched off in Settings > Live Channels is no longer offered for live viewing.
+router.get(
+    '/channels',
+    handle(async (_, res) => {
+        const channels = browseService.channels();
+        // Every live channel in the user's order, switched off ones included (the page hides them unless
+        // arranging) so a disabled channel keeps its place.
+        const settings = await liveChannelService.list();
+        const byId = new Map(channels.map((channel) => [channel.id, channel]));
+        res.json(
+            settings.map(({ id, title, logo, vpid, optional, enabled }) => {
+                const channel = byId.get(id);
+                return channel
+                    ? { ...channel, vpid, enabled, live: channel.live && enabled }
+                    : { id, title, logo, vpid, enabled, live: enabled, liveOnly: optional };
+            })
+        );
+    })
+);
 
 router.get(
     '/channel-logo/:file',
@@ -103,7 +123,27 @@ router.get(
     handle(async (req, res) => {
         const id = req.params.id as string;
         if (!ID_REGEX.test(id)) return invalid(res, 'Invalid channel id');
-        res.json(await browseService.channel(id));
+        // The optional nations/regions are not in iPlayer's channel list, but most have their own schedule
+        // and programmes there; whatever a feed lacks is filled from its parent national channel.
+        const extra = (await liveChannelService.list()).find((c) => c.id === id && c.optional);
+        if (extra) {
+            const def = OptionalLiveChannels.find((c) => c.id === id) as OptionalLiveChannel;
+            const own = await browseService.channel(def.iblId).catch(() => undefined);
+            const hasNowNext = !!(own?.nowNext?.now || own?.nowNext?.next);
+            const parent =
+                own?.rails.length && hasNowNext ? undefined : await browseService.channel(def.parentId).catch(() => undefined);
+            res.json({
+                channel: { id, title: extra.title, logo: extra.logo, live: extra.enabled, liveOnly: true },
+                rails: own?.rails.length ? own.rails : (parent?.rails ?? []),
+                nowNext: hasNowNext ? own?.nowNext : parent?.nowNext,
+            });
+            return;
+        }
+        const result = await browseService.channel(id);
+        if (result.channel?.live && !(await liveChannelService.isEnabled(id))) {
+            result.channel = { ...result.channel, live: false };
+        }
+        res.json(result);
     })
 );
 

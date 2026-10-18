@@ -87,6 +87,12 @@ export interface BrowseChannel {
     logo?: string;
     // True when the channel can be watched live through LiveStreamService (see LiveChannels.ts).
     live?: boolean;
+    // A live feed with no iPlayer channel page (the optional nations/regions) - it can only be watched.
+    liveOnly?: boolean;
+    // False when the channel is switched off in the Channels page's arrange mode (it stays in its place there).
+    enabled?: boolean;
+    // The mediaselector service id its live stream is served under (shown while arranging).
+    vpid?: string;
 }
 
 export interface BrowseSeason {

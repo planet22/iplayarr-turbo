@@ -3,6 +3,7 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/BrowseRoute';
 import browseService from '../../../src/service/browseService';
+import liveChannelService from '../../../src/service/liveChannelService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 
 jest.mock('../../../src/service/browseService');
@@ -41,10 +42,19 @@ describe('BrowseRoute', () => {
         expect(mocked.category).not.toHaveBeenCalled();
     });
 
-    it('GET /channels is synchronous and returns the list', async () => {
-        mocked.channels.mockReturnValue([{ id: 'bbc_one_london', title: 'BBC One' }]);
+    it('GET /channels lists every live channel in the saved order, with its enabled state and vpid', async () => {
+        mocked.channels.mockReturnValue([
+            { id: 'bbc_one_london', title: 'BBC One', logo: 'one.svg', live: true },
+            { id: 'cbbc', title: 'CBBC', logo: 'cbbc.svg', live: true },
+        ]);
+        await liveChannelService.setOrder(['bbc_one_east', 'cbbc', 'bbc_one_london']);
+        await liveChannelService.setEnabled('cbbc', false);
         const res = await request(app).get('/channels');
-        expect(res.body).toEqual([{ id: 'bbc_one_london', title: 'BBC One' }]);
+        expect(res.body.slice(0, 3)).toEqual([
+            expect.objectContaining({ id: 'bbc_one_east', title: 'BBC One East', vpid: 'bbc_one_east', enabled: false, live: false, liveOnly: true }),
+            expect.objectContaining({ id: 'cbbc', vpid: 'cbbc_hd', enabled: false, live: false }),
+            expect.objectContaining({ id: 'bbc_one_london', vpid: 'bbc_one_hd', enabled: true, live: true }),
+        ]);
     });
 
     it('GET /channel/:id returns the channel page', async () => {

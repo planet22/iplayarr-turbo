@@ -17,6 +17,7 @@ import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../ut
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import EventsRoute from './json-api/EventsRoute';
+import LiveChannelsRoute from './json-api/LiveChannelsRoute';
 import LiveSubscriptionsRoute from './json-api/LiveSubscriptionsRoute';
 import LiveTvRoute from './json-api/LiveTvRoute';
 import MaintenanceRoute from './json-api/MaintenanceRoute';
@@ -47,6 +48,7 @@ router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
 router.use('/live-tv', LiveTvRoute);
+router.use('/live-channels', LiveChannelsRoute);
 router.use('/subscriptions/live', LiveSubscriptionsRoute);
 router.use('/subscriptions/arr', SubscriptionArrRoute);
 router.use('/request', RequestRoute);

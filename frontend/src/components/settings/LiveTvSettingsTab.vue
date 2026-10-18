@@ -51,6 +51,14 @@
             tooltip="Landscape suits Jellyfin's guide cards, Square its channel tiles. After changing, save and Update the tuner."
             :options="logoShapeOptions"
         />
+        <div class="rebuildLogos">
+            <button type="button" :disabled="rebuilding" @click="rebuildLogos">
+                <font-awesome-icon :icon="['fas', 'rotate']" :spin="rebuilding" /> Rebuild Logos
+            </button>
+            <span class="hint">
+                Redraws every channel logo: library posters are rewritten and Jellyfin is asked to refresh.
+            </span>
+        </div>
         <legend class="guideLegend">Guide options</legend>
         <SelectInput
             v-model="config.LIVE_TV_GUIDE_CATEGORIES"
@@ -80,12 +88,14 @@
 </template>
 
 <script setup>
-import { defineEmits, inject } from 'vue';
+import { defineEmits, inject, ref } from 'vue';
 
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LiveTvJellyfinSetup from '@/components/settings/LiveTvJellyfinSetup.vue';
+import dialogService from '@/lib/dialogService';
+import { ipFetch } from '@/lib/ipFetch';
 
 const emit = defineEmits(['generate-stream-key']);
 
@@ -109,11 +119,31 @@ const liveTvUrl = (mode) => {
     return `${base}/api?mode=${mode}&streamkey=${encodeURIComponent(config.value.STREAM_KEY || '')}`;
 };
 
+const rebuilding = ref(false);
+const rebuildLogos = async () => {
+    rebuilding.value = true;
+    const { ok, data } = await ipFetch('json-api/live-channels/rebuild-logos', 'POST');
+    rebuilding.value = false;
+    dialogService.alert(ok ? 'Success' : 'Error', ok ? 'Logos rebuilt' : data?.message || 'Unable to rebuild the logos');
+};
+
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 </script>
 
 <style lang="less" scoped>
+.rebuildLogos {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0.5rem 0;
+
+    .hint {
+        font-size: 12px;
+        color: @subtle-text-color;
+    }
+}
+
 .guideLegend {
     margin-top: 2rem;
 }

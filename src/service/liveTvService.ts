@@ -1,11 +1,11 @@
 import { createHash } from 'crypto';
 
-import { BrowseChannels } from '../constants/BrowseChannels';
-import { isLiveChannel } from '../constants/LiveChannels';
+import { allLiveChannels } from '../constants/LiveChannels';
 import { BrowseSlot } from '../types/Browse';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import browseService from './browseService';
 import configService from './configService';
+import liveChannelService from './liveChannelService';
 import liveTvChannelService from './liveTvChannelService';
 
 // Jellyfin shows channel logos in square tiles and wide guide cards; landscape fills the wide ones.
@@ -108,16 +108,20 @@ class LiveTvService {
         return (await configService.getParameter(IplayarrParameter.LIVE_TV_ENABLED)) === 'true';
     }
 
-    // Every channel that can be played live, regardless of selection - channel numbers come from here so
-    // they stay put as channels are added and removed.
-    allChannels() {
-        return BrowseChannels.filter(({ id }) => isLiveChannel(id));
+    // Every channel that can be played live, regardless of selection or whether it is switched on, in the
+    // order set on the Channels page. Channel numbers come from here, so a channel keeps its number when it
+    // is switched off or taken out of Live TV; only rearranging changes them.
+    async allChannels() {
+        const order = await liveChannelService.order();
+        return allLiveChannels().sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
     }
 
     // Just the channels picked for Live TV.
     async channels() {
         const selected = await liveTvChannelService.list();
-        return this.allChannels().filter(({ id }) => selected.includes(id));
+        const picked = (await this.allChannels()).filter(({ id }) => selected.includes(id));
+        const enabled = await Promise.all(picked.map(({ id }) => liveChannelService.isEnabled(id)));
+        return picked.filter((_, index) => enabled[index]);
     }
 
     async epgOffsetMinutes(): Promise<number> {
@@ -176,7 +180,7 @@ class LiveTvService {
         const baseUrl = await this.#baseUrl();
         const lines: string[] = ['#EXTM3U'];
         const shape = await this.logoShape();
-        const numbers = this.allChannels().map(({ id }) => id);
+        const numbers = (await this.allChannels()).map(({ id }) => id);
         for (const channel of await this.channels()) {
             const attrs = [
                 `tvg-id="${m3uAttr(channel.id)}"`,
@@ -250,7 +254,7 @@ class LiveTvService {
     // Jellyfin would either not render or upscale to a blur, so it is rasterised here on the logo's own
     // background colour. sharp is loaded lazily so a missing native binary only costs the logos.
     async logo(channelId: string): Promise<Buffer | undefined> {
-        const masterBrand = this.allChannels().find(({ id }) => id === channelId)?.masterBrand;
+        const masterBrand = (await this.allChannels()).find(({ id }) => id === channelId)?.masterBrand;
         const svg = masterBrand ? await browseService.channelLogo(masterBrand) : undefined;
         if (!svg) return undefined;
         const background = /fill="(#[0-9a-f]{3,8})"/i.exec(svg)?.[1] ?? '#000000';

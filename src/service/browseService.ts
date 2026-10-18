@@ -2,7 +2,7 @@ import axios from 'axios';
 
 import { BrowseChannels, BrowseHomeChannelRails, BrowseHomeRails, BrowseHomeRandomCategories } from '../constants/BrowseChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
-import { isLiveChannel } from '../constants/LiveChannels';
+import { isLiveChannel, OptionalLiveChannels } from '../constants/LiveChannels';
 import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
@@ -24,6 +24,7 @@ import { VideoType } from '../types/IPlayerSearchResult';
 import { splitArrayIntoChunks } from '../utils/Utils';
 import DbCacheService from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
+import liveChannelService from './liveChannelService';
 import loggingService from './loggingService';
 
 const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
@@ -147,6 +148,28 @@ export function toBrowseItems(elements: any[]): BrowseItem[] {
     return items;
 }
 
+// The parent channel's logo with a region name under it, on the logo's own background colour. The logo
+// keeps its standard size: the icon is shrunk to leave a strip along the bottom, and a long name gets a
+// smaller font rather than a wider canvas.
+export function withCaption(svg: string, label: string): string {
+    const box = /viewBox="([-\d.]+)[ ,]+([-\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)"/.exec(svg);
+    if (!box) return svg;
+    const [x, y, w, h] = box.slice(1).map(Number);
+    const fills = Array.from(svg.matchAll(/fill="(#[0-9a-f]{3,8})"/gi)).map((m) => m[1]);
+    const [bg, fg] = [fills[0] ?? '#000000', fills[1] ?? '#ffffff'];
+    const inner = /<svg\b[^>]*>(.*)<\/svg>/s.exec(svg)?.[1] ?? '';
+    const scale = 0.6;
+    const fontSize = Math.min(h * 0.26, (w - 4) / label.length / 0.62);
+    const text = label.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    return (
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}">` +
+        `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${bg}"/>` +
+        `<svg x="${x + (w * (1 - scale)) / 2}" y="${y + h * 0.03}" width="${w * scale}" height="${h * scale}" viewBox="${x} ${y} ${w} ${h}">${inner}</svg>` +
+        `<text x="${x + w / 2}" y="${y + h * 0.93}" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" ` +
+        `font-weight="bold" font-size="${fontSize}" fill="${fg}">${text}</text></svg>`
+    );
+}
+
 const withLogo = (channel: BrowseChannel): BrowseChannel => ({
     ...channel,
     logo: channel.masterBrand ? `json-api/browse/channel-logo/${channel.masterBrand}.svg` : undefined,
@@ -262,9 +285,12 @@ class BrowseService {
                 return recent ? [recent] : [];
             },
         });
-        BrowseHomeChannelRails.forEach((id) =>
-            sources.push({ id: `channel_${id}`, load: async () => [await this.channelRail(id)] })
-        );
+        // A channel switched off on the Channels page is not featured here either.
+        for (const id of BrowseHomeChannelRails) {
+            if (await liveChannelService.isEnabled(id)) {
+                sources.push({ id: `channel_${id}`, load: async () => [await this.channelRail(id)] });
+            }
+        }
         sources.push({ id: 'categories', load: () => this.randomCategoryRails(BrowseHomeRandomCategories) });
         const settled = await Promise.allSettled(sources.map(({ load }) => load()));
         const rails: BrowseRail[] = [];
@@ -409,8 +435,13 @@ class BrowseService {
     // per-date IBL path nowNext() hits, so it rides the same 15-minute cache.
     async schedule(date?: string): Promise<BrowseChannelSchedule[]> {
         const day = date ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
+        const shown: BrowseChannel[] = [];
+        for (const channel of BrowseChannels) {
+            // Channels switched off on the Channels page drop out of the guide grid too.
+            if (!isLiveChannel(channel.id) || (await liveChannelService.isEnabled(channel.id))) shown.push(channel);
+        }
         const settled = await Promise.allSettled(
-            BrowseChannels.map(async (channel): Promise<BrowseChannelSchedule> => {
+            shown.map(async (channel): Promise<BrowseChannelSchedule> => {
                 const slots: BrowseSlot[] = [];
                 const data = await this.#ibl(`channels/${encodeURIComponent(channel.id)}/schedule/${day}`);
                 for (const broadcast of extractElements(data)) {
@@ -484,6 +515,11 @@ class BrowseService {
 
     async channelLogo(masterBrand: string): Promise<string | undefined> {
         const logos = await this.#channelIconSvgs();
+        const optional = OptionalLiveChannels.find(({ id }) => id === masterBrand);
+        if (optional) {
+            const parent = logos[optional.masterBrand ?? ''];
+            return parent && withCaption(parent, optional.label);
+        }
         return logos[masterBrand];
     }
 
