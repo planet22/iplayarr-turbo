@@ -9,7 +9,7 @@
             <MultiSelectInput
                 :model-value="selectedIds"
                 name="Automatic Configuration"
-                tooltip="Jellyfin servers to configure automatically (admin API key needed). Ticked servers get the buttons below and refresh their guide when channels change. Save first - the buttons use saved settings."
+                tooltip="Jellyfin servers to set up automatically. Needs an admin API key. Save first, as the buttons use saved settings."
                 :options="serverOptions"
                 @update:model-value="config.LIVE_TV_JELLYFIN_APPS = $event"
             />

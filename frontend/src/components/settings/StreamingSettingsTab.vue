@@ -3,7 +3,7 @@
     <SelectInput
         v-model="config.MEDIA_MODE"
         name="Media Mode"
-        tooltip="Stream via a small .strm pointer (saves disk space) or download the full file."
+        tooltip="Stream with a small .strm link (saves disk space) or download the full file."
         :error="validationErrors.config?.MEDIA_MODE"
         :options="mediaModes"
     />
@@ -18,7 +18,7 @@
         <TextInput
             v-model="config.STREAM_KEY"
             name="Stream Key"
-            tooltip="Secures .strm playback links, separate from your API Key."
+            tooltip="Protects .strm playback links. Separate from the API Key."
             :error="validationErrors.config?.STREAM_KEY"
             :copyable="true"
             icon-button="qrcode"
@@ -28,7 +28,7 @@
         <SelectInput
             v-model="config.STREAM_CLIENT"
             name="Stream Client"
-            tooltip="Tool that plays .strm links. Native is fastest; get_iplayer/yt-dlp use Video Quality."
+            tooltip="The tool that plays .strm links. Native is fastest."
             :error="validationErrors.config?.STREAM_CLIENT"
             :options="streamClients"
         />
@@ -36,7 +36,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_ADAPTIVE"
             name="Native Quality"
-            tooltip="Fixed (recommended) uses your Video Quality setting; Adaptive adjusts automatically."
+            tooltip="Fixed (recommended) uses your Video Quality. Adaptive switches automatically."
             :error="validationErrors.config?.STREAM_NATIVE_ADAPTIVE"
             :options="adaptiveOptions"
         />
@@ -44,7 +44,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_HQ_PROBE"
             name="Native Quality Probe"
-            tooltip="Verify real stream quality before playing (adds a short delay)."
+            tooltip="Check the real stream quality before playing. Adds a short delay."
             :error="validationErrors.config?.STREAM_NATIVE_HQ_PROBE"
             :options="hqProbeOptions"
         />
@@ -52,7 +52,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_EXPERIMENTAL_FHD"
             name="Native FHD Upgrade"
-            tooltip="Tries to unlock real 1080p above BBC's usual 720p cap (recommended)."
+            tooltip="Try to unlock true 1080p instead of BBC's usual 720p (recommended)."
             :error="validationErrors.config?.STREAM_NATIVE_EXPERIMENTAL_FHD"
             :options="experimentalFhdOptions"
         />
@@ -60,7 +60,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_SUBTITLES"
             name="Native Subtitles"
-            tooltip="Offers BBC's subtitles as a selectable track (off by default). Programmes and live channels that have them; Direct mode only."
+            tooltip="Offer BBC subtitles as a selectable track, where available. Direct mode only."
             :error="validationErrors.config?.STREAM_SUBTITLES"
             :options="subtitlesOptions"
         />
@@ -68,7 +68,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_LIVE_DASH_1080"
             name="Live 1080p (Experimental)"
-            tooltip="Live channels as 1080p HEVC instead of 720p, in Direct and Progressive MKV modes (MKV needs ffmpeg). HEVC needs a player that can decode it; subtitles are not offered on these channels. Jellyfin: clear its cached channel probes after changing this. Falls back to 720p if unavailable."
+            tooltip="Play live channels in 1080p HEVC instead of 720p. Needs a player that supports HEVC, and has no subtitles. Clear Jellyfin's channel cache after changing."
             :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
             :options="subtitlesOptions"
         />
@@ -76,14 +76,14 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.LIVE_UHD_EVENT_FEEDS"
             name="UHD Event Feeds"
-            tooltip="Show BBC's UHD event feeds (up to 2160p HEVC, uk bbc stream 031-044) in the live channels. They only carry video while a big event is on, and need a UK IP and a player (or Jellyfin transcoder) that handles 4K HEVC. Off by default."
+            tooltip="Show BBC's 4K event channels. They only have video during big events and need a UK IP and a player that handles 4K HEVC."
             :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
             :options="subtitlesOptions"
         />
         <SelectInput
             v-model="config.STREAM_MODE"
             name="Stream Mode"
-            tooltip="Direct (recommended, supports seeking) or Progressive MKV (needs ffmpeg, no seeking)."
+            tooltip="Direct (recommended) allows seeking. Progressive MKV needs ffmpeg and cannot seek."
             :error="validationErrors.config?.STREAM_MODE"
             :options="streamModes"
         />
@@ -97,7 +97,7 @@
                 v-model="config.STREAM_CACHE_DIR"
                 :advanced="true"
                 name="Stream Cache Directory"
-                tooltip="Temporary streaming files. Blank = system temp folder."
+                tooltip="Folder for temporary streaming files. Leave blank to use the system temp folder."
                 :error="validationErrors.config?.STREAM_CACHE_DIR"
             />
         </template>
@@ -107,7 +107,7 @@
     <SelectInput
         v-model="config.STRM_WATCHDOG_ENABLED"
         name="STRM Watchdog"
-        tooltip="Daily check that .strm links still resolve on BBC iPlayer."
+        tooltip="Check daily that .strm links still work on BBC iPlayer."
         :error="validationErrors.config?.STRM_WATCHDOG_ENABLED"
         :options="watchdogEnabledOptions"
     />
@@ -115,14 +115,14 @@
         <MultiSelectInput
             v-model="config.STRM_WATCHDOG_SOURCES"
             name="Watchdog Sources"
-            tooltip="Where to find .strm files. Sonarr/Jellyfin sources need the library mounted into this container (see Path Mapping)."
+            tooltip="Where to look for .strm files. Sonarr/Jellyfin libraries must be mounted into this container (see Path Mapping)."
             :error="validationErrors.config?.STRM_WATCHDOG_SOURCES"
             :options="watchdogSourceOptions"
         />
         <SelectInput
             v-model="config.STRM_WATCHDOG_ACTION"
             name="Watchdog Action"
-            tooltip="What to do with a link that has expired on BBC (after two failed checks)."
+            tooltip="What to do with a link that BBC has removed (after two failed checks)."
             :error="validationErrors.config?.STRM_WATCHDOG_ACTION"
             :options="watchdogActionOptions"
         />
@@ -130,7 +130,7 @@
             v-if="hasType('arr') || hasType('jellyfin')"
             v-model="config.STRM_WATCHDOG_PATH_MAP"
             name="Watchdog Path Mapping"
-            tooltip="Sonarr/Jellyfin path = path inside this container, e.g. /tv=/library/tv (separate with ;)."
+            tooltip="Maps their folder to this container's folder, e.g. /tv=/library/tv. Separate several with ;"
             :error="validationErrors.config?.STRM_WATCHDOG_PATH_MAP"
         />
         <template v-if="hasType('jellyfin')">
@@ -149,7 +149,7 @@
             v-if="hasType('arr')"
             v-model="config.STRM_WATCHDOG_ARR_ACTION"
             name="Sonarr/Radarr Action"
-            tooltip="Also tell Sonarr/Radarr about an expired link (Sonarr/Radarr source only)."
+            tooltip="Also tell Sonarr/Radarr when a link has expired. Sonarr/Radarr source only."
             :error="validationErrors.config?.STRM_WATCHDOG_ARR_ACTION"
             :options="watchdogArrActionOptions"
         />
@@ -157,20 +157,20 @@
             v-model="config.STRM_WATCHDOG_CONCURRENCY"
             type-override="number"
             name="Parallel Checks"
-            tooltip="Links checked against BBC at once (1-10, default 4). Lower is gentler on BBC."
+            tooltip="How many links to check at once (1-10, default 4). Lower is gentler on BBC."
             :error="validationErrors.config?.STRM_WATCHDOG_CONCURRENCY"
         />
         <TextInput
             v-model="config.STRM_WATCHDOG_FAIL_THRESHOLD"
             type-override="number"
             name="Minimum Valid Before Action"
-            tooltip="Failures are only acted on once this many links have validated OK in the run (proves BBC is up). This many failures in a row abandons the run."
+            tooltip="Failures only count after this many links pass first, which shows BBC is up. This many failures in a row stops the check."
             :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
         />
         <TextInput
             v-model="config.STRM_WATCHDOG_WEBHOOK_URL"
             name="Watchdog Webhook URL"
-            tooltip="Optional. Receives a JSON POST when a link first becomes invalid."
+            tooltip="Optional. Sent a notification when a link first stops working."
             :error="validationErrors.config?.STRM_WATCHDOG_WEBHOOK_URL"
         />
     </template>

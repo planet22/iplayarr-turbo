@@ -3,80 +3,80 @@
     <TextInput
         v-model="config.DOWNLOAD_DIR"
         name="Download Directory"
-        tooltip="Directory for in-progress Downloads."
+        tooltip="Where downloads are saved while in progress."
         :error="validationErrors.config?.DOWNLOAD_DIR"
     />
     <TextInput
         v-model="config.COMPLETE_DIR"
         name="Complete Directory"
-        tooltip="Directory for completed Downloads."
+        tooltip="Where finished downloads are moved."
         :error="validationErrors.config?.COMPLETE_DIR"
     />
     <TextInput
         v-model="config.ARR_COMPLETE_DIR"
         name="*arr Complete Directory"
-        tooltip="Overrides Complete Directory for Sonarr/Radarr TV. Blank = Complete Directory."
+        tooltip="Separate folder for Sonarr/Radarr downloads. Leave blank to use the Complete Directory."
         :error="validationErrors.config?.ARR_COMPLETE_DIR"
     />
     <TextInput
         v-model="config.LIVE_STRM_DIR"
         name="Live Channels Directory"
-        tooltip="Where subscribed live-channel .strm files go (point a Jellyfin library here). Blank = Complete Directory."
+        tooltip="Where live channel .strm files are saved. Point a Jellyfin library here. Leave blank to use the Complete Directory."
         :error="validationErrors.config?.LIVE_STRM_DIR"
     />
     <SelectInput
         v-model="config.VIDEO_QUALITY"
         name="Video Quality"
-        tooltip="Maximum video quality (Where available)"
+        tooltip="The best quality to download, where BBC offers it."
         :error="validationErrors.config?.VIDEO_QUALITY"
         :options="qualityProfiles"
     />
     <MultiSelectInput
         v-model="config.EXTRA_VIDEO_QUALITIES"
         name="Additional Qualities"
-        tooltip="Also offer these qualities as separate search results, so Sonarr/Radarr can choose between them by quality profile. Leave empty to offer only the Video Quality above."
+        tooltip="Offer these extra qualities as separate results so Sonarr/Radarr can pick one. Leave empty to offer only the Video Quality."
         :error="validationErrors.config?.EXTRA_VIDEO_QUALITIES"
         :options="qualityProfiles"
     />
     <SelectInput
         v-model="config.RELEASE_LANGUAGE"
         name="Release Language"
-        tooltip="Adds an explicit language tag (e.g. ENGLISH) to release names, for when Sonarr/Radarr shows the language as Unknown and refuses automatic grabs. You can also place {{language}} yourself in the filename templates."
+        tooltip="Adds a language tag like ENGLISH to release names. Use it if Sonarr/Radarr shows the language as Unknown and will not grab automatically."
         :error="validationErrors.config?.RELEASE_LANGUAGE"
         :options="releaseLanguages"
     />
     <SelectInput
         v-model="config.AIRDATE_NUMBERING"
         name="Airdate Numbering"
-        tooltip="Number episodes by their UK air date matched against TheTVDB (via Skyhook) instead of iPlayer's own Series/Episode labels, which often don't match. Falls back to iPlayer's numbering when no match is found. Manual overrides can be set through the numbering-overrides API."
+        tooltip="Number episodes by UK air date using TheTVDB, not iPlayer's own numbers, which often do not match. Uses iPlayer's numbers if nothing matches."
         :error="validationErrors.config?.AIRDATE_NUMBERING"
         :options="trueOrFalse"
     />
     <SelectInput
         v-model="config.OUTPUT_FORMAT"
         name="Output Format?"
-        tooltip="Which Output Format to use"
+        tooltip="The video file format."
         :error="validationErrors.config?.OUTPUT_FORMAT"
         :options="outputFormats"
     />
     <SelectInput
         v-model="config.ARCHIVE_ENABLED"
         name="Archive Downloads?"
-        tooltip="Archive Downloads for record-keeping"
+        tooltip="Keep a record of what has been downloaded."
         :error="validationErrors.config?.ARCHIVE_ENABLED"
         :options="trueOrFalse"
     />
     <SelectInput
         v-model="config.LIBRARY_FOLDER_STRUCTURE"
         name="Organize into Folder Structure?"
-        tooltip="Organise completed downloads into Show/Season (or Movie) folders."
+        tooltip="Sort finished downloads into Show/Season (or Movie) folders."
         :error="validationErrors.config?.LIBRARY_FOLDER_STRUCTURE"
         :options="trueOrFalse"
     />
     <SelectInput
         v-model="config.WRITE_NFO_STRM"
         name="Write .nfo Metadata Files?"
-        tooltip="Write a Jellyfin-compatible .nfo beside each completed item."
+        tooltip="Save a Jellyfin .nfo info file next to each download."
         :error="validationErrors.config?.WRITE_NFO_STRM"
         :options="nfoWriteModes"
     />
@@ -84,7 +84,7 @@
         v-if="config.WRITE_NFO_STRM !== 'none'"
         v-model="config.WRITE_STRMTOOL_JSON"
         name="Write .strmtool.json Files?"
-        tooltip="Write a .strmtool.json sidecar so the StrmTool Jellyfin plugin can skip probing .strm files."
+        tooltip="Save a small file that lets the StrmTool Jellyfin plugin skip scanning .strm files."
         :error="validationErrors.config?.WRITE_STRMTOOL_JSON"
         :options="trueOrFalse"
     />
@@ -94,14 +94,14 @@
             v-model="config.TV_FILENAME_TEMPLATE"
             :advanced="true"
             name="TV Filename Template"
-            tooltip="Template for TV Filenames, {title, synonym, season, episode, episodeTitle, quality}."
+            tooltip="Naming pattern for TV files. Use {title}, {synonym}, {season}, {episode}, {episodeTitle}, {quality}."
             :error="validationErrors.config?.TV_FILENAME_TEMPLATE"
         />
         <TextInput
             v-model="config.MOVIE_FILENAME_TEMPLATE"
             :advanced="true"
             name="Movie Filename Template"
-            tooltip="Template for Movie Filenames, {title, synonym, quality}."
+            tooltip="Naming pattern for movie files. Use {title}, {synonym}, {quality}."
             :error="validationErrors.config?.MOVIE_FILENAME_TEMPLATE"
         />
     </template>

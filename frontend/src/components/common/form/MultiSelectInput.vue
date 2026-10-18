@@ -2,10 +2,13 @@
     <div ref="root" :class="['form-group', advanced ? 'advanced' : '']">
         <label v-if="name">{{ name }}</label>
         <div :class="['inputBox', error ? 'error' : '']">
+            <div class="fieldRow">
             <button type="button" class="trigger" :aria-expanded="open" @click="open = !open">
                 <span class="summary">{{ summary }}</span>
                 <font-awesome-icon :icon="['fas', open ? 'chevron-up' : 'chevron-down']" />
             </button>
+            <InfoTip v-if="showInfo" :text="tooltip" />
+            </div>
             <ul v-if="open" class="menu">
                 <li v-for="option of options" :key="option.key">
                     <label class="option">
@@ -21,7 +24,7 @@
             <div v-if="error" class="error">
                 {{ error }}
             </div>
-            <div class="tooltip">
+            <div v-if="!showInfo" class="tooltip">
                 {{ tooltip }}
             </div>
         </div>
@@ -29,7 +32,9 @@
 </template>
 
 <script setup>
-import { computed, defineEmits, defineProps, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, defineEmits, defineProps, inject, onBeforeUnmount, onMounted, ref } from 'vue';
+
+import InfoTip from '@/components/common/form/InfoTip.vue';
 
 // Dropdown of tick boxes. The model is a comma-separated string of the ticked option keys
 // (e.g. 'history,arr'), matching how multi-valued settings are already stored as plain strings.
@@ -37,12 +42,17 @@ const props = defineProps({
     name: { type: String, required: true },
     options: { type: Array, required: true }, // [{ key, value }]
     tooltip: { type: String, required: true },
+    inlineTooltip: { type: Boolean, required: false, default: false },
     modelValue: { type: String, required: true },
     error: { type: String, required: false, default: undefined },
     advanced: { type: Boolean, required: false, default: false },
 });
 
 const emit = defineEmits(['update:modelValue']);
+
+// Settings page shows the tooltip behind an (i) button; elsewhere (and when inlineTooltip is set) it stays as text below.
+const infoTips = inject('infoTips', false);
+const showInfo = computed(() => infoTips && !props.inlineTooltip);
 
 const open = ref(false);
 const root = ref(null);
@@ -114,14 +124,21 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         flex: 1 1 auto;
         box-sizing: border-box;
 
+        .fieldRow {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         .trigger {
+            flex: 1 1 auto;
+            min-width: 0;
             box-sizing: border-box;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
             padding: 6px 16px;
-            width: 100%;
             height: 35px;
             border: 1px solid @input-border-color;
             border-radius: 4px;

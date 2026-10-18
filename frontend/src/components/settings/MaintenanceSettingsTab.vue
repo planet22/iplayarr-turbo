@@ -4,6 +4,7 @@
         v-model="config.STREAM_HISTORY_RETENTION_DAYS"
         type-override="number"
         name="Stream History Retention (Days)"
+        inline-tooltip
         tooltip="Delete stream history older than this many days (runs nightly)."
         :error="validationErrors.config?.STREAM_HISTORY_RETENTION_DAYS"
     />

@@ -3,14 +3,14 @@
     <TextInput
         v-model="config.ACTIVE_LIMIT"
         name="Download Limit"
-        tooltip="The number of simultaneous downloads."
+        tooltip="How many downloads can run at once."
         type-override="number"
         :error="validationErrors.config?.ACTIVE_LIMIT"
     />
     <SelectInput
         v-model="config.DOWNLOAD_CLIENT"
         name="Download Client?"
-        tooltip="Which Download Client to use"
+        tooltip="The tool used to download."
         :error="validationErrors.config?.DOWNLOAD_CLIENT"
         :options="downloadClients"
     />
@@ -20,7 +20,7 @@
             v-model="config.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
             :advanced="true"
             name="Additional Download Parameters"
-            :tooltip="paramsLocked ? lockedReason : 'Extra parameters to pass to get_iplayer for download'"
+            :tooltip="paramsLocked ? lockedReason : 'Extra options passed to get_iplayer.'"
             :disabled="paramsLocked"
             :error="validationErrors.config?.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
         />

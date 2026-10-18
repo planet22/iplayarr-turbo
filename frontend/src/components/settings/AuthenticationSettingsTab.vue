@@ -4,7 +4,7 @@
         v-model="config.AUTH_TYPE"
         :advanced="false"
         name="Authentication Enabled?"
-        tooltip="Enable Authentication for iPlayarr Turbo."
+        tooltip="Require a login to use iPlayarr Turbo."
         :error="validationErrors.config?.AUTH_TYPE"
         :options="authTypes"
     />
@@ -30,7 +30,7 @@
         <TextInput
             v-model="config.OIDC_CONFIG_URL"
             name="OIDC Configuration URL"
-            tooltip="The OIDC Configuration URL."
+            tooltip="The OIDC provider's configuration URL."
             :error="validationErrors.config?.OIDC_CONFIG_URL"
         />
         <TextInput
@@ -42,20 +42,20 @@
         <TextInput
             v-model="config.OIDC_CLIENT_ID"
             name="OIDC Client ID"
-            tooltip="The OIDC Client ID."
+            tooltip="Client ID from your OIDC provider."
             :error="validationErrors.config?.OIDC_CLIENT_ID"
         />
         <TextInput
             v-model="config.OIDC_CLIENT_SECRET"
             name="OIDC Client Secret"
-            tooltip="The OIDC Client Secret."
+            tooltip="Client secret from your OIDC provider."
             type-override="password"
             :error="validationErrors.config?.OIDC_CLIENT_SECRET"
         />
         <TextInput
             v-model="config.OIDC_ALLOWED_EMAILS"
             name="OIDC Allowed Emails"
-            tooltip="Comma-separated list of allowed email addresses."
+            tooltip="Email addresses allowed to log in, separated by commas."
             :error="validationErrors.config?.OIDC_ALLOWED_EMAILS"
         />
         <div class="button-container">

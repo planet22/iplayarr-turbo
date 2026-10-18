@@ -2,6 +2,7 @@
     <div :class="['form-group', advanced ? 'advanced' : '']">
         <label v-if="name">{{ name }}</label>
         <div class="inputBox">
+            <div class="fieldRow">
             <div :class="['inputWithButton', error ? 'error' : '']">
                 <input v-model="localValue" :type="typeOverride" :placeholder="placeholder" :disabled="disabled" />
                 <div class="buttonGroup">
@@ -16,10 +17,12 @@
                     </button>
                 </div>
             </div>
+            <InfoTip v-if="showInfo" :text="tooltip" />
+            </div>
             <div v-if="error" class="error">
                 {{ error }}
             </div>
-            <div class="tooltip">
+            <div v-if="!showInfo" class="tooltip">
                 {{ tooltip }}
             </div>
         </div>
@@ -27,7 +30,9 @@
 </template>
 
 <script setup>
-import { defineEmits, defineProps, ref, watch } from 'vue';
+import { computed, defineEmits, defineProps, inject, ref, watch } from 'vue';
+
+import InfoTip from '@/components/common/form/InfoTip.vue';
 
 const props = defineProps({
     name: {
@@ -37,6 +42,11 @@ const props = defineProps({
     tooltip: {
         type: String,
         required: true,
+    },
+    inlineTooltip: {
+        type: Boolean,
+        required: false,
+        default: false,
     },
     modelValue: {
         type: String,
@@ -77,6 +87,10 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue', 'action']);
+
+// Settings page shows the tooltip behind an (i) button; elsewhere (and when inlineTooltip is set) it stays as text below.
+const infoTips = inject('infoTips', false);
+const showInfo = computed(() => infoTips && !props.inlineTooltip);
 
 const localValue = ref(props.modelValue);
 const copied = ref(false);
@@ -175,10 +189,18 @@ const copyValue = async () => {
             color: @error-color;
         }
 
+        .fieldRow {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         .inputWithButton {
             position: relative;
             display: flex;
             align-items: center;
+            flex: 1 1 auto;
+            min-width: 0;
             width: 100%;
 
             .buttonGroup {

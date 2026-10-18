@@ -2,15 +2,18 @@
     <div :class="['form-group', advanced ? 'advanced' : '']">
         <label v-if="name">{{ name }}</label>
         <div :class="['inputBox', error ? 'error' : '']">
+            <div class="fieldRow">
             <select v-model="localValue">
                 <option v-for="option of options" :key="option.key" :value="option.key">
                     {{ option.value }}
                 </option>
             </select>
+            <InfoTip v-if="showInfo" :text="tooltip" />
+            </div>
             <div v-if="error" class="error">
                 {{ error }}
             </div>
-            <div class="tooltip">
+            <div v-if="!showInfo" class="tooltip">
                 {{ tooltip }}
             </div>
         </div>
@@ -18,7 +21,9 @@
 </template>
 
 <script setup>
-import { defineEmits, defineProps, ref, watch } from 'vue';
+import { computed, defineEmits, defineProps, inject, ref, watch } from 'vue';
+
+import InfoTip from '@/components/common/form/InfoTip.vue';
 
 const props = defineProps({
     name: {
@@ -32,6 +37,11 @@ const props = defineProps({
     tooltip: {
         type: String,
         required: true,
+    },
+    inlineTooltip: {
+        type: Boolean,
+        required: false,
+        default: false,
     },
     modelValue: {
         type: [String, Boolean, Number],
@@ -50,6 +60,10 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue']);
+
+// Settings page shows the tooltip behind an (i) button; elsewhere (and when inlineTooltip is set) it stays as text below.
+const infoTips = inject('infoTips', false);
+const showInfo = computed(() => infoTips && !props.inlineTooltip);
 
 const localValue = ref(props.modelValue);
 
@@ -94,7 +108,15 @@ watch(
         flex: 1 1 auto;
         box-sizing: border-box;
 
+        .fieldRow {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         select {
+            flex: 1 1 auto;
+            min-width: 0;
             box-sizing: border-box;
             padding: 6px 16px;
             width: 100%;

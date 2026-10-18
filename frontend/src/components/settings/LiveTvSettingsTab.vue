@@ -3,7 +3,7 @@
     <SelectInput
         v-model="config.LIVE_TV_ENABLED"
         name="Live TV"
-        tooltip="Offer BBC live channels to Jellyfin as an M3U tuner and XMLTV guide. Needs Stream Base URL and Key."
+        tooltip="Share BBC live channels with Jellyfin as a tuner and TV guide. Needs the Stream Base URL and Key."
         :error="validationErrors.config?.LIVE_TV_ENABLED"
         :options="liveTvOptions"
     />
@@ -18,7 +18,7 @@
             <TextInput
                 v-model="config.STREAM_KEY"
                 name="Stream Key"
-                tooltip="Secures tuner, guide and playback links (separate from the API Key)."
+                tooltip="Protects the tuner, guide and playback links. Separate from the API Key."
                 :error="validationErrors.config?.STREAM_KEY"
                 :copyable="true"
                 icon-button="qrcode"
@@ -42,13 +42,13 @@
             v-model="config.LIVE_TV_EPG_OFFSET"
             type-override="number"
             name="EPG Time Offset (minutes)"
-            tooltip="Shift guide times if Jellyfin shows them early or late, e.g. 60 or -60. 0 = no shift."
+            tooltip="Minutes to shift guide times if they show early or late, e.g. 60 or -60. 0 = no shift."
             :error="validationErrors.config?.LIVE_TV_EPG_OFFSET"
         />
         <SelectInput
             v-model="config.LIVE_TV_LOGO_SHAPE"
             name="Channel Logo Shape"
-            tooltip="Landscape suits Jellyfin's guide cards, Square its channel tiles. After changing, save and Update the tuner."
+            tooltip="Landscape suits guide cards, Square suits channel tiles. After changing, save and update the tuner."
             :options="logoShapeOptions"
         />
         <div class="rebuildLogos">
@@ -63,13 +63,13 @@
         <SelectInput
             v-model="config.LIVE_TV_GUIDE_CATEGORIES"
             name="Guide Categories"
-            tooltip="Tag programmes with their BBC category for Jellyfin's colours and Movies/Sports/News/Kids filters."
+            tooltip="Tag programmes by category (Movies, Sports, News, Kids) for Jellyfin colours and filters."
             :options="onOffOptions"
         />
         <SelectInput
             v-model="config.LIVE_TV_GUIDE_FLAGS"
             name="Live / New / Repeat Flags"
-            tooltip="Tag programmes as live, new or repeat for Jellyfin's indicators."
+            tooltip="Tag programmes as live, new or repeat."
             :options="onOffOptions"
         />
         <SelectInput

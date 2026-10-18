@@ -92,6 +92,7 @@ const validationErrors = ref({
 provide('settingsConfig', config);
 provide('settingsValidationErrors', validationErrors);
 provide('settingsShowAdvanced', showAdvanced);
+provide('infoTips', true);
 
 const qualityProfiles = ref([]);
 const trueOrFalse = ref([
