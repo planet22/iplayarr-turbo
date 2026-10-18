@@ -45,6 +45,8 @@ FROM redis:8-alpine3.23 AS redis
 # one thing that differs between them.
 FROM node:24-alpine3.24 AS runtime-base
 
+# font-dejavu: the live channel logos/posters carry text that sharp (librsvg) rasterises, and Alpine has no
+# fonts by default - without one the text renders as empty boxes.
 RUN apk --update add \
     ffmpeg \
     openssl \
@@ -54,7 +56,8 @@ RUN apk --update add \
     perl-xml-libxml \
     su-exec \
     python3 \
-    tzdata
+    tzdata \
+    font-dejavu
 
 # atomicparsley still isn't packaged in any stable Alpine release, only edge/testing,
 # so it needs its own apk invocation - keeping --allow-untrusted scoped to just this
