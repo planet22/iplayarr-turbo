@@ -18,6 +18,10 @@ export interface BrowseItem {
     thumbnail?: string;
     channel?: string;
     category?: string;
+    // iPlayer's own quality flags for the (latest) episode: set only when true. Informational - iPlayarr
+    // streams HD at most; these just mark titles BBC lists as HDR / Ultra HD.
+    hdr?: boolean;
+    uhd?: boolean;
 }
 
 export interface BrowseRail {

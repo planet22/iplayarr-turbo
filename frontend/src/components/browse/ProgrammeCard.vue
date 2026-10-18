@@ -5,6 +5,7 @@
             <div v-else class="noThumb">
                 <font-awesome-icon :icon="['fas', 'tv']" size="2x" />
             </div>
+            <QualityBadges :item="item" class="thumbBadges" />
             <span v-if="item.kind !== 'episode'" class="kind">{{ item.kind === 'brand' ? 'Programme' : 'Series' }}</span>
             <div v-if="item.kind === 'episode'" class="overlay">
                 <button v-if="canPlay" class="clickable" title="Play Video" @click.prevent.stop="play(item)">
@@ -27,6 +28,7 @@
 import { computed, defineProps } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
+import QualityBadges from '@/components/common/QualityBadges.vue';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
@@ -70,6 +72,12 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
         align-items: center;
         justify-content: center;
         color: @subtle-text-color;
+    }
+
+    .thumbBadges {
+        position: absolute;
+        top: 6px;
+        right: 6px;
     }
 
     .kind {

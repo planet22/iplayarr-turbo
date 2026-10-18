@@ -5,6 +5,7 @@ import browseService, {
     dedupeRails,
     extractElements,
     parseIplayerState,
+    parseQualityFlags,
     parseSkipMarkers,
     shuffled,
     toBrowseItem,
@@ -600,5 +601,31 @@ describe('parseSkipMarkers', () => {
         expect(parseSkipMarkers(episode)).toEqual([]);
         expect(parseSkipMarkers(undefined)).toEqual([]);
         expect(parseSkipMarkers({})).toEqual([]);
+    });
+});
+
+describe('parseQualityFlags', () => {
+    const version = (kind: string, hdr: boolean, uhd: boolean) => ({ kind, hd: true, hdr, uhd });
+
+    it('reads the original version of an episode', () => {
+        const episode = { versions: [version('audio-described', false, false), version('original', true, true)] };
+        expect(parseQualityFlags(episode)).toEqual({ hdr: true, uhd: true });
+        expect(parseQualityFlags({ versions: [version('original', false, true)] })).toEqual({ uhd: true });
+    });
+
+    it('reads a list item through its latest episode', () => {
+        expect(parseQualityFlags({ initial_children: [{ versions: [version('original', true, false)] }] })).toEqual({ hdr: true });
+    });
+
+    it('sets nothing when the flags are false or missing', () => {
+        expect(parseQualityFlags({ versions: [version('original', false, false)] })).toEqual({});
+        expect(parseQualityFlags({})).toEqual({});
+        expect(parseQualityFlags(undefined)).toEqual({});
+    });
+
+    it('is carried onto browse items only when set', () => {
+        const element = { id: 'm002whth', title: 'A Good Girl', type: 'episode', versions: [version('original', false, true)] };
+        expect(toBrowseItem(element)).toMatchObject({ pid: 'm002whth', uhd: true });
+        expect(toBrowseItem({ ...element, versions: [version('original', false, false)] })).not.toHaveProperty('uhd');
     });
 });

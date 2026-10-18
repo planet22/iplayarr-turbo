@@ -47,6 +47,12 @@
         tooltip="Colour channel pills from each BBC logo. Applies instantly."
         :options="trueOrFalse"
     />
+    <SelectInput
+        v-model="qualityBadgesEnabled"
+        name="Show HDR / UHD Badges"
+        tooltip="Mark programmes iPlayer lists as HDR or Ultra HD. It only shows what BBC offers - iPlayarr itself streams HD at most. For series and programmes it reflects the latest episode. Applies instantly."
+        :options="trueOrFalse"
+    />
 
     <template v-if="showAdvanced">
         <TextInput
@@ -81,6 +87,7 @@ import { computed, defineEmits, defineProps, inject } from 'vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import { useChannelPillColors } from '@/lib/channelPillColors';
+import { useQualityBadges } from '@/lib/qualityBadges';
 
 defineProps({
     trueOrFalse: {
@@ -104,5 +111,11 @@ const { state: pillColors, setEnabled: setPillColorsEnabled } = useChannelPillCo
 const pillColorsEnabled = computed({
     get: () => String(pillColors.enabled),
     set: (value) => setPillColorsEnabled(value === 'true'),
+});
+
+const { state: qualityBadges, setEnabled: setQualityBadgesEnabled } = useQualityBadges();
+const qualityBadgesEnabled = computed({
+    get: () => String(qualityBadges.enabled),
+    set: (value) => setQualityBadgesEnabled(value === 'true'),
 });
 </script>

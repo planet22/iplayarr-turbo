@@ -2,6 +2,7 @@
     <div class="browseHero" :style="heroStyle">
         <div class="heroContent">
             <ChannelPill :channel="item.channel" />
+            <QualityBadges :item="item" />
             <h1>{{ item.title }}</h1>
             <h2 v-if="item.subtitle">{{ item.subtitle }}</h2>
             <p v-if="item.synopsis">{{ item.synopsis }}</p>
@@ -27,6 +28,7 @@
 import { computed, defineProps } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
+import QualityBadges from '@/components/common/QualityBadges.vue';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { getThumbnailUrl } from '@/lib/utils';
 

@@ -54,6 +54,16 @@ export function parseIplayerState(html: string): any {
     }
 }
 
+// iPlayer flags every version of an episode `hd` / `hdr` / `uhd`. An episode carries `versions` itself;
+// a programme/series/brand list item carries its latest episode as `initial_children[0]`, so for those
+// the flags describe the latest episode only. The original version is used (the audio-described and
+// signed cuts are not what anyone browses for).
+export function parseQualityFlags(element: any): { hdr?: true; uhd?: true } {
+    const versions: any[] = element?.versions ?? element?.initial_children?.[0]?.versions ?? [];
+    const version = versions.find((v) => v?.kind === 'original') ?? versions[0];
+    return { ...(version?.hdr === true ? { hdr: true as const } : {}), ...(version?.uhd === true ? { uhd: true as const } : {}) };
+}
+
 export function toBrowseItem(element: any): BrowseItem | undefined {
     if (!element?.id || !element?.title) return undefined;
     // Rails like a channel's "highlights" mix in category/collection promo tiles whose id isn't a
@@ -82,6 +92,7 @@ export function toBrowseItem(element: any): BrowseItem | undefined {
         thumbnail: imagePid ? `json-api/thumbnail/${imagePid}.jpg` : undefined,
         channel: element.master_brand?.titles?.small ?? element.master_brand?.titles?.medium,
         category: element.labels?.category,
+        ...parseQualityFlags(element),
     };
 }
 

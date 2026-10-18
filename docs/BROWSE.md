@@ -30,6 +30,12 @@ Wherever a channel name appears as a small pill (Discover, Search, Subscriptions
 
 This is a per-browser preference, not a server setting: the **Colour channel pills by logo** checkbox on the Discover page toggles it off, back to every pill being the plain default colour, and the choice is remembered (`localStorage`) across visits. A channel with no mapped colour (e.g. one not in `BrowseChannels.ts`) always falls back to the plain style regardless of the toggle.
 
+### HDR / UHD badges
+
+iPlayer flags each programme as available in HDR and/or Ultra HD. With **Show HDR / UHD badges** turned on (Settings → General), cards and the Discover banner carry a small **UHD** or **HDR** badge on those titles. It is off by default and, like the channel pills, a per-browser preference rather than a server setting, remembered in `localStorage` and applied instantly.
+
+The badge only reports what BBC lists: iPlayarr itself streams HD at most, so a UHD badge does not mean you can download or stream it in 4K. For a series or programme the flag describes its latest episode.
+
 ### Play and Download
 
 - **Play** appears only when a **Stream Key** is configured (Settings → Streaming), the same precondition the player itself enforces. On touch devices the buttons are always visible, since there is no hover.
@@ -93,5 +99,6 @@ All under `/json-api/browse` (behind the same login as the rest of `/json-api`),
 | `GET /schedule?date=YYYY-MM-DD` | Every channel's full day of broadcasts (defaults to today, UK calendar date) - what the Schedule page renders |
 | `GET /atoz/:letter?page=&perPage=` | A page of programmes for `a`-`z` or `0` (digits) |
 | `GET /programme/:pid` | A show with its series and episodes |
+| `GET /markers/:pid` | An episode's "Skip intro" / "Skip recap" spans as `[{type, start, end}]` (seconds). Many episodes have none (`[]`); nothing in the UI uses it yet |
 | `GET /details?pids=a,b,c` | Batch episode details (up to 40), used for Posters artwork |
 | `GET /suggest?q=` | Title suggestions for type-ahead |
