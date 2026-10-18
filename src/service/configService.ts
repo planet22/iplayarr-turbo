@@ -4,6 +4,7 @@ import searchFacade from '../facade/searchFacade';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
+import episodeDetailsCache from './episodeDetailsCache';
 
 dotenv.config();
 
@@ -111,6 +112,10 @@ const configService = {
         configMap[parameter] = value;
         await storage.setItem('config', encryptSettings(configMap));
         if ((parameter == IplayarrParameter.NATIVE_SEARCH || parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE) && oldValue != value) {
+            searchFacade.clearSearchCache();
+        }
+        if (parameter == IplayarrParameter.AIRDATE_NUMBERING && oldValue != value) {
+            await episodeDetailsCache.clear();
             searchFacade.clearSearchCache();
         }
     },

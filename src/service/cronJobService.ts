@@ -40,8 +40,8 @@ class CronJobService {
 
     getTasks(): CronTaskStatus[] {
         return Array.from(this.tasks.values()).map((task) => {
-            const { id, label, description, cron: cronExpression, running, lastTrigger, lastStartedAt, lastFinishedAt, lastStatus, lastError } = task;
-            return { id, label, description, cron: cronExpression, running, lastTrigger, lastStartedAt, lastFinishedAt, lastStatus, lastError };
+            const { id, label, description, group, cron: cronExpression, running, lastTrigger, lastStartedAt, lastFinishedAt, lastStatus, lastError } = task;
+            return { id, label, description, group, cron: cronExpression, running, lastTrigger, lastStartedAt, lastFinishedAt, lastStatus, lastError };
         });
     }
 

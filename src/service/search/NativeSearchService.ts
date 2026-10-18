@@ -16,27 +16,30 @@ import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
 import AbstractSearchService from './AbstractSearchService';
+import newSearchCache from './newSearchCache';
 
 const maxEpisodePages = 10;
-
 class NativeSearchService implements AbstractSearchService {
 
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
         const matchAllWords = (await configService.getParameter(IplayarrParameter.SEARCH_MATCH_ALL_WORDS)) !== 'false';
         const url = `https://ibl.api.bbc.co.uk/ibl/v1/new-search?q=${encodeURIComponent(term)}`;
-        let response: AxiosResponse<IPlayerNewSearchResponse>;
-        try {
-            response = await axios.get(url);
-        } catch (err: any) {
-            loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
-            return [];
+        let results: IPlayerNewSearchResult[] | undefined = await newSearchCache.get(term.toLowerCase());
+        if (!results) {
+            let response: AxiosResponse<IPlayerNewSearchResponse>;
+            try {
+                response = await axios.get(url);
+            } catch (err: any) {
+                loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
+                return [];
+            }
+            if (response.status == 200) {
+                results = response.data.new_search.results;
+                await newSearchCache.set(term.toLowerCase(), results).catch(() => undefined);
+            }
         }
-        if (response.status == 200) {
-            const {
-                new_search: { results },
-            } = response.data;
-
+        if (results) {
             const lunrResults: Index.Result[] = this.#indexAndReSearch(term, results, matchAllWords);
             const pidLedger: string[] = [];
             const infoPidLedger: Set<string> = new Set();

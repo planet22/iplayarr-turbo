@@ -64,7 +64,7 @@
                 :title="refreshTitle"
                 @click="emit('refresh')"
             >
-                <font-awesome-icon :icon="['fas', 'arrows-rotate']" />
+                <font-awesome-icon :icon="['fas', 'arrows-rotate']" :spin="refreshing" />
                 <div class="SettingsPageToolbar-label">{{ refreshLabel }}</div>
             </button>
             <button
@@ -86,6 +86,16 @@
                 @click="emit('deleteQueueItem')"
             >
                 <font-awesome-icon :icon="['fas', 'trash']" />
+            </button>
+            <button
+                v-if="icons.some((i) => i == 'clear')"
+                class="SettingsPageToolbar-button clickable"
+                :disabled="clearDisabled"
+                :title="clearTitle"
+                @click="emit('clear')"
+            >
+                <font-awesome-icon :icon="['fas', 'trash-can']" />
+                <div class="SettingsPageToolbar-label">{{ clearLabel }}</div>
             </button>
             <template v-if="icons.some((i) => i == 'filter')">
                 <button
@@ -132,6 +142,7 @@ const emit = defineEmits([
     'run',
     'stop',
     'refresh',
+    'clear',
 ]);
 const showFilterDropdown = ref(false);
 const dropdownDiv = ref(null);
@@ -209,7 +220,29 @@ defineProps({
         required: false,
         default: 'Stop',
     },
+    // clear icon: a labelled trash button on the right, for emptying whatever the page lists.
+    clearDisabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    clearLabel: {
+        type: String,
+        required: false,
+        default: 'Clear All',
+    },
+    clearTitle: {
+        type: String,
+        required: false,
+        default: undefined,
+    },
     refreshDisabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    // refresh icon: spin while the page is reloading.
+    refreshing: {
         type: Boolean,
         required: false,
         default: false,

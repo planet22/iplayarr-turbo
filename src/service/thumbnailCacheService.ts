@@ -108,6 +108,45 @@ class ThumbnailCacheService {
         }
     }
 
+    // How many thumbnails are on disk and how much space they take.
+    async stats(): Promise<{ count: number; sizeBytes: number }> {
+        let count = 0;
+        let sizeBytes = 0;
+        for (const filePath of await this.#listThumbnails()) {
+            try {
+                sizeBytes += (await fs.promises.stat(filePath)).size;
+                count += 1;
+            } catch {
+                // Deleted since readdir - not counted.
+            }
+        }
+        return { count, sizeBytes };
+    }
+
+    // Deletes every cached thumbnail; they are fetched again on demand.
+    async clearAll(): Promise<number> {
+        let deleted = 0;
+        for (const filePath of await this.#listThumbnails()) {
+            try {
+                await fs.promises.unlink(filePath);
+                deleted += 1;
+            } catch {
+                // Already gone.
+            }
+        }
+        return deleted;
+    }
+
+    async #listThumbnails(): Promise<string[]> {
+        const cacheDir = await getThumbnailCacheDir();
+        try {
+            return (await fs.promises.readdir(cacheDir)).filter((name) => name.endsWith('.jpg')).map((name) => path.join(cacheDir, name));
+        } catch (error: any) {
+            if (error.code === 'ENOENT') return [];
+            throw error;
+        }
+    }
+
     // Deletes cached thumbnails that haven't been viewed for THUMBNAIL_RETENTION_DAYS.
     async cleanup(): Promise<number> {
         const cacheDir = await getThumbnailCacheDir();

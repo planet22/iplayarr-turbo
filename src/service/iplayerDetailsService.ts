@@ -6,9 +6,13 @@ import { IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataRespons
 import { withRetry } from '../utils/retry';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
 import DbCacheService from './db/dbCacheService';
+import episodeDetailsCache from './episodeDetailsCache';
 
 class IPlayerDetailsService {
-    metadataCache: DbCacheService<IPlayerMetadataResponse> = new DbCacheService('metadata_cache', 86400); // 24 hours
+    metadataCache: DbCacheService<IPlayerMetadataResponse> = new DbCacheService('metadata_cache', 86400, { label: 'Programme metadata', description: 'BBC programme details per PID (title, synopsis, parents).' });
+    // IBL episode-list pages per programme/series pid. Short TTL: new episodes must show up, and the
+    // hourly subscription check relies on seeing them.
+    episodesCache: DbCacheService<IPlayerEpisodeMetadata[]> = new DbCacheService('ibl_episodes', 1800, { label: 'Episode lists', description: 'Pages of episodes per brand/series. Keep short so new episodes appear and subscriptions see them.' });
     // ids BBC answered 404 for (e.g. live channel ids like bbc_two_england, which several pages
     // ask details for) mapped to when to try again - otherwise every request repeats the BBC round trip.
     notFound: Map<string, number> = new Map();
@@ -39,18 +43,24 @@ class IPlayerDetailsService {
     }
 
     async episodeDetails(pid: string, axiosInstance: Axios = axios): Promise<IPlayerDetails> {
+        const cached = await episodeDetailsCache.get(pid);
+        if (cached) return cached;
         const { programme } = await this.getMetadata(pid, axiosInstance);
         const [type, episode, episodeTitle, series] = await calculateSeasonAndEpisode(programme);
         // The immediate parent is often a mid-tier "series" (season), not the top-level "brand" -
         // only a brand's episode listing is guaranteed non-empty, so climb the rest of the way when
         // the parent isn't already one (see findBrandForPid / browseService.programme's own climb).
         const parent = programme.parent?.programme;
+        let brandLookupFailed = false;
         const seriesPid = !parent
             ? undefined
             : parent.type === 'brand'
                 ? parent.pid
-                : await this.findBrandForPid(parent.pid).catch(() => undefined);
-        return {
+                : await this.findBrandForPid(parent.pid).catch(() => {
+                    brandLookupFailed = true;
+                    return undefined;
+                });
+        const details: IPlayerDetails = {
             pid,
             title: programme.display_title?.title ?? programme.title,
             episode,
@@ -68,6 +78,9 @@ class IPlayerDetailsService {
             type,
             seriesPid,
         };
+        // A failed brand climb is usually transient, so don't keep that gap for hours.
+        if (!brandLookupFailed) await episodeDetailsCache.set(pid, details).catch(() => undefined);
+        return details;
     }
 
     async getMetadata(pid: string, axiosInstance: Axios = axios): Promise<IPlayerMetadataResponse> {
@@ -105,11 +118,16 @@ class IPlayerDetailsService {
     }
 
     async getSeriesEpisodes(pid: string, page: number = 1, perPage: number = searchResultLimit): Promise<IPlayerEpisodeMetadata[]> {
+        const cacheKey = `${pid}_${perPage}_${page}`;
+        const cached = await this.episodesCache.get(cacheKey);
+        if (cached) return cached;
         try {
             const response: AxiosResponse<IPlayerEpisodesResponse> = await withRetry(() => axios.get(
                 `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`
             ));
-            return response.data.programme_episodes.elements;
+            const elements = response.data.programme_episodes.elements;
+            await this.episodesCache.set(cacheKey, elements).catch(() => undefined);
+            return elements;
         } catch {
             return [];
         }
@@ -119,13 +137,18 @@ class IPlayerDetailsService {
     // can tell a failed page from a genuinely short (final) one. Used by Native Search V2.
     async getSeriesEpisodesChecked(pid: string, page: number = 1, perPage: number = searchResultLimit): Promise<{ elements: IPlayerEpisodeMetadata[]; failed: boolean }> {
         const url = `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`;
+        const cacheKey = `${pid}_${perPage}_${page}`;
+        const cached = await this.episodesCache.get(cacheKey);
+        if (cached) return { elements: cached, failed: false };
         try {
             // Backs off and honours Retry-After on a 429, instead of retrying straight away.
             const response: AxiosResponse<IPlayerEpisodesResponse> = await withRetry(() => axios.get(url), {
                 retries: 2,
                 retryUnknown: true,
             });
-            return { elements: response.data.programme_episodes.elements ?? [], failed: false };
+            const elements = response.data.programme_episodes.elements ?? [];
+            await this.episodesCache.set(cacheKey, elements).catch(() => undefined);
+            return { elements, failed: false };
         } catch {
             return { elements: [], failed: true };
         }

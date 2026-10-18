@@ -213,8 +213,8 @@ export function dedupeRails(rails: BrowseRail[]): BrowseRail[] {
 }
 
 class BrowseService {
-    shortCache: DbCacheService<any> = new DbCacheService('browse_short', 900); // 15 minutes
-    longCache: DbCacheService<any> = new DbCacheService('browse_long', 86400); // 24 hours
+    shortCache: DbCacheService<any> = new DbCacheService('browse_short', 900, { label: 'Browse (listings)', description: 'Fast-changing iPlayer listings: highlights, schedules, recently added.' });
+    longCache: DbCacheService<any> = new DbCacheService('browse_long', 86400, { label: 'Browse (static)', description: 'Slow-changing iPlayer data: categories, channel logos, skip markers.' });
 
     async #ibl(path: string, cache: DbCacheService<any> = this.shortCache): Promise<any> {
         return cache.getOr(path, async () => {

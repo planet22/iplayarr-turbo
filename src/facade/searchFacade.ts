@@ -22,8 +22,8 @@ interface SearchTerm {
 }
 
 class SearchFacade {
-    searchCache: DbCacheService<IPlayerSearchResult[]> = new DbCacheService('search_cache', 300);
-    traceCache: DbCacheService<TraceCandidate[]> = new DbCacheService('search_trace_cache', 300);
+    searchCache: DbCacheService<IPlayerSearchResult[]> = new DbCacheService('search_cache', 1800, { label: 'Search results', description: 'Finished Sonarr/Radarr search results per search term.' });
+    traceCache: DbCacheService<TraceCandidate[]> = new DbCacheService('search_trace_cache', 1800, { label: 'Search trace', description: 'Why each candidate was kept or dropped, for the search debugger.' });
 
     async search(inputTerm: string, season?: number, episode?: number): Promise<IPlayerSearchResult[]> {
         return this.#run(inputTerm, season, episode);
@@ -190,11 +190,13 @@ class SearchFacade {
     }
 
     removeFromSearchCache(term: string) {
-        this.searchCache.del(term);
+        this.searchCache.delWithVariants(term);
+        this.traceCache.delWithVariants(term);
     }
 
     clearSearchCache() {
         this.searchCache.clear();
+        this.traceCache.clear();
     }
 }
 

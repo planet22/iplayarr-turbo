@@ -18,13 +18,13 @@ import synonymService from '../synonymService';
 import { AbstractScheduleService } from './AbstractScheduleService';
 
 class NativeScheduleService implements AbstractScheduleService {
-    scheduleCache: DbCacheService<IPlayerSearchResult[]> = new DbCacheService('schedule_cache', 5400);
-    cacheTime: DbCacheService<number> = new DbCacheService('schedule_cache_time', 5400);
+    scheduleCache: DbCacheService<IPlayerSearchResult[]> = new DbCacheService('schedule_cache', 5400, { label: 'Schedule feed', description: 'The RSS feed built from the last few days of BBC schedules.' });
+    cacheTime: DbCacheService<number> = new DbCacheService('schedule_stamp', 5400); // distinct prefix so it is not counted under schedule_cache
     // A past day's BBC schedule page never changes once the day is over, so there's no reason to
     // re-fetch/re-parse it on every refresh cycle - only today's page is still being updated.
     // Cached indefinitely relative to a single refresh cycle (14 days comfortably outlives any
     // realistic RSS_FEED_HOURS window) and only ever written once a day has fully passed.
-    schedulePageCache: DbCacheService<string[]> = new DbCacheService('schedule_page_pids', 60 * 60 * 24 * 14);
+    schedulePageCache: DbCacheService<string[]> = new DbCacheService('schedule_page_pids', 60 * 60 * 24 * 14, { label: 'Schedule pages', description: 'Programme IDs scraped from BBC schedule pages of past days (those never change).' });
     caching: boolean = false;
 
 

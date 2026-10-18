@@ -19,6 +19,7 @@ import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
 import AbstractSearchService from './AbstractSearchService';
 import nativeSearchService from './NativeSearchService';
+import newSearchCache from './newSearchCache';
 
 const maxEpisodePages = 10;
 const episodeChunkSize = 5;
@@ -147,9 +148,14 @@ class NativeSearchV2Service implements AbstractSearchService {
     // undefined when the BBC search itself failed.
     async #fetchHits(term: string): Promise<IPlayerNewSearchResult[] | undefined> {
         const url = `https://ibl.api.bbc.co.uk/ibl/v1/new-search?q=${encodeURIComponent(term)}`;
+        const cached = await newSearchCache.get(term.toLowerCase());
+        if (cached) return cached;
         try {
             const response: AxiosResponse<IPlayerNewSearchResponse> = await axios.get(url);
-            return response.status == 200 ? response.data.new_search.results : undefined;
+            if (response.status != 200) return undefined;
+            const hits = response.data.new_search.results;
+            await newSearchCache.set(term.toLowerCase(), hits).catch(() => undefined);
+            return hits;
         } catch (err: any) {
             loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
             return undefined;

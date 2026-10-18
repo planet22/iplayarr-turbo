@@ -3,6 +3,8 @@ export interface CronTaskDefinition {
     label: string;
     description: string;
     cron: string;
+    // Tasks tagged 'cache' are listed with the caches on the Maintenance tab instead of under Scheduled Tasks.
+    group?: 'cache';
 }
 
 export interface CronTaskStatus extends CronTaskDefinition {

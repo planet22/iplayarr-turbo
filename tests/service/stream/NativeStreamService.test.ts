@@ -117,6 +117,29 @@ describe('NativeStreamService', () => {
         expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Adaptive');
     });
 
+    it('persists the vpid, so a repeat resolve does not refetch playlist.json', async () => {
+        let playlistCalls = 0;
+        route = (url, m) => {
+            if (url.includes('/playlist.json')) playlistCalls++;
+            return defaultRoute(url, m);
+        };
+        await service.streamDirect('p1', req, res);
+        clearResolveCache();
+        await service.streamDirect('p1', req, res);
+        expect(playlistCalls).toBe(1);
+    });
+
+    it('checkAvailable never uses the persisted vpid', async () => {
+        let playlistCalls = 0;
+        route = (url, m) => {
+            if (url.includes('/playlist.json')) playlistCalls++;
+            return defaultRoute(url, m);
+        };
+        await service.streamDirect('p1', req, res);
+        await service.checkAvailable('p1');
+        expect(playlistCalls).toBe(2);
+    });
+
     it('prefers the plain programme version when resolving the vpid', async () => {
         await service.streamDirect('p1', req, res);
         const urls = (https.get as jest.Mock).mock.calls.map((c) => c[0] as string);
@@ -233,6 +256,52 @@ describe('NativeStreamService', () => {
             };
             await service.streamDirect('p1', req, res);
             expect(proxyUrl).toHaveBeenCalledWith('https://hq/master.m3u8', req, res, 5, undefined);
+        });
+
+        it('remembers the winning connection (and the vpid) so a repeat play makes one mediaselector call', async () => {
+            let selectorCalls = 0;
+            let playlistCalls = 0;
+            route = (url, m) => {
+                if (url.includes('/playlist.json')) playlistCalls++;
+                if (url.includes('mediaselector')) {
+                    selectorCalls++;
+                    return { body: twoConnections };
+                }
+                if (url.startsWith('https://hq/master.m3u8')) return { body: master(1080) };
+                return defaultRoute(url, m);
+            };
+            await service.streamDirect('p1', req, res);
+            expect(selectorCalls).toBe(4);
+
+            clearResolveCache();
+            selectorCalls = 0;
+            await service.streamDirect('p1', req, res);
+
+            expect(selectorCalls).toBe(1);
+            expect(playlistCalls).toBe(1);
+            expect(proxyUrl).toHaveBeenLastCalledWith('https://hq/master.m3u8', req, res, 5, undefined);
+        });
+
+        it('forgets a remembered connection that has gone and re-probes', async () => {
+            let selectorCalls = 0;
+            let remembered = true;
+            route = (url, m) => {
+                if (url.includes('mediaselector')) {
+                    selectorCalls++;
+                    return { body: remembered ? twoConnections : mediaXml([conn('transferFormat="hls" protocol="https" supplier="a" href="https://cdn/redirect?only"')]) };
+                }
+                if (url.startsWith('https://hq/master.m3u8')) return { body: master(1080) };
+                return defaultRoute(url, m);
+            };
+            await service.streamDirect('p1', req, res);
+
+            clearResolveCache();
+            remembered = false;
+            selectorCalls = 0;
+            await service.streamDirect('p1', req, res);
+
+            expect(selectorCalls).toBe(1 + 4);
+            expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, undefined);
         });
 
         it('skips candidates that fail to probe', async () => {

@@ -9,8 +9,9 @@ import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
-import { allMediaSelectorPairs, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
+import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
 import { cached, resolveTtlMs, vpidTtlMs } from './resolveCache';
+import { hqProbeCache, vpidCache } from './streamProbeCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
 import { loadSubtitleTrack, SubtitleTrack } from './subtitles/captionsSource';
@@ -198,7 +199,7 @@ class NativeStreamService implements AbstractStreamService {
         // A pid's versions rarely change, so this is cached much longer than the stream URL itself.
         // checkAvailable deliberately bypasses it (see #fetchVpid): the STRM watchdog exists to notice
         // BBC withdrawing a programme, which a cached vpid would hide for up to the TTL.
-        return cached(`vpid:${pid}`, vpidTtlMs, () => this.#fetchVpid(pid));
+        return cached(`vpid:${pid}`, vpidTtlMs, () => vpidCache.getOr(pid, () => this.#fetchVpid(pid)));
     }
 
     async #fetchVpid(pid: string): Promise<string> {
@@ -230,7 +231,13 @@ class NativeStreamService implements AbstractStreamService {
     // checkAvailable doesn't, so it is read here.
     async #resolveMasterPlaylistUrl(vpid: string, probeHqSetting?: boolean): Promise<string> {
         const probeHq = probeHqSetting ?? (await configService.getParameter(IplayarrParameter.STREAM_NATIVE_HQ_PROBE)) === 'true';
-        const { hrefs, reason } = await this.#resolveHlsConnections(vpid, !probeHq);
+        if (probeHq) {
+            const remembered = await this.#rememberedProbeWinner(vpid);
+            if (remembered) {
+                return remembered;
+            }
+        }
+        const { hrefs, reason, sources } = await this.#resolveHlsConnections(vpid, !probeHq);
         if (hrefs.length === 0) {
             throw new Error(`No HLS stream connection found for vpid ${vpid}${reason ? ` (BBC says: ${reason})` : ''}`);
         }
@@ -254,9 +261,11 @@ class NativeStreamService implements AbstractStreamService {
             })
         );
         let best: { url: string; height: number } | undefined;
-        for (const candidate of probed) {
+        let bestIndex = -1;
+        for (const [index, candidate] of probed.entries()) {
             if (candidate && (!best || candidate.height > best.height)) {
                 best = candidate;
+                bestIndex = index;
             }
         }
         if (!best) {
@@ -264,7 +273,35 @@ class NativeStreamService implements AbstractStreamService {
             // than failing the whole stream over what's likely a transient fetch error.
             return resolveRedirect(hrefs[0]);
         }
+        const source = sources?.[bestIndex];
+        if (source && best.height > 0) {
+            await hqProbeCache.set(vpid, { ...source.pair, index: source.index, height: best.height }).catch(() => undefined);
+        }
         return best.url;
+    }
+
+    // Repeat plays skip the all-connections probe: ask mediaselector just once, for the pair that won before, and
+    // take the connection at the remembered position. Anything unexpected (programme withdrawn, connections
+    // reshuffled) forgets the result and falls back to the full probe, which also reports availability properly.
+    async #rememberedProbeWinner(vpid: string): Promise<string | undefined> {
+        const winner = await hqProbeCache.get(vpid);
+        if (!winner) {
+            return undefined;
+        }
+        try {
+            const href = this.#hlsHrefsFrom(await fetchText(mediaSelectorUrl(winner, vpid)))[winner.index];
+            if (href) {
+                return await resolveRedirect(href);
+            }
+        } catch (err: any) {
+            loggingService.error(`NativeStreamService: remembered HQ connection failed, re-probing - ${err?.message}`);
+        }
+        await hqProbeCache.del(vpid).catch(() => undefined);
+        return undefined;
+    }
+
+    #hlsHrefsFrom(xml: string): string[] {
+        return unavailableRegex.test(xml) ? [] : this.#extractHlsHrefs(xml);
     }
 
     // BBC's mediaselector XML API - the same endpoint get_iplayer's get_stream_data hits, once
@@ -274,15 +311,24 @@ class NativeStreamService implements AbstractStreamService {
     // is found; set false to keep walking every pair and collect every candidate instead.
     // `reason` is BBC's own explanation (the <error id="..."> mediaselector answers with, e.g.
     // "geolocation") from the last pair that gave one, so a failure can say why - not just "none found".
-    async #resolveHlsConnections(vpid: string, stopAtFirst: boolean): Promise<{ hrefs: string[]; reason?: string }> {
-        const hrefsFrom = (xml: string): string[] => (unavailableRegex.test(xml) ? [] : this.#extractHlsHrefs(xml));
+    async #resolveHlsConnections(
+        vpid: string,
+        stopAtFirst: boolean
+    ): Promise<{ hrefs: string[]; reason?: string; sources?: { pair: MediaSelectorPair; index: number }[] }> {
+        const hrefsFrom = (xml: string): string[] => this.#hlsHrefsFrom(xml);
         const reasonFrom = (xmls: string[]): string | undefined => xmls.map((xml) => /<error\s+id="([^"]+)"/.exec(xml)?.[1]).filter(Boolean).pop();
 
         if (!stopAtFirst) {
             // Collecting every candidate needs every (mediaset, version) pair anyway, so fetch them
             // all at once; Promise.all keeps the results in pair order, which is the preference order.
             const bodies = await Promise.all(allMediaSelectorPairs.map((pair) => fetchText(mediaSelectorUrl(pair, vpid))));
-            return { hrefs: bodies.flatMap(hrefsFrom), reason: reasonFrom(bodies) };
+            const perPair = bodies.map(hrefsFrom);
+            return {
+                hrefs: perPair.flat(),
+                reason: reasonFrom(bodies),
+                // Where each href came from, in the same order, so a probe winner can be remembered.
+                sources: perPair.flatMap((list, i) => list.map((_, index) => ({ pair: allMediaSelectorPairs[i], index }))),
+            };
         }
 
         // The common path: stay sequential rather than firing requests that would be thrown away,

@@ -3,6 +3,7 @@ import scheduleFacade from '../facade/scheduleFacade';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import configService from './configService';
 import cronJobService from './cronJobService';
+import DbCacheService from './db/dbCacheService';
 import episodeCacheService from './episodeCacheService';
 import libraryCleanupService from './libraryCleanupService';
 import streamSessionService from './stream/streamSessionService';
@@ -19,6 +20,7 @@ class TaskService {
                 label: 'Schedule Refresh',
                 description: 'Refreshes the schedule cache, recaches series metadata, and clears stuck failed downloads.',
                 cron: cronSchedule,
+                group: 'cache',
             },
             async () => {
                 const nativeSearchEnabled = await configService.getParameter(IplayarrParameter.NATIVE_SEARCH);
@@ -53,6 +55,7 @@ class TaskService {
                 label: 'Thumbnail Cache Cleanup',
                 description: 'Deletes cached episode thumbnails that have not been viewed recently.',
                 cron: '35 3 * * *',
+                group: 'cache',
             },
             () => thumbnailCacheService.cleanup()
         );
@@ -81,6 +84,18 @@ class TaskService {
                 cron: '45 3 * * *',
             },
             () => libraryCleanupService.cleanup()
+        );
+
+        // Expired cache row purge - 3:50 AM daily. Rows are otherwise only dropped when read again.
+        cronJobService.defineTask(
+            {
+                id: 'cache-purge',
+                label: 'Expired Cache Purge',
+                description: 'Deletes expired entries from the database cache.',
+                cron: '50 3 * * *',
+                group: 'cache',
+            },
+            () => DbCacheService.purgeExpired()
         );
 
         // STRM Watchdog - 4:15 AM daily. Does nothing unless STRM_WATCHDOG_ENABLED; "Run now" on

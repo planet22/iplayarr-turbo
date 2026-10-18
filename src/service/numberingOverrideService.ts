@@ -1,6 +1,8 @@
 import { v4 } from 'uuid';
 
+import searchFacade from '../facade/searchFacade';
 import { QueuedStorage } from '../types/QueuedStorage';
+import episodeDetailsCache from './episodeDetailsCache';
 
 // Manual season/episode for a broadcast that airdate matching can't resolve (same-day double bills,
 // anthologies, specials TVDB files differently). Keyed by show title + UK air date.
@@ -15,6 +17,12 @@ export interface NumberingOverride {
 const storage: QueuedStorage = new QueuedStorage();
 const KEY = 'numbering_overrides';
 const normalise = (text: string) => text.trim().toLocaleLowerCase();
+
+// Cached details and search results carry the numbering, so they must be rebuilt after an override changes.
+const invalidateNumbering = async () => {
+    await episodeDetailsCache.clear();
+    searchFacade.clearSearchCache();
+};
 
 const numberingOverrideService = {
     getAll: async (): Promise<NumberingOverride[]> => (await storage.getItem(KEY)) || [],
@@ -34,6 +42,7 @@ const numberingOverrideService = {
         const saved: NumberingOverride = { ...entry, id: entry.id ?? v4() };
         all.push(saved);
         await storage.setItem(KEY, all);
+        await invalidateNumbering();
         return saved;
     },
 
@@ -43,6 +52,7 @@ const numberingOverrideService = {
             KEY,
             all.filter((entry) => entry.id !== id)
         );
+        await invalidateNumbering();
     },
 };
 

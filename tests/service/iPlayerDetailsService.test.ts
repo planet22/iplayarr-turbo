@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { IPlayerEpisodeMetadata } from '../../src/types/responses/IPlayerMetadataResponse';
 import * as Utils from '../../src/utils/Utils';
@@ -55,6 +56,27 @@ describe('iplayerDetailsService', () => {
             link: 'https://www.bbc.co.uk/programmes/b1234567',
             thumbnail: 'json-api/thumbnail/p09image.jpg',
         });
+    });
+
+    it('episodeDetails serves a repeat from the cache without recomputing or refetching', async () => {
+        mockedAxios.get.mockResolvedValueOnce({ data: { programme: mockProgramme } });
+
+        const first = await iplayerDetailsService.episodeDetails('b1234567');
+        const second = await iplayerDetailsService.episodeDetails('b1234567');
+
+        expect(second).toEqual(first);
+        expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        expect(Utils.calculateSeasonAndEpisode).toHaveBeenCalledTimes(1);
+    });
+
+    it('episodeDetails recomputes after the details cache is cleared', async () => {
+        mockedAxios.get.mockResolvedValue({ data: { programme: mockProgramme } });
+
+        await iplayerDetailsService.episodeDetails('b1234567');
+        await episodeDetailsCache.clear();
+        await iplayerDetailsService.episodeDetails('b1234567');
+
+        expect(Utils.calculateSeasonAndEpisode).toHaveBeenCalledTimes(2);
     });
 
     it('details returns array of episode details', async () => {
@@ -149,11 +171,34 @@ describe('iplayerDetailsService', () => {
         expect(url).not.toContain('&page=');
     });
 
+    it('getSeriesEpisodes serves a repeat request from the cache', async () => {
+        mockedAxios.get.mockResolvedValueOnce({ data: { programme_episodes: { elements: [{ id: 'e1' }] } } });
+        await iplayerDetailsService.getSeriesEpisodes('b9999999');
+        const again = await iplayerDetailsService.getSeriesEpisodes('b9999999');
+        expect(again).toEqual([{ id: 'e1' }]);
+        expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    });
+
+    it('getSeriesEpisodes does not cache a failed request', async () => {
+        mockedAxios.get.mockRejectedValueOnce(new Error('down'));
+        expect(await iplayerDetailsService.getSeriesEpisodes('b8888888')).toEqual([]);
+        mockedAxios.get.mockResolvedValueOnce({ data: { programme_episodes: { elements: [{ id: 'e2' }] } } });
+        expect(await iplayerDetailsService.getSeriesEpisodes('b8888888')).toEqual([{ id: 'e2' }]);
+    });
+
     describe('getSeriesEpisodesChecked', () => {
         const ok = { data: { programme_episodes: { elements: [{ id: 'e1' }] } } };
 
-        beforeEach(() => jest.useFakeTimers());
-        afterEach(() => jest.useRealTimers());
+        // The database-backed cache can't run under fake timers, so stub it out here.
+        beforeEach(() => {
+            jest.spyOn(iplayerDetailsService.episodesCache, 'get').mockResolvedValue(undefined);
+            jest.spyOn(iplayerDetailsService.episodesCache, 'set').mockResolvedValue(undefined);
+            jest.useFakeTimers();
+        });
+        afterEach(() => {
+            jest.useRealTimers();
+            jest.restoreAllMocks();
+        });
 
         it('backs off and retries after a 429, then succeeds', async () => {
             const rateLimited = Object.assign(new Error('429'), { isAxiosError: true, response: { status: 429, headers: { 'retry-after': '2' } } });
