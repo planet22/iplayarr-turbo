@@ -3,7 +3,7 @@
         <slot :item="item" />
         <div class="actionContainer">
             <button v-for="action in actions" :key="action[0]" class="clickable" @click="action[1](item)">
-                <font-awesome-icon :icon="['fas', action[0]]" />
+                <font-awesome-icon :icon="['fas', action[0] === 'refresh' ? 'arrows-rotate' : action[0]]" :spin="!!action[2]?.(item)" />
             </button>
         </div>
     </button>

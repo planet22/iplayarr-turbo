@@ -9,7 +9,7 @@
             v-slot="{ item }"
             :items="cacheDefinitions"
             :actions="[
-                ['refresh', refreshCacheDefinition],
+                ['refresh', refreshCacheDefinition, (def) => refreshingIds.has(def.id)],
                 ['trash', remove],
             ]"
             @create="openForm"
@@ -29,7 +29,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRouter } from 'vue-router';
 
@@ -42,6 +42,7 @@ import { deepCopy } from '@/lib/utils';
 
 const cacheDefinitions = ref([]);
 const router = useRouter();
+const refreshingIds = reactive(new Set());
 
 const refreshCacheDefinitions = async () => {
     cacheDefinitions.value = (await ipFetch('json-api/offSchedule')).data;
@@ -90,7 +91,12 @@ const saveCacheDefinition = async (form) => {
 
 const refreshCacheDefinition = async (def) => {
     if (await dialogService.confirm('Refresh Cache', `Are you sure you want to refresh the cache for ${def.name}?`)) {
-        await ipFetch('json-api/offSchedule/refresh', 'POST', def);
+        refreshingIds.add(def.id);
+        try {
+            await ipFetch('json-api/offSchedule/refresh', 'POST', def);
+        } finally {
+            refreshingIds.delete(def.id);
+        }
         if (await dialogService.confirm('Show Results?', `Show Results for ${def.name}?`)) {
             router.push(`/search?searchTerm=${def.name}`);
         }

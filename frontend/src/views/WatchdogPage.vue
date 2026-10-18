@@ -5,6 +5,7 @@
             :icons="['run', 'refresh']"
             :running="live.running" :run-disabled="live.running ? stopping : !canRun"
             :stop-label="stopping ? 'Stopping…' : 'Stop'"
+            :refreshing="refreshing"
             :refresh-disabled="live.running || refreshing" :refresh-label="refreshing ? 'Refreshing…' : 'Refresh Links'"
             refresh-title="Re-list links from the sources and update the counts, without checking them against BBC"
             @run="runNow" @stop="stopRun" @refresh="refreshCounts"
@@ -65,8 +66,9 @@
         <div class="statRow">
             <div class="statCard progressCard">
                 <div class="progressHeader">
-                    <span class="statLabel">{{ live.running ? 'Checking' : 'Idle' }}</span>
-                    <span class="progressText">{{ live.checked }} / {{ live.total }}</span>
+                    <span class="statLabel">{{ live.running ? 'Checking' : listing ? 'Refreshing' : 'Idle' }}</span>
+                    <span v-if="listing" class="progressText">{{ live.collecting.done }} / {{ live.collecting.total }}</span>
+                    <span v-else class="progressText">{{ live.checked }} / {{ live.total }}</span>
                 </div>
                 <div class="progressTrack">
                     <div class="progressFill" :style="{ width: progressPercent + '%' }" />
@@ -75,7 +77,7 @@
                     <template v-if="live.running && live.currentPid">
                         Checking <router-link :to="`/browse/programme/${live.currentPid}`">{{ live.currentPid }}</router-link>
                     </template>
-                    <template v-else-if="live.running && live.collecting">
+                    <template v-else-if="live.collecting">
                         Collecting from {{ live.collecting.name }}<template v-if="live.collecting.total">{{ ' ' }}{{ live.collecting.done }} / {{ live.collecting.total }}</template>
                     </template>
                     <template v-else-if="live.running">Collecting from sources...</template>
@@ -139,7 +141,7 @@
         <PageHeader title="Library Access" />
         <SettingsPageToolbar
             :icons="['refresh']" :refresh-label="checkingAccess ? 'Checking…' : 'Check Access'"
-            :refresh-disabled="checkingAccess" @refresh="checkAccess"
+            :refreshing="checkingAccess" :refresh-disabled="checkingAccess" @refresh="checkAccess"
         />
         <InfoBar v-if="accessError">{{ accessError }}</InfoBar>
         <p v-if="!access" class="empty">
@@ -304,7 +306,12 @@ const tracked = computed(() => ({
     total: status.value.tracked?.total ?? status.value.items.length,
     types: status.value.tracked?.types ?? countTypes(status.value.items),
 }));
-const progressPercent = computed(() => (live.value.total ? Math.round((live.value.checked / live.value.total) * 100) : 0));
+// Refresh Links lists the sources without a run, so the card shows that listing's progress instead.
+const listing = computed(() => !live.value.running && !!live.value.collecting);
+const progressPercent = computed(() => {
+    const { done, total } = listing.value ? live.value.collecting : { done: live.value.checked, total: live.value.total };
+    return total ? Math.round((done / total) * 100) : 0;
+});
 const canRun = computed(() => status.value.enabled && !live.value.running);
 const lastRunDuration = computed(() =>
     lastRun.value ? Date.parse(lastRun.value.finishedAt) - Date.parse(lastRun.value.startedAt) : 0

@@ -3,7 +3,7 @@
         <PageHeader title="Subscriptions" />
         <SettingsPageToolbar
             :icons="['refresh']" :refresh-label="checkingAll ? 'Checking…' : 'Check All Now'"
-            :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"
+            :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"
         />
         <p>
             New episodes of these shows are queued for download automatically. They are checked every hour, or on
