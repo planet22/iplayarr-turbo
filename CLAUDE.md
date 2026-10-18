@@ -34,6 +34,14 @@ npm run prettier:fix
 
 Frontend dev server runs at `http://localhost:8080` and proxies `/auth`, `/api`, `/json-api`, `/ping` and `/socket.io` to the backend on `http://localhost:4404`, so the browser stays same-origin (use :8080 in dev). Tests live under `tests/`, mirroring the `src/` structure, with fixture JSON under `tests/data/`.
 
+**Running jest/lint when the repo is on a Windows network share (e.g. `Y:\`)**: `npm install`/`npm ci` fails there (`EUNKNOWN ... symlink`) because npm workspaces symlink `frontend` into `node_modules`, so there is no `node_modules` to run jest from. Run tests from a local copy instead:
+
+1. Copy the repo to a local drive (robocopy `/E`), leaving out `node_modules`, `.git`, `dist`, `coverage`, `cache`, `logs` and the *top-level* `config/`. Keep `src/config/` (it holds `version.json`; suites fail to compile without it). Delete the copied `.env` and any personal `docker-compose*.yaml`.
+2. In the copy: `npm ci`, then `npx prisma generate` (install does not generate the Prisma client; without it suites fail with "no exported member PrismaClient"), then `npm test` / `npx jest <file>` / `npm run lint`.
+3. After editing the share, resync (`robocopy <share>\src <copy>\src /MIR`, same for `tests` and `frontend\src`, plus changed root files) before re-running.
+
+Known baseline noise: `tests/service/versionService.test.ts` hard-codes `/tmp` and fails 5 tests on Windows; `npm run prettier` already flags many files. Lint requires single quotes (escape apostrophes) and sorted imports. On Linux/macOS/WSL or in a container, none of this is needed: `npm ci && npx prisma generate && npm test`.
+
 Node version is pinned in `.node-version`. The backend uses `module-alias` at runtime (`_moduleAliases` in package.json maps `src` → `dist/src`), not TypeScript path aliases.
 
 ## Architecture
