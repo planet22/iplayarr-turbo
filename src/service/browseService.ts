@@ -15,6 +15,7 @@ import {
     BrowseProgramme,
     BrowseRail,
     BrowseSeason,
+    BrowseSkipMarker,
     BrowseSlot,
     BrowseSuggestion,
 } from '../types/Browse';
@@ -96,6 +97,30 @@ export function toBrowseSlot(broadcast: any): BrowseSlot | undefined {
         childrens: broadcast.episode.childrens || undefined,
         categories: Array.isArray(broadcast.episode.categories) ? broadcast.episode.categories : undefined,
     };
+}
+
+// iPlayer lists "Skip intro"/"Skip recap" spans as `skip` interactions on an episode's version
+// (ibl/v1/episodes/<pid>). Timings belong to one version, so only the first original version's
+// are used - an edited, signed or described cut has different timings.
+export function parseSkipMarkers(episode: any): BrowseSkipMarker[] {
+    const versions: any[] = episode?.versions ?? [];
+    const version = versions.find((v) => v?.kind === 'original') ?? versions[0];
+    const markers: BrowseSkipMarker[] = [];
+    for (const interaction of version?.interactions ?? []) {
+        const start = interaction?.interaction_points?.show_from;
+        const end = interaction?.interaction_points?.skip_to;
+        if (
+            interaction?.type === 'skip' &&
+            (interaction.subtype === 'intro' || interaction.subtype === 'recap') &&
+            Number.isFinite(start) &&
+            Number.isFinite(end) &&
+            start >= 0 &&
+            end > start
+        ) {
+            markers.push({ type: interaction.subtype, start, end });
+        }
+    }
+    return markers.sort((a, b) => a.start - b.start);
 }
 
 export function toBrowseItems(elements: any[]): BrowseItem[] {
@@ -333,6 +358,11 @@ class BrowseService {
             if (suggestions.length >= limit) break;
         }
         return suggestions;
+    }
+
+    async skipMarkers(pid: string): Promise<BrowseSkipMarker[]> {
+        const data = await this.#ibl(`episodes/${pid}`, this.longCache);
+        return parseSkipMarkers(extractElements(data)[0] ?? data?.episodes?.[0]);
     }
 
     // What's on a channel right now and what follows. The day's schedule is cached; "now" is

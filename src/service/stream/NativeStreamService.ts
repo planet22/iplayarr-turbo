@@ -230,9 +230,9 @@ class NativeStreamService implements AbstractStreamService {
     // checkAvailable doesn't, so it is read here.
     async #resolveMasterPlaylistUrl(vpid: string, probeHqSetting?: boolean): Promise<string> {
         const probeHq = probeHqSetting ?? (await configService.getParameter(IplayarrParameter.STREAM_NATIVE_HQ_PROBE)) === 'true';
-        const hrefs = await this.#resolveHlsConnections(vpid, !probeHq);
+        const { hrefs, reason } = await this.#resolveHlsConnections(vpid, !probeHq);
         if (hrefs.length === 0) {
-            throw new Error(`No HLS stream connection found for vpid ${vpid}`);
+            throw new Error(`No HLS stream connection found for vpid ${vpid}${reason ? ` (BBC says: ${reason})` : ''}`);
         }
         if (!probeHq) {
             return resolveRedirect(hrefs[0]);
@@ -272,25 +272,32 @@ class NativeStreamService implements AbstractStreamService {
     // but for this ONE vpid only (get_stream_data does this for every version it's given).
     // stopAtFirst=true (the default, non-probing path) returns as soon as one usable connection
     // is found; set false to keep walking every pair and collect every candidate instead.
-    async #resolveHlsConnections(vpid: string, stopAtFirst: boolean): Promise<string[]> {
+    // `reason` is BBC's own explanation (the <error id="..."> mediaselector answers with, e.g.
+    // "geolocation") from the last pair that gave one, so a failure can say why - not just "none found".
+    async #resolveHlsConnections(vpid: string, stopAtFirst: boolean): Promise<{ hrefs: string[]; reason?: string }> {
         const hrefsFrom = (xml: string): string[] => (unavailableRegex.test(xml) ? [] : this.#extractHlsHrefs(xml));
+        const reasonFrom = (xmls: string[]): string | undefined => xmls.map((xml) => /<error\s+id="([^"]+)"/.exec(xml)?.[1]).filter(Boolean).pop();
 
         if (!stopAtFirst) {
             // Collecting every candidate needs every (mediaset, version) pair anyway, so fetch them
             // all at once; Promise.all keeps the results in pair order, which is the preference order.
-            return (await Promise.all(allMediaSelectorPairs.map((pair) => fetchText(mediaSelectorUrl(pair, vpid))))).flatMap(hrefsFrom);
+            const bodies = await Promise.all(allMediaSelectorPairs.map((pair) => fetchText(mediaSelectorUrl(pair, vpid))));
+            return { hrefs: bodies.flatMap(hrefsFrom), reason: reasonFrom(bodies) };
         }
 
         // The common path: stay sequential rather than firing requests that would be thrown away,
         // but start with the pair that answered last time (see mediaSelectorPairs.ts).
+        const bodies: string[] = [];
         for (const pair of orderedMediaSelectorPairs('native')) {
-            const hrefs = hrefsFrom(await fetchText(mediaSelectorUrl(pair, vpid)));
+            const xml = await fetchText(mediaSelectorUrl(pair, vpid));
+            bodies.push(xml);
+            const hrefs = hrefsFrom(xml);
             if (hrefs.length > 0) {
                 rememberMediaSelectorPair('native', pair);
-                return hrefs;
+                return { hrefs };
             }
         }
-        return [];
+        return { hrefs: [], reason: reasonFrom(bodies) };
     }
 
     #extractHlsHrefs(xml: string): string[] {

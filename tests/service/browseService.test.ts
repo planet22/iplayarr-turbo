@@ -5,6 +5,7 @@ import browseService, {
     dedupeRails,
     extractElements,
     parseIplayerState,
+    parseSkipMarkers,
     shuffled,
     toBrowseItem,
     toBrowseItems,
@@ -571,5 +572,33 @@ describe('browseService', () => {
             { series: undefined, episodes: [expect.objectContaining({ pid: 'b00ep001' })] },
         ]);
         expect(mockedDetails.getSeriesEpisodes).not.toHaveBeenCalled();
+    });
+});
+
+describe('parseSkipMarkers', () => {
+    const skip = (subtype: string, from: number, to: number) => ({
+        type: 'skip',
+        subtype,
+        interaction_points: { show_from: from, skip_to: to },
+    });
+
+    it('returns intro and recap spans from the original version, sorted by start', () => {
+        const episode = {
+            versions: [
+                { kind: 'signed', interactions: [skip('intro', 1, 2)] },
+                { kind: 'original', interactions: [skip('intro', 60, 90), skip('recap', 5, 40), { type: 'other' }] },
+            ],
+        };
+        expect(parseSkipMarkers(episode)).toEqual([
+            { type: 'recap', start: 5, end: 40 },
+            { type: 'intro', start: 60, end: 90 },
+        ]);
+    });
+
+    it('ignores malformed spans and unknown subtypes, and tolerates missing data', () => {
+        const episode = { versions: [{ interactions: [skip('credits', 1, 9), skip('intro', 30, 10), skip('intro', -1, 5)] }] };
+        expect(parseSkipMarkers(episode)).toEqual([]);
+        expect(parseSkipMarkers(undefined)).toEqual([]);
+        expect(parseSkipMarkers({})).toEqual([]);
     });
 });

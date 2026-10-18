@@ -56,6 +56,13 @@ export interface BrowseSlot {
     categories?: string[];
 }
 
+// A "Skip intro" / "Skip recap" span within an episode, in seconds from the start.
+export interface BrowseSkipMarker {
+    type: 'intro' | 'recap';
+    start: number;
+    end: number;
+}
+
 export interface BrowseNowNext {
     now?: BrowseSlot;
     next?: BrowseSlot;

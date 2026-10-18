@@ -130,6 +130,15 @@ router.get(
 );
 
 router.get(
+    '/markers/:pid',
+    handle(async (req, res) => {
+        const pid = req.params.pid as string;
+        if (!PID_REGEX.test(pid)) return invalid(res, 'Invalid pid');
+        res.json(await browseService.skipMarkers(pid));
+    })
+);
+
+router.get(
     '/programme/:pid',
     handle(async (req, res) => {
         const pid = req.params.pid as string;

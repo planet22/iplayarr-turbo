@@ -284,6 +284,11 @@ describe('NativeStreamService', () => {
             await expect(service.streamDirect('p1', req, res)).rejects.toThrow('No HLS stream connection found for vpid plain');
         });
 
+        it('says why, in BBC\'s own words, when mediaselector gave a reason', async () => {
+            route = (url, m) => (url.includes('mediaselector') ? { body: '<error id="geolocation"/>' } : defaultRoute(url, m));
+            await expect(service.streamDirect('p1', req, res)).rejects.toThrow('(BBC says: geolocation)');
+        });
+
         it('ignores non-video media and keeps walking pairs until one has connections', async () => {
             let calls = 0;
             route = (url, m) => {
