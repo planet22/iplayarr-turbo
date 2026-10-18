@@ -68,7 +68,7 @@
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_LIVE_DASH_1080"
             name="Live 1080p (Experimental)"
-            tooltip="Live channels as 1080p HEVC instead of 720p (needs ffmpeg). Works in Progressive MKV mode; Direct mode also needs the Direct Mode option below. Falls back to 720p if unavailable."
+            tooltip="Live channels as 1080p HEVC instead of 720p. Progressive MKV mode needs ffmpeg; Direct mode also needs the Direct Mode option below. Falls back to 720p if unavailable."
             :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
             :options="subtitlesOptions"
         />
