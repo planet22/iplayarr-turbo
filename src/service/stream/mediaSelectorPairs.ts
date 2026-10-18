@@ -15,7 +15,11 @@ export const allMediaSelectorPairs: MediaSelectorPair[] = mediaSets.flatMap((med
     mediaSelectorVersions.map((version) => ({ mediaSet, version }))
 );
 
-const sameKey = (pair: MediaSelectorPair): string => `${pair.mediaSet}/${pair.version}`;
+// `iptv-mse` is the one mediaset that offers a live channel as 1080p (HEVC) DASH - `iptv-all` and `pc`
+// stop at 720p. It has no HLS connection at all, so it sits outside the walk above.
+export const liveDashPair: MediaSelectorPair = { mediaSet: 'iptv-mse', version: 6 };
+
+const sameKey =(pair: MediaSelectorPair): string => `${pair.mediaSet}/${pair.version}`;
 const lastWorking = new Map<string, string>();
 
 // `scope` separates things that behave differently - a live channel id, or 'native' for on-demand.

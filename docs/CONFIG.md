@@ -92,6 +92,8 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Native Quality | `STREAM_NATIVE_ADAPTIVE` | `false` | Native client only. |
 | Native Quality Probe | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only. |
 | Native FHD Upgrade | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only. |
+| Live 1080p (Experimental) | `STREAM_LIVE_DASH_1080` | `false` | Native client, **Progressive MKV mode only**. Live channels as 1080p HEVC DASH (mediaset `iptv-mse`) instead of 720p HLS; needs ffmpeg. Direct mode stays 720p unless Live 1080p Direct is also on. Falls back to HLS if BBC offers no DASH for the channel. |
+| Live 1080p Direct (Experimental) | `STREAM_LIVE_DASH_BRIDGE` | `false` | Needs Live 1080p on. Lets **Direct mode** play Live 1080p: BBC's DASH feed is presented as HLS (playlists only; the segments are proxied untouched - no ffmpeg, no re-encode, no disk). Subtitles are not offered on these channels. Falls back to 720p HLS if the feed cannot be presented. |
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
 | Stream Cache Directory _(advanced)_ | `STREAM_CACHE_DIR` | temp folder | Scratch space for in-flight streams. |
 | — | `THUMBNAIL_CACHE_DIR` | temp folder | Where cached BBC episode thumbnails are stored. Env-only. |

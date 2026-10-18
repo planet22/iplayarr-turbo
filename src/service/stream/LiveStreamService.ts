@@ -6,8 +6,10 @@ import configService from '../configService';
 import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
-import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
+import { buildMasterPlaylist, buildMediaPlaylist, DashKind, LiveDash, parseLiveMpd } from './liveDashHls';
+import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
 import { cached, liveResolveTtlMs } from './resolveCache';
+import { register as registerSegmentUrl } from './segmentUrlRegistry';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
 import { extractLiveCaptionsTemplate } from './subtitles/captionsSource';
@@ -45,6 +47,22 @@ function extractHlsHref(xml: string): string | undefined {
     return undefined;
 }
 
+// The standard (not low-latency, which 403s on a plain fetch) DASH manifest for the 1080p HEVC ladder.
+function extractDashHref(xml: string): string | undefined {
+    for (const [, mediaAttrsRaw, mediaBody] of xml.matchAll(/<media\s+([^>]+?)>(.*?)<\/media>/gs)) {
+        if (parseAttributes(mediaAttrsRaw).kind !== 'video') {
+            continue;
+        }
+        const conn = [...mediaBody.matchAll(/<connection\s+([^>]+?)\/>/gs)]
+            .map(([, raw]) => parseAttributes(raw))
+            .find((c) => c.transferFormat === 'dash' && c.protocol === 'https' && !/bidi/i.test(c.supplier ?? '') && c.href);
+        if (conn) {
+            return conn.href;
+        }
+    }
+    return undefined;
+}
+
 class LiveStreamService implements AbstractStreamService {
     async #resolveUrl(channelId: string, sessionId?: string): Promise<string> {
         const url = await cached(`live:${channelId}`, liveResolveTtlMs, () => this.#resolve(channelId));
@@ -75,6 +93,9 @@ class LiveStreamService implements AbstractStreamService {
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
+        if (await this.#serveDashHls(pid, req, res, sessionId)) {
+            return;
+        }
         const url = await this.#resolveUrl(pid, sessionId);
         // Opt-in (STREAM_SUBTITLES) and additive, exactly like on-demand: off, or a channel with no
         // captions, is the plain proxy call it always was.
@@ -154,7 +175,101 @@ class LiveStreamService implements AbstractStreamService {
         return liveFragmentToVtt(fragment, Number(segmentNumber));
     }
 
+    // EXPERIMENTAL, opt-in (STREAM_LIVE_DASH_1080): the `iptv-mse` mediaset serves live channels as 1080p
+    // HEVC DASH where the HLS ladder stops at 720p. Only progressive-mkv can use it - ffmpeg reads the
+    // manifest itself; Direct mode gets the same feed as HLS via liveDashHls.ts. Any failure
+    // (no connection, mediaselector error) returns undefined so the caller falls back to the HLS path.
+    async #resolveDash(channelId: string): Promise<string | undefined> {
+        if ((await configService.getParameter(IplayarrParameter.STREAM_LIVE_DASH_1080)) !== 'true') {
+            return undefined;
+        }
+        return this.#dashUrl(channelId);
+    }
+
+    async #dashUrl(channelId: string): Promise<string | undefined> {
+        const vpid = LiveChannelVpids[channelId];
+        try {
+            return await cached(`live-dash:${channelId}`, liveResolveTtlMs, async () => {
+                const xml = await fetchText(mediaSelectorUrl(liveDashPair, vpid));
+                const href = unavailableRegex.test(xml) ? undefined : extractDashHref(xml);
+                if (!href) {
+                    throw new Error('no DASH connection');
+                }
+                return resolveRedirect(href);
+            });
+        } catch (err: any) {
+            loggingService.error(`LiveStreamService: 1080p DASH unavailable for ${channelId}, using HLS - ${err?.message}`);
+            return undefined;
+        }
+    }
+
+    // The channel's live DASH manifest, parsed (see liveDashHls.ts). The MPD itself is static for hours
+    // (only the segment numbers move), so it is cached like the resolved URL.
+    async #liveDash(channelId: string): Promise<LiveDash | undefined> {
+        const dashUrl = await this.#dashUrl(channelId);
+        if (!dashUrl) {
+            return undefined;
+        }
+        return cached(`live-mpd:${dashUrl}`, liveResolveTtlMs, async () => parseLiveMpd(await fetchText(dashUrl), dashUrl));
+    }
+
+    // Direct mode's route to 1080p: needs both toggles. The player gets an HLS master built from BBC's
+    // DASH feed (liveDashHls.ts); the segments themselves stream through the usual segment proxy.
+    // Returns false - and the caller serves the normal 720p HLS - when either is off or the manifest
+    // isn't one we can present.
+    async #serveDashHls(channelId: string, req: Request, res: Response, sessionId?: string): Promise<boolean> {
+        const [dash, bridge] = await configService.getParameters(IplayarrParameter.STREAM_LIVE_DASH_1080, IplayarrParameter.STREAM_LIVE_DASH_BRIDGE);
+        if (dash !== 'true' || bridge !== 'true') {
+            return false;
+        }
+        try {
+            const live = await this.#liveDash(channelId);
+            if (!live) {
+                return false;
+            }
+            const streamKey = (req.query?.streamkey as string) ?? '';
+            const playlist = buildMasterPlaylist(live, (kind) => this.#dashPlaylistHref(channelId, kind, streamKey, sessionId));
+            if (sessionId) {
+                streamSessionService.setResolution(sessionId, 'Live 1080p');
+            }
+            res.status(200);
+            res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+            res.setHeader('Cache-Control', 'no-store');
+            res.send(playlist);
+            return true;
+        } catch (err: any) {
+            loggingService.error(`LiveStreamService: 1080p DASH->HLS unavailable for ${channelId}, using HLS - ${err?.message}`);
+            return false;
+        }
+    }
+
+    #dashPlaylistHref(channelId: string, kind: DashKind, streamKey: string, sessionId?: string): string {
+        return (
+            `/api/live-${kind}.m3u8?mode=stream&pid=${encodeURIComponent(channelId)}&dash=${kind}&streamkey=${encodeURIComponent(streamKey)}` +
+            (sessionId ? `&session=${encodeURIComponent(sessionId)}` : '')
+        );
+    }
+
+    // A video or audio media playlist as polled by the player (the endpoint's `dash=` request): a fresh
+    // sliding window each time, with every segment URL a segment-proxy token.
+    async getDashPlaylist(channelId: string, kind: DashKind, streamKey: string, sessionId?: string): Promise<string | undefined> {
+        const live = await this.#liveDash(channelId);
+        if (!live) {
+            return undefined;
+        }
+        const suffix = `&streamkey=${encodeURIComponent(streamKey)}` + (sessionId ? `&session=${encodeURIComponent(sessionId)}` : '');
+        return buildMediaPlaylist(live, kind, Date.now(), (url, isInit) => `/api/${isInit ? 'init.mp4' : 'seg.m4s'}?mode=stream&token=${registerSegmentUrl(url)}${suffix}`);
+    }
+
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {
+        const dashUrl = await this.#resolveDash(pid);
+        if (dashUrl) {
+            if (sessionId) {
+                streamSessionService.setResolution(sessionId, 'Live 1080p');
+            }
+            await remuxToMkv(dashUrl, pid, res, sessionId);
+            return;
+        }
         const masterUrl = await this.#resolveUrl(pid, sessionId);
         await remuxToMkv(await this.#topVariantUrl(masterUrl), pid, res, sessionId);
     }

@@ -110,6 +110,98 @@ describe('LiveStreamService', () => {
         expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/master.m3u8', 'bbc_two_england', res, 'sess');
     });
 
+    describe('1080p DASH (STREAM_LIVE_DASH_1080)', () => {
+        const dashXml = `<mediaSelection><media kind="video">${[
+            conn('transferFormat="dash_lowlatency" protocol="https" supplier="akamai_live_uk" href="https://ll/x.mpd"'),
+            conn('transferFormat="dash" protocol="https" supplier="bbc_bidi_live_uk" href="https://bidi/x.mpd"'),
+            conn('transferFormat="dash" protocol="https" supplier="akamai_live_uk" href="https://dash/x.mpd?a=1&amp;b=2"'),
+        ].join('')}</media></mediaSelection>`;
+
+        beforeEach(() => {
+            route = (url, method) =>
+                url.includes('/mediaset/iptv-mse/') ? { body: dashXml } : url.includes('mediaselector') ? { body: liveXml } : defaultLiveRoute(url, method);
+        });
+
+        it('stays on HLS when the setting is off', async () => {
+            await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'false');
+            await service.streamProgressiveMkv('bbc_two_england', res, 'sess');
+            expect(requested.some((u) => u.includes('/mediaset/iptv-mse/'))).toBe(false);
+            expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/variant.m3u8', 'bbc_two_england', res, 'sess');
+        });
+
+        it('remuxes the standard DASH manifest when on, skipping low-latency and bidi suppliers', async () => {
+            await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
+            await service.streamProgressiveMkv('bbc_two_england', res, 'sess');
+            expect(remuxToMkv).toHaveBeenCalledWith('https://dash/x.mpd?a=1&b=2', 'bbc_two_england', res, 'sess');
+            expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Live 1080p');
+        });
+
+        describe('Direct mode DASH->HLS (STREAM_LIVE_DASH_BRIDGE)', () => {
+            const reply = (): any => ({ status: jest.fn().mockReturnThis(), setHeader: jest.fn(), send: jest.fn() });
+            const mpd = `<MPD type="dynamic" availabilityStartTime="1970-01-01T00:00:12Z"><Period>
+                <AdaptationSet contentType="video" mimeType="video/mp4"><Role value="main"/>
+                    <Representation id="v1" bandwidth="6500000" width="1920" height="1080" codecs="hev1.1.6.L123.B0" frameRate="50">
+                        <SegmentTemplate initialization="v/init" media="v/$Number$.m4s" timescale="200" duration="768"/></Representation></AdaptationSet>
+                <AdaptationSet contentType="audio" mimeType="audio/mp4" lang="en"><Role value="main"/>
+                    <Representation id="a1" bandwidth="320000" codecs="mp4a.40.2">
+                        <SegmentTemplate initialization="a/init" media="a/$Number$.m4s" timescale="48000" duration="184320"/></Representation></AdaptationSet>
+            </Period></MPD>`;
+
+            beforeEach(() => {
+                const base = route;
+                route = (url, method) => (url.startsWith('https://dash/') ? { body: mpd } : base(url, method));
+            });
+
+            it('answers with an HLS master built from the DASH manifest when both settings are on', async () => {
+                await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
+                await configService.setParameter('STREAM_LIVE_DASH_BRIDGE' as any, 'true');
+                const out = reply();
+                await service.streamDirect('bbc_two_england', { headers: {}, query: { streamkey: 'k' } } as any, out, 'sess');
+
+                const master: string = out.send.mock.calls[0][0];
+                expect(master).toContain('RESOLUTION=1920x1080');
+                expect(master).toContain('/api/live-video.m3u8?mode=stream&pid=bbc_two_england&dash=video&streamkey=k&session=sess');
+                expect(master).toContain('URI="/api/live-audio.m3u8?mode=stream&pid=bbc_two_england&dash=audio&streamkey=k&session=sess"');
+                expect(proxyUrl).not.toHaveBeenCalled();
+                expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Live 1080p');
+            });
+
+            it('builds a media playlist whose segments are segment-proxy tokens', async () => {
+                await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
+                const playlist = (await service.getDashPlaylist('bbc_two_england', 'video', 'k', 'sess')) as string;
+
+                expect(playlist).toMatch(/#EXT-X-MAP:URI="\/api\/init\.mp4\?mode=stream&token=[\w-]+&streamkey=k&session=sess"/);
+                expect(playlist.match(/^\/api\/seg\.m4s\?mode=stream&token=/gm)).toHaveLength(6);
+                expect(playlist).toContain('#EXTINF:3.840');
+            });
+
+            it('stays on HLS when only the 1080p setting is on', async () => {
+                await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
+                await configService.setParameter('STREAM_LIVE_DASH_BRIDGE' as any, 'false');
+                await service.streamDirect('bbc_two_england', req, reply(), 'sess');
+                expect(proxyUrl).toHaveBeenCalled();
+            });
+
+            it('falls back to HLS when the manifest is not one it can present', async () => {
+                await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
+                await configService.setParameter('STREAM_LIVE_DASH_BRIDGE' as any, 'true');
+                const base = route;
+                route = (url, method) => (url.startsWith('https://dash/') ? { body: '<MPD type="static"/>' } : base(url, method));
+                const out = reply();
+                await service.streamDirect('bbc_two_england', req, out, 'sess');
+                expect(out.send).not.toHaveBeenCalled();
+                expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req, out, 5, 'sess', true);
+            });
+        });
+
+        it('falls back to HLS when mediaselector offers no DASH', async () => {
+            await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
+            route = (url, method) => (url.includes('/mediaset/iptv-mse/') ? { body: '<error id="selectionunavailable"/>' } : url.includes('mediaselector') ? { body: liveXml } : defaultLiveRoute(url, method));
+            await service.streamProgressiveMkv('bbc_two_england', res, 'sess');
+            expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/variant.m3u8', 'bbc_two_england', res, 'sess');
+        });
+    });
+
     it('reuses a resolved channel url briefly, still reporting Live to each session', async () => {
         await service.streamDirect('bbc_one_london', req, res, 'a');
         const selectorCalls = requested.filter((u) => u.includes('mediaselector')).length;

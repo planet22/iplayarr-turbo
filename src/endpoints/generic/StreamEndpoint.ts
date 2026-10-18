@@ -88,6 +88,27 @@ async function handleLiveSubtitles(req: Request, res: Response): Promise<void> {
     res.send(body);
 }
 
+// A media playlist of the live 1080p DASH->HLS presentation (liveDashHls.ts). Segments are not served
+// here: the playlist points them at segment-proxy tokens, handled by the `token` branch below.
+async function handleDashPlaylist(req: Request, res: Response): Promise<void> {
+    const { pid, dash } = req.query as any;
+    const sessionId = req.query.session as string | undefined;
+    if (sessionId) {
+        res.on('close', () => streamSessionService.touch(sessionId));
+    }
+    const playlist =
+        isLiveChannel(pid) && (dash === 'video' || dash === 'audio')
+            ? await LiveStreamService.getDashPlaylist(pid, dash, (req.query.streamkey as string) ?? '', sessionId)
+            : undefined;
+    if (!playlist) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such stream playlist' } as ApiResponse);
+        return;
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.send(playlist);
+}
+
 async function handleSubtitles(req: Request, res: Response): Promise<void> {
     const { pid, subs } = req.query as any;
     if (subs === 'livelist' || subs === 'livevtt') {
@@ -115,6 +136,18 @@ export default (req: Request, res: Response): Promise<void> =>
 
 async function handleStream(req: Request, res: Response): Promise<void> {
     const { pid, token } = req.query as any;
+
+    if (req.query.dash !== undefined) {
+        try {
+            await handleDashPlaylist(req, res);
+        } catch (err: any) {
+            loggingService.error(err);
+            if (!res.headersSent) {
+                res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: err?.message ?? 'Streaming failed' } as ApiResponse);
+            }
+        }
+        return;
+    }
 
     // A rewritten HLS playlist reference (segment/sub-playlist/key) from proxyUrl's own
     // rewritePlaylist - `token` is an opaque segmentUrlRegistry key, never the real URL itself
