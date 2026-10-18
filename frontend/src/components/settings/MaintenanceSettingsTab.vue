@@ -78,7 +78,12 @@
                     <span class="size"></span>
                     <span class="ttlEditor">
                         Keep for
-                        <input v-model="config.STREAM_HISTORY_RETENTION_DAYS" type="number" min="1" />
+                        <input
+                            v-model="config.STREAM_HISTORY_RETENTION_DAYS"
+                            :class="{ changed: changedKeys.has('STREAM_HISTORY_RETENTION_DAYS') }"
+                            type="number"
+                            min="1"
+                        />
                         days
                     </span>
                 </div>
@@ -112,6 +117,7 @@ import { useScheduledTasks } from '@/lib/useScheduledTasks';
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
+const changedKeys = inject('settingsChangedKeys');
 
 const rebuilding = ref(false);
 const rebuildLogos = async () => {
@@ -248,6 +254,11 @@ onMounted(() => {
 
     input {
         width: 64px;
+    }
+
+    input.changed {
+        border-color: #e84a9a;
+        box-shadow: 0 0 0 2px rgba(232, 74, 154, 0.35);
     }
 
     select {

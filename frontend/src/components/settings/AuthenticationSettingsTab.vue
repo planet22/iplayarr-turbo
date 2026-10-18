@@ -2,6 +2,7 @@
     <legend>Authentication</legend>
     <SelectInput
         v-model="config.AUTH_TYPE"
+        field="AUTH_TYPE"
         :advanced="false"
         name="Authentication Enabled?"
         tooltip="Require a login to use iPlayarr Turbo."
@@ -11,12 +12,14 @@
     <template v-if="config.AUTH_TYPE == 'form'">
         <TextInput
             v-model="config.AUTH_USERNAME"
+            field="AUTH_USERNAME"
             name="Username"
             tooltip="The Login Username."
             :error="validationErrors.config?.AUTH_USERNAME"
         />
         <TextInput
             v-model="config.AUTH_PASSWORD"
+            field="AUTH_PASSWORD"
             name="Password"
             tooltip="The Login Password."
             type-override="password"
@@ -29,31 +32,40 @@
         </InfoBar>
         <TextInput
             v-model="config.OIDC_CONFIG_URL"
+            field="OIDC_CONFIG_URL"
             name="OIDC Configuration URL"
             tooltip="The OIDC provider's configuration URL."
             :error="validationErrors.config?.OIDC_CONFIG_URL"
         />
         <TextInput
+            v-if="showAdvanced"
             v-model="config.OIDC_CALLBACK_HOST"
+            field="OIDC_CALLBACK_HOST"
+            :advanced="true"
             name="OIDC Callback Host"
             :tooltip="oidcCallbackTooltip"
             :error="validationErrors.config?.OIDC_CALLBACK_HOST"
         />
         <TextInput
             v-model="config.OIDC_CLIENT_ID"
+            field="OIDC_CLIENT_ID"
             name="OIDC Client ID"
             tooltip="Client ID from your OIDC provider."
             :error="validationErrors.config?.OIDC_CLIENT_ID"
         />
         <TextInput
             v-model="config.OIDC_CLIENT_SECRET"
+            field="OIDC_CLIENT_SECRET"
             name="OIDC Client Secret"
             tooltip="Client secret from your OIDC provider."
             type-override="password"
             :error="validationErrors.config?.OIDC_CLIENT_SECRET"
         />
         <TextInput
+            v-if="showAdvanced"
             v-model="config.OIDC_ALLOWED_EMAILS"
+            field="OIDC_ALLOWED_EMAILS"
+            :advanced="true"
             name="OIDC Allowed Emails"
             tooltip="Email addresses allowed to log in, separated by commas."
             :error="validationErrors.config?.OIDC_ALLOWED_EMAILS"
@@ -91,6 +103,7 @@ defineProps({
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
+const showAdvanced = inject('settingsShowAdvanced');
 
 const emit = defineEmits(['test-oidc']);
 </script>

@@ -1,7 +1,10 @@
 <template>
     <legend>Download Client</legend>
     <TextInput
+        v-if="showAdvanced"
         v-model="config.ACTIVE_LIMIT"
+        field="ACTIVE_LIMIT"
+        :advanced="true"
         name="Download Limit"
         tooltip="How many downloads can run at once."
         type-override="number"
@@ -9,6 +12,7 @@
     />
     <SelectInput
         v-model="config.DOWNLOAD_CLIENT"
+        field="DOWNLOAD_CLIENT"
         name="Download Client?"
         tooltip="The tool used to download."
         :error="validationErrors.config?.DOWNLOAD_CLIENT"
@@ -18,6 +22,7 @@
     <template v-if="showAdvanced">
         <TextInput
             v-model="config.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
+            field="ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
             :advanced="true"
             name="Additional Download Parameters"
             :tooltip="paramsLocked ? lockedReason : 'Extra options passed to get_iplayer.'"

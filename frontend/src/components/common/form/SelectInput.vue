@@ -1,5 +1,5 @@
 <template>
-    <div :class="['form-group', advanced ? 'advanced' : '']">
+    <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
         <label v-if="name">{{ name }}</label>
         <div :class="['inputBox', error ? 'error' : '']">
             <div class="fieldRow">
@@ -57,6 +57,11 @@ const props = defineProps({
         required: false,
         default: false,
     },
+    field: {
+        type: String,
+        required: false,
+        default: undefined,
+    },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -64,6 +69,10 @@ const emit = defineEmits(['update:modelValue']);
 // Settings page shows the tooltip behind an (i) button; elsewhere (and when inlineTooltip is set) it stays as text below.
 const infoTips = inject('infoTips', false);
 const showInfo = computed(() => infoTips && !props.inlineTooltip);
+
+// Settings page lists the keys edited since the last save; those fields get a highlight.
+const changedKeys = inject('settingsChangedKeys', null);
+const changed = computed(() => !!props.field && !!changedKeys?.value?.has(props.field));
 
 const localValue = ref(props.modelValue);
 
@@ -141,6 +150,11 @@ watch(
     .tooltip {
         font-size: 14px;
         color: @subtle-text-color;
+    }
+
+    &.changed select {
+        border-color: #e84a9a;
+        box-shadow: 0 0 0 2px rgba(232, 74, 154, 0.35);
     }
 
     &.advanced {

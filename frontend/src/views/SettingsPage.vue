@@ -8,7 +8,7 @@
             @toggle-advanced="toggleAdvanced"
         />
     </div>
-    <SettingsTabs v-model="activeTab" :tabs="tabs" />
+    <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
     <div v-if="!loading" class="inner-content">
         <GeneralSettingsTab
             v-if="activeTab == 'general'"
@@ -21,11 +21,11 @@
             :output-formats="outputFormats"
             :true-or-false="trueOrFalse"
             :nfo-write-modes="nfoWriteModes"
+            :media-modes="mediaModes"
         />
         <DownloadClientSettingsTab v-if="activeTab == 'downloadClient'" :download-clients="downloadClients" />
         <StreamingSettingsTab
             v-if="activeTab == 'streaming'"
-            :media-modes="mediaModes"
             :stream-modes="streamModes"
             :stream-clients="streamClients"
             @generate-stream-key="generateStreamKey"
@@ -70,7 +70,6 @@ let originalApiKey = undefined;
 let originalUhdFeeds = undefined;
 
 const config = ref({});
-const configChanges = ref(false);
 const showAdvanced = ref(false);
 const refreshGlobalSettings = inject('refreshGlobalSettings');
 
@@ -85,11 +84,61 @@ const tabs = [
 ];
 const activeTab = ref('general');
 
+// Which config keys each tab edits. Save sends just the current tab's keys, and the tab bar flags
+// the tabs whose keys differ from what was last loaded or saved. STREAM_BASE_URL and STREAM_KEY are
+// shared by Streaming and Live TV.
+const TAB_KEYS = {
+    general: [
+        'API_KEY', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY',
+        'SEARCH_MATCH_ALL_WORDS', 'REFRESH_SCHEDULE', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH',
+    ],
+    mediaManagement: [
+        'DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'LIVE_STRM_DIR', 'VIDEO_QUALITY', 'EXTRA_VIDEO_QUALITIES',
+        'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'OUTPUT_FORMAT',
+        'MEDIA_MODE', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON',
+    ],
+    downloadClient: ['ACTIVE_LIMIT', 'DOWNLOAD_CLIENT', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS'],
+    streaming: [
+        'STREAM_BASE_URL', 'STREAM_KEY', 'STREAM_CLIENT', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PROBE',
+        'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_MODE', 'STREAM_CACHE_DIR', 'STRM_WATCHDOG_ENABLED',
+        'STRM_WATCHDOG_SOURCES', 'STRM_WATCHDOG_ACTION', 'STRM_WATCHDOG_PATH_MAP', 'STRM_WATCHDOG_ARR_ACTION',
+        'STRM_WATCHDOG_CONCURRENCY', 'STRM_WATCHDOG_FAIL_THRESHOLD', 'STRM_WATCHDOG_WEBHOOK_URL',
+    ],
+    liveTv: [
+        'LIVE_TV_ENABLED', 'STREAM_BASE_URL', 'STREAM_KEY', 'LIVE_TV_EPG_OFFSET', 'LIVE_TV_LOGO_SHAPE',
+        'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD',
+    ],
+    authentication: [
+        'AUTH_TYPE', 'AUTH_USERNAME', 'AUTH_PASSWORD', 'OIDC_CONFIG_URL', 'OIDC_CALLBACK_HOST', 'OIDC_CLIENT_ID',
+        'OIDC_CLIENT_SECRET', 'OIDC_ALLOWED_EMAILS',
+    ],
+    maintenance: ['STREAM_HISTORY_RETENTION_DAYS'],
+};
+
+// What each key held when the config was loaded or last saved.
+const original = ref({});
+const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+const changedKeys = computed(() => {
+    const changed = new Set();
+    for (const keys of Object.values(TAB_KEYS)) {
+        for (const key of keys) {
+            if (JSON.stringify(config.value[key]) !== JSON.stringify(original.value[key])) changed.add(key);
+        }
+    }
+    return changed;
+});
+const tabHas = (tab, lookup) => TAB_KEYS[tab].some((key) => lookup(key));
+const dirtyTabs = computed(() => tabs.filter((tab) => tabHas(tab.key, (key) => changedKeys.value.has(key))).map((tab) => tab.key));
+const errorTabs = computed(() =>
+    tabs.filter((tab) => tabHas(tab.key, (key) => validationErrors.value.config?.[key])).map((tab) => tab.key)
+);
+
 const validationErrors = ref({
     config: {},
 });
 
 provide('settingsConfig', config);
+provide('settingsChangedKeys', changedKeys);
 provide('settingsValidationErrors', validationErrors);
 provide('settingsShowAdvanced', showAdvanced);
 provide('infoTips', true);
@@ -102,9 +151,9 @@ const trueOrFalse = ref([
 
 const nfoWriteModes = ref([
     { key: 'none', value: 'Disabled' },
-    { key: 'all', value: 'Enabled (All Downloads)' },
-    { key: 'nzb', value: 'Enabled (Sonarr/Radarr Downloads Only)' },
-    { key: 'manual', value: 'Enabled (Manual Downloads Only)' },
+    { key: 'all', value: 'Enabled (All)' },
+    { key: 'nzb', value: 'Enabled (Sonarr/Radarr)' },
+    { key: 'manual', value: 'Enabled (Manual)' },
 ]);
 
 const authTypes = ref([
@@ -121,7 +170,7 @@ const downloadClients = ref([
 const streamClients = ref([
     { key: 'GET_IPLAYER', value: 'get_iplayer' },
     { key: 'YTDLP', value: 'yt-dlp' },
-    { key: 'NATIVE', value: 'Native (fastest - talks to BBC directly, no get_iplayer/yt-dlp, recommended)' },
+    { key: 'NATIVE', value: 'Native (fastest, recommended)' },
 ]);
 
 const outputFormats = ref([
@@ -135,13 +184,28 @@ const mediaModes = ref([
 ]);
 
 const streamModes = ref([
-    { key: 'direct', value: 'Direct (proxied through iPlayarr Turbo, supports seeking)' },
-    { key: 'progressive-mkv', value: 'Progressive MKV (ffmpeg remux, proxied through iPlayarr Turbo)' },
+    { key: 'direct', value: 'Direct (supports seeking)' },
+    { key: 'progressive-mkv', value: 'Progressive MKV (ffmpeg, no seeking)' },
 ]);
 
-const saveEnabled = computed(() => {
-    return configChanges.value;
-});
+// Save applies to the tab being viewed only; other tabs keep their edits (and their flag) until saved.
+// Edits survive a tab switch, but ask first so an unsaved tab is not left behind by accident.
+const switchTab = async (key) => {
+    if (key === activeTab.value) return;
+    if (
+        dirtyTabs.value.includes(activeTab.value) &&
+        !(await dialogService.confirm(
+            'Unsaved Changes',
+            'You have unsaved changes on this tab. Switch anyway?',
+            'Your edits are kept until you leave the page, but they are not saved until you press Save on this tab.'
+        ))
+    ) {
+        return;
+    }
+    activeTab.value = key;
+};
+
+const saveEnabled = computed(() => dirtyTabs.value.includes(activeTab.value));
 
 const oidcCallbackTooltip = computed(() => {
     return `${window.location.protocol}//${window.location.host}`;
@@ -157,6 +221,7 @@ onMounted(async () => {
     ]);
 
     config.value = configResponse.data;
+    original.value = clone(configResponse.data);
     originalApiKey = configResponse.data.API_KEY;
     originalUhdFeeds = configResponse.data.LIVE_UHD_EVENT_FEEDS;
     qualityProfiles.value = qpResponse.data.map(({ id, name, quality }) => ({
@@ -167,7 +232,6 @@ onMounted(async () => {
     watch(
         config,
         () => {
-            configChanges.value = true;
             oidcTested.value = false;
         },
         { deep: true }
@@ -186,7 +250,8 @@ onMounted(async () => {
 });
 
 const saveConfig = async () => {
-    if (config.value.AUTH_TYPE == 'oidc' && !oidcTested.value) {
+    const tab = activeTab.value;
+    if (tab == 'authentication' && config.value.AUTH_TYPE == 'oidc' && !oidcTested.value) {
         if (
             !(await dialogService.confirm(
                 'OIDC Not Tested',
@@ -196,7 +261,7 @@ const saveConfig = async () => {
             return;
         }
     }
-    if (originalUhdFeeds === 'true' && config.value.LIVE_UHD_EVENT_FEEDS !== 'true') {
+    if (tab == 'liveTv' && originalUhdFeeds === 'true' && config.value.LIVE_UHD_EVENT_FEEDS !== 'true') {
         if (
             !(await dialogService.confirm(
                 'Turn Off UHD Event Feeds',
@@ -208,10 +273,12 @@ const saveConfig = async () => {
         }
     }
     loading.value = true;
-    if (configChanges.value) {
+    {
+        const keys = TAB_KEYS[tab].filter((key) => key in config.value);
+        const body = Object.fromEntries(keys.map((key) => [key, config.value[key]]));
         validationErrors.value.config = {};
 
-        const configResponse = await ipFetch('json-api/config', 'PUT', config.value);
+        const configResponse = await ipFetch('json-api/config', 'PUT', body);
 
         if (!configResponse.ok) {
             const errorData = configResponse.data;
@@ -220,13 +287,13 @@ const saveConfig = async () => {
             return;
         } else {
             dialogService.alert('Success', 'Save Successful');
-            configChanges.value = false;
+            for (const key of keys) original.value[key] = clone(config.value[key]);
             refreshGlobalSettings();
         }
     }
 
     loading.value = false;
-    if (config.value.API_KEY != originalApiKey) {
+    if (tab == 'general' && config.value.API_KEY != originalApiKey) {
         if (
             await dialogService.confirm('API Key Changed', 'Api Key Changed, do you want to update any relevant apps?')
         ) {
@@ -241,8 +308,8 @@ const saveConfig = async () => {
             formModal.open();
         }
     }
-    originalApiKey = config.value.API_KEY;
-    originalUhdFeeds = config.value.LIVE_UHD_EVENT_FEEDS;
+    if (tab == 'general') originalApiKey = config.value.API_KEY;
+    if (tab == 'liveTv') originalUhdFeeds = config.value.LIVE_UHD_EVENT_FEEDS;
 };
 
 const toggleAdvanced = () => {
@@ -274,7 +341,7 @@ const generateStreamKey = async () => {
 };
 
 onBeforeRouteLeave(async (_, __, next) => {
-    if (saveEnabled.value) {
+    if (dirtyTabs.value.length) {
         if (
             await dialogService.confirm(
                 'Unsaved Changes',

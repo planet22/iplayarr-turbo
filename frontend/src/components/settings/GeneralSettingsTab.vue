@@ -2,6 +2,7 @@
     <legend>General</legend>
     <TextInput
         v-model="config.API_KEY"
+        field="API_KEY"
         name="Api Key"
         tooltip="The key Sonarr/Radarr use to connect."
         :error="validationErrors.config?.API_KEY"
@@ -12,30 +13,37 @@
     />
     <SelectInput
         v-model="config.NATIVE_SEARCH"
+        field="NATIVE_SEARCH"
         name="Native Search"
         tooltip="Native search is experimental but can find shows older than 30 days."
         :error="validationErrors.config?.NATIVE_SEARCH"
         :options="trueOrFalse"
     />
     <SelectInput
-        v-if="config.NATIVE_SEARCH == 'true'"
+        v-if="showAdvanced && config.NATIVE_SEARCH == 'true'"
         v-model="config.NATIVE_SEARCH_ENGINE"
+        field="NATIVE_SEARCH_ENGINE"
+        :advanced="true"
         name="Native Search Engine"
         tooltip="1.0 is stable. 2.0 is experimental, faster and retries failed lookups."
         :error="validationErrors.config?.NATIVE_SEARCH_ENGINE"
         :options="nativeSearchEngines"
     />
     <SelectInput
-        v-if="config.NATIVE_SEARCH == 'true' && config.NATIVE_SEARCH_ENGINE == 'V2'"
+        v-if="showAdvanced && config.NATIVE_SEARCH == 'true' && config.NATIVE_SEARCH_ENGINE == 'V2'"
         v-model="config.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
+        field="NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
+        :advanced="true"
         name="Requested Series Only (2.0)"
         tooltip="Only fetch the season Sonarr/Radarr asks for, not the whole show. Faster for long-running shows. Not used with synonyms or Airdate Numbering."
         :error="validationErrors.config?.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
         :options="trueOrFalse"
     />
     <SelectInput
-        v-if="config.NATIVE_SEARCH == 'true'"
+        v-if="showAdvanced && config.NATIVE_SEARCH == 'true'"
         v-model="config.SEARCH_MATCH_ALL_WORDS"
+        field="SEARCH_MATCH_ALL_WORDS"
+        :advanced="true"
         name="Match All Search Words"
         tooltip="Only show results that contain every word you searched for. Turn off for looser matching."
         :error="validationErrors.config?.SEARCH_MATCH_ALL_WORDS"
@@ -57,6 +65,7 @@
     <template v-if="showAdvanced">
         <TextInput
             v-model="config.REFRESH_SCHEDULE"
+            field="REFRESH_SCHEDULE"
             :advanced="true"
             name="Refresh Schedule"
             tooltip="How often to refresh the schedule (cron expression)."
@@ -64,6 +73,7 @@
         />
         <TextInput
             v-model="config.RSS_FEED_HOURS"
+            field="RSS_FEED_HOURS"
             :advanced="true"
             type-override="number"
             name="Hours in RSS Feed"
@@ -72,6 +82,7 @@
         />
         <SelectInput
             v-model="config.SCHEDULE_FULL_REFRESH"
+            field="SCHEDULE_FULL_REFRESH"
             :advanced="true"
             name="Full Schedule Refresh"
             tooltip="Off refreshes only today's schedule. On refreshes everything."

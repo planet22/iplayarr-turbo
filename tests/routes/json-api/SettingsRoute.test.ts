@@ -194,7 +194,7 @@ describe('SettingsRoute', () => {
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual(body);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
-            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(body);
+            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.setParameter).toHaveBeenCalledTimes(2);
             expect(mockedConfigService.setParameter).toHaveBeenCalledWith('DOWNLOAD_DIR', '/dl');
             expect(mockedConfigService.setParameter).toHaveBeenCalledWith('COMPLETE_DIR', '/done');
@@ -211,7 +211,15 @@ describe('SettingsRoute', () => {
                 invalid_fields: validation_result,
             } as ApiResponse);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
-            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(body);
+            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
+            expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
+        });
+
+        it('validates a partial body against the stored config and only reports the keys it sent', async () => {
+            mockedConfigFormValidator.validate.mockResolvedValue({ DOWNLOAD_DIR: 'Must exist', COMPLETE_DIR: 'Must exist' });
+            const response = await request(app).put('/').send({ DOWNLOAD_DIR: 'x' });
+            expect(response.statusCode).toBe(400);
+            expect(response.body.invalid_fields).toEqual({ DOWNLOAD_DIR: 'Must exist' });
             expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
         });
 
@@ -229,7 +237,7 @@ describe('SettingsRoute', () => {
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual(body);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
-            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(body);
+            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.getParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.getParameter).toHaveBeenCalledWith('AUTH_PASSWORD');
             expect(Utils.hashPassword).toHaveBeenCalledWith('FOOBAR');
@@ -249,7 +257,7 @@ describe('SettingsRoute', () => {
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual(body);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
-            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(body);
+            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.getParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.getParameter).toHaveBeenCalledWith('AUTH_PASSWORD');
             expect(mockedConfigService.setParameter).not.toHaveBeenCalled();

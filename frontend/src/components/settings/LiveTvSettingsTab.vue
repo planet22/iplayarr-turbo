@@ -2,21 +2,23 @@
     <legend>Live TV (Jellyfin)</legend>
     <SelectInput
         v-model="config.LIVE_TV_ENABLED"
+        field="LIVE_TV_ENABLED"
         name="Live TV"
         tooltip="Share BBC live channels with Jellyfin as a tuner and TV guide. Needs the Stream Base URL and Key."
         :error="validationErrors.config?.LIVE_TV_ENABLED"
         :options="liveTvOptions"
     />
     <template v-if="config.LIVE_TV_ENABLED == 'true'">
-        <template v-if="config.MEDIA_MODE != 'strm'">
             <TextInput
                 v-model="config.STREAM_BASE_URL"
+                field="STREAM_BASE_URL"
                 name="Stream Base URL"
                 tooltip="Address Jellyfin uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
                 :error="validationErrors.config?.STREAM_BASE_URL"
             />
             <TextInput
                 v-model="config.STREAM_KEY"
+                field="STREAM_KEY"
                 name="Stream Key"
                 tooltip="Protects the tuner, guide and playback links. Separate from the API Key."
                 :error="validationErrors.config?.STREAM_KEY"
@@ -25,7 +27,6 @@
                 button-tooltip="Regenerate Stream Key"
                 @action="emit('generate-stream-key')"
             />
-        </template>
         <TextInput
             :model-value="liveTvUrl('live_playlist')"
             name="M3U Tuner URL"
@@ -38,38 +39,70 @@
             tooltip="Jellyfin: Live TV → TV Guide Data Providers → XMLTV."
             :copyable="true"
         />
-        <TextInput
-            v-model="config.LIVE_TV_EPG_OFFSET"
-            type-override="number"
-            name="EPG Time Offset (minutes)"
-            tooltip="Minutes to shift guide times if they show early or late, e.g. 60 or -60. 0 = no shift."
-            :error="validationErrors.config?.LIVE_TV_EPG_OFFSET"
-        />
-        <SelectInput
-            v-model="config.LIVE_TV_LOGO_SHAPE"
-            name="Channel Logo Shape"
-            tooltip="Landscape suits guide cards, Square suits channel tiles. After changing, save and update the tuner."
-            :options="logoShapeOptions"
-        />
-        <legend class="guideLegend">Guide options</legend>
-        <SelectInput
-            v-model="config.LIVE_TV_GUIDE_CATEGORIES"
-            name="Guide Categories"
-            tooltip="Tag programmes by category (Movies, Sports, News, Kids) for Jellyfin colours and filters."
-            :options="onOffOptions"
-        />
-        <SelectInput
-            v-model="config.LIVE_TV_GUIDE_FLAGS"
-            name="Live / New / Repeat Flags"
-            tooltip="Tag programmes as live, new or repeat."
-            :options="onOffOptions"
-        />
-        <SelectInput
-            v-model="config.LIVE_TV_GUIDE_HD"
-            name="HD Indicator"
-            tooltip="Mark all programmes as HD."
-            :options="onOffOptions"
-        />
+        <template v-if="showAdvanced">
+            <TextInput
+                v-model="config.LIVE_TV_EPG_OFFSET"
+                field="LIVE_TV_EPG_OFFSET"
+                :advanced="true"
+                type-override="number"
+                name="EPG Time Offset (minutes)"
+                tooltip="Minutes to shift guide times if they show early or late, e.g. 60 or -60. 0 = no shift."
+                :error="validationErrors.config?.LIVE_TV_EPG_OFFSET"
+            />
+            <SelectInput
+                v-model="config.LIVE_TV_LOGO_SHAPE"
+                field="LIVE_TV_LOGO_SHAPE"
+                :advanced="true"
+                name="Channel Logo Shape"
+                tooltip="Landscape suits guide cards, Square suits channel tiles. After changing, save and update the tuner."
+                :options="logoShapeOptions"
+            />
+            <SelectInput
+                v-if="config.STREAM_CLIENT == 'NATIVE'"
+                v-model="config.STREAM_LIVE_DASH_1080"
+                field="STREAM_LIVE_DASH_1080"
+                :advanced="true"
+                name="Live 1080p (Experimental)"
+                tooltip="Play live channels in 1080p HEVC instead of 720p. Needs a player that supports HEVC, and has no subtitles. Clear Jellyfin's channel cache after changing."
+                :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
+                :options="liveTvOptions"
+            />
+            <SelectInput
+                v-if="config.STREAM_CLIENT == 'NATIVE'"
+                v-model="config.LIVE_UHD_EVENT_FEEDS"
+                field="LIVE_UHD_EVENT_FEEDS"
+                :advanced="true"
+                name="UHD Event Feeds"
+                tooltip="Show BBC's 4K event channels. They only have video during big events and need a UK IP and a player that handles 4K HEVC."
+                :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
+                :options="liveTvOptions"
+            />
+            <legend class="guideLegend">Guide options</legend>
+            <SelectInput
+                v-model="config.LIVE_TV_GUIDE_CATEGORIES"
+                field="LIVE_TV_GUIDE_CATEGORIES"
+                :advanced="true"
+                name="Guide Categories"
+                tooltip="Tag programmes by category (Movies, Sports, News, Kids) for Jellyfin colours and filters."
+                :options="onOffOptions"
+            />
+            <SelectInput
+                v-model="config.LIVE_TV_GUIDE_FLAGS"
+                field="LIVE_TV_GUIDE_FLAGS"
+                :advanced="true"
+                name="Live / New / Repeat Flags"
+                tooltip="Tag programmes as live, new or repeat."
+                :options="onOffOptions"
+            />
+            <SelectInput
+                v-model="config.LIVE_TV_GUIDE_HD"
+                field="LIVE_TV_GUIDE_HD"
+                :advanced="true"
+                name="HD Indicator"
+                tooltip="Mark all programmes as HD."
+                :options="onOffOptions"
+            />
+        </template>
         <LiveTvJellyfinSetup />
         <InfoBar>
             Only channels you pick with the TV icon on the Channels page (or a channel's own page) appear in the
@@ -111,6 +144,7 @@ const liveTvUrl = (mode) => {
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
+const showAdvanced = inject('settingsShowAdvanced');
 </script>
 
 <style lang="less" scoped>

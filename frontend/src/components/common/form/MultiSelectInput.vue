@@ -1,5 +1,5 @@
 <template>
-    <div ref="root" :class="['form-group', advanced ? 'advanced' : '']">
+    <div ref="root" :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
         <label v-if="name">{{ name }}</label>
         <div :class="['inputBox', error ? 'error' : '']">
             <div class="fieldRow">
@@ -46,6 +46,7 @@ const props = defineProps({
     modelValue: { type: String, required: true },
     error: { type: String, required: false, default: undefined },
     advanced: { type: Boolean, required: false, default: false },
+    field: { type: String, required: false, default: undefined },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -53,6 +54,10 @@ const emit = defineEmits(['update:modelValue']);
 // Settings page shows the tooltip behind an (i) button; elsewhere (and when inlineTooltip is set) it stays as text below.
 const infoTips = inject('infoTips', false);
 const showInfo = computed(() => infoTips && !props.inlineTooltip);
+
+// Settings page lists the keys edited since the last save; those fields get a highlight.
+const changedKeys = inject('settingsChangedKeys', null);
+const changed = computed(() => !!props.field && !!changedKeys?.value?.has(props.field));
 
 const open = ref(false);
 const root = ref(null);
@@ -205,6 +210,11 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
     .tooltip {
         font-size: 14px;
         color: @subtle-text-color;
+    }
+
+    &.changed .trigger {
+        border-color: #e84a9a;
+        box-shadow: 0 0 0 2px rgba(232, 74, 154, 0.35);
     }
 
     &.advanced {

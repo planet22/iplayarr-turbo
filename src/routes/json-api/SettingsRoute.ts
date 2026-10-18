@@ -68,7 +68,12 @@ router.put('/', async (req: Request, res: Response) => {
         return;
     }
     const validator: Validator = new ConfigFormValidator();
-    const validationResult: { [key: string]: string } = await validator.validate(req.body);
+    // The UI saves one tab at a time, so the body may hold only some keys: validate them against the stored
+    // config, and report only problems with the keys that were actually sent.
+    const validationAll: { [key: string]: string } = await validator.validate({ ...currentConfig, ...req.body });
+    const validationResult: { [key: string]: string } = Object.fromEntries(
+        Object.entries(validationAll).filter(([key]) => key in req.body)
+    );
     if (Object.keys(validationResult).length > 0) {
         const apiResponse: ApiResponse = {
             error: ApiError.INVALID_INPUT,

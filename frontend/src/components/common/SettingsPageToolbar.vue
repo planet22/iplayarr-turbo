@@ -15,7 +15,7 @@
             </div>
             <button
                 v-if="icons.some((i) => i == 'save')"
-                class="SettingsPageToolbar-button clickable"
+                :class="['SettingsPageToolbar-button clickable', saveEnabled ? 'needsSave' : '']"
                 :disabled="!saveEnabled"
                 @click="emit('save')"
             >
@@ -342,6 +342,18 @@ const handleClickOutside = (event) => {
             &.enabled {
                 svg {
                     color: @brand-color;
+                }
+            }
+
+            // Unsaved changes waiting: the Save button stands out.
+            &.needsSave {
+                svg,
+                .SettingsPageToolbar-label {
+                    color: #e84a9a;
+                }
+
+                .SettingsPageToolbar-label {
+                    font-weight: bold;
                 }
             }
         }

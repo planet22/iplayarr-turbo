@@ -1,22 +1,15 @@
 <template>
     <legend>Streaming</legend>
-    <SelectInput
-        v-model="config.MEDIA_MODE"
-        name="Media Mode"
-        tooltip="Stream with a small .strm link (saves disk space) or download the full file."
-        :error="validationErrors.config?.MEDIA_MODE"
-        :options="mediaModes"
-    />
-
-    <template v-if="config.MEDIA_MODE == 'strm'">
         <TextInput
             v-model="config.STREAM_BASE_URL"
+            field="STREAM_BASE_URL"
             name="Stream Base URL"
             tooltip="Address your media server uses to reach iPlayarr Turbo, e.g. http://192.168.1.10:4404."
             :error="validationErrors.config?.STREAM_BASE_URL"
         />
         <TextInput
             v-model="config.STREAM_KEY"
+            field="STREAM_KEY"
             name="Stream Key"
             tooltip="Protects .strm playback links. Separate from the API Key."
             :error="validationErrors.config?.STREAM_KEY"
@@ -27,30 +20,37 @@
         />
         <SelectInput
             v-model="config.STREAM_CLIENT"
+            field="STREAM_CLIENT"
             name="Stream Client"
             tooltip="The tool that plays .strm links. Native is fastest."
             :error="validationErrors.config?.STREAM_CLIENT"
             :options="streamClients"
         />
         <SelectInput
-            v-if="config.STREAM_CLIENT == 'NATIVE'"
+            v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_ADAPTIVE"
+            field="STREAM_NATIVE_ADAPTIVE"
+            :advanced="true"
             name="Native Quality"
             tooltip="Fixed (recommended) uses your Video Quality. Adaptive switches automatically."
             :error="validationErrors.config?.STREAM_NATIVE_ADAPTIVE"
             :options="adaptiveOptions"
         />
         <SelectInput
-            v-if="config.STREAM_CLIENT == 'NATIVE'"
+            v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_HQ_PROBE"
+            field="STREAM_NATIVE_HQ_PROBE"
+            :advanced="true"
             name="Native Quality Probe"
             tooltip="Check the real stream quality before playing. Adds a short delay."
             :error="validationErrors.config?.STREAM_NATIVE_HQ_PROBE"
             :options="hqProbeOptions"
         />
         <SelectInput
-            v-if="config.STREAM_CLIENT == 'NATIVE'"
+            v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_EXPERIMENTAL_FHD"
+            field="STREAM_NATIVE_EXPERIMENTAL_FHD"
+            :advanced="true"
             name="Native FHD Upgrade"
             tooltip="Try to unlock true 1080p instead of BBC's usual 720p (recommended)."
             :error="validationErrors.config?.STREAM_NATIVE_EXPERIMENTAL_FHD"
@@ -59,29 +59,17 @@
         <SelectInput
             v-if="config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_SUBTITLES"
+            field="STREAM_SUBTITLES"
             name="Native Subtitles"
             tooltip="Offer BBC subtitles as a selectable track, where available. Direct mode only."
             :error="validationErrors.config?.STREAM_SUBTITLES"
             :options="subtitlesOptions"
         />
         <SelectInput
-            v-if="config.STREAM_CLIENT == 'NATIVE'"
-            v-model="config.STREAM_LIVE_DASH_1080"
-            name="Live 1080p (Experimental)"
-            tooltip="Play live channels in 1080p HEVC instead of 720p. Needs a player that supports HEVC, and has no subtitles. Clear Jellyfin's channel cache after changing."
-            :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
-            :options="subtitlesOptions"
-        />
-        <SelectInput
-            v-if="config.STREAM_CLIENT == 'NATIVE'"
-            v-model="config.LIVE_UHD_EVENT_FEEDS"
-            name="UHD Event Feeds"
-            tooltip="Show BBC's 4K event channels. They only have video during big events and need a UK IP and a player that handles 4K HEVC."
-            :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
-            :options="subtitlesOptions"
-        />
-        <SelectInput
+            v-if="showAdvanced"
             v-model="config.STREAM_MODE"
+            field="STREAM_MODE"
+            :advanced="true"
             name="Stream Mode"
             tooltip="Direct (recommended) allows seeking. Progressive MKV needs ffmpeg and cannot seek."
             :error="validationErrors.config?.STREAM_MODE"
@@ -91,21 +79,20 @@
             Progressive MKV requires ffmpeg to be installed and on the PATH, and does not support seeking within an
             in-progress stream.
         </InfoBar>
-
-        <template v-if="showAdvanced">
-            <TextInput
-                v-model="config.STREAM_CACHE_DIR"
-                :advanced="true"
-                name="Stream Cache Directory"
-                tooltip="Folder for temporary streaming files. Leave blank to use the system temp folder."
-                :error="validationErrors.config?.STREAM_CACHE_DIR"
-            />
-        </template>
-    </template>
+        <TextInput
+            v-if="showAdvanced"
+            v-model="config.STREAM_CACHE_DIR"
+            field="STREAM_CACHE_DIR"
+            :advanced="true"
+            name="Stream Cache Directory"
+            tooltip="Folder for temporary streaming files. Leave blank to use the system temp folder."
+            :error="validationErrors.config?.STREAM_CACHE_DIR"
+        />
 
     <legend class="watchdogLegend">STRM Watchdog</legend>
     <SelectInput
         v-model="config.STRM_WATCHDOG_ENABLED"
+        field="STRM_WATCHDOG_ENABLED"
         name="STRM Watchdog"
         tooltip="Check daily that .strm links still work on BBC iPlayer."
         :error="validationErrors.config?.STRM_WATCHDOG_ENABLED"
@@ -114,6 +101,7 @@
     <template v-if="config.STRM_WATCHDOG_ENABLED == 'true'">
         <MultiSelectInput
             v-model="config.STRM_WATCHDOG_SOURCES"
+            field="STRM_WATCHDOG_SOURCES"
             name="Watchdog Sources"
             tooltip="Where to look for .strm files. Sonarr/Jellyfin libraries must be mounted into this container (see Path Mapping)."
             :error="validationErrors.config?.STRM_WATCHDOG_SOURCES"
@@ -121,14 +109,17 @@
         />
         <SelectInput
             v-model="config.STRM_WATCHDOG_ACTION"
+            field="STRM_WATCHDOG_ACTION"
             name="Watchdog Action"
             tooltip="What to do with a link that BBC has removed (after two failed checks)."
             :error="validationErrors.config?.STRM_WATCHDOG_ACTION"
             :options="watchdogActionOptions"
         />
         <TextInput
-            v-if="hasType('arr') || hasType('jellyfin')"
+            v-if="showAdvanced && (hasType('arr') || hasType('jellyfin'))"
             v-model="config.STRM_WATCHDOG_PATH_MAP"
+            field="STRM_WATCHDOG_PATH_MAP"
+            :advanced="true"
             name="Watchdog Path Mapping"
             tooltip="Maps their folder to this container's folder, e.g. /tv=/library/tv. Separate several with ;"
             :error="validationErrors.config?.STRM_WATCHDOG_PATH_MAP"
@@ -148,27 +139,37 @@
         <SelectInput
             v-if="hasType('arr')"
             v-model="config.STRM_WATCHDOG_ARR_ACTION"
+            field="STRM_WATCHDOG_ARR_ACTION"
             name="Sonarr/Radarr Action"
             tooltip="Also tell Sonarr/Radarr when a link has expired. Sonarr/Radarr source only."
             :error="validationErrors.config?.STRM_WATCHDOG_ARR_ACTION"
             :options="watchdogArrActionOptions"
         />
         <TextInput
+            v-if="showAdvanced"
             v-model="config.STRM_WATCHDOG_CONCURRENCY"
+            field="STRM_WATCHDOG_CONCURRENCY"
+            :advanced="true"
             type-override="number"
             name="Parallel Checks"
             tooltip="How many links to check at once (1-10, default 4). Lower is gentler on BBC."
             :error="validationErrors.config?.STRM_WATCHDOG_CONCURRENCY"
         />
         <TextInput
+            v-if="showAdvanced"
             v-model="config.STRM_WATCHDOG_FAIL_THRESHOLD"
+            field="STRM_WATCHDOG_FAIL_THRESHOLD"
+            :advanced="true"
             type-override="number"
             name="Minimum Valid Before Action"
             tooltip="Failures only count after this many links pass first, which shows BBC is up. This many failures in a row stops the check."
             :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
         />
         <TextInput
+            v-if="showAdvanced"
             v-model="config.STRM_WATCHDOG_WEBHOOK_URL"
+            field="STRM_WATCHDOG_WEBHOOK_URL"
+            :advanced="true"
             name="Watchdog Webhook URL"
             tooltip="Optional. Sent a notification when a link first stops working."
             :error="validationErrors.config?.STRM_WATCHDOG_WEBHOOK_URL"
@@ -186,10 +187,6 @@ import InfoBar from '@/components/common/InfoBar.vue';
 import { ipFetch } from '@/lib/ipFetch';
 
 defineProps({
-    mediaModes: {
-        type: Array,
-        required: true,
-    },
     streamModes: {
         type: Array,
         required: true,
@@ -204,12 +201,12 @@ const emit = defineEmits(['generate-stream-key']);
 
 const adaptiveOptions = [
     { key: 'true', value: 'Adaptive' },
-    { key: 'false', value: 'Fixed (uses Video Quality, recommended)' },
+    { key: 'false', value: 'Fixed (recommended)' },
 ];
 
 const hqProbeOptions = [
     { key: 'false', value: 'Disabled (recommended)' },
-    { key: 'true', value: 'Enabled (verify real quality)' },
+    { key: 'true', value: 'Enabled' },
 ];
 
 const experimentalFhdOptions = [
@@ -235,8 +232,8 @@ const appResults = ref({});
 
 const watchdogSourceOptions = computed(() => [
     // Both read iPlayarr's own list of downloads; neither scans folders.
-    { key: 'subscribed', value: 'iPlayarr - subscriptions only' },
-    { key: 'history', value: 'iPlayarr - all downloads (history)' },
+    { key: 'subscribed', value: 'iPlayarr: subscriptions' },
+    { key: 'history', value: 'iPlayarr: all downloads' },
     ...watchdogApps.value.map((app) => ({
         key: `app:${app.id}`,
         // No "(Sonarr)" suffix when the app is simply named after its type.
@@ -257,14 +254,14 @@ const hasType = (group) =>
     watchdogSourceOptions.value.some((option) => option.group == group && selectedSources.value.includes(option.key));
 
 const watchdogActionOptions = [
-    { key: 'notify', value: 'Notify only (Video Events log)' },
-    { key: 'delete', value: 'Delete the .strm file' },
+    { key: 'notify', value: 'Notify only' },
+    { key: 'delete', value: 'Delete .strm file' },
 ];
 
 const watchdogArrActionOptions = [
     { key: 'none', value: 'Do nothing' },
-    { key: 'unmonitor', value: 'Unmonitor the episode/movie' },
-    { key: 'search', value: 'Search for a replacement' },
+    { key: 'unmonitor', value: 'Unmonitor' },
+    { key: 'search', value: 'Search for replacement' },
 ];
 
 // Apps are managed on the Apps page; here we only show whether they connect.
