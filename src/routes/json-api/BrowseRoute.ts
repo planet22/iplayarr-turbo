@@ -2,6 +2,7 @@ import { Request, Response, Router } from 'express';
 
 import { OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
 import browseService from '../../service/browseService';
+import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
 import liveChannelService from '../../service/liveChannelService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 
@@ -36,7 +37,30 @@ const handle =
 
 router.get('/home', handle(async (_, res) => res.json(await browseService.home())));
 
-router.get('/categories', handle(async (_, res) => res.json(await browseService.categories())));
+router.get(
+    '/categories',
+    handle(async (_, res) => {
+        const featured = await categoryDiscoverService.list();
+        res.json((await browseService.categories()).map((c) => ({ ...c, discover: featured.includes(c.id) })));
+    })
+);
+
+// Feature a category as a rail on Discover (or take it off); capped, see categoryDiscoverService.
+router.put(
+    '/categories/:id/discover',
+    handle(async (req, res) => {
+        const id = req.params.id as string;
+        const { enabled } = req.body ?? {};
+        if (!ID_REGEX.test(id)) return invalid(res, 'Invalid category id');
+        if (typeof enabled !== 'boolean') return invalid(res, 'enabled must be true or false');
+        try {
+            res.json(await categoryDiscoverService.set(id, enabled));
+        } catch (error: any) {
+            if (error instanceof CategoryDiscoverError) return invalid(res, error.message);
+            throw error;
+        }
+    })
+);
 
 router.get(
     '/suggest',
@@ -75,11 +99,11 @@ router.get(
         const settings = await liveChannelService.list();
         const byId = new Map(channels.map((channel) => [channel.id, channel]));
         res.json(
-            settings.map(({ id, title, logo, vpid, optional, enabled }) => {
+            settings.map(({ id, title, logo, vpid, optional, enabled, discover }) => {
                 const channel = byId.get(id);
                 return channel
-                    ? { ...channel, vpid, enabled, live: channel.live && enabled }
-                    : { id, title, logo, vpid, enabled, live: enabled, liveOnly: optional };
+                    ? { ...channel, vpid, enabled, discover, live: channel.live && enabled }
+                    : { id, title, logo, vpid, enabled, discover, live: enabled, liveOnly: optional };
             })
         );
     })

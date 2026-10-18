@@ -2,33 +2,67 @@
     <div class="browsePage">
         <PageHeader :title="isChannels ? 'Channels' : 'Categories'">
             <button
-                v-if="isChannels && editing && !loading && !error && tiles.some((t) => t.live)" type="button" class="addAll"
-                :title="allSubscribed ? 'Remove every live channel from the library' : 'Subscribe to all live channels (adds them to the library)'"
-                :disabled="allBusy" @click="allSubscribed ? confirmUnsubscribeAll() : subscribeAll()"
+                v-if="isChannels && editing && !loading && !error && tiles.some((t) => t.live)"
+                type="button"
+                class="addAll"
+                :title="
+                    allSubscribed
+                        ? 'Remove every live channel from the library'
+                        : 'Subscribe to all live channels (adds them to the library)'
+                "
+                :disabled="allBusy"
+                @click="allSubscribed ? confirmUnsubscribeAll() : subscribeAll()"
             >
-                <font-awesome-icon :icon="['fas', allBusy ? 'circle-notch' : allSubscribed ? 'bell-slash' : 'bell']" :spin="allBusy" />
+                <font-awesome-icon
+                    :icon="['fas', allBusy ? 'circle-notch' : allSubscribed ? 'bell-slash' : 'bell']"
+                    :spin="allBusy"
+                />
                 {{ allSubscribed ? 'Unsubscribe all' : 'Subscribe all' }}
             </button>
             <button
-                v-if="isChannels && editing && liveTvEnabled && !loading && !error && tiles.some((t) => t.live)" type="button" class="addAll"
-                :title="allLiveTv ? 'Take every channel out of Jellyfin Live TV' : 'Offer every live channel to Jellyfin Live TV'"
-                :disabled="isLiveTvBusy('all')" @click="allLiveTv ? liveTvClear() : liveTvAddAll()"
+                v-if="isChannels && editing && liveTvEnabled && !loading && !error && tiles.some((t) => t.live)"
+                type="button"
+                class="addAll"
+                :title="
+                    allLiveTv
+                        ? 'Take every channel out of Jellyfin Live TV'
+                        : 'Offer every live channel to Jellyfin Live TV'
+                "
+                :disabled="isLiveTvBusy('all')"
+                @click="allLiveTv ? liveTvClear() : liveTvAddAll()"
             >
-                <font-awesome-icon :icon="['fas', isLiveTvBusy('all') ? 'circle-notch' : 'tv']" :spin="isLiveTvBusy('all')" />
+                <font-awesome-icon
+                    :icon="['fas', isLiveTvBusy('all') ? 'circle-notch' : 'tv']"
+                    :spin="isLiveTvBusy('all')"
+                />
                 {{ allLiveTv ? 'Live TV none' : 'Live TV all' }}
             </button>
             <button
-                v-if="isChannels && !loading && !error" type="button"
+                v-if="!isChannels && !loading && !error"
+                type="button"
+                :class="['addAll', 'editToggle', featuring ? 'active' : '']"
+                :title="featuring ? 'Done' : 'Choose which categories are featured on Discover'"
+                @click="featuring = !featuring"
+            >
+                <font-awesome-icon :icon="['fas', featuring ? 'check' : 'compass']" />
+                {{ featuring ? 'Done' : 'Discover' }}
+            </button>
+            <button
+                v-if="isChannels && !loading && !error"
+                type="button"
                 :class="['addAll', 'editToggle', arranging ? 'active' : '']"
-                :title="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'" @click="toggleArranging"
+                :title="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'"
+                @click="toggleArranging"
             >
                 <font-awesome-icon :icon="['fas', arranging ? 'check' : 'grip']" />
                 {{ arranging ? 'Done' : 'Arrange' }}
             </button>
             <button
-                v-if="isChannels && !arranging && !loading && !error && tiles.some((t) => t.live)" type="button"
+                v-if="isChannels && !arranging && !loading && !error && tiles.some((t) => t.live)"
+                type="button"
                 :class="['addAll', 'editToggle', editing ? 'active' : '']"
-                :title="editing ? 'Done editing' : 'Edit library and Live TV channels'" @click="editing = !editing"
+                :title="editing ? 'Done editing' : 'Edit library and Live TV channels'"
+                @click="editing = !editing"
             >
                 <font-awesome-icon :icon="['fas', editing ? 'check' : 'pen']" />
                 {{ editing ? 'Done' : 'Edit' }}
@@ -37,15 +71,30 @@
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
         <InfoBar v-if="arranging && !loading && !error">
-            Drag channels (or use the arrows) into the order you want. Use the eye to switch a channel off: it keeps
-            its place here but is hidden from the Channels page, and is removed from your library and Jellyfin Live
-            TV. Turn BBC One London off and BBC One East on to swap one for the other.
+            Drag channels (or use the arrows) into the order you want. Use the eye to switch a channel off. The compass
+            features a channel as a rail on the Discover page (up to 4, shown in this order).
+        </InfoBar>
+        <InfoBar v-if="featuring && !loading && !error">
+            Use the compass to feature up to 2 categories as rails on the Discover page. With none chosen, Discover
+            shows 2 random categories.
         </InfoBar>
         <div v-if="!loading && !error" class="tileGrid">
             <RouterLink
-                v-for="tile in shownTiles" :key="tile.id" :to="`/browse/${isChannels ? 'channel' : 'category'}/${tile.id}`"
-                :class="['tile', isChannels ? '' : 'imageTile', arranging ? 'arranging' : '', tile.enabled === false ? 'disabled' : '', dragId === tile.id ? 'dragging' : '']"
-                :style="!isChannels && tile.thumbnail ? { 'background-image': `url(${getThumbnailUrl(tile.thumbnail, true)})` } : {}"
+                v-for="tile in shownTiles"
+                :key="tile.id"
+                :to="`/browse/${isChannels ? 'channel' : 'category'}/${tile.id}`"
+                :class="[
+                    'tile',
+                    isChannels ? '' : 'imageTile',
+                    arranging ? 'arranging' : '',
+                    tile.enabled === false ? 'disabled' : '',
+                    dragId === tile.id ? 'dragging' : '',
+                ]"
+                :style="
+                    !isChannels && tile.thumbnail
+                        ? { 'background-image': `url(${getThumbnailUrl(tile.thumbnail, true)})` }
+                        : {}
+                "
                 :draggable="arranging"
                 @click="onTileClick($event, tile)"
                 @dragstart="onDragStart($event, tile)"
@@ -55,23 +104,51 @@
             >
                 <template v-if="isChannels">
                     <img
-                        v-if="tile.logo && !failedLogos[tile.id]" class="channelLogo" :src="getThumbnailUrl(tile.logo)"
-                        :alt="tile.title" @error="failedLogos[tile.id] = true"
+                        v-if="tile.logo && !failedLogos[tile.id]"
+                        class="channelLogo"
+                        :src="getThumbnailUrl(tile.logo)"
+                        :alt="tile.title"
+                        @error="failedLogos[tile.id] = true"
                     />
                     <!-- Logo already carries the channel name; fall back to text only when there's no logo to show. -->
                     <span v-if="!tile.logo || failedLogos[tile.id]" class="channelName">{{ tile.title }}</span>
                     <template v-if="arranging">
                         <button
-                            class="arrangeButton arrangeEye" type="button" :disabled="isArrangeBusy(tile.id)"
+                            class="arrangeButton arrangeEye"
+                            type="button"
+                            :disabled="isArrangeBusy(tile.id)"
                             :title="tile.enabled === false ? `Enable ${tile.title}` : `Disable ${tile.title}`"
                             @click.prevent.stop="toggleEnabled(tile)"
                         >
                             <font-awesome-icon :icon="['fas', tile.enabled === false ? 'eye-slash' : 'eye']" />
                         </button>
-                        <button class="arrangeButton arrangeBack" type="button" title="Move earlier" @click.prevent.stop="shift(tile, -1)">
+                        <button
+                            :class="['arrangeButton', 'arrangeDiscover', tile.discover ? 'on' : '']"
+                            type="button"
+                            :disabled="isArrangeBusy(tile.id)"
+                            :title="
+                                tile.discover
+                                    ? `${tile.title} is featured on Discover - click to remove`
+                                    : `Feature ${tile.title} on Discover`
+                            "
+                            @click.prevent.stop="toggleDiscover(tile)"
+                        >
+                            <font-awesome-icon :icon="['fas', 'compass']" />
+                        </button>
+                        <button
+                            class="arrangeButton arrangeBack"
+                            type="button"
+                            title="Move earlier"
+                            @click.prevent.stop="shift(tile, -1)"
+                        >
                             <font-awesome-icon :icon="['fas', 'chevron-left']" />
                         </button>
-                        <button class="arrangeButton arrangeForward" type="button" title="Move later" @click.prevent.stop="shift(tile, 1)">
+                        <button
+                            class="arrangeButton arrangeForward"
+                            type="button"
+                            title="Move later"
+                            @click.prevent.stop="shift(tile, 1)"
+                        >
                             <font-awesome-icon :icon="['fas', 'chevron-right']" />
                         </button>
                         <div class="arrangeInfo">
@@ -81,34 +158,72 @@
                     </template>
                     <!-- Not editing: read-only status, only for what's on. -->
                     <span v-if="tile.live && !editing && !arranging" class="statusBadge">
-                        <font-awesome-icon v-if="isSubscribed(tile.id)" :icon="['fas', 'bell']" title="In the library" />
                         <font-awesome-icon
-                            v-if="liveTvEnabled && isLiveTvSelected(tile.id)" :icon="['fas', 'tv']" title="In Jellyfin Live TV"
+                            v-if="isSubscribed(tile.id)"
+                            :icon="['fas', 'bell']"
+                            title="In the library"
+                        />
+                        <font-awesome-icon
+                            v-if="liveTvEnabled && isLiveTvSelected(tile.id)"
+                            :icon="['fas', 'tv']"
+                            title="In Jellyfin Live TV"
                         />
                     </span>
                     <button
-                        v-if="tile.live && editing && !arranging" :class="['liveButton', 'libraryButton', isSubscribed(tile.id) ? 'on' : '']" type="button" :disabled="isBusy(tile.id)"
-                        :title="isSubscribed(tile.id) ? `${tile.title} is in the library - click to remove` : `Add ${tile.title} to the library`"
+                        v-if="tile.live && editing && !arranging"
+                        :class="['liveButton', 'libraryButton', isSubscribed(tile.id) ? 'on' : '']"
+                        type="button"
+                        :disabled="isBusy(tile.id)"
+                        :title="
+                            isSubscribed(tile.id)
+                                ? `${tile.title} is in the library - click to remove`
+                                : `Add ${tile.title} to the library`
+                        "
                         @click.prevent.stop="toggleLibrary(tile)"
                     >
                         <font-awesome-icon :icon="['fas', 'bell']" />
                     </button>
                     <button
-                        v-if="tile.live && liveTvEnabled && editing && !arranging" :class="['liveButton', 'liveTvButton', isLiveTvSelected(tile.id) ? 'on' : '']" type="button"
+                        v-if="tile.live && liveTvEnabled && editing && !arranging"
+                        :class="['liveButton', 'liveTvButton', isLiveTvSelected(tile.id) ? 'on' : '']"
+                        type="button"
                         :disabled="isLiveTvBusy(tile.id)"
-                        :title="isLiveTvSelected(tile.id) ? `${tile.title} is in Jellyfin Live TV - click to remove` : `Add ${tile.title} to Jellyfin Live TV`"
+                        :title="
+                            isLiveTvSelected(tile.id)
+                                ? `${tile.title} is in Jellyfin Live TV - click to remove`
+                                : `Add ${tile.title} to Jellyfin Live TV`
+                        "
                         @click.prevent.stop="liveTvToggle(tile.id)"
                     >
                         <font-awesome-icon :icon="['fas', 'tv']" />
                     </button>
                     <button
-                        v-if="tile.live && !arranging" class="liveButton" type="button" :title="`Watch ${tile.title} live`"
+                        v-if="tile.live && !arranging"
+                        class="liveButton"
+                        type="button"
+                        :title="`Watch ${tile.title} live`"
                         @click.prevent.stop="watchLive(tile)"
                     >
                         <font-awesome-icon :icon="['fas', 'play']" />
                     </button>
                 </template>
-                <span v-else class="tileTitle">{{ tile.title }}</span>
+                <template v-else>
+                    <span class="tileTitle">{{ tile.title }}</span>
+                    <button
+                        v-if="featuring"
+                        :class="['arrangeButton', 'arrangeDiscover', tile.discover ? 'on' : '']"
+                        type="button"
+                        :disabled="isArrangeBusy(tile.id)"
+                        :title="
+                            tile.discover
+                                ? `${tile.title} is featured on Discover - click to remove`
+                                : `Feature ${tile.title} on Discover`
+                        "
+                        @click.prevent.stop="toggleCategoryDiscover(tile)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'compass']" />
+                    </button>
+                </template>
             </RouterLink>
         </div>
     </div>
@@ -156,8 +271,38 @@ const toggleArranging = () => {
     editing.value = false;
 };
 
+// Categories page: feature up to 2 categories on Discover.
+const featuring = ref(false);
+
+const toggleCategoryDiscover = async (tile) => {
+    arrangeBusy[tile.id] = true;
+    const { ok, data } = await ipFetch(`json-api/browse/categories/${tile.id}/discover`, 'PUT', {
+        enabled: !tile.discover,
+    });
+    arrangeBusy[tile.id] = false;
+    if (ok) {
+        tiles.value.forEach((t) => (t.discover = data.includes(t.id)));
+    } else {
+        dialogService.alert('Error', data?.message || 'Unable to update Discover');
+    }
+};
+
+// Features the channel as a rail on the Discover page (or takes it off).
+const toggleDiscover = async (tile) => {
+    arrangeBusy[tile.id] = true;
+    const { ok, data } = await ipFetch(`json-api/live-channels/${tile.id}/discover`, 'PUT', {
+        enabled: !tile.discover,
+    });
+    arrangeBusy[tile.id] = false;
+    if (ok) {
+        tile.discover = !tile.discover;
+    } else {
+        dialogService.alert('Error', data?.message || 'Unable to update Discover');
+    }
+};
+
 const onTileClick = (event, tile) => {
-    if (arranging.value) {
+    if (arranging.value || featuring.value) {
         event.preventDefault();
     } else if (tile.liveOnly) {
         event.preventDefault();
@@ -229,8 +374,16 @@ const toggleEnabled = async (tile) => {
 // tiles just show play plus a small read-only status badge.
 const editing = ref(false);
 
-const { allBusy, load: loadLive, isSubscribed, isBusy, subscribe, unsubscribe, subscribeAll, unsubscribeAll } =
-    useLiveSubscriptions();
+const {
+    allBusy,
+    load: loadLive,
+    isSubscribed,
+    isBusy,
+    subscribe,
+    unsubscribe,
+    subscribeAll,
+    unsubscribeAll,
+} = useLiveSubscriptions();
 loadLive();
 
 const {
@@ -250,7 +403,12 @@ const allSubscribed = computed(() => liveTiles.value.length > 0 && liveTiles.val
 const allLiveTv = computed(() => liveTiles.value.length > 0 && liveTiles.value.every((t) => isLiveTvSelected(t.id)));
 // Unsubscribing deletes each channel's .strm from the library, so ask first.
 const confirmUnsubscribeAll = async () => {
-    if (await dialogService.confirm('Unsubscribe all', 'Remove every live channel from the library? Their .strm files will be deleted.')) {
+    if (
+        await dialogService.confirm(
+            'Unsubscribe all',
+            'Remove every live channel from the library? Their .strm files will be deleted.'
+        )
+    ) {
         await unsubscribeAll();
     }
 };
@@ -334,7 +492,9 @@ watch(
     color: @primary-text-color;
     text-decoration: none;
     font-size: 16px;
-    transition: background-color 150ms, border-color 150ms;
+    transition:
+        background-color 150ms,
+        border-color 150ms;
 
     svg {
         color: @subtle-text-color;
@@ -527,6 +687,41 @@ watch(
                 left: 42px;
             }
         }
+    }
+
+    // Compass: lit when the channel/category has a rail on Discover. Shared by Arrange (channels) and the
+    // categories' Discover mode.
+    .arrangeButton.arrangeDiscover {
+        position: absolute;
+        top: 8px;
+        right: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background-color: rgba(0, 0, 0, 0.55);
+        cursor: pointer;
+
+        svg {
+            color: #888;
+        }
+
+        &.on svg {
+            color: #fff;
+        }
+
+        &:disabled {
+            cursor: default;
+            opacity: 0.5;
+        }
+    }
+
+    &.imageTile .arrangeButton.arrangeDiscover {
+        right: 8px;
     }
 
     // Categories: large artwork tiles with the title over a gradient.

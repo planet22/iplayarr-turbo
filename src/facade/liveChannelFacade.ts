@@ -8,6 +8,11 @@ class LiveChannelFacade {
         return liveChannelService.list();
     }
 
+    async setDiscover(channelId: string, on: boolean): Promise<LiveChannelSetting[]> {
+        await liveChannelService.setDiscover(channelId, on);
+        return liveChannelService.list();
+    }
+
     async setOrder(ids: string[]): Promise<LiveChannelSetting[]> {
         await liveChannelService.setOrder(ids);
         return liveChannelService.list();

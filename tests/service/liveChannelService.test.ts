@@ -45,3 +45,18 @@ describe('liveChannelService ordering', () => {
         await expect(service.setOrder(['bbc_one_london', 'nope'])).rejects.toThrow(LiveChannelError);
     });
 });
+
+describe('liveChannelService Discover', () => {
+    it('defaults to the three built-in rails and returns them in channel order', async () => {
+        expect(await service.discoverIds()).toEqual(['bbc_two_england', 'bbc_three', 'bbc_four']);
+    });
+
+    it('limits Discover to 4 channels and ignores disabled ones', async () => {
+        await service.setDiscover('cbbc', true);
+        await expect(service.setDiscover('cbeebies', true)).rejects.toThrow(LiveChannelError);
+        await service.setDiscover('bbc_four', false);
+        await service.setDiscover('cbeebies', true);
+        await service.setEnabled('cbbc', false);
+        expect(await service.discoverIds()).toEqual(['bbc_two_england', 'bbc_three', 'cbeebies']);
+    });
+});

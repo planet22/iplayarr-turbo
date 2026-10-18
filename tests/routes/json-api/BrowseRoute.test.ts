@@ -10,6 +10,7 @@ jest.mock('../../../src/service/browseService');
 const mocked = jest.mocked(browseService);
 
 const app = express();
+app.use(express.json());
 app.use('/', router);
 
 describe('BrowseRoute', () => {
@@ -25,7 +26,16 @@ describe('BrowseRoute', () => {
     it('GET /categories returns categories', async () => {
         mocked.categories.mockResolvedValue([{ id: 'comedy', title: 'Comedy' }]);
         const res = await request(app).get('/categories');
-        expect(res.body).toEqual([{ id: 'comedy', title: 'Comedy' }]);
+        expect(res.body).toEqual([{ id: 'comedy', title: 'Comedy', discover: false }]);
+    });
+
+    it('PUT /categories/:id/discover features a category, capped at 2', async () => {
+        await request(app).put('/categories/comedy/discover').send({ enabled: true });
+        const res = await request(app).put('/categories/drama/discover').send({ enabled: true });
+        expect(res.body).toEqual(['comedy', 'drama']);
+        const over = await request(app).put('/categories/news/discover').send({ enabled: true });
+        expect(over.status).toBe(400);
+        expect((await request(app).put('/categories/news/discover').send({})).status).toBe(400);
     });
 
     it('GET /category/:id passes paging through as numbers', async () => {

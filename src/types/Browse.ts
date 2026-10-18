@@ -38,6 +38,8 @@ export interface BrowsePage {
 }
 
 export interface BrowseCategory {
+    // Featured on the Discover page (set when listing, never cached).
+    discover?: boolean;
     id: string;
     title: string;
     // Artwork borrowed from the category's first programme, for the image tiles.
@@ -91,6 +93,8 @@ export interface BrowseChannel {
     liveOnly?: boolean;
     // False when the channel is switched off in the Channels page's arrange mode (it stays in its place there).
     enabled?: boolean;
+    // Whether the channel has its own rail on the Discover page.
+    discover?: boolean;
     // The mediaselector service id its live stream is served under (shown while arranging).
     vpid?: string;
 }
