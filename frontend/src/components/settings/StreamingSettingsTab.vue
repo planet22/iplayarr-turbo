@@ -57,6 +57,14 @@
             :options="experimentalFhdOptions"
         />
         <SelectInput
+            v-if="config.STREAM_CLIENT == 'NATIVE'"
+            v-model="config.STREAM_SUBTITLES"
+            name="Native Subtitles"
+            tooltip="Offers BBC's subtitles as a selectable track (off by default). Programmes and live channels that have them; Direct mode only."
+            :error="validationErrors.config?.STREAM_SUBTITLES"
+            :options="subtitlesOptions"
+        />
+        <SelectInput
             v-model="config.STREAM_MODE"
             name="Stream Mode"
             tooltip="Direct (recommended, supports seeking) or Progressive MKV (needs ffmpeg, no seeking)."
@@ -191,6 +199,11 @@ const hqProbeOptions = [
 const experimentalFhdOptions = [
     { key: 'false', value: 'Disabled' },
     { key: 'true', value: 'Enabled (recommended)' },
+];
+
+const subtitlesOptions = [
+    { key: 'false', value: 'Disabled (recommended)' },
+    { key: 'true', value: 'Enabled' },
 ];
 
 const watchdogEnabledOptions = [

@@ -11,6 +11,8 @@ import NativeStreamService from '../../service/stream/NativeStreamService';
 import { resolve as resolveSegmentUrl } from '../../service/stream/segmentUrlRegistry';
 import { proxyUrl } from '../../service/stream/streamProxyUtils';
 import streamSessionService from '../../service/stream/streamSessionService';
+import { buildSubtitleMediaPlaylist } from '../../service/stream/subtitles/hlsSubtitles';
+import { isSegmentNumber } from '../../service/stream/subtitles/liveSubtitles';
 import YTDLPStreamService from '../../service/stream/YTDLPStreamService';
 import { StreamClient } from '../../types/enums/StreamClient';
 import { StreamMode } from '../../types/enums/StreamMode';
@@ -64,6 +66,48 @@ async function getStreamService(): Promise<{ client: StreamClient; service: Abst
     }
 }
 
+async function handleLiveSubtitles(req: Request, res: Response): Promise<void> {
+    const { pid, subs, n } = req.query as any;
+    const streamKey = (req.query.streamkey as string) ?? '';
+    let body: string | undefined;
+    if (isLiveChannel(pid)) {
+        if (subs === 'livelist') {
+            body = await LiveStreamService.getSubtitlePlaylist(pid, streamKey);
+        } else if (isSegmentNumber(n)) {
+            body = await LiveStreamService.getSubtitleSegment(pid, n);
+        }
+    }
+    if (body === undefined) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No subtitles available' } as ApiResponse);
+        return;
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', subs === 'livelist' ? 'application/vnd.apple.mpegurl' : 'text/vtt; charset=utf-8');
+    res.send(body);
+}
+
+async function handleSubtitles(req: Request, res: Response): Promise<void> {
+    const { pid, subs } = req.query as any;
+    if (subs === 'livelist' || subs === 'livevtt') {
+        return handleLiveSubtitles(req, res);
+    }
+    const track = isValidPid(pid) && (subs === 'playlist' || subs === 'vtt') ? await NativeStreamService.getSubtitles(pid) : undefined;
+    if (!track) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No subtitles available' } as ApiResponse);
+        return;
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    if (subs === 'playlist') {
+        const streamKey = encodeURIComponent((req.query.streamkey as string) ?? '');
+        const vttUri = `/api/subs.vtt?mode=stream&pid=${encodeURIComponent(pid)}&subs=vtt&streamkey=${streamKey}`;
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.send(buildSubtitleMediaPlaylist(vttUri, track.durationSeconds));
+    } else {
+        res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+        res.send(track.vtt);
+    }
+}
+
 export default (req: Request, res: Response): Promise<void> =>
     runWithQuality(req.query.quality, () => handleStream(req, res));
 
@@ -93,6 +137,13 @@ async function handleStream(req: Request, res: Response): Promise<void> {
                 res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: err?.message ?? 'Streaming failed' } as ApiResponse);
             }
         }
+        return;
+    }
+
+    // The subtitle rendition a master playlist was given (STREAM_SUBTITLES): its playlist, then the
+    // WebVTT file that playlist lists. Not a playback session either.
+    if (req.query.subs !== undefined) {
+        await handleSubtitles(req, res);
         return;
     }
 

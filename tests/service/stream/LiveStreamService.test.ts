@@ -3,6 +3,7 @@ import http from 'http';
 import https from 'https';
 
 import { isLiveChannel, LiveChannelVpids } from '../../../src/constants/LiveChannels';
+import configService from '../../../src/service/configService';
 import service from '../../../src/service/stream/LiveStreamService';
 import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
@@ -56,6 +57,12 @@ const liveXml = `<mediaSelection><media kind="video">${[
     conn('transferFormat="dash" protocol="https" supplier="x" href="https://dash/x"'),
     conn('transferFormat="hls" protocol="https" supplier="akamai" href="https://cdn/live?a=1&amp;b=2"'),
 ].join('')}</media></mediaSelection>`;
+
+const defaultLiveRoute = (url: string, method: string): Reply => {
+    if (url.startsWith('https://cdn/live') && method === 'HEAD') return { status: 302, headers: { location: '/master.m3u8' } };
+    if (url.endsWith('/master.m3u8')) return { body: ['#EXTM3U', '#EXT-X-STREAM-INF:BANDWIDTH=5', 'variant.m3u8', ''].join(String.fromCharCode(10)) };
+    return { body: '' };
+};
 
 const req: any = { headers: {} };
 const res: any = {};
@@ -178,5 +185,84 @@ describe('LiveStreamService', () => {
         route = () => ({ body: '<error id="geolocation"/>' });
         await expect(service.streamDirect('bbc_one_london', req, res)).rejects.toThrow('No live HLS stream available');
         expect(proxyUrl).not.toHaveBeenCalled();
+    });
+});
+
+describe('LiveStreamService subtitles', () => {
+    const subReq: any = { headers: {}, query: { streamkey: 'k y' } };
+    const template = 'https://caps/x=4/s=caption1/$Number$.m4s';
+    const captionsXml = liveXml.replace(
+        '</mediaSelection>',
+        `<media kind="captions">${conn(`transferFormat="dash" protocol="https" href="${template}"`)}</media></mediaSelection>`
+    );
+    const videoPlaylist = '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:7\n#EXTINF:3.84,\n7.ts\n#EXTINF:3.84,\n8.ts\n';
+    const fragment = '\u0000moof\u0000mdat<?xml version="1.0"?><tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="00:00:01.000" end="00:00:02.000"><span>Live words</span></p></div></body></tt>';
+    let enabled: boolean;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        clearResolveCache();
+        clearRememberedMediaSelectorPairs();
+        requested.length = 0;
+        installNetwork();
+        enabled = true;
+        jest.spyOn(configService, 'getParameter').mockImplementation(async (p: any) => (p === 'STREAM_SUBTITLES' && enabled ? 'true' : undefined));
+        route = (url, method) => {
+            if (url.includes('mediaselector')) return { body: captionsXml };
+            if (url.startsWith('https://cdn/live') && method === 'HEAD') return { status: 302, headers: { location: '/master.m3u8' } };
+            if (url.endsWith('/master.m3u8')) return { body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=5\nvariant.m3u8\n' };
+            if (url.endsWith('/variant.m3u8')) return { body: videoPlaylist };
+            if (url === 'https://caps/x=4/s=caption1/7.m4s') return { body: fragment };
+            if (url.includes('/s=caption1/')) return { status: 404, body: 'Object not found.' };
+            return { body: '' };
+        };
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('hands the proxy the subtitle playlist uri when enabled and the channel has captions', async () => {
+        await service.streamDirect('bbc_one_london', subReq, res, 'sess');
+        expect(proxyUrl).toHaveBeenCalledWith(
+            'https://cdn/master.m3u8',
+            subReq,
+            res,
+            5,
+            'sess',
+            true,
+            '/api/subs.m3u8?mode=stream&pid=bbc_one_london&subs=livelist&streamkey=k%20y'
+        );
+    });
+
+    it('is the plain proxy call when the setting is off, without looking for captions', async () => {
+        enabled = false;
+        await service.streamDirect('bbc_one_london', subReq, res, 'sess');
+        expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', subReq, res, 5, 'sess', true);
+        expect(await service.getSubtitlePlaylist('bbc_one_london', 'k')).toBeUndefined();
+        expect(await service.getSubtitleSegment('bbc_one_london', '7')).toBeUndefined();
+    });
+
+    it('is the plain proxy call for a channel without captions', async () => {
+        route = (url, method) => (url.includes('mediaselector') ? { body: liveXml } : defaultLiveRoute(url, method));
+        await service.streamDirect('bbc_one_london', subReq, res, 'sess');
+        expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', subReq, res, 5, 'sess', true);
+    });
+
+    it('mirrors the best variant window as the subtitle playlist', async () => {
+        const out = await service.getSubtitlePlaylist('bbc_one_london', 'k y');
+        expect(out).toContain('#EXT-X-MEDIA-SEQUENCE:7');
+        expect(out).toContain('/api/subs.vtt?mode=stream&pid=bbc_one_london&subs=livevtt&n=7&streamkey=k%20y');
+        expect(out).toContain('n=8&');
+    });
+
+    it('serves a published caption fragment as WebVTT pinned to the video', async () => {
+        const vtt = await service.getSubtitleSegment('bbc_one_london', '7');
+        expect(vtt).toContain('X-TIMESTAMP-MAP=MPEGTS:');
+        expect(vtt).toContain('Live words');
+    });
+
+    it('serves an unpublished fragment as an empty segment instead of failing', async () => {
+        const vtt = await service.getSubtitleSegment('bbc_one_london', '99');
+        expect(vtt).toContain('X-TIMESTAMP-MAP=MPEGTS:');
+        expect(vtt).not.toContain('-->');
     });
 });

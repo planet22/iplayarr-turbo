@@ -403,6 +403,40 @@ describe('proxyUrl', () => {
         reqs[0].emit('error', new Error('boom'));
         await expect(p).rejects.toThrow('boom');
     });
+    describe('subtitlePlaylistUri', () => {
+        const mp = { 'content-type': 'application/vnd.apple.mpegurl' };
+        const subs = '/api/subs.m3u8?mode=stream&pid=p&subs=playlist&streamkey=k';
+
+        it('adds the subtitle group to a master playlist', async () => {
+            mockGet(https, [{ status: 200, headers: mp, body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION=1x1\nv.m3u8\n' }]);
+            const res = makeRes();
+            await proxyUrl('https://cdn/m.m3u8', makeReq({ streamkey: 'k' }), res, 5, undefined, false, subs);
+            const body: string = res.send.mock.calls[0][0];
+            expect(body).toContain('TYPE=SUBTITLES,GROUP-ID="subs"');
+            expect(body).toContain(`URI="${subs}"`);
+            expect(body).toContain('SUBTITLES="subs"\n/api/seg.m3u8');
+        });
+
+        it('wraps a media playlist in a master whose variant is a proxied reference to it', async () => {
+            mockGet(https, [{ status: 200, headers: mp, body: '#EXTM3U\n#EXT-X-TARGETDURATION:6\nseg1.ts\n#EXT-X-ENDLIST\n' }]);
+            const res = makeRes();
+            await proxyUrl('https://cdn/v.m3u8', makeReq({ streamkey: 'k' }), res, 5, 'sess', false, subs);
+            const body: string = res.send.mock.calls[0][0];
+            expect(body).toContain('#EXT-X-STREAM-INF');
+            expect(body).not.toContain('seg1.ts');
+            const token = /\/api\/seg\.m3u8\?mode=stream&token=([^&]+)/.exec(body)![1];
+            expect(resolveToken(token)).toBe('https://cdn/v.m3u8');
+            expect(body).toContain('session=sess');
+        });
+
+        it('leaves the playlist untouched when no subtitle uri is given', async () => {
+            mockGet(https, [{ status: 200, headers: mp, body: '#EXTM3U\n#EXT-X-TARGETDURATION:6\nseg1.ts\n' }]);
+            const res = makeRes();
+            await proxyUrl('https://cdn/v.m3u8', makeReq(), res);
+            expect(res.send.mock.calls[0][0]).not.toContain('SUBTITLES');
+            expect(res.send.mock.calls[0][0]).toContain('/api/seg.ts?');
+        });
+    });
 });
 
 describe('remuxToMkv', () => {

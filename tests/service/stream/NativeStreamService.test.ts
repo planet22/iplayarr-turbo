@@ -419,4 +419,56 @@ describe('NativeStreamService', () => {
             expect(proxyUrl).toHaveBeenCalledWith('https://first/master.m3u8', req, res, 5, undefined);
         });
     });
+
+    describe('subtitles', () => {
+        const subReq: any = { query: { streamkey: 'k y' } };
+        const ttml =
+            '<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="00:00:01.000" end="00:00:02.000">Hi</p></div></body></tt>';
+        const withCaptions = (captionBody: Reply = { body: ttml }): Router => (url, m) => {
+            if (url.includes('mediaselector')) {
+                return { body: goodXml.replace('</mediaSelection>', mediaXml([conn('transferFormat="plain" protocol="https" href="https://c/cap.xml"')], 'captions').replace('<mediaSelection>', '')) };
+            }
+            if (url === 'https://c/cap.xml') return captionBody;
+            return defaultRoute(url, m);
+        };
+
+        it('is off by default: no caption lookups and the plain proxy call', async () => {
+            route = withCaptions();
+            await service.streamDirect('p1', subReq, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', subReq, res, 5, 'sess');
+            expect((https.get as jest.Mock).mock.calls.some((c) => (c[0] as string).includes('cap.xml'))).toBe(false);
+            expect(await service.getSubtitles('p1')).toBeUndefined();
+        });
+
+        it('hands the proxy a subtitle playlist uri when enabled and captions exist', async () => {
+            setConfig({ STREAM_SUBTITLES: 'true' });
+            route = withCaptions();
+            await service.streamDirect('p1', subReq, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith(
+                'https://cdn/master.m3u8',
+                subReq,
+                res,
+                5,
+                'sess',
+                false,
+                '/api/subs.m3u8?mode=stream&pid=p1&subs=playlist&streamkey=k%20y'
+            );
+            const track = await service.getSubtitles('p1');
+            expect(track?.vtt).toContain('00:00:11.000 --> 00:00:12.000');
+            expect(track?.durationSeconds).toBe(2);
+        });
+
+        it('falls back to the plain proxy call when the programme has no captions', async () => {
+            setConfig({ STREAM_SUBTITLES: 'true' });
+            await service.streamDirect('p1', subReq, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', subReq, res, 5, 'sess');
+        });
+
+        it('falls back to the plain proxy call when the captions are unusable', async () => {
+            setConfig({ STREAM_SUBTITLES: 'true' });
+            route = withCaptions({ body: '<html>not captions' });
+            await service.streamDirect('p1', subReq, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', subReq, res, 5, 'sess');
+        });
+    });
 });

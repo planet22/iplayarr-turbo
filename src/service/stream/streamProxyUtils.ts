@@ -8,6 +8,7 @@ import { agentFor, clientFor, redirectStatusCodes, requestTimeoutMs } from './bb
 import { prefetch, takePrefetched } from './segmentPrefetch';
 import { linkSegments, nextSegmentUrl, register as registerSegmentUrl } from './segmentUrlRegistry';
 import streamSessionService from './streamSessionService';
+import { addSubtitleRendition, isMasterPlaylist, wrapMediaPlaylistAsMaster } from './subtitles/hlsSubtitles';
 
 const playlistContentTypeRegex = /mpegurl/i;
 const uriAttrRegex = /URI="([^"]+)"/;
@@ -168,9 +169,21 @@ function sendRewrittenPlaylist(
     statusCode: number,
     contentType: string,
     sessionId?: string,
-    highestVariantFirst = false
+    highestVariantFirst = false,
+    subtitlePlaylistUri?: string
 ): void {
-    const { body, segmentCount } = rewritePlaylist(
+    if (subtitlePlaylistUri && !isMasterPlaylist(text) && text.includes('#EXT-X-TARGETDURATION')) {
+        // A pinned-quality stream resolves to a bare media playlist, which has nowhere to attach a
+        // subtitle group - so it is served as a one-variant master pointing back at itself (that
+        // fetch is a normal proxied request, and gets the usual rewriting).
+        const variant = buildPassthroughUrl(url, (req.query.streamkey as string) ?? '', sessionId).href;
+        res.status(statusCode);
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(wrapMediaPlaylistAsMaster(variant, subtitlePlaylistUri));
+        return;
+    }
+    const rewritten = rewritePlaylist(
         text,
         url,
         (req.query.streamkey as string) ?? '',
@@ -178,6 +191,8 @@ function sendRewrittenPlaylist(
         highestVariantFirst,
         liveTvManifestRegex.test((req.originalUrl ?? '').split('?')[0])
     );
+    const { segmentCount } = rewritten;
+    const body = subtitlePlaylistUri && isMasterPlaylist(text) ? addSubtitleRendition(rewritten.body, subtitlePlaylistUri) : rewritten.body;
     if (sessionId && segmentCount > 0) {
         streamSessionService.setSegmentCount(sessionId, segmentCount);
     }
@@ -221,7 +236,8 @@ export async function proxyUrl(
     res: Response,
     redirectsLeft = 5,
     sessionId?: string,
-    highestVariantFirst = false
+    highestVariantFirst = false,
+    subtitlePlaylistUri?: string
 ): Promise<void> {
     const headers: Record<string, string> = {};
     if (req.headers.range) {
@@ -231,7 +247,7 @@ export async function proxyUrl(
     if (!req.headers.range) {
         const playlist = vodPlaylistCache.get(url);
         if (playlist && playlist.expiresAt > Date.now()) {
-            sendRewrittenPlaylist(playlist.text, url, req, res, 200, playlist.contentType, sessionId, highestVariantFirst);
+            sendRewrittenPlaylist(playlist.text, url, req, res, 200, playlist.contentType, sessionId, highestVariantFirst, subtitlePlaylistUri);
             return;
         }
         // A segment the previous request read ahead is served from memory.
@@ -262,7 +278,7 @@ export async function proxyUrl(
                 redirectsLeft > 0
             ) {
                 upstreamRes.resume();
-                proxyUrl(upstreamRes.headers.location, req, res, redirectsLeft - 1, sessionId, highestVariantFirst).then(resolve, reject);
+                proxyUrl(upstreamRes.headers.location, req, res, redirectsLeft - 1, sessionId, highestVariantFirst, subtitlePlaylistUri).then(resolve, reject);
                 return;
             }
 
@@ -279,7 +295,7 @@ export async function proxyUrl(
                         if (statusCode === 200 && !req.headers.range) {
                             rememberVodPlaylist(url, text, contentType);
                         }
-                        sendRewrittenPlaylist(text, url, req, res, statusCode, contentType, sessionId, highestVariantFirst);
+                        sendRewrittenPlaylist(text, url, req, res, statusCode, contentType, sessionId, highestVariantFirst, subtitlePlaylistUri);
                         resolve();
                     } catch (err) {
                         reject(err);

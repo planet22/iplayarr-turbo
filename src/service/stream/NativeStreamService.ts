@@ -13,6 +13,7 @@ import { allMediaSelectorPairs, mediaSelectorUrl, orderedMediaSelectorPairs, rem
 import { cached, resolveTtlMs, vpidTtlMs } from './resolveCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
+import { loadSubtitleTrack, SubtitleTrack } from './subtitles/captionsSource';
 
 interface ProgrammeVersion {
     pid: string;
@@ -330,7 +331,43 @@ class NativeStreamService implements AbstractStreamService {
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
         const url = await this.#resolveUrl(pid, sessionId);
-        await proxyUrl(url, req, res, 5, sessionId);
+        // Subtitles are strictly opt-in (STREAM_SUBTITLES) and additive: with the setting off, or no
+        // captions for the programme, this is exactly the plain proxy call it always was.
+        const subtitlePlaylistUri = await this.#subtitlePlaylistUri(pid, req);
+        if (subtitlePlaylistUri) {
+            await proxyUrl(url, req, res, 5, sessionId, false, subtitlePlaylistUri);
+        } else {
+            await proxyUrl(url, req, res, 5, sessionId);
+        }
+    }
+
+    async subtitlesEnabled(): Promise<boolean> {
+        return (await configService.getParameter(IplayarrParameter.STREAM_SUBTITLES)) === 'true';
+    }
+
+    // The programme's captions converted to WebVTT, or undefined when subtitles are off or the
+    // programme has none. Never throws.
+    async getSubtitles(pid: string): Promise<SubtitleTrack | undefined> {
+        if (!(await this.subtitlesEnabled())) {
+            return undefined;
+        }
+        try {
+            return await loadSubtitleTrack(await this.#resolveVpid(pid), (message) => loggingService.error(`NativeStreamService: ${message}`));
+        } catch (err: any) {
+            loggingService.error(`NativeStreamService: subtitles unavailable for ${pid} - ${err?.message}`);
+            return undefined;
+        }
+    }
+
+    // Relative URL of the subtitle rendition's playlist (served by StreamEndpoint) when this
+    // programme has captions to offer. Carries the caller's stream key, like every other reference
+    // the proxy hands out.
+    async #subtitlePlaylistUri(pid: string, req: Request): Promise<string | undefined> {
+        if (!(await this.getSubtitles(pid))) {
+            return undefined;
+        }
+        const streamKey = (req.query?.streamkey as string) ?? '';
+        return `/api/subs.m3u8?mode=stream&pid=${encodeURIComponent(pid)}&subs=playlist&streamkey=${encodeURIComponent(streamKey)}`;
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {

@@ -1,12 +1,17 @@
 import { Request, Response } from 'express';
 
 import { LiveChannelVpids } from '../../constants/LiveChannels';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
+import configService from '../configService';
+import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
-import { fetchText, parseAttributes, resolveRedirect } from './bbcHttp';
+import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
 import { cached, liveResolveTtlMs } from './resolveCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
+import { extractLiveCaptionsTemplate } from './subtitles/captionsSource';
+import { buildLiveSubtitlePlaylist, liveFragmentToVtt } from './subtitles/liveSubtitles';
 
 // BBC live channels. Deliberately standalone from NativeStreamService (which is built around
 // on-demand programmes: a pid -> playlist.json -> version vpid -> mediaselector chain): a live
@@ -16,6 +21,8 @@ import streamSessionService from './streamSessionService';
 // through - there is no fixed-quality pinning or FHD upgrade for live.
 const excludedSupplierRegex = /vbidi/i;
 const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
+const liveCaptionsTtlMs = 10 * 60_000;
+const liveWindowTtlMs = 2_000;
 
 function extractHlsHref(xml: string): string | undefined {
     for (const [, mediaAttrsRaw, mediaBody] of xml.matchAll(/<media\s+([^>]+?)>(.*?)<\/media>/gs)) {
@@ -68,7 +75,83 @@ class LiveStreamService implements AbstractStreamService {
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
-        await proxyUrl(await this.#resolveUrl(pid, sessionId), req, res, 5, sessionId, true);
+        const url = await this.#resolveUrl(pid, sessionId);
+        // Opt-in (STREAM_SUBTITLES) and additive, exactly like on-demand: off, or a channel with no
+        // captions, is the plain proxy call it always was.
+        const subtitlePlaylistUri = await this.#subtitlePlaylistUri(pid, req);
+        if (subtitlePlaylistUri) {
+            await proxyUrl(url, req, res, 5, sessionId, true, subtitlePlaylistUri);
+        } else {
+            await proxyUrl(url, req, res, 5, sessionId, true);
+        }
+    }
+
+    async #subtitlesEnabled(): Promise<boolean> {
+        return (await configService.getParameter(IplayarrParameter.STREAM_SUBTITLES)) === 'true';
+    }
+
+    // The channel's caption segment URL template (null when it has none). Never throws.
+    async #captionsTemplate(channelId: string): Promise<string | null> {
+        try {
+            return await cached(`live-captions:${channelId}`, liveCaptionsTtlMs, async () => {
+                const vpid = LiveChannelVpids[channelId];
+                for (const pair of orderedMediaSelectorPairs(`live:${channelId}`)) {
+                    const template = extractLiveCaptionsTemplate(await fetchText(mediaSelectorUrl(pair, vpid)));
+                    if (template) {
+                        return template;
+                    }
+                }
+                return null;
+            });
+        } catch (err: any) {
+            loggingService.error(`LiveStreamService: captions lookup failed for ${channelId} - ${err?.message}`);
+            return null;
+        }
+    }
+
+    async #subtitlePlaylistUri(channelId: string, req: Request): Promise<string | undefined> {
+        if (!(await this.#subtitlesEnabled()) || !(await this.#captionsTemplate(channelId))) {
+            return undefined;
+        }
+        const streamKey = (req.query?.streamkey as string) ?? '';
+        return `/api/subs.m3u8?mode=stream&pid=${encodeURIComponent(channelId)}&subs=livelist&streamkey=${encodeURIComponent(streamKey)}`;
+    }
+
+    // The subtitle rendition's playlist: the best video variant's current window, mirrored.
+    async getSubtitlePlaylist(channelId: string, streamKey: string): Promise<string | undefined> {
+        if (!(await this.#subtitlesEnabled()) || !(await this.#captionsTemplate(channelId))) {
+            return undefined;
+        }
+        try {
+            const variantUrl = await cached(`live-top:${channelId}`, liveResolveTtlMs, async () =>
+                this.#topVariantUrl(await this.#resolveUrl(channelId))
+            );
+            // Players poll this every few seconds; concurrent viewers share one upstream fetch.
+            const videoPlaylist = await cached(`live-window:${variantUrl}`, liveWindowTtlMs, () => fetchText(variantUrl));
+            return buildLiveSubtitlePlaylist(
+                videoPlaylist,
+                (n) => `/api/subs.vtt?mode=stream&pid=${encodeURIComponent(channelId)}&subs=livevtt&n=${n}&streamkey=${encodeURIComponent(streamKey)}`
+            );
+        } catch (err: any) {
+            loggingService.error(`LiveStreamService: subtitle playlist failed for ${channelId} - ${err?.message}`);
+            return undefined;
+        }
+    }
+
+    // One segment's WebVTT. A fragment BBC has not published (yet) is an empty segment, not an error.
+    async getSubtitleSegment(channelId: string, segmentNumber: string): Promise<string | undefined> {
+        const template = (await this.#subtitlesEnabled()) ? await this.#captionsTemplate(channelId) : null;
+        if (!template) {
+            return undefined;
+        }
+        let fragment: string | undefined;
+        try {
+            const { statusCode, body } = await fetchTextWithStatus(template.replace('$Number$', segmentNumber));
+            fragment = statusCode >= 200 && statusCode < 300 ? body : undefined;
+        } catch (err: any) {
+            loggingService.error(`LiveStreamService: caption fragment ${segmentNumber} failed for ${channelId} - ${err?.message}`);
+        }
+        return liveFragmentToVtt(fragment, Number(segmentNumber));
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {
