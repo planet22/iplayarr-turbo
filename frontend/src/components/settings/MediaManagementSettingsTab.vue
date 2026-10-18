@@ -1,5 +1,5 @@
 <template>
-    <legend>Media Management</legend>
+    <SettingsSubheading text="Mode and folders" />
     <SelectInput
         v-model="config.MEDIA_MODE"
         field="MEDIA_MODE"
@@ -40,6 +40,7 @@
         tooltip="Where live channel .strm files are saved. Point a Jellyfin library here. Leave blank to use the Complete Directory."
         :error="validationErrors.config?.LIVE_STRM_DIR"
     />
+    <SettingsSubheading text="Quality" />
     <SelectInput
         v-model="config.VIDEO_QUALITY"
         field="VIDEO_QUALITY"
@@ -57,6 +58,14 @@
         :options="qualityProfiles"
     />
     <SelectInput
+        v-model="config.OUTPUT_FORMAT"
+        field="OUTPUT_FORMAT"
+        name="Output Format?"
+        tooltip="The video file format."
+        :error="validationErrors.config?.OUTPUT_FORMAT"
+        :options="outputFormats"
+    />
+    <SelectInput
         v-if="showAdvanced"
         v-model="config.RELEASE_LANGUAGE"
         field="RELEASE_LANGUAGE"
@@ -66,6 +75,7 @@
         :error="validationErrors.config?.RELEASE_LANGUAGE"
         :options="releaseLanguages"
     />
+    <SettingsSubheading text="Naming and library" />
     <SelectInput
         v-if="showAdvanced"
         v-model="config.AIRDATE_NUMBERING"
@@ -95,24 +105,6 @@
         :error="validationErrors.config?.MOVIE_FILENAME_TEMPLATE"
     />
     <SelectInput
-        v-model="config.OUTPUT_FORMAT"
-        field="OUTPUT_FORMAT"
-        name="Output Format?"
-        tooltip="The video file format."
-        :error="validationErrors.config?.OUTPUT_FORMAT"
-        :options="outputFormats"
-    />
-    <SelectInput
-        v-if="showAdvanced"
-        v-model="config.ARCHIVE_ENABLED"
-        field="ARCHIVE_ENABLED"
-        :advanced="true"
-        name="Archive Downloads?"
-        tooltip="Keep a record of what has been downloaded."
-        :error="validationErrors.config?.ARCHIVE_ENABLED"
-        :options="trueOrFalse"
-    />
-    <SelectInput
         v-model="config.LIBRARY_FOLDER_STRUCTURE"
         field="LIBRARY_FOLDER_STRUCTURE"
         name="Organize into Folder Structure?"
@@ -120,6 +112,7 @@
         :error="validationErrors.config?.LIBRARY_FOLDER_STRUCTURE"
         :options="trueOrFalse"
     />
+    <SettingsSubheading text="Metadata and archive" />
     <SelectInput
         v-model="config.WRITE_NFO_STRM"
         field="WRITE_NFO_STRM"
@@ -138,6 +131,16 @@
         :error="validationErrors.config?.WRITE_STRMTOOL_JSON"
         :options="trueOrFalse"
     />
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="config.ARCHIVE_ENABLED"
+        field="ARCHIVE_ENABLED"
+        :advanced="true"
+        name="Archive Downloads?"
+        tooltip="Keep a record of what has been downloaded."
+        :error="validationErrors.config?.ARCHIVE_ENABLED"
+        :options="trueOrFalse"
+    />
 </template>
 
 <script setup>
@@ -146,6 +149,7 @@ import { defineProps, inject } from 'vue';
 import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
+import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 
 defineProps({
     mediaModes: {

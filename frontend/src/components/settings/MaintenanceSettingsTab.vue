@@ -1,5 +1,5 @@
 <template>
-    <legend>Maintenance</legend>
+    <SettingsSubheading text="Maintenance" />
     <div class="scheduledTasks">
         <div class="taskRow">
             <div class="info">
@@ -17,7 +17,7 @@
         </div>
     </div>
 
-    <legend class="scheduledTasksHeading">Caches</legend>
+    <SettingsSubheading text="Caches" />
     <SettingsPageToolbar
         :icons="['refresh', 'clear']"
         refresh-title="Reload the item counts"
@@ -96,7 +96,7 @@
         <div v-if="cacheError" class="cacheError">{{ cacheError }}</div>
     </div>
 
-    <legend class="scheduledTasksHeading">Scheduled Tasks</legend>
+    <SettingsSubheading text="Scheduled tasks" />
     <LoadingIndicator v-if="!loaded" />
     <div v-else class="scheduledTasks">
         <ScheduledTaskRow v-for="task in otherTasks" :key="task.id" :task="task" :busy="!!running[task.id]" @run="runNow" />
@@ -110,6 +110,7 @@ import InfoTip from '@/components/common/form/InfoTip.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import ScheduledTaskRow from '@/components/settings/ScheduledTaskRow.vue';
+import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { splitTtl, TTL_UNITS, useCaches } from '@/lib/useCaches';
@@ -195,10 +196,6 @@ onMounted(() => {
 </script>
 
 <style lang="less">
-.scheduledTasksHeading {
-    margin-top: 24px;
-}
-
 .cacheNote,
 .cacheError {
     font-size: 12px;

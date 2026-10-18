@@ -15,7 +15,7 @@
         </InfoBar>
         <InfoBar v-if="runError">{{ runError }}</InfoBar>
         <InfoBar v-if="live.notice">{{ live.notice }}</InfoBar>
-        <InfoBar v-for="warning in live.warnings || []" :key="warning" class="warning">{{ warning }}</InfoBar>
+        <InfoBar v-for="warning in live.warnings || []" :key="warning" clazz="warning">{{ warning }}</InfoBar>
 
         <div class="statRow">
             <div class="statCard">

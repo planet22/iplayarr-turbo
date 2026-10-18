@@ -1,5 +1,4 @@
 <template>
-    <legend>Authentication</legend>
     <SelectInput
         v-model="config.AUTH_TYPE"
         field="AUTH_TYPE"

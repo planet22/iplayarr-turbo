@@ -1,5 +1,9 @@
 <template>
-    <legend>Live TV (Jellyfin)</legend>
+    <SettingsSubheading text="Tuner">
+        <InfoTip
+            text="Only channels you pick with the TV icon on the Channels page (or a channel's own page) appear in the tuner and guide. Playback needs a UK IP address, like the rest of iPlayarr. Save settings before adding to Jellyfin or copying the URLs if you changed the Stream Base URL, Stream Key or offset."
+        />
+    </SettingsSubheading>
     <SelectInput
         v-model="config.LIVE_TV_ENABLED"
         field="LIVE_TV_ENABLED"
@@ -40,6 +44,7 @@
             :copyable="true"
         />
         <template v-if="showAdvanced">
+            <SettingsSubheading text="Guide" />
             <TextInput
                 v-model="config.LIVE_TV_EPG_OFFSET"
                 field="LIVE_TV_EPG_OFFSET"
@@ -57,27 +62,6 @@
                 tooltip="Landscape suits guide cards, Square suits channel tiles. After changing, save and update the tuner."
                 :options="logoShapeOptions"
             />
-            <SelectInput
-                v-if="config.STREAM_CLIENT == 'NATIVE'"
-                v-model="config.STREAM_LIVE_DASH_1080"
-                field="STREAM_LIVE_DASH_1080"
-                :advanced="true"
-                name="Live 1080p (Experimental)"
-                tooltip="Play live channels in 1080p HEVC instead of 720p. Needs a player that supports HEVC, and has no subtitles. Clear Jellyfin's channel cache after changing."
-                :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
-                :options="liveTvOptions"
-            />
-            <SelectInput
-                v-if="config.STREAM_CLIENT == 'NATIVE'"
-                v-model="config.LIVE_UHD_EVENT_FEEDS"
-                field="LIVE_UHD_EVENT_FEEDS"
-                :advanced="true"
-                name="UHD Event Feeds"
-                tooltip="Show BBC's 4K event channels. They only have video during big events and need a UK IP and a player that handles 4K HEVC."
-                :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
-                :options="liveTvOptions"
-            />
-            <legend class="guideLegend">Guide options</legend>
             <SelectInput
                 v-model="config.LIVE_TV_GUIDE_CATEGORIES"
                 field="LIVE_TV_GUIDE_CATEGORIES"
@@ -102,23 +86,41 @@
                 tooltip="Mark all programmes as HD."
                 :options="onOffOptions"
             />
-        </template>
+            <SettingsSubheading text="Channel feeds" />
+            <SelectInput
+                v-if="config.STREAM_CLIENT == 'NATIVE'"
+                v-model="config.STREAM_LIVE_DASH_1080"
+                field="STREAM_LIVE_DASH_1080"
+                :advanced="true"
+                name="Live 1080p (Experimental)"
+                tooltip="Play live channels in 1080p HEVC instead of 720p. Needs a player that supports HEVC, and has no subtitles. Clear Jellyfin's channel cache after changing."
+                :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
+                :options="liveTvOptions"
+            />
+            <SelectInput
+                v-if="config.STREAM_CLIENT == 'NATIVE'"
+                v-model="config.LIVE_UHD_EVENT_FEEDS"
+                field="LIVE_UHD_EVENT_FEEDS"
+                :advanced="true"
+                name="UHD Event Feeds"
+                tooltip="Show BBC's 4K event channels. They only have video during big events and need a UK IP and a player that handles 4K HEVC."
+                :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
+                :options="liveTvOptions"
+            />
+                    </template>
+        <SettingsSubheading text="Jellyfin" />
         <LiveTvJellyfinSetup />
-        <InfoBar>
-            Only channels you pick with the TV icon on the Channels page (or a channel's own page) appear in the
-            tuner and guide. Playback needs a UK IP address, like the rest of iPlayarr. Save settings before
-            adding to Jellyfin or copying the URLs if you changed the Stream Base URL, Stream Key or offset.
-        </InfoBar>
     </template>
 </template>
 
 <script setup>
 import { defineEmits, inject } from 'vue';
 
+import InfoTip from '@/components/common/form/InfoTip.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
 import LiveTvJellyfinSetup from '@/components/settings/LiveTvJellyfinSetup.vue';
+import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 
 const emit = defineEmits(['generate-stream-key']);
 
@@ -147,8 +149,3 @@ const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
 </script>
 
-<style lang="less" scoped>
-.guideLegend {
-    margin-top: 2rem;
-}
-</style>

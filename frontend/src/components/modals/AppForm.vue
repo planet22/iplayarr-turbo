@@ -70,7 +70,7 @@
                 </template>
 
                 <template v-if="showForm('callback')">
-                    <InfoBar v-if="form.type == 'PROWLARR'" class="warning">
+                    <InfoBar v-if="form.type == 'PROWLARR'" clazz="warning">
                         Prowlarr cannot force download client affinity in downstream Arrs
                     </InfoBar>
                     <SelectInput

@@ -1,5 +1,5 @@
 <template>
-    <legend>Streaming</legend>
+    <SettingsSubheading text="Playback" />
         <TextInput
             v-model="config.STREAM_BASE_URL"
             field="STREAM_BASE_URL"
@@ -71,14 +71,10 @@
             field="STREAM_MODE"
             :advanced="true"
             name="Stream Mode"
-            tooltip="Direct (recommended) allows seeking. Progressive MKV needs ffmpeg and cannot seek."
+            tooltip="Direct (recommended) allows seeking. Progressive MKV needs ffmpeg installed and on the PATH, and cannot seek within an in-progress stream."
             :error="validationErrors.config?.STREAM_MODE"
             :options="streamModes"
         />
-        <InfoBar v-if="config.STREAM_MODE == 'progressive-mkv'">
-            Progressive MKV requires ffmpeg to be installed and on the PATH, and does not support seeking within an
-            in-progress stream.
-        </InfoBar>
         <TextInput
             v-if="showAdvanced"
             v-model="config.STREAM_CACHE_DIR"
@@ -89,7 +85,7 @@
             :error="validationErrors.config?.STREAM_CACHE_DIR"
         />
 
-    <legend class="watchdogLegend">STRM Watchdog</legend>
+    <SettingsSubheading text="STRM Watchdog" />
     <SelectInput
         v-model="config.STRM_WATCHDOG_ENABLED"
         field="STRM_WATCHDOG_ENABLED"
@@ -184,6 +180,7 @@ import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
+import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import { ipFetch } from '@/lib/ipFetch';
 
 defineProps({
@@ -290,10 +287,6 @@ const showAdvanced = inject('settingsShowAdvanced');
 </script>
 
 <style lang="less" scoped>
-.watchdogLegend {
-    margin-top: 2rem;
-}
-
 .jellyfinStatus {
     display: flex;
     align-items: center;

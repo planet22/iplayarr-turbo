@@ -1,5 +1,5 @@
 <template>
-    <legend>General</legend>
+    <SettingsSubheading text="Access" />
     <TextInput
         v-model="config.API_KEY"
         field="API_KEY"
@@ -11,6 +11,7 @@
         button-tooltip="Regenerate API Key"
         @action="emit('generate-api-key')"
     />
+    <SettingsSubheading text="Search" />
     <SelectInput
         v-model="config.NATIVE_SEARCH"
         field="NATIVE_SEARCH"
@@ -49,6 +50,7 @@
         :error="validationErrors.config?.SEARCH_MATCH_ALL_WORDS"
         :options="trueOrFalse"
     />
+    <SettingsSubheading text="Appearance" />
     <SelectInput
         v-model="pillColorsEnabled"
         name="Colour Channel Pills by Logo"
@@ -63,6 +65,7 @@
     />
 
     <template v-if="showAdvanced">
+        <SettingsSubheading text="Schedule" />
         <TextInput
             v-model="config.REFRESH_SCHEDULE"
             field="REFRESH_SCHEDULE"
@@ -97,6 +100,7 @@ import { computed, defineEmits, defineProps, inject } from 'vue';
 
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
+import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import { useChannelPillColors } from '@/lib/channelPillColors';
 import { useQualityBadges } from '@/lib/qualityBadges';
 

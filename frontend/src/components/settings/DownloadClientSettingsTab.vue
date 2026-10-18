@@ -1,5 +1,5 @@
 <template>
-    <legend>Download Client</legend>
+    <SettingsSubheading text="Client" />
     <TextInput
         v-if="showAdvanced"
         v-model="config.ACTIVE_LIMIT"
@@ -38,7 +38,7 @@
         Looking for NZB Passthrough? Check the <RouterLink to="/apps"> Apps </RouterLink> section
     </InfoBar>
 
-    <legend>Tool Versions</legend>
+    <SettingsSubheading text="Tool versions" />
     <div class="toolVersionRow">
         <div class="toolVersionInfo">
             <strong>get_iplayer</strong>
@@ -80,6 +80,7 @@ import { RouterLink } from 'vue-router';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
+import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 
