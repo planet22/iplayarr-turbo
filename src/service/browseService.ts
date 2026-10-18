@@ -150,7 +150,7 @@ export function toBrowseItems(elements: any[]): BrowseItem[] {
 }
 
 // The parent channel's logo with a region name under it, on the logo's own background colour. The logo
-// keeps its standard size: the icon is shrunk to leave a strip along the bottom, and a long name gets a
+// keeps its standard size: the icon is lifted to leave a strip along the bottom, and a long name gets a
 // smaller font rather than a wider canvas.
 export function withCaption(svg: string, label: string): string {
     const box = /viewBox="([-\d.]+)[ ,]+([-\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)"/.exec(svg);
@@ -159,14 +159,14 @@ export function withCaption(svg: string, label: string): string {
     const fills = Array.from(svg.matchAll(/fill="(#[0-9a-f]{3,8})"/gi)).map((m) => m[1]);
     const [bg, fg] = [fills[0] ?? '#000000', fills[1] ?? '#ffffff'];
     const inner = /<svg\b[^>]*>(.*)<\/svg>/s.exec(svg)?.[1] ?? '';
-    const scale = 0.6;
-    const fontSize = Math.min(h * 0.26, (w - 4) / label.length / 0.7);
+    const lift = h * 0.14;
+    const fontSize = Math.min(h * 0.2, (w - 4) / label.length / 0.7);
     const text = label.replace(/&/g, '&amp;').replace(/</g, '&lt;');
     return (
         `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${w} ${h}">` +
         `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${bg}"/>` +
-        `<svg x="${x + (w * (1 - scale)) / 2}" y="${y + h * 0.03}" width="${w * scale}" height="${h * scale}" viewBox="${x} ${y} ${w} ${h}">${inner}</svg>` +
-        `<text x="${x + w / 2}" y="${y + h * 0.93}" text-anchor="middle" font-family="DejaVu Sans,Arial,Helvetica,sans-serif" ` +
+        `<g transform="translate(0 ${-lift})">${inner}</g>` +
+        `<text x="${x + w / 2}" y="${y + h * 0.91}" text-anchor="middle" font-family="DejaVu Sans,Arial,Helvetica,sans-serif" ` +
         `font-weight="bold" font-size="${fontSize}" fill="${fg}">${text}</text></svg>`
     );
 }
