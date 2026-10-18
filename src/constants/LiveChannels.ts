@@ -51,6 +51,25 @@ const optional = (vpid: string, title: string, masterBrand: string, label: strin
     parentId: ParentIds[masterBrand],
 });
 
+// BBC's UHD event feeds (big sporting events): up to 2160p HEVC, DASH only (no mediaselector entry, so no
+// HLS), clear of DRM, and only carrying segments while an event is on - between events the manifest is
+// still served but its segments 404. Probed 2026-10-18: these five exist out of uk_bbc_stream_001-099.
+// Hidden unless LIVE_UHD_EVENT_FEEDS is on.
+const UhdHost = 'https://ve-uhd-push-uk-live.akamaized.net';
+export const UhdEventFeedIds = [
+    'uk_bbc_stream_031',
+    'uk_bbc_stream_041',
+    'uk_bbc_stream_042',
+    'uk_bbc_stream_043',
+    'uk_bbc_stream_044',
+];
+
+export function isUhdEventFeed(id: string | undefined): boolean {
+    return !!id && UhdEventFeedIds.includes(id);
+}
+
+export const uhdEventDashUrl = (id: string): string => `${UhdHost}/x=4/i=urn:bbc:pips:service:${id}/iptv_uhd_v1.mpd`;
+
 export const OptionalLiveChannels: OptionalLiveChannel[] = [
     optional('bbc_one_scotland_hd', 'BBC One Scotland', 'bbc_one', 'Scotland'),
     optional('bbc_one_wales_hd', 'BBC One Wales', 'bbc_one', 'Wales'),
@@ -71,6 +90,11 @@ export const OptionalLiveChannels: OptionalLiveChannel[] = [
     optional('bbc_one_west', 'BBC One West', 'bbc_one', 'West'),
     optional('bbc_one_west_midlands', 'BBC One West Midlands', 'bbc_one', 'West Midlands'),
     optional('bbc_one_yorks', 'BBC One Yorkshire', 'bbc_one', 'Yorkshire'),
+    // BBC Red Button's main stream (1080p on the DASH set). Not in iPlayer's channel list, so Now/Next and
+    // programme rails fall back to BBC One's.
+    optional('red_button_one', 'BBC Red Button', 'bbc_one', 'Red Button'),
+    // Named after their vpid, underscores dropped ("uk bbc stream 041").
+    ...UhdEventFeedIds.map((id) => optional(id, id.replaceAll('_', ' '), 'bbc_one', id.replaceAll('_', ' '))),
 ];
 
 export const LiveChannelVpids: Record<string, string> = {

@@ -1,3 +1,4 @@
+import { UhdEventFeedIds } from '../constants/LiveChannels';
 import liveChannelService, { LiveChannelSetting } from '../service/liveChannelService';
 import liveSubscriptionService from '../service/liveSubscriptionService';
 import liveTvChannelService from '../service/liveTvChannelService';
@@ -16,6 +17,21 @@ class LiveChannelFacade {
     async setOrder(ids: string[]): Promise<LiveChannelSetting[]> {
         await liveChannelService.setOrder(ids);
         return liveChannelService.list();
+    }
+
+    // Turning the UHD event feeds off removes them from the library and Jellyfin Live TV, as disabling a
+    // channel does, so no .strm is left pointing at a feed that no longer plays. Returns how many were removed.
+    async removeUhdFeeds(): Promise<number> {
+        let removed = 0;
+        const inLiveTv = await liveTvChannelService.list();
+        for (const id of UhdEventFeedIds) {
+            if (await liveSubscriptionService.unsubscribe(id)) removed++;
+            if (inLiveTv.includes(id)) {
+                await liveTvChannelService.remove(id);
+                liveTvSyncService.notifyChanged();
+            }
+        }
+        return removed;
     }
 
     // Redraws the logos: browsers are told to refetch them, the poster beside every subscribed channel's

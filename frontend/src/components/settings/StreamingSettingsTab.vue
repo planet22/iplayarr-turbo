@@ -73,6 +73,14 @@
             :options="subtitlesOptions"
         />
         <SelectInput
+            v-if="config.STREAM_CLIENT == 'NATIVE'"
+            v-model="config.LIVE_UHD_EVENT_FEEDS"
+            name="UHD Event Feeds"
+            tooltip="Show BBC's UHD event feeds (up to 2160p HEVC, uk bbc stream 031-044) in the live channels. They only carry video while a big event is on, and need a UK IP and a player (or Jellyfin transcoder) that handles 4K HEVC. Off by default."
+            :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
+            :options="subtitlesOptions"
+        />
+        <SelectInput
             v-model="config.STREAM_MODE"
             name="Stream Mode"
             tooltip="Direct (recommended, supports seeking) or Progressive MKV (needs ffmpeg, no seeking)."

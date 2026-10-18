@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import request from 'supertest';
 
+import liveChannelFacade from '../../../src/facade/liveChannelFacade';
 import SettingsRoute from '../../../src/routes/json-api/SettingsRoute';
 import configService from '../../../src/service/configService';
 import historyService from '../../../src/service/historyService';
@@ -13,6 +14,7 @@ import { VideoEventType } from '../../../src/types/VideoEvent';
 import * as Utils from '../../../src/utils/Utils';
 import { ConfigFormValidator } from '../../../src/validators/ConfigFormValidator';
 
+jest.mock('../../../src/facade/liveChannelFacade');
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/historyService');
 jest.mock('../../../src/service/videoEventService');
@@ -101,6 +103,29 @@ describe('SettingsRoute', () => {
                 const res = await request(app).delete('/executableOverride/DOWNLOAD_DIR');
                 expect(res.status).toBe(400);
                 expect(mockedConfigService.removeParameter).not.toHaveBeenCalled();
+            });
+        });
+
+        describe('UHD event feeds', () => {
+            const put = (body: unknown) => request(app).put('/').send(body as object);
+
+            beforeEach(() => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                mockedConfigService.setParameter.mockResolvedValue();
+            });
+
+            it('removes the feeds from the library and Live TV when switched off', async () => {
+                mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'form', LIVE_UHD_EVENT_FEEDS: 'true' });
+                await put({ LIVE_UHD_EVENT_FEEDS: 'false' });
+                expect(liveChannelFacade.removeUhdFeeds).toHaveBeenCalled();
+            });
+
+            it('leaves them alone when switched on, or when they were already off', async () => {
+                mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'form', LIVE_UHD_EVENT_FEEDS: 'true' });
+                await put({ LIVE_UHD_EVENT_FEEDS: 'true' });
+                mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'form', LIVE_UHD_EVENT_FEEDS: 'false' });
+                await put({ LIVE_UHD_EVENT_FEEDS: 'false' });
+                expect(liveChannelFacade.removeUhdFeeds).not.toHaveBeenCalled();
             });
         });
 

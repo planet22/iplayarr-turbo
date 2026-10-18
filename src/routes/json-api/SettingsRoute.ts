@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { version } from '../../config/version.json';
+import liveChannelFacade from '../../facade/liveChannelFacade';
 import configService, { ConfigMap } from '../../service/configService';
 import historyService from '../../service/historyService';
 import loggingService from '../../service/loggingService';
@@ -85,6 +86,8 @@ router.put('/', async (req: Request, res: Response) => {
         ? await configService.getParameter(IplayarrParameter.STREAM_KEY)
         : undefined;
 
+    const uhdWasOn: boolean = currentConfig[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'true';
+
     for (const key of Object.keys(req.body)) {
         const val = req.body[key];
         if (key == IplayarrParameter.AUTH_PASSWORD) {
@@ -119,6 +122,11 @@ router.put('/', async (req: Request, res: Response) => {
     const newStreamKey: string | undefined = req.body[IplayarrParameter.STREAM_KEY];
     if (newStreamKey && oldStreamKey && newStreamKey !== oldStreamKey) {
         await rewriteStrmKeys('streamkey', oldStreamKey, newStreamKey, VideoEventType.STREAM_KEY_ROTATED, 'Stream key');
+    }
+
+    // Switching the UHD event feeds off takes them out of the library and Live TV (the UI warns first).
+    if (uhdWasOn && req.body[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'false') {
+        await liveChannelFacade.removeUhdFeeds();
     }
 
     res.json(req.body);

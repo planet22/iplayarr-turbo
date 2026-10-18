@@ -67,6 +67,7 @@ import { getHost } from '@/lib/utils';
 
 const loading = ref(false);
 let originalApiKey = undefined;
+let originalUhdFeeds = undefined;
 
 const config = ref({});
 const configChanges = ref(false);
@@ -156,6 +157,7 @@ onMounted(async () => {
 
     config.value = configResponse.data;
     originalApiKey = configResponse.data.API_KEY;
+    originalUhdFeeds = configResponse.data.LIVE_UHD_EVENT_FEEDS;
     qualityProfiles.value = qpResponse.data.map(({ id, name, quality }) => ({
         key: id,
         value: `${name} (${quality})`,
@@ -188,6 +190,17 @@ const saveConfig = async () => {
             !(await dialogService.confirm(
                 'OIDC Not Tested',
                 'You have not tested your OIDC configuration. Are you sure you want to save without testing?'
+            ))
+        ) {
+            return;
+        }
+    }
+    if (originalUhdFeeds === 'true' && config.value.LIVE_UHD_EVENT_FEEDS !== 'true') {
+        if (
+            !(await dialogService.confirm(
+                'Turn Off UHD Event Feeds',
+                'Turn off the UHD event feeds?',
+                'Any of them in your library or Jellyfin Live TV are removed, and their .strm files deleted.'
             ))
         ) {
             return;
@@ -228,6 +241,7 @@ const saveConfig = async () => {
         }
     }
     originalApiKey = config.value.API_KEY;
+    originalUhdFeeds = config.value.LIVE_UHD_EVENT_FEEDS;
 };
 
 const toggleAdvanced = () => {

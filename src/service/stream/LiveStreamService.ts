@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 
-import { LiveChannelVpids } from '../../constants/LiveChannels';
+import { isUhdEventFeed, LiveChannelVpids, uhdEventDashUrl } from '../../constants/LiveChannels';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import configService from '../configService';
 import loggingService from '../loggingService';
@@ -180,13 +180,24 @@ class LiveStreamService implements AbstractStreamService {
     // manifest itself; Direct mode gets the same feed as HLS via liveDashHls.ts. Any failure
     // (no connection, mediaselector error) returns undefined so the caller falls back to the HLS path.
     async #resolveDash(channelId: string): Promise<string | undefined> {
-        if ((await configService.getParameter(IplayarrParameter.STREAM_LIVE_DASH_1080)) !== 'true') {
+        if (!(await this.#dashWanted(channelId))) {
             return undefined;
         }
         return this.#dashUrl(channelId);
     }
 
+    // The UHD event feeds only exist as DASH, so they ignore the Live 1080p setting.
+    async #dashWanted(channelId: string): Promise<boolean> {
+        return (
+            isUhdEventFeed(channelId) ||
+            (await configService.getParameter(IplayarrParameter.STREAM_LIVE_DASH_1080)) === 'true'
+        );
+    }
+
     async #dashUrl(channelId: string): Promise<string | undefined> {
+        if (isUhdEventFeed(channelId)) {
+            return uhdEventDashUrl(channelId);
+        }
         const vpid = LiveChannelVpids[channelId];
         try {
             return await cached(`live-dash:${channelId}`, liveResolveTtlMs, async () => {
@@ -218,7 +229,7 @@ class LiveStreamService implements AbstractStreamService {
     // Returns false - and the caller serves the normal 720p HLS - when the setting is off or the
     // manifest isn't one we can present.
     async #serveDashHls(channelId: string, req: Request, res: Response, sessionId?: string): Promise<boolean> {
-        if ((await configService.getParameter(IplayarrParameter.STREAM_LIVE_DASH_1080)) !== 'true') {
+        if (!(await this.#dashWanted(channelId))) {
             return false;
         }
         try {
@@ -229,7 +240,7 @@ class LiveStreamService implements AbstractStreamService {
             const streamKey = (req.query?.streamkey as string) ?? '';
             const playlist = buildMasterPlaylist(live, (kind) => this.#dashPlaylistHref(channelId, kind, streamKey, sessionId));
             if (sessionId) {
-                streamSessionService.setResolution(sessionId, 'Live 1080p');
+                streamSessionService.setResolution(sessionId, isUhdEventFeed(channelId) ? 'Live UHD' : 'Live 1080p');
             }
             res.status(200);
             res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -264,7 +275,7 @@ class LiveStreamService implements AbstractStreamService {
         const dashUrl = await this.#resolveDash(pid);
         if (dashUrl) {
             if (sessionId) {
-                streamSessionService.setResolution(sessionId, 'Live 1080p');
+                streamSessionService.setResolution(sessionId, isUhdEventFeed(pid) ? 'Live UHD' : 'Live 1080p');
             }
             await remuxToMkv(dashUrl, pid, res, sessionId);
             return;

@@ -1,6 +1,14 @@
 import { BrowseHomeChannelRails } from '../constants/BrowseChannels';
-import { allLiveChannels, isLiveChannel, isOptionalLiveChannel, LiveChannelVpids } from '../constants/LiveChannels';
+import {
+    allLiveChannels,
+    isLiveChannel,
+    isOptionalLiveChannel,
+    isUhdEventFeed,
+    LiveChannelVpids,
+} from '../constants/LiveChannels';
+import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
+import configService from './configService';
 
 const storage: QueuedStorage = new QueuedStorage();
 const STORAGE_KEY = 'liveChannelSettings';
@@ -38,8 +46,14 @@ class LiveChannelService {
         return (await storage.getItem(STORAGE_KEY)) || {};
     }
 
+    // The UHD event feeds exist only while LIVE_UHD_EVENT_FEEDS is on: otherwise they are not listed and
+    // count as off everywhere (tiles, Live TV, subscriptions, playback).
+    async #uhdFeedsOn(): Promise<boolean> {
+        return (await configService.getParameter(IplayarrParameter.LIVE_UHD_EVENT_FEEDS)) === 'true';
+    }
+
     async isEnabled(channelId: string): Promise<boolean> {
-        if (!isLiveChannel(channelId)) {
+        if (!isLiveChannel(channelId) || (isUhdEventFeed(channelId) && !(await this.#uhdFeedsOn()))) {
             return false;
         }
         const override = (await this.#overrides())[channelId];
@@ -83,7 +97,9 @@ class LiveChannelService {
     async discoverIds(): Promise<string[]> {
         const discover = await this.#discover();
         const overrides = await this.#overrides();
+        const uhdOn = await this.#uhdFeedsOn();
         return (await this.order())
+            .filter((id) => !isUhdEventFeed(id) || uhdOn)
             .filter((id) => discover[id] && (overrides[id] ?? !isOptionalLiveChannel(id)))
             .slice(0, DISCOVER_MAX);
     }
@@ -92,7 +108,10 @@ class LiveChannelService {
         const overrides = await this.#overrides();
         const discover = await this.#discover();
         const order = await this.order();
-        const channels = allLiveChannels().sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+        const uhdOn = await this.#uhdFeedsOn();
+        const channels = allLiveChannels()
+            .filter(({ id }) => !isUhdEventFeed(id) || uhdOn)
+            .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
         return channels.map(({ id, title, masterBrand }) => ({
             id,
             title,

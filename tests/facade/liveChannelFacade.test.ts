@@ -50,3 +50,16 @@ describe('liveChannelFacade.setOrder', () => {
         expect(liveChannelService.setOrder).toHaveBeenCalledWith(['cbbc']);
     });
 });
+
+describe('liveChannelFacade.removeUhdFeeds', () => {
+    it('unsubscribes every UHD feed and drops those in Live TV', async () => {
+        jest.clearAllMocks();
+        (liveSubscriptionService.unsubscribe as jest.Mock).mockImplementation(async (id: string) => id === 'uk_bbc_stream_041');
+        (liveTvChannelService.list as jest.Mock).mockResolvedValue(['uk_bbc_stream_041', 'cbbc']);
+        expect(await liveChannelFacade.removeUhdFeeds()).toBe(1);
+        expect(liveSubscriptionService.unsubscribe).toHaveBeenCalledTimes(5);
+        expect(liveTvChannelService.remove).toHaveBeenCalledTimes(1);
+        expect(liveTvChannelService.remove).toHaveBeenCalledWith('uk_bbc_stream_041');
+        expect(liveTvSyncService.notifyChanged).toHaveBeenCalled();
+    });
+});

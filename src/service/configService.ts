@@ -76,6 +76,7 @@ const configService = {
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
         STREAM_SUBTITLES: 'false',
         STREAM_LIVE_DASH_1080: 'false',
+        LIVE_UHD_EVENT_FEEDS: 'false',
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',

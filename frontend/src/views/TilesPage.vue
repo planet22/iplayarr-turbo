@@ -96,7 +96,7 @@
                         : {}
                 "
                 :draggable="arranging"
-                @click="onTileClick($event, tile)"
+                @click.capture="onTileClick($event, tile)"
                 @dragstart="onDragStart($event, tile)"
                 @dragend="dragId = null"
                 @dragover.prevent
@@ -301,12 +301,14 @@ const toggleDiscover = async (tile) => {
     }
 };
 
+// Runs in the capture phase: RouterLink navigates from its own click handler, and only skips navigating
+// if the event is already default-prevented. A tile's own buttons (play, compass, eye...) handle themselves.
 const onTileClick = (event, tile) => {
     if (arranging.value || featuring.value) {
         event.preventDefault();
     } else if (tile.liveOnly) {
         event.preventDefault();
-        watchLive(tile);
+        if (!event.target.closest('button')) watchLive(tile);
     }
 };
 

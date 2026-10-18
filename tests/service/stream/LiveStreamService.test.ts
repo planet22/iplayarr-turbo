@@ -180,6 +180,22 @@ describe('LiveStreamService', () => {
                 expect(proxyUrl).toHaveBeenCalled();
             });
 
+            it('serves a UHD event feed as DASH->HLS straight from its manifest, whatever the setting', async () => {
+                await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'false');
+                const base = route;
+                route = (url, method) =>
+                    url === 'https://ve-uhd-push-uk-live.akamaized.net/x=4/i=urn:bbc:pips:service:uk_bbc_stream_041/iptv_uhd_v1.mpd'
+                        ? { body: mpd }
+                        : base(url, method);
+                const out = reply();
+                await service.streamDirect('uk_bbc_stream_041', { headers: {}, query: { streamkey: 'k' } } as any, out, 'sess');
+
+                expect(requested.some((u) => u.includes('mediaselector'))).toBe(false);
+                expect(out.send.mock.calls[0][0]).toContain('pid=uk_bbc_stream_041&dash=video');
+                expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Live UHD');
+                expect(proxyUrl).not.toHaveBeenCalled();
+            });
+
             it('falls back to HLS when the manifest is not one it can present', async () => {
                 await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true');
                 const base = route;
