@@ -5,20 +5,23 @@ import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
 import { resolveInside, sanitizeFileName } from './pathSafety';
 
-// Picks which configured complete directory a completed item should land under.
-// ARR_COMPLETE_DIR (set via the *arr Complete Directory setting) is an
-// optional override for TV content that Sonarr/Radarr actually queued (source
-// NZB) - Movies, and any manually-triggered or subscription-queued TV
-// download (source MANUAL), always use COMPLETE_DIR. Falls back to
-// COMPLETE_DIR when unset, so leaving it blank keeps the old single-directory
-// behavior.
+// The directory reported as complete_dir by get_config, and where everything Sonarr/Radarr/
+// Prowlarr queued lands: ARR_COMPLETE_DIR when set, otherwise COMPLETE_DIR. The apps only
+// import the files they asked for, so any number of them can share it.
+export function arrBaseDir(completeDir: string, arrCompleteDir?: string): string {
+    return arrCompleteDir || completeDir;
+}
+
+// Picks which configured complete directory a completed item should land under: the arr
+// directory for anything an *arr app queued (source NZB), COMPLETE_DIR for manually-triggered
+// and subscription-queued downloads (source MANUAL).
 export function resolveCompleteDir(
-    type: VideoType,
+    _type: VideoType,
     source: QueueEntrySource | undefined,
     completeDir: string,
     arrCompleteDir?: string
 ): string {
-    return type === VideoType.TV && source === QueueEntrySource.NZB && arrCompleteDir ? arrCompleteDir : completeDir;
+    return source === QueueEntrySource.NZB ? arrBaseDir(completeDir, arrCompleteDir) : completeDir;
 }
 
 // Windows/POSIX-illegal filename characters.

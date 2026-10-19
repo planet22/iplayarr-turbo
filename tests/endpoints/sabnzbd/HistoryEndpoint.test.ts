@@ -125,7 +125,7 @@ describe('sabnzbdActionEndpoint', () => {
             });
         });
 
-        it('uses ARR_COMPLETE_DIR for NZB-sourced TV items when set, and COMPLETE_DIR for movies', async () => {
+        it('puts NZB-sourced items (TV and movies) in ARR_COMPLETE_DIR', async () => {
             const queueEntries: QueueEntry[] = [
                 {
                     pid: 'id1',
@@ -158,7 +158,7 @@ describe('sabnzbdActionEndpoint', () => {
             const responseArg = (res.json as jest.Mock).mock.calls[0][0];
             expect(responseArg.history.slots).toMatchObject([
                 { storage: '/arr-complete/tvfile.mp4' },
-                { storage: '/complete/moviefile.mp4' },
+                { storage: '/arr-complete/moviefile.mp4' },
             ]);
         });
 

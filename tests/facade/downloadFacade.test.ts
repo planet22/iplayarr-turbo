@@ -352,7 +352,7 @@ describe('DownloadFacade', () => {
             expect(strmToolWrites).toHaveLength(0);
         });
 
-        it('moves NZB-sourced TV downloads into ARR_COMPLETE_DIR when set, leaving movies in COMPLETE_DIR', async () => {
+        it('moves NZB-sourced TV downloads into ARR_COMPLETE_DIR when set', async () => {
             mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
             (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
 
@@ -372,7 +372,7 @@ describe('DownloadFacade', () => {
             );
         });
 
-        it('leaves movies in COMPLETE_DIR even when ARR_COMPLETE_DIR is set', async () => {
+        it('puts NZB-sourced movies in ARR_COMPLETE_DIR too', async () => {
             mockConfig({ ARR_COMPLETE_DIR: '/arr-complete' });
             (fs.readdirSync as jest.Mock).mockReturnValue(['movie.mkv']);
 
@@ -388,7 +388,7 @@ describe('DownloadFacade', () => {
 
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 path.join(pidDir, 'movie.mkv'),
-                path.join('/complete', 'Some.Movie.mkv')
+                path.join('/arr-complete', 'Some.Movie.mkv')
             );
         });
 

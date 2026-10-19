@@ -1,9 +1,10 @@
 import path from 'path';
 
+import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntry } from '../../src/types/QueueEntry';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
-import { buildLibraryFilePath } from '../../src/utils/libraryPathBuilder';
+import { buildLibraryFilePath, resolveCompleteDir } from '../../src/utils/libraryPathBuilder';
 
 const completeDir = '/complete';
 
@@ -70,5 +71,20 @@ describe('buildLibraryFilePath', () => {
         const result = buildLibraryFilePath(completeDir, item, 'mkv', true);
 
         expect(result.fileName).toBe('Show Name - S01E02 - WhoWhat.mkv');
+    });
+});
+
+describe('resolveCompleteDir', () => {
+    it('puts NZB items (TV and movies) directly in ARR_COMPLETE_DIR', () => {
+        expect(resolveCompleteDir(VideoType.TV, QueueEntrySource.NZB, '/complete', '/arr')).toBe('/arr');
+        expect(resolveCompleteDir(VideoType.MOVIE, QueueEntrySource.NZB, '/complete', '/arr')).toBe('/arr');
+    });
+
+    it('falls back to COMPLETE_DIR when ARR_COMPLETE_DIR is unset', () => {
+        expect(resolveCompleteDir(VideoType.TV, QueueEntrySource.NZB, '/complete')).toBe('/complete');
+    });
+
+    it('leaves manual items directly in COMPLETE_DIR', () => {
+        expect(resolveCompleteDir(VideoType.TV, QueueEntrySource.MANUAL, '/complete', '/arr')).toBe('/complete');
     });
 });

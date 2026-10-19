@@ -37,4 +37,17 @@ describe('ConfigEndpoint', () => {
             },
         });
     });
+
+    it('reports ARR_COMPLETE_DIR as complete_dir when it is set', async () => {
+        (configService.getParameter as jest.Mock).mockImplementation((param: IplayarrParameter) => {
+            if (param === IplayarrParameter.COMPLETE_DIR) return Promise.resolve('/complete');
+            if (param === IplayarrParameter.ARR_COMPLETE_DIR) return Promise.resolve('/arr');
+            return Promise.resolve(undefined);
+        });
+
+        const jsonMock = jest.fn();
+        await handler({} as Request, { json: jsonMock } as unknown as Response);
+
+        expect(jsonMock.mock.calls[0][0].config.misc.complete_dir).toBe('/arr');
+    });
 });
