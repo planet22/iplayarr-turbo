@@ -85,6 +85,11 @@ export const getPidFromBBCUrl = (url) => {
 
 export const formatStorageSize = (mb) => {
     if (mb) {
+        // A .strm pointer is a few hundred bytes - show those as KB (or B), not "0.00 MB".
+        if (mb < 1) {
+            const kb = mb * 1024;
+            return kb >= 1 ? kb.toFixed(1) + ' KB' : Math.round(kb * 1024) + ' B';
+        }
         if (mb >= 1024) {
             return (mb / 1024).toFixed(2) + ' GB';
         }

@@ -173,9 +173,9 @@ const authTypes = ref([
 ]);
 
 const downloadClients = ref([
+    { key: 'NATIVE', value: 'Native (fastest, recommended)' },
     { key: 'GET_IPLAYER', value: 'get_iplayer' },
     { key: 'YTDLP', value: 'yt-dlp (Experimental)' },
-    { key: 'NATIVE', value: 'Native (ffmpeg only, Experimental)' },
 ]);
 
 const streamClients = ref([

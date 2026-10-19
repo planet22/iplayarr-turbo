@@ -1,5 +1,5 @@
 <template>
-    <div class="infoBanner" :style="{ 'background-image': `url(${getThumbnailUrl(details.thumbnail)})` }">
+    <div :class="['infoBanner', { compact }]" :style="{ 'background-image': `url(${getThumbnailUrl(details.thumbnail)})` }">
         <div class="infoContainer">
             <h1>{{ title ?? details.title }}</h1>
             <h2 v-if="details.episodeTitle || subtitle">
@@ -69,16 +69,37 @@ const props = defineProps({
         type: String,
         required: false,
     },
+    // Release name of the specific download to report on, when the same programme has several (one per resolution).
+    matchName: {
+        type: String,
+        required: false,
+        default: null,
+    },
+    // Exactly which download to report on (see VideoInfoModal's jobId).
+    matchId: {
+        type: String,
+        required: false,
+        default: null,
+    },
+    // Smaller padding and type, for use inside a modal.
+    compact: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
 });
 
 const resolvedType = computed(() => props.type ?? details.value.type);
 
 const downloadDetails = computed(() => {
-    const historyItem = history.value.find(({ pid }) => pid == props.pid);
-    if (historyItem) return historyItem.details;
-    const queueItem = queue.value.find(({ pid }) => pid == props.pid);
-    if (queueItem) return queueItem.details;
-    return {};
+    const same = ({ jobId, pid, nzbName }) =>
+        props.matchId ? jobId == props.matchId : pid == props.pid && (!props.matchName || nzbName == props.matchName);
+    const found =
+        queue.value.find(same) ||
+        history.value.findLast(same) ||
+        history.value.findLast(({ pid }) => pid == props.pid) ||
+        queue.value.find(({ pid }) => pid == props.pid);
+    return found ? found.details : {};
 });
 
 watch(
@@ -127,6 +148,36 @@ const fixCasing = (str) => {
                     margin-right: 10px;
                 }
             }
+        }
+    }
+
+    &.compact {
+        .infoContainer {
+            padding: 0.75rem 1rem;
+
+            .seriesDetails {
+                margin-bottom: 6px;
+                font-size: 14px;
+
+                span {
+                    margin-right: 10px;
+                }
+            }
+        }
+
+        h1 {
+            font-size: 26px;
+            line-height: 30px;
+        }
+
+        h2 {
+            font-size: 17px;
+            margin: 2px 0 6px;
+        }
+
+        .seriesDetails .pill.grey,
+        .seriesDetails .pill.channelPill {
+            font-size: 13px;
         }
     }
 

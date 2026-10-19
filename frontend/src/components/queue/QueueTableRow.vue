@@ -34,6 +34,12 @@
                 {{ item.type }}
             </span>
         </td>
+        <td data-title="Client">
+            {{ clientLabel }}
+        </td>
+        <td data-title="Output">
+            {{ outputLabel }}
+        </td>
         <td data-title="Start">
             {{ formatDate(item.details.start, 'short', 'short') }}
         </td>
@@ -51,12 +57,12 @@
             </template>
         </td>
         <td class="progress-column" data-title="Progress">
-            <ProgressBar :progress="item.details.progress" :status="item.status" />
+            <ProgressBar :progress="barProgress" :status="item.status" :label="barLabel" />
         </td>
         <td data-title="ETA">
             {{ item.details.eta }}
         </td>
-        <td data-title="Speed">{{ item.details.speed ? `${item.details.speed} Mb/s` : '' }}</td>
+        <td data-title="Speed">{{ item.details.speed ? `${item.details.speed} MB/s` : '' }}</td>
         <td class="actionCol" data-title="Action">
             <span>
                 <font-awesome-icon
@@ -101,29 +107,55 @@ const apps = inject('apps');
 const checked = ref(false);
 defineExpose({ checked, item: props.item });
 
+// A download that is waiting its turn, or has started but not reported any progress yet (looking the
+// programme up, starting the tool), has nothing to fill the bar with - it sits at zero and says what it is doing.
+const waiting = computed(() => {
+    const { status, details } = props.item;
+    return status == 'Queued' || (status == 'Downloading' && !details?.progress);
+});
+const barProgress = computed(() => (waiting.value ? 0 : props.item.details?.progress));
+const barLabel = computed(() => {
+    if (props.item.status == 'Queued') return 'Queued';
+    if (waiting.value) return 'Starting...';
+    return props.item.details?.part;
+});
+
+const clientLabels = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'Native', STRM: '-' };
+const clientLabel = computed(() => clientLabels[props.item.client] ?? '');
+// A .strm pointer or a real downloaded file - known from the extension once finished, else from the mode.
+const outputLabel = computed(() => {
+    if (props.item.extension) return props.item.extension == 'strm' ? 'STRM' : 'File';
+    if (props.item.status == 'Forwarded') return '';
+    return props.item.client == 'STRM' ? 'STRM' : props.item.client ? 'File' : '';
+});
+
 const seriesEpisodeLabel = computed(() => getSeriesEpisodeLabel(props.details));
 
 const preview = ({ pid, nzbName }) => {
     playInPip(pid, nzbName);
 };
 
-const trash = async (pid) => {
+// The job id (when the entry has one) picks out this download - the same programme can have several.
+const target = ({ pid, jobId }) => `pid=${pid}${jobId ? `&jobId=${jobId}` : ''}`;
+
+const trash = async (entry) => {
     if (await dialogService.confirm('Delete', 'Are you sure you want to delete this history item?')) {
-        ipFetch(`json-api/queue/history?pid=${pid}`, 'DELETE');
+        ipFetch(`json-api/queue/history?${target(entry)}`, 'DELETE');
     }
 };
 
-const cancel = async (pid) => {
+const cancel = async (entry) => {
     if (await dialogService.confirm('Cancel', 'Are you sure you want to cancel this download?')) {
-        ipFetch(`json-api/queue/queue?pid=${pid}`, 'DELETE');
+        ipFetch(`json-api/queue/queue?${target(entry)}`, 'DELETE');
     }
 };
 
-const deleteRow = async ({ pid, status }) => {
+const deleteRow = async (entry) => {
+    const { status } = entry;
     if (status == 'Complete' || status == 'Forwarded' || status == 'Cancelled' || status == 'Removed') {
-        await trash(pid);
+        await trash(entry);
     } else {
-        await cancel(pid);
+        await cancel(entry);
     }
 };
 
@@ -131,10 +163,10 @@ const getAppForId = (id) => {
     return apps.value.find(({ id: appId }) => id == appId);
 };
 
-const openInfo = ({ pid }) => {
+const openInfo = ({ pid, nzbName, jobId }) => {
     const infoModal = useModal({
         component: VideoInfoModal,
-        attrs: { pid },
+        attrs: { pid, nzbName, jobId },
     });
     infoModal.open();
 };

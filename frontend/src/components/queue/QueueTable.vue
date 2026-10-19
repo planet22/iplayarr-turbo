@@ -10,6 +10,8 @@
                  date, "12.3 Mb/s") and scale with font-size/zoom, instead of a guessed pixel
                  width that clips content whenever it runs a bit longer than expected. -->
             <col style="width: 8ch" />
+            <col style="width: 11ch" />
+            <col style="width: 8ch" />
             <col style="width: 20ch" />
             <col style="width: 12ch" />
             <col style="width: 16ch" />
@@ -31,6 +33,8 @@
                 <th class="sortable" @click="toggleSort('type')">
                     Type <SortIcon :active="sortBy == 'type'" :order="sortOrder" />
                 </th>
+                <th>Client</th>
+                <th>Output</th>
                 <th class="sortable" @click="toggleSort('start')">
                     Start <SortIcon :active="sortBy == 'start'" :order="sortOrder" />
                 </th>
@@ -48,11 +52,11 @@
         </thead>
         <tbody>
             <QueueTableRow
-                v-for="item in filteredQueue" :key="item.id" ref="queueRows" :item="item"
+                v-for="item in filteredQueue" :key="item.jobId ?? item.pid" ref="queueRows" :item="item"
                 :details="detailsFor(item.pid)"
             />
             <QueueTableRow
-                v-for="item in pagedHistory" :key="item.id" ref="historyRows" :item="item"
+                v-for="item in pagedHistory" :key="item.jobId ?? `${item.pid}_${item.nzbName}_${item.details?.start}`" ref="historyRows" :item="item"
                 :details="detailsFor(item.pid)"
             />
         </tbody>
