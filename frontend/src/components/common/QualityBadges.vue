@@ -39,8 +39,9 @@ const { state } = useQualityBadges();
     border: 1px solid rgba(255, 255, 255, 0.35);
 
     &.uhd {
-        background-color: @brand-color;
+        background-color: rgba(0, 0, 0, 0.7);
         border-color: @brand-color;
+        color: @brand-color;
     }
 }
 </style>

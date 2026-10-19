@@ -1,8 +1,10 @@
 <template>
     <div class="browseHero" :style="heroStyle">
         <div class="heroContent">
-            <ChannelPill :channel="item.channel" />
-            <QualityBadges :item="item" />
+            <div class="heroBadges">
+                <ChannelPill :channel="item.channel" />
+                <QualityBadges :item="item" />
+            </div>
             <h1>{{ item.title }}</h1>
             <h2 v-if="item.subtitle">{{ item.subtitle }}</h2>
             <p v-if="item.synopsis">{{ item.synopsis }}</p>
@@ -64,6 +66,22 @@ const heroStyle = computed(() => {
         box-sizing: border-box;
         padding: 2rem;
         background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.1));
+
+        .heroBadges {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+
+            // Fixed height so the pill is the same size with or without badges; thumbnail badges keep their own size.
+            :deep(.qualityBadge),
+            :deep(.channelPill) {
+                display: inline-flex;
+                align-items: center;
+                box-sizing: border-box;
+                min-height: 20px;
+            }
+        }
 
         h1 {
             margin: 8px 0 0;
