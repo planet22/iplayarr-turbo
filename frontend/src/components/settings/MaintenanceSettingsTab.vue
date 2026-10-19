@@ -92,19 +92,18 @@
                 </div>
             </div>
         </div>
-        <ScheduledTaskRow v-for="task in cacheTasks" :key="task.id" :task="task" :busy="!!running[task.id]" @run="runNow" />
         <div v-if="cacheError" class="cacheError">{{ cacheError }}</div>
     </div>
 
     <SettingsSubheading text="Scheduled tasks" />
     <LoadingIndicator v-if="!loaded" />
     <div v-else class="scheduledTasks">
-        <ScheduledTaskRow v-for="task in otherTasks" :key="task.id" :task="task" :busy="!!running[task.id]" @run="runNow" />
+        <ScheduledTaskRow v-for="task in tasks" :key="task.id" :task="task" :busy="!!running[task.id]" @run="runNow" />
     </div>
 </template>
 
 <script setup>
-import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
+import { inject, onMounted, reactive, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
@@ -119,6 +118,7 @@ import { useScheduledTasks } from '@/lib/useScheduledTasks';
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 const changedKeys = inject('settingsChangedKeys');
+const schedulesReload = inject('settingsSchedulesReload');
 
 const rebuilding = ref(false);
 const rebuildLogos = async () => {
@@ -129,8 +129,7 @@ const rebuildLogos = async () => {
 };
 
 const { tasks, loaded, running, load, runNow } = useScheduledTasks();
-const cacheTasks = computed(() => tasks.value.filter((task) => task.group === 'cache'));
-const otherTasks = computed(() => tasks.value.filter((task) => task.group !== 'cache'));
+
 
 const { caches, loaded: cachesLoaded, busy: cacheBusy, error: cacheError, clearingAll, load: loadCaches, clear, clearAll, setTtl } = useCaches();
 
@@ -188,6 +187,9 @@ const clearEverything = async () => {
         clearAll();
     }
 };
+
+// The page bumps this after Save applies schedule edits, so the next-run times refresh.
+watch(schedulesReload, () => load());
 
 onMounted(() => {
     load();

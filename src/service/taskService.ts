@@ -14,13 +14,13 @@ import thumbnailCacheService from './thumbnailCacheService';
 class TaskService {
     async init() {
         const cronSchedule = (await configService.getParameter(IplayarrParameter.REFRESH_SCHEDULE)) as string;
-        cronJobService.defineTask(
+        await cronJobService.defineTask(
             {
                 id: 'schedule-refresh',
                 label: 'Schedule Refresh',
                 description: 'Refreshes the schedule cache, recaches series metadata, and clears stuck failed downloads.',
                 cron: cronSchedule,
-                group: 'cache',
+                minIntervalMinutes: 15,
             },
             async () => {
                 const nativeSearchEnabled = await configService.getParameter(IplayarrParameter.NATIVE_SEARCH);
@@ -37,32 +37,32 @@ class TaskService {
 
         // Subscriptions - hourly at :17 (off the hour, away from the schedule refresh). Fixed
         // schedule; "Check now" on the Subscriptions page runs the same pass on demand.
-        cronJobService.defineTask(
+        await cronJobService.defineTask(
             {
                 id: 'subscriptions-check',
                 label: 'Subscriptions Check',
                 description: 'Checks all subscriptions for new episodes and queues them for download.',
                 cron: '17 * * * *',
+                minIntervalMinutes: 15,
             },
             () => subscriptionService.checkAll()
         );
 
         // Unused thumbnail prune - 3:35 AM daily. Fixed schedule (not user-configurable, like
         // the failed-downloads cleanup above); retention itself is THUMBNAIL_RETENTION_DAYS.
-        cronJobService.defineTask(
+        await cronJobService.defineTask(
             {
                 id: 'thumbnail-cleanup',
                 label: 'Thumbnail Cache Cleanup',
                 description: 'Deletes cached episode thumbnails that have not been viewed recently.',
                 cron: '35 3 * * *',
-                group: 'cache',
             },
             () => thumbnailCacheService.cleanup()
         );
 
         // Old stream history prune - 3:40 AM daily. Fixed schedule, same as the thumbnail prune
         // above; retention itself is STREAM_HISTORY_RETENTION_DAYS.
-        cronJobService.defineTask(
+        await cronJobService.defineTask(
             {
                 id: 'stream-history-cleanup',
                 label: 'Stream History Cleanup',
@@ -76,7 +76,7 @@ class TaskService {
         // above. Only does anything when LIBRARY_FOLDER_STRUCTURE is on: cleans up Show/Season
         // folders under COMPLETE_DIR/ARR_COMPLETE_DIR left behind once Sonarr/Radarr has
         // imported (moved) the file out of them.
-        cronJobService.defineTask(
+        await cronJobService.defineTask(
             {
                 id: 'library-cleanup',
                 label: 'Empty Library Folder Cleanup',
@@ -87,25 +87,25 @@ class TaskService {
         );
 
         // Expired cache row purge - 3:50 AM daily. Rows are otherwise only dropped when read again.
-        cronJobService.defineTask(
+        await cronJobService.defineTask(
             {
                 id: 'cache-purge',
                 label: 'Expired Cache Purge',
                 description: 'Deletes expired entries from the database cache.',
                 cron: '50 3 * * *',
-                group: 'cache',
             },
             () => DbCacheService.purgeExpired()
         );
 
         // STRM Watchdog - 4:15 AM daily. Does nothing unless STRM_WATCHDOG_ENABLED; "Run now" on
         // the Maintenance tab runs the same pass on demand.
-        cronJobService.defineTask(
+        await cronJobService.defineTask(
             {
                 id: 'strm-watchdog',
                 label: 'STRM Watchdog',
                 description: 'Checks that .strm links still resolve on BBC iPlayer and reports or removes expired ones.',
                 cron: '15 4 * * *',
+                minIntervalMinutes: 60,
             },
             () => strmWatchdogService.run()
         );

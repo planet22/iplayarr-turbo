@@ -66,14 +66,7 @@
 
     <template v-if="showAdvanced">
         <SettingsSubheading text="Schedule" />
-        <TextInput
-            v-model="config.REFRESH_SCHEDULE"
-            field="REFRESH_SCHEDULE"
-            :advanced="true"
-            name="Refresh Schedule"
-            tooltip="How often to refresh the schedule (cron expression)."
-            :error="validationErrors.config?.REFRESH_SCHEDULE"
-        />
+        <p class="cacheNote">When tasks run (including the schedule refresh) is set on the Maintenance tab.</p>
         <TextInput
             v-model="config.RSS_FEED_HOURS"
             field="RSS_FEED_HOURS"

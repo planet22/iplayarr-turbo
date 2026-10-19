@@ -24,6 +24,29 @@ router.post('/tasks/:id/run', async (req: Request, res: Response) => {
     res.status(409).json({ error: ApiError.INVALID_INPUT, message: 'Task is already running' } as ApiResponse);
 });
 
+// Body: { cron: '<5-field expression>' } to override, or { cron: null } to go back to the default.
+// POST .../schedule/validate takes the same body and only checks it; PUT applies it.
+const scheduleHandler = (apply: boolean) => async (req: Request, res: Response) => {
+    const expression = req.body?.cron;
+    if (expression !== null && typeof expression !== 'string') {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Please provide a cron expression' } as ApiResponse);
+        return;
+    }
+    const id = req.params.id as string;
+    const result = apply ? await cronJobService.setSchedule(id, expression) : cronJobService.validateSchedule(id, expression);
+    if (result.ok) {
+        res.json({ status: true });
+        return;
+    }
+    res.status(result.reason == 'not_found' ? 404 : 400).json({
+        error: result.reason == 'not_found' ? ApiError.API_NOT_FOUND : ApiError.INVALID_INPUT,
+        message: result.message,
+    } as ApiResponse);
+};
+
+router.put('/tasks/:id/schedule', scheduleHandler(true));
+router.post('/tasks/:id/schedule/validate', scheduleHandler(false));
+
 router.get('/caches', async (_, res: Response) => {
     res.json(await cacheAdminService.list());
 });

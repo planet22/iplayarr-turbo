@@ -4,9 +4,6 @@ import nzbFacade from '../facade/nzbFacade';
 import { FilenameTemplateContext } from '../types/FilenameTemplateContext';
 import { Validator } from './Validator';
 
-const cronRegex: RegExp =
-    /^(\*|([0-5]?[0-9])) (\*|([01]?[0-9]|2[0-3])) (\*|([01]?[1-9]|[12][0-9]|3[01])) (\*|([1-9]|1[0-2])) (\*|([0-6]))(\s(\d{4}))?$/;
-
 export class ConfigFormValidator extends Validator {
     async validate(input: any): Promise<{ [key: string]: string }> {
         const validatorError: { [key: string]: string } = {};
@@ -36,9 +33,6 @@ export class ConfigFormValidator extends Validator {
         }
         if (!input.AUTH_PASSWORD) {
             validatorError['AUTH_PASSWORD'] = 'Please provide a Password';
-        }
-        if (!this.matchesRegex(input.REFRESH_SCHEDULE, cronRegex)) {
-            validatorError['REFRESH_SCHEDULE'] = 'Please provide a valid cron expression';
         }
         if (!this.compilesSuccessfully(input.TV_FILENAME_TEMPLATE)) {
             validatorError['TV_FILENAME_TEMPLATE'] = 'Template does not compile';

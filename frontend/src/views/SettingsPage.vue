@@ -90,7 +90,7 @@ const activeTab = ref('general');
 const TAB_KEYS = {
     general: [
         'API_KEY', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY',
-        'SEARCH_MATCH_ALL_WORDS', 'REFRESH_SCHEDULE', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH',
+        'SEARCH_MATCH_ALL_WORDS', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH',
     ],
     mediaManagement: [
         'DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'LIVE_STRM_DIR', 'VIDEO_QUALITY', 'EXTRA_VIDEO_QUALITIES',
@@ -128,7 +128,15 @@ const changedKeys = computed(() => {
     return changed;
 });
 const tabHas = (tab, lookup) => TAB_KEYS[tab].some((key) => lookup(key));
-const dirtyTabs = computed(() => tabs.filter((tab) => tabHas(tab.key, (key) => changedKeys.value.has(key))).map((tab) => tab.key));
+// Maintenance cron drafts: id -> { draft, saved, message, valid }. Rows create their entry; Save applies the changed ones.
+const schedules = ref({});
+const schedulesReload = ref(0);
+const changedSchedules = computed(() => Object.keys(schedules.value).filter((id) => schedules.value[id].draft.trim() !== schedules.value[id].saved));
+const dirtyTabs = computed(() =>
+    tabs
+        .filter((tab) => tabHas(tab.key, (key) => changedKeys.value.has(key)) || (tab.key == 'maintenance' && changedSchedules.value.length))
+        .map((tab) => tab.key)
+);
 const errorTabs = computed(() =>
     tabs.filter((tab) => tabHas(tab.key, (key) => validationErrors.value.config?.[key])).map((tab) => tab.key)
 );
@@ -139,6 +147,8 @@ const validationErrors = ref({
 
 provide('settingsConfig', config);
 provide('settingsChangedKeys', changedKeys);
+provide('settingsSchedules', schedules);
+provide('settingsSchedulesReload', schedulesReload);
 provide('settingsValidationErrors', validationErrors);
 provide('settingsShowAdvanced', showAdvanced);
 provide('infoTips', true);
@@ -250,6 +260,25 @@ onMounted(async () => {
     };
 });
 
+// Applies every edited cron schedule; returns how many were refused (their message is left on the row).
+const saveSchedules = async () => {
+    let failed = 0;
+    for (const id of changedSchedules.value) {
+        const entry = schedules.value[id];
+        const { ok, data } = await ipFetch(`json-api/maintenance/tasks/${id}/schedule`, 'PUT', { cron: entry.draft.trim() });
+        entry.valid = ok;
+        if (ok) {
+            entry.saved = entry.draft.trim();
+            entry.message = '';
+        } else {
+            failed++;
+            entry.message = data?.message || 'Unable to save the schedule';
+        }
+    }
+    schedulesReload.value++;
+    return failed;
+};
+
 const saveConfig = async () => {
     const tab = activeTab.value;
     if (tab == 'authentication' && config.value.AUTH_TYPE == 'oidc' && !oidcTested.value) {
@@ -287,9 +316,14 @@ const saveConfig = async () => {
             loading.value = false;
             return;
         } else {
-            dialogService.alert('Success', 'Save Successful');
             for (const key of keys) original.value[key] = clone(config.value[key]);
             refreshGlobalSettings();
+            const scheduleErrors = tab == 'maintenance' ? await saveSchedules() : 0;
+            if (scheduleErrors) {
+                dialogService.alert('Error', `${scheduleErrors} schedule(s) could not be saved - see the messages under each task.`);
+            } else {
+                dialogService.alert('Success', 'Save Successful');
+            }
         }
     }
 
