@@ -2,6 +2,8 @@ import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import fs from 'fs';
 import https from 'https';
+import os from 'os';
+import path from 'path';
 import * as tar from 'tar';
 
 import configService from '../../src/service/configService';
@@ -203,7 +205,7 @@ describe('versionService', () => {
         let exec: string;
 
         beforeEach(() => {
-            dir = fs.mkdtempSync('/tmp/vs-test-');
+            dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vs-test-'));
             exec = `${dir}/get_iplayer`;
             (configService.getParameter as jest.Mock).mockResolvedValue(exec);
         });
