@@ -35,7 +35,10 @@
                 </RouterLink>
             </div>
             <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
-            <p v-if="rails.length === 0">Nothing found for this channel.</p>
+            <p v-if="rails.length === 0 && channel?.liveOnly && !nowNext">
+                This is a live stream only, with no schedule or programmes.
+            </p>
+            <p v-else-if="rails.length === 0">Nothing found for this channel.</p>
         </template>
     </div>
 </template>

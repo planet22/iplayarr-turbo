@@ -1,6 +1,6 @@
 import { Request, Response, Router } from 'express';
 
-import { OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
+import { isUhdEventFeed, OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
 import browseService from '../../service/browseService';
 import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
 import liveChannelService from '../../service/liveChannelService';
@@ -152,6 +152,14 @@ router.get(
         const extra = (await liveChannelService.list()).find((c) => c.id === id && c.optional);
         if (extra) {
             const def = OptionalLiveChannels.find((c) => c.id === id) as OptionalLiveChannel;
+            // Event feeds have no schedule or programmes, so nothing is borrowed from the parent channel.
+            if (isUhdEventFeed(id)) {
+                res.json({
+                    channel: { id, title: extra.title, logo: extra.logo, live: extra.enabled, liveOnly: true },
+                    rails: [],
+                });
+                return;
+            }
             const own = await browseService.channel(def.iblId).catch(() => undefined);
             const hasNowNext = !!(own?.nowNext?.now || own?.nowNext?.next);
             const parent =
