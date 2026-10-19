@@ -235,13 +235,5 @@ const clearEvents = async () => {
         font-size: 12px;
         color: @subtle-text-color;
     }
-
-    .pill.warn {
-        color: @warn-color;
-    }
-
-    .pill.error {
-        color: @error-color;
-    }
 }
 </style>

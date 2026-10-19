@@ -7,6 +7,14 @@ body {
     min-height: 100vh;
 }
 
+// Safari does not inherit the page font into form controls (cards built on <button> fall back to serif).
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
+}
+
 .main-layout {
     display: flex;
 }

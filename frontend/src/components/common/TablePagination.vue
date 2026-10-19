@@ -199,6 +199,13 @@ const onPageSizeChange = (event) => {
         border-radius: 4px;
         background-color: @input-background-color;
         color: @input-text-color;
+        // iOS Safari paints native selects white and ignores the colours above unless the native look is dropped.
+        -webkit-appearance: none;
+        appearance: none;
+        padding-right: 24px;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" fill="none" stroke="%23ccc" stroke-width="1.5"><path d="M1 1l4 4 4-4"/></svg>');
+        background-repeat: no-repeat;
+        background-position: right 8px center;
     }
 }
 </style>

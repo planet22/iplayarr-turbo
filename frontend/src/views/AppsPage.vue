@@ -231,8 +231,10 @@ const removeMapping = async ({ id, userAgent }) => {
 </script>
 
 <style lang="less" scoped>
+// A block with no positioning of its own: the absolute last-seen label anchors to the card
+// (.listButton), not to this inline <a> inside a <button>, which Safari/Firefox lay out differently.
 .appBox {
-    position: relative;
+    display: block;
 
     .lastSeen {
         position: absolute;
