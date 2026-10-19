@@ -14,6 +14,7 @@
             <span v-if="trace.episode != null" class="pill">Episode {{ trace.episode }}</span>
             <span v-if="trace.cached" class="pill" title="Served from the 5 minute search cache">Cached</span>
         </div>
+        <TablePagination v-if="itemsTotalPages > 1" v-model="itemsPage" v-model:page-size="itemsPageSize" :total="items.length" />
         <table class="resultsTable responsive-table">
             <thead>
                 <tr>
@@ -24,19 +25,22 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="(item, index) of items" :key="index">
+                <tr v-for="(item, index) of items" :key="index" :class="{ offPage: !onPage(index, itemsPage, itemsPageSize) }">
                     <td class="text">{{ item.title }}</td>
                     <td data-title="Type"><span class="pill">{{ item.type }}</span></td>
                     <td data-title="Size">{{ formatStorageSize(item.size) }}</td>
                     <td data-title="Air Date">{{ formatDate(item.pubDate) }}</td>
                 </tr>
+                <tr v-for="n in itemsFiller" :key="`filler-${n}`" class="fillerRow" aria-hidden="true"><td colspan="4" /></tr>
                 <tr v-if="items.length == 0">
                     <td colspan="4" class="empty">No results were returned for this search</td>
                 </tr>
             </tbody>
         </table>
+        <TablePagination v-if="itemsTotalPages > 1" v-model="itemsPage" v-model:page-size="itemsPageSize" :total="items.length" />
         <template v-if="rejected.length">
             <h3 class="traceHeading">Filtered out ({{ rejected.length }})</h3>
+            <TablePagination v-if="rejectedTotalPages > 1" v-model="rejectedPage" v-model:page-size="rejectedPageSize" :total="rejected.length" />
             <table class="resultsTable responsive-table">
                 <thead>
                     <tr>
@@ -46,13 +50,15 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="(candidate, index) of rejected" :key="index">
+                    <tr v-for="(candidate, index) of rejected" :key="index" :class="{ offPage: !onPage(index, rejectedPage, rejectedPageSize) }">
                         <td class="text">{{ candidate.title }}</td>
                         <td data-title="Stage"><span class="pill">{{ stageLabels[candidate.stage] ?? candidate.stage }}</span></td>
                         <td data-title="Why">{{ candidate.detail ?? reasonLabels[candidate.reason] ?? candidate.reason }}</td>
                     </tr>
+                    <tr v-for="n in rejectedFiller" :key="`filler-${n}`" class="fillerRow" aria-hidden="true"><td colspan="3" /></tr>
                 </tbody>
             </table>
+            <TablePagination v-if="rejectedTotalPages > 1" v-model="rejectedPage" v-model:page-size="rejectedPageSize" :total="rejected.length" />
             <p v-if="trace.truncated" class="empty">Only the first {{ trace.candidates.length }} candidates are shown.</p>
         </template>
     </IPlayarrModal>
@@ -61,8 +67,10 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
+import { usePagination } from '@/lib/usePagination';
 import { formatDate, formatStorageSize } from '@/lib/utils';
 
+import TablePagination from '../common/TablePagination.vue';
 import IPlayarrModal from './IPlayarrModal.vue';
 
 const props = defineProps({
@@ -92,6 +100,23 @@ const reasonLabels = {
 };
 
 const rejected = computed(() => (props.trace?.candidates ?? []).filter(({ kept }) => !kept));
+
+const itemsRef = computed(() => props.items);
+const {
+    page: itemsPage, pageSize: itemsPageSize, totalPages: itemsTotalPages, pagedItems,
+} = usePagination(itemsRef);
+const {
+    page: rejectedPage, pageSize: rejectedPageSize, totalPages: rejectedTotalPages, pagedItems: pagedRejected,
+} = usePagination(rejected);
+
+// Blank rows pad a short last page to the page size, so the popup keeps one height while paging.
+const fillerCount = (totalPages, pageSize, shown) => (totalPages.value > 1 ? Math.max(0, pageSize.value - shown.value.length) : 0);
+
+// Every row stays in the table and the off-page ones are collapsed (see .offPage), so the columns -
+// and with them the popup's width - are sized by the widest text across all pages, not the current one.
+const onPage = (index, page, pageSize) => index >= (page - 1) * pageSize && index < page * pageSize;
+const itemsFiller = computed(() => fillerCount(itemsTotalPages, itemsPageSize, pagedItems));
+const rejectedFiller = computed(() => fillerCount(rejectedTotalPages, rejectedPageSize, pagedRejected));
 </script>
 
 <style lang="less" scoped>
@@ -110,6 +135,7 @@ const rejected = computed(() => (props.trace?.candidates ?? []).filter(({ kept }
 .resultsTable {
     max-width: 100%;
     width: 100%;
+
     border-collapse: collapse;
     font-size: 14px;
     color: @table-text-color;
@@ -135,6 +161,20 @@ const rejected = computed(() => (props.trace?.candidates ?? []).filter(({ kept }
                 padding: 8px;
                 border-top: 1px solid @table-border-color;
                 line-height: 1.52857143;
+            }
+
+            &.offPage {
+                // Collapsed rows keep their say in the column widths but take no height.
+                visibility: collapse;
+            }
+
+            &.fillerRow {
+                pointer-events: none;
+
+                td {
+                    height: 39px;
+                    padding: 0;
+                }
             }
         }
     }

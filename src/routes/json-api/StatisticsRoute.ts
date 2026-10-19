@@ -1,14 +1,26 @@
 import { Request, Response, Router } from 'express';
 
 import statisticsService from '../../service/stats/StatisticsService';
+import { summariseSearchHistory } from '../../utils/searchHistorySummary';
 
 const router = Router();
 
 router.get('/searchHistory', async (req: Request, res: Response) => {
-    const { limit, filterRss } = req.query as any as { limit?: number, filterRss?: boolean };
+    const { limit, filterRss, summary } = req.query as any as { limit?: number, filterRss?: boolean, summary?: string };
     let searchHistory = await statisticsService.getSearchHistory();
     searchHistory = filterRss ? searchHistory.filter(({ term }) => term != '*') : searchHistory;
-    res.json(limit ? searchHistory.slice(limit * -1) : searchHistory);
+    const limited = limit ? searchHistory.slice(limit * -1) : searchHistory;
+    res.json(summary == 'true' ? summariseSearchHistory(limited) : limited);
+});
+
+router.get('/searchHistory/detail', async (req: Request, res: Response) => {
+    const { term, time } = req.query as { term?: string, time?: string };
+    const entry = (await statisticsService.getSearchHistory()).find((e) => e.term == term && String(e.time) == time);
+    if (!entry) {
+        res.status(404).json({ error: 'Search not found' });
+        return;
+    }
+    res.json({ items: entry.items ?? [], trace: entry.trace });
 });
 
 router.delete('/searchHistory', async (_: Request, res: Response) => {

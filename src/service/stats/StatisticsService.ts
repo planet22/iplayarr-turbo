@@ -3,6 +3,7 @@ import { GrabHistoryEntry } from '../../types/data/GrabHistoryEntry';
 import { SearchHistoryEntry } from '../../types/data/SearchHistoryEntry';
 import { AbstractFIFOQueue } from '../../types/utils/AbstractFIFOQueue';
 import { DbFIFOQueue } from '../../types/utils/DbFIFOQueue';
+import { summariseSearchHistory } from '../../utils/searchHistorySummary';
 import DbCacheService from '../db/dbCacheService';
 import { dbReady, prisma } from '../db/prismaService';
 import socketService from '../socketService';
@@ -23,7 +24,7 @@ class StatisticsService {
 
     async addSearch(entry: SearchHistoryEntry): Promise<void> {
         await this.searchHistory.enqueue(entry);
-        socketService.emit('searchHistory', await this.getSearchHistory());
+        socketService.emit('searchHistory', summariseSearchHistory(await this.getSearchHistory()));
     }
 
     async getSearchHistory(): Promise<SearchHistoryEntry[]> {
@@ -32,7 +33,7 @@ class StatisticsService {
 
     async clearSearchHistory(): Promise<void> {
         await this.searchHistory.clear();
-        socketService.emit('searchHistory', await this.getSearchHistory());
+        socketService.emit('searchHistory', summariseSearchHistory(await this.getSearchHistory()));
     }
 
     async addGrab(entry: GrabHistoryEntry): Promise<void> {
