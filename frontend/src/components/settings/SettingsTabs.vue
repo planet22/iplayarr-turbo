@@ -1,5 +1,5 @@
 <template>
-    <div class="settingsTabs">
+    <div ref="strip" class="settingsTabs">
         <button
 v-for="tab in tabs" :key="tab.key" type="button"
             :class="['settingsTab', modelValue === tab.key ? 'active' : '', errorTabs.includes(tab.key) ? 'hasError' : '', dirtyTabs.includes(tab.key) ? 'dirty' : '']"
@@ -13,9 +13,9 @@ v-for="tab in tabs" :key="tab.key" type="button"
 </template>
 
 <script setup>
-import { defineEmits, defineProps } from 'vue';
+import { defineEmits, defineProps, nextTick, ref, watch } from 'vue';
 
-defineProps({
+const props = defineProps({
     tabs: {
         type: Array,
         required: true,
@@ -36,6 +36,16 @@ defineProps({
 });
 
 const emit = defineEmits(['update:modelValue']);
+
+// On phones the tabs are one scrolling row; keep the selected one in view.
+const strip = ref(null);
+watch(
+    () => props.modelValue,
+    async () => {
+        await nextTick();
+        strip.value?.querySelector('.settingsTab.active')?.scrollIntoView?.({ inline: 'center', block: 'nearest' });
+    }
+);
 </script>
 
 <style lang="less">
@@ -87,6 +97,24 @@ const emit = defineEmits(['update:modelValue']);
         &.active {
             color: @brand-color;
             border-bottom-color: @brand-color;
+        }
+    }
+
+    // One scrolling row instead of a three-line wrapped block that pushes the form off the screen.
+    @media (max-width: @mobile-breakpoint) {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        gap: 0;
+        scrollbar-width: none;
+
+        &::-webkit-scrollbar {
+            display: none;
+        }
+
+        .settingsTab {
+            flex: none;
+            white-space: nowrap;
+            padding: 10px 12px;
         }
     }
 }

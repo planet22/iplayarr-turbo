@@ -15,6 +15,17 @@ textarea {
     font-family: inherit;
 }
 
+// iOS Safari paints native selects white and ignores their background/colour; dropping the native look
+// makes the dark input styling apply, and the chevron is drawn back in.
+select:not([multiple]) {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 28px !important;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" fill="none" stroke="%23ccc" stroke-width="1.5"><path d="M1 1l4 4 4-4"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+}
+
 .main-layout {
     display: flex;
 }
@@ -103,9 +114,16 @@ textarea {
                 display: none;
             }
 
+            // Low-value cells (IDs, secondary timestamps) that a phone card can do without.
+            td.hide-mobile {
+                display: none;
+            }
+
+            // Quiet labels, so the values carry the card rather than "Label: value" pairs of equal weight.
             td[data-title]:not(.text)::before {
                 content: attr(data-title) ':';
-                font-weight: bold;
+                font-weight: normal;
+                font-size: 12px;
                 color: @subtle-text-color;
             }
 

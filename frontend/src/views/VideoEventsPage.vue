@@ -67,7 +67,7 @@
                         </div>
                     </td>
                     <td data-title="Type"><span class="pill">{{ event.type }}</span></td>
-                    <td data-title="Level"><span :class="['pill', event.level]">{{ event.level }}</span></td>
+                    <td :class="event.level == 'info' ? 'hide-mobile' : ''" data-title="Level"><span :class="['pill', event.level]">{{ event.level }}</span></td>
                     <td class="text">{{ event.message }}</td>
                     <td data-title="Time">{{ formatDate(event.timestamp) }}</td>
                 </tr>

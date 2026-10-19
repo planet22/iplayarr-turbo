@@ -162,5 +162,26 @@ onMounted(async () => {
             opacity: 0.5;
         }
     }
+
+    // Label on its own line, then state and both buttons - the desktop widths add up to more than a phone.
+    @media (max-width: @mobile-breakpoint) {
+        flex-wrap: wrap;
+        gap: 8px;
+
+        label {
+            flex: 1 0 100%;
+            text-align: start;
+            margin-right: 0;
+        }
+
+        .state {
+            flex: 1 1 auto;
+        }
+
+        button {
+            min-width: 0;
+            padding: 6px 12px;
+        }
+    }
 }
 </style>

@@ -1,5 +1,69 @@
 <template>
-    <tr>
+    <tr v-if="cardView" class="queueCard">
+        <td colspan="14">
+            <div class="card">
+                <CheckInput v-model="checked" class="cardCheck" />
+                <div class="cardThumb">
+                    <img
+                        v-if="getProgrammeThumbnailUrl(item.pid)"
+                        class="cardImg clickable"
+                        :src="getProgrammeThumbnailUrl(item.pid)"
+                        @click="openInfo(item)"
+                        @error="hideBrokenImage"
+                    />
+                    <div v-else class="cardImg thumbnail-placeholder clickable" @click="openInfo(item)">
+                        <font-awesome-icon :icon="['fas', item.type == 'TV' ? 'tv' : 'film']" />
+                    </div>
+                </div>
+                <div class="cardBody">
+                    <a
+                        v-if="item.status != 'Forwarded'"
+                        class="cardTitle clickable"
+                        @click="openInfo(item)"
+                    >
+                        {{ item.nzbName }}
+                    </a>
+                    <a
+                        v-else
+                        class="cardTitle"
+                        target="_blank"
+                        :href="getAppForId(item.appId)?.link || getAppForId(item.appId)?.url || '#'"
+                    >
+                        {{ item.nzbName }}
+                    </a>
+                    <div v-if="details?.channel || seriesEpisodeLabel" class="subtle">
+                        {{ [details?.channel, seriesEpisodeLabel].filter(Boolean).join(' · ') }}
+                    </div>
+                    <div class="cardMeta">
+                        <font-awesome-icon :class="[item.status, 'statusIcon']" :icon="['fas', getDownloadIcon(item)]" />
+                        <span :class="['pill', item.type]">{{ item.type }}</span>
+                        <span v-if="clientLabel && clientLabel != '-'">{{ clientLabel }}</span>
+                        <span v-if="outputLabel">{{ outputLabel }}</span>
+                        <span v-if="item.details.size">{{ formatStorageSize(item.details.size) }}</span>
+                        <span v-if="getAppForId(item.appId)" class="appDisplay">
+                            <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />
+                            {{ getAppForId(item.appId).name }}
+                        </span>
+                    </div>
+                </div>
+                <div class="cardProgress">
+                    <ProgressBar :progress="barProgress" :status="item.status" :label="barLabel" />
+                </div>
+                <div class="cardFoot">
+                    <span class="subtle">
+                        {{ formatDate(item.details.start, 'short', 'short') }}
+                        <template v-if="item.details.speed"> · {{ item.details.speed }} MB/s</template>
+                        <template v-if="item.details.eta"> · ETA {{ item.details.eta }}</template>
+                    </span>
+                    <span class="cardActions">
+                        <font-awesome-icon class="clickable" :icon="['fas', 'play']" title="Play Video" @click="preview(item)" />
+                        <font-awesome-icon class="clickable" :icon="['fas', getDeleteIcon(item)]" @click="deleteRow(item)" />
+                    </span>
+                </div>
+            </div>
+        </td>
+    </tr>
+    <tr v-else>
         <td>
             <CheckInput v-model="checked" />
         </td>
@@ -34,7 +98,7 @@
                 {{ item.type }}
             </span>
         </td>
-        <td data-title="Client">
+        <td class="hideMd" data-title="Client">
             {{ clientLabel }}
         </td>
         <td data-title="Output">
@@ -46,7 +110,7 @@
         <td data-title="Size">
             {{ formatStorageSize(item.details.size) }}
         </td>
-        <td data-title="App">
+        <td class="hideMd" data-title="App">
             <template v-if="item.appId && getAppForId(item.appId)">
                 <div class="appDisplay">
                     <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />
@@ -59,7 +123,7 @@
         <td class="progress-column" data-title="Progress">
             <ProgressBar :progress="barProgress" :status="item.status" :label="barLabel" />
         </td>
-        <td data-title="ETA">
+        <td class="hideMd" data-title="ETA">
             {{ item.details.eta }}
         </td>
         <td data-title="Speed">{{ item.details.speed ? `${item.details.speed} MB/s` : '' }}</td>
@@ -100,6 +164,12 @@ const props = defineProps({
         type: Object,
         required: false,
         default: null,
+    },
+
+    // Render as a card (phones, or the card view) instead of a table row.
+    cardView: {
+        type: Boolean,
+        default: false,
     },
 });
 
@@ -209,6 +279,89 @@ const getDeleteIcon = ({ status }) => {
     display: block;
 }
 
+// Card layout: [checkbox] [poster] [title / meta], then the bar and a footer across the full width.
+.queueCard > td {
+    padding: 0 !important;
+    border-top: 0 !important;
+    overflow: visible !important;
+    white-space: normal !important;
+}
+
+.card {
+    display: grid;
+    grid-template-columns: auto 96px minmax(0, 1fr);
+    gap: 8px 10px;
+    align-items: start;
+    padding: 10px;
+    background-color: @nav-active-background-color;
+    border-radius: 6px;
+    box-shadow: 0 0 10px 1px @primary-box-shadow;
+    font-size: 13px;
+
+    .cardCheck {
+        align-self: center;
+    }
+
+    .cardImg {
+        width: 96px;
+        height: 54px;
+        object-fit: cover;
+        border-radius: 3px;
+        display: block;
+    }
+
+    .cardBody {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .cardTitle {
+        overflow-wrap: anywhere;
+        line-height: 1.3;
+        color: @primary-text-color;
+    }
+
+    .cardMeta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 10px;
+        margin-top: 4px;
+        color: @table-text-color;
+
+        .appDisplay {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .appImg {
+            width: 14px;
+        }
+    }
+
+    .cardProgress,
+    .cardFoot {
+        grid-column: 1 / -1;
+    }
+
+    .cardFoot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+
+        .cardActions {
+            display: inline-flex;
+            gap: 18px;
+            font-size: 16px;
+            // Easier to hit with a thumb.
+            padding: 2px 4px;
+        }
+    }
+}
 
 .subtle {
     font-size: 12px;

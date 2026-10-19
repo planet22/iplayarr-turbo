@@ -223,7 +223,7 @@
                     </td>
                     <td data-title="Checked">{{ formatRelativeTime(Date.parse(item.lastChecked)) }}</td>
                     <td data-title="Action">{{ (item.actions || []).join(', ') }}</td>
-                    <td class="detail">{{ item.message || (item.files || []).join(', ') }}</td>
+                    <td :class="['detail', item.status == 'ok' ? 'hide-mobile' : '']">{{ item.message || (item.files || []).join(', ') }}</td>
                 </tr>
             </tbody>
         </table>

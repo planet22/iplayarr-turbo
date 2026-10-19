@@ -30,7 +30,7 @@
         @select-filter="selectFilter"
     />
     <div v-if="!loading" class="inner-content scroll-x">
-        <div v-if="searchResults.length" class="viewToggle">
+        <div v-if="searchResults.length" class="resultsToolbar">
             <span v-if="loadingMore" class="loadingMoreNote">
                 <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
                 Loading more results… ({{ searchResults.length }} so far)
@@ -40,20 +40,7 @@
                     {{ option === 'All' ? 'All channels' : option }}
                 </option>
             </select>
-            <button
-                :class="['clickable', viewMode === 'table' ? 'active' : '']"
-                title="Table view"
-                @click="setViewMode('table')"
-            >
-                <font-awesome-icon :icon="['fas', 'table-list']" />
-            </button>
-            <button
-                :class="['clickable', viewMode === 'posters' ? 'active' : '']"
-                title="Poster view"
-                @click="setViewMode('posters')"
-            >
-                <font-awesome-icon :icon="['fas', 'table-cells-large']" />
-            </button>
+            <ViewToggle :model-value="viewMode" :modes="['table', 'posters']" @update:model-value="setViewMode" />
         </div>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
         <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
@@ -64,10 +51,9 @@
                 <col style="width: 40px" />
                 <col style="width: 70px" />
                 <col />
-                <col style="width: 110px" />
-                <col style="width: 160px" />
-                <col />
-                <col style="width: 95px" />
+                <col style="width: 100px" />
+                <col style="width: 150px" />
+                <col style="width: 90px" />
                 <col style="width: 100px" />
                 <col style="width: 190px" />
                 <col style="width: 44px" />
@@ -82,7 +68,6 @@
                     <th>Title</th>
                     <th>Series</th>
                     <th>Episode</th>
-                    <th>Filename</th>
                     <th>Est. Size</th>
                     <th>Channel</th>
                     <th>First Broadcast</th>
@@ -104,6 +89,7 @@
                     </td>
                     <td class="text" @click="download(result)">
                         {{ result.title }}
+                        <div class="filename">{{ result.nzbName }}</div>
                     </td>
                     <td
                         data-title="Series"
@@ -114,9 +100,6 @@
                     </td>
                     <td data-title="Episode" @click="download(result)">
                         {{ result.episode ? `Episode ${result.episode}` : result.episodeTitle }}
-                    </td>
-                    <td class="wrap" data-title="Filename" @click="download(result)">
-                        {{ result.nzbName }}
                     </td>
                     <td data-title="Est. Size" @click="download(result)">
                         {{ formatStorageSize(result.size) }}
@@ -163,6 +146,7 @@ import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import ViewToggle from '@/components/common/ViewToggle.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
@@ -170,6 +154,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { streamSearch } from '@/lib/searchStream';
 import { usePagination } from '@/lib/usePagination';
+import { useViewMode } from '@/lib/useViewMode';
 import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 
 const route = useRoute();
@@ -278,25 +263,13 @@ const {
     page: resultsPage, pageSize: resultsPageSize, pagedItems: pagedResults,
 } = usePagination(filteredResults);
 
-// Table (default) or poster grid. Remembered per browser; storage can be unavailable (private
-// windows, blocked site data) so every access is guarded.
-const VIEW_MODE_KEY = 'iplayarr.searchViewMode';
-const readViewMode = () => {
-    try {
-        return localStorage.getItem(VIEW_MODE_KEY) === 'posters' ? 'posters' : 'table';
-    } catch {
-        return 'table';
-    }
-};
-const viewMode = ref(readViewMode());
-const setViewMode = (mode) => {
-    viewMode.value = mode;
-    try {
-        localStorage.setItem(VIEW_MODE_KEY, mode);
-    } catch {
-        // Not persisted - the toggle still works for this session.
-    }
-};
+// Posters on phones (the table collapses into long stacks of cramped cards there), the table on
+// desktop; the user's own choice is remembered per browser.
+const { viewMode, setViewMode } = useViewMode('iplayarr.searchViewMode', {
+    modes: ['table', 'posters'],
+    desktop: 'table',
+    mobile: 'posters',
+});
 
 // Search results only carry pids, so artwork for the posters is fetched per visible page
 // (server-side metadata is cached) and merged in as it arrives.
@@ -511,7 +484,7 @@ watch(
     }
 }
 
-.viewToggle {
+.resultsToolbar {
     display: flex;
     justify-content: flex-end;
     align-items: center;
@@ -532,28 +505,6 @@ watch(
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
-    }
-
-    button {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 34px;
-        height: 30px;
-        padding: 0;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-
-        &:hover {
-            background-color: @settings-button-hover-background-color;
-        }
-
-        &.active {
-            background-color: @brand-color;
-            border-color: @brand-color;
-        }
     }
 }
 
@@ -607,9 +558,14 @@ watch(
 
                 // Filenames can genuinely need the extra height - deliberately excluded from
                 // the single-line ellipsis truncation every other column gets.
-                &.wrap {
+                &.text {
                     white-space: normal;
-                    word-break: break-word;
+                }
+
+                .filename {
+                    font-size: 12px;
+                    color: @subtle-text-color;
+                    word-break: break-all;
                 }
 
                 &:first-child,
