@@ -54,6 +54,7 @@
                         </span>
                     </div>
                     <div v-for="row in channels" :key="row.channel.id" class="channelRow">
+                        <span v-if="row.slots.length === 0" class="noSchedule">No schedule available</span>
                         <RouterLink
                             v-for="slot in row.slots" :key="slot.item.pid" :to="`/browse/programme/${slot.item.pid}`"
                             :class="['programmeBlock', isLive(slot) ? 'live' : '']"
@@ -569,6 +570,16 @@ onBeforeUnmount(() => {
     &:nth-child(odd) {
         background-color: fade(@settings-button-background-color, 40%);
     }
+}
+
+.noSchedule {
+    position: sticky;
+    left: 0;
+    display: inline-block;
+    padding: 0 12px;
+    line-height: @row-height;
+    font-size: 12px;
+    color: @subtle-text-color;
 }
 
 .programmeBlock {

@@ -12,6 +12,7 @@ import browseService, {
     toBrowseItems,
 } from '../../src/service/browseService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
+import liveChannelService from '../../src/service/liveChannelService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 
 jest.mock('axios');
@@ -24,6 +25,7 @@ jest.mock('../../src/service/db/dbCacheService', () => ({
         async getOr(key: string, fn: (key: string) => Promise<unknown>) {
             return fn(key);
         }
+        async set() {}
     },
 }));
 
@@ -364,6 +366,48 @@ describe('browseService', () => {
         const result = await browseService.nowNext('bbc_one_london', new Date('2026-10-03T19:30:00Z'));
         expect(result.now?.item.pid).toBe('s2');
         expect(result.next?.item.pid).toBe('s3');
+    });
+
+    it('schedule lists enabled channels in the configured order and keeps a channel with no schedule', async () => {
+        await liveChannelService.setOrder(['bbc_two_england', 'bbc_one_wales_hd', 'bbc_one_london']);
+        await liveChannelService.setEnabled('bbc_one_wales_hd', true);
+        await liveChannelService.setEnabled('bbc_four', false);
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            if (url.includes('bbc_one_wales/')) throw new Error('404');
+            return { data: { schedule: { elements: [broadcast('s1', '2026-10-03T18:00:00Z', '2026-10-03T19:00:00Z')] } } };
+        });
+        const result = await browseService.schedule('2026-10-03');
+        const ids = result.map((row) => row.channel.id);
+        expect(ids.slice(0, 3)).toEqual(['bbc_two_england', 'bbc_one_wales_hd', 'bbc_one_london']);
+        expect(ids).not.toContain('bbc_four');
+        expect(result[1].slots).toEqual([]);
+        expect(result[0].slots).toHaveLength(1);
+    });
+
+    it('schedule versions the captioned logo url of optional channels only', async () => {
+        await liveChannelService.setEnabled('bbc_one_wales_hd', true);
+        mockedAxios.get.mockResolvedValue({ data: { schedule: { elements: [] } } });
+        const rows = await browseService.schedule('2026-10-03');
+        const logo = (id: string) => rows.find((row) => row.channel.id === id)?.channel.logo;
+        expect(logo('bbc_one_london')).toBe('json-api/browse/channel-logo/bbc_one.svg');
+        expect(logo('bbc_one_wales_hd')).toBe(
+            `json-api/browse/channel-logo/bbc_one_wales_hd.svg?v=${liveChannelService.logoVersion}`
+        );
+    });
+
+    it('refreshSchedule re-fetches each shown channel by its schedule id and survives a failing channel', async () => {
+        await liveChannelService.setEnabled('bbc_one_wales_hd', true);
+        const set = jest.spyOn(browseService.scheduleCache, 'set');
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            if (url.includes('/bbc_three/')) throw new Error('boom');
+            return { data: { schedule: { elements: [] } } };
+        });
+        await expect(browseService.refreshSchedule('2026-10-03')).resolves.toBeUndefined();
+        const paths = set.mock.calls.map(([path]) => path);
+        expect(paths).toContain('channels/bbc_one_wales/schedule/2026-10-03');
+        expect(paths).toContain('channels/bbc_one_london/schedule/2026-10-03');
+        expect(paths).not.toContain('channels/bbc_three/schedule/2026-10-03');
+        set.mockRestore();
     });
 
     it('nowNext falls through to tomorrow when today has no next slot', async () => {

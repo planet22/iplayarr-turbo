@@ -2,7 +2,7 @@ import axios from 'axios';
 
 import { BrowseChannels, BrowseHomeRails, BrowseHomeRandomCategories } from '../constants/BrowseChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
-import { isLiveChannel, OptionalLiveChannels } from '../constants/LiveChannels';
+import { allLiveChannels, isLiveChannel, isOptionalLiveChannel, OptionalLiveChannels } from '../constants/LiveChannels';
 import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
@@ -173,7 +173,10 @@ export function withCaption(svg: string, label: string): string {
 
 const withLogo = (channel: BrowseChannel): BrowseChannel => ({
     ...channel,
-    logo: channel.masterBrand ? `json-api/browse/channel-logo/${channel.masterBrand}.svg` : undefined,
+    // Optional channels get the captioned logo, versioned like the Channels page's so a cached older design isn't shown.
+    logo: channel.masterBrand
+        ? `json-api/browse/channel-logo/${channel.masterBrand}.svg${isOptionalLiveChannel(channel.id) ? `?v=${liveChannelService.logoVersion}` : ''}`
+        : undefined,
     live: isLiveChannel(channel.id),
 });
 
@@ -456,13 +459,18 @@ class BrowseService {
 
     // Every channel's full day, for the multi-channel guide grid. Reuses the same per-channel,
     // per-date IBL path nowNext() hits, so it rides the same 8-hour schedule cache.
+    // The channels switched on in Settings (built-in and optional), in the user's own channel order.
     async #shownChannels(): Promise<BrowseChannel[]> {
-        const shown: BrowseChannel[] = [];
-        for (const channel of BrowseChannels) {
-            // Channels switched off on the Channels page drop out of the guide grid too.
-            if (!isLiveChannel(channel.id) || (await liveChannelService.isEnabled(channel.id))) shown.push(channel);
-        }
-        return shown;
+        const order = await liveChannelService.order();
+        const enabled = await Promise.all(allLiveChannels().map(({ id }) => liveChannelService.isEnabled(id)));
+        return allLiveChannels()
+            .filter((_, index) => enabled[index])
+            .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    }
+
+    // The IBL channel id holding a channel's schedule: optional feeds are keyed by their own iblId.
+    #scheduleId(channelId: string): string {
+        return OptionalLiveChannels.find(({ id }) => id === channelId)?.iblId ?? channelId;
     }
 
     // Re-fetches one day's schedule for every shown channel and overwrites the cached copy, so the
@@ -471,7 +479,7 @@ class BrowseService {
         const shown = await this.#shownChannels();
         await Promise.allSettled(
             shown.map(async (channel) => {
-                const path = `channels/${encodeURIComponent(channel.id)}/schedule/${day}`;
+                const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
                 const response = await axios.get(`${IBL_BASE}/${path}`);
                 await this.scheduleCache.set(path, response.data);
             })
@@ -481,21 +489,24 @@ class BrowseService {
     async schedule(date?: string): Promise<BrowseChannelSchedule[]> {
         const day = date ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
         const shown = await this.#shownChannels();
-        const settled = await Promise.allSettled(
+        // A channel with no schedule (BBC has none for it, or the fetch failed) keeps its row with no
+        // slots rather than vanishing, so the guide always lists every configured channel in order.
+        return Promise.all(
             shown.map(async (channel): Promise<BrowseChannelSchedule> => {
                 const slots: BrowseSlot[] = [];
-                const data = await this.#ibl(`channels/${encodeURIComponent(channel.id)}/schedule/${day}`, this.scheduleCache);
-                for (const broadcast of extractElements(data)) {
-                    const slot = toBrowseSlot(broadcast);
-                    if (slot) slots.push(slot);
+                try {
+                    const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
+                    for (const broadcast of extractElements(await this.#ibl(path, this.scheduleCache))) {
+                        const slot = toBrowseSlot(broadcast);
+                        if (slot) slots.push(slot);
+                    }
+                } catch {
+                    // No schedule: the row stays, empty. Failures aren't cached, so it retries next request.
                 }
                 slots.sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
                 return { channel: withLogo(channel), slots };
             })
         );
-        return settled
-            .filter((r): r is PromiseFulfilledResult<BrowseChannelSchedule> => r.status === 'fulfilled')
-            .map((r) => r.value);
     }
 
     // iPlayer's own curated rails for a category ("Panel Show Palooza!", ...). The bundle list only

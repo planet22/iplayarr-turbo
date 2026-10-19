@@ -75,3 +75,15 @@ describe('liveChannelService UHD event feeds', () => {
         expect(feed).toMatchObject({ title: 'uk bbc stream 041', vpid: 'uk_bbc_stream_041', optional: true });
     });
 });
+
+describe('liveChannelService logo version', () => {
+    it('exposes the version used on captioned logo urls, and bumpLogoVersion changes it', () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-10-19T10:00:00Z'));
+        service.bumpLogoVersion();
+        const before = service.logoVersion;
+        jest.setSystemTime(new Date('2026-10-19T10:00:05Z'));
+        service.bumpLogoVersion();
+        jest.useRealTimers();
+        expect(service.logoVersion).toBeGreaterThan(before);
+    });
+});

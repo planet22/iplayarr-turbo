@@ -38,6 +38,10 @@ class LiveChannelService {
     // Added to the captioned logos' URLs so browsers (which cache them for a day) refetch after a rebuild.
     #logoVersion = Date.now();
 
+    get logoVersion(): number {
+        return this.#logoVersion;
+    }
+
     bumpLogoVersion(): void {
         this.#logoVersion = Date.now();
     }
