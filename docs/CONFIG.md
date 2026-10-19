@@ -53,7 +53,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
 | Download Limit | `ACTIVE_LIMIT` | `3` | Max simultaneous downloads. Must be a non-negative number. |
-| Download Client? | `DOWNLOAD_CLIENT` | `GET_IPLAYER` | `GET_IPLAYER` or `YTDLP` (experimental) — which tool actually performs full downloads (`AbstractDownloadService` implementations). `YTDLP` in a non-root container needs `cap_add: [NET_BIND_SERVICE]` - see the note under [Stream Client](#streaming-settings--streaming) below. |
+| Download Client? | `DOWNLOAD_CLIENT` | `NATIVE` | `NATIVE`, `GET_IPLAYER` or `YTDLP` (experimental) — which tool actually performs full downloads (`AbstractDownloadService` implementations). `NATIVE` (the default and the fastest) resolves the BBC stream itself and has ffmpeg copy it to a file, so no get_iplayer/yt-dlp is spawned; it doesn't embed subtitles or resume an interrupted download yet, so pick `GET_IPLAYER` if you need those. `YTDLP` in a non-root container needs `cap_add: [NET_BIND_SERVICE]` - see the note under [Stream Client](#streaming-settings--streaming) below. |
 | Additional Download Parameters _(advanced)_ | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | Extra CLI parameters appended to the `get_iplayer` download invocation. |
 | — | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (baked into the Docker image) | Path to the `get_iplayer` binary. Env-only; not in the Settings UI. |
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |

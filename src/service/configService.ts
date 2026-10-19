@@ -65,7 +65,7 @@ const configService = {
         ARCHIVE_ENABLED: 'false',
         THUMBNAIL_RETENTION_DAYS: '30',
         STREAM_HISTORY_RETENTION_DAYS: '30',
-        DOWNLOAD_CLIENT: 'GET_IPLAYER',
+        DOWNLOAD_CLIENT: 'NATIVE',
         OUTPUT_FORMAT: 'mp4',
         AUTH_TYPE: 'form',
         MEDIA_MODE: 'strm',

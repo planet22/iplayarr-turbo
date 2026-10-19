@@ -1,3 +1,4 @@
+import activeJobs from '../../src/service/activeJobs';
 import configService from '../../src/service/configService';
 import loggingService from '../../src/service/loggingService';
 import socketService from '../../src/service/socketService';
@@ -32,6 +33,26 @@ describe('loggingService', () => {
                 timestamp: expect.any(Date),
             })
         );
+    });
+
+    it('info tags a download step with its pid and the job it is for', () => {
+        loggingService.info('abc12345', 'Looking up the programme', 'job-1');
+
+        expect(socketService.emit).toHaveBeenCalledWith(
+            'log',
+            expect.objectContaining({ level: LogLineLevel.INFO, id: 'abc12345', jobId: 'job-1', message: 'Looking up the programme' })
+        );
+    });
+
+    it('info falls back to the job active for the pid', () => {
+        activeJobs.set('abc12345', 'job-active');
+        try {
+            loggingService.info('abc12345', 'No job named');
+        } finally {
+            activeJobs.clear('abc12345');
+        }
+
+        expect(socketService.emit).toHaveBeenCalledWith('log', expect.objectContaining({ id: 'abc12345', jobId: 'job-active' }));
     });
 
     it('should log error messages and emit socket log', () => {

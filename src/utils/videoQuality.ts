@@ -14,11 +14,19 @@ export function parseExtraQualities(value: string | undefined, primaryId: string
 
 const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Swaps the primary quality token in a release name for another (e.g. 720p -> 1080p), or appends
-// one when the filename template has no quality token, so each variant stays a distinct release.
+// Swaps the primary quality token in a release name for another (e.g. 720p -> 1080p). A name built
+// under a different quality (e.g. cached before VIDEO_QUALITY changed) has some other known token, which
+// is swapped instead. Only a name with no quality token at all gets one appended, so each variant stays
+// a distinct release.
 export function swapQualityInName(nzbName: string, from: string, to: string): string {
-    const token = new RegExp(`(^|[.\\-_ ])${escapeRegex(from)}(?=$|[.\\-_ ])`);
-    return token.test(nzbName) ? nzbName.replace(token, `$1${to}`) : `${nzbName}.${to}`;
+    const tokenFor = (quality: string) => new RegExp(`(^|[.\\-_ ])${escapeRegex(quality)}(?=$|[.\\-_ ])`);
+    for (const quality of [from, ...qualityProfiles.map((profile) => profile.quality)]) {
+        const token = tokenFor(quality);
+        if (token.test(nzbName)) {
+            return nzbName.replace(token, `$1${to}`);
+        }
+    }
+    return `${nzbName}.${to}`;
 }
 
 // One extra result per additional quality, same programme but named/sized for that quality and

@@ -25,10 +25,10 @@ class YTDLPDownloadService implements AbstractDownloadService {
         return { exec: ytdlpExec, args: execArgs };
     }
 
-    async download(pid: string, directory: string): Promise<ChildProcess> {
+    async download(pid: string, directory: string, jobId?: string): Promise<ChildProcess> {
         const executable: SpawnExecutable = await this.#getExecutable();
         const videoQuality =
-            queueService.getFromQueue(pid)?.library?.quality ??
+            queueService.getFromQueue(pid, jobId)?.library?.quality ??
             ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
         const width_str = qualityProfiles.find(({ id }) => id == videoQuality)?.quality;
 

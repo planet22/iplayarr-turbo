@@ -4,6 +4,7 @@ import fs from 'fs';
 import configService from '../../../src/service/configService';
 import ytdlpDownloadService from '../../../src/service/download/YTDLPDownloadService';
 import loggingService from '../../../src/service/loggingService';
+import queueService from '../../../src/service/queueService';
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
@@ -64,6 +65,20 @@ describe('YTDLPDownloadService', () => {
       );
       expect(result).toBe(mockChildProcess);
 
+    });
+  });
+
+  describe('download of one of several jobs for the programme', () => {
+    it('takes the quality of the named job', async () => {
+      (configService.getParameter as jest.Mock).mockImplementation(async (param: string) => (param === 'YTDLP_EXEC' ? 'yt-dlp' : 'mp4'));
+      (queueService.getFromQueue as jest.Mock).mockImplementation((_pid: string, jobId?: string) => (jobId === 'job-2' ? { library: { quality: 'sd' } } : undefined));
+      (spawn as jest.Mock).mockReturnValue({ stdout: { on: jest.fn() }, stderr: { on: jest.fn() } });
+
+      await ytdlpDownloadService.download('some-pid', '/fake/dir', 'job-2');
+
+      expect(queueService.getFromQueue).toHaveBeenCalledWith('some-pid', 'job-2');
+      // sd is 540p
+      expect((spawn as jest.Mock).mock.calls[0][1]).toEqual(expect.arrayContaining(['-f', 'bestvideo[width<=540]+bestaudio']));
     });
   });
 

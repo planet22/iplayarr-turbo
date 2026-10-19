@@ -52,7 +52,7 @@ Node version is pinned in `.node-version`. The backend uses `module-alias` at ru
 
 **Pluggable services via Abstract* base classes** — the config decides which concrete implementation is active at runtime:
 - `src/service/search/`: `AbstractSearchService` → `GetIplayerSearchService` (shells out to `get_iplayer`) or `NativeSearchService`.
-- `src/service/download/`: `AbstractDownloadService` → `GetIplayerDownloadService` or `YTDLPDownloadService`.
+- `src/service/download/`: `AbstractDownloadService` → `GetIplayerDownloadService`, `YTDLPDownloadService` or `NativeDownloadService` (reuses `NativeStreamService.resolveDownloadUrl`, ffmpeg copies the HLS stream).
 - `src/service/arr/`: `AbstractArrService` → `V1ArrService` / `V3ArrService` (Sonarr/Radarr API version differences).
 
 When changing download or search behavior, check whether the change belongs in the abstract base or needs to be duplicated across both concrete implementations.

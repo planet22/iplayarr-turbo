@@ -9,7 +9,7 @@ Quick-lookup reference. Every one of these (except the database location and pro
 | `COMPLETE_DIR` | _(none)_ | **Yes** | Completed download directory. |
 | `ARR_COMPLETE_DIR` | _(unset)_ | No | Override of `COMPLETE_DIR` for TV downloads Sonarr/Radarr themselves queued only - not manual UI downloads or subscriptions, even for TV. |
 | `ACTIVE_LIMIT` | `3` | No | Max simultaneous downloads. |
-| `DOWNLOAD_CLIENT` | `GET_IPLAYER` | No | `GET_IPLAYER` or `YTDLP`. |
+| `DOWNLOAD_CLIENT` | `NATIVE` | No | `NATIVE`, `GET_IPLAYER` or `YTDLP`. |
 | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (Docker image) | No | Path to the `get_iplayer` binary. |
 | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (Docker image) | No | Path to the `yt-dlp` binary. |
 | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | No | Extra CLI params passed to `get_iplayer` downloads. |

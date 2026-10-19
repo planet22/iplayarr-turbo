@@ -28,6 +28,10 @@ export interface QueueLibraryMetadata {
 }
 
 export interface QueueEntry {
+    // Job id: unique to one download (also what video events can be tied to). The same programme can be fetched more than once (different resolution or
+    // client) under the same pid and release name, so the pid alone can't tell its entries apart. Carried
+    // into history; entries from before this existed don't have one.
+    jobId?: string;
     pid: string;
     status: QueueEntryStatus;
     process?: ChildProcess;
@@ -41,6 +45,8 @@ export interface QueueEntry {
     // explicitly. Used to scope WRITE_NFO_STRM (NfoWriteMode).
     source?: QueueEntrySource;
     extension?: string;
+    // What fetched it: a DownloadClient value, or STRM when only a .strm pointer was written.
+    client?: string;
     library?: QueueLibraryMetadata;
     // Path of the completed file relative to COMPLETE_DIR, set once the
     // download finishes. Persisted so history reporting stays correct even

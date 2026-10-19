@@ -6,6 +6,7 @@ import DailyRotateFile from 'winston-daily-rotate-file';
 import { dbReady, prisma } from '../service/db/prismaService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { LogLine, LogLineLevel } from '../types/LogLine';
+import activeJobs from './activeJobs';
 import configService from './configService';
 import socketService from './socketService';
 
@@ -65,6 +66,13 @@ const loggingService = {
         fileLogger.error(message);
         const logLine: LogLine = { level: LogLineLevel.ERROR, id: 'ERROR', message, timestamp: new Date() };
         loggingService.publish(logLine);
+    },
+
+    // A progress/step line for one download, shown in that download's log in the queue popup.
+    info: (pid: string, message: string, jobId?: string) => {
+        console.log(`[${pid}] ${message}`);
+        fileLogger.info(`[${pid}] ${message}`);
+        loggingService.publish({ level: LogLineLevel.INFO, id: pid, jobId: jobId ?? activeJobs.get(pid), message, timestamp: new Date() });
     },
 
     debug: (...params: any[]) => {

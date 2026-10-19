@@ -16,9 +16,9 @@ class StrmDownloadService implements AbstractDownloadService {
         return spawn(process.execPath, ['-e', 'process.exit(0)']);
     }
 
-    async postProcess(pid: string, directory: string): Promise<void> {
+    async postProcess(pid: string, directory: string, _code?: any, jobId?: string): Promise<void> {
         const streamKey: string = (await configService.getParameter(IplayarrParameter.STREAM_KEY)) as string;
-        const quality: string | undefined = queueService.getFromQueue(pid)?.library?.quality;
+        const quality: string | undefined = queueService.getFromQueue(pid, jobId)?.library?.quality;
         const content: string = await createStrmContent(pid, streamKey, quality);
         fs.writeFileSync(path.join(directory, 'stream.strm'), content, 'utf8');
     }

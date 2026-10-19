@@ -18,6 +18,10 @@ describe('videoQuality', () => {
         expect(swapQualityInName('Show.S01E01', '720p', '1080p')).toBe('Show.S01E01.1080p');
     });
 
+    it('swaps a different known quality token instead of appending (stale name)', () => {
+        expect(swapQualityInName('Show.S01E01.WEBDL.1080p-BBC', '720p', '540p')).toBe('Show.S01E01.WEBDL.540p-BBC');
+    });
+
     it('expands one variant per extra quality with scaled size', () => {
         const base = { pid: 'p1', title: 'T', nzbName: 'T.WEBDL.720p-BBC', size: 61, type: VideoType.TV } as IPlayerSearchResult;
         const out = expandQualityVariants([base], hd, [fhd, sd]);

@@ -56,6 +56,17 @@ describe('StrmDownloadService', () => {
             );
         });
 
+        it('reads the quality of the named job when the programme has several', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('k');
+            (queueService.getFromQueue as jest.Mock).mockImplementation((_pid: string, jobId?: string) => (jobId === 'job-2' ? { library: { quality: 'web' } } : undefined));
+            (createStrmContent as jest.Mock).mockResolvedValue('url');
+
+            await strmDownloadService.postProcess('abc123', '/fake/dir', 0, 'job-2');
+
+            expect(queueService.getFromQueue).toHaveBeenCalledWith('abc123', 'job-2');
+            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'k', 'web');
+        });
+
         it('bakes the queue entry\'s variant quality into the stream URL', async () => {
             (configService.getParameter as jest.Mock).mockResolvedValue('k');
             (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { quality: 'sd' } });

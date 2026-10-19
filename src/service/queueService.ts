@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 
 import downloadFacade from '../facade/downloadFacade';
 import { DownloadDetails } from '../types/DownloadDetails';
@@ -9,6 +10,7 @@ import { QueueEntry, QueueLibraryMetadata } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
 import { isValidPid, sanitizeFileName } from '../utils/pathSafety';
+import activeJobs from './activeJobs';
 import configService from './configService';
 import historyService from './historyService';
 import socketService from './socketService';
@@ -40,6 +42,7 @@ const queueService = {
         }
         nzbName = sanitizeFileName(nzbName) || pid;
         const queueEntry: QueueEntry = {
+            jobId: randomUUID(),
             pid,
             status: QueueEntryStatus.QUEUED,
             nzbName,
@@ -50,6 +53,7 @@ const queueService = {
             source,
         };
         queue.push(queueEntry);
+        activeJobs.set(pid, queueEntry.jobId as string);
         queueService.moveQueue();
 
         // "Grabs" are NZBs handed over by Sonarr/Radarr - subscription and manual downloads
@@ -83,7 +87,7 @@ const queueService = {
             next.status = QueueEntryStatus.DOWNLOADING;
             next.details = { ...next.details, start: new Date() };
             try {
-                const process = await downloadFacade.download(next.pid);
+                const process = await downloadFacade.download(next.pid, next.jobId);
                 if (queue.includes(next)) {
                     next.process = process;
                 } else if (process?.pid) {
@@ -102,39 +106,43 @@ const queueService = {
         socketService.emit('queue', queue);
     },
 
-    updateQueue: (pid: string, details: Partial<DownloadDetails>) => {
-        const index: number = queue.findIndex(({ pid: id }) => id == pid);
+    // The same programme can be downloading more than once (different resolutions), so everything below takes
+    // an optional jobId that picks out one download; without it, the pid means every download of that programme.
+    updateQueue: (pid: string, details: Partial<DownloadDetails>, jobId?: string) => {
+        const index: number = queue.findIndex((entry) => (jobId ? entry.jobId === jobId : entry.pid == pid));
         if (index > -1) {
             queue[index].details = { ...queue[index].details, ...details };
         }
         socketService.emit('queue', queue);
     },
 
-    removeFromQueue: (pid: string): void => {
-        queue = queue.filter(({ pid: id }) => id != pid);
+    removeFromQueue: (pid: string, jobId?: string): void => {
+        queue = queue.filter((entry) => !(jobId ? entry.jobId === jobId : entry.pid == pid));
+        activeJobs.clear(pid, jobId);
         queueService.moveQueue();
     },
 
-    cancelItem: (pid: string, archive: boolean = false): void => {
-        const queueItem: QueueEntry | undefined = queue.find(({ pid: id }) => id == pid);
+    cancelItem: (pid: string, archive: boolean = false, jobId?: string): void => {
+        const matches = (entry: QueueEntry): boolean => (jobId ? entry.jobId === jobId : entry.pid == pid);
+        const queueItem: QueueEntry | undefined = queue.find(matches);
         for (const item of queue) {
-            if (item.process && item.pid == pid) {
+            if (item.process && matches(item)) {
                 spawn('kill', ['-9', String(item.process.pid)]);
             }
         }
         if (archive && queueItem) {
             historyService.addArchive(queueItem);
         }
-        videoEventService.record(VideoEventType.CANCELLED, `Cancelled "${queueItem?.nzbName ?? pid}"`, { pid });
-        queueService.removeFromQueue(pid);
+        videoEventService.record(VideoEventType.CANCELLED, `Cancelled "${queueItem?.nzbName ?? pid}"`, { pid, jobId: queueItem?.jobId });
+        queueService.removeFromQueue(pid, jobId);
     },
 
     getQueue: (): QueueEntry[] => {
         return queue;
     },
 
-    getFromQueue: (pid: string): QueueEntry | undefined => {
-        return queue.find(({ pid: queuePid }) => queuePid == pid);
+    getFromQueue: (pid: string, jobId?: string): QueueEntry | undefined => {
+        return queue.find((entry) => (jobId ? entry.jobId === jobId : entry.pid == pid));
     },
 };
 

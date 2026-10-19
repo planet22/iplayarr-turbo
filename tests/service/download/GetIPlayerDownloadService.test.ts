@@ -32,7 +32,7 @@ describe('GetIplayerDownloadService', () => {
 
         const result = await getIplayerDownloadService.download(pid, directory);
 
-        expect(getIplayerExecutableService.getAllDownloadParameters).toHaveBeenCalledWith(pid, directory);
+        expect(getIplayerExecutableService.getAllDownloadParameters).toHaveBeenCalledWith(pid, directory, undefined);
         expect(spawn).toHaveBeenCalledWith(exec, args);
         expect(result).toBe(mockChildProcess);
     });

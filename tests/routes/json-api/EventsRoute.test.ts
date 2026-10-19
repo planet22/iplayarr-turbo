@@ -36,6 +36,16 @@ describe('EventsRoute', () => {
         expect((await request(app).get('/?pid=a&type=y&level=error')).body).toEqual([events[2]]);
     });
 
+    it('filters by job id, returning every event of that job', async () => {
+        const jobEvents = [
+            { pid: 'a', jobId: 'job-1', type: 'queued' },
+            { pid: 'a', jobId: 'job-1', type: 'download_complete' },
+            { pid: 'a', jobId: 'job-2', type: 'queued' },
+        ] as any[];
+        mocked.getEvents.mockResolvedValue(jobEvents);
+        expect((await request(app).get('/?jobId=job-1')).body).toEqual([jobEvents[0], jobEvents[1]]);
+    });
+
     it('DELETE / clears events', async () => {
         const res = await request(app).delete('/');
         expect(mocked.clear).toHaveBeenCalled();

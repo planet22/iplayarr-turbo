@@ -50,24 +50,24 @@ export class GetIplayerExecutableService {
         };
     }
 
-    async #getQualityParam(pid?: string): Promise<string> {
-        const chain: string[] = await this.getQualityFallbackChain(pid);
+    async #getQualityParam(pid?: string, jobId?: string): Promise<string> {
+        const chain: string[] = await this.getQualityFallbackChain(pid, jobId);
         return `--tv-quality=${chain.join(',')}`;
     }
 
     // Same preference order used for --tv-quality, exposed separately so callers that need to
     // pick a specific --streaminfo stream variant (rather than let get_iplayer itself download
     // the best available one) can walk the same fallback chain.
-    async getQualityFallbackChain(pid?: string): Promise<string[]> {
+    async getQualityFallbackChain(pid?: string, jobId?: string): Promise<string[]> {
         // A grab made from an extra-quality variant carries its own quality on the queue entry.
         const videoQuality =
-            (pid ? queueService.getFromQueue(pid)?.library?.quality : undefined) ??
+            (pid ? queueService.getFromQueue(pid, jobId)?.library?.quality : undefined) ??
             requestedQuality() ??
             ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
         return [...new Set([videoQuality, 'hd', 'sd', 'web', 'mobile'])];
     }
 
-    async getAllDownloadParameters(pid: string, directory: string): Promise<SpawnExecutable> {
+    async getAllDownloadParameters(pid: string, directory: string, jobId?: string): Promise<SpawnExecutable> {
         const { exec, args } = await this.getIPlayerExec();
         const additionalParamsString: string = (await configService.getParameter(
             IplayarrParameter.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS
@@ -77,7 +77,7 @@ export class GetIplayerExecutableService {
         const allArgs: string[] = [
             ...args,
             ...additionalParams,
-            await this.#getQualityParam(pid),
+            await this.#getQualityParam(pid, jobId),
             '--output',
             directory,
             '--overwrite',

@@ -5,6 +5,7 @@ import { timestampFile } from '../../src/constants/iPlayarrConstants';
 import downloadFacade from '../../src/facade/downloadFacade';
 import configService from '../../src/service/configService';
 import GetIplayerDownloadService from '../../src/service/download/GetIplayerDownloadService';
+import NativeDownloadService from '../../src/service/download/NativeDownloadService';
 import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
@@ -46,6 +47,11 @@ jest.mock('../../src/service/configService', () => ({
 }));
 
 jest.mock('../../src/service/download/GetIplayerDownloadService', () => ({
+    download: jest.fn(),
+    postProcess: jest.fn(),
+}));
+
+jest.mock('../../src/service/download/NativeDownloadService', () => ({
     download: jest.fn(),
     postProcess: jest.fn(),
 }));
@@ -101,9 +107,12 @@ describe('DownloadFacade', () => {
             const pidDir = '/downloads/test-pid';
 
             // Mocks
-            (configService.getParameter as jest.Mock)
-                .mockResolvedValueOnce(downloadDir) // For DOWNLOAD_DIR
-                .mockResolvedValueOnce(DownloadClient.GET_IPLAYER); // For DOWNLOAD_CLIENT
+            const values: Record<string, string> = {
+                DOWNLOAD_DIR: downloadDir,
+                DOWNLOAD_CLIENT: DownloadClient.GET_IPLAYER,
+                MEDIA_MODE: 'download',
+            };
+            (configService.getParameter as jest.Mock).mockImplementation((param: string) => Promise.resolve(values[param]));
 
             const mockChildProcess = {
                 stdout: { on: jest.fn() },
@@ -129,6 +138,48 @@ describe('DownloadFacade', () => {
             expect(mockChildProcess.on).toHaveBeenCalledWith('close', expect.any(Function));
 
             expect(result).toBe(mockChildProcess);
+        });
+
+        it('handles a progress line with no size (~N/A) without throwing', async () => {
+            const values: Record<string, string> = { DOWNLOAD_DIR: '/downloads', DOWNLOAD_CLIENT: DownloadClient.NATIVE, MEDIA_MODE: 'download' };
+            (configService.getParameter as jest.Mock).mockImplementation((param: string) => Promise.resolve(values[param]));
+            const child = { stdout: { on: jest.fn() }, stderr: { on: jest.fn() }, on: jest.fn() };
+            (NativeDownloadService.download as jest.Mock).mockResolvedValue(child);
+            jest.spyOn(console, 'log').mockImplementation(() => undefined);
+
+            await downloadFacade.download('test-pid');
+            const onData = child.stdout.on.mock.calls.find(([event]) => event === 'data')?.[1];
+            expect(() => onData(Buffer.from('10.0% of ~N/A @ 2.00MB/s ETA: 00:01:00 [audio+video]\n'))).not.toThrow();
+
+            expect(queueService.updateQueue).toHaveBeenCalledWith('test-pid', expect.objectContaining({ progress: 10, size: 0, speed: 2, eta: '00:01:00' }), undefined);
+        });
+
+        it.each([undefined, '', 'SOMETHING_ELSE'])('falls back to NativeDownloadService when DOWNLOAD_CLIENT is %p', async (client) => {
+            const values: Record<string, string | undefined> = { DOWNLOAD_DIR: '/downloads', DOWNLOAD_CLIENT: client, MEDIA_MODE: 'download' };
+            (configService.getParameter as jest.Mock).mockImplementation((param: string) => Promise.resolve(values[param]));
+            const child = { stdout: { on: jest.fn() }, stderr: { on: jest.fn() }, on: jest.fn() };
+            (NativeDownloadService.download as jest.Mock).mockResolvedValue(child);
+
+            await downloadFacade.download('test-pid');
+
+            expect(NativeDownloadService.download).toHaveBeenCalledWith('test-pid', '/downloads/test-pid');
+            expect(GetIplayerDownloadService.download).not.toHaveBeenCalled();
+        });
+
+        it('selects NativeDownloadService when DOWNLOAD_CLIENT is NATIVE', async () => {
+            const values: Record<string, string> = {
+                DOWNLOAD_DIR: '/downloads',
+                DOWNLOAD_CLIENT: DownloadClient.NATIVE,
+                MEDIA_MODE: 'download',
+            };
+            (configService.getParameter as jest.Mock).mockImplementation((param: string) => Promise.resolve(values[param]));
+            const child = { stdout: { on: jest.fn() }, stderr: { on: jest.fn() }, on: jest.fn() };
+            (NativeDownloadService.download as jest.Mock).mockResolvedValue(child);
+
+            await downloadFacade.download('test-pid');
+
+            expect(NativeDownloadService.download).toHaveBeenCalledWith('test-pid', '/downloads/test-pid');
+            expect(GetIplayerDownloadService.download).not.toHaveBeenCalled();
         });
     });
 

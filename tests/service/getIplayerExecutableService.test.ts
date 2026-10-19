@@ -44,6 +44,13 @@ describe('GetIplayerExecutableService', () => {
             expect(await service.getQualityFallbackChain('p0abc123')).toEqual(['sd', 'hd', 'web', 'mobile']);
         });
 
+        it('reads the quality of the named job when the programme has several', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('hd');
+            queueService.getFromQueue = jest.fn().mockImplementation((_pid: string, jobId?: string) => (jobId === 'job-2' ? { library: { quality: 'web' } } : undefined));
+            expect((await service.getQualityFallbackChain('p0abc123', 'job-2'))[0]).toBe('web');
+            expect(queueService.getFromQueue).toHaveBeenCalledWith('p0abc123', 'job-2');
+        });
+
         it('falls back to VIDEO_QUALITY with no queue entry', async () => {
             mockedConfigService.getParameter.mockResolvedValue('fhd');
             queueService.getFromQueue = jest.fn().mockReturnValue(undefined);
