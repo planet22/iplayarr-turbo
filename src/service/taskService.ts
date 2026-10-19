@@ -6,6 +6,7 @@ import cronJobService from './cronJobService';
 import DbCacheService from './db/dbCacheService';
 import episodeCacheService from './episodeCacheService';
 import libraryCleanupService from './libraryCleanupService';
+import liveTvService from './liveTvService';
 import streamSessionService from './stream/streamSessionService';
 import strmWatchdogService from './strmWatchdogService';
 import subscriptionService from './subscriptionService';
@@ -33,6 +34,20 @@ class TaskService {
                     downloadFacade.cleanupFailedDownloads(),
                 ]);
             }
+        );
+
+        // Live TV guide refresh - every 6 hours at :25. The day schedules behind the Jellyfin guide
+        // are cached for 8 hours; refreshing them before they expire means Jellyfin never waits on
+        // the BBC. Does nothing unless Live TV is enabled.
+        await cronJobService.defineTask(
+            {
+                id: 'guide-refresh',
+                label: 'Live TV Guide Refresh',
+                description: 'Re-fetches the BBC schedules behind the Jellyfin guide before their cache expires.',
+                cron: '25 */6 * * *',
+                minIntervalMinutes: 60,
+            },
+            () => liveTvService.refreshGuide()
         );
 
         // Subscriptions - hourly at :17 (off the hour, away from the schedule refresh). Fixed

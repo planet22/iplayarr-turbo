@@ -213,8 +213,11 @@ export function dedupeRails(rails: BrowseRail[]): BrowseRail[] {
 }
 
 class BrowseService {
-    shortCache: DbCacheService<any> = new DbCacheService('browse_short', 900, { label: 'Browse (listings)', description: 'Fast-changing iPlayer listings: highlights, schedules, recently added.' });
+    shortCache: DbCacheService<any> = new DbCacheService('browse_short', 900, { label: 'Browse (listings)', description: 'Fast-changing iPlayer listings: highlights, recently added.' });
     longCache: DbCacheService<any> = new DbCacheService('browse_long', 86400, { label: 'Browse (static)', description: 'Slow-changing iPlayer data: categories, channel logos, skip markers.' });
+
+    // Day schedules barely change once published, and "now" is worked out per request, so they live much longer than other listings.
+    scheduleCache: DbCacheService<any> = new DbCacheService('browse_schedule', 60 * 60 * 8, { label: 'Browse (day schedules)', description: 'The schedule of each channel for a day, behind the guide grid, now/next and the Jellyfin guide.' });
 
     async #ibl(path: string, cache: DbCacheService<any> = this.shortCache): Promise<any> {
         return cache.getOr(path, async () => {
@@ -432,7 +435,7 @@ class BrowseService {
             const day = new Date(at.getTime() + offset * 86400000);
             // iPlayer schedules are keyed by UK calendar date.
             const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
-            const data = await this.#ibl(`channels/${encodeURIComponent(channelId)}/schedule/${date}`);
+            const data = await this.#ibl(`channels/${encodeURIComponent(channelId)}/schedule/${date}`, this.scheduleCache);
             for (const broadcast of extractElements(data)) {
                 const slot = toBrowseSlot(broadcast);
                 if (slot) slots.push(slot);
@@ -452,18 +455,36 @@ class BrowseService {
     }
 
     // Every channel's full day, for the multi-channel guide grid. Reuses the same per-channel,
-    // per-date IBL path nowNext() hits, so it rides the same 15-minute cache.
-    async schedule(date?: string): Promise<BrowseChannelSchedule[]> {
-        const day = date ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
+    // per-date IBL path nowNext() hits, so it rides the same 8-hour schedule cache.
+    async #shownChannels(): Promise<BrowseChannel[]> {
         const shown: BrowseChannel[] = [];
         for (const channel of BrowseChannels) {
             // Channels switched off on the Channels page drop out of the guide grid too.
             if (!isLiveChannel(channel.id) || (await liveChannelService.isEnabled(channel.id))) shown.push(channel);
         }
+        return shown;
+    }
+
+    // Re-fetches one day's schedule for every shown channel and overwrites the cached copy, so the
+    // guide never goes cold. A channel that fails keeps its previous cache entry.
+    async refreshSchedule(day: string): Promise<void> {
+        const shown = await this.#shownChannels();
+        await Promise.allSettled(
+            shown.map(async (channel) => {
+                const path = `channels/${encodeURIComponent(channel.id)}/schedule/${day}`;
+                const response = await axios.get(`${IBL_BASE}/${path}`);
+                await this.scheduleCache.set(path, response.data);
+            })
+        );
+    }
+
+    async schedule(date?: string): Promise<BrowseChannelSchedule[]> {
+        const day = date ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
+        const shown = await this.#shownChannels();
         const settled = await Promise.allSettled(
             shown.map(async (channel): Promise<BrowseChannelSchedule> => {
                 const slots: BrowseSlot[] = [];
-                const data = await this.#ibl(`channels/${encodeURIComponent(channel.id)}/schedule/${day}`);
+                const data = await this.#ibl(`channels/${encodeURIComponent(channel.id)}/schedule/${day}`, this.scheduleCache);
                 for (const broadcast of extractElements(data)) {
                     const slot = toBrowseSlot(broadcast);
                     if (slot) slots.push(slot);

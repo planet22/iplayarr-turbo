@@ -204,15 +204,29 @@ class LiveTvService {
         return lines.join('\n') + '\n';
     }
 
+    #guideDays(): string[] {
+        const days: string[] = [];
+        for (let offset = -GUIDE_DAYS_BEFORE; offset <= GUIDE_DAYS_AFTER; offset++) {
+            days.push(ukDate(offset));
+        }
+        return days;
+    }
+
+    // Scheduled refresh of the day schedules behind the guide, so a Jellyfin guide fetch is always
+    // served from cache. One day at a time, like epg(), to keep the BBC connections happy.
+    async refreshGuide(): Promise<void> {
+        if (!(await this.isEnabled())) return;
+        for (const day of this.#guideDays()) {
+            await browseService.refreshSchedule(day);
+        }
+    }
+
     async epg(): Promise<string> {
         const { baseUrl, streamKey } = await this.#keyAndBase();
         const channels = await this.channels();
         const offset = await this.epgOffsetMinutes();
         const guide = await this.guideOptions();
-        const days: string[] = [];
-        for (let offset = -GUIDE_DAYS_BEFORE; offset <= GUIDE_DAYS_AFTER; offset++) {
-            days.push(ukDate(offset));
-        }
+        const days = this.#guideDays();
         // One day at a time: each day is already a request per channel, and firing a whole week at
         // the BBC at once gets TLS connections dropped. Responses are cached either way.
         const schedules: Awaited<ReturnType<typeof browseService.schedule>> = [];
