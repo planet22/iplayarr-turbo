@@ -1,73 +1,69 @@
 <template>
     <div class="browsePage">
-        <PageHeader :title="isChannels ? 'Channels' : 'Categories'">
-            <button
-                v-if="isChannels && editing && !loading && !error && tiles.some((t) => t.live)"
-                type="button"
-                class="addAll"
-                :title="
-                    allSubscribed
-                        ? 'Remove every live channel from the library'
-                        : 'Subscribe to all live channels (adds them to the library)'
-                "
-                :disabled="allBusy"
-                @click="allSubscribed ? confirmUnsubscribeAll() : subscribeAll()"
-            >
-                <font-awesome-icon
-                    :icon="['fas', allBusy ? 'circle-notch' : allSubscribed ? 'bell-slash' : 'bell']"
-                    :spin="allBusy"
-                />
-                {{ allSubscribed ? 'Unsubscribe all' : 'Subscribe all' }}
-            </button>
-            <button
-                v-if="isChannels && editing && liveTvEnabled && !loading && !error && tiles.some((t) => t.live)"
-                type="button"
-                class="addAll"
-                :title="
-                    allLiveTv
-                        ? 'Take every channel out of Jellyfin Live TV'
-                        : 'Offer every live channel to Jellyfin Live TV'
-                "
-                :disabled="isLiveTvBusy('all')"
-                @click="allLiveTv ? liveTvClear() : liveTvAddAll()"
-            >
-                <font-awesome-icon
-                    :icon="['fas', isLiveTvBusy('all') ? 'circle-notch' : 'tv']"
-                    :spin="isLiveTvBusy('all')"
-                />
-                {{ allLiveTv ? 'Live TV none' : 'Live TV all' }}
-            </button>
-            <button
-                v-if="!isChannels && !loading && !error"
-                type="button"
-                :class="['addAll', 'editToggle', featuring ? 'active' : '']"
-                :title="featuring ? 'Done' : 'Choose which categories are featured on Discover'"
-                @click="featuring = !featuring"
-            >
-                <font-awesome-icon :icon="['fas', featuring ? 'check' : 'compass']" />
-                {{ featuring ? 'Done' : 'Discover' }}
-            </button>
-            <button
-                v-if="isChannels && !loading && !error"
-                type="button"
-                :class="['addAll', 'editToggle', arranging ? 'active' : '']"
-                :title="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'"
-                @click="toggleArranging"
-            >
-                <font-awesome-icon :icon="['fas', arranging ? 'check' : 'grip']" />
-                {{ arranging ? 'Done' : 'Arrange' }}
-            </button>
-            <button
-                v-if="isChannels && !arranging && !loading && !error && tiles.some((t) => t.live)"
-                type="button"
-                :class="['addAll', 'editToggle', editing ? 'active' : '']"
-                :title="editing ? 'Done editing' : 'Edit library and Live TV channels'"
-                @click="editing = !editing"
-            >
-                <font-awesome-icon :icon="['fas', editing ? 'check' : 'pen']" />
-                {{ editing ? 'Done' : 'Edit' }}
-            </button>
-        </PageHeader>
+        <PageHeader :title="isChannels ? 'Channels' : 'Categories'" />
+        <SettingsPageToolbar>
+            <template #actions>
+                <button
+                    v-if="isChannels && editing && !loading && !error && tiles.some((t) => t.live)"
+                    type="button"
+                    :title="
+                        allSubscribed
+                            ? 'Remove every live channel from the library'
+                            : 'Subscribe to all live channels (adds them to the library)'
+                    "
+                    :disabled="allBusy"
+                    @click="allSubscribed ? confirmUnsubscribeAll() : subscribeAll()"
+                >
+                    <font-awesome-icon
+                        :icon="['fas', allBusy ? 'circle-notch' : allSubscribed ? 'bell-slash' : 'bell']"
+                        :spin="allBusy"
+                    />
+                </button>
+                <button
+                    v-if="isChannels && editing && liveTvEnabled && !loading && !error && tiles.some((t) => t.live)"
+                    type="button"
+                    :title="
+                        allLiveTv
+                            ? 'Take every channel out of Jellyfin Live TV'
+                            : 'Offer every live channel to Jellyfin Live TV'
+                    "
+                    :disabled="isLiveTvBusy('all')"
+                    @click="allLiveTv ? liveTvClear() : liveTvAddAll()"
+                >
+                    <font-awesome-icon
+                        :icon="['fas', isLiveTvBusy('all') ? 'circle-notch' : 'tv']"
+                        :spin="isLiveTvBusy('all')"
+                    />
+                </button>
+                <button
+                    v-if="!isChannels && !loading && !error"
+                    type="button"
+                    :class="{ enabled: featuring }"
+                    :title="featuring ? 'Done' : 'Choose which categories are featured on Discover'"
+                    @click="featuring = !featuring"
+                >
+                    <font-awesome-icon :icon="['fas', featuring ? 'check' : 'compass']" />
+                </button>
+                <button
+                    v-if="isChannels && !loading && !error"
+                    type="button"
+                    :class="{ enabled: arranging }"
+                    :title="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'"
+                    @click="toggleArranging"
+                >
+                    <font-awesome-icon :icon="['fas', arranging ? 'check' : 'grip']" />
+                </button>
+                <button
+                    v-if="isChannels && !arranging && !loading && !error && tiles.some((t) => t.live)"
+                    type="button"
+                    :class="{ enabled: editing }"
+                    :title="editing ? 'Done editing' : 'Edit library and Live TV channels'"
+                    @click="editing = !editing"
+                >
+                    <font-awesome-icon :icon="['fas', editing ? 'check' : 'pen']" />
+                </button>
+            </template>
+        </SettingsPageToolbar>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
         <InfoBar v-if="arranging && !loading && !error">
@@ -236,6 +232,7 @@ import { useRoute } from 'vue-router';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
@@ -429,42 +426,9 @@ watch(
 </script>
 
 <style lang="less" scoped>
-// Title and Add all share one line (including on mobile) - the title block's own bottom margin
-// moves to the row so the button stays vertically centred on the heading.
-.tilesHeader {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 1rem;
-
-    // Needs h1 + class to outrank global.less's `h1.browseTitle` bottom margin, which would
-    // otherwise push the heading above the button's centre line.
-    h1.browseTitle {
-        margin: 0;
-    }
-
-    .addAll {
-        margin-left: auto;
-        padding: 6px 14px;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-        cursor: pointer;
-        white-space: nowrap;
-
-        svg {
-            margin-right: 6px;
-        }
-
-        &:hover:not(:disabled) {
-            background-color: @settings-button-hover-background-color;
-        }
-    }
-}
-
-.editToggle.active {
-    border-color: @brand-color;
+// The toolbar sits under the title bar; keep a gap before the tiles.
+.browsePage :deep(.SettingsPageToolbar) {
+    margin-bottom: 12px;
 }
 
 .tileGrid {
@@ -472,7 +436,12 @@ watch(
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 12px;
 
+    // Three across on tablets, two on phones.
     @media (max-width: @mobile-breakpoint) {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    @media (max-width: 480px) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }

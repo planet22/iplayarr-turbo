@@ -1,5 +1,5 @@
 <template>
-    <div class="inner-content">
+    <div class="inner-content statsPage">
         <PageHeader title="Statistics" />
         <SettingsPageToolbar
             :icons="['filter']" :filter-enabled="range != 'All'" :filter-options="availableRanges"
@@ -437,6 +437,56 @@ const selectRange = (option) => {
             font-size: 16px;
             font-weight: 400;
             color: @primary-text-color;
+        }
+    }
+}
+
+// Phones: lighter cards and smaller figures, so the numbers do not dominate the screen. Scoped to this page
+// because the Watchdog page's own (global) .statRow rules would otherwise win on the shared class names.
+@media (max-width: @mobile-breakpoint) {
+    .statsPage {
+        .statRow {
+            gap: 0.6rem;
+            margin-bottom: 1.25rem;
+
+            .statCard {
+                flex-basis: 100%;
+                min-width: 0;
+                gap: 12px;
+                padding: 10px 14px;
+
+                &.sparkline {
+                    gap: 6px;
+
+                    .statCardHeader {
+                        gap: 12px;
+                    }
+                }
+
+                .statIcon {
+                    font-size: 20px;
+                    width: 24px;
+                }
+
+                .statLabel {
+                    font-size: 11px;
+                }
+
+                .statValue {
+                    font-size: 20px;
+                }
+            }
+        }
+
+        .chartRow {
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+
+            .chartCard {
+                flex-basis: 100%;
+                min-width: 0;
+                padding: 12px;
+            }
         }
     }
 }

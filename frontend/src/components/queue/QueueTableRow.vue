@@ -37,24 +37,36 @@
                     <div class="cardMeta">
                         <font-awesome-icon :class="[item.status, 'statusIcon']" :icon="['fas', getDownloadIcon(item)]" />
                         <span :class="['pill', item.type]">{{ item.type }}</span>
-                        <span v-if="clientLabel && clientLabel != '-'">{{ clientLabel }}</span>
-                        <span v-if="outputLabel">{{ outputLabel }}</span>
-                        <span v-if="item.details.size">{{ formatStorageSize(item.details.size) }}</span>
-                        <span v-if="getAppForId(item.appId)" class="appDisplay">
-                            <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />
-                            {{ getAppForId(item.appId).name }}
-                        </span>
+                        <font-awesome-icon v-if="clientIcon" class="clientIcon" :icon="clientIcon" :title="clientLabel" />
+                        <font-awesome-icon
+                            v-if="outputLabel"
+                            class="clientIcon"
+                            :icon="['fas', outputLabel == 'STRM' ? 'link' : 'file-video']"
+                            :title="outputLabel == 'STRM' ? 'STRM link' : 'File'"
+                        />
                     </div>
                 </div>
-                <div class="cardProgress">
-                    <ProgressBar :progress="barProgress" :status="item.status" :label="barLabel" />
-                </div>
-                <div class="cardFoot">
-                    <span class="subtle">
-                        {{ formatDate(item.details.start, 'short', 'short') }}
-                        <template v-if="item.details.speed"> · {{ item.details.speed }} MB/s</template>
-                        <template v-if="item.details.eta"> · ETA {{ item.details.eta }}</template>
+                <div class="cardDetails">
+                    <span v-if="item.details.size" title="Size">
+                        <font-awesome-icon :icon="['fas', 'hard-drive']" />{{ formatStorageSize(item.details.size) }}
                     </span>
+                    <span v-if="getAppForId(item.appId)" title="App" class="appDisplay">
+                        <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />{{ getAppForId(item.appId).name }}
+                    </span>
+                    <span v-if="item.details.speed" title="Speed">
+                        <font-awesome-icon :icon="['fas', 'gauge-high']" />{{ item.details.speed }} MB/s
+                    </span>
+                    <span v-if="item.details.eta" title="ETA">
+                        <font-awesome-icon :icon="['fas', 'hourglass-half']" />{{ item.details.eta }}
+                    </span>
+                    <span v-if="item.details.start" title="Start">
+                        <font-awesome-icon :icon="['fas', 'calendar']" />{{ formatDate(item.details.start, 'short', 'short') }}
+                    </span>
+                </div>
+                <div class="cardProgress">
+                    <div class="cardBar">
+                        <ProgressBar :progress="barProgress" :status="item.status" :label="barLabel" />
+                    </div>
                     <span class="cardActions">
                         <font-awesome-icon class="clickable" :icon="['fas', 'play']" title="Play Video" @click="preview(item)" />
                         <font-awesome-icon class="clickable" :icon="['fas', getDeleteIcon(item)]" @click="deleteRow(item)" />
@@ -192,6 +204,9 @@ const barLabel = computed(() => {
 
 const clientLabels = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'Native', STRM: '-' };
 const clientLabel = computed(() => clientLabels[props.item.client] ?? '');
+// Card view shows the client as an icon (its label is the tooltip); STRM has none - the output icon says it.
+const clientIcons = { GET_IPLAYER: ['fas', 'terminal'], YTDLP: ['fab', 'youtube'], NATIVE: ['fas', 'bolt'] };
+const clientIcon = computed(() => clientIcons[props.item.client] ?? null);
 // A .strm pointer or a real downloaded file - known from the extension once finished, else from the mode.
 const outputLabel = computed(() => {
     if (props.item.extension) return props.item.extension == 'strm' ? 'STRM' : 'File';
@@ -288,11 +303,15 @@ const getDeleteIcon = ({ status }) => {
 }
 
 .card {
+    flex: 1 1 auto;
+    min-width: 0;
     display: grid;
     grid-template-columns: auto 96px minmax(0, 1fr);
-    gap: 8px 10px;
+    // Spare height goes to the details row, which keeps the progress bar at the bottom of the card.
+    grid-template-rows: auto 1fr auto;
+    gap: 6px 10px;
     align-items: start;
-    padding: 10px;
+    padding: 8px 10px;
     background-color: @nav-active-background-color;
     border-radius: 6px;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
@@ -331,10 +350,31 @@ const getDeleteIcon = ({ status }) => {
         margin-top: 4px;
         color: @table-text-color;
 
-        .appDisplay {
+        .clientIcon {
+            font-size: 15px;
+            color: @subtle-text-color;
+        }
+    }
+
+    // Every table column as an icon + value (the icon's tooltip names it); empty values are left out.
+    .cardDetails {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 12px;
+        font-size: 12px;
+        color: @table-text-color;
+
+        > span {
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 5px;
+            white-space: nowrap;
+        }
+
+        svg {
+            color: @subtle-text-color;
         }
 
         .appImg {
@@ -342,20 +382,21 @@ const getDeleteIcon = ({ status }) => {
         }
     }
 
-    .cardProgress,
-    .cardFoot {
+    // The bar fills the row and the action icons sit at its end.
+    .cardProgress {
         grid-column: 1 / -1;
-    }
-
-    .cardFoot {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 10px;
+        gap: 12px;
+
+        .cardBar {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
 
         .cardActions {
             display: inline-flex;
-            gap: 18px;
+            gap: 16px;
             font-size: 16px;
             // Easier to hit with a thumb.
             padding: 2px 4px;

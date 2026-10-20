@@ -1,12 +1,16 @@
 <template>
+    <div class="browsePage programmeHeader">
+        <SettingsPageToolbar />
+    </div>
     <LoadingIndicator v-if="loading" />
     <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
     <template v-else-if="programme">
         <div class="programmeBanner">
             <div class="bannerBackdrop" :style="bannerStyle" />
-            <div class="programmeBannerContent">
+            <div :class="['programmeBannerContent', posterUrl ? 'hasPoster' : '']">
                 <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
                 <div class="programmeText">
+                <div class="programmeHead">
                 <h1>{{ programme.title }}</h1>
                 <div class="programmeMeta">
                     <span :class="['pill', 'grey']">
@@ -22,6 +26,7 @@
                             <font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" />Link
                         </a>
                     </span>
+                </div>
                 </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>
                 <div v-if="programme.kind !== 'episode' || subscription" class="subscribeRow">
@@ -90,7 +95,7 @@
                         <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
                         Loading more episodes… ({{ loadedCount }} so far)
                     </span>
-                    <button class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
+                    <button :class="['clickable', 'seasonDownload', duplicatesBannerDownload ? 'hideMobile' : '']" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
                         <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-download']" :spin="downloadingSeason" />
                         Download {{ programme.seasons.length > 1 ? seasonLabel(programme.seasons[selected]) : 'all' }}
                         ({{ episodes.length }})
@@ -106,7 +111,21 @@
                                 <span v-if="getSeriesEpisodeLabel(episode)" class="episodeLabel">{{ getSeriesEpisodeLabel(episode) }}</span>
                                 {{ episode.episodeTitle || episode.title }}
                             </div>
-                            <div v-if="episode.description" class="episodeDescription">{{ episode.description }}</div>
+                            <div
+                                v-if="episode.description"
+                                :ref="(el) => measureDescription(el, episode.pid)"
+                                :class="['episodeDescription', openDescriptions[episode.pid] ? 'open' : '', clampedDescriptions[episode.pid] ? 'clamped' : '']"
+                                @click="toggleDescription(episode.pid)"
+                            >
+                                {{ episode.description }}
+                            </div>
+                            <a
+                                v-if="clampedDescriptions[episode.pid] || openDescriptions[episode.pid]"
+                                class="descriptionToggle clickable"
+                                @click="toggleDescription(episode.pid)"
+                            >
+                                {{ openDescriptions[episode.pid] ? 'less' : '… more' }}
+                            </a>
                             <div class="episodeDetails">
                                 <span v-if="episode.runtime">{{ roundUpMinutes(episode.runtime) }} min</span>
                                 <span v-if="episode.firstBroadcast">{{ formatDate(episode.firstBroadcast) }}</span>
@@ -129,12 +148,13 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
@@ -212,6 +232,20 @@ const episodes = computed(() => [...(programme.value?.seasons[selected.value]?.e
 const {
     page: episodePage, pageSize: episodePageSize, pagedItems: pagedEpisodes,
 } = usePagination(episodes);
+
+// Episode descriptions are clamped to three lines; a "... more" link (or a tap on the text) opens the rest.
+const openDescriptions = reactive({});
+const clampedDescriptions = reactive({});
+const toggleDescription = (pid) => {
+    if (clampedDescriptions[pid] || openDescriptions[pid]) openDescriptions[pid] = !openDescriptions[pid];
+};
+// Called whenever the row renders: note whether the clamp is actually cutting text off. An opened
+// description keeps its flag, so the "less" link stays.
+const measureDescription = (el, pid) => {
+    if (!el || openDescriptions[pid]) return;
+    clampedDescriptions[pid] = el.scrollHeight > el.clientHeight + 1;
+};
+
 const selectSeason = (index) => {
     selected.value = index;
     episodePage.value = 1;
@@ -331,9 +365,23 @@ watch(
     },
     { immediate: true }
 );
+
+// On a phone the banner's "Download all" and the season bar's would sit a screen apart, doing the same thing.
+const duplicatesBannerDownload = computed(
+    () => programme.value?.seasons.length === 1 && (programme.value.kind !== 'episode' || !!subscription.value)
+);
 </script>
 
 <style lang="less" scoped>
+// The toolbar sits straight above the banner: the page padding below it is dropped so the gap is just 12px.
+.programmeHeader {
+    padding-bottom: 0;
+
+    :deep(.SettingsPageToolbar) {
+        margin-bottom: 12px;
+    }
+}
+
 .programmeBanner {
     background-color: @nav-background-color;
     background-size: cover;
@@ -424,11 +472,81 @@ watch(
 }
 
 .subscribeRow {
+    // Buttons keep their natural width; the gap is the same 10px between them in both directions.
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 10px;
+    gap: 10px;
     margin-top: 14px;
+
+    // Phone width: two columns share the full width; an odd button out spans the whole row.
+    @media (max-width: 600px) {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+
+        > .subscribeButton {
+            padding: 9px 8px;
+            font-size: 14px;
+            text-align: center;
+
+            &:last-child:nth-child(odd) {
+                grid-column: 1 / -1;
+            }
+        }
+    }
+}
+
+// Phones: poster beside the title and pills, then the synopsis and buttons across the full width,
+// instead of everything squeezed into the narrow column right of the poster.
+@media (max-width: @mobile-breakpoint) {
+    .programmeBanner .programmeBannerContent {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        gap: 12px;
+        padding: 1rem;
+
+        &:not(.hasPoster) {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .poster {
+            width: 112px;
+            flex-basis: auto;
+        }
+
+        .programmeText {
+            display: contents;
+        }
+
+        .programmeHead {
+            min-width: 0;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .programmeMeta {
+            margin-bottom: 0;
+            gap: 6px;
+
+            .pill.grey,
+            .pill.channelPill {
+                font-size: 13px;
+            }
+        }
+
+        p,
+        .subscribeRow {
+            grid-column: 1 / -1;
+            margin: 0;
+        }
+
+        p {
+            font-size: 14px;
+        }
+    }
 }
 
 .subscribeButton {
@@ -468,6 +586,20 @@ watch(
     justify-content: flex-end;
     gap: 14px;
     margin-bottom: 4px;
+
+    @media (max-width: @mobile-breakpoint) {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+
+        .seasonDownload {
+            padding: 9px 14px;
+
+            &.hideMobile {
+                display: none;
+            }
+        }
+    }
 
     .loadingMore {
         color: @subtle-text-color;
@@ -553,6 +685,25 @@ watch(
             display: block;
             color: @subtle-text-color;
             font-size: 12px;
+        }
+
+        .descriptionToggle {
+            display: inline-block;
+            margin-top: 2px;
+            font-size: 12px;
+            color: @brand-color;
+        }
+
+        .episodeDescription.clamped,
+        .episodeDescription.open {
+            cursor: pointer;
+        }
+
+        .episodeDescription.open {
+            display: block;
+            overflow: visible;
+            -webkit-line-clamp: unset;
+            line-clamp: unset;
         }
 
         .episodeDescription {

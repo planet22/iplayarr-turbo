@@ -1,6 +1,9 @@
 <template>
     <div class="inner-content scroll-x">
         <PageHeader title="Recent Searches" />
+        <div class="viewToggleRow">
+            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
+        </div>
         <SettingsPageToolbar
             :icons="['delete', 'filterToggle']" delete-label="Clear searches"
             :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
@@ -12,7 +15,24 @@
             </template>
         </SettingsPageToolbar>
         <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
-        <table class="dataTable responsive-table">
+        <div v-if="cardView" class="cardList">
+            <DataCard v-for="(entry, index) in pagedSearches" :key="index">
+                <template #title>{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</template>
+                <template v-if="entry.series != null || entry.episode != null" #subtitle>
+                    {{ [entry.series != null ? `Season ${entry.series}` : '', entry.episode != null ? `Episode ${entry.episode}` : ''].filter(Boolean).join(' · ') }}
+                </template>
+                <template #chips>
+                    <span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span>
+                    <a v-if="entry.hasDetail" class="clickable" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
+                    <span v-else>{{ resultsLabel(entry) }}</span>
+                </template>
+                <template #foot>
+                    <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
+                </template>
+            </DataCard>
+            <div v-if="sortedSearches.length == 0" class="empty">No searches recorded yet</div>
+        </div>
+        <table v-else class="dataTable">
             <colgroup>
                 <col style="width: 36ch" />
                 <col style="width: 10ch" />
@@ -82,7 +102,35 @@
             </template>
         </SettingsPageToolbar>
         <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
-        <table class="dataTable streamsTable responsive-table">
+        <div v-if="cardView" class="cardList">
+            <DataCard v-for="(entry, index) in pagedGrabs" :key="index">
+                <template #thumb>
+                    <img
+                        v-if="getProgrammeThumbnailUrl(entry.pid)"
+                        class="clickable"
+                        :src="getProgrammeThumbnailUrl(entry.pid)"
+                        @click="openInfo(entry.pid)"
+                        @error="hideBrokenImage"
+                    />
+                    <div v-else class="thumbnail-placeholder"></div>
+                </template>
+                <template #title>
+                    <a class="clickable" @click="openInfo(entry.pid)">{{ detailsFor(entry.pid)?.title ?? entry.nzbName }}</a>
+                </template>
+                <template v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" #subtitle>
+                    {{ [detailsFor(entry.pid)?.channel, seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
+                </template>
+                <template #chips>
+                    <span class="pill">{{ entry.type }}</span>
+                </template>
+                <template #foot>
+                    <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
+                    <span>{{ entry.pid }}</span>
+                </template>
+            </DataCard>
+            <div v-if="sortedGrabs.length == 0" class="empty">No grabs recorded yet</div>
+        </div>
+        <table v-else class="dataTable streamsTable">
             <colgroup>
                 <col style="width: 70px" />
                 <col style="width: 14ch" />
@@ -155,7 +203,21 @@
             </template>
         </SettingsPageToolbar>
         <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="sortedFailedGrabs.length" />
-        <table class="dataTable responsive-table">
+        <div v-if="cardView" class="cardList">
+            <DataCard v-for="(entry, index) in pagedFailedGrabs" :key="index">
+                <template #title>{{ entry.nzbName }}</template>
+                <template #chips>
+                    <span class="pill error">Failed</span>
+                </template>
+                <template v-if="entry.error">{{ entry.error }}</template>
+                <template #foot>
+                    <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
+                    <span>{{ entry.pid }}</span>
+                </template>
+            </DataCard>
+            <div v-if="sortedFailedGrabs.length == 0" class="empty">No failed grabs</div>
+        </div>
+        <table v-else class="dataTable">
             <colgroup>
                 <col style="width: 14ch" />
                 <col />
@@ -203,11 +265,13 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import DataCard from '@/components/common/DataCard.vue';
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
+import ViewToggle from '@/components/common/ViewToggle.vue';
 import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
@@ -215,9 +279,18 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
+import { useViewMode } from '@/lib/useViewMode';
 import {
     formatDateTimeWithMillis, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage,
 } from '@/lib/utils';
+
+// Cards on phones (dense tables), tables on wide screens; either can be chosen and is remembered.
+const { viewMode, setViewMode } = useViewMode('iplayarr.nzbViewMode', {
+    modes: ['table', 'cards'],
+    desktop: 'table',
+    mobile: 'cards',
+});
+const cardView = computed(() => viewMode.value === 'cards');
 
 const searchHistory = ref([]);
 const grabHistory = ref([]);

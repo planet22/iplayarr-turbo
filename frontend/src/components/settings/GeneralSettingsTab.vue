@@ -63,6 +63,24 @@
         tooltip="Show an HDR or Ultra HD badge where iPlayer lists it. It is only a label: iPlayarr streams HD at most."
         :options="trueOrFalse"
     />
+    <SelectInput
+        v-model="topBarMode"
+        name="Top Bar on Phones"
+        tooltip="Slim keeps the top bar (menu, search) on screen while you scroll. Hide on scroll gives it back when you scroll up."
+        :options="TOP_BAR_MODES"
+    />
+    <SelectInput
+        v-model="infoMessagesEnabled"
+        name="Show Info Messages"
+        tooltip="Show the blue explanatory notes at the top of pages. Warnings and errors always show."
+        :options="trueOrFalse"
+    />
+    <TextInput
+        v-model="pagingMinimumText"
+        type-override="number"
+        name="Items Before Paging"
+        tooltip="A list only shows page controls when it has more items than this. Set 0 to always show them."
+    />
 
     <template v-if="showAdvanced">
         <SettingsSubheading text="Schedule" />
@@ -95,7 +113,10 @@ import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import { useChannelPillColors } from '@/lib/channelPillColors';
+import { useInfoMessages } from '@/lib/infoMessages';
+import { usePagingMinimum } from '@/lib/pagingMinimum';
 import { useQualityBadges } from '@/lib/qualityBadges';
+import { TOP_BAR_MODES, useTopBar } from '@/lib/topBar';
 
 defineProps({
     trueOrFalse: {
@@ -119,6 +140,24 @@ const { state: pillColors, setEnabled: setPillColorsEnabled } = useChannelPillCo
 const pillColorsEnabled = computed({
     get: () => String(pillColors.enabled),
     set: (value) => setPillColorsEnabled(value === 'true'),
+});
+
+const { state: topBar, setMode: setTopBarMode } = useTopBar();
+const topBarMode = computed({
+    get: () => topBar.mode,
+    set: (value) => setTopBarMode(value),
+});
+
+const { state: infoMessages, setEnabled: setInfoMessagesEnabled } = useInfoMessages();
+const infoMessagesEnabled = computed({
+    get: () => String(infoMessages.enabled),
+    set: (value) => setInfoMessagesEnabled(value === 'true'),
+});
+
+const { state: pagingMinimum, setMinimum: setPagingMinimum } = usePagingMinimum();
+const pagingMinimumText = computed({
+    get: () => String(pagingMinimum.minimum),
+    set: (value) => setPagingMinimum(parseInt(value, 10)),
 });
 
 const { state: qualityBadges, setEnabled: setQualityBadgesEnabled } = useQualityBadges();

@@ -1,14 +1,19 @@
 <template>
-    <div class="SettingsPageToolbar">
+    <div ref="rootEl" :class="['SettingsPageToolbar', inlineFilters ? 'inlineFilters' : '']">
         <div>
+            <button v-if="canGoBack && isFirstToolbar" class="SettingsPageToolbar-button clickable" title="Back" aria-label="Back" @click="goBack">
+                <font-awesome-icon :icon="['fas', 'arrow-left']" />
+            </button>
+            <slot name="nav" />
             <button
                 v-if="icons.some((i) => i == 'filterToggle')"
                 :class="['SettingsPageToolbar-button clickable', filtersActive ? 'enabled' : '']"
                 :aria-pressed="filtersShown"
+                title="Filter"
+                aria-label="Filter"
                 @click="emit('toggleFilters')"
             >
                 <font-awesome-icon :icon="['fas', 'filter']" />
-                <div class="SettingsPageToolbar-label">Filter</div>
             </button>
             <div v-if="$slots.filters" class="SettingsPageToolbar-filters">
                 <slot name="filters" />
@@ -17,34 +22,42 @@
                 v-if="icons.some((i) => i == 'save')"
                 :class="['SettingsPageToolbar-button clickable', saveEnabled ? 'needsSave' : '']"
                 :disabled="!saveEnabled"
+                :title="saveEnabled ? 'Save changes' : 'No changes'"
+                :aria-label="saveEnabled ? 'Save changes' : 'No changes'"
                 @click="emit('save')"
             >
                 <font-awesome-icon :icon="['fas', 'floppy-disk']" />
-                <div class="SettingsPageToolbar-label">{{ saveEnabled ? 'Save' : 'No' }} Changes</div>
+                <div v-if="!iconOnly" class="SettingsPageToolbar-label">{{ saveEnabled ? 'Save' : 'No' }} Changes</div>
             </button>
             <button
                 v-if="icons.some((i) => i == 'advanced')"
                 class="SettingsPageToolbar-button clickable"
+                title="Toggle advanced settings"
+                aria-label="Toggle advanced settings"
                 @click="emit('toggleAdvanced')"
             >
                 <font-awesome-icon :icon="['fas', 'cog']" />
-                <div class="SettingsPageToolbar-label">Toggle Advanced</div>
+                <div v-if="!iconOnly" class="SettingsPageToolbar-label">Toggle Advanced</div>
             </button>
             <button
                 v-if="icons.some((i) => i == 'download')"
                 class="SettingsPageToolbar-button clickable"
+                title="Download"
+                aria-label="Download"
                 @click="emit('download')"
             >
                 <font-awesome-icon :icon="['fas', 'download']" />
-                <div class="SettingsPageToolbar-label">Download</div>
+                <div v-if="!iconOnly" class="SettingsPageToolbar-label">Download</div>
             </button>
             <button
                 v-if="icons.some((i) => i == 'follow')"
                 class="SettingsPageToolbar-button clickable"
+                :title="followStatus ? 'Following' : 'Not following'"
+                :aria-label="followStatus ? 'Following' : 'Not following'"
                 @click="emit('toggleFollow')"
             >
                 <font-awesome-icon :icon="['fas', followStatus ? 'person-walking' : 'person']" />
-                <div class="SettingsPageToolbar-label">
+                <div v-if="!iconOnly" class="SettingsPageToolbar-label">
                     {{ followStatus ? 'Following' : 'Not Following' }}
                 </div>
             </button>
@@ -52,31 +65,37 @@
                 v-if="icons.some((i) => i == 'run')"
                 :class="['SettingsPageToolbar-button clickable', running ? 'enabled' : '']"
                 :disabled="runDisabled"
+                :title="running ? stopLabel : runLabel"
+                :aria-label="running ? stopLabel : runLabel"
                 @click="emit(running ? 'stop' : 'run')"
             >
                 <font-awesome-icon :icon="['fas', running ? 'stop' : 'play']" />
-                <div class="SettingsPageToolbar-label">{{ running ? stopLabel : runLabel }}</div>
+                <div v-if="!iconOnly" class="SettingsPageToolbar-label">{{ running ? stopLabel : runLabel }}</div>
             </button>
             <button
                 v-if="icons.some((i) => i == 'refresh')"
                 class="SettingsPageToolbar-button clickable"
                 :disabled="refreshDisabled"
-                :title="refreshTitle"
+                :title="refreshTitle || (iconOnly ? refreshLabel : undefined)"
+                :aria-label="refreshTitle || refreshLabel || 'Refresh'"
                 @click="emit('refresh')"
             >
                 <font-awesome-icon :icon="['fas', 'arrows-rotate']" :spin="refreshing" />
-                <div class="SettingsPageToolbar-label">{{ refreshLabel }}</div>
+                <div v-if="refreshLabel && !iconOnly" class="SettingsPageToolbar-label">{{ refreshLabel }}</div>
             </button>
             <button
                 v-if="icons.some((i) => i == 'arrImport')"
                 class="SettingsPageToolbar-button clickable"
+                title="Arr import"
+                aria-label="Arr import"
                 @click="emit('arrImport')"
             >
                 <font-awesome-icon :icon="['fas', 'hat-wizard']" />
-                <div class="SettingsPageToolbar-label">Arr Import</div>
+                <div v-if="!iconOnly" class="SettingsPageToolbar-label">Arr Import</div>
             </button>
         </div>
         <div>
+            <slot name="actions" />
             <button
                 v-if="icons.some((i) => i == 'delete')"
                 class="SettingsPageToolbar-button clickable"
@@ -91,19 +110,21 @@
                 v-if="icons.some((i) => i == 'clear')"
                 class="SettingsPageToolbar-button clickable"
                 :disabled="clearDisabled"
-                :title="clearTitle"
+                :title="clearTitle || (iconOnly ? clearLabel : undefined)"
+                :aria-label="clearLabel"
                 @click="emit('clear')"
             >
                 <font-awesome-icon :icon="['fas', 'trash-can']" />
-                <div class="SettingsPageToolbar-label">{{ clearLabel }}</div>
+                <div v-if="!iconOnly" class="SettingsPageToolbar-label">{{ clearLabel }}</div>
             </button>
             <template v-if="icons.some((i) => i == 'filter')">
                 <button
                     :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
+                    title="Filter"
+                    aria-label="Filter"
                     @click="toggleFilter"
                 >
                     <font-awesome-icon :icon="['fas', 'filter']" />
-                    <div class="SettingsPageToolbar-label">Filter</div>
                 </button>
                 <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown">
                     <ul>
@@ -128,7 +149,9 @@
 </template>
 
 <script setup>
-import { defineEmits, defineProps, onBeforeUnmount, ref } from 'vue';
+import { defineEmits, defineProps, onBeforeUnmount, onMounted, ref } from 'vue';
+
+import { toolbarCount, useBackNav } from '@/lib/useBackNav';
 
 const emit = defineEmits([
     'save',
@@ -144,10 +167,33 @@ const emit = defineEmits([
     'refresh',
     'clear',
 ]);
+const { canGoBack, goBack } = useBackNav();
+// A page can have several toolbars (one per section); only the first carries the Back button.
+const rootEl = ref(null);
+const isFirstToolbar = ref(false);
+onMounted(() => {
+    isFirstToolbar.value = document.querySelector('.SettingsPageToolbar') === rootEl.value;
+    toolbarCount.value++;
+});
+onBeforeUnmount(() => toolbarCount.value--);
+
 const showFilterDropdown = ref(false);
 const dropdownDiv = ref(null);
 
 defineProps({
+    // Buttons show just their icon, with the label as the tooltip. On by default so every page's toolbar
+    // matches; pass :icon-only="false" to bring the words back.
+    iconOnly: {
+        type: Boolean,
+        required: false,
+        default: true,
+    },
+    // Phones: keep the filter boxes on the same row as the buttons instead of dropping them onto their own row.
+    inlineFilters: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     saveEnabled: {
         type: Boolean,
         required: false,
@@ -316,8 +362,11 @@ const handleClickOutside = (event) => {
             width: auto;
             white-space: nowrap;
             background-color: transparent;
-            border: 0px;
-            min-height: 44px;
+            // A faint outline, like the round icon buttons on the cards.
+            border: 1px solid @settings-button-border-color;
+            border-radius: 4px;
+            margin: 6px 3px;
+            min-height: 32px;
 
             &:hover {
                 svg {
@@ -464,6 +513,13 @@ const handleClickOutside = (event) => {
         .SettingsPageToolbar-filters {
             order: 3;
             padding: 0 0 8px;
+        }
+
+        &.inlineFilters .SettingsPageToolbar-filters {
+            order: 0;
+            flex: 1 1 0;
+            min-width: 0;
+            padding: 6px 0 6px 6px;
         }
     }
 }

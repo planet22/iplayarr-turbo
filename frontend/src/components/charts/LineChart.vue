@@ -25,6 +25,9 @@ const props = defineProps({
     }
 });
 
+// Phones: a smaller, regular-weight title (the default is a big bold Arial).
+const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
+
 const chartSeries = computed(() => {
     return props.series.map(({ name, data }) => ({
         name,
@@ -104,6 +107,7 @@ const options = computed(() => ({
     },
     grid: {
         borderColor: '#444'
-    }
+    },
+    responsive: [{ breakpoint: 600, options: { title: { style: PHONE_TITLE }, legend: { fontSize: '12px' } } }]
 }));
 </script>

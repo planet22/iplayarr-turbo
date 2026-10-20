@@ -1,19 +1,21 @@
 <template>
     <div ref="strip" class="settingsTabs">
         <button
-v-for="tab in tabs" :key="tab.key" type="button"
+v-for="tab in tabs" :key="tab.key" type="button" :title="tab.label" :aria-label="tab.label"
             :class="['settingsTab', modelValue === tab.key ? 'active' : '', errorTabs.includes(tab.key) ? 'hasError' : '', dirtyTabs.includes(tab.key) ? 'dirty' : '']"
             @click="emit('update:modelValue', tab.key)">
             <font-awesome-icon v-if="tab.icon" :icon="['fas', tab.icon]" class="tabIcon" />
-            {{ tab.label }}
+            <span class="tabLabel">{{ tab.label }}</span>
             <span v-if="errorTabs.includes(tab.key)" class="tabFlag" title="This tab has a setting that needs fixing">!</span>
             <span v-else-if="dirtyTabs.includes(tab.key)" class="tabFlag" title="Unsaved changes on this tab">&bull;</span>
         </button>
     </div>
+    <!-- Phones: the tabs are icons only, so the open tab's name goes on its own line under the strip. -->
+    <div class="settingsTabTitle">{{ activeLabel }}</div>
 </template>
 
 <script setup>
-import { defineEmits, defineProps, nextTick, ref, watch } from 'vue';
+import { computed, defineEmits, defineProps, nextTick, ref, watch } from 'vue';
 
 const props = defineProps({
     tabs: {
@@ -37,6 +39,8 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
+const activeLabel = computed(() => props.tabs.find((tab) => tab.key === props.modelValue)?.label ?? '');
+
 // On phones the tabs are one scrolling row; keep the selected one in view.
 const strip = ref(null);
 watch(
@@ -49,6 +53,10 @@ watch(
 </script>
 
 <style lang="less">
+.settingsTabTitle {
+    display: none;
+}
+
 .settingsTabs {
     display: flex;
     flex-wrap: wrap;
@@ -115,7 +123,32 @@ watch(
             flex: none;
             white-space: nowrap;
             padding: 10px 12px;
+
+            // Icons only: the open tab's name is shown under the strip (.settingsTabTitle).
+            .tabLabel {
+                display: none;
+            }
+
+            .tabIcon {
+                margin-right: 0;
+                font-size: 18px;
+            }
         }
+    }
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .settingsTabs {
+        margin-bottom: 0.75rem;
+    }
+
+    .settingsTabTitle {
+        display: block;
+        margin: 0 5px 1rem;
+        padding-left: 11px;
+        font-size: 16px;
+        font-weight: 500;
+        color: @primary-text-color;
     }
 }
 </style>

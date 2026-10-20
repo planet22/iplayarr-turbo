@@ -9,6 +9,9 @@ const props = defineProps({ title: String, data: Object });
 
 const MAX_ITEMS = 5;
 
+// Phones: a smaller, regular-weight title (the default is a big bold Arial).
+const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
+
 const processedData = computed(() => {
     const entries = Object.entries(props.data)
         .sort((a, b) => b[1] - a[1]);
@@ -76,6 +79,7 @@ const options = computed(() => {
         legend: {
             show: false
         },
+        responsive: [{ breakpoint: 600, options: { title: { style: PHONE_TITLE } } }],
         tooltip: {
             theme: 'dark'
         }

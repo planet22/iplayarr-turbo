@@ -35,6 +35,11 @@ const emit = defineEmits(['update:modelValue']);
     display: inline-flex;
     gap: 6px;
 
+    // On phones the layout is fixed to the card/poster view (see useViewMode), so there is nothing to choose.
+    @media (max-width: @mobile-breakpoint) {
+        display: none;
+    }
+
     button {
         display: flex;
         align-items: center;

@@ -1,5 +1,6 @@
 <template>
     <IPlayarrModal
+        compact
         :title="`${action} Synonym`"
         :show-close="true"
         close-label="Cancel"

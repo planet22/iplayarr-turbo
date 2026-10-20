@@ -1,5 +1,5 @@
 <template>
-    <div :class="['infoPanel', clazz]" role="note">
+    <div v-if="!hidden" :class="['infoPanel', clazz]" role="note">
         <font-awesome-icon class="infoIcon" :icon="['fas', icon]" />
         <div class="infoText"><slot /></div>
     </div>
@@ -8,12 +8,22 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
+import { useInfoMessages } from '@/lib/infoMessages';
+
 const props = defineProps({
     // info | success | warning | danger (optionally with "small")
     clazz: {
         type: String,
         default: 'info',
     },
+});
+
+// The blue info kind can be switched off in Settings; the other kinds always show.
+const { state: infoMessages } = useInfoMessages();
+const hidden = computed(() => {
+    const kinds = props.clazz.split(' ');
+    const isInfo = !['danger', 'warning', 'success'].some((kind) => kinds.includes(kind));
+    return isInfo && !infoMessages.enabled;
 });
 
 const icon = computed(() => {

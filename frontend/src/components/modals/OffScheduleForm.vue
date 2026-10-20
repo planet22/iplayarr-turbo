@@ -1,5 +1,6 @@
 <template>
     <IPlayarrModal
+        compact
         :title="`${action} Cache Definition`"
         :show-close="true"
         close-label="Cancel"

@@ -15,7 +15,18 @@
             <span v-if="trace.cached" class="pill" title="Served from the 5 minute search cache">Cached</span>
         </div>
         <TablePagination v-if="itemsTotalPages > 1" v-model="itemsPage" v-model:page-size="itemsPageSize" :total="items.length" />
-        <table class="resultsTable responsive-table">
+        <div v-if="isMobile" class="cardList">
+            <DataCard v-for="(item, index) of pagedItems" :key="index">
+                <template #title>{{ item.title }}</template>
+                <template #chips><span class="pill">{{ item.type }}</span></template>
+                <template #foot>
+                    <span>{{ formatDate(item.pubDate) }}</span>
+                    <span>{{ formatStorageSize(item.size) }}</span>
+                </template>
+            </DataCard>
+            <p v-if="items.length == 0" class="empty">No results were returned for this search</p>
+        </div>
+        <table v-else class="resultsTable responsive-table">
             <thead>
                 <tr>
                     <th>Title</th>
@@ -41,7 +52,16 @@
         <template v-if="rejected.length">
             <h3 class="traceHeading">Filtered out ({{ rejected.length }})</h3>
             <TablePagination v-if="rejectedTotalPages > 1" v-model="rejectedPage" v-model:page-size="rejectedPageSize" :total="rejected.length" />
-            <table class="resultsTable responsive-table">
+            <div v-if="isMobile" class="cardList">
+                <DataCard v-for="(candidate, index) of pagedRejected" :key="index">
+                    <template #title>{{ candidate.title }}</template>
+                    <template #chips>
+                        <span class="pill">{{ stageLabels[candidate.stage] ?? candidate.stage }}</span>
+                    </template>
+                    <template #default>{{ candidate.detail ?? reasonLabels[candidate.reason] ?? candidate.reason }}</template>
+                </DataCard>
+            </div>
+            <table v-else class="resultsTable responsive-table">
                 <thead>
                     <tr>
                         <th>Title</th>
@@ -67,6 +87,8 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
+import DataCard from '@/components/common/DataCard.vue';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { formatDate, formatStorageSize } from '@/lib/utils';
 
@@ -85,6 +107,7 @@ const props = defineProps({
     },
 });
 
+const isMobile = useIsMobile();
 const stageLabels = { bbc: 'BBC search', episode: 'Episode', schedule: 'Schedule' };
 const reasonLabels = {
     'no-match': 'No search word matches this title',

@@ -3,7 +3,16 @@
         <LoadingIndicator v-if="loading" />
         <div v-if="!loading" class="arrLookup">
             <TextInput v-if="showFilter" v-model="filterText" placeholder="Filter" />
-            <table class="resultsTable responsive-table">
+            <div v-if="isMobile" class="cardList">
+                <DataCard v-for="result of computedResults" :key="result.id">
+                    <template #title>{{ result.title }}</template>
+                    <template #foot>
+                        <span />
+                        <a class="clickable" @click="emit('select', result)"> Select </a>
+                    </template>
+                </DataCard>
+            </div>
+            <table v-else class="resultsTable responsive-table">
                 <thead>
                     <tr>
                         <th>Result</th>
@@ -31,12 +40,15 @@
 <script setup>
 import { computed, defineEmits, defineProps, onMounted, ref } from 'vue';
 
+import DataCard from '@/components/common/DataCard.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import { useIsMobile } from '@/lib/useIsMobile';
 
 import TextInput from '../common/form/TextInput.vue';
 import LoadingIndicator from '../common/LoadingIndicator.vue';
 import IPlayarrModal from './IPlayarrModal.vue';
 
+const isMobile = useIsMobile();
 const results = ref([]);
 const emit = defineEmits(['select', 'error']);
 const props = defineProps({

@@ -5,10 +5,14 @@
             <h2 v-if="details.episodeTitle || subtitle">
                 {{ details.episodeTitle ?? subtitle }}
             </h2>
-            <div v-if="details.category" class="seriesDetails">
-                <span v-if="roundUpMinutes(details.runtime)">{{ roundUpMinutes(details.runtime) }} Minutes</span>
-                <span>{{ details.category }}</span>
-                <span>{{ formatDate(details.firstBroadcast, 'full', 'long') }}</span>
+            <div v-if="details.category" class="seriesDetails factRow">
+                <span v-if="roundUpMinutes(details.runtime)" title="Duration">
+                    <font-awesome-icon :icon="['fas', 'clock']" />{{ roundUpMinutes(details.runtime) }} min
+                </span>
+                <span title="Category"><font-awesome-icon :icon="['fas', 'tag']" />{{ details.category }}</span>
+                <span title="First broadcast">
+                    <font-awesome-icon :icon="['fas', 'calendar']" />{{ formatDate(details.firstBroadcast, ...broadcastDateStyle) }}
+                </span>
             </div>
             <div v-if="details.category" class="seriesDetails pillRow">
                 <span :class="['pill', 'grey']">
@@ -41,6 +45,7 @@
 import { computed, defineProps, inject, ref, watch } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { formatDate, getThumbnailUrl, roundUpMinutes } from '@/lib/utils';
 
 import ChannelPill from './ChannelPill.vue';
@@ -88,6 +93,10 @@ const props = defineProps({
         default: false,
     },
 });
+
+// A long date ("Monday, 19 October 2026 at 12:30:00 am GMT-4") wraps badly in a phone-width popup.
+const isMobile = useIsMobile();
+const broadcastDateStyle = computed(() => (props.compact && isMobile.value ? ['medium', 'short'] : ['full', 'long']));
 
 const resolvedType = computed(() => props.type ?? details.value.type);
 
@@ -203,6 +212,25 @@ const fixCasing = (str) => {
         font-size: 17px;
 
         margin-right: 0 !important;
+    }
+}
+
+// Duration / category / date, each led by an icon so they read as separate facts.
+.seriesDetails.factRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+
+    span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-right: 0;
+    }
+
+    svg {
+        opacity: 0.75;
+        font-size: 0.85em;
     }
 }
 

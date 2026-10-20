@@ -141,11 +141,6 @@ const heroStyle = computed(() => {
             gap: 8px;
             margin-top: 12px;
         }
-
-        .heroButton {
-            padding: 6px 12px;
-            font-size: 14px;
-        }
     }
 
     .heroButton {
@@ -168,6 +163,30 @@ const heroStyle = computed(() => {
         &.primary {
             background-color: @brand-color;
             border-color: @brand-color;
+        }
+    }
+
+    // Phones (declared after .heroButton so it wins): Play / Download / More info share one row.
+    @media (max-width: @mobile-breakpoint) {
+        .heroActions {
+            flex-wrap: nowrap;
+        }
+
+        .heroButton {
+            flex: 1 1 0;
+            min-width: 0;
+            justify-content: center;
+            gap: 5px;
+            padding: 8px 4px;
+            font-size: 14px;
+            white-space: nowrap;
+
+            // Very narrow phones: keep all three in the row.
+            @media (max-width: 360px) {
+                gap: 4px;
+                padding: 8px 2px;
+                font-size: 13px;
+            }
         }
     }
 }

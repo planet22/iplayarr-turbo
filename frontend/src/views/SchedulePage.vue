@@ -1,30 +1,33 @@
 <template>
     <div class="browsePage schedulePage">
-        <PageHeader title="Guide">
-            <template #center>
-            <div class="dateNav">
-                <button type="button" @click="shiftDay(-1)"><font-awesome-icon :icon="['fas', 'chevron-left']" /></button>
-                <span class="currentDate">{{ dateLabel }}</span>
-                <button type="button" @click="shiftDay(1)"><font-awesome-icon :icon="['fas', 'chevron-right']" /></button>
-                <button v-if="!isToday" type="button" class="todayButton" @click="goToday">Today</button>
-            </div>
-            </template>
-            <div class="zoomNav">
-                <button
-                    type="button" :class="['zoneButton', useLocalTime ? 'active' : '']" :title="zoneTooltip"
-                    @click="toggleZone"
-                >
-                    <font-awesome-icon :icon="['fas', 'globe']" />
-                    <span>{{ useLocalTime ? 'Local' : 'UK' }}</span>
+        <PageHeader :title="`Guide - ${dateLabel}`" />
+        <SettingsPageToolbar>
+            <template #nav>
+                <button type="button" title="Previous day" aria-label="Previous day" @click="shiftDay(-1)">
+                    <font-awesome-icon :icon="['fas', 'chevron-left']" />
                 </button>
-                <button type="button" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
+                <button type="button" title="Next day" aria-label="Next day" @click="shiftDay(1)">
+                    <font-awesome-icon :icon="['fas', 'chevron-right']" />
+                </button>
+                <button v-if="!isToday" type="button" title="Today" aria-label="Today" @click="goToday">
+                    <font-awesome-icon :icon="['fas', 'calendar-day']" />
+                </button>
+            </template>
+            <template #actions>
+                <button
+                    type="button" :title="zoneTooltip"
+                    :aria-label="zoneTooltip" @click="toggleZone"
+                >
+                    <font-awesome-icon :icon="['fas', useLocalTime ? 'location-dot' : 'crown']" />
+                </button>
+                <button type="button" aria-label="Zoom out" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
                 </button>
-                <button type="button" :disabled="pxPerMinute >= ZOOM_MAX" @click="zoomIn">
+                <button type="button" aria-label="Zoom in" :disabled="pxPerMinute >= ZOOM_MAX" @click="zoomIn">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" />
                 </button>
-            </div>
-        </PageHeader>
+            </template>
+        </SettingsPageToolbar>
         <LoadingIndicator v-if="loading" />
         <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
         <InfoBar v-else-if="channels.length === 0">Nothing scheduled for this day.</InfoBar>
@@ -82,6 +85,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { browseFetch } from '@/lib/browse';
 import { getThumbnailUrl } from '@/lib/utils';
 
@@ -389,59 +393,9 @@ onBeforeUnmount(() => {
     }
 }
 
-.dateNav,
-.zoomNav {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-
-    button {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-        cursor: pointer;
-
-        &:hover:not(:disabled) {
-            border-color: @brand-color;
-        }
-
-        &:disabled {
-            opacity: 0.4;
-            cursor: default;
-        }
-    }
-}
-
-.zoomNav .zoneButton {
-    width: auto;
-    gap: 6px;
-    padding: 0 10px;
-    font-size: 13px;
-
-    &.active {
-        border-color: @brand-color;
-    }
-}
-
-.dateNav {
-    .todayButton {
-        width: auto;
-        padding: 0 12px;
-        font-size: 13px;
-    }
-
-    .currentDate {
-        min-width: 150px;
-        text-align: center;
-        font-size: 15px;
-        font-weight: 600;
-    }
+// The buttons take the toolbar's own look; only the spacing under the bar needs styling here.
+.schedulePage :deep(.SettingsPageToolbar) {
+    margin-bottom: 12px;
 }
 
 @row-height: 64px;

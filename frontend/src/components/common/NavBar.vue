@@ -1,5 +1,5 @@
 <template>
-    <div class="NavBar">
+    <div :class="['NavBar', barHidden ? 'barHidden' : '']">
         <div class="left">
             <div class="logoPanel">
                 <RouterLink to="/browse">
@@ -12,7 +12,7 @@ v-if="authState.user" class="mobileOnly clickable burgerMenu" :icon="['fas', 'ba
             </div>
         </div>
         <div class="middle">
-            <div v-if="authState.user" class="searchPanel">
+            <div v-if="authState.user && route.name !== 'search'" class="searchPanel">
                 <font-awesome-icon :icon="['fas', 'search']" />
                 <div class="searchWrap">
                     <input
@@ -52,11 +52,12 @@ v-if="authState.user && versionLabel" class="versionLabel desktopOnly"
 import { getBasePath } from '@/lib/utils';
 
 const logoUrl = `${getBasePath()}/iplayarr.png`;
-import { computed, defineExpose, inject, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineExpose, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useTopBar } from '@/lib/topBar';
 import { getPidFromBBCUrl } from '@/lib/utils';
 
 const route = useRoute();
@@ -166,7 +167,31 @@ const onEnter = () => {
     }
 };
 
-onBeforeUnmount(() => clearTimeout(suggestTimer));
+// Top Bar on Phones "auto": slide the bar away while scrolling down, bring it back on any scroll up.
+const { state: topBar } = useTopBar();
+const barHidden = ref(false);
+let lastScrollY = 0;
+const onScroll = () => {
+    const y = Math.max(0, window.scrollY);
+    const phone = window.matchMedia('(max-width: 768px)').matches;
+    if (topBar.mode !== 'auto' || !phone || y < 60) {
+        barHidden.value = false;
+    } else if (y > lastScrollY + 8) {
+        barHidden.value = true;
+    } else if (y < lastScrollY - 8) {
+        barHidden.value = false;
+    }
+    lastScrollY = y;
+};
+onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }));
+watch(() => topBar.mode, () => {
+    barHidden.value = false;
+});
+
+onBeforeUnmount(() => {
+    clearTimeout(suggestTimer);
+    window.removeEventListener('scroll', onScroll);
+});
 
 const search = async () => {
     closeSuggestions();
@@ -195,11 +220,11 @@ defineExpose({ clearSearch });
     display: flex;
     padding: 0px 20px;
     background-color: @nav-background-color;
-    height: 60px;
+    height: var(--navbar-height, 60px);
     z-index: 2;
     position: relative;
 
-    @media (min-width: @mobile-breakpoint) {
+    @media (min-width: @desktop-breakpoint) {
         position: sticky;
         top: 0;
     }
@@ -210,13 +235,13 @@ defineExpose({ clearSearch });
         }
 
         &.left {
-            @media (min-width: @mobile-breakpoint) {
+            @media (min-width: @desktop-breakpoint) {
                 flex: 0 0 210px;
             }
         }
 
         &.middle {
-            @media (min-width: @mobile-breakpoint) {
+            @media (min-width: @desktop-breakpoint) {
                 flex: 1;
                 justify-content: flex-start;
             }
@@ -250,7 +275,7 @@ defineExpose({ clearSearch });
                     // dropdown to the viewport instead of the box.
                     @media (max-width: @mobile-breakpoint) {
                         position: fixed;
-                        top: 60px;
+                        top: var(--navbar-height, 60px);
                         left: 8px;
                         right: 8px;
                         min-width: 0;
@@ -316,7 +341,7 @@ defineExpose({ clearSearch });
         }
 
         &.right {
-            @media (min-width: @mobile-breakpoint) {
+            @media (min-width: @desktop-breakpoint) {
                 flex: 0 0 auto;
             }
 
@@ -338,7 +363,7 @@ defineExpose({ clearSearch });
 
             a {
                 width: 30px;
-                height: 60px;
+                height: var(--navbar-height, 60px);
                 text-align: center;
                 display: flex;
                 align-items: center;
@@ -347,7 +372,7 @@ defineExpose({ clearSearch });
     }
 
     .logoPanel {
-        height: 60px;
+        height: var(--navbar-height, 60px);
         display: flex;
         align-items: center;
 

@@ -7,7 +7,8 @@
             </div>
             <div class="details">
                 <span class="ttlEditor">
-                    Cron
+                    <span class="keepLabel">Cron</span>
+                    <font-awesome-icon class="keepIcon" :icon="['fas', 'calendar-days']" title="Cron schedule" />
                     <input
                         v-model="entry.draft"
                         class="cronInput"
@@ -42,8 +43,8 @@
                 :disabled="task.running || busy"
                 @click="emit('run', task)"
             >
-                <font-awesome-icon :icon="['fas', 'rotate']" :spin="task.running || busy" />
-                Run Now
+                <font-awesome-icon :icon="['fas', task.running || busy ? 'circle-notch' : 'play']" :spin="task.running || busy" />
+                <span class="btnText">Run Now</span>
             </button>
         </div>
     </div>

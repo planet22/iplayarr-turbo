@@ -1,7 +1,32 @@
 <template>
     <div class="inner-content scroll-x">
         <PageHeader title="Active Streams" />
-        <table class="dataTable streamsTable responsive-table">
+        <div class="viewToggleRow">
+            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
+        </div>
+        <div v-if="cardView" class="cardList">
+            <StreamCard
+                v-for="session in streams.active"
+                :key="session.id"
+                :session="session"
+                :history="false"
+                :thumbnail="thumbnailFor(session)"
+                :title="session.title ?? detailsFor(session.pid)?.title ?? session.pid"
+                :subtitle="[detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ')"
+                :mode="modeLabel(session)"
+                :client-ip="formatClientIp(session.clientIp)"
+                :started="formatDate(session.startedAt)"
+                :duration="formatDuration(session.startedAt, null)"
+                :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
+                :now="now"
+                :stopping="stopping.has(session.id)"
+                @info="openInfo(session)"
+                @stop="stopStream(session)"
+                @segments="openSegments(session)"
+            />
+            <div v-if="streams.active.length == 0" class="empty">No streams currently playing</div>
+        </div>
+        <table v-else class="dataTable streamsTable">
             <colgroup>
                 <col style="width: 70px" />
                 <!-- A fixed px width, not a bare flexible <col/> - under table-layout:fixed a
@@ -117,7 +142,29 @@
         <PageHeader title="Stream History" />
         <SettingsPageToolbar :icons="['delete']" delete-label="Clear stream history" @delete-queue-item="clearHistory" />
         <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
-        <table class="dataTable streamsTable responsive-table">
+        <div v-if="cardView" class="cardList">
+            <StreamCard
+                v-for="session in pagedHistory"
+                :key="session.id"
+                :session="session"
+                :history="true"
+                :thumbnail="thumbnailFor(session)"
+                :title="session.title ?? detailsFor(session.pid)?.title ?? session.pid"
+                :subtitle="[detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ')"
+                :mode="modeLabel(session)"
+                :client-ip="formatClientIp(session.clientIp)"
+                :started="formatDate(session.startedAt)"
+                :duration="formatDuration(session.startedAt, session.endedAt)"
+                :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
+                :now="now"
+                :stopping="stopping.has(session.id)"
+                @info="openInfo(session)"
+                @stop="stopStream(session)"
+                @segments="openSegments(session)"
+            />
+            <div v-if="reversedHistory.length == 0" class="empty">No streaming history yet</div>
+        </div>
+        <table v-else class="dataTable streamsTable">
             <colgroup>
                 <col style="width: 70px" />
                 <col style="width: 200px" />
@@ -227,10 +274,12 @@ import { useModal } from 'vue-final-modal';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import ViewToggle from '@/components/common/ViewToggle.vue';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { useViewMode } from '@/lib/useViewMode';
 import {
 formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
@@ -239,9 +288,18 @@ import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
 import SettingsChips from '../components/streaming/SettingsChips.vue';
+import StreamCard from '../components/streaming/StreamCard.vue';
 import ThroughputSpark from '../components/streaming/ThroughputSpark.vue';
 
 const streams = inject('streams');
+
+// Cards on phones (16 columns do not fit), table on wide screens; either can be chosen and is remembered.
+const { viewMode, setViewMode } = useViewMode('iplayarr.streamsViewMode', {
+    modes: ['table', 'cards'],
+    desktop: 'table',
+    mobile: 'cards',
+});
+const cardView = computed(() => viewMode.value === 'cards');
 
 const stopping = ref(new Set());
 

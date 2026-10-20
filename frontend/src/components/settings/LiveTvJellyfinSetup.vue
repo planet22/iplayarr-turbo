@@ -117,6 +117,11 @@ onMounted(async () => {
         margin: 0 0 0.75rem 266px;
         font-weight: bold;
         font-size: 14px;
+
+        // The 266px lines the name up with the fields on desktop; on a phone the fields start at the edge.
+        @media (max-width: @mobile-breakpoint) {
+            margin-left: 0;
+        }
     }
 }
 

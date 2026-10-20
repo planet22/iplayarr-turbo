@@ -43,7 +43,8 @@
                     <span class="pill primary count">{{ cache.count.toLocaleString() }} {{ cache.count === 1 ? 'item' : 'items' }}</span>
                     <span class="pill grey size">{{ formatSize(cache.sizeBytes) }}</span>
                     <span class="ttlEditor">
-                        Keep for
+                        <span class="keepLabel">Keep for</span>
+                        <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
                         <input
                             v-model.number="ttlDraft[cache.prefix].value"
                             type="number"
@@ -63,7 +64,7 @@
             <div class="rowActions">
                 <button class="clickable" title="Delete everything in this cache" :disabled="cacheBusy[cache.prefix]" @click="clearCache(cache)">
                     <font-awesome-icon :icon="['fas', 'trash']" />
-                    Clear
+                    <span class="btnText">Clear</span>
                 </button>
             </div>
         </div>
@@ -77,7 +78,8 @@
                     <span class="count"></span>
                     <span class="size"></span>
                     <span class="ttlEditor">
-                        Keep for
+                        <span class="keepLabel">Keep for</span>
+                        <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
                         <input
                             v-model="config.STREAM_HISTORY_RETENTION_DAYS"
                             :class="{ changed: changedKeys.has('STREAM_HISTORY_RETENTION_DAYS') }"
@@ -229,6 +231,15 @@ onMounted(() => {
     }
 }
 
+// "Keep for" and "Cron" are shown as an icon (the words are its tooltip).
+.keepLabel {
+    display: none;
+}
+
+.keepIcon {
+    flex: 0 0 auto;
+}
+
 .ttlEditor {
     flex: 0 0 auto;
     min-width: 230px;
@@ -330,6 +341,121 @@ onMounted(() => {
                 background-color: @settings-button-hover-background-color;
             }
         }
+    }
+}
+
+// Phones: each cache and scheduled task becomes a card. The name and its action button share a header row, with
+// the details (counts, "Keep for", cron, status) underneath; .info is flattened so its parts join the card's grid.
+@media (max-width: @mobile-breakpoint) {
+    .taskRow {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px 10px;
+        margin-bottom: 8px;
+        padding: 10px 12px;
+        border-bottom: 0;
+        border-radius: 6px;
+        background-color: @nav-active-background-color;
+        box-shadow: 0 0 10px 1px @primary-box-shadow;
+
+        .info {
+            display: contents;
+
+            .label {
+                grid-column: 1;
+                grid-row: 1;
+                font-size: 14px;
+            }
+
+            .details {
+                grid-column: 1 / -1;
+                grid-row: 2;
+                margin-top: 0;
+            }
+
+            .cacheOk,
+            .cacheError {
+                grid-column: 1 / -1;
+                grid-row: 3;
+                margin-top: 0;
+            }
+        }
+
+        .rowActions {
+            grid-column: 2;
+            grid-row: 1;
+
+            button {
+                padding: 5px 10px;
+                font-size: 13px;
+            }
+        }
+    }
+
+    .cacheDetails {
+        flex-wrap: wrap;
+
+        .count,
+        .size {
+            min-width: 0;
+            text-align: left;
+        }
+
+        // Stream History has no counts: do not leave an empty gap where they would be.
+        .count:empty,
+        .size:empty {
+            display: none;
+        }
+
+        // Items, size and "Keep for" share one line; the editor sits at the right so it lines up from card to
+        // card. A "Reset to default" link (only on an overridden cache) takes the line below.
+        gap: 6px;
+
+        .pill {
+            font-size: 11px;
+            padding: 2px 6px;
+        }
+
+        .ttlEditor {
+            flex: 0 0 auto;
+            flex-wrap: nowrap;
+            gap: 4px;
+
+            input {
+                width: 52px;
+                padding: 2px 6px;
+            }
+
+            select {
+                padding: 2px 4px;
+            }
+        }
+
+        .count:not(:empty) ~ .ttlEditor {
+            margin-left: auto;
+        }
+
+        .linkButton {
+            flex: 1 1 100%;
+            order: 3;
+            text-align: left;
+        }
+    }
+
+    .ttlEditor {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    // The trash can says it all: icon-only Clear (its tooltip still names it).
+    .rowActions .btnText {
+        display: none;
+    }
+
+    .rowActions button:has(.btnText) svg {
+        margin-right: 0;
     }
 }
 </style>

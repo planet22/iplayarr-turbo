@@ -1,5 +1,8 @@
 /* Breakpoints */
 @mobile-breakpoint: 768px;
+// First width that is NOT mobile. Pair min-width queries with this, never @mobile-breakpoint: at exactly
+// 768px a min-width rule on the mobile breakpoint and a max-width: @mobile-breakpoint rule both match.
+@desktop-breakpoint: 769px;
 
 /* Colours */
 @brand-color: rgb(225, 31, 119);

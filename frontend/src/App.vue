@@ -3,6 +3,7 @@
     <div class="main-layout">
         <LeftHandNav v-if="authState.user" ref="leftHandNav" @clear-search="clearSearch" />
         <div class="content">
+            <BackButton v-if="authState.user" />
             <RouterView />
         </div>
     </div>
@@ -20,6 +21,7 @@ import { RouterView } from 'vue-router';
 import { ipFetch } from '@/lib/ipFetch';
 import { getBasePath } from '@/lib/utils';
 
+import BackButton from './components/common/BackButton.vue';
 import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue';
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';

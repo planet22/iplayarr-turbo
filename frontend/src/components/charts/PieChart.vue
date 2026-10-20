@@ -14,6 +14,10 @@ const props = defineProps({
 
 const MAX_ITEMS = 5;
 
+// Phones: a smaller, regular-weight title (the default is a big bold Arial), and the legend under the donut
+// instead of squeezed to its right, where it overlaps the ring.
+const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
+
 const buildData = (data) => {
     const entries = Object.entries(data)
         .sort((a, b) => b[1] - a[1]);
@@ -72,7 +76,17 @@ const options = computed(() => {
             position: 'right',
             offsetY: 0,
             height: 200,
-        }
+        },
+        responsive: [
+            {
+                breakpoint: 600,
+                options: {
+                    chart: { height: 380 },
+                    title: { style: PHONE_TITLE },
+                    legend: { position: 'bottom', height: undefined, fontSize: '12px', offsetY: 0 },
+                },
+            },
+        ],
     };
 })
 </script>

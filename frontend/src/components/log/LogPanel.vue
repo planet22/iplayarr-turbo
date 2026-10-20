@@ -141,4 +141,19 @@ ul {
         }
     }
 }
+
+// Phones: use the full width, tighter padding and a smaller monospace size so lines wrap less.
+@media (max-width: @mobile-breakpoint) {
+    ul:not(.compact) {
+        max-width: 100%;
+        padding: 0.6rem;
+        box-sizing: border-box;
+        font-size: 11px;
+
+        pre {
+            font-size: 11px;
+            line-height: 1.35;
+        }
+    }
+}
 </style>

@@ -1,5 +1,6 @@
 <template>
     <IPlayarrModal
+        compact
         :title="title"
         :show-cancel="showCancel"
         cancel-label="Cancel"

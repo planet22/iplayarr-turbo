@@ -236,7 +236,7 @@ const handleClickOutside = (event) => {
         box-sizing: border-box;
         transform: translateX(-100%);
         transition: transform 0.3s ease-in-out;
-        padding-top: 60px;
+        padding-top: var(--navbar-height, 60px);
     }
 
     .LeftHandNav.show {

@@ -119,9 +119,6 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         font-size: 14px;
         color: @table-text-color;
 
-        @media (max-width: @mobile-breakpoint) {
-            flex: 0 0 80px;
-        }
     }
 
     .inputBox {
@@ -221,6 +218,30 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         > label,
         .tooltip {
             color: @warn-color;
+        }
+    }
+}
+
+// Phones: the label sits above its box (left-aligned, smaller) instead of in a narrow right-aligned column
+// that wraps long names onto four lines and leaves the box top-aligned beside them.
+.form-group {
+    @media (max-width: @mobile-breakpoint) {
+        flex-direction: column;
+        margin-bottom: 0.9rem;
+
+        label {
+            flex: none;
+            justify-content: flex-start;
+            margin: 0 0 4px;
+            padding-top: 0;
+            min-height: 0;
+            text-align: start;
+            font-size: 13px;
+        }
+
+        .tooltip,
+        .error {
+            font-size: 12px;
         }
     }
 }

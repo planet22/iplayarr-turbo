@@ -57,7 +57,7 @@ const { page, pageSize, pagedItems } = usePagination(items);
     color: @table-text-color;
     height: 120px;
 
-    @media (min-width: @mobile-breakpoint) {
+    @media (min-width: @desktop-breakpoint) {
         float: left;
     }
 

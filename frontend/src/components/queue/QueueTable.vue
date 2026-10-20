@@ -2,7 +2,12 @@
     <div class="queueViewToggle">
         <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
     </div>
-    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
+    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force>
+        <!-- Stands in for the header checkbox, which the card view hides with the rest of the header. -->
+        <template v-if="cardView" #leading>
+            <CheckInput v-model="allChecked" class="selectAll" title="Select all" />
+        </template>
+    </TablePagination>
     <table :class="['queueTable', cardView ? 'cards' : 'responsive-table']" summary="Queue">
         <colgroup>
             <col style="width: 36px" />
@@ -64,7 +69,7 @@
             />
         </tbody>
     </table>
-    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
+    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force />
 </template>
 
 <script setup>
@@ -220,8 +225,28 @@ watch(
 <style lang="less">
 .queueViewToggle {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: 10px;
+
+    // Keeps the view toggle on the right when there is no select-all beside it.
+    .viewToggle:only-child {
+        margin-left: auto;
+    }
+}
+
+// Select-all checkbox in the card view's pagination row, lined up with the cards' own checkboxes.
+.CheckInput-container.selectAll {
+    flex: 0 0 auto;
+    padding-left: 10px;
+
+    .CheckInput-label {
+        align-items: center;
+    }
+
+    .CheckInput-input {
+        margin-top: 0;
+    }
 }
 
 .queueTable {
@@ -347,8 +372,10 @@ watch(
             gap: 12px;
             margin-top: 8px;
 
+            // The row stretches to the tallest card in its grid row; the cell and card fill it,
+            // so cards sharing a row are the same height.
             tr {
-                display: block;
+                display: flex;
 
                 &:hover {
                     background-color: transparent;
@@ -356,7 +383,9 @@ watch(
             }
 
             td {
-                display: block;
+                display: flex;
+                flex: 1 1 auto;
+                min-width: 0;
             }
         }
     }

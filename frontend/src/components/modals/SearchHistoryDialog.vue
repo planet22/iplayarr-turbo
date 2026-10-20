@@ -1,6 +1,27 @@
 <template>
     <IPlayarrModal title="Search History" :show-close="true" close-label="Cancel">
-        <table class="resultsTable responsive-table">
+        <div v-if="isMobile" class="cardList">
+            <DataCard v-for="history of searchHistory" :key="history.term">
+                <template #title>{{ history.term }}</template>
+                <template #subtitle>
+                    <span v-if="history.series">Series {{ history.series }}</span>
+                    <span v-if="history.series && history.episode"> · </span>
+                    <span v-if="history.episode">Episode {{ history.episode }}</span>
+                </template>
+                <template #chips>
+                    <span class="pill">{{ history.results }} results</span>
+                    <span v-if="getAppForId(history.appId)" class="appDisplay">
+                        <img class="appImg" :src="`/img/${getAppForId(history.appId).type.toLowerCase()}.svg`" />
+                        <span class="appName">{{ getAppForId(history.appId).name }}</span>
+                    </span>
+                </template>
+                <template #foot>
+                    <span />
+                    <a class="clickable" @click="select(history)"> Select </a>
+                </template>
+            </DataCard>
+        </div>
+        <table v-else class="resultsTable responsive-table">
             <thead>
                 <tr>
                     <th>Search Term</th>
@@ -44,10 +65,13 @@
 <script setup>
 import { defineEmits, onMounted, ref } from 'vue';
 
+import DataCard from '@/components/common/DataCard.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import { useIsMobile } from '@/lib/useIsMobile';
 
 import IPlayarrModal from './IPlayarrModal.vue';
 
+const isMobile = useIsMobile();
 const searchHistory = ref([]);
 const apps = ref([]);
 
@@ -109,6 +133,16 @@ const select = (history) => {
                 }
             }
         }
+    }
+}
+
+.cardList .appDisplay {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .appImg {
+        width: 15px;
     }
 }
 

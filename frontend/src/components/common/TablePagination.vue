@@ -1,7 +1,9 @@
 <template>
-    <div v-if="showControls" class="listPagination">
-        <div class="spacer" />
-        <nav class="pageControls" aria-label="pagination">
+    <div v-if="showPager || $slots.leading" class="listPagination">
+        <div class="spacer">
+            <slot name="leading" />
+        </div>
+        <nav v-if="showPager" class="pageControls" aria-label="pagination">
             <button
                 v-if="!compact"
                 class="clickable navButton edgeButton" aria-label="go to first page" :disabled="modelValue <= 1"
@@ -41,7 +43,7 @@
                 <font-awesome-icon :icon="['fas', 'angles-right']" />
             </button>
         </nav>
-        <div class="pageSize">
+        <div v-if="showPager" class="pageSize">
             <span class="perPageLabel">Per page:</span>
             <select :value="pageSize" aria-label="items per page" @change="onPageSizeChange">
                 <option v-for="size in pageSizes" :key="size" :value="size">
@@ -55,6 +57,8 @@
 <script setup>
 import { computed, defineEmits, defineProps } from 'vue';
 
+import { usePagingMinimum } from '@/lib/pagingMinimum';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { PAGE_SIZES } from '@/lib/usePagination';
 
 const props = defineProps({
@@ -63,6 +67,8 @@ const props = defineProps({
     pageSize: { type: Number, required: true },
     pageSizes: { type: Array, required: false, default: () => PAGE_SIZES },
     compact: { type: Boolean, required: false, default: false },
+    // Show the pager whatever the "Items Before Paging" preference says (lists that need it even when short).
+    force: { type: Boolean, required: false, default: false },
 });
 
 const emit = defineEmits(['update:modelValue', 'update:pageSize']);
@@ -70,9 +76,25 @@ const emit = defineEmits(['update:modelValue', 'update:pageSize']);
 const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)));
 const showControls = computed(() => props.total > 0);
 
+// A short list is shown whole, without a pager (the cut-off is the Settings > General "Items Before Paging"
+// preference). Never when the list would not fit on the one page, or its rows would be cut off.
+const { state: pagingMinimum } = usePagingMinimum();
+const showPager = computed(
+    () => showControls.value && (props.force || props.total > pagingMinimum.minimum || props.total > props.pageSize)
+);
+
+// On a phone the page list collapses sooner (at most five slots), so the per-page select stays on the same row.
+const isPhone = useIsMobile('(max-width: 480px)');
+
 const pageItems = computed(() => {
     const total = totalPages.value;
     const current = props.modelValue;
+
+    if (isPhone.value && total > 5) {
+        if (current <= 3) return [1, 2, 3, 'right-ellipsis', total];
+        if (current >= total - 2) return [1, 'left-ellipsis', total - 2, total - 1, total];
+        return [1, 'left-ellipsis', current, 'right-ellipsis', total];
+    }
 
     if (total <= 7) {
         return Array.from({ length: total }, (_, index) => index + 1);
@@ -112,12 +134,12 @@ const onPageSizeChange = (event) => {
     position: relative;
     min-height: 34px;
 
+    // Takes the spare width, so the page buttons and per-page select always sit at the right edge
+    // (a page can put something, like a select-all checkbox, on the left).
     .spacer {
         flex: 1 1 0;
-
-        @media (max-width: @mobile-breakpoint) {
-            display: none;
-        }
+        display: flex;
+        align-items: center;
     }
 }
 

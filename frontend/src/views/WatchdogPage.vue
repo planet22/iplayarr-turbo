@@ -197,8 +197,47 @@
         />
         <p v-if="!sortedItems.length" class="empty">No links have been checked yet.</p>
         <template v-else>
+        <div class="viewToggleRow">
+            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
+        </div>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
-        <table class="dataTable responsive-table">
+        <div v-if="cardView" class="cardList">
+            <DataCard v-for="item in pagedItems" :key="item.pid">
+                <template #thumb>
+                    <img
+                        v-if="getProgrammeThumbnailUrl(item.pid)"
+                        class="clickable"
+                        :src="getProgrammeThumbnailUrl(item.pid)"
+                        @click="router.push(`/browse/programme/${item.pid}`)"
+                        @error="hideBrokenImage"
+                    />
+                    <div v-else class="thumbnail-placeholder"></div>
+                </template>
+                <template #title>
+                    <router-link :to="`/browse/programme/${item.pid}`">{{ details[item.pid]?.title ?? item.pid }}</router-link>
+                </template>
+                <template v-if="details[item.pid]?.title || getSeriesEpisodeLabel(details[item.pid])" #subtitle>
+                    {{ [details[item.pid]?.title ? item.pid : '', getSeriesEpisodeLabel(details[item.pid])].filter(Boolean).join(' · ') }}
+                </template>
+                <template #chips>
+                    <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
+                        {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
+                    </span>
+                    <span v-if="item.status == 'ok' && item.failCount" class="pill grey">1 strike</span>
+                    <span v-if="(item.sourceNames || item.sources || []).length" class="linkMeta">
+                        {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') }}
+                    </span>
+                    <span class="linkMeta" title="Last checked">
+                        <font-awesome-icon :icon="['fas', 'clock']" />{{ formatRelativeTime(Date.parse(item.lastChecked)) }}
+                    </span>
+                    <span v-if="(item.actions || []).length" class="linkMeta">{{ item.actions.join(', ') }}</span>
+                </template>
+                <template v-if="item.status == 'invalid' && (item.message || (item.files || []).length)">
+                    {{ item.message || (item.files || []).join(', ') }}
+                </template>
+            </DataCard>
+        </div>
+        <table v-else class="dataTable">
             <thead>
                 <tr>
                     <th>Programme</th>
@@ -234,20 +273,34 @@
 
 <script setup>
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 
 import LineChart from '@/components/charts/LineChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
+import DataCard from '@/components/common/DataCard.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import Pagination from '@/components/common/TablePagination.vue';
+import ViewToggle from '@/components/common/ViewToggle.vue';
 import TypeCounts from '@/components/watchdog/TypeCounts.vue';
+import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
-import { formatRelativeTime } from '@/lib/utils';
+import { useViewMode } from '@/lib/useViewMode';
+import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
 
 const socket = inject('socket');
+const router = useRouter();
+
+// Cards on phones (six columns, long paths), table on wide screens; either can be chosen and is remembered.
+const { viewMode, setViewMode } = useViewMode('iplayarr.watchdogViewMode', {
+    modes: ['table', 'cards'],
+    desktop: 'table',
+    mobile: 'cards',
+});
+const cardView = computed(() => viewMode.value === 'cards');
 
 const status = ref({
     enabled: false,
@@ -289,6 +342,13 @@ const {
     pageSize: linkPageSize,
     pagedItems,
 } = usePagination(sortedItems);
+
+// Titles and posters for the card view, only for the page on screen.
+watch(
+    [pagedItems, cardView],
+    () => cardView.value && pagedItems.value.forEach(({ pid }) => loadDetails(pid)),
+    { immediate: true }
+);
 const sourceLabels = { history: 'iPlayarr', arr: 'Sonarr/Radarr', jellyfin: 'Jellyfin' };
 // What kind of source listed an item. Older stored items predate `types`, so fall back to their source.
 const typesOf = (item) =>
@@ -421,13 +481,48 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="less">
+// Source, check time and any action, in the pill row of a Links card.
+.linkMeta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: @subtle-text-color;
+}
+
 .legendRow {
     flex-wrap: wrap;
 }
 
 @media (max-width: @mobile-breakpoint) {
-    .statRow .statCard {
-        flex-basis: 100%;
+    // Tighter than the desktop cards so the page is not a long scroll of big tiles.
+    .statRow {
+        gap: 8px;
+        margin-bottom: 1rem;
+
+        .statCard {
+            flex-basis: 100%;
+            padding: 10px 14px;
+            gap: 12px;
+
+            .statValue {
+                font-size: 24px;
+            }
+        }
+    }
+
+    // Library Access: each source reads as its own card, with the detail text on its own line.
+    .accessResults .accessRow {
+        padding: 10px;
+        background-color: @nav-active-background-color;
+        border-radius: 6px;
+        box-shadow: 0 0 10px 1px @primary-box-shadow;
+        font-size: 13px;
+
+        .detail {
+            flex-basis: 100%;
+            font-size: 12px;
+        }
     }
 }
 

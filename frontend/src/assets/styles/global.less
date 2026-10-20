@@ -49,7 +49,7 @@ select:not([multiple]) {
     text-align: right;
 }
 
-@media (min-width: @mobile-breakpoint) {
+@media (min-width: @desktop-breakpoint) {
     .mobileOnly {
         display: none !important;
     }
@@ -232,6 +232,13 @@ button:focus {
     box-shadow: none;
 }
 
+// Blur and dim the page behind any modal (vue-final-modal's overlay), so a dark dialog stands out from a dark page.
+.vfm--overlay {
+    background-color: rgba(0, 0, 0, 0.6);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+}
+
 .iplayarr-modal {
     display: flex;
     align-items: center;
@@ -252,12 +259,12 @@ button:focus {
         overflow-y: auto;
         // Breathing room for the scrollbar so it doesn't sit flush against input boxes.
         padding-right: 10px;
-        @media (min-width: @mobile-breakpoint) {
+        @media (min-width: @desktop-breakpoint) {
             max-height: 75vh;
         }
     }
 
-    @media (min-width: @mobile-breakpoint) {
+    @media (min-width: @desktop-breakpoint) {
         min-width: 640px;
         max-width: 80%;
     }
@@ -277,6 +284,25 @@ button:focus {
         display: flex;
         flex-direction: column;
         height: 100%;
+
+        &.compact {
+            box-sizing: border-box;
+            border: 1px solid @settings-button-border-color;
+            width: calc(100vw - 32px);
+            height: auto;
+            max-height: 85dvh;
+            padding-top: 20px;
+            border-radius: 8px;
+
+            .modal-inner {
+                padding-right: 0;
+            }
+
+            .button-container.floor {
+                margin-top: 1.25rem;
+                margin-bottom: 0;
+            }
+        }
     }
 
     .button-container {
@@ -334,9 +360,14 @@ button:focus {
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
 
+    // Tablets (iPad portrait is 768) get three across; only phones drop to two.
     @media (max-width: @mobile-breakpoint) {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
+    }
+
+    @media (max-width: 480px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -363,4 +394,44 @@ button:focus {
     font-size: 16px;
     color: @subtle-text-color;
     background-color: @nav-background-color;
+}
+
+// Top bar height, read by the bar itself and by the sidebar that sits under it on phones. Phones get the
+// slim bar unless the Settings > General "Top Bar on Phones" choice is to let it scroll away.
+:root {
+    --navbar-height: 60px;
+}
+
+@media (max-width: @mobile-breakpoint) {
+    :root:not([data-top-bar='off']) {
+        --navbar-height: 48px;
+    }
+
+    // Slim and auto keep the bar on screen; auto also slides it up out of the way (NavBar toggles .barHidden).
+    :root:not([data-top-bar='off']) .NavBar {
+        position: sticky;
+        top: 0;
+    }
+
+    :root[data-top-bar='auto'] .NavBar {
+        transition: transform 0.25s ease-in-out;
+
+        &.barHidden {
+            transform: translateY(-100%);
+        }
+    }
+}
+
+// Right-aligned ViewToggle above a table / card list.
+.viewToggleRow {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 6px;
+}
+
+// A list of DataCards in place of a table.
+.cardList .empty {
+    padding: 16px;
+    text-align: center;
+    color: @subtle-text-color;
 }

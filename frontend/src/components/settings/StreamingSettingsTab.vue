@@ -312,5 +312,17 @@ const showAdvanced = inject('settingsShowAdvanced');
     .testPending {
         color: @subtle-text-color;
     }
+
+    // Phones: the label takes its own line (the 250px desktop column leaves no room), then name and status.
+    @media (max-width: @mobile-breakpoint) {
+        flex-wrap: wrap;
+        gap: 4px 10px;
+
+        label {
+            flex: 1 0 100%;
+            text-align: start;
+            margin-right: 0;
+        }
+    }
 }
 </style>

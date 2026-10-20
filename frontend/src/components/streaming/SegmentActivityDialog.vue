@@ -165,7 +165,7 @@ function cellTitle(index) {
     // clip real columns off the right edge. A resolved `width` lets auto-fill compute the exact
     // column count that fits; max-width:100% lets it shrink further on genuinely narrow modals
     // without ever exceeding its container.
-    @media (min-width: @mobile-breakpoint) {
+    @media (min-width: @desktop-breakpoint) {
         width: 650px;
         max-width: 100%;
     }

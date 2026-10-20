@@ -2,7 +2,7 @@
     <VueFinalModal
         v-slot="{ close }"
         class="iplayarr-modal"
-        content-class="iplayarr-modal-content"
+        :content-class="['iplayarr-modal-content', compact ? 'compact' : '']"
         overlay-transition="vfm-fade"
         content-transition="vfm-fade"
     >
@@ -36,6 +36,8 @@ import { VueFinalModal } from 'vue-final-modal';
 
 defineProps({
     title: String,
+    // Small dialogs: on phones, size to the content as a centred card instead of filling the screen.
+    compact: Boolean,
     showCancel: Boolean,
     cancelLabel: String,
     showClose: Boolean,
