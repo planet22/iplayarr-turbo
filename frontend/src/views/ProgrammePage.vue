@@ -455,6 +455,8 @@ const duplicatesBannerDownload = computed(
         align-items: flex-start;
         gap: 24px;
         background-color: rgba(0, 0, 0, 0.55);
+        // Over the artwork backdrop: fixed white, not the theme's text colour (dark in light mode).
+        color: #fff;
     }
 
     .poster {

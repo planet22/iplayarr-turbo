@@ -144,6 +144,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
         font-size: 11px;
         border-radius: 2px;
         background-color: rgba(0, 0, 0, 0.7);
+        color: #fff;
     }
 
     .overlay {

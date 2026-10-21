@@ -878,6 +878,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             padding: 28px 12px 10px;
             font-size: 18px;
             box-sizing: border-box;
+            color: #fff;
             background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
         }
 

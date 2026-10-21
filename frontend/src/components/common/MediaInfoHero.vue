@@ -140,6 +140,8 @@ const fixCasing = (str) => {
     .infoContainer {
         width: 100%;
         background-color: rgba(0, 0, 0, 0.6);
+        // Over the artwork: fixed white, not the theme's text colour (dark in light mode).
+        color: #fff;
         padding: 2rem;
         box-sizing: border-box;
 
