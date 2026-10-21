@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 import { BrowseChannels, BrowseHomeRails, BrowseHomeRandomCategories } from '../constants/BrowseChannels';
+import { channelOverride, hasCustomLogo } from '../constants/CustomChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { allLiveChannels, isLiveChannel, isOptionalLiveChannel, OptionalLiveChannels } from '../constants/LiveChannels';
 import scheduleFacade from '../facade/scheduleFacade';
@@ -23,6 +24,7 @@ import { IPlayerDetails } from '../types/IPlayerDetails';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { splitArrayIntoChunks } from '../utils/Utils';
 import categoryDiscoverService from './categoryDiscoverService';
+import { readableTextColor } from './channelLogoService';
 import DbCacheService from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
 import liveChannelService from './liveChannelService';
@@ -171,14 +173,40 @@ export function withCaption(svg: string, label: string): string {
     );
 }
 
+// What the user sees for a channel: their own name and logo if they changed them, else the BBC's. The id
+// (bbc_one_london...) and the BBC's own name (still what programmes are matched against) never change.
 const withLogo = (channel: BrowseChannel): BrowseChannel => ({
     ...channel,
+    title: channelOverride(channel.id)?.name ?? channel.title,
     // Optional channels get the captioned logo, versioned like the Channels page's so a cached older design isn't shown.
-    logo: channel.masterBrand
-        ? `json-api/browse/channel-logo/${channel.masterBrand}.svg${isOptionalLiveChannel(channel.id) ? `?v=${liveChannelService.logoVersion}` : ''}`
-        : undefined,
+    logo: hasCustomLogo(channel.id)
+        ? `json-api/live-channels/logo/${channel.id}?v=${liveChannelService.logoVersion}`
+        : channel.masterBrand
+          ? `json-api/browse/channel-logo/${channel.masterBrand}.svg${isOptionalLiveChannel(channel.id) ? `?v=${liveChannelService.logoVersion}` : ''}`
+          : undefined,
     live: isLiveChannel(channel.id),
 });
+
+// Pill colours and display names, keyed by the BBC's channel name with spaces removed ("BBCOne"), which is
+// what programmes carry. Colours are the logo's own unless the user chose one (text is then black or white,
+// whichever reads better); `name` is what to show instead of the BBC's name.
+export function buildChannelColors(
+    icons: Record<string, string>
+): Record<string, { bg: string; fg: string; name: string }> {
+    const colors: Record<string, { bg: string; fg: string; name: string }> = {};
+    for (const channel of BrowseChannels) {
+        const override = channelOverride(channel.id);
+        const svg = channel.masterBrand && icons[channel.masterBrand];
+        const fills = svg ? Array.from(svg.matchAll(/fill="(#[0-9a-f]{3,8})"/gi)).map((m) => m[1]) : [];
+        const name = override?.name ?? channel.title;
+        if (override?.color) {
+            colors[channel.title.replaceAll(' ', '')] = { bg: override.color, fg: readableTextColor(override.color), name };
+        } else if (fills.length >= 2) {
+            colors[channel.title.replaceAll(' ', '')] = { bg: fills[0], fg: fills[1], name };
+        }
+    }
+    return colors;
+}
 
 const PROGRAMME_PAGE_SIZE = 30;
 
@@ -333,7 +361,9 @@ class BrowseService {
         const items = [...load(highlights), ...shuffled(load(programmes))]
             .filter(({ pid }) => !seen.has(pid) && seen.add(pid))
             .slice(0, 30);
-        return { id: `channel_${id}`, title: `On ${title}`, items };
+        // Matched against the BBC's name above, but shown under the user's own.
+        const shown = optional ? title : (channelOverride(id)?.name ?? title);
+        return { id: `channel_${id}`, title: `On ${shown}`, items };
     }
 
     // The categories the user featured on Discover, or - when none are chosen - a random pick.
@@ -462,8 +492,10 @@ class BrowseService {
     // The channels switched on in Settings (built-in and optional), in the user's own channel order.
     async #shownChannels(): Promise<BrowseChannel[]> {
         const order = await liveChannelService.order();
-        const enabled = await Promise.all(allLiveChannels().map(({ id }) => liveChannelService.isEnabled(id)));
-        return allLiveChannels()
+        // The user's own channels have no BBC schedule, so they are left out of the guide.
+        const bbcChannels = allLiveChannels().filter(({ custom }) => !custom);
+        const enabled = await Promise.all(bbcChannels.map(({ id }) => liveChannelService.isEnabled(id)));
+        return bbcChannels
             .filter((_, index) => enabled[index])
             .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
     }
@@ -580,18 +612,8 @@ class BrowseService {
     // the letter mark, in that order. Keyed the same way the channel pill CSS classes already are
     // (title with spaces stripped, e.g. "BBC One" -> "BBCOne") so the frontend can look them up
     // directly against whatever channel name a pill already carries.
-    async channelColors(): Promise<Record<string, { bg: string; fg: string }>> {
-        const icons = await this.#channelIconSvgs();
-        const colors: Record<string, { bg: string; fg: string }> = {};
-        for (const channel of BrowseChannels) {
-            const svg = channel.masterBrand && icons[channel.masterBrand];
-            if (!svg) continue;
-            const fills = Array.from(svg.matchAll(/fill="(#[0-9a-f]{3,8})"/gi)).map((m) => m[1]);
-            if (fills.length >= 2) {
-                colors[channel.title.replaceAll(' ', '')] = { bg: fills[0], fg: fills[1] };
-            }
-        }
-        return colors;
+    async channelColors(): Promise<Record<string, { bg: string; fg: string; name: string }>> {
+        return buildChannelColors(await this.#channelIconSvgs());
     }
 
     channels(): BrowseChannel[] {

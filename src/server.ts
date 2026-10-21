@@ -7,6 +7,7 @@ import path from 'path';
 import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 
+import customChannelFacade from './facade/customChannelFacade';
 import ApiRoute from './routes/ApiRoute';
 import AuthRoute, { addAuthMiddleware, isAuthenticatedRequest, sessionMiddleware } from './routes/AuthRoute';
 import JsonApiRoute from './routes/JsonApiRoute';
@@ -157,6 +158,8 @@ const startServer = () => {
 
 (async () => {
     await dbReady();
+    // Before the server listens, so the user's channels are known to the first request.
+    await customChannelFacade.startup().catch((err) => loggingService.error('Custom channels failed to load', err?.message ?? err));
     await importFromRedisIfNeeded(loggingService.log).catch((err) =>
         loggingService.error('Redis import failed', err?.message ?? err)
     );

@@ -1,9 +1,11 @@
 import { createHash } from 'crypto';
 
+import { channelLook, customChannel, hasCustomLogo } from '../constants/CustomChannels';
 import { allLiveChannels } from '../constants/LiveChannels';
 import { BrowseSlot } from '../types/Browse';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import browseService from './browseService';
+import channelLogoService from './channelLogoService';
 import configService from './configService';
 import liveChannelService from './liveChannelService';
 import liveTvChannelService from './liveTvChannelService';
@@ -185,14 +187,15 @@ class LiveTvService {
             const attrs = [
                 `tvg-id="${m3uAttr(channel.id)}"`,
                 `tvg-name="${m3uAttr(channel.title)}"`,
-                `tvg-chno="${numbers.indexOf(channel.id) + 1}"`,
+                `tvg-chno="${channelLook(channel.id)?.channelNumber ?? numbers.indexOf(channel.id) + 1}"`,
             ];
-            if (channel.masterBrand) {
+            if (channel.masterBrand || hasCustomLogo(channel.id)) {
                 attrs.push(
                     `tvg-logo="${baseUrl}/api?mode=live_logo&channel=${encodeURIComponent(channel.id)}&v=png-${shape}&streamkey=${encodeURIComponent(streamKey)}"`
                 );
             }
-            attrs.push('group-title="BBC"');
+            const custom = customChannel(channel.id);
+            attrs.push(`group-title="${custom ? m3uAttr(custom.group ?? 'Custom') : 'BBC'}"`);
             lines.push(`#EXTINF:-1 ${attrs.join(' ')},${channel.title}`);
             // The .m3u8 path matters: Jellyfin only recognises an HLS manifest by the URL path's
             // extension, and without it marks the channel direct-playable - browsers then try to
@@ -268,6 +271,10 @@ class LiveTvService {
     // Jellyfin would either not render or upscale to a blur, so it is rasterised here on the logo's own
     // background colour. sharp is loaded lazily so a missing native binary only costs the logos.
     async logo(channelId: string): Promise<Buffer | undefined> {
+        if (hasCustomLogo(channelId)) {
+            const [customWidth, customHeight] = LOGO_SHAPES[await this.logoShape()];
+            return channelLogoService.render(channelId, customWidth, customHeight);
+        }
         const masterBrand = (await this.allChannels()).find(({ id }) => id === channelId)?.masterBrand;
         const svg = masterBrand ? await browseService.channelLogo(masterBrand) : undefined;
         if (!svg) return undefined;

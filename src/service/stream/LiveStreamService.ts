@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 
+import { customChannel } from '../../constants/CustomChannels';
 import { isUhdEventFeed, LiveChannelVpids, uhdEventDashUrl } from '../../constants/LiveChannels';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import configService from '../configService';
@@ -64,6 +65,28 @@ function extractDashHref(xml: string): string | undefined {
 }
 
 class LiveStreamService implements AbstractStreamService {
+    // A user's own channel is played from its stored URL (see CustomChannels.ts); BBC's mediaselector is not involved.
+    async #streamCustom(channelId: string, req: Request, res: Response, sessionId?: string): Promise<void> {
+        const channel = customChannel(channelId);
+        if (!channel) return;
+        if (sessionId) {
+            streamSessionService.setResolution(sessionId, 'Live');
+        }
+        if (this.#customViaProxy(channelId)) {
+            await proxyUrl(channel.streamUrl, req, res, 5, sessionId, true);
+        } else {
+            await remuxToMkv(channel.streamUrl, channelId, res, sessionId, channel.headers);
+        }
+    }
+
+    // Plain HLS without special headers can use the normal segment proxy; DASH, raw streams and anything
+    // needing headers are read by ffmpeg and delivered as MKV whatever the configured stream mode.
+    #customViaProxy(channelId: string): boolean {
+        const channel = customChannel(channelId);
+        if (!channel || (channel.headers && Object.keys(channel.headers).length)) return false;
+        return channel.streamType === 'hls' || (channel.streamType === 'auto' && /\.m3u8(\?|$)/i.test(channel.streamUrl));
+    }
+
     async #resolveUrl(channelId: string, sessionId?: string): Promise<string> {
         const url = await cached(`live:${channelId}`, liveResolveTtlMs, () => this.#resolve(channelId));
         if (sessionId) {
@@ -93,6 +116,9 @@ class LiveStreamService implements AbstractStreamService {
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
+        if (customChannel(pid)) {
+            return this.#streamCustom(pid, req, res, sessionId);
+        }
         if (await this.#serveDashHls(pid, req, res, sessionId)) {
             return;
         }
@@ -113,6 +139,7 @@ class LiveStreamService implements AbstractStreamService {
 
     // The channel's caption segment URL template (null when it has none). Never throws.
     async #captionsTemplate(channelId: string): Promise<string | null> {
+        if (customChannel(channelId)) return null;
         try {
             return await cached(`live-captions:${channelId}`, liveCaptionsTtlMs, async () => {
                 const vpid = LiveChannelVpids[channelId];
@@ -195,6 +222,7 @@ class LiveStreamService implements AbstractStreamService {
     }
 
     async #dashUrl(channelId: string): Promise<string | undefined> {
+        if (customChannel(channelId)) return undefined;
         if (isUhdEventFeed(channelId)) {
             return uhdEventDashUrl(channelId);
         }
@@ -272,6 +300,15 @@ class LiveStreamService implements AbstractStreamService {
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {
+        const custom = customChannel(pid);
+        if (custom) {
+            if (sessionId) {
+                streamSessionService.setResolution(sessionId, 'Live');
+            }
+            const source = this.#customViaProxy(pid) ? await this.#topVariantUrl(custom.streamUrl) : custom.streamUrl;
+            await remuxToMkv(source, pid, res, sessionId, custom.headers);
+            return;
+        }
         const dashUrl = await this.#resolveDash(pid);
         if (dashUrl) {
             if (sessionId) {

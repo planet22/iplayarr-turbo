@@ -1,4 +1,5 @@
 import { BrowseHomeChannelRails } from '../constants/BrowseChannels';
+import { channelLook, customChannel, hasCustomLogo, StreamTestResult } from '../constants/CustomChannels';
 import {
     allLiveChannels,
     isLiveChannel,
@@ -8,6 +9,7 @@ import {
 } from '../constants/LiveChannels';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
+import channelLogoService from './channelLogoService';
 import configService from './configService';
 
 const storage: QueuedStorage = new QueuedStorage();
@@ -29,6 +31,18 @@ export interface LiveChannelSetting {
     // Whether the channel gets its own rail on the Discover (home) page.
     discover: boolean;
     logo?: string;
+    // The user's own channel (live only; its stream URL is managed in the customise dialog).
+    custom?: boolean;
+    color?: string;
+    logoText?: string;
+    group?: string;
+    channelNumber?: number;
+    streamType?: string;
+    lastTest?: StreamTestResult;
+    // A built-in channel carrying any name/colour/logo/number override (so the UI can offer a reset).
+    customised?: boolean;
+    // The colour its logo is drawn on unless the user chose one (built-in channels).
+    brandColor?: string;
 }
 
 // Which live channels are switched on. The built-in channels default to on and the optional
@@ -116,17 +130,28 @@ class LiveChannelService {
         const channels = allLiveChannels()
             .filter(({ id }) => !isUhdEventFeed(id) || uhdOn)
             .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-        return channels.map(({ id, title, masterBrand }) => ({
-            id,
-            title,
-            vpid: LiveChannelVpids[id],
-            optional: isOptionalLiveChannel(id),
-            enabled: overrides[id] ?? !isOptionalLiveChannel(id),
-            discover: discover[id],
-            logo: masterBrand
-                ? `json-api/browse/channel-logo/${masterBrand}.svg${isOptionalLiveChannel(id) ? `?v=${this.#logoVersion}` : ''}`
-                : undefined,
-        }));
+        return channels.map(({ id, title, masterBrand }) => {
+            const look = channelLook(id);
+            const custom = customChannel(id);
+            return {
+                id,
+                title,
+                vpid: LiveChannelVpids[id],
+                optional: isOptionalLiveChannel(id),
+                enabled: overrides[id] ?? !isOptionalLiveChannel(id),
+                discover: discover[id],
+                // A restyled or user-supplied logo is drawn by channelLogoService; otherwise the BBC icon as before.
+                logo: hasCustomLogo(id)
+                    ? `json-api/live-channels/logo/${id}?v=${this.#logoVersion}`
+                    : masterBrand
+                      ? `json-api/browse/channel-logo/${masterBrand}.svg${isOptionalLiveChannel(id) ? `?v=${this.#logoVersion}` : ''}`
+                      : undefined,
+                ...(custom && { custom: true, group: custom.group, streamType: custom.streamType, lastTest: custom.lastTest }),
+                ...(look && { color: look.color, logoText: look.logoText, channelNumber: look.channelNumber }),
+                ...(!custom && look && { customised: true }),
+                ...(!custom && { brandColor: channelLogoService.brandColor(id) }),
+            };
+        });
     }
 
     async setEnabled(channelId: string, enabled: boolean): Promise<void> {

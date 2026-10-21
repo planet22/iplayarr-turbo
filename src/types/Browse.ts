@@ -89,6 +89,8 @@ export interface BrowseChannel {
     logo?: string;
     // True when the channel can be watched live through LiveStreamService (see LiveChannels.ts).
     live?: boolean;
+    // One of the user's own live channels (no BBC schedule or programmes).
+    custom?: boolean;
     // A live feed with no iPlayer channel page (the optional nations/regions) - it can only be watched.
     liveOnly?: boolean;
     // False when the channel is switched off in the Channels page's arrange mode (it stays in its place there).

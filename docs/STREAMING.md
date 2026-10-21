@@ -118,6 +118,15 @@ Changing any of them (or the channel selection or offset) changes the guide URL'
 
 Playback uses the existing live resolver, so it needs a UK IP.
 
+### Customising channels and adding your own
+
+Every channel can be renamed, given a colour, text on its logo, an uploaded logo and a Jellyfin channel number, and you can add live channels of your own (the API is under `/json-api/live-channels`).
+
+- **Logos** live in `<config>/logos/`. Nothing is shipped in the image: on start-up the BBC logos that are missing are downloaded into `logos/defaults/` (never overwritten; offline starts retry next time). An upload (PNG, JPG, WebP or SVG, 200-2000px per side, no more than 3:1, 2MB) replaces the default; removing it goes back. The text is drawn black or white, whichever reads best on the colour.
+- **Your own channels** are live-only: a name, colour, stream URL, optional group (the M3U `group-title`, default `Custom`), stream type, request headers (for example `User-Agent` or `Referer`) and channel number. They can be added to the library (`.strm`) and Jellyfin Live TV like the BBC ones but have no guide data. HLS without headers goes through the normal segment proxy; DASH, plain streams and anything needing headers are read by ffmpeg and delivered as MKV whatever the Stream Mode.
+- **Test stream** reads the URL (never link-local addresses) and reports whether it is HLS, DASH or a plain stream, the quality ladder, audio and subtitle renditions and whether it is live. Every custom channel is re-tested once a day; failures are logged and shown as a badge.
+- **Import / export**: channels export as JSON, and a JSON export or an M3U playlist (`group-title` and `#EXTVLCOPT` user-agent/referrer are kept) can be imported.
+
 ## Checking links still work
 
 Programmes expire from iPlayer. The optional [STRM Watchdog](WATCHDOG.md) checks daily that your `.strm` links still resolve and can report or remove dead ones.

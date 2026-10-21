@@ -342,7 +342,7 @@ export const ffmpegKillGraceMs = 3000;
 // a live remux has no fixed byte offsets to seek within. No manifest rewriting needed here either -
 // ffmpeg fetches every segment itself from inside this same (VPN'd) container, so there's nothing
 // to rewrite, only a total byte count to report once the remux finishes.
-export async function remuxToMkv(url: string, pid: string, res: Response, sessionId?: string): Promise<void> {
+export async function remuxToMkv(url: string, pid: string, res: Response, sessionId?: string, requestHeaders?: Record<string, string>): Promise<void> {
     // Each remux is a long-lived ffmpeg process re-encoding audio, so a handful of viewers on a small
     // host (a NAS) could starve everything else. Over the cap, answer 503 + Retry-After straight away
     // rather than queueing a connection the player would just time out on.
@@ -355,13 +355,13 @@ export async function remuxToMkv(url: string, pid: string, res: Response, sessio
     }
     activeRemuxes++;
     try {
-        await runRemux(url, pid, res, sessionId);
+        await runRemux(url, pid, res, sessionId, requestHeaders);
     } finally {
         activeRemuxes--;
     }
 }
 
-async function runRemux(url: string, pid: string, res: Response, sessionId?: string): Promise<void> {
+async function runRemux(url: string, pid: string, res: Response, sessionId?: string, requestHeaders?: Record<string, string>): Promise<void> {
     await assertFfmpegAvailable();
     // ffmpeg fetches the CDN URLs itself through the system (musl) resolver, which hits the same
     // getaddrinfo bug as yt-dlp does in this VPN'd container - without the relay its lookups fail
@@ -373,7 +373,11 @@ async function runRemux(url: string, pid: string, res: Response, sessionId?: str
     // parsing AAC extradata ... Could not write header" and the response ends after the 282-byte EBML
     // header. Neither `-bsf:a aac_adtstoasc` nor an explicit -map fixes that (tried live against both
     // on-demand and live inputs); re-encoding the audio does, at negligible CPU cost.
-    const ffmpeg = spawn('ffmpeg', ['-i', url, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-f', 'matroska', 'pipe:1']);
+    // A user's own channel may need request headers (User-Agent, Referer...); ffmpeg takes them as one CRLF-joined string.
+    const headerArgs = requestHeaders && Object.keys(requestHeaders).length
+        ? ['-headers', Object.entries(requestHeaders).map(([name, value]) => name + ': ' + value + '\r\n').join('')]
+        : [];
+    const ffmpeg = spawn('ffmpeg', [...headerArgs, '-i', url, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-f', 'matroska', 'pipe:1']);
 
     // Ending ffmpeg when the client goes away needs more than a polite SIGTERM. With nobody reading
     // its stdout any more, ffmpeg sits blocked writing into the full pipe and never gets round to

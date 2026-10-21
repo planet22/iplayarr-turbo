@@ -1,5 +1,6 @@
 import { BrowseChannel } from '../types/Browse';
 import { BrowseChannels } from './BrowseChannels';
+import { channelOverride, customChannels, isCustomChannel } from './CustomChannels';
 
 // BBC live channels playable through LiveStreamService. Keyed by the same iPlayer (IBL) channel ids
 // as BrowseChannels.ts - that id is what the Channels pages pass as the stream `pid` - and mapped to
@@ -103,7 +104,7 @@ export const LiveChannelVpids: Record<string, string> = {
 };
 
 export function isLiveChannel(id: string | undefined): boolean {
-    return !!id && Object.prototype.hasOwnProperty.call(LiveChannelVpids, id);
+    return !!id && (Object.prototype.hasOwnProperty.call(LiveChannelVpids, id) || isCustomChannel(id));
 }
 
 export function isOptionalLiveChannel(id: string | undefined): boolean {
@@ -113,11 +114,16 @@ export function isOptionalLiveChannel(id: string | undefined): boolean {
 // Every live channel, core (in Channels-page order) then optional, which keeps Jellyfin channel
 // numbers of the core ones stable.
 export function allLiveChannels(): BrowseChannel[] {
-    return [
+    const builtIn = [
         ...BrowseChannels.filter(({ id }) => Object.prototype.hasOwnProperty.call(CoreLiveChannelVpids, id)),
         // Keyed by their own id: browseService.channelLogo() draws the parent logo with the region label.
         ...OptionalLiveChannels.map(({ id, title }) => ({ id, title, masterBrand: id })),
-    ];
+    ].map((channel) => {
+        const name = channelOverride(channel.id)?.name;
+        return name ? { ...channel, title: name } : channel;
+    });
+    // The user's own channels (customChannelService) follow the built-in ones.
+    return [...builtIn, ...customChannels().map(({ id, title }) => ({ id, title, custom: true }))];
 }
 
 export function liveChannelInfo(id: string): BrowseChannel | undefined {

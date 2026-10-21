@@ -99,11 +99,12 @@ router.get(
         const settings = await liveChannelService.list();
         const byId = new Map(channels.map((channel) => [channel.id, channel]));
         res.json(
-            settings.map(({ id, title, logo, vpid, optional, enabled, discover }) => {
+            settings.map(({ id, title, logo, vpid, optional, enabled, discover, ...look }) => {
                 const channel = byId.get(id);
+                // look: the user's name/colour/logo/number overrides and custom-channel details, if any.
                 return channel
-                    ? { ...channel, vpid, enabled, discover, live: channel.live && enabled }
-                    : { id, title, logo, vpid, enabled, discover, live: enabled, liveOnly: optional };
+                    ? { ...channel, title, ...(look.customised && { logo }), vpid, enabled, discover, live: channel.live && enabled, ...look }
+                    : { id, title, logo, vpid, enabled, discover, live: enabled, liveOnly: optional || look.custom, ...look };
             })
         );
     })
@@ -147,6 +148,12 @@ router.get(
     handle(async (req, res) => {
         const id = req.params.id as string;
         if (!ID_REGEX.test(id)) return invalid(res, 'Invalid channel id');
+        // The user's own channels have a page of their own, but no schedule or programmes.
+        const own = (await liveChannelService.list()).find((c) => c.id === id && c.custom);
+        if (own) {
+            res.json({ channel: { id, title: own.title, logo: own.logo, live: own.enabled, liveOnly: true }, rails: [] });
+            return;
+        }
         // The optional nations/regions are not in iPlayer's channel list, but most have their own schedule
         // and programmes there; whatever a feed lacks is filled from its parent national channel.
         const extra = (await liveChannelService.list()).find((c) => c.id === id && c.optional);
@@ -174,6 +181,11 @@ router.get(
         const result = await browseService.channel(id);
         if (result.channel?.live && !(await liveChannelService.isEnabled(id))) {
             result.channel = { ...result.channel, live: false };
+        }
+        // A name, colour, text or logo the user changed shows here too.
+        const restyled = result.channel && (await liveChannelService.list()).find((c) => c.id === id && c.customised);
+        if (result.channel && restyled) {
+            result.channel = { ...result.channel, title: restyled.title, logo: restyled.logo };
         }
         res.json(result);
     })
