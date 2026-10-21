@@ -338,6 +338,12 @@ defineExpose({ clearSearch });
                         box-shadow: none;
                         border-bottom-color: transparent;
 
+                        // Keyboard focus keeps a visible ring (the underline fades on focus).
+                        &:focus-visible {
+                            outline: 2px solid @brand-color;
+                            outline-offset: 2px;
+                        }
+
                         &::placeholder {
                             color: transparent;
                         }

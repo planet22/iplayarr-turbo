@@ -11,6 +11,7 @@ import { createVfm } from 'vue-final-modal';
 import VueApexCharts from 'vue3-apexcharts';
 
 import App from './App.vue';
+import { installClickableA11y } from './lib/a11y';
 import router from './router/router.js';
 
 library.add(fas);
@@ -29,3 +30,4 @@ app.use(VueApexCharts);
 app.component('FontAwesomeIcon', FontAwesomeIcon);
 app.use(router);
 app.mount('#app');
+installClickableA11y();

@@ -233,12 +233,37 @@ legend {
     }
 }
 
-input:focus,
-textarea:focus,
-select:focus,
-button:focus {
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+button:focus:not(:focus-visible) {
     outline: none;
     box-shadow: none;
+}
+
+// The rule above removes the browser's own focus outline, so keyboard users get this one instead. It only
+// appears for keyboard focus (:focus-visible), never on a mouse click or tap.
+:focus-visible {
+    outline: 2px solid @brand-color;
+    outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+    outline-offset: 0;
+}
+
+// Anyone who asks their system for less motion gets effectively none.
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 // Blur and dim the page behind any modal (vue-final-modal's overlay), so a dark dialog stands out from a dark page.

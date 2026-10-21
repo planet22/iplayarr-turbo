@@ -10,7 +10,9 @@
             <span class="modalTitleText">{{ title }}</span>
             <div class="modalTitleActions">
                 <slot name="header-actions" :close="close" />
-                <font-awesome-icon class="clickable" :icon="['fas', 'xmark']" @click="close()" />
+                <button type="button" class="modalClose" aria-label="Close" @click="close()">
+                    <font-awesome-icon :icon="['fas', 'xmark']" />
+                </button>
             </div>
         </legend>
         <div class="modal-inner">
@@ -75,6 +77,22 @@ const emit = defineEmits(['cancel', 'confirm']);
         display: flex;
         align-items: center;
         gap: 0.5rem;
+
+        // The close X is a real button (focusable, named) but looks like the bare icon it replaced.
+        .modalClose {
+            padding: 4px 6px;
+            border: none;
+            background: none;
+            color: inherit;
+            font-size: inherit;
+            line-height: 1;
+            cursor: pointer;
+
+            &:hover {
+                background: none;
+                color: @brand-color;
+            }
+        }
     }
 }
 </style>
