@@ -92,14 +92,14 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
         align-items: flex-start;
         gap: 10px;
         box-sizing: border-box;
-        padding: 12px 12px 12px 14px;
-        border-radius: 6px;
+        padding: @space-3 @space-3 @space-3 14px;
+        border-radius: @radius-md;
         border: 1px solid @table-border-color;
         border-left-width: 4px;
         background-color: @nav-background-color;
         color: @primary-text-color;
         box-shadow: 0 6px 20px @shadow-color;
-        font-size: 14px;
+        font-size: @font-size-md;
 
         &.success {
             border-left-color: @success-color;
@@ -162,8 +162,8 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
 .toast-enter-active,
 .toast-leave-active {
     transition:
-        opacity 0.2s ease,
-        transform 0.2s ease;
+        opacity @motion-base ease,
+        transform @motion-base ease;
 }
 
 .toast-enter-from,

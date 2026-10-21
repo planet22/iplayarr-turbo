@@ -58,14 +58,14 @@ onBeforeUnmount(() => setOffset(false));
         gap: 12px;
         box-sizing: border-box;
         max-width: 900px;
-        padding: 12px 20px;
+        padding: @space-3 20px;
     }
 
     .saveBarText {
         display: flex;
         align-items: center;
         gap: 8px;
-        font-size: 14px;
+        font-size: @font-size-md;
         font-weight: 600;
         color: @primary-text-color;
     }
@@ -123,8 +123,8 @@ onBeforeUnmount(() => setOffset(false));
 .saveBar-enter-active,
 .saveBar-leave-active {
     transition:
-        transform 0.2s ease,
-        opacity 0.2s ease;
+        transform @motion-base ease,
+        opacity @motion-base ease;
 }
 
 .saveBar-enter-from,

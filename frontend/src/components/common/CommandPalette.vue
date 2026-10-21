@@ -191,7 +191,7 @@ defineExpose({ show });
         max-width: 560px;
         overflow: hidden;
         border: 1px solid @table-border-color;
-        border-radius: 8px;
+        border-radius: @radius-lg;
         background-color: @nav-background-color;
         box-shadow: 0 12px 40px @shadow-color;
         color: @primary-text-color;
@@ -245,7 +245,7 @@ defineExpose({ show });
         align-items: center;
         gap: 10px;
         padding: 9px 10px;
-        border-radius: 5px;
+        border-radius: @radius-sm;
         cursor: pointer;
 
         &.active {

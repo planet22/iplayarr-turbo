@@ -95,8 +95,8 @@ const cycle = () => {
 
 @media (max-width: @mobile-breakpoint) {
     .cycle {
-        width: 40px;
-        height: 40px;
+        width: @touch-target;
+        height: @touch-target;
     }
 }
 </style>
