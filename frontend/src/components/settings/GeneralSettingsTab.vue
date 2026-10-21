@@ -59,36 +59,57 @@
     />
     <SelectInput
         v-model="appearance.colorMode"
+        field="appearance:colorMode"
         name="Colour Mode"
         tooltip="Dark, light, or follow your device's setting. The sun/moon switch in the top bar changes this straight away."
         :options="COLOR_MODES"
     />
     <SelectInput
         v-model="pillColorsEnabled"
+        field="appearance:pillColors"
         name="Colour Channel Pills by Logo"
         tooltip="Colour channel labels to match each BBC logo."
         :options="trueOrFalse"
     />
     <SelectInput
+        v-model="channelToolsEnabled"
+        field="appearance:channelTools"
+        name="Show Channel Editing Tools"
+        tooltip="Show the arrange, library, Live TV and customise buttons on the Channels page (rename, recolour, logos, add your own channels). Off keeps the page simple."
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="showAdvanced"
         v-model="qualityBadgesEnabled"
+        :advanced="true"
+        field="appearance:qualityBadges"
         name="Show HDR / UHD Badges"
         tooltip="Show an HDR or Ultra HD badge where iPlayer lists it. It is only a label: iPlayarr streams HD at most."
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="showAdvanced"
         v-model="topBarMode"
+        :advanced="true"
+        field="appearance:topBar"
         name="Top Bar on Phones"
         tooltip="Slim keeps the top bar (menu, search) on screen while you scroll. Hide on scroll gives it back when you scroll up."
         :options="TOP_BAR_MODES"
     />
     <SelectInput
+        v-if="showAdvanced"
         v-model="infoMessagesEnabled"
+        :advanced="true"
+        field="appearance:infoMessages"
         name="Show Info Messages"
         tooltip="Show the blue explanatory notes at the top of pages. Warnings and errors always show."
         :options="trueOrFalse"
     />
     <TextInput
+        v-if="showAdvanced"
         v-model="pagingMinimumText"
+        :advanced="true"
+        field="appearance:pagingMinimum"
         type-override="number"
         name="Items Before Paging"
         tooltip="A list only shows page controls when it has more items than this. Set 0 to always show them."
@@ -169,5 +190,9 @@ const pagingMinimumText = computed({
 const qualityBadgesEnabled = computed({
     get: () => String(appearance.qualityBadges),
     set: (value) => (appearance.qualityBadges = value === 'true'),
+});
+const channelToolsEnabled = computed({
+    get: () => String(appearance.channelTools),
+    set: (value) => (appearance.channelTools = value === 'true'),
 });
 </script>

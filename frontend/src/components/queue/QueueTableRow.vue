@@ -31,8 +31,9 @@
                     >
                         {{ item.nzbName }}
                     </a>
-                    <div v-if="details?.channel || seriesEpisodeLabel" class="subtle">
-                        {{ [details?.channel, seriesEpisodeLabel].filter(Boolean).join(' · ') }}
+                    <div v-if="details?.channel || seriesEpisodeLabel" class="subtle channelLine">
+                        <ChannelPill :channel="details?.channel" />
+                        <span v-if="seriesEpisodeLabel">{{ seriesEpisodeLabel }}</span>
                     </div>
                     <div class="cardMeta">
                         <font-awesome-icon :class="[item.status, 'statusIcon']" :icon="['fas', getDownloadIcon(item)]" />
@@ -101,8 +102,9 @@
             <a v-else target="_blank" :href="getAppForId(item.appId)?.link || getAppForId(item.appId)?.url || '#'">
                 {{ item.nzbName }}
             </a>
-            <div v-if="details?.channel || seriesEpisodeLabel" class="subtle">
-                {{ [details?.channel, seriesEpisodeLabel].filter(Boolean).join(' · ') }}
+            <div v-if="details?.channel || seriesEpisodeLabel" class="subtle channelLine">
+                <ChannelPill :channel="details?.channel" />
+                <span v-if="seriesEpisodeLabel">{{ seriesEpisodeLabel }}</span>
             </div>
         </td>
         <td data-title="Type">
@@ -162,6 +164,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { formatDate, formatStorageSize, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
 
+import ChannelPill from '../common/ChannelPill.vue';
 import CheckInput from '../common/form/CheckInput.vue';
 import ProgressBar from '../common/ProgressBar.vue';
 import VideoInfoModal from '../modals/VideoInfoModal.vue';
@@ -280,6 +283,13 @@ const getDeleteIcon = ({ status }) => {
 </script>
 
 <style lang="less" scoped>
+.channelLine {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+}
+
 .actionCol span {
     display: inline-flex;
     align-items: center;

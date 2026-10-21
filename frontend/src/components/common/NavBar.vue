@@ -222,6 +222,9 @@ defineExpose({ clearSearch });
     display: flex;
     padding: 0px 20px;
     background-color: @nav-background-color;
+    // A faint line along the bottom edge splits the bar from the page. Inset, so the bar's height (which
+    // the layout offsets from) is unchanged; derived from the text colour so it works in every theme.
+    box-shadow: inset 0 -1px 0 color-mix(in srgb, @primary-text-color 14%, transparent);
     height: var(--navbar-height, 60px);
     z-index: 2;
     position: relative;

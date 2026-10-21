@@ -12,7 +12,7 @@
                 :history="false"
                 :thumbnail="thumbnailFor(session)"
                 :title="session.title ?? detailsFor(session.pid)?.title ?? session.pid"
-                :subtitle="[detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ')"
+                :subtitle="[channelLabel(detailsFor(session.pid)?.channel), seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ')"
                 :mode="modeLabel(session)"
                 :client-ip="formatClientIp(session.clientIp)"
                 :started="formatDate(session.startedAt)"
@@ -96,7 +96,7 @@
                             {{ session.title ?? detailsFor(session.pid)?.title ?? session.pid }}
                         </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
-                            {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
+                            {{ [channelLabel(detailsFor(session.pid)?.channel), seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td data-title="Mode">
@@ -150,7 +150,7 @@
                 :history="true"
                 :thumbnail="thumbnailFor(session)"
                 :title="session.title ?? detailsFor(session.pid)?.title ?? session.pid"
-                :subtitle="[detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ')"
+                :subtitle="[channelLabel(detailsFor(session.pid)?.channel), seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ')"
                 :mode="modeLabel(session)"
                 :client-ip="formatClientIp(session.clientIp)"
                 :started="formatDate(session.startedAt)"
@@ -223,7 +223,7 @@
                             {{ session.title ?? detailsFor(session.pid)?.title ?? session.pid }}
                         </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
-                            {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
+                            {{ [channelLabel(detailsFor(session.pid)?.channel), seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td data-title="Mode">
@@ -275,6 +275,7 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import ViewToggle from '@/components/common/ViewToggle.vue';
+import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';

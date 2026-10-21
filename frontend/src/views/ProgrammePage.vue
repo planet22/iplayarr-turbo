@@ -373,12 +373,13 @@ const duplicatesBannerDownload = computed(
 </script>
 
 <style lang="less" scoped>
-// The toolbar sits straight above the banner: the page padding below it is dropped so the gap is just 12px.
+// A toolbar with no title above it sits flush between the nav bar and the banner: no page padding or
+// margin around it.
 .programmeHeader {
-    padding-bottom: 0;
+    padding: 0;
 
     :deep(.SettingsPageToolbar) {
-        margin-bottom: 12px;
+        margin: 0;
     }
 }
 

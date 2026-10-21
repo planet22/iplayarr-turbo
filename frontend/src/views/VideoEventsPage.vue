@@ -35,7 +35,7 @@
                     <template v-else>{{ event.message }}</template>
                 </template>
                 <template v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" #subtitle>
-                    {{ [detailsFor(event.pid)?.channel, seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
+                    {{ [channelLabel(detailsFor(event.pid)?.channel), seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
                 </template>
                 <template #chips>
                     <span class="pill">{{ event.type }}</span>
@@ -101,7 +101,7 @@
                             {{ titleFor(event.pid) }}
                         </a>
                         <div v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" class="subtle">
-                            {{ [detailsFor(event.pid)?.channel, seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
+                            {{ [channelLabel(detailsFor(event.pid)?.channel), seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td data-title="Type"><span class="pill">{{ event.type }}</span></td>
@@ -130,6 +130,7 @@ import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import ViewToggle from '@/components/common/ViewToggle.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
+import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';

@@ -4,7 +4,22 @@
         <div class="inputBox">
             <div class="fieldRow">
             <div :class="['inputWithButton', error ? 'error' : '']">
-                <input v-model="localValue" :type="typeOverride" :placeholder="placeholder" :disabled="disabled" />
+                <textarea
+                    v-if="multiline"
+                    v-model="localValue"
+                    :class="{ monospace }"
+                    :rows="rows"
+                    :placeholder="placeholder"
+                    :disabled="disabled"
+                />
+                <input
+                    v-else
+                    v-model="localValue"
+                    :class="{ monospace }"
+                    :type="typeOverride"
+                    :placeholder="placeholder"
+                    :disabled="disabled"
+                />
                 <div class="buttonGroup">
                     <button v-if="copyable" type="button" title="Copy to clipboard" @click="copyValue">
                         <font-awesome-icon :icon="['fas', copied ? 'check' : 'copy']" />
@@ -17,6 +32,8 @@
                     </button>
                 </div>
             </div>
+            <!-- Optional control level with the box itself (e.g. a colour sample), whatever the label layout. -->
+            <slot name="after" />
             <InfoTip v-if="showInfo" :text="tooltip" />
             </div>
             <div v-if="error" class="error">
@@ -65,6 +82,23 @@ const props = defineProps({
     placeholder: {
         type: String,
         required: false,
+    },
+    // A box of several lines instead of one, styled and sized like the single-line input.
+    multiline: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    rows: {
+        type: Number,
+        required: false,
+        default: 3,
+    },
+    // Fixed-width text, for values like headers, URLs and keys.
+    monospace: {
+        type: Boolean,
+        required: false,
+        default: false,
     },
     disabled: {
         type: Boolean,
@@ -240,6 +274,24 @@ const copyValue = async () => {
                 }
             }
 
+            textarea {
+                box-sizing: border-box;
+                padding: 8px 16px;
+                width: 100%;
+                border: 1px solid @input-border-color;
+                border-radius: 4px;
+                background-color: @input-background-color;
+                box-shadow: inset 0 1px 1px @primary-box-shadow;
+                color: @input-text-color;
+                font: inherit;
+                resize: vertical;
+            }
+
+            .monospace {
+                font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+                font-size: 13px;
+            }
+
             input {
                 box-sizing: border-box;
                 padding: 6px 16px;
@@ -256,7 +308,8 @@ const copyValue = async () => {
                 font-size: 14px;
                 color: @error-color;
 
-                input {
+                input,
+                textarea {
                     border-color: @error-color;
                 }
             }
@@ -269,7 +322,8 @@ const copyValue = async () => {
     }
 
     &.changed {
-        .inputWithButton input {
+        .inputWithButton input,
+        .inputWithButton textarea {
             border-color: @changed-color;
             box-shadow: 0 0 0 2px @changed-soft-color;
         }

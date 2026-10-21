@@ -45,7 +45,8 @@ select:not([multiple]) {
     min-width: 0;
 
     .inner-content {
-        padding: 1rem;
+        // Tighter at the top, so the title (or toolbar) sits close to the nav bar.
+        padding: 0.5rem 1rem 1rem;
     }
 }
 
@@ -354,7 +355,7 @@ button:focus {
 
 // Browse screens (Discover / Channels / Categories / A-Z)
 .browsePage {
-    padding: 1rem;
+    padding: 0.5rem 1rem 1rem;
 
     h1.browseTitle {
         margin: 0 0 1rem;

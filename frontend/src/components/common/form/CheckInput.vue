@@ -75,6 +75,11 @@ watch(
             text-align: center;
             line-height: 20px;
 
+            // The tick is always in the markup; it is the white-on-dark box that makes it show, so hide it unless checked.
+            &:not(.CheckInput-isChecked) svg {
+                visibility: hidden;
+            }
+
             &.CheckInput-isChecked {
                 border-color: @primary-color;
                 background-color: @primary-color;

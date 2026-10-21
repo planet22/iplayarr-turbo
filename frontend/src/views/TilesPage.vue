@@ -45,7 +45,7 @@
                     <font-awesome-icon :icon="['fas', featuring ? 'check' : 'compass']" />
                 </button>
                 <button
-                    v-if="isChannels && !loading && !error"
+                    v-if="isChannels && channelTools.enabled && !customising && !loading && !error"
                     type="button"
                     :class="{ enabled: arranging }"
                     :title="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'"
@@ -53,8 +53,29 @@
                 >
                     <font-awesome-icon :icon="['fas', arranging ? 'check' : 'grip']" />
                 </button>
+                <template v-if="isChannels && channelTools.enabled && customising && !loading && !error">
+                    <button type="button" title="Add your own live channel" @click="openChannelEditor()">
+                        <font-awesome-icon :icon="['fas', 'plus']" />
+                    </button>
+                    <button type="button" title="Import channels from a JSON export or an M3U playlist" @click="importInput.click()">
+                        <font-awesome-icon :icon="['fas', 'file-import']" />
+                    </button>
+                    <button type="button" title="Export your channels as JSON" @click="exportChannels">
+                        <font-awesome-icon :icon="['fas', 'file-export']" />
+                    </button>
+                    <input ref="importInput" type="file" accept=".json,.m3u,.m3u8,application/json" hidden @change="importChannels" />
+                </template>
                 <button
-                    v-if="isChannels && !arranging && !loading && !error && tiles.some((t) => t.live)"
+                    v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading && !error"
+                    type="button"
+                    :class="{ enabled: customising }"
+                    :title="customising ? 'Done customising' : 'Rename channels, change colours and logos, add your own channels'"
+                    @click="toggleCustomising"
+                >
+                    <font-awesome-icon :icon="['fas', customising ? 'check' : 'palette']" />
+                </button>
+                <button
+                    v-if="isChannels && channelTools.enabled && !arranging && !customising && !loading && !error && tiles.some((t) => t.live)"
                     type="button"
                     :class="{ enabled: editing }"
                     :title="editing ? 'Done editing' : 'Edit library and Live TV channels'"
@@ -70,6 +91,10 @@
             Drag channels (or use the arrows) into the order you want. Use the eye to switch a channel off. The compass
             features a channel as a rail on the Discover page (up to 4, shown in this order).
         </InfoBar>
+        <InfoBar v-if="customising && !loading && !error">
+            Use the pen on a channel to change its name, colour, logo text, logo or Jellyfin number. Use + to add a live
+            stream of your own, or import a list of them.
+        </InfoBar>
         <InfoBar v-if="featuring && !loading && !error">
             Use the compass to feature up to 2 categories as rails on the Discover page. With none chosen, Discover
             shows 2 random categories.
@@ -83,6 +108,7 @@
                     'tile',
                     isChannels ? '' : 'imageTile',
                     arranging ? 'arranging' : '',
+                    customising ? 'customising' : '',
                     tile.enabled === false ? 'disabled' : '',
                     dragId === tile.id ? 'dragging' : '',
                 ]"
@@ -152,8 +178,24 @@
                             <code class="arrangeVpid">{{ tile.vpid }}</code>
                         </div>
                     </template>
+                    <template v-if="customising">
+                        <button
+                            class="customiseButton"
+                            type="button"
+                            :title="`Customise ${tile.title}`"
+                            @click.prevent.stop="openChannelEditor(tile)"
+                        >
+                            <font-awesome-icon :icon="['fas', 'pen']" />
+                        </button>
+                        <span v-if="tile.custom" class="customBadge" :title="testTitle(tile)">
+                            <font-awesome-icon
+                                :icon="['fas', !tile.lastTest ? 'circle-question' : tile.lastTest.ok ? 'circle-check' : 'triangle-exclamation']"
+                                :class="!tile.lastTest ? '' : tile.lastTest.ok ? 'testOk' : 'testBad'"
+                            />
+                        </span>
+                    </template>
                     <!-- Not editing: read-only status, only for what's on. -->
-                    <span v-if="tile.live && !editing && !arranging" class="statusBadge">
+                    <span v-if="tile.live && !editing && !arranging && !customising" class="statusBadge">
                         <font-awesome-icon
                             v-if="isSubscribed(tile.id)"
                             :icon="['fas', 'bell']"
@@ -194,7 +236,7 @@
                         <font-awesome-icon :icon="['fas', 'tv']" />
                     </button>
                     <button
-                        v-if="tile.live && !arranging"
+                        v-if="tile.live && !arranging && !customising"
                         class="liveButton"
                         type="button"
                         :title="`Watch ${tile.title} live`"
@@ -221,27 +263,36 @@
                     </button>
                 </template>
             </RouterLink>
+            <button v-if="isChannels && customising" type="button" class="tile addTile" @click="openChannelEditor()">
+                <font-awesome-icon :icon="['fas', 'plus']" />
+                <span class="channelName">Add channel</span>
+            </button>
         </div>
     </div>
 </template>
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
+import { useModal } from 'vue-final-modal';
 import { useRoute } from 'vue-router';
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import ChannelEditModal from '@/components/modals/ChannelEditModal.vue';
 import { browseFetch } from '@/lib/browse';
+import { refreshChannelColors } from '@/lib/channelPillColors';
+import { useChannelTools } from '@/lib/channelTools';
 import dialogService from '@/lib/dialogService';
-import { ipFetch } from '@/lib/ipFetch';
+import { ipFetch, ipUpload } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
-import { getThumbnailUrl } from '@/lib/utils';
+import { getHost, getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
+const { state: channelTools } = useChannelTools();
 const tiles = ref([]);
 // Channel logos that failed to load fall back to the text label.
 const failedLogos = reactive({});
@@ -266,6 +317,59 @@ const shownTiles = computed(() =>
 const toggleArranging = () => {
     arranging.value = !arranging.value;
     editing.value = false;
+};
+
+// Customise mode (Channels only): rename channels, restyle their logos, and add or import your own live
+// streams. The edit dialog does the work; tiles just open it.
+const customising = ref(false);
+const importInput = ref(null);
+
+const toggleCustomising = () => {
+    customising.value = !customising.value;
+};
+
+const testTitle = (tile) =>
+    !tile.lastTest
+        ? 'Not tested yet'
+        : tile.lastTest.ok
+          ? `Last tested OK ${new Date(tile.lastTest.at).toLocaleString()}`
+          : `Failed its last test: ${tile.lastTest.message || 'no answer'}`;
+
+const openChannelEditor = (tile) => {
+    const modal = useModal({
+        component: ChannelEditModal,
+        attrs: {
+            channel: tile,
+            onSaved: () => {
+                modal.close();
+                refreshChannelColors();
+                loadTiles(true);
+                loadLive();
+                loadLiveTv();
+            },
+        },
+    });
+    modal.open();
+};
+
+// The server answers with a download (Content-Disposition), so navigating to it saves the file.
+const exportChannels = () => window.location.assign(`${getHost()}/json-api/live-channels/custom-export`);
+
+const importChannels = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const { ok, data } = await ipUpload('json-api/live-channels/custom-import', 'file', file);
+    if (!ok) {
+        dialogService.alert('Import failed', data?.message || 'Unable to import that file');
+        return;
+    }
+    await loadTiles(true);
+    dialogService.alert(
+        'Import finished',
+        `${data.added} channel${data.added === 1 ? '' : 's'} added.`,
+        data.skipped?.length ? `Skipped:\n${data.skipped.join('\n')}` : undefined
+    );
 };
 
 // Categories page: feature up to 2 categories on Discover.
@@ -301,7 +405,7 @@ const toggleDiscover = async (tile) => {
 // Runs in the capture phase: RouterLink navigates from its own click handler, and only skips navigating
 // if the event is already default-prevented. A tile's own buttons (play, compass, eye...) handle themselves.
 const onTileClick = (event) => {
-    if (arranging.value || featuring.value) event.preventDefault();
+    if (arranging.value || featuring.value || customising.value) event.preventDefault();
 };
 
 const saveOrder = async () => {
@@ -408,21 +512,34 @@ const confirmUnsubscribeAll = async () => {
 };
 const toggleLibrary = (tile) => (isSubscribed(tile.id) ? unsubscribe(tile.id) : subscribe(tile.id));
 
+// Switching the editing tools off (Settings) while a mode is open closes it.
 watch(
-    isChannels,
-    async (channels) => {
-        loading.value = true;
-        error.value = null;
-        try {
-            tiles.value = await browseFetch(channels ? 'channels' : 'categories');
-        } catch (e) {
-            error.value = e.message;
-        } finally {
-            loading.value = false;
+    () => channelTools.enabled,
+    (on) => {
+        if (!on) {
+            arranging.value = false;
+            editing.value = false;
+            customising.value = false;
         }
-    },
-    { immediate: true }
+    }
 );
+
+// `quiet` refreshes in place (after an edit) without blanking the grid.
+const loadTiles = async (quiet = false) => {
+    if (!quiet) loading.value = true;
+    error.value = null;
+    try {
+        tiles.value = await browseFetch(isChannels.value ? 'channels' : 'categories');
+        // A replaced logo has a new URL; give it another chance if it failed before.
+        Object.keys(failedLogos).forEach((id) => delete failedLogos[id]);
+    } catch (e) {
+        error.value = e.message;
+    } finally {
+        loading.value = false;
+    }
+};
+
+watch(isChannels, () => loadTiles(), { immediate: true });
 </script>
 
 <style lang="less" scoped>
@@ -688,6 +805,58 @@ watch(
 
     &.imageTile .arrangeButton.arrangeDiscover {
         right: 8px;
+    }
+
+    // Customise mode: a pen on each tile, a health badge on your own channels.
+    .customiseButton {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background-color: rgba(0, 0, 0, 0.55);
+        cursor: pointer;
+
+        svg {
+            color: #fff;
+        }
+    }
+
+    .customBadge {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        font-size: 16px;
+        text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+
+        svg {
+            color: #fff;
+        }
+
+        svg.testOk {
+            color: #4ade80;
+        }
+
+        svg.testBad {
+            color: #f87171;
+        }
+    }
+
+    &.addTile {
+        cursor: pointer;
+        flex-direction: column;
+        justify-content: center;
+        // Same shape as the logo tiles (76:32), so the grid stays even.
+        aspect-ratio: 2.375 / 1;
+        padding: 0;
+        border-style: dashed;
+        font: inherit;
     }
 
     // Categories: large artwork tiles with the title over a gradient.

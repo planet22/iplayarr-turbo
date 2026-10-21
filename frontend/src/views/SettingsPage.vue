@@ -127,6 +127,8 @@ const changedKeys = computed(() => {
             if (JSON.stringify(config.value[key]) !== JSON.stringify(original.value[key])) changed.add(key);
         }
     }
+    // The per-browser Appearance preferences join the same highlighting, as "appearance:<name>".
+    for (const name of changedAppearance.value) changed.add(`appearance:${name}`);
     return changed;
 });
 const tabHas = (tab, lookup) => TAB_KEYS[tab].some((key) => lookup(key));

@@ -1,6 +1,7 @@
 import { computed, reactive, watch } from 'vue';
 
 import { useChannelPillColors } from '@/lib/channelPillColors';
+import { useChannelTools } from '@/lib/channelTools';
 import { useInfoMessages } from '@/lib/infoMessages';
 import { usePagingMinimum } from '@/lib/pagingMinimum';
 import { useQualityBadges } from '@/lib/qualityBadges';
@@ -13,6 +14,7 @@ import { useTopBar } from '@/lib/topBar';
 export function useAppearanceDraft() {
     const pillColors = useChannelPillColors();
     const qualityBadges = useQualityBadges();
+    const channelTools = useChannelTools();
     const topBar = useTopBar();
     const infoMessages = useInfoMessages();
     const pagingMinimum = usePagingMinimum();
@@ -21,6 +23,7 @@ export function useAppearanceDraft() {
     const read = () => ({
         pillColors: pillColors.state.enabled,
         qualityBadges: qualityBadges.state.enabled,
+        channelTools: channelTools.state.enabled,
         topBar: topBar.state.mode,
         infoMessages: infoMessages.state.enabled,
         pagingMinimum: pagingMinimum.state.minimum,
@@ -45,6 +48,7 @@ export function useAppearanceDraft() {
     const apply = () => {
         pillColors.setEnabled(draft.pillColors);
         qualityBadges.setEnabled(draft.qualityBadges);
+        channelTools.setEnabled(draft.channelTools);
         topBar.setMode(draft.topBar);
         infoMessages.setEnabled(draft.infoMessages);
         pagingMinimum.setMinimum(draft.pagingMinimum);

@@ -35,7 +35,7 @@
                     </template>
                     <template v-if="item.library.channel">
                         <dt>Channel</dt>
-                        <dd>{{ item.library.channel }}</dd>
+                        <dd>{{ channelLabel(item.library.channel) }}</dd>
                     </template>
                     <template v-if="item.library.pubDate">
                         <dt>Air Date</dt>
@@ -106,6 +106,7 @@
 <script setup>
 import { computed, defineProps, inject, ref } from 'vue';
 
+import { channelLabel } from '@/lib/channelPillColors';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';

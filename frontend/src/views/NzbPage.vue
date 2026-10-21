@@ -118,7 +118,7 @@
                     <a class="clickable" @click="openInfo(entry.pid)">{{ detailsFor(entry.pid)?.title ?? entry.nzbName }}</a>
                 </template>
                 <template v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" #subtitle>
-                    {{ [detailsFor(entry.pid)?.channel, seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
+                    {{ [channelLabel(detailsFor(entry.pid)?.channel), seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
                 </template>
                 <template #chips>
                     <span class="pill">{{ entry.type }}</span>
@@ -177,7 +177,7 @@
                             {{ detailsFor(entry.pid)?.title ?? entry.nzbName }}
                         </a>
                         <div v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" class="subtle">
-                            {{ [detailsFor(entry.pid)?.channel, seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
+                            {{ [channelLabel(detailsFor(entry.pid)?.channel), seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td data-title="Type"><span class="pill">{{ entry.type }}</span></td>
@@ -274,6 +274,7 @@ import Pagination from '@/components/common/TablePagination.vue';
 import ViewToggle from '@/components/common/ViewToggle.vue';
 import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
+import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
