@@ -530,4 +530,10 @@ const handleClickOutside = (event) => {
         }
     }
 }
+
+@media (max-width: @mobile-breakpoint) {
+    .SettingsPageToolbar .SettingsPageToolbar-button {
+        min-height: 40px;
+    }
+}
 </style>

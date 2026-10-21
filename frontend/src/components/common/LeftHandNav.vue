@@ -1,22 +1,45 @@
 <template>
     <div ref="lhn" class="LeftHandNav">
         <ul>
-            <li class="sectionLabel">Browse</li>
+            <li
+                class="sectionLabel clickable" role="button" tabindex="0" :aria-expanded="isOpen('browse')"
+                @click="toggleGroup('browse')" @keydown.enter.prevent="toggleGroup('browse')" @keydown.space.prevent="toggleGroup('browse')"
+            >
+                <span>Browse</span>
+                <font-awesome-icon class="groupChevron" :icon="['fas', isOpen('browse') ? 'chevron-down' : 'chevron-right']" />
+            </li>
+            <template v-if="isOpen('browse')">
             <LeftHandNavLink label="Discover" icon="compass" path="/browse" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Search" icon="search" path="/search" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Guide" icon="calendar-days" path="/browse/schedule" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Channels" icon="tower-broadcast" path="/browse/channels" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" @option-clicked="closeLHN" />
             <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" @option-clicked="closeLHN" />
+            </template>
 
-            <li class="sectionLabel">Activity</li>
+            <li
+                class="sectionLabel clickable" role="button" tabindex="0" :aria-expanded="isOpen('activity')"
+                @click="toggleGroup('activity')" @keydown.enter.prevent="toggleGroup('activity')" @keydown.space.prevent="toggleGroup('activity')"
+            >
+                <span>Activity</span>
+                <font-awesome-icon class="groupChevron" :icon="['fas', isOpen('activity') ? 'chevron-down' : 'chevron-right']" />
+            </li>
+            <template v-if="isOpen('activity')">
             <LeftHandNavLink label="Queue" icon="tasks" path="/queue" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Video Events" icon="film" path="/events" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" @option-clicked="closeLHN" />
+            </template>
 
-            <li class="sectionLabel">Integrations</li>
+            <li
+                class="sectionLabel clickable" role="button" tabindex="0" :aria-expanded="isOpen('integrations')"
+                @click="toggleGroup('integrations')" @keydown.enter.prevent="toggleGroup('integrations')" @keydown.space.prevent="toggleGroup('integrations')"
+            >
+                <span>Integrations</span>
+                <font-awesome-icon class="groupChevron" :icon="['fas', isOpen('integrations') ? 'chevron-down' : 'chevron-right']" />
+            </li>
+            <template v-if="isOpen('integrations')">
             <LeftHandNavLink label="Apps" icon="laptop-code" path="/apps" @option-clicked="closeLHN" />
             <LeftHandNavLink label="NZB" icon="satellite-dish" path="/nzb" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Synonyms" icon="arrows-rotate" path="/synonyms" @option-clicked="closeLHN" />
@@ -26,13 +49,22 @@
 label="Refresh Index" icon="address-book" :no-link="true"
                     @option-clicked="refreshCache" />
             </template>
+            </template>
 
-            <li class="sectionLabel">System</li>
+            <li
+                class="sectionLabel clickable" role="button" tabindex="0" :aria-expanded="isOpen('system')"
+                @click="toggleGroup('system')" @keydown.enter.prevent="toggleGroup('system')" @keydown.space.prevent="toggleGroup('system')"
+            >
+                <span>System</span>
+                <font-awesome-icon class="groupChevron" :icon="['fas', isOpen('system') ? 'chevron-down' : 'chevron-right']" />
+            </li>
+            <template v-if="isOpen('system')">
             <LeftHandNavLink label="Statistics" icon="chart-bar" path="/stats" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Logs" icon="history" path="/logs" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Settings" icon="gears" path="/settings" @option-clicked="closeLHN" />
             <LeftHandNavLink label="About" icon="circle-info" path="/about" @option-clicked="closeLHN" />
             <LeftHandNavLink v-if="globalSettings.AUTH_TYPE != 'none'" label="Logout" icon="sign-out" :no-link="true" @option-clicked="logout" />
+            </template>
         </ul>
         <div class="floor">
             <div v-if="globalSettings.NATIVE_SEARCH == 'false'">
@@ -55,16 +87,51 @@ label="Refresh Index" icon="address-book" :no-link="true"
 </template>
 
 <script setup>
-import { computed, defineEmits, defineExpose, inject, onBeforeUnmount, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { onBeforeRouteLeave } from 'vue-router';
+import { computed, defineEmits, defineExpose, inject, onBeforeUnmount, ref, watch } from 'vue';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 import LeftHandNavLink from './NavLink.vue';
 
 const router = useRouter();
+const route = useRoute();
+
+// Each group of links can be folded away; which ones are folded is remembered per browser. The group
+// holding the page you open is always unfolded again.
+const GROUP_PATHS = {
+    browse: ['/browse', '/search'],
+    activity: ['/queue', '/subscriptions', '/streaming', '/events', '/watchdog'],
+    integrations: ['/apps', '/nzb', '/synonyms', '/offSchedule'],
+    system: ['/stats', '/logs', '/settings', '/about'],
+};
+const COLLAPSED_KEY = 'iplayarr.navCollapsed';
+const readCollapsed = () => {
+    try {
+        return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || '{}');
+    } catch {
+        return {};
+    }
+};
+const collapsed = ref(readCollapsed());
+const isOpen = (group) => !collapsed.value[group];
+const toggleGroup = (group) => {
+    collapsed.value = { ...collapsed.value, [group]: !collapsed.value[group] };
+    try {
+        localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed.value));
+    } catch {
+        // Not remembered (private window); the groups still fold for this visit.
+    }
+};
+watch(
+    () => route.path,
+    (path) => {
+        const group = Object.keys(GROUP_PATHS).find((key) => GROUP_PATHS[key].some((p) => path === p || path.startsWith(`${p}/`)));
+        if (group && collapsed.value[group]) collapsed.value = { ...collapsed.value, [group]: false };
+    },
+    { immediate: true }
+);
 const lhn = ref(null);
 const emit = defineEmits(['clear-search']);
 const globalSettings = inject('globalSettings');
@@ -97,22 +164,20 @@ const closeLHN = () => {
 defineExpose({ toggleLHN });
 
 const logout = async () => {
-    if (await dialogService.confirm('Logout', 'Are you sure you want to log out?')) {
-        const response = await ipFetch('auth/logout');
-        if (response.ok) {
-            router.go(0);
-        }
+    const response = await ipFetch('auth/logout');
+    if (response.ok) {
+        router.go(0);
+    } else {
+        toastService.error('Unable to log out');
     }
 };
 
 const refreshCache = async () => {
-    if (await dialogService.confirm('Refresh Index', 'Are you sure you want to refresh the index?')) {
-        await ipFetch('json-api/cache-refresh');
-        if (
-            await dialogService.confirm('Index Refreshing', 'Cache Refresh Started, Would you like to view the logs?')
-        ) {
-            router.push('/logs');
-        }
+    const { ok, data } = await ipFetch('json-api/cache-refresh');
+    if (ok) {
+        toastService.info('Index refresh started', { action: { label: 'View logs', onClick: () => router.push('/logs') } });
+    } else {
+        toastService.error('Unable to refresh the index', { detail: data?.message });
     }
 };
 
@@ -181,13 +246,25 @@ const handleClickOutside = (event) => {
     }
 
     li.sectionLabel {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
         padding: 18px 24px 6px;
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: @subtle-text-color;
-        cursor: default;
+        cursor: pointer;
+        user-select: none;
+
+        .groupChevron {
+            font-size: 10px;
+        }
+
+        &:hover {
+            color: @primary-text-color;
+        }
 
         &:first-child {
             padding-top: 12px;
@@ -228,6 +305,12 @@ const handleClickOutside = (event) => {
 }
 
 @media (max-width: @mobile-breakpoint) {
+    .LeftHandNav li.sectionLabel {
+        min-height: 44px;
+        box-sizing: border-box;
+        padding-top: 14px;
+    }
+
     .LeftHandNav {
         position: fixed;
         top: 0px;

@@ -9,23 +9,28 @@
     </div>
     <ModalsContainer />
     <ConnectionLostOverlay />
+    <ToastHost />
+    <CommandPalette v-if="authState.user" ref="palette" />
     <PipPlayer v-if="authState.user" />
 </template>
 
 <script setup>
 import { io } from 'socket.io-client';
-import { inject, provide, ref, watch } from 'vue';
+import { computed, inject, provide, ref, watch } from 'vue';
 import { ModalsContainer } from 'vue-final-modal';
 import { RouterView } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { useSubscriptions } from '@/lib/subscriptions';
 import { getBasePath } from '@/lib/utils';
 
 import BackButton from './components/common/BackButton.vue';
+import CommandPalette from './components/common/CommandPalette.vue';
 import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue';
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
 import PipPlayer from './components/common/PipPlayer.vue';
+import ToastHost from './components/common/ToastHost.vue';
 import { enforceMaxLength } from './lib/utils';
 
 const authState = inject('authState');
@@ -48,6 +53,9 @@ const navBar = ref(null);
 
 const leftHandNav = ref(null);
 
+const palette = ref(null);
+provide('openCommandPalette', () => palette.value?.show());
+
 const updateQueue = async () => {
     queue.value = (await ipFetch('json-api/queue/queue')).data;
     history.value = (await ipFetch('json-api/queue/history')).data;
@@ -58,6 +66,14 @@ const updateQueue = async () => {
 const toggleLeftHandNav = () => {
     leftHandNav.value.toggleLHN();
 };
+
+// What is already queued / downloaded, by pid, so programme cards can say so without each searching the lists.
+const itemStatus = computed(() => ({
+    queued: new Set(queue.value.map((entry) => entry.pid)),
+    downloaded: new Set(history.value.filter((entry) => entry.status == 'Complete' || entry.status == 'Forwarded').map((entry) => entry.pid)),
+}));
+provide('itemStatus', itemStatus);
+const { load: loadSubscriptions } = useSubscriptions();
 
 provide('queue', queue);
 provide('history', history);
@@ -134,6 +150,7 @@ const pageSetup = async () => {
         apps.value = (await ipFetch('json-api/apps')).data;
         refreshGlobalSettings();
         refreshToolVersions();
+        loadSubscriptions();
     }
 };
 

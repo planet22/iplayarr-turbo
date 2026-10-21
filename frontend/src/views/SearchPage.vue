@@ -859,4 +859,10 @@ watch(
         color: @on-fill-color;
     }
 }
+
+@media (max-width: @mobile-breakpoint) {
+    .chip {
+        min-height: 36px;
+    }
+}
 </style>

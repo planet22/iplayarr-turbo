@@ -81,8 +81,8 @@ import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 defineProps({
     downloadClients: {
@@ -126,7 +126,8 @@ async function update(tool) {
     try {
         const response = await ipFetch('json-api/versions/update', 'POST', { tool });
         await refreshToolVersions();
-        await dialogService.alert(response.data.success ? 'Success' : 'Update Failed', response.data.message);
+        if (response.data.success) toastService.success(response.data.message);
+        else toastService.error('Update failed', { detail: response.data.message });
     } finally {
         updating[key] = false;
     }

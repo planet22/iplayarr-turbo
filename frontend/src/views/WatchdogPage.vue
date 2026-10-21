@@ -407,7 +407,7 @@ const onStatus = (data) => {
 };
 
 async function clearItems() {
-    if (!(await dialogService.confirm('Clear Table', 'Clear the list of checked links? They will be listed again on the next run.'))) return;
+    if (!(await dialogService.confirm('Clear Table', 'Clear the list of checked links? They will be listed again on the next run.', undefined, { danger: true, confirmLabel: 'Clear' }))) return;
     const { ok, data } = await ipFetch('json-api/watchdog/items', 'DELETE');
     if (!ok) runError.value = data?.message ?? 'Could not clear the table';
 }

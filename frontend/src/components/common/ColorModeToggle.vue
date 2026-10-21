@@ -92,4 +92,11 @@ const cycle = () => {
         color: @primary-text-color;
     }
 }
+
+@media (max-width: @mobile-breakpoint) {
+    .cycle {
+        width: @touch-target;
+        height: @touch-target;
+    }
+}
 </style>

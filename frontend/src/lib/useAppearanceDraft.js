@@ -58,5 +58,8 @@ export function useAppearanceDraft() {
         Object.assign(draft, read());
     };
 
-    return { draft, changed, apply };
+    // Back to what is applied (Discard on the settings page).
+    const reset = () => Object.assign(draft, read());
+
+    return { draft, changed, apply, reset };
 }

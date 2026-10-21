@@ -25,8 +25,8 @@
                 </button>
             </template>
         </SettingsPageToolbar>
-        <LoadingIndicator v-if="loading" />
-        <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
+        <SkeletonLoader v-if="loading" variant="rails" />
+        <ErrorState v-else-if="error" :message="error" @retry="reload" />
         <template v-else>
             <div v-if="nowNext?.now || nowNext?.next" class="nowNext">
                 <RouterLink
@@ -63,10 +63,10 @@ import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
-import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import { browseFetch } from '@/lib/browse';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
@@ -99,9 +99,13 @@ const logoFailed = ref(false);
 // id only if it never does.
 const pageTitle = computed(() => channel.value?.title ?? (loading.value ? '\u00a0' : route.params.id));
 
+// Bumped by "Try again" to load the same channel once more.
+const reloadKey = ref(0);
+const reload = () => reloadKey.value++;
+
 watch(
-    () => route.params.id,
-    async (id) => {
+    () => [route.params.id, reloadKey.value],
+    async ([id]) => {
         if (!id) return;
         loading.value = true;
         error.value = null;

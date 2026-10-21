@@ -11,6 +11,11 @@
                 <font-awesome-icon :icon="['fas', 'tv']" size="2x" />
             </div>
             <QualityBadges :item="item" class="thumbBadges" />
+            <span v-if="statusBadges.length && !selectable" class="statusBadges">
+                <span v-for="badge in statusBadges" :key="badge.key" class="statusBadge" role="img" :title="badge.label" :aria-label="badge.label">
+                    <font-awesome-icon :icon="['fas', badge.icon]" />
+                </span>
+            </span>
             <span v-if="item.kind !== 'episode'" class="kind">{{ item.kind === 'brand' ? 'Programme' : 'Series' }}</span>
             <span v-if="selectable" class="selectBadge" aria-hidden="true">
                 <font-awesome-icon v-if="selected" :icon="['fas', 'check']" />
@@ -33,11 +38,12 @@
 </template>
 
 <script setup>
-import { computed, defineEmits, defineProps } from 'vue';
+import { computed, defineEmits, defineProps, inject } from 'vue';
 import { RouterLink } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
+import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
@@ -64,6 +70,18 @@ const onCardClick = () => {
 
 const { canPlay, play, download } = useBrowseActions();
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
+
+// Already in the queue, already downloaded, or a show you subscribe to.
+const itemStatus = inject('itemStatus', null);
+const { findByPid } = useSubscriptions();
+const statusBadges = computed(() => {
+    const { pid, seriesPid } = props.item;
+    const badges = [];
+    if (itemStatus?.value.downloaded.has(pid)) badges.push({ key: 'downloaded', icon: 'circle-check', label: 'Downloaded' });
+    else if (itemStatus?.value.queued.has(pid)) badges.push({ key: 'queued', icon: 'clock', label: 'In the queue' });
+    if (findByPid(seriesPid ?? pid) || findByPid(pid)) badges.push({ key: 'subscribed', icon: 'bell', label: 'Subscribed' });
+    return badges;
+});
 </script>
 
 <style lang="less" scoped>
@@ -107,6 +125,27 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
         cursor: pointer;
         user-select: none;
 
+        // Top right, opposite the Programme / Series label: what you already have or follow.
+        .statusBadges {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            display: flex;
+            gap: 4px;
+
+            .statusBadge {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 22px;
+                height: 22px;
+                border-radius: 50%;
+                background-color: rgba(0, 0, 0, 0.7);
+                color: #fff;
+                font-size: 11px;
+            }
+        }
+
         .selectBadge {
             position: absolute;
             top: 8px;
@@ -144,6 +183,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
         font-size: 11px;
         border-radius: 2px;
         background-color: rgba(0, 0, 0, 0.7);
+        color: #fff;
     }
 
     .overlay {

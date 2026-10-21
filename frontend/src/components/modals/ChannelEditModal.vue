@@ -129,6 +129,7 @@ import { computed, defineEmits, defineProps, onMounted, ref } from 'vue';
 
 import dialogService from '@/lib/dialogService';
 import { ipFetch, ipUpload } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { getThumbnailUrl } from '@/lib/utils';
 
 import SelectInput from '../common/form/SelectInput.vue';
@@ -281,7 +282,7 @@ const removeLogo = () => {
     removeUploaded.value = true;
 };
 
-const fail = (data, fallback) => dialogService.alert('Error', data?.message || fallback);
+const fail = (data, fallback) => toastService.error(fallback, { detail: data?.message });
 
 const save = async () => {
     saving.value = true;
@@ -322,7 +323,7 @@ const save = async () => {
 const hasUploadedLogoOnServer = () => !!props.channel?.logo?.includes('live-channels/logo/');
 
 const reset = async () => {
-    if (!(await dialogService.confirm('Reset channel', `Reset ${props.channel.title} to its defaults?`, 'Its name, colour, text, number and uploaded logo are cleared.'))) {
+    if (!(await dialogService.confirm('Reset channel', `Reset ${props.channel.title} to its defaults?`, 'Its name, colour, text, number and uploaded logo are cleared.', { danger: true, confirmLabel: 'Reset' }))) {
         return;
     }
     const { ok, data } = await ipFetch(`${API}/${props.channel.id}/customise`, 'DELETE');
@@ -331,7 +332,7 @@ const reset = async () => {
 };
 
 const remove = async () => {
-    if (!(await dialogService.confirm('Delete channel', `Delete ${props.channel.title}?`, 'It is also removed from your library and Jellyfin Live TV.'))) {
+    if (!(await dialogService.confirm('Delete channel', `Delete ${props.channel.title}?`, 'It is also removed from your library and Jellyfin Live TV.', { danger: true, confirmLabel: 'Delete' }))) {
         return;
     }
     const { ok, data } = await ipFetch(`${API}/custom/${props.channel.id}`, 'DELETE');

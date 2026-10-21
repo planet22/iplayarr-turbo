@@ -4,6 +4,25 @@
 // 768px a min-width rule on the mobile breakpoint and a max-width: @mobile-breakpoint rule both match.
 @desktop-breakpoint: 769px;
 
+/* Layout scale
+   Spacing, corner radius, type size, motion and fingertip size. New styles use these instead of literal numbers, so
+   the whole UI can be adjusted in one place; older styles keep their literal values until they are next touched. */
+@space-1: 4px;
+@space-2: 8px;
+@space-3: 12px;
+@space-4: 16px;
+@space-5: 24px;
+@space-6: 32px;
+@radius-sm: 4px;
+@radius-md: 6px;
+@radius-lg: 8px;
+@font-size-sm: 12px;
+@font-size-md: 14px;
+@font-size-lg: 18px;
+@motion-fast: 0.15s;
+@motion-base: 0.2s;
+@touch-target: 40px;
+
 /* Colours
    Every colour is a CSS custom property written onto <html> by lib/theme.js from the active theme (lib/themes.js),
    so the Less names below keep working while the colours change with the theme and with light / dark mode.

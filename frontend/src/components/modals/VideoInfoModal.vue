@@ -191,7 +191,9 @@ const deleteItem = async () => {
     const isHistory = status == 'Complete' || status == 'Forwarded' || status == 'Cancelled' || status == 'Removed';
     const confirmed = await dialogService.confirm(
         isHistory ? 'Remove' : 'Cancel',
-        `Are you sure you want to ${isHistory ? 'remove this history item' : 'cancel this download'}?`
+        `Are you sure you want to ${isHistory ? 'remove this history item' : 'cancel this download'}?`,
+        undefined,
+        { danger: true, confirmLabel: isHistory ? 'Remove' : 'Cancel download' }
     );
     if (confirmed) {
         await ipFetch(`json-api/queue/${isHistory ? 'history' : 'queue'}?pid=${pid}${jobId ? `&jobId=${jobId}` : ''}`, 'DELETE');

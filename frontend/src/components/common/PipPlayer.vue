@@ -201,7 +201,7 @@ onBeforeUnmount(cleanup);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: @primary-text-color;
+    color: #fff;
     background-color: rgba(0, 0, 0, 0.55);
     pointer-events: none;
 }

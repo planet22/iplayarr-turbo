@@ -240,7 +240,7 @@ function formatDate(value) {
 }
 
 const clearEvents = async () => {
-    if (await dialogService.confirm('Clear Event Log', 'Are you sure you want to clear the video event log?')) {
+    if (await dialogService.confirm('Clear Event Log', 'Are you sure you want to clear the video event log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/events', 'DELETE');
     }
 };

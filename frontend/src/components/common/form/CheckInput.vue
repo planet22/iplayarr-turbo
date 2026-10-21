@@ -87,4 +87,19 @@ watch(
         }
     }
 }
+
+// Phones: the ticking area is a 20px box, so the label around it grows into a fingertip-sized hit area.
+@media (max-width: @mobile-breakpoint) {
+    .CheckInput-container .CheckInput-label {
+        align-items: center;
+        justify-content: center;
+        min-width: 40px;
+        min-height: 40px;
+
+        .CheckInput-input {
+            flex: 0 0 20px;
+            margin: 0;
+        }
+    }
+}
 </style>

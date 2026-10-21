@@ -56,8 +56,11 @@ const routes = [
 const router = createRouter({
     history: createWebHistory(getBasePath() || '/'),
     routes,
-    scrollBehavior() {
-        return { top: 0, behaviour: 'smooth' };
+    scrollBehavior(_to, _from, saved) {
+        // Back / forward: return to where the page was. Browse grids and rails fill in after navigation,
+        // so wait briefly for them to be tall enough before scrolling.
+        if (saved) return new Promise((resolve) => setTimeout(() => resolve(saved), 350));
+        return { top: 0 };
     },
 });
 

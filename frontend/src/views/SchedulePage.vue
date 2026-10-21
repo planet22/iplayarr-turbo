@@ -29,7 +29,7 @@
             </template>
         </SettingsPageToolbar>
         <LoadingIndicator v-if="loading" />
-        <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
+        <ErrorState v-else-if="error" :message="error" @retry="load()" />
         <InfoBar v-else-if="channels.length === 0">Nothing scheduled for this day.</InfoBar>
         <div v-else class="scheduleGrid">
             <div class="channelColumn">
@@ -82,6 +82,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';

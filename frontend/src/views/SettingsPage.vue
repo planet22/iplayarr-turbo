@@ -9,7 +9,18 @@
         />
     </div>
     <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
-    <div v-if="!loading" class="inner-content">
+    <div v-if="!loading && filterable" class="inner-content settingsFilterRow">
+        <font-awesome-icon :icon="['fas', 'search']" class="settingsFilterIcon" />
+        <input
+            v-model="filterText"
+            type="search"
+            class="settingsFilter"
+            placeholder="Filter settings on this tab"
+            aria-label="Filter settings on this tab"
+            @keydown.esc="filterText = ''"
+        />
+    </div>
+    <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody">
         <GeneralSettingsTab
             v-if="activeTab == 'general'"
             :true-or-false="trueOrFalse"
@@ -39,15 +50,19 @@
             @test-oidc="testOIDC"
         />
         <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" />
+        <div v-if="filterText.trim() && !filterMatches" class="settingsFilterEmpty">
+            No settings on this tab match "{{ filterText.trim() }}".
+        </div>
     </div>
+    <SettingsSaveBar :count="tabChangeCount" :saving="loading" @save="saveConfig" @discard="discardChanges" />
     <LoadingIndicator v-if="loading" />
 </template>
 
 <script setup>
 import { v4 } from 'uuid';
-import { computed, inject, onMounted, provide, ref, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
-import { onBeforeRouteLeave } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -59,12 +74,14 @@ import GeneralSettingsTab from '@/components/settings/GeneralSettingsTab.vue';
 import LiveTvSettingsTab from '@/components/settings/LiveTvSettingsTab.vue';
 import MaintenanceSettingsTab from '@/components/settings/MaintenanceSettingsTab.vue';
 import MediaManagementSettingsTab from '@/components/settings/MediaManagementSettingsTab.vue';
+import SettingsSaveBar from '@/components/settings/SettingsSaveBar.vue';
 import SettingsTabs from '@/components/settings/SettingsTabs.vue';
 import StreamingSettingsTab from '@/components/settings/StreamingSettingsTab.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { useAppearanceDraft } from '@/lib/useAppearanceDraft';
-import { ttlDraftSeconds, ttlEntryChanged } from '@/lib/useCaches';
+import { splitTtl, ttlDraftSeconds, ttlEntryChanged } from '@/lib/useCaches';
 import { getHost } from '@/lib/utils';
 
 const loading = ref(false);
@@ -84,7 +101,11 @@ const tabs = [
     { key: 'authentication', label: 'Authentication', icon: 'shield-halved' },
     { key: 'maintenance', label: 'Maintenance', icon: 'wrench' },
 ];
-const activeTab = ref('general');
+const route = useRoute();
+const router = useRouter();
+// The open tab is kept in the URL (#streaming), so a tab can be linked to and survives a reload.
+const initialTab = tabs.find((tab) => tab.key === route.hash.slice(1))?.key;
+const activeTab = ref(initialTab ?? 'general');
 
 // Which config keys each tab edits. Save sends just the current tab's keys, and the tab bar flags
 // the tabs whose keys differ from what was last loaded or saved. STREAM_BASE_URL and STREAM_KEY are
@@ -141,7 +162,7 @@ const cacheTtls = ref({});
 const cachesReload = ref(0);
 const changedCacheTtls = computed(() => Object.keys(cacheTtls.value).filter((prefix) => ttlEntryChanged(cacheTtls.value[prefix])));
 // General tab per-browser preferences: applied by Save, not as they are edited.
-const { draft: appearance, changed: changedAppearance, apply: applyAppearance } = useAppearanceDraft();
+const { draft: appearance, changed: changedAppearance, apply: applyAppearance, reset: resetAppearance } = useAppearanceDraft();
 const dirtyTabs = computed(() =>
     tabs
         .filter(
@@ -232,9 +253,103 @@ const switchTab = async (key) => {
         return;
     }
     activeTab.value = key;
+    filterText.value = '';
+    router.replace({ hash: `#${key}` });
 };
 
 const saveEnabled = computed(() => dirtyTabs.value.includes(activeTab.value));
+
+// Edits waiting on the open tab, for the save bar.
+const tabChangeCount = computed(() => {
+    const tab = activeTab.value;
+    let count = TAB_KEYS[tab].filter((key) => changedKeys.value.has(key)).length;
+    if (tab == 'maintenance') count += changedSchedules.value.length + changedCacheTtls.value.length;
+    if (tab == 'general') count += changedAppearance.value.length;
+    return count;
+});
+
+// Puts the open tab back to what was last loaded or saved.
+const discardChanges = () => {
+    const tab = activeTab.value;
+    for (const key of TAB_KEYS[tab]) {
+        if (key in original.value) config.value[key] = clone(original.value[key]);
+    }
+    if (tab == 'maintenance') {
+        for (const id of changedSchedules.value) schedules.value[id].draft = schedules.value[id].saved;
+        for (const prefix of changedCacheTtls.value) {
+            Object.assign(cacheTtls.value[prefix], splitTtl(cacheTtls.value[prefix].savedTtl), { resetPending: false });
+        }
+    }
+    if (tab == 'general') resetAppearance();
+    validationErrors.value.config = {};
+    toastService.info('Changes discarded');
+};
+
+// Filter box: hides the settings on the open tab whose label or help text lacks the typed words, and any
+// section heading left with nothing under it. Done on the rendered rows so every tab gets it unchanged.
+const filterText = ref('');
+const filterMatches = ref(true);
+const settingsBody = ref(null);
+const filterable = computed(() => activeTab.value != 'maintenance');
+let filterObserver;
+
+const applyFilter = () => {
+    const root = settingsBody.value;
+    if (!root) return;
+    const words = filterText.value.toLowerCase().split(/\s+/).filter(Boolean);
+    let heading = null;
+    let headingHasMatch = false;
+    let matches = 0;
+    const closeHeading = () => {
+        if (heading) heading.classList.toggle('filteredOut', words.length > 0 && !headingHasMatch);
+    };
+    for (const el of root.querySelectorAll('.settingsSubheading, .form-group')) {
+        if (el.classList.contains('settingsSubheading')) {
+            closeHeading();
+            heading = el;
+            headingHasMatch = false;
+            continue;
+        }
+        const text = [el.querySelector('label')?.textContent, ...[...el.querySelectorAll('.tooltip, .InfoTip-popup')].map((n) => n.textContent)]
+            .join(' ')
+            .toLowerCase();
+        const hit = words.every((word) => text.includes(word));
+        el.classList.toggle('filteredOut', words.length > 0 && !hit);
+        if (hit) {
+            matches++;
+            headingHasMatch = true;
+        }
+    }
+    closeHeading();
+    filterMatches.value = words.length === 0 || matches > 0;
+};
+
+watch([filterText, activeTab, loading], async () => {
+    await nextTick();
+    applyFilter();
+});
+
+watch(settingsBody, (el) => {
+    filterObserver?.disconnect();
+    if (el) {
+        // A tab's rows can arrive after it opens (data loading in); keep the filter applied to them.
+        filterObserver = new MutationObserver(() => {
+            if (filterText.value.trim()) applyFilter();
+        });
+        filterObserver.observe(el, { childList: true, subtree: true });
+    }
+});
+onBeforeUnmount(() => filterObserver?.disconnect());
+
+// Closing or reloading the browser tab with edits waiting asks first (route changes are covered below).
+const warnBeforeUnload = (event) => {
+    if (dirtyTabs.value.length) {
+        event.preventDefault();
+        event.returnValue = '';
+    }
+};
+window.addEventListener('beforeunload', warnBeforeUnload);
+onBeforeUnmount(() => window.removeEventListener('beforeunload', warnBeforeUnload));
 
 const oidcCallbackTooltip = computed(() => {
     return `${window.location.protocol}//${window.location.host}`;
@@ -270,10 +385,8 @@ onMounted(async () => {
     oidcChannel.onmessage = (event) => {
         if (event.data && event.data.type === 'oidc-test-result') {
             oidcTested.value = event.data.success;
-            dialogService.alert(
-                'OIDC Test Result',
-                event.data.success ? `OIDC test succeeded for ${event.data.email}!` : `OIDC test failed: ${event.data.error || 'Unknown error'}`
-            );
+            if (event.data.success) toastService.success(`OIDC test succeeded for ${event.data.email}`);
+            else toastService.error('OIDC test failed', { detail: event.data.error || 'Unknown error' });
         }
     };
 });
@@ -358,11 +471,11 @@ const saveConfig = async () => {
             const scheduleErrors = tab == 'maintenance' ? await saveSchedules() : 0;
             const cacheErrors = tab == 'maintenance' ? await saveCacheTtls() : 0;
             if (scheduleErrors) {
-                dialogService.alert('Error', `${scheduleErrors} schedule(s) could not be saved - see the messages under each task.`);
+                toastService.error(`${scheduleErrors} schedule(s) could not be saved`, { detail: 'See the messages under each task.' });
             } else if (cacheErrors) {
-                dialogService.alert('Error', `${cacheErrors} cache lifetime(s) could not be saved.`);
+                toastService.error(`${cacheErrors} cache lifetime(s) could not be saved`);
             } else {
-                dialogService.alert('Success', 'Save Successful');
+                toastService.success('Settings saved');
             }
         }
     }
@@ -415,20 +528,14 @@ const generateStreamKey = async () => {
     }
 };
 
-onBeforeRouteLeave(async (_, __, next) => {
-    if (dirtyTabs.value.length) {
-        if (
-            await dialogService.confirm(
-                'Unsaved Changes',
-                'You have unsaved changes. If you leave this page they will be lost.'
-            )
-        ) {
-            next();
-        } else {
-            next(false);
-        }
-    }
-    next();
+onBeforeRouteLeave(async () => {
+    if (!dirtyTabs.value.length) return true;
+    return await dialogService.confirm(
+        'Unsaved Changes',
+        'You have unsaved changes. If you leave this page they will be lost.',
+        undefined,
+        { danger: true, confirmLabel: 'Leave page' }
+    );
 });
 
 const testOIDC = () => {
@@ -464,3 +571,41 @@ const testOIDC = () => {
     }, 1000);
 };
 </script>
+
+<style lang="less">
+.settingsFilterRow {
+    position: relative;
+    max-width: 650px;
+    margin-bottom: 1rem;
+
+    .settingsFilterIcon {
+        position: absolute;
+        left: 26px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: @subtle-text-color;
+        pointer-events: none;
+    }
+
+    .settingsFilter {
+        box-sizing: border-box;
+        width: 100%;
+        height: 35px;
+        padding: 6px 16px 6px 38px;
+        margin: 0 5px;
+        border: 1px solid @input-border-color;
+        border-radius: 4px;
+        background-color: @input-background-color;
+        color: @input-text-color;
+    }
+}
+
+.settingsBody .filteredOut {
+    display: none !important;
+}
+
+.settingsFilterEmpty {
+    padding: 1rem 0;
+    color: @subtle-text-color;
+}
+</style>

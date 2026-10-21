@@ -1,5 +1,7 @@
 <template>
-    <apexchart type="line" height="260" :options="options" :series="chartSeries" />
+    <div role="img" :aria-label="title ? `${title} over time` : 'Chart over time'">
+        <apexchart type="line" height="260" :options="options" :series="chartSeries" />
+    </div>
 </template>
 
 <script setup>

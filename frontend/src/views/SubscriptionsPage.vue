@@ -7,10 +7,12 @@
         />
         <InfoBar small>New episodes are queued automatically, checked hourly or on demand.</InfoBar>
         <LoadingIndicator v-if="!loaded" />
-        <p v-else-if="subscriptions.length === 0">
-            No subscriptions yet. Open a show from
-            <RouterLink to="/browse">Discover</RouterLink> and press Subscribe.
-        </p>
+        <EmptyState
+            v-else-if="subscriptions.length === 0" icon="bell" title="No subscriptions yet"
+            hint="Open a show and press Subscribe, and new episodes are queued for you automatically."
+        >
+            <RouterLink to="/browse">Browse programmes</RouterLink>
+        </EmptyState>
         <TablePagination v-if="loaded && subscriptions.length" v-model="page" v-model:page-size="pageSize" :total="subscriptions.length" />
         <div v-if="isMobile && loaded && subscriptions.length" class="cardList">
             <DataCard v-for="subscription in pagedItems" :key="subscription.id">
@@ -125,7 +127,7 @@
                     </template>
                     <template #corner>
                         <div class="rowActions">
-                            <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="unsubscribeLive(live.channelId)">
+                            <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="removeLive(live)">
                                 <font-awesome-icon :icon="['fas', 'trash']" />
                             </button>
                         </div>
@@ -149,7 +151,7 @@
                         </div>
                     </div>
                     <div class="rowActions">
-                        <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="unsubscribeLive(live.channelId)">
+                        <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="removeLive(live)">
                             <font-awesome-icon :icon="['fas', 'trash']" />
                         </button>
                     </div>
@@ -164,6 +166,7 @@ import { onMounted, reactive, ref } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import DataCard from '@/components/common/DataCard.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -174,6 +177,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
+import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { formatRelativeTime, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
@@ -213,13 +217,13 @@ const summarise = (results) => {
     const queued = results.reduce((n, r) => n + r.queued.length, 0);
     const failed = results.filter((r) => r.error);
     if (failed.length) {
-        dialogService.alert(
-            'Check finished with errors',
-            `${queued} new episode(s) queued.`,
-            failed.map((r) => `${r.title}: ${r.error}`).join('; ')
-        );
+        toastService.error(`Check finished with errors (${queued} new episode(s) queued)`, {
+            detail: failed.map((r) => `${r.title}: ${r.error}`).join('; '),
+        });
+    } else if (queued) {
+        toastService.success(`${queued} new episode(s) queued for download`);
     } else {
-        dialogService.alert('Check complete', queued ? `${queued} new episode(s) queued for download.` : 'No new episodes.');
+        toastService.info('No new episodes');
     }
 };
 
@@ -255,6 +259,20 @@ const toggleArrWithBusy = async (subscription) => {
 };
 
 const remove = (subscription) => unsubscribe(subscription);
+
+// Removing a live channel deletes its .strm from the library, so ask first (like unsubscribing from a show).
+const removeLive = async (live) => {
+    if (
+        await dialogService.confirm(
+            'Remove live channel',
+            `Remove ${live.title} from your library?`,
+            'Its .strm file is deleted. You can add it again from Channels.',
+            { danger: true, confirmLabel: 'Remove' }
+        )
+    ) {
+        unsubscribeLive(live.channelId);
+    }
+};
 </script>
 
 <style lang="less" scoped>
@@ -369,5 +387,12 @@ const remove = (subscription) => unsubscribe(subscription);
 .cardTitle {
     color: @primary-text-color;
     text-decoration: none;
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .cardList :deep(button) {
+        width: 40px;
+        height: 40px;
+    }
 }
 </style>

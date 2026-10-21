@@ -44,3 +44,14 @@ where they are used.
 Add a `define({ id, name, description, dark, light, tint })` entry to `THEMES` in `themes.js`: `dark` and `light` are the
 brand colour in each mode as `#rrggbb`; `tint` is an optional `{ hue, sat }` that colours the greys. Check the result in
 both modes on the Statistics, Queue and Settings pages.
+
+## Layout scale
+
+`variables.less` also holds a small layout scale for new work: spacing (`@space-1`..`@space-6`), corner radius
+(`@radius-sm/md/lg`), type size (`@font-size-sm/md/lg`), motion (`@motion-fast/base`) and `@touch-target` (the 40px
+minimum for a fingertip on phones). Older styles keep their literal numbers until they are next touched.
+
+## Text over artwork
+
+Text on poster or banner images (Discover hero, programme banner, media info banner, card labels, quality badges, channel
+tile titles) is fixed white, never the theme's text colour, because the scrim behind it is dark in both colour modes.

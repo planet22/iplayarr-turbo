@@ -1,5 +1,7 @@
 <template>
-    <apexchart type="donut" height="260" :options="options" :series="processedData.series"></apexchart>
+    <div role="img" :aria-label="summary">
+        <apexchart type="donut" height="260" :options="options" :series="processedData.series"></apexchart>
+    </div>
 </template>
 
 <script setup>
@@ -15,6 +17,15 @@ const props = defineProps({
 });
 
 const MAX_ITEMS = 5;
+
+// Screen readers cannot see the chart, so give them its numbers as text.
+const summary = computed(() => {
+    const top = Object.entries(props.data ?? {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, MAX_ITEMS)
+        .map(([label, value]) => `${label} ${value}`);
+    return `${props.title || 'Chart'}: ${top.length ? top.join(', ') : 'no data'}`;
+});
 
 // Phones: a smaller, regular-weight title (the default is a big bold Arial), and the legend under the donut
 // instead of squeezed to its right, where it overlaps the ring.

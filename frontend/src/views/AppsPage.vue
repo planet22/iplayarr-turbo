@@ -220,7 +220,8 @@ const deleteApp = async ({ id, name }) => {
         await dialogService.confirm(
             'Delete App',
             `Are you sure you want to delete ${name}`,
-            'Indexers and Download Clients in the target Arr, will NOT be deleted'
+            'Indexers and Download Clients in the target Arr, will NOT be deleted',
+            { danger: true, confirmLabel: 'Delete' }
         )
     ) {
         await ipFetch('json-api/apps', 'DELETE', { id });
@@ -263,7 +264,7 @@ const saveMapping = async (mapping) => {
 };
 
 const removeMapping = async ({ id, userAgent }) => {
-    if (await dialogService.confirm('Delete User-Agent Mapping', `Are you sure you want to delete "${userAgent}"`)) {
+    if (await dialogService.confirm('Delete User-Agent Mapping', `Are you sure you want to delete "${userAgent}"`, undefined, { danger: true, confirmLabel: 'Delete' })) {
         await ipFetch('json-api/apps/user-agents', 'DELETE', { id });
         await refreshUserAgentMappings();
     }

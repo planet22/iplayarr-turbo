@@ -34,7 +34,8 @@ const { state } = useQualityBadges();
     line-height: 1.4;
     letter-spacing: 0.04em;
     border-radius: 2px;
-    color: @primary-text-color;
+    // On a dark chip over artwork: fixed white, not the theme's text colour.
+    color: #fff;
     background-color: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.35);
 

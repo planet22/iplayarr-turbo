@@ -1,5 +1,7 @@
 <template>
-    <apexchart type="bar" height="260" :options="options" :series="processedData.series"></apexchart>
+    <div role="img" :aria-label="summary">
+        <apexchart type="bar" height="260" :options="options" :series="processedData.series"></apexchart>
+    </div>
 </template>
 
 <script setup>
@@ -10,6 +12,15 @@ import { chartTheme } from '@/lib/chartTheme';
 const props = defineProps({ title: String, data: Object });
 
 const MAX_ITEMS = 5;
+
+// Screen readers cannot see the chart, so give them its numbers as text.
+const summary = computed(() => {
+    const top = Object.entries(props.data ?? {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, MAX_ITEMS)
+        .map(([label, value]) => `${label} ${value}`);
+    return `${props.title || 'Chart'}: ${top.length ? top.join(', ') : 'no data'}`;
+});
 
 // Phones: a smaller, regular-weight title (the default is a big bold Arial).
 const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
