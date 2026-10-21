@@ -169,11 +169,11 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
+import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { formatRelativeTime, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
@@ -213,13 +213,13 @@ const summarise = (results) => {
     const queued = results.reduce((n, r) => n + r.queued.length, 0);
     const failed = results.filter((r) => r.error);
     if (failed.length) {
-        dialogService.alert(
-            'Check finished with errors',
-            `${queued} new episode(s) queued.`,
-            failed.map((r) => `${r.title}: ${r.error}`).join('; ')
-        );
+        toastService.error(`Check finished with errors (${queued} new episode(s) queued)`, {
+            detail: failed.map((r) => `${r.title}: ${r.error}`).join('; '),
+        });
+    } else if (queued) {
+        toastService.success(`${queued} new episode(s) queued for download`);
     } else {
-        dialogService.alert('Check complete', queued ? `${queued} new episode(s) queued for download.` : 'No new episodes.');
+        toastService.info('No new episodes');
     }
 };
 

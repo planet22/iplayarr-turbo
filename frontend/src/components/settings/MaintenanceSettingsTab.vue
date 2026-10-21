@@ -120,6 +120,7 @@ import ScheduledTaskRow from '@/components/settings/ScheduledTaskRow.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { splitTtl, TTL_UNITS, ttlEntryChanged, useCaches } from '@/lib/useCaches';
 import { useScheduledTasks } from '@/lib/useScheduledTasks';
 
@@ -135,7 +136,8 @@ const rebuildLogos = async () => {
     rebuilding.value = true;
     const { ok, data } = await ipFetch('json-api/live-channels/rebuild-logos', 'POST');
     rebuilding.value = false;
-    dialogService.alert(ok ? 'Success' : 'Error', ok ? 'Logos rebuilt' : data?.message || 'Unable to rebuild the logos');
+    if (ok) toastService.success('Logos rebuilt');
+    else toastService.error('Unable to rebuild the logos', { detail: data?.message });
 };
 
 const { tasks, loaded, running, load, runNow } = useScheduledTasks();
@@ -173,7 +175,7 @@ const resetTtl = (cache) => {
     Object.assign(ttlDraft.value[cache.prefix], splitTtl(cache.defaultTtl), { resetPending: true });
 };
 const clearCache = async (cache) => {
-    if (await dialogService.confirm(`Clear ${cache.label}`, `Are you sure you want to clear ${cache.count.toLocaleString()} cached items?`)) {
+    if (await dialogService.confirm(`Clear ${cache.label}`, `Are you sure you want to clear ${cache.count.toLocaleString()} cached items?`, undefined, { danger: true, confirmLabel: 'Clear' })) {
         clear(cache);
     }
 };
@@ -195,7 +197,8 @@ const clearEverything = async () => {
         await dialogService.confirm(
             'Clear All Caches',
             `Are you sure you want to clear all ${total.toLocaleString()} cached items?`,
-            'Searches and pages will be slower until the caches fill up again.'
+            'Searches and pages will be slower until the caches fill up again.',
+            { danger: true, confirmLabel: 'Clear all' }
         )
     ) {
         clearAll();

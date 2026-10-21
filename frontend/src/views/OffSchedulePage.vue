@@ -57,11 +57,13 @@ const openForm = (cacheDef) => {
         attrs: {
             inputObj: deepCopy(cacheDef),
             action: cacheDef ? 'Edit' : 'Create',
-            onSave: async (form, success) => {
+            onSave: async (form, success, failed) => {
                 const result = await saveCacheDefinition(form);
-                if (result) {
+                if (result.ok) {
                     formModal.close();
                     success();
+                } else {
+                    failed(result.errors);
                 }
             },
         },
@@ -71,7 +73,7 @@ const openForm = (cacheDef) => {
 
 const remove = async ({ id }) => {
     if (
-        await dialogService.confirm('Delete Cache Definition', 'Are you sure you want to delete this Cache Definition?')
+        await dialogService.confirm('Delete Cache Definition', 'Are you sure you want to delete this Cache Definition?', undefined, { danger: true, confirmLabel: 'Delete' })
     ) {
         await ipFetch('json-api/offSchedule', 'DELETE', { id });
         refreshCacheDefinitions();
@@ -83,10 +85,9 @@ const saveCacheDefinition = async (form) => {
     const response = await ipFetch('json-api/offSchedule', method, form);
     if (response.ok) {
         refreshCacheDefinitions();
-        return true;
+        return { ok: true };
     } else {
-        dialogService.alert('Validation Error', response.data.invalid_fields?.url);
-        return false;
+        return { ok: false, errors: response.data.invalid_fields ?? { url: response.data.message } };
     }
 };
 

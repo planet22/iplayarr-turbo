@@ -18,7 +18,8 @@ const dialogService = {
         formModal.open();
     },
 
-    confirm: async (title, text, subtext) => {
+    // options: { danger, confirmLabel } - a red, verb-labelled confirm button for destructive actions.
+    confirm: async (title, text, subtext, options = {}) => {
         return new Promise((resolve) => {
             const formModal = useModal({
                 component: AlertDialog,
@@ -27,6 +28,8 @@ const dialogService = {
                     text,
                     subtext,
                     showCancel: true,
+                    ...(options.confirmLabel ? { confirmLabel: options.confirmLabel } : {}),
+                    danger: !!options.danger,
                     onConfirm: () => {
                         resolve(true);
                         formModal.close();

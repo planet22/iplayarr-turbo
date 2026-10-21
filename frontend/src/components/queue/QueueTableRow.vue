@@ -227,13 +227,13 @@ const preview = ({ pid, nzbName }) => {
 const target = ({ pid, jobId }) => `pid=${pid}${jobId ? `&jobId=${jobId}` : ''}`;
 
 const trash = async (entry) => {
-    if (await dialogService.confirm('Delete', 'Are you sure you want to delete this history item?')) {
+    if (await dialogService.confirm('Delete', 'Are you sure you want to delete this history item?', undefined, { danger: true, confirmLabel: 'Delete' })) {
         ipFetch(`json-api/queue/history?${target(entry)}`, 'DELETE');
     }
 };
 
 const cancel = async (entry) => {
-    if (await dialogService.confirm('Cancel', 'Are you sure you want to cancel this download?')) {
+    if (await dialogService.confirm('Cancel', 'Are you sure you want to cancel this download?', undefined, { danger: true, confirmLabel: 'Cancel download' })) {
         ipFetch(`json-api/queue/queue?${target(entry)}`, 'DELETE');
     }
 };

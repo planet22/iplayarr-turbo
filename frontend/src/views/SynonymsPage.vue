@@ -41,6 +41,7 @@ import ArrLookupDialog from '@/components/modals/ArrLookupDialog.vue';
 import SynonymForm from '@/components/modals/SynonymForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { deepCopy, getCleanSceneTitle } from '@/lib/utils';
 
 const synonyms = ref([]);
@@ -68,7 +69,7 @@ const openForm = (synonym, inputApp) => {
 };
 
 const removeSynonym = async ({ id }) => {
-    if (await dialogService.confirm('Delete Synonym', 'Are you sure you want to delete this Synonym?')) {
+    if (await dialogService.confirm('Delete Synonym', 'Are you sure you want to delete this Synonym?', undefined, { danger: true, confirmLabel: 'Delete' })) {
         await ipFetch('json-api/synonym', 'DELETE', { id });
         refreshSynonyms();
     }
@@ -97,7 +98,7 @@ const openArrItemList = async (app) => {
             app,
             showFilter: true,
             onError: (err) => {
-                dialogService.alert(`Error from ${app.name}`, err.message);
+                toastService.error(`Error from ${app.name}`, { detail: err.message });
             },
             onSelect: async (result) => {
                 let options = [result.title];

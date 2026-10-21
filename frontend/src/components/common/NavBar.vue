@@ -57,8 +57,8 @@ import { computed, defineExpose, inject, onBeforeUnmount, onMounted, ref, watch 
 import { useRoute, useRouter } from 'vue-router';
 
 import ColorModeToggle from '@/components/common/ColorModeToggle.vue';
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
 import { getPidFromBBCUrl } from '@/lib/utils';
 
@@ -202,8 +202,9 @@ const search = async () => {
         const { ok, data } = await ipFetch(`json-api/download?pid=${pid}`, 'GET');
         if (ok) {
             searchTerm.value = '';
+            toastService.success('Download queued', { action: { label: 'View queue', onClick: () => router.push('/queue') } });
         } else {
-            dialogService.alert('Download Error', data.message);
+            toastService.error('Unable to download', { detail: data?.message });
         }
     } else {
         router.push({ name: 'search', query: { searchTerm: searchTerm.value } });

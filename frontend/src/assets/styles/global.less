@@ -345,6 +345,20 @@ button:focus {
                 background-color: @error-color;
             }
 
+            // Confirm button of a destructive question: red, with the verb as its label.
+            &.danger {
+                background-color: @error-color;
+                border-color: @error-color;
+                color: @error-text-color;
+                font-weight: 600;
+
+                &:hover:not(:disabled) {
+                    background-color: @error-color;
+                    border-color: @error-color;
+                    filter: brightness(1.1);
+                }
+            }
+
             &:hover:not(:disabled) {
                 border-color: @settings-button-hover-border-color;
                 background-color: @settings-button-hover-background-color;

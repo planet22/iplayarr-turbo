@@ -480,7 +480,7 @@ async function showResults(entry) {
 }
 
 const clearFailedGrabs = async () => {
-    if (await dialogService.confirm('Clear Failed Grabs', 'Are you sure you want to clear the failed grabs log?')) {
+    if (await dialogService.confirm('Clear Failed Grabs', 'Are you sure you want to clear the failed grabs log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/stats/failedGrabHistory', 'DELETE');
         failedGrabHistory.value = [];
         failedGrabPage.value = 1;
@@ -488,7 +488,7 @@ const clearFailedGrabs = async () => {
 };
 
 const clearSearches = async () => {
-    if (await dialogService.confirm('Clear Recent Searches', 'Are you sure you want to clear the recent searches log?')) {
+    if (await dialogService.confirm('Clear Recent Searches', 'Are you sure you want to clear the recent searches log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/stats/searchHistory', 'DELETE');
         searchHistory.value = [];
         searchPage.value = 1;
@@ -496,7 +496,7 @@ const clearSearches = async () => {
 };
 
 const clearGrabs = async () => {
-    if (await dialogService.confirm('Clear Recent Grabs', 'Are you sure you want to clear the recent grabs log?')) {
+    if (await dialogService.confirm('Clear Recent Grabs', 'Are you sure you want to clear the recent grabs log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/stats/grabHistory', 'DELETE');
         grabHistory.value = [];
         grabPage.value = 1;

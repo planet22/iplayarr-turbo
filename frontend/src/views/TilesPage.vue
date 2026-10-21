@@ -289,6 +289,7 @@ import { ipFetch, ipUpload } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
+import toastService from '@/lib/toastService';
 import { getHost, getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
@@ -361,15 +362,14 @@ const importChannels = async (event) => {
     if (!file) return;
     const { ok, data } = await ipUpload('json-api/live-channels/custom-import', 'file', file);
     if (!ok) {
-        dialogService.alert('Import failed', data?.message || 'Unable to import that file');
+        toastService.error('Import failed', { detail: data?.message || 'Unable to import that file' });
         return;
     }
     await loadTiles(true);
-    dialogService.alert(
-        'Import finished',
-        `${data.added} channel${data.added === 1 ? '' : 's'} added.`,
-        data.skipped?.length ? `Skipped:\n${data.skipped.join('\n')}` : undefined
-    );
+    const summary = `${data.added} channel${data.added === 1 ? '' : 's'} added.`;
+    // A skipped list needs reading properly, so that stays a dialog; a clean import is just a toast.
+    if (data.skipped?.length) dialogService.alert('Import finished', summary, `Skipped:\n${data.skipped.join('\n')}`);
+    else toastService.success(summary);
 };
 
 // Categories page: feature up to 2 categories on Discover.
@@ -384,7 +384,7 @@ const toggleCategoryDiscover = async (tile) => {
     if (ok) {
         tiles.value.forEach((t) => (t.discover = data.includes(t.id)));
     } else {
-        dialogService.alert('Error', data?.message || 'Unable to update Discover');
+        toastService.error('Unable to update Discover', { detail: data?.message });
     }
 };
 
@@ -398,7 +398,7 @@ const toggleDiscover = async (tile) => {
     if (ok) {
         tile.discover = !tile.discover;
     } else {
-        dialogService.alert('Error', data?.message || 'Unable to update Discover');
+        toastService.error('Unable to update Discover', { detail: data?.message });
     }
 };
 
@@ -410,7 +410,7 @@ const onTileClick = (event) => {
 
 const saveOrder = async () => {
     const { ok, data } = await ipFetch('json-api/live-channels/order', 'PUT', { ids: tiles.value.map((t) => t.id) });
-    if (!ok) dialogService.alert('Error', data?.message || 'Unable to save the channel order');
+    if (!ok) toastService.error('Unable to save the channel order', { detail: data?.message });
 };
 
 const moveTile = (fromId, toId) => {
@@ -449,7 +449,8 @@ const toggleEnabled = async (tile) => {
         !(await dialogService.confirm(
             `Disable ${tile.title}`,
             `Disable ${tile.title}?`,
-            'It will be hidden from here and removed from your library and Jellyfin Live TV if it is in them.'
+            'It will be hidden from here and removed from your library and Jellyfin Live TV if it is in them.',
+            { danger: true, confirmLabel: 'Disable' }
         ))
     ) {
         return;
@@ -458,7 +459,7 @@ const toggleEnabled = async (tile) => {
     const { ok, data } = await ipFetch(`json-api/live-channels/${tile.id}`, 'PUT', { enabled });
     arrangeBusy[tile.id] = false;
     if (!ok) {
-        dialogService.alert('Error', data?.message || 'Unable to update the channel');
+        toastService.error('Unable to update the channel', { detail: data?.message });
         return;
     }
     tile.enabled = enabled;
@@ -504,7 +505,9 @@ const confirmUnsubscribeAll = async () => {
     if (
         await dialogService.confirm(
             'Unsubscribe all',
-            'Remove every live channel from the library? Their .strm files will be deleted.'
+            'Remove every live channel from the library? Their .strm files will be deleted.',
+            undefined,
+            { danger: true, confirmLabel: 'Unsubscribe all' }
         )
     ) {
         await unsubscribeAll();

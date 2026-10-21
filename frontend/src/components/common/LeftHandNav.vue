@@ -59,8 +59,8 @@ import { computed, defineEmits, defineExpose, inject, onBeforeUnmount, ref } fro
 import { useRouter } from 'vue-router';
 import { onBeforeRouteLeave } from 'vue-router';
 
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 import LeftHandNavLink from './NavLink.vue';
 
@@ -97,22 +97,20 @@ const closeLHN = () => {
 defineExpose({ toggleLHN });
 
 const logout = async () => {
-    if (await dialogService.confirm('Logout', 'Are you sure you want to log out?')) {
-        const response = await ipFetch('auth/logout');
-        if (response.ok) {
-            router.go(0);
-        }
+    const response = await ipFetch('auth/logout');
+    if (response.ok) {
+        router.go(0);
+    } else {
+        toastService.error('Unable to log out');
     }
 };
 
 const refreshCache = async () => {
-    if (await dialogService.confirm('Refresh Index', 'Are you sure you want to refresh the index?')) {
-        await ipFetch('json-api/cache-refresh');
-        if (
-            await dialogService.confirm('Index Refreshing', 'Cache Refresh Started, Would you like to view the logs?')
-        ) {
-            router.push('/logs');
-        }
+    const { ok, data } = await ipFetch('json-api/cache-refresh');
+    if (ok) {
+        toastService.info('Index refresh started', { action: { label: 'View logs', onClick: () => router.push('/logs') } });
+    } else {
+        toastService.error('Unable to refresh the index', { detail: data?.message });
     }
 };
 

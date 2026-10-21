@@ -63,6 +63,7 @@ import SettingsTabs from '@/components/settings/SettingsTabs.vue';
 import StreamingSettingsTab from '@/components/settings/StreamingSettingsTab.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { useAppearanceDraft } from '@/lib/useAppearanceDraft';
 import { ttlDraftSeconds, ttlEntryChanged } from '@/lib/useCaches';
 import { getHost } from '@/lib/utils';
@@ -270,10 +271,8 @@ onMounted(async () => {
     oidcChannel.onmessage = (event) => {
         if (event.data && event.data.type === 'oidc-test-result') {
             oidcTested.value = event.data.success;
-            dialogService.alert(
-                'OIDC Test Result',
-                event.data.success ? `OIDC test succeeded for ${event.data.email}!` : `OIDC test failed: ${event.data.error || 'Unknown error'}`
-            );
+            if (event.data.success) toastService.success(`OIDC test succeeded for ${event.data.email}`);
+            else toastService.error('OIDC test failed', { detail: event.data.error || 'Unknown error' });
         }
     };
 });
@@ -358,11 +357,11 @@ const saveConfig = async () => {
             const scheduleErrors = tab == 'maintenance' ? await saveSchedules() : 0;
             const cacheErrors = tab == 'maintenance' ? await saveCacheTtls() : 0;
             if (scheduleErrors) {
-                dialogService.alert('Error', `${scheduleErrors} schedule(s) could not be saved - see the messages under each task.`);
+                toastService.error(`${scheduleErrors} schedule(s) could not be saved`, { detail: 'See the messages under each task.' });
             } else if (cacheErrors) {
-                dialogService.alert('Error', `${cacheErrors} cache lifetime(s) could not be saved.`);
+                toastService.error(`${cacheErrors} cache lifetime(s) could not be saved`);
             } else {
-                dialogService.alert('Success', 'Save Successful');
+                toastService.success('Settings saved');
             }
         }
     }

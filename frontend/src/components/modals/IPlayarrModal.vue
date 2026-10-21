@@ -19,10 +19,10 @@
                 <button v-if="showClose" :class="['clickable', { cancel: !showCancel }]" @click="close()">
                     {{ closeLabel }}
                 </button>
-                <button v-if="showCancel" class="clickable cancel" @click="emit('cancel')">
+                <button v-if="showCancel" :class="['clickable', { cancel: !danger }]" @click="emit('cancel')">
                     {{ cancelLabel }}
                 </button>
-                <button v-if="showConfirm" class="clickable" @click="emit('confirm')">
+                <button v-if="showConfirm" :class="['clickable', { danger }]" @click="emit('confirm')">
                     {{ confirmLabel }}
                 </button>
             </div>
@@ -44,6 +44,8 @@ defineProps({
     closeLabel: String,
     showConfirm: Boolean,
     confirmLabel: String,
+    // Destructive confirmations (delete, clear, cancel a download): the confirm button is red.
+    danger: Boolean,
 });
 
 const emit = defineEmits(['cancel', 'confirm']);

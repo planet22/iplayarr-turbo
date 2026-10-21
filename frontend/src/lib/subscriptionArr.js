@@ -4,6 +4,7 @@ import { useModal } from 'vue-final-modal';
 import ArrMatchDialog from '@/components/modals/ArrMatchDialog.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 const BASE = 'json-api/subscriptions/arr';
 const UNLINK_AND_REMOVE = 'Unlink and remove it from Sonarr/Radarr';
@@ -12,7 +13,7 @@ const UNSUB_AND_REMOVE = 'Unsubscribe and remove it from Sonarr/Radarr';
 const UNSUB_KEEP = 'Unsubscribe, but keep it in Sonarr/Radarr';
 
 const fail = (title, data) => {
-    dialogService.alert(title, data?.message || 'Something went wrong');
+    toastService.error(title, { detail: data?.message || 'Something went wrong' });
     return false;
 };
 
@@ -93,7 +94,7 @@ export async function requestFromArr(title) {
         qualityProfileId: choice.qualityProfileId,
     });
     if (!ok) return fail('Unable to request', data);
-    dialogService.alert('Requested', `${choice.match.title} was ${data.created ? 'added to' : 'searched again in'} ${app.name}. ${app.name} will pick the best release from your indexers.`);
+    toastService.success(`${choice.match.title} ${data.created ? 'added to' : 'searched again in'} ${app.name}`, { detail: `${app.name} will pick the best release from your indexers.` });
     return true;
 }
 

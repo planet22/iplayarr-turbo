@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { hasArrApps, linkToArr, offerArrLink, unlinkFromArr } from '@/lib/subscriptionArr';
+import toastService from '@/lib/toastService';
 
 const ARR_ONLY = 'Add to Sonarr/Radarr only - subscribed, but no downloads by iPlayarr';
 const NEW_ONLY = 'Only new episodes from now on';
@@ -53,7 +54,7 @@ export function useSubscriptions() {
             ...(arrOnly ? { arrOnly: true } : {}),
         });
         if (!ok) {
-            dialogService.alert('Unable to subscribe', data?.message || 'Something went wrong');
+            toastService.error('Unable to subscribe', { detail: data?.message || 'Something went wrong' });
             return undefined;
         }
         if (arrOnly) {
@@ -78,14 +79,14 @@ export function useSubscriptions() {
         // When iPlayarr added the show to Sonarr/Radarr, the remove-or-keep choice below doubles as
         // the confirmation, so there is a single prompt.
         const choiceFollows = subscription.arr?.addedByUs;
-        if (!choiceFollows && !(await dialogService.confirm('Unsubscribe', text))) {
+        if (!choiceFollows && !(await dialogService.confirm('Unsubscribe', text, undefined, { danger: true, confirmLabel: 'Unsubscribe' }))) {
             return false;
         }
         // A linked show is unlinked first (offering to remove it from Sonarr/Radarr if we added it).
         if (subscription.arr && !(await unlinkFromArr(subscription, { unsubscribing: true }))) return false;
         const { ok, data } = await ipFetch(`json-api/subscriptions/${subscription.id}`, 'DELETE');
         if (!ok) {
-            dialogService.alert('Unable to unsubscribe', data?.message || 'Something went wrong');
+            toastService.error('Unable to unsubscribe', { detail: data?.message || 'Something went wrong' });
             return false;
         }
         await load();

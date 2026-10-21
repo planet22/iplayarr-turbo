@@ -403,7 +403,7 @@ async function stopStream(session) {
     if (stopping.value.has(session.id)) {
         return;
     }
-    if (!(await dialogService.confirm('Stop stream', 'Are you sure you want to stop this stream?'))) {
+    if (!(await dialogService.confirm('Stop stream', 'Are you sure you want to stop this stream?', undefined, { danger: true, confirmLabel: 'Stop stream' }))) {
         return;
     }
     stopping.value.add(session.id);
@@ -428,7 +428,7 @@ function openSegments(session) {
 }
 
 async function clearHistory() {
-    if (await dialogService.confirm('Clear Stream History', 'Are you sure you want to clear the stream history?')) {
+    if (await dialogService.confirm('Clear Stream History', 'Are you sure you want to clear the stream history?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         // The 'streams' socket push updates streams.value.history once the server confirms it -
         // no need to clear it here too, same as stopStream above.
         await ipFetch('json-api/streams/history', 'DELETE');

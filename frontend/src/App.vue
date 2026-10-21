@@ -9,6 +9,7 @@
     </div>
     <ModalsContainer />
     <ConnectionLostOverlay />
+    <ToastHost />
     <PipPlayer v-if="authState.user" />
 </template>
 
@@ -26,6 +27,7 @@ import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
 import PipPlayer from './components/common/PipPlayer.vue';
+import ToastHost from './components/common/ToastHost.vue';
 import { enforceMaxLength } from './lib/utils';
 
 const authState = inject('authState');
