@@ -76,7 +76,7 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
 .toastHost {
     position: fixed;
     right: 20px;
-    bottom: 20px;
+    bottom: calc(20px + var(--floating-bar-height, 0px));
     // Above the modal layer (vue-final-modal), so feedback from a dialog's own action is visible.
     z-index: 10000;
     display: flex;
@@ -183,7 +183,7 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
     .toastHost {
         left: 16px;
         right: 16px;
-        bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+        bottom: calc(16px + env(safe-area-inset-bottom, 0px) + var(--floating-bar-height, 0px));
         width: auto;
         max-width: none;
     }
