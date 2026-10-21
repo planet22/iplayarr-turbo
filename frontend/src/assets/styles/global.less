@@ -392,6 +392,23 @@ select:focus-visible {
     }
 }
 
+// Top bar button that opens the Ctrl/Cmd+K quick find.
+.NavBar .quickFind {
+    margin-right: 8px;
+    padding: 5px 9px;
+    border: 1px solid @settings-button-border-color;
+    border-radius: 6px;
+    background: none;
+    color: @primary-text-color;
+    cursor: pointer;
+
+    &:hover {
+        border-color: @brand-color;
+        color: @brand-color;
+        background: none;
+    }
+}
+
 // Browse screens (Discover / Channels / Categories / A-Z)
 .browsePage {
     padding: 0.5rem 1rem 1rem;

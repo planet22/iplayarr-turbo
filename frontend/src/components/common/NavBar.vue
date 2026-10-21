@@ -34,6 +34,12 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
             </div>
         </div>
         <div class="right">
+            <button
+                v-if="authState.user" type="button" class="quickFind desktopOnly" title="Quick find (Ctrl+K)"
+                aria-label="Quick find" @click="openCommandPalette"
+            >
+                <font-awesome-icon :icon="['fas', 'bolt']" />
+            </button>
             <ColorModeToggle v-if="authState.user" />
             <span
 v-if="authState.user && versionLabel" class="versionLabel desktopOnly"
@@ -67,6 +73,7 @@ const router = useRouter();
 
 // const globalSettings = inject('globalSettings');
 const toggleLeftHandNav = inject('toggleLeftHandNav');
+const openCommandPalette = inject('openCommandPalette');
 const authState = inject('authState');
 const hiddenSettings = inject('hiddenSettings');
 const toolVersions = inject('toolVersions');
