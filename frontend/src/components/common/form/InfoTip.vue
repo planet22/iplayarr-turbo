@@ -173,4 +173,10 @@ onBeforeUnmount(() => {
         pointer-events: none;
     }
 }
+
+@media (max-width: @mobile-breakpoint) {
+    .InfoTip .InfoTip-button {
+        padding: 9px;
+    }
+}
 </style>

@@ -305,6 +305,12 @@ const handleClickOutside = (event) => {
 }
 
 @media (max-width: @mobile-breakpoint) {
+    .LeftHandNav li.sectionLabel {
+        min-height: 44px;
+        box-sizing: border-box;
+        padding-top: 14px;
+    }
+
     .LeftHandNav {
         position: fixed;
         top: 0px;

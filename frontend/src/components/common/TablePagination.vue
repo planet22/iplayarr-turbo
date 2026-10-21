@@ -230,4 +230,16 @@ const onPageSizeChange = (event) => {
         background-position: right 8px center;
     }
 }
+
+@media (max-width: @mobile-breakpoint) {
+    .navButton,
+    .pageButton {
+        min-width: 40px;
+        height: 40px;
+    }
+
+    .pageSize select {
+        height: 40px;
+    }
+}
 </style>

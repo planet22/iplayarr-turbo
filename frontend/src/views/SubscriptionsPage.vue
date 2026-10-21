@@ -127,7 +127,7 @@
                     </template>
                     <template #corner>
                         <div class="rowActions">
-                            <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="unsubscribeLive(live.channelId)">
+                            <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="removeLive(live)">
                                 <font-awesome-icon :icon="['fas', 'trash']" />
                             </button>
                         </div>
@@ -151,7 +151,7 @@
                         </div>
                     </div>
                     <div class="rowActions">
-                        <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="unsubscribeLive(live.channelId)">
+                        <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="removeLive(live)">
                             <font-awesome-icon :icon="['fas', 'trash']" />
                         </button>
                     </div>
@@ -172,6 +172,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
@@ -258,6 +259,20 @@ const toggleArrWithBusy = async (subscription) => {
 };
 
 const remove = (subscription) => unsubscribe(subscription);
+
+// Removing a live channel deletes its .strm from the library, so ask first (like unsubscribing from a show).
+const removeLive = async (live) => {
+    if (
+        await dialogService.confirm(
+            'Remove live channel',
+            `Remove ${live.title} from your library?`,
+            'Its .strm file is deleted. You can add it again from Channels.',
+            { danger: true, confirmLabel: 'Remove' }
+        )
+    ) {
+        unsubscribeLive(live.channelId);
+    }
+};
 </script>
 
 <style lang="less" scoped>
@@ -372,5 +387,12 @@ const remove = (subscription) => unsubscribe(subscription);
 .cardTitle {
     color: @primary-text-color;
     text-decoration: none;
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .cardList :deep(button) {
+        width: 40px;
+        height: 40px;
+    }
 }
 </style>
