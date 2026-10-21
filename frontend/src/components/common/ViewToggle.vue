@@ -59,6 +59,7 @@ const emit = defineEmits(['update:modelValue']);
         &.active {
             background-color: @brand-color;
             border-color: @brand-color;
+            color: @on-brand-color;
         }
     }
 }

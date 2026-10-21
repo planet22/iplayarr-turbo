@@ -86,10 +86,10 @@ watch(
         }
 
         &.dirty {
-            color: #e84a9a;
+            color: @changed-color;
 
             .tabFlag {
-                color: #e84a9a;
+                color: @changed-color;
             }
         }
 

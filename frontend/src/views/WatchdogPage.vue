@@ -111,7 +111,7 @@
                         <span class="statValue">{{ lastRun?.invalid ?? 0 }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="runs.map((r) => r.invalid)" color="#f05050" />
+                <SparklineChart :data="runs.map((r) => r.invalid)" color="danger-color" />
             </div>
             <div class="statCard sparkline">
                 <div class="statCardHeader">
@@ -121,7 +121,7 @@
                         <span class="statValue">{{ failureRate(lastRun).toFixed(2) }}%</span>
                     </div>
                 </div>
-                <SparklineChart :data="runs.map(failureRate)" color="#888888" />
+                <SparklineChart :data="runs.map(failureRate)" color="chart-6" />
             </div>
         </div>
         <div class="chartRow">
@@ -131,8 +131,8 @@
                     :local-time="true"
                     :window-minutes="live.running ? 2 : 0"
                     :series="[
-                        { name: 'Checked', data: checkedSeries, color: '#F12D7F' },
-                        { name: 'Failed', data: failedSeries, color: '#f05050' },
+                        { name: 'Checked', data: checkedSeries, color: 'chart-1' },
+                        { name: 'Failed', data: failedSeries, color: 'danger-color' },
                     ]"
                 />
             </div>
@@ -552,7 +552,7 @@ onBeforeUnmount(() => {
     code {
         padding: 2px 6px;
         border-radius: 3px;
-        background-color: rgba(255, 255, 255, 0.1);
+        background-color: @hover-tint;
     }
 }
 
@@ -613,7 +613,7 @@ onBeforeUnmount(() => {
         width: 100%;
         height: 8px;
         border-radius: 4px;
-        background-color: rgba(255, 255, 255, 0.15);
+        background-color: @table-row-hover-color;
         overflow: hidden;
     }
 

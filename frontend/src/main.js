@@ -1,3 +1,4 @@
+import './lib/theme';
 import './registerServiceWorker';
 import 'vue-final-modal/style.css';
 

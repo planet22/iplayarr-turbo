@@ -71,6 +71,8 @@ When changing download or search behavior, check whether the change belongs in t
 
 **Frontend**: Vue 3 + vue-router + Socket.IO client, under `frontend/src/`, built separately with Vite and served as static files by the Express backend in production.
 
+**Theming**: colour schemes and light/dark mode are per-browser (`frontend/src/lib/theme.js`, `themes.js`). The Less colour variables in `variables.less` are `var(--...)` references, so style with the variables (or the role tokens) and never a raw colour unless it must stay fixed (text over posters). Settings-page edits, including the Appearance prefs, only apply on Save. See [docs/THEMING.md](docs/THEMING.md).
+
 ## Docker image specifics
 
 The Dockerfile builds Alpine + Node, downloads and bakes in a pinned `get_iplayer` version (`GET_IPLAYER_VERSION`) and latest `yt-dlp`, and keeps a Redis binary from the `redis:alpine` image solely so `docker_entry.sh` can read a legacy `/config/dump.rdb` once for the SQLite import. `docker_entry.sh` is the container entrypoint before `npm run start`. Source (`src/`, `frontend/src`) is stripped from the final image after build.

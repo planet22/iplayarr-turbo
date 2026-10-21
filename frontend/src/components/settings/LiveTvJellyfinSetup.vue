@@ -13,27 +13,51 @@
                 :options="serverOptions"
                 @update:model-value="config.LIVE_TV_JELLYFIN_APPS = $event"
             />
-            <div v-for="server in chosen" :key="server.id" class="serverBlock">
-                <div class="serverName">{{ server.name }}</div>
-                <div v-for="item in itemsFor(server.id)" :key="item.key" class="setupRow">
-                    <label>{{ item.label }}</label>
-                    <span :class="['state', item.present ? 'on' : '']">{{ item.present ? 'In Jellyfin' : 'Not added' }}</span>
-                    <button type="button" :disabled="!!busy" @click="act(server.id, item.key, 'POST')">
-                        <font-awesome-icon
-                            :icon="['fas', busy === key(server.id, item.key, 'POST') ? 'circle-notch' : 'plus']"
-                            :spin="busy === key(server.id, item.key, 'POST')"
-                        />
-                        {{ item.present ? 'Update' : 'Add' }}
-                    </button>
-                    <button type="button" :disabled="!!busy || !item.present" @click="act(server.id, item.key, 'DELETE')">
-                        <font-awesome-icon
-                            :icon="['fas', busy === key(server.id, item.key, 'DELETE') ? 'circle-notch' : 'trash']"
-                            :spin="busy === key(server.id, item.key, 'DELETE')"
-                        />
-                        Remove
-                    </button>
+            <div v-if="chosen.length" class="jellyfinTable">
+                <div class="jtRow jtHead">
+                    <span>Server</span>
+                    <span v-for="item in itemsFor('')" :key="item.key">{{ item.short }}</span>
                 </div>
-                <InfoBar v-if="messages[server.id]" :clazz="messages[server.id].clazz">{{ messages[server.id].text }}</InfoBar>
+                <template v-for="server in chosen" :key="server.id">
+                    <div class="jtRow">
+                        <span class="jtName">{{ server.name }}</span>
+                        <div v-for="item in itemsFor(server.id)" :key="item.key" class="jtCell">
+                            <span class="jtLabel">{{ item.label }}</span>
+                            <span
+                                :class="['statusIcon', item.present ? 'ok' : 'pending']"
+                                :title="item.present ? 'In Jellyfin' : 'Not added'"
+                                :aria-label="item.present ? 'In Jellyfin' : 'Not added'"
+                            >
+                                <font-awesome-icon :icon="['fas', item.present ? 'circle-check' : 'circle-minus']" />
+                            </span>
+                            <button
+                                type="button"
+                                :disabled="!!busy"
+                                :title="item.present ? 'Update' : 'Add'"
+                                :aria-label="item.present ? 'Update' : 'Add'"
+                                @click="act(server.id, item.key, 'POST')"
+                            >
+                                <font-awesome-icon
+                                    :icon="['fas', busy === key(server.id, item.key, 'POST') ? 'circle-notch' : item.present ? 'rotate' : 'plus']"
+                                    :spin="busy === key(server.id, item.key, 'POST')"
+                                />
+                            </button>
+                            <button
+                                type="button"
+                                :disabled="!!busy || !item.present"
+                                title="Remove"
+                                aria-label="Remove"
+                                @click="act(server.id, item.key, 'DELETE')"
+                            >
+                                <font-awesome-icon
+                                    :icon="['fas', busy === key(server.id, item.key, 'DELETE') ? 'circle-notch' : 'trash']"
+                                    :spin="busy === key(server.id, item.key, 'DELETE')"
+                                />
+                            </button>
+                        </div>
+                    </div>
+                    <InfoBar v-if="messages[server.id]" :clazz="messages[server.id].clazz" small>{{ messages[server.id].text }}</InfoBar>
+                </template>
             </div>
         </template>
     </div>
@@ -65,8 +89,8 @@ const chosen = computed(() => {
 
 const key = (serverId, what, method) => `${serverId}:${what}:${method}`;
 const itemsFor = (serverId) => [
-    { key: 'tuner', label: 'Channels (M3U tuner)', present: !!statuses[serverId]?.tuner },
-    { key: 'guide', label: 'Guide (XMLTV)', present: !!statuses[serverId]?.guide },
+    { key: 'tuner', label: 'Channels (M3U tuner)', short: 'Channels', present: !!statuses[serverId]?.tuner },
+    { key: 'guide', label: 'Guide (XMLTV)', short: 'Guide', present: !!statuses[serverId]?.guide },
 ];
 
 const report = (serverId, ok, text) => {
@@ -110,53 +134,91 @@ onMounted(async () => {
 </script>
 
 <style lang="less" scoped>
-.serverBlock {
+// One row per server, one column per thing to set up: a tick says it is in Jellyfin, the buttons add/update or remove it.
+// Ends where the selects above end (a form row is 650px wide, its info icon takes the last 32px).
+.jellyfinTable {
+    max-width: 618px;
+    margin-right: 32px;
     margin-bottom: 1.5rem;
+    border: 1px solid @input-border-color;
+    border-radius: 4px;
+    background-color: @input-background-color;
+    box-shadow: inset 0 1px 1px @primary-box-shadow;
+    overflow: hidden;
 
-    .serverName {
-        margin: 0 0 0.75rem 266px;
-        font-weight: bold;
-        font-size: 14px;
+    .jtRow {
+        display: grid;
+        grid-template-columns: minmax(90px, 1fr) repeat(2, 112px);
+        align-items: center;
+        gap: 0 12px;
+        padding: 6px 12px;
+        border-top: 1px solid @input-border-color;
 
-        // The 266px lines the name up with the fields on desktop; on a phone the fields start at the edge.
-        @media (max-width: @mobile-breakpoint) {
-            margin-left: 0;
+        &:first-child {
+            border-top: 0;
         }
     }
-}
 
-.setupRow {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 1rem;
-
-    label {
-        flex: 0 0 250px;
-        text-align: end;
+    .jtHead {
+        padding-top: 8px;
+        padding-bottom: 8px;
+        background-color: @nav-active-background-color;
+        color: @subtle-text-color;
+        font-size: 12px;
         font-weight: bold;
-        font-size: 14px;
-        margin-right: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+
+        // Header text sits over the cell's tick, not the buttons.
+        span:not(:first-child) {
+            text-align: start;
+        }
     }
 
-    // Fixed widths so the buttons line up whatever the state text / Add-vs-Update label says.
-    .state {
-        flex: 0 0 100px;
-        color: @subtle-text-color;
+    .jtName {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: bold;
+        color: @table-text-color;
+    }
 
-        &.on {
-            color: #2ecc71;
+    .jtCell {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        .jtLabel {
+            display: none;
+        }
+    }
+
+    .statusIcon {
+        flex: 0 0 22px;
+        text-align: center;
+        font-size: 18px;
+        cursor: default;
+
+        &.ok {
+            color: @positive-color;
+        }
+
+        &.pending {
+            color: @subtle-text-color;
         }
     }
 
     button {
+        width: 32px;
+        height: 32px;
+        padding: 0;
         background-color: @settings-button-background-color;
         border: 1px solid @settings-button-border-color;
-        padding: 6px 16px;
         font-size: 14px;
         color: @primary-text-color;
         border-radius: 4px;
-        min-width: 105px;
 
         &:hover:not(:disabled) {
             border-color: @settings-button-hover-border-color;
@@ -164,28 +226,30 @@ onMounted(async () => {
         }
 
         &:disabled {
-            opacity: 0.5;
+            opacity: 0.4;
         }
     }
 
-    // Label on its own line, then state and both buttons - the desktop widths add up to more than a phone.
+    // Phones: the server name heads a card; its two items sit under it with their label beside the controls.
     @media (max-width: @mobile-breakpoint) {
-        flex-wrap: wrap;
-        gap: 8px;
-
-        label {
-            flex: 1 0 100%;
-            text-align: start;
-            margin-right: 0;
+        .jtHead {
+            display: none;
         }
 
-        .state {
-            flex: 1 1 auto;
+        .jtRow {
+            grid-template-columns: 1fr;
+            gap: 6px;
+            padding: 10px 12px;
         }
 
-        button {
-            min-width: 0;
-            padding: 6px 12px;
+        .jtCell {
+            .jtLabel {
+                display: block;
+                flex: 1 1 auto;
+                min-width: 0;
+                font-size: 13px;
+                color: @table-text-color;
+            }
         }
     }
 }

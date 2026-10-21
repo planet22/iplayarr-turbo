@@ -74,7 +74,7 @@ const icon = computed(() => {
         color: @alertInfoColor;
 
         .infoIcon {
-            color: #5ea6cf;
+            color: var(--alert-info-text);
         }
     }
 
@@ -84,7 +84,7 @@ const icon = computed(() => {
         color: @alertDangerColor;
 
         .infoIcon {
-            color: #e5605d;
+            color: var(--alert-danger-text);
         }
     }
 
@@ -94,7 +94,7 @@ const icon = computed(() => {
         color: @alertSuccessColor;
 
         .infoIcon {
-            color: #5cb85c;
+            color: var(--alert-success-text);
         }
     }
 
@@ -104,7 +104,7 @@ const icon = computed(() => {
         color: @alertWarningColor;
 
         .infoIcon {
-            color: #e0a84b;
+            color: var(--alert-warning-text);
         }
     }
 

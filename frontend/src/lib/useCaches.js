@@ -15,6 +15,15 @@ export const splitTtl = (seconds) => {
     return { value: Math.round(seconds / unit.seconds), unit: unit.seconds };
 };
 
+// A cache lifetime being edited on the settings page: value/unit is the draft, savedTtl what the server holds,
+// resetPending a "reset to default" waiting for Save. Invalid drafts (blank, below 1) count as unchanged.
+export const ttlDraftSeconds = (entry) => entry.value * entry.unit;
+export const ttlEntryChanged = (entry) => {
+    if (entry.resetPending) return true;
+    const seconds = ttlDraftSeconds(entry);
+    return Number.isFinite(seconds) && entry.value >= 1 && seconds !== entry.savedTtl;
+};
+
 export function useCaches() {
     const caches = ref([]);
     const loaded = ref(false);

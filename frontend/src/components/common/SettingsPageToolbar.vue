@@ -117,7 +117,7 @@
                 <font-awesome-icon :icon="['fas', 'trash-can']" />
                 <div v-if="!iconOnly" class="SettingsPageToolbar-label">{{ clearLabel }}</div>
             </button>
-            <template v-if="icons.some((i) => i == 'filter')">
+            <div v-if="icons.some((i) => i == 'filter')" class="filterWrap">
                 <button
                     :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
                     title="Filter"
@@ -143,7 +143,7 @@
                         </li>
                     </ul>
                 </div>
-            </template>
+            </div>
         </div>
     </div>
 </template>
@@ -398,7 +398,7 @@ const handleClickOutside = (event) => {
             &.needsSave {
                 svg,
                 .SettingsPageToolbar-label {
-                    color: #e84a9a;
+                    color: @brand-color;
                 }
 
                 .SettingsPageToolbar-label {
@@ -457,9 +457,16 @@ const handleClickOutside = (event) => {
             }
         }
 
+        .filterWrap {
+            position: relative;
+            display: inline-flex;
+        }
+
         .filterDropdown {
             position: absolute;
-            top: 104px;
+            top: 100%;
+            right: 0;
+            z-index: 20;
             background-color: @nav-background-color;
             width: 180px;
 

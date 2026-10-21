@@ -1,10 +1,10 @@
 <template>
     <div class="inner-content">
         <PageHeader title="Off Schedule" />
-        <p>
+        <InfoBar small>
             By default, only media broadcast in the last 30 days is returned, to extend this, you need to index specific
             iPlayer URLs
-        </p>
+        </InfoBar>
         <ListEditor
             v-slot="{ item }"
             :items="cacheDefinitions"
@@ -33,6 +33,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRouter } from 'vue-router';
 
+import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import OffScheduleForm from '@/components/modals/OffScheduleForm.vue';

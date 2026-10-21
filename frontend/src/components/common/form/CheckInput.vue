@@ -68,9 +68,9 @@ watch(
             margin-right: 5px;
             width: 20px;
             height: 20px;
-            border: 1px solid #ccc;
+            border: 1px solid @input-border-color;
             border-radius: 2px;
-            background-color: white;
+            background-color: @input-background-color;
             color: white;
             text-align: center;
             line-height: 20px;

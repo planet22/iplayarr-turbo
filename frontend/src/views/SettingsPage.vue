@@ -63,6 +63,8 @@ import SettingsTabs from '@/components/settings/SettingsTabs.vue';
 import StreamingSettingsTab from '@/components/settings/StreamingSettingsTab.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useAppearanceDraft } from '@/lib/useAppearanceDraft';
+import { ttlDraftSeconds, ttlEntryChanged } from '@/lib/useCaches';
 import { getHost } from '@/lib/utils';
 
 const loading = ref(false);
@@ -132,9 +134,20 @@ const tabHas = (tab, lookup) => TAB_KEYS[tab].some((key) => lookup(key));
 const schedules = ref({});
 const schedulesReload = ref(0);
 const changedSchedules = computed(() => Object.keys(schedules.value).filter((id) => schedules.value[id].draft.trim() !== schedules.value[id].saved));
+// Maintenance cache lifetimes: prefix -> { value, unit, savedTtl, resetPending }. The tab creates the entries; Save applies the changed ones.
+const cacheTtls = ref({});
+const cachesReload = ref(0);
+const changedCacheTtls = computed(() => Object.keys(cacheTtls.value).filter((prefix) => ttlEntryChanged(cacheTtls.value[prefix])));
+// General tab per-browser preferences: applied by Save, not as they are edited.
+const { draft: appearance, changed: changedAppearance, apply: applyAppearance } = useAppearanceDraft();
 const dirtyTabs = computed(() =>
     tabs
-        .filter((tab) => tabHas(tab.key, (key) => changedKeys.value.has(key)) || (tab.key == 'maintenance' && changedSchedules.value.length))
+        .filter(
+            (tab) =>
+                tabHas(tab.key, (key) => changedKeys.value.has(key)) ||
+                (tab.key == 'maintenance' && (changedSchedules.value.length || changedCacheTtls.value.length)) ||
+                (tab.key == 'general' && changedAppearance.value.length)
+        )
         .map((tab) => tab.key)
 );
 const errorTabs = computed(() =>
@@ -149,6 +162,9 @@ provide('settingsConfig', config);
 provide('settingsChangedKeys', changedKeys);
 provide('settingsSchedules', schedules);
 provide('settingsSchedulesReload', schedulesReload);
+provide('settingsCacheTtls', cacheTtls);
+provide('settingsCachesReload', cachesReload);
+provide('settingsAppearance', appearance);
 provide('settingsValidationErrors', validationErrors);
 provide('settingsShowAdvanced', showAdvanced);
 provide('infoTips', true);
@@ -279,6 +295,24 @@ const saveSchedules = async () => {
     return failed;
 };
 
+// Applies every edited cache lifetime (or pending reset); returns how many were refused.
+const saveCacheTtls = async () => {
+    let failed = 0;
+    for (const prefix of changedCacheTtls.value) {
+        const entry = cacheTtls.value[prefix];
+        const ttl = entry.resetPending ? null : ttlDraftSeconds(entry);
+        const { ok } = await ipFetch(`json-api/maintenance/caches/${prefix}/ttl`, 'PUT', { ttl });
+        if (ok) {
+            entry.resetPending = false;
+            if (ttl !== null) entry.savedTtl = ttl;
+        } else {
+            failed++;
+        }
+    }
+    cachesReload.value++;
+    return failed;
+};
+
 const saveConfig = async () => {
     const tab = activeTab.value;
     if (tab == 'authentication' && config.value.AUTH_TYPE == 'oidc' && !oidcTested.value) {
@@ -318,9 +352,13 @@ const saveConfig = async () => {
         } else {
             for (const key of keys) original.value[key] = clone(config.value[key]);
             refreshGlobalSettings();
+            if (tab == 'general') applyAppearance();
             const scheduleErrors = tab == 'maintenance' ? await saveSchedules() : 0;
+            const cacheErrors = tab == 'maintenance' ? await saveCacheTtls() : 0;
             if (scheduleErrors) {
                 dialogService.alert('Error', `${scheduleErrors} schedule(s) could not be saved - see the messages under each task.`);
+            } else if (cacheErrors) {
+                dialogService.alert('Error', `${cacheErrors} cache lifetime(s) could not be saved.`);
             } else {
                 dialogService.alert('Success', 'Save Successful');
             }

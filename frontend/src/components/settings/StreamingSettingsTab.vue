@@ -120,18 +120,29 @@
             tooltip="Maps their folder to this container's folder, e.g. /tv=/library/tv. Separate several with ;"
             :error="validationErrors.config?.STRM_WATCHDOG_PATH_MAP"
         />
-        <template v-if="hasType('jellyfin')">
-            <div v-for="server in jellyfinStatus" :key="server.id" class="jellyfinStatus">
-                <label>Jellyfin</label>
-                <span>{{ server.name }}</span>
-                <span :class="server.ok === null ? 'testPending' : server.ok ? 'testOk' : 'testFail'">
-                    {{ server.ok === null ? 'Checking…' : server.ok ? 'Connected' : server.message }}
-                </span>
-            </div>
-            <InfoBar v-if="jellyfinLoaded && !jellyfinStatus.length" clazz="info">
-                No Jellyfin server is configured. <router-link to="/apps">Add Jellyfin on the Apps page</router-link>.
-            </InfoBar>
-        </template>
+        <div v-if="appStatus.length" class="jellyfinStatus">
+            <label>App Connections</label>
+            <ul class="statusList">
+                <li v-for="server in appStatus" :key="server.id">
+                    <span class="statusName">
+                        {{ server.name }}<span v-if="server.name !== server.typeLabel" class="statusType">{{ server.typeLabel }}</span>
+                    </span>
+                        <span
+                            :class="['statusIcon', server.ok === null ? 'pending' : server.ok ? 'ok' : 'fail']"
+                            :title="server.ok === null ? 'Checking…' : server.ok ? 'Connected' : server.message"
+                            :aria-label="server.ok === null ? 'Checking…' : server.ok ? 'Connected' : server.message"
+                        >
+                            <font-awesome-icon
+                                :icon="['fas', server.ok === null ? 'circle-notch' : server.ok ? 'circle-check' : 'circle-exclamation']"
+                                :spin="server.ok === null"
+                            />
+                        </span>
+                    </li>
+            </ul>
+        </div>
+        <InfoBar v-if="hasType('jellyfin') && jellyfinLoaded && !hasJellyfinApp" clazz="info">
+            No Jellyfin server is configured. <router-link to="/apps">Add Jellyfin on the Apps page</router-link>.
+        </InfoBar>
         <SelectInput
             v-if="hasType('arr')"
             v-model="config.STRM_WATCHDOG_ARR_ACTION"
@@ -263,11 +274,16 @@ const watchdogArrActionOptions = [
 
 // Apps are managed on the Apps page; here we only show whether they connect.
 const jellyfinLoaded = ref(false);
-const jellyfinStatus = computed(() =>
-    watchdogApps.value
-        .filter(({ type }) => type == 'JELLYFIN')
-        .map(({ id, name }) => ({ id, name, ok: appResults.value[id]?.ok ?? null, message: appResults.value[id]?.message ?? '' }))
+const appStatus = computed(() =>
+    watchdogApps.value.map(({ id, name, type }) => ({
+        id,
+        name,
+        typeLabel: typeLabels[type],
+        ok: appResults.value[id]?.ok ?? null,
+        message: appResults.value[id]?.message ?? '',
+    }))
 );
+const hasJellyfinApp = computed(() => watchdogApps.value.some(({ type }) => type == 'JELLYFIN'));
 
 onMounted(async () => {
     const apps = (await ipFetch('json-api/apps')).data.filter(({ type }) => typeLabels[type]);
@@ -287,41 +303,50 @@ const showAdvanced = inject('settingsShowAdvanced');
 </script>
 
 <style lang="less" scoped>
+// Laid out like a SelectInput row: the same label column, with a read-only box in place of the control.
 .jellyfinStatus {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    max-width: 650px;
     margin-bottom: 1rem;
 
     label {
         flex: 0 0 250px;
+        display: flex;
+        justify-content: flex-end;
+        margin-right: 20px;
+        padding-top: 8px;
+        min-height: 35px;
         text-align: end;
         font-weight: bold;
         font-size: 14px;
-        margin-right: 8px;
+        color: @table-text-color;
     }
 
-    .testOk {
-        color: #2ecc71;
+    // Same width as the selects beside it (their info icon takes the last 32px).
+    .statusList {
+        flex: 1 1 auto;
+
+        .statusType {
+            margin-left: 8px;
+            font-size: 12px;
+            color: @subtle-text-color;
+        }
+
+        margin-right: 32px;
     }
 
-    .testFail {
-        color: #f05050;
-    }
-
-    .testPending {
-        color: @subtle-text-color;
-    }
-
-    // Phones: the label takes its own line (the 250px desktop column leaves no room), then name and status.
     @media (max-width: @mobile-breakpoint) {
-        flex-wrap: wrap;
-        gap: 4px 10px;
+        flex-direction: column;
+        margin-bottom: 0.9rem;
 
         label {
-            flex: 1 0 100%;
+            flex: none;
+            justify-content: flex-start;
+            margin: 0 0 4px;
+            padding-top: 0;
+            min-height: 0;
             text-align: start;
-            margin-right: 0;
+            font-size: 13px;
         }
     }
 }

@@ -28,12 +28,17 @@
                     <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                     <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                 </template>
-                <template v-if="subscription.lastQueuedAt" #corner>
-                    <span class="pill" :title="`${subscription.lastQueuedCount} episode${subscription.lastQueuedCount === 1 ? '' : 's'} in the last download`">
+                <template v-if="subscription.lastQueuedAt || subscription.arrOnly" #corner>
+                    <span v-if="subscription.lastQueuedAt" class="pill" :title="`${subscription.lastQueuedCount} episode${subscription.lastQueuedCount === 1 ? '' : 's'} in the last download`">
                         {{ subscription.lastQueuedCount }}
                     </span>
+                    <div v-if="subscription.arrOnly" class="rowActions">
+                        <button class="clickable" title="Unsubscribe" @click="remove(subscription)">
+                            <font-awesome-icon :icon="['fas', 'trash']" />
+                        </button>
+                    </div>
                 </template>
-                <div class="cardInfoRow">
+                <div v-if="!subscription.arrOnly || subscription.lastQueuedAt" class="cardInfoRow">
                     <div class="cardLines">
                         <div v-if="!subscription.arrOnly" class="cardLine" title="Last checked">
                             <font-awesome-icon :icon="['fas', 'clock']" />{{ checkedLabel(subscription) }}
@@ -42,9 +47,8 @@
                             <font-awesome-icon :icon="['fas', 'download']" />{{ formatRelativeTime(Date.parse(subscription.lastQueuedAt)) }}
                         </div>
                     </div>
-                    <div class="rowActions">
+                    <div v-if="!subscription.arrOnly" class="rowActions">
                         <button
-                            v-if="!subscription.arrOnly"
                             class="clickable"
                             :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
                             :disabled="busy[subscription.id]"
@@ -52,7 +56,7 @@
                         >
                             <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
                         </button>
-                        <button v-if="!subscription.arrOnly" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
+                        <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                             <font-awesome-icon :icon="['fas', 'rotate']" :spin="busy[subscription.id]" />
                         </button>
                         <button class="clickable" title="Unsubscribe" @click="remove(subscription)">
@@ -332,6 +336,7 @@ const remove = (subscription) => unsubscribe(subscription);
         &:hover:not(:disabled) {
             background-color: @brand-color;
             border-color: @brand-color;
+            color: @on-brand-color;
         }
     }
 }

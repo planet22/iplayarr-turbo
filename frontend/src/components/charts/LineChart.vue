@@ -5,6 +5,8 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
+import { chartColor, chartTheme } from '@/lib/chartTheme';
+
 const props = defineProps({
     title: String,
     series: {
@@ -48,7 +50,9 @@ const zoom = computed(() => {
     return { min: max - props.windowMinutes * 60_000, max };
 });
 
-const options = computed(() => ({
+const options = computed(() => {
+    const t = chartTheme();
+    return {
     chart: {
         type: 'line',
         background: 'transparent',
@@ -61,11 +65,11 @@ const options = computed(() => ({
         text: props.title,
         style: {
             fontSize: '20px',
-            color: '#ffffff'
+            color: t.text
         }
     },
     theme: {
-        mode: 'dark'
+        mode: t.mode
     },
     xaxis: {
         type: 'datetime',
@@ -73,7 +77,7 @@ const options = computed(() => ({
         labels: {
             datetimeUTC: !props.localTime,
             style: {
-                colors: '#ffffff'
+                colors: t.text
             }
         }
     },
@@ -81,7 +85,7 @@ const options = computed(() => ({
         min: 0,
         labels: {
             style: {
-                colors: '#ffffff'
+                colors: t.text
             }
         }
     },
@@ -89,9 +93,9 @@ const options = computed(() => ({
         curve: 'straight',
         width: 1.5
     },
-    colors: props.series.map(({ color }) => color),
+    colors: props.series.map(({ color }, index) => (color ? chartColor(color) : t.series[index % t.series.length])),
     tooltip: {
-        theme: 'dark',
+        theme: t.mode,
         x: {
             format: props.localTime ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd'
         }
@@ -102,12 +106,13 @@ const options = computed(() => ({
     legend: {
         show: props.series.length > 1,
         labels: {
-            colors: '#ffffff'
+            colors: t.text
         }
     },
     grid: {
-        borderColor: '#444'
+        borderColor: t.grid
     },
     responsive: [{ breakpoint: 600, options: { title: { style: PHONE_TITLE }, legend: { fontSize: '12px' } } }]
-}));
+    };
+});
 </script>

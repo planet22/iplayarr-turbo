@@ -9,9 +9,8 @@
                 </div>
             </div>
             <div class="rowActions">
-                <button class="clickable" type="button" :disabled="rebuilding" @click="rebuildLogos">
+                <button class="clickable" type="button" title="Rebuild" aria-label="Rebuild" :disabled="rebuilding" @click="rebuildLogos">
                     <font-awesome-icon :icon="['fas', 'rotate']" :spin="rebuilding" />
-                    Rebuild
                 </button>
             </div>
         </div>
@@ -27,12 +26,12 @@
         @refresh="refreshCaches"
         @clear="clearEverything"
     />
-    <p class="cacheNote">
+    <InfoBar small>
         Cached BBC data is kept in the database so repeat searches and page loads are fast. A new lifetime applies to entries stored from
         now on; existing entries keep their old expiry until cleared.
-    </p>
+    </InfoBar>
     <LoadingIndicator v-if="!cachesLoaded" />
-    <div v-else class="scheduledTasks">
+    <div v-else class="scheduledTasks cacheGrid">
         <div v-for="cache in caches" :key="cache.prefix" class="taskRow">
             <div class="info">
                 <div class="label">
@@ -47,16 +46,22 @@
                         <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
                         <input
                             v-model.number="ttlDraft[cache.prefix].value"
+                            :class="{ changed: ttlEntryChanged(ttlDraft[cache.prefix]) }"
                             type="number"
                             min="1"
                             :disabled="cacheBusy[cache.prefix]"
-                            @change="saveTtl(cache)"
+                            @input="ttlDraft[cache.prefix].resetPending = false"
                         />
-                        <select v-model.number="ttlDraft[cache.prefix].unit" :disabled="cacheBusy[cache.prefix]" @change="saveTtl(cache)">
+                        <select
+                            v-model.number="ttlDraft[cache.prefix].unit"
+                            :class="{ changed: ttlEntryChanged(ttlDraft[cache.prefix]) }"
+                            :disabled="cacheBusy[cache.prefix]"
+                            @change="ttlDraft[cache.prefix].resetPending = false"
+                        >
                             <option v-for="unit in TTL_UNITS" :key="unit.seconds" :value="unit.seconds">{{ unit.label }}</option>
                         </select>
                     </span>
-                    <button v-if="cache.overridden" class="linkButton" title="Use the built-in lifetime" @click="resetTtl(cache)">
+                    <button v-if="cache.overridden && !ttlDraft[cache.prefix].resetPending" class="linkButton" title="Use the built-in lifetime" @click="resetTtl(cache)">
                         Reset to default ({{ describeTtl(cache.defaultTtl) }})
                     </button>
                 </div>
@@ -99,28 +104,31 @@
 
     <SettingsSubheading text="Scheduled tasks" />
     <LoadingIndicator v-if="!loaded" />
-    <div v-else class="scheduledTasks">
+    <div v-else class="scheduledTasks cacheGrid">
         <ScheduledTaskRow v-for="task in tasks" :key="task.id" :task="task" :busy="!!running[task.id]" @run="runNow" />
     </div>
 </template>
 
 <script setup>
-import { inject, onMounted, reactive, ref, watch } from 'vue';
+import { inject, onMounted, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
+import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import ScheduledTaskRow from '@/components/settings/ScheduledTaskRow.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { splitTtl, TTL_UNITS, useCaches } from '@/lib/useCaches';
+import { splitTtl, TTL_UNITS, ttlEntryChanged, useCaches } from '@/lib/useCaches';
 import { useScheduledTasks } from '@/lib/useScheduledTasks';
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 const changedKeys = inject('settingsChangedKeys');
 const schedulesReload = inject('settingsSchedulesReload');
+const ttlDraft = inject('settingsCacheTtls');
+const cachesReload = inject('settingsCachesReload');
 
 const rebuilding = ref(false);
 const rebuildLogos = async () => {
@@ -133,14 +141,23 @@ const rebuildLogos = async () => {
 const { tasks, loaded, running, load, runNow } = useScheduledTasks();
 
 
-const { caches, loaded: cachesLoaded, busy: cacheBusy, error: cacheError, clearingAll, load: loadCaches, clear, clearAll, setTtl } = useCaches();
+const { caches, loaded: cachesLoaded, busy: cacheBusy, error: cacheError, clearingAll, load: loadCaches, clear, clearAll } = useCaches();
 
-// Editable copy of each cache's lifetime, re-seeded whenever the server list changes.
-const ttlDraft = reactive({});
+// Each cache's lifetime is a draft held by the settings page (Save applies it). Follow the server value
+// unless the user is part-way through editing that row.
 watch(
     caches,
     (list) => {
-        for (const cache of list) ttlDraft[cache.prefix] = splitTtl(cache.ttl);
+        for (const cache of list) {
+            const entry = ttlDraft.value[cache.prefix];
+            if (!entry) {
+                ttlDraft.value[cache.prefix] = { ...splitTtl(cache.ttl), savedTtl: cache.ttl, resetPending: false };
+                continue;
+            }
+            const edited = ttlEntryChanged(entry);
+            entry.savedTtl = cache.ttl;
+            if (!edited) Object.assign(entry, splitTtl(cache.ttl), { resetPending: false });
+        }
     },
     { immediate: true }
 );
@@ -151,15 +168,10 @@ const describeTtl = (seconds) => {
     return `${value} ${TTL_UNITS.find((u) => u.seconds === unit).label}`;
 };
 
-const saveTtl = (cache) => {
-    const { value, unit } = ttlDraft[cache.prefix];
-    if (!Number.isFinite(value) || value < 1) {
-        ttlDraft[cache.prefix] = splitTtl(cache.ttl);
-        return;
-    }
-    setTtl(cache, value * unit);
+// Stage the built-in lifetime; Save sends it.
+const resetTtl = (cache) => {
+    Object.assign(ttlDraft.value[cache.prefix], splitTtl(cache.defaultTtl), { resetPending: true });
 };
-const resetTtl = (cache) => setTtl(cache, null);
 const clearCache = async (cache) => {
     if (await dialogService.confirm(`Clear ${cache.label}`, `Are you sure you want to clear ${cache.count.toLocaleString()} cached items?`)) {
         clear(cache);
@@ -192,6 +204,7 @@ const clearEverything = async () => {
 
 // The page bumps this after Save applies schedule edits, so the next-run times refresh.
 watch(schedulesReload, () => load());
+watch(cachesReload, () => loadCaches());
 
 onMounted(() => {
     load();
@@ -208,7 +221,7 @@ onMounted(() => {
 
 .cacheError {
     margin-top: 8px;
-    color: #f05050;
+    color: @danger-color;
 }
 
 .cacheDetails {
@@ -267,8 +280,8 @@ onMounted(() => {
     }
 
     input.changed {
-        border-color: #e84a9a;
-        box-shadow: 0 0 0 2px rgba(232, 74, 154, 0.35);
+        border-color: @changed-color;
+        box-shadow: 0 0 0 2px @changed-soft-color;
     }
 
     select {
@@ -456,6 +469,24 @@ onMounted(() => {
 
     .rowActions button:has(.btnText) svg {
         margin-right: 0;
+    }
+}
+
+// Tablet portrait: the cache cards sit two across.
+@media (min-width: 520px) and (max-width: @mobile-breakpoint) {
+    .cacheGrid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        align-items: start;
+
+        .taskRow {
+            margin-bottom: 0;
+        }
+
+        .cacheError {
+            grid-column: 1 / -1;
+        }
     }
 }
 </style>

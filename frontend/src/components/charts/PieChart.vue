@@ -5,6 +5,8 @@
 <script setup>
 import { computed, defineProps, ref, watch } from 'vue';
 
+import { chartTheme } from '@/lib/chartTheme';
+
 const props = defineProps({
     title: String,
     data: Object,
@@ -45,24 +47,18 @@ watch(
 );
 
 const options = computed(() => {
+    const t = chartTheme();
     return {
         title: {
             text: props.title,
             style: {
                 fontSize: '20px',
-                color: '#ffffff' // Adjust for dark theme
+                color: t.text
             }
         },
-        colors: [
-            '#98003B',
-            '#C90A5F',
-            '#F12D7F',
-            '#c2687b',
-            '#ce8191',
-            '#A6A6A6'
-        ],
+        colors: t.series,
         theme: {
-            mode: 'dark' // Enables dark mode
+            mode: t.mode
         },
         labels: processedData.value.labels,
         dataLabels: {

@@ -17,7 +17,7 @@
         >
             <font-awesome-icon :icon="['fas', 'circle-info']" />
         </button>
-        <span v-show="visible" ref="popup" role="tooltip" class="InfoTip-popup" :style="popupStyle">
+        <span v-show="visible" ref="popup" role="tooltip" :class="['InfoTip-popup', { above: pos.above }]" :style="popupStyle">
             <span class="InfoTip-arrow" :style="arrowStyle" />
             {{ text }}
         </span>
@@ -137,7 +137,7 @@ onBeforeUnmount(() => {
         border-top: 2px solid @brand-color;
         border-radius: 6px;
         background-color: @nav-background-color;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 8px 24px @shadow-color;
         font-size: 13px;
         font-weight: normal;
         line-height: 1.5;
@@ -145,6 +145,19 @@ onBeforeUnmount(() => {
         text-transform: none;
         color: @input-text-color;
         pointer-events: auto;
+    }
+
+    // Above the icon the accent moves to the bottom edge, where the arrow points down at the icon.
+    .InfoTip-popup.above {
+        border-top: 1px solid @input-border-color;
+        border-bottom: 2px solid @brand-color;
+
+        .InfoTip-arrow {
+            top: auto;
+            bottom: -8px;
+            border-bottom: 0;
+            border-top: 6px solid @brand-color;
+        }
     }
 
     // Little triangle on the top edge, pointing at the icon.

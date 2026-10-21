@@ -54,7 +54,7 @@
                         <span class="statValue">{{ grabsToday }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="grabsTrend" color="#888888" />
+                <SparklineChart :data="grabsTrend" color="chart-6" />
             </div>
             <div class="statCard sparkline">
                 <div class="statCardHeader">
@@ -64,7 +64,7 @@
                         <span class="statValue">{{ failedGrabsToday }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="failedGrabsTrend" color="#f05050" />
+                <SparklineChart :data="failedGrabsTrend" color="danger-color" />
             </div>
         </div>
         <div class="chartRow">
@@ -72,8 +72,8 @@
                 <LineChart
                     title="Searches vs Grabs"
                     :series="[
-                        { name: 'Searches', data: searchOverTimeSeries, color: '#F12D7F' },
-                        { name: 'Grabs', data: grabOverTimeSeries, color: '#888888' },
+                        { name: 'Searches', data: searchOverTimeSeries, color: 'chart-1' },
+                        { name: 'Grabs', data: grabOverTimeSeries, color: 'chart-2' },
                     ]"
                 />
             </div>

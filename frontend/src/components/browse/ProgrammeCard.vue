@@ -172,6 +172,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
             &:hover {
                 background-color: @brand-color;
                 border-color: @brand-color;
+                color: @on-brand-color;
             }
         }
     }

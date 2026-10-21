@@ -205,6 +205,7 @@ watch(
 
             &.live {
                 background-color: @brand-color;
+                color: @on-brand-color;
             }
         }
 

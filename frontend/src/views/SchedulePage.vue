@@ -484,7 +484,7 @@ onBeforeUnmount(() => {
     position: absolute;
     top: 0;
     bottom: 0;
-    background-color: rgba(255, 255, 255, 0.06);
+    background-color: @hover-tint;
     pointer-events: none;
     z-index: 1;
 }
@@ -522,7 +522,7 @@ onBeforeUnmount(() => {
     border-top: 1px solid @settings-button-border-color;
 
     &:nth-child(odd) {
-        background-color: fade(@settings-button-background-color, 40%);
+        background-color: color-mix(in srgb, @settings-button-background-color 40%, transparent);
     }
 }
 

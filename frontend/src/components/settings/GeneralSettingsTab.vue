@@ -51,6 +51,18 @@
         :options="trueOrFalse"
     />
     <SettingsSubheading text="Appearance" />
+    <ThemePicker
+        v-model="appearance.theme"
+        name="Colour Scheme"
+        tooltip="The colours used across the app. Each scheme has a dark and a light version."
+        :changed="appearance.theme !== themeState.theme"
+    />
+    <SelectInput
+        v-model="appearance.colorMode"
+        name="Colour Mode"
+        tooltip="Dark, light, or follow your device's setting. The sun/moon switch in the top bar changes this straight away."
+        :options="COLOR_MODES"
+    />
     <SelectInput
         v-model="pillColorsEnabled"
         name="Colour Channel Pills by Logo"
@@ -84,7 +96,7 @@
 
     <template v-if="showAdvanced">
         <SettingsSubheading text="Schedule" />
-        <p class="cacheNote">When tasks run (including the schedule refresh) is set on the Maintenance tab.</p>
+        <InfoBar small>When tasks run (including the schedule refresh) is set on the Maintenance tab.</InfoBar>
         <TextInput
             v-model="config.RSS_FEED_HOURS"
             field="RSS_FEED_HOURS"
@@ -111,12 +123,11 @@ import { computed, defineEmits, defineProps, inject } from 'vue';
 
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
+import ThemePicker from '@/components/common/form/ThemePicker.vue';
+import InfoBar from '@/components/common/InfoBar.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
-import { useChannelPillColors } from '@/lib/channelPillColors';
-import { useInfoMessages } from '@/lib/infoMessages';
-import { usePagingMinimum } from '@/lib/pagingMinimum';
-import { useQualityBadges } from '@/lib/qualityBadges';
-import { TOP_BAR_MODES, useTopBar } from '@/lib/topBar';
+import { COLOR_MODES, useTheme } from '@/lib/theme';
+import { TOP_BAR_MODES } from '@/lib/topBar';
 
 defineProps({
     trueOrFalse: {
@@ -136,33 +147,27 @@ const showAdvanced = inject('settingsShowAdvanced');
 
 const emit = defineEmits(['generate-api-key']);
 
-const { state: pillColors, setEnabled: setPillColorsEnabled } = useChannelPillColors();
+// The per-browser Appearance preferences are drafts held by the settings page; Save applies them.
+const appearance = inject('settingsAppearance');
+const { state: themeState } = useTheme();
 const pillColorsEnabled = computed({
-    get: () => String(pillColors.enabled),
-    set: (value) => setPillColorsEnabled(value === 'true'),
+    get: () => String(appearance.pillColors),
+    set: (value) => (appearance.pillColors = value === 'true'),
 });
-
-const { state: topBar, setMode: setTopBarMode } = useTopBar();
 const topBarMode = computed({
-    get: () => topBar.mode,
-    set: (value) => setTopBarMode(value),
+    get: () => appearance.topBar,
+    set: (value) => (appearance.topBar = value),
 });
-
-const { state: infoMessages, setEnabled: setInfoMessagesEnabled } = useInfoMessages();
 const infoMessagesEnabled = computed({
-    get: () => String(infoMessages.enabled),
-    set: (value) => setInfoMessagesEnabled(value === 'true'),
+    get: () => String(appearance.infoMessages),
+    set: (value) => (appearance.infoMessages = value === 'true'),
 });
-
-const { state: pagingMinimum, setMinimum: setPagingMinimum } = usePagingMinimum();
 const pagingMinimumText = computed({
-    get: () => String(pagingMinimum.minimum),
-    set: (value) => setPagingMinimum(parseInt(value, 10)),
+    get: () => String(appearance.pagingMinimum),
+    set: (value) => (appearance.pagingMinimum = parseInt(value, 10)),
 });
-
-const { state: qualityBadges, setEnabled: setQualityBadgesEnabled } = useQualityBadges();
 const qualityBadgesEnabled = computed({
-    get: () => String(qualityBadges.enabled),
-    set: (value) => setQualityBadgesEnabled(value === 'true'),
+    get: () => String(appearance.qualityBadges),
+    set: (value) => (appearance.qualityBadges = value === 'true'),
 });
 </script>

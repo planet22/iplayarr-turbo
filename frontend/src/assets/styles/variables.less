@@ -4,68 +4,94 @@
 // 768px a min-width rule on the mobile breakpoint and a max-width: @mobile-breakpoint rule both match.
 @desktop-breakpoint: 769px;
 
-/* Colours */
-@brand-color: rgb(225, 31, 119);
-@error-color: #f05050;
-@warn-color: #ffa500;
-@success-color: #00853d;
-@primary-color: #5d9cec;
-@complete-color: rgb(122, 67, 182);
+/* Colours
+   Every colour is a CSS custom property written onto <html> by lib/theme.js from the active theme (lib/themes.js),
+   so the Less names below keep working while the colours change with the theme and with light / dark mode.
+   Fixed colours that must not change (text over posters, the log console) are written inline where they are used. */
+@brand-color: var(--brand-color);
+@on-brand-color: var(--on-brand-color);
+@error-color: var(--error-color);
+@warn-color: var(--warn-color);
+@success-color: var(--success-color);
+@primary-color: var(--primary-color);
+@complete-color: var(--complete-color);
 
-@primary-text-color: rgb(229, 229, 229);
-@nav-text-color: rgb(225, 226, 227);
-@table-text-color: rgb(204, 204, 204);
-@subtle-text-color: #737d83;
-@toolbar-text-color: rgb(153, 153, 153);
+// Foreground-safe role colours: readable as text or an icon on the page background in both modes.
+@danger-color: var(--danger-color);
+@caution-color: var(--caution-color);
+@positive-color: var(--positive-color);
+@info-color: var(--info-color);
+// Soft versions for rings and tints, derived from the role colour (see global.less).
+@brand-soft-color: var(--brand-soft-color);
+@changed-color: var(--changed-color);
+@changed-soft-color: var(--changed-soft-color);
 
+@primary-text-color: var(--primary-text-color);
+@nav-text-color: var(--nav-text-color);
+@table-text-color: var(--table-text-color);
+@subtle-text-color: var(--subtle-text-color);
+@toolbar-text-color: var(--toolbar-text-color);
+
+// Text on the (mode-independent) primary / success / complete fills.
+@on-fill-color: #fff;
 @warn-text-color: black;
 @error-text-color: black;
-@primary-text-color: white;
 
-@page-background-color: rgb(32, 32, 32);
-@nav-background-color: rgb(42, 42, 42);
-@nav-active-background-color: rgb(51, 51, 51);
-@toolbar-background-color: rgb(38, 38, 38);
-@grey-pill-background-color: rgb(89, 89, 89);
+@page-background-color: var(--page-background-color);
+@nav-background-color: var(--nav-background-color);
+@nav-active-background-color: var(--nav-active-background-color);
+@toolbar-background-color: var(--toolbar-background-color);
+@grey-pill-background-color: var(--grey-pill-background-color);
 
-@nav-border-color: @primary-text-color;
-@nav-link-color: rgb(225, 226, 227);
+@nav-border-color: var(--nav-border-color);
+@nav-link-color: var(--nav-link-color);
 
-@login-button-background-color: @primary-color;
-@login-button-border-color: #5899eb;
-@login-panel-header-color: #494949;
-@login-panel-body-color: #111;
+@login-button-background-color: var(--primary-color);
+@login-button-border-color: var(--login-button-border-color);
+@login-panel-header-color: var(--login-panel-header-color);
+@login-panel-body-color: var(--login-panel-body-color);
 
-@logs-background-color: #000;
+@logs-background-color: var(--logs-background-color);
 
-@settings-button-background-color: #333;
-@settings-button-border-color: #393f45;
-@settings-button-hover-background-color: #444;
-@settings-button-hover-border-color: #5a6265;
+@settings-button-background-color: var(--settings-button-background-color);
+@settings-button-border-color: var(--settings-button-border-color);
+@settings-button-hover-background-color: var(--settings-button-hover-background-color);
+@settings-button-hover-border-color: var(--settings-button-hover-border-color);
 
-@primary-box-shadow: rgba(0, 0, 0, 0.075);
+@primary-box-shadow: var(--primary-box-shadow);
+@shadow-color: var(--shadow-color);
+@overlay-color: var(--overlay-color);
+@hover-tint: var(--hover-tint);
 
-@input-background-color: #333;
-@input-border-color: #dde6e9;
-@input-text-color: #ccc;
+@input-background-color: var(--input-background-color);
+@input-border-color: var(--input-border-color);
+@input-text-color: var(--input-text-color);
 
-@table-row-hover-color: rgba(255, 255, 255, 0.08);
-@table-border-color: #858585;
+@table-row-hover-color: var(--table-row-hover-color);
+@table-border-color: var(--table-border-color);
+
+// Categorical chart / tag colours (the first follows the brand)
+@chart-1: var(--chart-1);
+@chart-2: var(--chart-2);
+@chart-3: var(--chart-3);
+@chart-4: var(--chart-4);
+@chart-5: var(--chart-5);
+@chart-6: var(--chart-6);
 
 // Alerts
 
-@alertDangerBorderColor: #a94442;
+@alertDangerBorderColor: var(--alertDangerBorderColor);
 @alertDangerBackgroundColor: rgba(255, 0, 0, 0.1);
-@alertDangerColor: #ccc;
+@alertDangerColor: var(--table-text-color);
 
-@alertInfoBorderColor: #31708f;
+@alertInfoBorderColor: var(--alertInfoBorderColor);
 @alertInfoBackgroundColor: rgba(0, 0, 255, 0.1);
-@alertInfoColor: #ccc;
+@alertInfoColor: var(--table-text-color);
 
-@alertSuccessBorderColor: #3c763d;
+@alertSuccessBorderColor: var(--alertSuccessBorderColor);
 @alertSuccessBackgroundColor: rgba(0, 255, 0, 0.1);
-@alertSuccessColor: #ccc;
+@alertSuccessColor: var(--table-text-color);
 
-@alertWarningBorderColor: #8a6d3b;
+@alertWarningBorderColor: var(--alertWarningBorderColor);
 @alertWarningBackgroundColor: rgba(255, 255, 0, 0.1);
-@alertWarningColor: #ccc;
+@alertWarningColor: var(--table-text-color);

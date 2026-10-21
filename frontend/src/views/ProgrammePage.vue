@@ -568,6 +568,7 @@ const duplicatesBannerDownload = computed(
     &.on {
         background-color: @brand-color;
         border-color: @brand-color;
+        color: @on-brand-color;
     }
 
     // Same size as the buttons, but a status label rather than something to press.
@@ -575,6 +576,7 @@ const duplicatesBannerDownload = computed(
     &.arrChip:hover:not(:disabled) {
         background-color: @brand-color;
         border-color: @brand-color;
+        color: @on-brand-color;
         cursor: default;
         user-select: none;
     }
@@ -616,6 +618,7 @@ const duplicatesBannerDownload = computed(
         &:hover:not(:disabled) {
             background-color: @brand-color;
             border-color: @brand-color;
+            color: @on-brand-color;
         }
     }
 }
@@ -640,6 +643,7 @@ const duplicatesBannerDownload = computed(
         &.active {
             background-color: @brand-color;
             border-color: @brand-color;
+            color: @on-brand-color;
         }
     }
 }
@@ -753,6 +757,7 @@ const duplicatesBannerDownload = computed(
             &:hover {
                 background-color: @brand-color;
                 border-color: @brand-color;
+                color: @on-brand-color;
             }
         }
     }

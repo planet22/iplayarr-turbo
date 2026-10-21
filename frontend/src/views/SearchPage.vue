@@ -69,8 +69,8 @@
         </div>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
         <div v-if="selectMode && viewMode === 'posters' && searchResults.length" class="selectBar">
-            <span>{{ selectedCount }} selected</span>
-            <button type="button" title="Select all results" aria-label="Select all results" @click="setAllChecked(true)">
+            <span>{{ selectedCount }} of {{ filteredResults.length }} selected</span>
+            <button type="button" :title="`Select all ${filteredResults.length} results`" :aria-label="`Select all ${filteredResults.length} results`" @click="setAllChecked(true)">
                 <font-awesome-icon :icon="['fas', 'check-double']" />
             </button>
             <button type="button" title="Clear selection" aria-label="Clear selection" :disabled="!selectedCount" @click="setAllChecked(false)">
@@ -83,7 +83,7 @@
                 :selectable="selectMode" :selected="!!item.result.checked" @toggle="item.result.checked = !item.result.checked"
             />
         </div>
-        <table v-else class="resultsTable responsive-table">
+        <table v-else-if="filteredResults.length" class="resultsTable responsive-table">
             <colgroup>
                 <col style="width: 40px" />
                 <col style="width: 70px" />
@@ -592,7 +592,7 @@ watch(
             border-radius: 6px;
             border: 1px solid @settings-button-border-color;
             background-color: @nav-active-background-color;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 6px 18px @shadow-color;
 
             li {
                 display: flex;
@@ -837,25 +837,26 @@ watch(
     &.BBCTwo {
         background-color: @primary-color;
         border-color: @primary-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 
     &.BBCThree {
         background-color: @brand-color;
         border-color: @brand-color;
+        color: @on-brand-color;
         color: @primary-text-color;
     }
 
     &.CBeebies {
         background-color: @complete-color;
         border-color: @complete-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 
     &.CBBC {
         background-color: @success-color;
         border-color: @success-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 }
 </style>

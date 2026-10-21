@@ -185,7 +185,7 @@ const onPageSizeChange = (event) => {
     &.active {
         background-color: @primary-color;
         border-color: @primary-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
         font-weight: bold;
         cursor: default;
     }

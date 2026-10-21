@@ -108,7 +108,7 @@
                 :options="liveTvOptions"
             />
                     </template>
-        <SettingsSubheading text="Jellyfin" />
+        <SettingsSubheading text="Media Servers" />
         <LiveTvJellyfinSetup />
     </template>
 </template>

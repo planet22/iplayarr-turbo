@@ -117,6 +117,6 @@ const reset = () => {
 .cacheOk {
     margin-top: 8px;
     font-size: 12px;
-    color: #3fb950;
+    color: @positive-color;
 }
 </style>

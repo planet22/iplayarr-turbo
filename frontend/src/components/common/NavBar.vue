@@ -34,6 +34,7 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
             </div>
         </div>
         <div class="right">
+            <ColorModeToggle v-if="authState.user" />
             <span
 v-if="authState.user && versionLabel" class="versionLabel desktopOnly"
                 :class="{ updateAvailable: toolVersions?.getIplayer?.updateAvailable || toolVersions?.ytdlp?.updateAvailable }"
@@ -55,6 +56,7 @@ const logoUrl = `${getBasePath()}/iplayarr.png`;
 import { computed, defineExpose, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import ColorModeToggle from '@/components/common/ColorModeToggle.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useTopBar } from '@/lib/topBar';
@@ -288,7 +290,7 @@ defineExpose({ clearSearch });
                     border-radius: 4px;
                     border: 1px solid @settings-button-border-color;
                     background-color: @nav-active-background-color;
-                    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+                    box-shadow: 0 6px 18px @shadow-color;
 
                     li {
                         display: flex;
@@ -321,9 +323,9 @@ defineExpose({ clearSearch });
                 .searchBox {
                     background-color: transparent;
                     border: 0px;
-                    border-bottom: 1px solid white;
+                    border-bottom: 1px solid @primary-text-color;
                     padding: 5px 5px;
-                    color: white;
+                    color: @primary-text-color;
                     border-radius: 0px;
                     transition: border-bottom-color 0.3s ease-out;
 

@@ -76,7 +76,7 @@ const { page, pageSize, pagedItems } = usePagination(items);
             border: 1px solid @table-border-color;
             border-radius: 4px;
             background-color: @nav-background-color;
-            color: white;
+            color: @primary-text-color;
             font-size: 45px;
         }
     }
@@ -107,7 +107,33 @@ const { page, pageSize, pagedItems } = usePagination(items);
         button {
             background: none;
             border: none;
-            color: white;
+            color: @primary-text-color;
+        }
+    }
+}
+
+// Phones: the boxes span the page like every other card.
+@media (max-width: @mobile-breakpoint) {
+    .listButton {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0 0 10px;
+
+        .actionContainer {
+            width: calc(100% - 20px);
+        }
+    }
+}
+
+// Tablet portrait: two boxes side by side.
+@media (min-width: 520px) and (max-width: @mobile-breakpoint) {
+    .listButton {
+        float: left;
+        width: calc(50% - 5px);
+        margin: 0 10px 10px 0;
+
+        &:nth-of-type(even) {
+            margin-right: 0;
         }
     }
 }

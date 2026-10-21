@@ -210,8 +210,8 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
     }
 
     &.changed .trigger {
-        border-color: #e84a9a;
-        box-shadow: 0 0 0 2px rgba(232, 74, 154, 0.35);
+        border-color: @changed-color;
+        box-shadow: 0 0 0 2px @changed-soft-color;
     }
 
     &.advanced {
