@@ -22,14 +22,14 @@
                 {{ l === '0' ? '0-9' : l.toUpperCase() }}
             </RouterLink>
         </div>
-        <InfoBar v-if="error" clazz="danger">{{ error }}</InfoBar>
+        <ErrorState v-if="error" :message="error" @retry="fetchAll" />
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
         <div v-if="pagedItems.length" class="browseGrid">
             <ProgrammeCard v-for="item in pagedItems" :key="item.pid" :item="item" />
         </div>
         <p v-else-if="items.length && !loadingAll">Nothing matches that filter.</p>
-        <LoadingIndicator v-if="loading" />
-        <p v-else-if="!error && items.length === 0">No programmes found.</p>
+        <SkeletonLoader v-if="loading" />
+        <EmptyState v-else-if="!error && items.length === 0" icon="tv" title="No programmes found" hint="Nothing is listed here right now." />
         <p v-else-if="loadingAll" class="loadingMoreNote">Loading more ({{ items.length }} of {{ total ?? '…' }})&hellip;</p>
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
         <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
@@ -42,10 +42,11 @@ import { useRoute } from 'vue-router';
 
 import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
-import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch } from '@/lib/browse';
 import { usePagination } from '@/lib/usePagination';

@@ -1,7 +1,7 @@
 <template>
     <div class="browsePage">
-        <LoadingIndicator v-if="loading" />
-        <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
+        <SkeletonLoader v-if="loading" variant="rails" />
+        <ErrorState v-else-if="error" :message="error" @retry="load" />
         <template v-else>
             <BrowseHero v-if="heroItem" :item="heroItem" />
             <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
@@ -17,8 +17,9 @@ import { onMounted, ref } from 'vue';
 
 import BrowseHero from '@/components/browse/BrowseHero.vue';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
-import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import { browseFetch } from '@/lib/browse';
 
 const rails = ref([]);
@@ -33,7 +34,9 @@ const pickHero = () => {
     return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
 };
 
-onMounted(async () => {
+const load = async () => {
+    loading.value = true;
+    error.value = null;
     try {
         rails.value = await browseFetch('home');
         heroItem.value = pickHero();
@@ -42,5 +45,7 @@ onMounted(async () => {
     } finally {
         loading.value = false;
     }
-});
+};
+
+onMounted(load);
 </script>

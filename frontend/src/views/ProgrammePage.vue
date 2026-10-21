@@ -2,8 +2,8 @@
     <div class="browsePage programmeHeader">
         <SettingsPageToolbar />
     </div>
-    <LoadingIndicator v-if="loading" />
-    <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
+    <SkeletonLoader v-if="loading" variant="banner" />
+    <ErrorState v-else-if="error" :message="error" @retry="reload" />
     <template v-else-if="programme">
         <div class="programmeBanner">
             <div class="bannerBackdrop" :style="bannerStyle" />
@@ -78,7 +78,7 @@
         </div>
 
         <div class="browsePage">
-            <p v-if="programme.seasons.length === 0">No episodes are currently available.</p>
+            <EmptyState v-if="programme.seasons.length === 0" icon="film" title="No episodes are currently available" hint="They may not be on iPlayer right now." />
             <template v-else>
                 <div v-if="programme.seasons.length > 1" class="seasonTabs">
                     <button
@@ -152,9 +152,10 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
-import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
@@ -336,9 +337,13 @@ const loadRemainingPages = async (pid, first) => {
     }
 };
 
+// Bumped by Try again to load the same programme once more.
+const reloadKey = ref(0);
+const reload = () => reloadKey.value++;
+
 watch(
-    () => route.params.pid,
-    async (pid) => {
+    () => [route.params.pid, reloadKey.value],
+    async ([pid]) => {
         if (!pid) return;
         loading.value = true;
         loadingMore.value = false;

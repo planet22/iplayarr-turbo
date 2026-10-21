@@ -85,8 +85,8 @@
                 </button>
             </template>
         </SettingsPageToolbar>
-        <LoadingIndicator v-if="loading" />
-        <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
+        <SkeletonLoader v-if="loading" />
+        <ErrorState v-else-if="error" :message="error" @retry="loadTiles()" />
         <InfoBar v-if="arranging && !loading && !error">
             Drag channels (or use the arrows) into the order you want. Use the eye to switch a channel off. The compass
             features a channel as a rail on the Discover page (up to 4, shown in this order).
@@ -276,10 +276,11 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute } from 'vue-router';
 
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
-import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import ChannelEditModal from '@/components/modals/ChannelEditModal.vue';
 import { browseFetch } from '@/lib/browse';
 import { refreshChannelColors } from '@/lib/channelPillColors';

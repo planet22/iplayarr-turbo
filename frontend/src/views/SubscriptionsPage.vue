@@ -7,10 +7,12 @@
         />
         <InfoBar small>New episodes are queued automatically, checked hourly or on demand.</InfoBar>
         <LoadingIndicator v-if="!loaded" />
-        <p v-else-if="subscriptions.length === 0">
-            No subscriptions yet. Open a show from
-            <RouterLink to="/browse">Discover</RouterLink> and press Subscribe.
-        </p>
+        <EmptyState
+            v-else-if="subscriptions.length === 0" icon="bell" title="No subscriptions yet"
+            hint="Open a show and press Subscribe, and new episodes are queued for you automatically."
+        >
+            <RouterLink to="/browse">Browse programmes</RouterLink>
+        </EmptyState>
         <TablePagination v-if="loaded && subscriptions.length" v-model="page" v-model:page-size="pageSize" :total="subscriptions.length" />
         <div v-if="isMobile && loaded && subscriptions.length" class="cardList">
             <DataCard v-for="subscription in pagedItems" :key="subscription.id">
@@ -164,6 +166,7 @@ import { onMounted, reactive, ref } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import DataCard from '@/components/common/DataCard.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
