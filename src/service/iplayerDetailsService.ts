@@ -89,11 +89,24 @@ class IPlayerDetailsService {
             if (retryAt > Date.now()) throw new Error(`No programme metadata for PID ${pid} (cached 404)`);
             this.notFound.delete(pid);
         }
+        // When the BBC's programme pages are down they redirect to an HTML "Service Temporarily Unavailable" page,
+        // which axios follows and reports as a 200. That must not be taken for metadata or cached for a day.
+        const isMetadata = (value: unknown): value is IPlayerMetadataResponse =>
+            typeof value === 'object' && value !== null && typeof (value as IPlayerMetadataResponse).programme === 'object' && (value as IPlayerMetadataResponse).programme !== null;
+        const fetchMetadata = async (): Promise<IPlayerMetadataResponse> => {
+            const response: { data: unknown } = await axiosInstance.get(`https://www.bbc.co.uk/programmes/${pid}.json`);
+            if (!isMetadata(response.data)) {
+                throw new Error(`The BBC programme page for ${pid} returned an error page instead of data - the BBC site may be temporarily unavailable`);
+            }
+            return response.data;
+        };
         try {
-            return await this.metadataCache.getOr(pid, async () => {
-                const response: { data: IPlayerMetadataResponse } = await axiosInstance.get(`https://www.bbc.co.uk/programmes/${pid}.json`);
-                return response.data;
-            });
+            const value = await this.metadataCache.getOr(pid, fetchMetadata);
+            if (isMetadata(value)) return value;
+            // An error page cached before this check existed: fetch it again and replace the bad entry.
+            const fresh = await fetchMetadata();
+            await this.metadataCache.set(pid, fresh).catch(() => undefined);
+            return fresh;
         } catch (error) {
             if (axios.isAxiosError(error) && error.response?.status === 404) {
                 this.notFound.set(pid, Date.now() + IPlayerDetailsService.NOT_FOUND_TTL_MS);

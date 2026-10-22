@@ -116,6 +116,31 @@ describe('iplayerDetailsService', () => {
         expect(result.programme.pid).toBe('b1234567');
     });
 
+    it('getMetadata rejects the BBC error page (HTML) and does not cache it', async () => {
+        jest.spyOn(console, 'error').mockImplementation(() => undefined);
+        mockedAxios.isAxiosError.mockReturnValue(false);
+        mockedAxios.get.mockResolvedValueOnce({ data: '<!DOCTYPE html><title>BBC: Service Temporarily Unavailable</title>' });
+
+        await expect(iplayerDetailsService.getMetadata('errpage01')).rejects.toThrow('temporarily unavailable');
+
+        // Once the BBC recovers the same pid loads normally - nothing bad was remembered.
+        mockedAxios.get.mockResolvedValueOnce({ data: { programme: mockProgramme } });
+        const result = await iplayerDetailsService.getMetadata('errpage01');
+        expect(result.programme.pid).toBe('b1234567');
+        expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+    });
+
+    it('getMetadata replaces an error page that an earlier version cached', async () => {
+        mockedAxios.isAxiosError.mockReturnValue(false);
+        await iplayerDetailsService.metadataCache.set('poisoned1', '<html>error</html>' as any);
+        mockedAxios.get.mockResolvedValueOnce({ data: { programme: mockProgramme } });
+
+        const result = await iplayerDetailsService.getMetadata('poisoned1');
+
+        expect(result.programme.pid).toBe('b1234567');
+        expect(await iplayerDetailsService.metadataCache.get('poisoned1')).toEqual({ programme: mockProgramme });
+    });
+
     it('findBrandForPid returns pid when type is brand', async () => {
         mockedAxios.get.mockResolvedValueOnce({
             data: { programme: { pid: 'brandpid', type: 'brand' } },
