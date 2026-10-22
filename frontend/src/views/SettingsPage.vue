@@ -303,14 +303,14 @@ const applyFilter = () => {
     const closeHeading = () => {
         if (heading) heading.classList.toggle('filteredOut', words.length > 0 && !headingHasMatch);
     };
-    for (const el of root.querySelectorAll('.settingsSubheading, .form-group')) {
+    for (const el of root.querySelectorAll('.settingsSubheading, .form-group, .jellyfinStatus')) {
         if (el.classList.contains('settingsSubheading')) {
             closeHeading();
             heading = el;
             headingHasMatch = false;
             continue;
         }
-        const text = [el.querySelector('label')?.textContent, ...[...el.querySelectorAll('.tooltip, .InfoTip-popup')].map((n) => n.textContent)]
+        const text = [el.querySelector('label')?.textContent, ...[...el.querySelectorAll('.tooltip, .InfoTip-popup, .statusName')].map((n) => n.textContent)]
             .join(' ')
             .toLowerCase();
         const hit = words.every((word) => text.includes(word));
