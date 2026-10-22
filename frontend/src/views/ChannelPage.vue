@@ -25,7 +25,7 @@
                 </button>
             </template>
         </SettingsPageToolbar>
-        <SkeletonLoader v-if="loading" variant="rails" />
+        <SkeletonLoader v-if="loading" variant="rails" :hero="false" />
         <ErrorState v-else-if="error" :message="error" @retry="reload" />
         <template v-else>
             <div v-if="nowNext?.now || nowNext?.next" class="nowNext">

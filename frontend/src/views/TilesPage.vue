@@ -85,7 +85,7 @@
                 </button>
             </template>
         </SettingsPageToolbar>
-        <SkeletonLoader v-if="loading" />
+        <SkeletonLoader v-if="loading" variant="tiles" :tile-shape="isChannels ? 'channel' : 'category'" :count="isChannels ? 11 : 20" />
         <ErrorState v-else-if="error" :message="error" @retry="loadTiles()" />
         <InfoBar v-if="arranging && !loading && !error">
             Drag channels (or use the arrows) into the order you want. Use the eye to switch a channel off. The compass
