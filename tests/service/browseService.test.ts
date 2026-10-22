@@ -5,6 +5,7 @@ import browseService, {
     dedupeRails,
     extractElements,
     parseIplayerState,
+    parseIsoDurationMinutes,
     parseQualityFlags,
     parseSkipMarkers,
     shuffled,
@@ -617,6 +618,138 @@ describe('browseService', () => {
             { series: undefined, episodes: [expect.objectContaining({ pid: 'b00ep001' })] },
         ]);
         expect(mockedDetails.getSeriesEpisodes).not.toHaveBeenCalled();
+    });
+
+    describe('programme while the BBC programme pages are down', () => {
+        const iblEpisode = (id: string, extra: object = {}) => ({
+            id,
+            type: 'episode',
+            title: 'Time',
+            subtitle: 'Series 3: Episode 3',
+            original_title: 'Episode 3',
+            tleo_id: 'p09brand',
+            tleo_type: 'brand',
+            synopses: { medium: 'Episode synopsis' },
+            images: { standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0ep1234.jpg' },
+            master_brand: { titles: { small: 'BBC One' } },
+            labels: { category: 'Crime Drama' },
+            release_date_time: '2026-10-11T00:00:00.000Z',
+            versions: [{ kind: 'original', duration: { value: 'PT1H1M30S' } }],
+            ...extra,
+        });
+        const show = {
+            id: 'p09brand',
+            title: 'Time',
+            tleo_type: 'brand',
+            synopses: { medium: 'Show synopsis' },
+            images: { standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0show12.jpg' },
+            master_brand: { titles: { small: 'BBC One' } },
+            labels: { category: 'Crime Drama' },
+        };
+        const routes = (table: Record<string, unknown>) =>
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                const key = Object.keys(table).find((k) => url.endsWith(k));
+                if (!key) throw new Error(`unexpected ${url}`);
+                return { data: table[key] };
+            });
+
+        beforeEach(() => mockedDetails.getMetadata.mockRejectedValue(new Error('BBC down')));
+
+        it('builds a brand page from iBL and flags it degraded', async () => {
+            routes({
+                'programmes/p09brand': { programmes: [show] },
+                'programmes/p09brand/episodes?per_page=30&page=1': { programme_episodes: { elements: [iblEpisode('e3'), { id: 's', type: 'series' }] } },
+            });
+            const result = await browseService.programme('p09brand');
+            expect(result).toMatchObject({
+                pid: 'p09brand',
+                kind: 'brand',
+                title: 'Time',
+                synopsis: 'Show synopsis',
+                thumbnail: 'json-api/thumbnail/p0show12.jpg',
+                channel: 'BBC One',
+                category: 'Crime Drama',
+                degraded: true,
+                missing: [],
+                hasMore: false,
+            });
+            expect(result.seasons).toEqual([
+                {
+                    series: 3,
+                    episodes: [
+                        expect.objectContaining({
+                            pid: 'e3',
+                            episode: 3,
+                            series: 3,
+                            episodeTitle: 'Episode 3',
+                            description: 'Episode synopsis',
+                            runtime: 61.5,
+                            thumbnail: 'json-api/thumbnail/p0ep1234.jpg',
+                        }),
+                    ],
+                },
+            ]);
+        });
+
+        it('climbs an episode pid to its show and lists only the fields iBL lacks as missing', async () => {
+            const bare = { ...show, synopses: undefined, images: undefined };
+            routes({
+                'programmes/e3': { programmes: [] },
+                'episodes/e3': { episodes: [iblEpisode('e3')] },
+                'programmes/p09brand': { programmes: [bare] },
+                'programmes/p09brand/episodes?per_page=30&page=2': { programme_episodes: { elements: [iblEpisode('e3')] } },
+            });
+            const result = await browseService.programme('e3', 2);
+            expect(result).toMatchObject({ pid: 'p09brand', degraded: true, page: 2, missing: ['synopsis', 'thumbnail'] });
+        });
+
+        it('shows a standalone episode on its own', async () => {
+            routes({
+                'programmes/e9': { programmes: [] },
+                'episodes/e9': { episodes: [iblEpisode('e9', { tleo_id: 'e9', tleo_type: 'episode', subtitle: undefined, original_title: undefined })] },
+            });
+            const result = await browseService.programme('e9');
+            expect(result).toMatchObject({ pid: 'e9', kind: 'episode', degraded: true, hasMore: false });
+            expect(result.seasons[0].episodes.map((e) => e.pid)).toEqual(['e9']);
+        });
+
+        it('reports more pages while iBL returns a full page', async () => {
+            routes({
+                'programmes/p09brand': { programmes: [show] },
+                'programmes/p09brand/episodes?per_page=30&page=1': {
+                    programme_episodes: { elements: Array.from({ length: 30 }, (_, i) => iblEpisode(`e${i}`)) },
+                },
+            });
+            expect((await browseService.programme('p09brand')).hasMore).toBe(true);
+        });
+
+        it('rethrows the original error when iBL does not know the pid either', async () => {
+            routes({ 'programmes/nope': { programmes: [] }, 'episodes/nope': { episodes: [] } });
+            await expect(browseService.programme('nope')).rejects.toThrow('BBC down');
+        });
+
+        it('falls back when metadata loads but no episode lookup does', async () => {
+            mockedDetails.getMetadata.mockReset();
+            mockedDetails.getMetadata.mockResolvedValue({ programme: { type: 'brand', pid: 'p09brand', title: 'Time' } } as any);
+            mockedDetails.getSeriesEpisodes.mockResolvedValue([{ id: 'e3', type: 'episode', title: 't' }] as any);
+            mockedDetails.detailsForEpisodeMetadata.mockResolvedValue([]);
+            routes({
+                'programmes/p09brand': { programmes: [show] },
+                'programmes/p09brand/episodes?per_page=30&page=1': { programme_episodes: { elements: [iblEpisode('e3')] } },
+            });
+            const result = await browseService.programme('p09brand');
+            expect(result.degraded).toBe(true);
+            expect(result.seasons[0].episodes).toHaveLength(1);
+        });
+    });
+});
+
+describe('parseIsoDurationMinutes', () => {
+    it('reads ISO 8601 durations', () => {
+        expect(parseIsoDurationMinutes('PT1H1M34.040S')).toBeCloseTo(61.567, 2);
+        expect(parseIsoDurationMinutes('PT58M')).toBe(58);
+        expect(parseIsoDurationMinutes('PT')).toBeUndefined();
+        expect(parseIsoDurationMinutes(undefined)).toBeUndefined();
     });
 });
 

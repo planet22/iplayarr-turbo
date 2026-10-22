@@ -7,8 +7,11 @@
     <template v-else-if="programme">
         <div class="programmeBanner">
             <div class="bannerBackdrop" :style="bannerStyle" />
-            <div :class="['programmeBannerContent', posterUrl ? 'hasPoster' : '']">
+            <div :class="['programmeBannerContent', posterUrl || isMissing('thumbnail') ? 'hasPoster' : '']">
                 <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
+                <div v-else-if="isMissing('thumbnail')" class="poster missing" title="Artwork unavailable" role="img" aria-label="Artwork unavailable">
+                    <font-awesome-icon :icon="['fas', 'image']" />
+                </div>
                 <div class="programmeText">
                 <div class="programmeHead">
                 <h1>{{ programme.title }}</h1>
@@ -20,8 +23,15 @@
                     <ChannelPill :channel="programme.channel">
                         <font-awesome-icon :icon="['fas', 'tower-broadcast']" />
                     </ChannelPill>
+                    <span v-if="isMissing('channel')" class="pill grey missing" title="Channel unavailable">
+                        <font-awesome-icon :icon="['fas', 'tower-broadcast']" />Channel
+                    </span>
                     <span v-if="programme.category" :class="['pill', 'grey']">{{ programme.category }}</span>
-                    <span :class="['pill', 'grey']">
+                    <span v-else-if="isMissing('category')" class="pill grey missing" title="Category unavailable">Category</span>
+                    <span v-if="programme.degraded" class="pill grey missing" title="The BBC programme page is unavailable right now">
+                        <font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" />Link
+                    </span>
+                    <span v-else :class="['pill', 'grey']">
                         <a :href="`https://www.bbc.co.uk/programmes/${programme.pid}`" target="_blank" rel="noopener noreferrer">
                             <font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" />Link
                         </a>
@@ -29,6 +39,15 @@
                 </div>
                 </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>
+                <p v-else-if="isMissing('synopsis')" class="missing synopsisMissing">Synopsis unavailable</p>
+                <p v-if="programme.degraded" class="degradedNote" role="status">
+                    <font-awesome-icon :icon="['fas', 'circle-info']" />
+                    {{
+                        programme.missing?.length
+                            ? 'The BBC programme pages are not responding, so some details are missing. Episodes below come from iPlayer.'
+                            : 'The BBC programme pages are not responding, so these details come from iPlayer\'s listings.'
+                    }}
+                </p>
                 <div v-if="programme.kind !== 'episode' || subscription" class="subscribeRow">
                     <button
                         :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
@@ -267,6 +286,9 @@ const mergeSeasons = (current, incoming) => {
     return [...bySeries.values()].sort((a, b) => (a.series ?? Infinity) - (b.series ?? Infinity));
 };
 
+// Fields the server could not supply while the BBC's programme pages are down; shown as greyed placeholders.
+const isMissing = (field) => !!programme.value?.degraded && !!programme.value.missing?.includes(field);
+
 const posterUrl = computed(() => getThumbnailUrl(programme.value?.thumbnail));
 
 const bannerStyle = computed(() => {
@@ -386,6 +408,15 @@ const duplicatesBannerDownload = computed(
     :deep(.SettingsPageToolbar) {
         margin: 0;
     }
+
+    // This wrapper has no padding for the global phone rule's negative margins to cancel, so they would push
+    // the toolbar past both screen edges.
+    @media (max-width: @mobile-breakpoint) {
+        &.browsePage :deep(.SettingsPageToolbar) {
+            margin-left: 0;
+            margin-right: 0;
+        }
+    }
 }
 
 .programmeBanner {
@@ -431,6 +462,41 @@ const duplicatesBannerDownload = computed(
                 color: inherit;
                 text-decoration: none;
             }
+        }
+    }
+}
+
+// Fields the BBC could not supply: greyed, dashed placeholders (white-on-artwork stays readable).
+.programmeBanner {
+    .missing {
+        opacity: 0.55;
+        border: 1px dashed rgba(255, 255, 255, 0.55);
+        background: transparent;
+        font-style: italic;
+    }
+
+    p.missing {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+
+    .poster.missing {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        background: rgba(255, 255, 255, 0.08);
+        font-style: normal;
+    }
+
+    p.degradedNote {
+        margin: 10px 0 0;
+        font-size: 13px;
+        opacity: 0.75;
+
+        svg {
+            margin-right: 6px;
         }
     }
 }

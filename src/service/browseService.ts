@@ -21,6 +21,7 @@ import {
     BrowseSuggestion,
 } from '../types/Browse';
 import { IPlayerDetails } from '../types/IPlayerDetails';
+import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { splitArrayIntoChunks } from '../utils/Utils';
 import categoryDiscoverService from './categoryDiscoverService';
@@ -209,6 +210,40 @@ export function buildChannelColors(
 }
 
 const PROGRAMME_PAGE_SIZE = 30;
+
+// iBL gives durations as ISO 8601 ("PT1H1M34.040S"); the minutes, or undefined when it isn't one.
+export function parseIsoDurationMinutes(value: unknown): number | undefined {
+    const match = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/.exec(String(value ?? ''));
+    if (!match || (!match[1] && !match[2] && !match[3])) return undefined;
+    return Number(match[1] ?? 0) * 60 + Number(match[2] ?? 0) + Number(match[3] ?? 0) / 60;
+}
+
+// An episode as the programme page lists it, built from iBL's own episode record alone - for when the
+// BBC's programme pages (the usual source) are down. "Series 3: Episode 3" in the subtitle gives the numbers.
+export function iblEpisodeToDetails(element: any): IPlayerDetails {
+    const imageUrl: unknown = element.images?.standard ?? element.images?.portrait;
+    const imagePid = typeof imageUrl === 'string' ? IMAGE_PID_REGEX.exec(imageUrl)?.[1] : undefined;
+    const subtitle = String(element.subtitle ?? '');
+    const series = /\bSeries\s+(\d+)/i.exec(subtitle)?.[1];
+    const episode = /\bEpisode\s+(\d+)/i.exec(subtitle)?.[1];
+    const version = (element.versions ?? []).find((v: any) => v?.kind === 'original') ?? element.versions?.[0];
+    return {
+        pid: element.id,
+        title: element.title,
+        episode: episode === undefined ? undefined : Number(episode),
+        episodeTitle: element.original_title || subtitle || undefined,
+        series: series === undefined ? undefined : Number(series),
+        channel: element.master_brand?.titles?.small ?? element.master_brand?.titles?.medium,
+        category: element.labels?.category ?? '',
+        description: element.synopses?.medium ?? element.synopses?.large ?? element.synopses?.small,
+        runtime: parseIsoDurationMinutes(version?.duration?.value) ?? 0,
+        firstBroadcast: version?.first_broadcast_date_time ?? element.release_date_time,
+        link: `https://www.bbc.co.uk/programmes/${element.id}`,
+        thumbnail: imagePid ? `json-api/thumbnail/${imagePid}.jpg` : undefined,
+        type: VideoType.TV,
+        seriesPid: element.tleo_id,
+    };
+}
 
 export function shuffled<T>(list: T[]): T[] {
     const copy = [...list];
@@ -651,7 +686,18 @@ class BrowseService {
     async programme(requestedPid: string, page: number = 1): Promise<BrowseProgramme> {
         const safePage = Number.isInteger(page) && page > 0 ? page : 1;
         let pid = requestedPid;
-        let { programme } = await iplayerDetailsService.getMetadata(pid);
+        let programme: IPlayerProgramMetadata;
+        try {
+            ({ programme } = await iplayerDetailsService.getMetadata(pid));
+        } catch (error) {
+            // The BBC's programme pages being down must not take the programme page with them.
+            const degraded = await this.#programmeFromIbl(requestedPid, safePage).catch(() => undefined);
+            if (degraded) {
+                loggingService.log(`BBC programme page unavailable for ${requestedPid}; showing iPlayer listing data only (${error})`);
+                return degraded;
+            }
+            throw error;
+        }
         // An episode card opens its whole show: climb to the brand and list every episode there.
         if (programme.type === 'episode') {
             const brandPid = await iplayerDetailsService.findBrandForPid(pid).catch(() => undefined);
@@ -690,7 +736,58 @@ class BrowseService {
                 episodes.push(...(await iplayerDetailsService.detailsForEpisodeMetadata(chunk)));
             }
         }
+        if (episodes.length === 0) {
+            // Every episode lookup failed (the BBC's programme pages again): the listing API has the same data.
+            const degraded = await this.#programmeFromIbl(pid, safePage).catch(() => undefined);
+            if (degraded && degraded.seasons.length > 0) return degraded;
+        }
         return { ...base, seasons: this.#groupSeasons(episodes), page: safePage, hasMore };
+    }
+
+    // The programme page from iPlayer's listing API only: used when the BBC's programme pages are unreachable.
+    // An episode pid is climbed to its show through `tleo_id`. Returns undefined when iBL doesn't know the pid.
+    async #programmeFromIbl(requestedPid: string, page: number): Promise<BrowseProgramme | undefined> {
+        let show: any = (await this.#ibl(`programmes/${encodeURIComponent(requestedPid)}`))?.programmes?.[0];
+        let lone: any;
+        if (!show) {
+            const episode = (await this.#ibl(`episodes/${encodeURIComponent(requestedPid)}`))?.episodes?.[0];
+            if (!episode) return undefined;
+            if (episode.tleo_id && episode.tleo_id !== requestedPid && episode.tleo_type !== 'episode') {
+                show = (await this.#ibl(`programmes/${encodeURIComponent(episode.tleo_id)}`).catch(() => undefined))?.programmes?.[0];
+            }
+            if (!show) lone = episode;
+        }
+        const source = show ?? lone;
+        const imageUrl: unknown = source.images?.standard ?? source.images?.portrait;
+        const imagePid = typeof imageUrl === 'string' ? IMAGE_PID_REGEX.exec(imageUrl)?.[1] : undefined;
+        const base = {
+            pid: source.id as string,
+            kind: (lone ? 'episode' : KINDS.includes(source.tleo_type) ? source.tleo_type : 'brand') as BrowseKind,
+            type: VideoType.TV,
+            title: source.title as string,
+            synopsis: (source.synopses?.medium ?? source.synopses?.large ?? source.synopses?.small) as string | undefined,
+            thumbnail: imagePid ? `json-api/thumbnail/${imagePid}.jpg` : undefined,
+            channel: (source.master_brand?.titles?.small ?? source.master_brand?.titles?.medium) as string | undefined,
+            category: source.labels?.category as string | undefined,
+        };
+        const missing = (['synopsis', 'thumbnail', 'channel', 'category'] as const).filter((field) => !base[field]);
+
+        let elements: any[];
+        if (lone) {
+            elements = [lone];
+        } else {
+            const data = await this.#ibl(`programmes/${encodeURIComponent(base.pid)}/episodes?per_page=${PROGRAMME_PAGE_SIZE}&page=${page}`);
+            elements = data?.programme_episodes?.elements ?? [];
+        }
+        const episodes = elements.filter((e) => e?.type === 'episode' && e.id).map(iblEpisodeToDetails);
+        return {
+            ...base,
+            seasons: this.#groupSeasons(episodes),
+            page,
+            hasMore: !lone && elements.length >= PROGRAMME_PAGE_SIZE,
+            degraded: true,
+            missing: [...missing],
+        };
     }
 
     #groupSeasons(episodes: IPlayerDetails[]): BrowseSeason[] {

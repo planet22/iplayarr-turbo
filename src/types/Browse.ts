@@ -119,4 +119,8 @@ export interface BrowseProgramme {
     // Which page of the show's episode list `seasons` holds, and whether the BBC has further pages.
     page: number;
     hasMore: boolean;
+    // Set when the BBC's programme pages were unreachable and the page was built from iPlayer's listing API
+    // alone; `missing` then names the fields of this object that nothing could supply.
+    degraded?: boolean;
+    missing?: ('synopsis' | 'thumbnail' | 'channel' | 'category')[];
 }
