@@ -55,7 +55,7 @@ import { computed, inject, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import { ipFetch } from '@/lib/ipFetch';
-import { formatRelativeTime } from '@/lib/utils';
+import { formatRelativeTime, formatTime } from '@/lib/utils';
 
 const props = defineProps({
     task: { type: Object, required: true },
@@ -63,7 +63,7 @@ const props = defineProps({
 });
 const emit = defineEmits(['run']);
 
-const formatNextRun = (iso) => new Date(iso).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+const formatNextRun = (iso) => `${new Date(iso).toLocaleDateString('en-GB', { weekday: 'short' })} ${formatTime(iso)}`;
 
 // The draft lives on the settings page (so its Save button applies it and flags the tab as changed);
 // it outlives this row when the user switches tabs.

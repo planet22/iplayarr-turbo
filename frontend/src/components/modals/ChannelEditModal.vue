@@ -20,7 +20,7 @@
                 <span v-if="channel?.lastTest && !testResult" :class="['lastTest', channel.lastTest.ok ? 'ok' : 'bad']">
                     <font-awesome-icon :icon="['fas', channel.lastTest.ok ? 'circle-check' : 'triangle-exclamation']" />
                     {{ channel.lastTest.ok ? 'Last tested OK' : `Last test failed: ${channel.lastTest.message || 'no answer'}` }}
-                    ({{ new Date(channel.lastTest.at).toLocaleString() }})
+                    ({{ formatDate(channel.lastTest.at) }})
                 </span>
                 <button type="button" class="clickable" :disabled="testing || !form.streamUrl" @click="testStream">
                     <font-awesome-icon :icon="['fas', testing ? 'circle-notch' : 'vial']" :spin="testing" />
@@ -130,7 +130,7 @@ import { computed, defineEmits, defineProps, onMounted, ref } from 'vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch, ipUpload } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
-import { getThumbnailUrl } from '@/lib/utils';
+import { formatDate, getThumbnailUrl } from '@/lib/utils';
 
 import SelectInput from '../common/form/SelectInput.vue';
 import TextInput from '../common/form/TextInput.vue';

@@ -143,26 +143,64 @@ export function getCleanSceneTitle(title) {
     return cleanTitle.trim().replaceAll('+', ' ');
 }
 
-export function formatDate(dateString, dateStyle, timeStyle) {
-    const date = dateString != null ? new Date(dateString) : undefined;
-    return isNaN(date?.getTime())
-        ? undefined
-        : new Intl.DateTimeFormat('en-GB', {
-              dateStyle: dateStyle ?? 'medium',
-              timeStyle: timeStyle ?? 'short',
-              hour12: true,
-          }).format(date);
-}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-export function formatDateTimeWithMillis(dateString) {
-    const date = dateString != null ? new Date(dateString) : undefined;
+// Every date and time the UI shows goes through these, so they all read alike: "21 Oct 2026" and "4.00pm".
+// `timeZone` is for the guide's UK/local switch; elsewhere it is the browser's own zone.
+const clockParts = (date, timeZone) =>
+    Object.fromEntries(
+        new Intl.DateTimeFormat('en-GB', {
+            timeZone,
+            hourCycle: 'h23',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+        })
+            .formatToParts(date)
+            .map((part) => [part.type, Number(part.value)])
+    );
+
+// "4.00pm", "12.30am". With seconds "4.00.05pm"; with milliseconds too "4.00.05.123pm" (logs, events, streams).
+export function formatTime(value, { seconds = false, millis = false, timeZone } = {}) {
+    const date = value != null ? new Date(value) : undefined;
     if (isNaN(date?.getTime())) {
         return undefined;
     }
-    const datePart = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(date);
-    const timePart = new Intl.DateTimeFormat('en-GB', { timeStyle: 'medium', hour12: false }).format(date);
-    const millis = String(date.getMilliseconds()).padStart(3, '0');
-    return `${datePart} ${timePart}.${millis}`;
+    const { hour, minute, second } = clockParts(date, timeZone);
+    const pad = (n, width = 2) => String(n).padStart(width, '0');
+    let text = `${hour % 12 || 12}.${pad(minute)}`;
+    if (seconds || millis) text += `.${pad(second)}`;
+    if (millis) text += `.${pad(date.getMilliseconds(), 3)}`;
+    return text + (hour < 12 ? 'am' : 'pm');
+}
+
+// "21 Oct 2026".
+export function formatShortDate(value, timeZone) {
+    const date = value != null ? new Date(value) : undefined;
+    if (isNaN(date?.getTime())) {
+        return undefined;
+    }
+    const { year, month, day } = clockParts(date, timeZone);
+    return `${day} ${MONTHS[month - 1]} ${year}`;
+}
+
+// "21 Oct 2026, 4.00pm". The two style arguments are accepted for older callers and ignored; pass
+// timeStyle 'none' for the date alone.
+export function formatDate(dateString, _dateStyle, timeStyle) {
+    const day = formatShortDate(dateString);
+    if (day === undefined) {
+        return undefined;
+    }
+    return timeStyle === 'none' ? day : `${day}, ${formatTime(dateString)}`;
+}
+
+// "21 Oct 2026, 4.00.05.123pm" - for logs, events and streams, where the exact moment matters.
+export function formatDateTimeWithMillis(dateString) {
+    const day = formatShortDate(dateString);
+    return day === undefined ? undefined : `${day}, ${formatTime(dateString, { seconds: true, millis: true })}`;
 }
 
 // "20 seconds ago" style relative time. `now` defaults to Date.now() but can be passed in so

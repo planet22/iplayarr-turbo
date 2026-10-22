@@ -291,7 +291,7 @@ import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
 import toastService from '@/lib/toastService';
-import { getHost, getThumbnailUrl } from '@/lib/utils';
+import { formatDate, getHost, getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
 const { state: channelTools } = useChannelTools();
@@ -334,7 +334,7 @@ const testTitle = (tile) =>
     !tile.lastTest
         ? 'Not tested yet'
         : tile.lastTest.ok
-          ? `Last tested OK ${new Date(tile.lastTest.at).toLocaleString()}`
+          ? `Last tested OK ${formatDate(tile.lastTest.at)}`
           : `Failed its last test: ${tile.lastTest.message || 'no answer'}`;
 
 const openChannelEditor = (tile) => {

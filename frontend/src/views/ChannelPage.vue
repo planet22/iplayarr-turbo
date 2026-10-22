@@ -71,7 +71,7 @@ import { browseFetch } from '@/lib/browse';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
-import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { formatTime as formatClock, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const channel = ref(null);
@@ -89,7 +89,7 @@ const slots = computed(() =>
         { label: 'Next', data: nowNext.value?.next },
     ].filter(({ data }) => data)
 );
-const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const formatTime = (iso) => formatClock(iso);
 const loading = ref(true);
 const error = ref(null);
 const logoFailed = ref(false);

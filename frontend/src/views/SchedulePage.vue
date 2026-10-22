@@ -88,7 +88,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { browseFetch } from '@/lib/browse';
-import { getThumbnailUrl } from '@/lib/utils';
+import { formatTime as formatClock, getThumbnailUrl } from '@/lib/utils';
 
 const ZOOM_STEP = 0.5;
 const ZOOM_MIN = 1;
@@ -178,8 +178,10 @@ const toggleZone = () => {
         // Preference just won't persist.
     }
 };
-const displayTime = (ms) =>
-    new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: displayZone.value });
+const displayTime = (ms) => formatClock(ms, { timeZone: displayZone.value });
+// Midnight is where the ruler shows the date instead of a time.
+const isMidnight = (ms) =>
+    new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: displayZone.value }) === '00:00';
 
 // The date shown in the toolbar follows whichever day is in the middle of the viewport, so it
 // updates as you scroll across midnight. selectedDate (which anchors the loaded window) catches up
@@ -245,7 +247,7 @@ const hourMarks = computed(() => {
     const marks = [];
     for (let ms = dayStart.value.getTime(); ms < dayEnd.value.getTime(); ms += 3600000) {
         const label = displayTime(ms);
-        const midnight = label === '00:00';
+        const midnight = isMidnight(ms);
         marks.push({
             left: ((ms - dayStart.value) / 60000) * pxPerMinute.value,
             label: midnight

@@ -18,7 +18,7 @@
 import { computed, defineProps, inject, nextTick, ref, watch } from 'vue';
 
 import { usePagination } from '@/lib/usePagination';
-import { formatDateTimeWithMillis } from '@/lib/utils';
+import { formatDateTimeWithMillis, formatTime } from '@/lib/utils';
 
 import TablePagination from '../common/TablePagination.vue';
 
@@ -85,7 +85,7 @@ const formatTimestamp = (timestamp) => formatDateTimeWithMillis(timestamp) ?? ti
 // so a line is just the time and the message.
 const lineText = (log) =>
     props.compact
-        ? `${new Date(log.timestamp).toLocaleTimeString()}  ${log.message.trim()}`
+        ? `${formatTime(log.timestamp, { seconds: true, millis: true }) ?? ''}  ${log.message.trim()}`
         : `[ ${log.id} ] - ${formatTimestamp(log.timestamp)} - ${log.message.trim()}`;
 
 const scrollToBottom = () => {
