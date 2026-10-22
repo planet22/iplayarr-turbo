@@ -10,15 +10,17 @@
     </div>
     <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
     <div v-if="!loading && filterable" class="inner-content settingsFilterRow">
-        <font-awesome-icon :icon="['fas', 'search']" class="settingsFilterIcon" />
-        <input
-            v-model="filterText"
-            type="search"
-            class="settingsFilter"
-            placeholder="Filter settings on this tab"
-            aria-label="Filter settings on this tab"
-            @keydown.esc="filterText = ''"
-        />
+        <div class="settingsFilterBox">
+            <font-awesome-icon :icon="['fas', 'search']" class="settingsFilterIcon" />
+            <input
+                v-model="filterText"
+                type="search"
+                class="settingsFilter"
+                placeholder="Filter settings on this tab"
+                aria-label="Filter settings on this tab"
+                @keydown.esc="filterText = ''"
+            />
+        </div>
     </div>
     <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody">
         <GeneralSettingsTab
@@ -574,13 +576,18 @@ const testOIDC = () => {
 
 <style lang="less">
 .settingsFilterRow {
-    position: relative;
     max-width: 650px;
     margin-bottom: 1rem;
 
+    // The icon is centred on the box itself (not the row, which has padding of its own).
+    .settingsFilterBox {
+        position: relative;
+        margin: 0 5px;
+    }
+
     .settingsFilterIcon {
         position: absolute;
-        left: 26px;
+        left: 14px;
         top: 50%;
         transform: translateY(-50%);
         color: @subtle-text-color;
@@ -592,7 +599,7 @@ const testOIDC = () => {
         width: 100%;
         height: 35px;
         padding: 6px 16px 6px 38px;
-        margin: 0 5px;
+        margin: 0;
         border: 1px solid @input-border-color;
         border-radius: 4px;
         background-color: @input-background-color;

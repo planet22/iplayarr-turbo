@@ -124,6 +124,9 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
     .inputBox {
         position: relative;
         flex: 1 1 auto;
+        // Without this the box grows to fit the longest summary instead of staying the width of the other fields
+        // (the summary is cut off with an ellipsis instead).
+        min-width: 0;
         box-sizing: border-box;
 
         .fieldRow {
