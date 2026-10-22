@@ -2,26 +2,25 @@
     <div class="inner-content">
         <PageHeader title="Settings" />
         <SettingsPageToolbar
+            inline-filters
             :save-enabled="saveEnabled"
             :icons="['save', 'advanced']"
             @save="saveConfig"
             @toggle-advanced="toggleAdvanced"
-        />
+        >
+            <template v-if="filterable && !loading" #filters>
+                <input
+                    v-model="filterText"
+                    type="search"
+                    class="tableFilter"
+                    placeholder="Filter settings on this tab"
+                    aria-label="Filter settings on this tab"
+                    @keydown.esc="filterText = ''"
+                />
+            </template>
+        </SettingsPageToolbar>
     </div>
     <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
-    <div v-if="!loading && filterable" class="inner-content settingsFilterRow">
-        <div class="settingsFilterBox">
-            <font-awesome-icon :icon="['fas', 'search']" class="settingsFilterIcon" />
-            <input
-                v-model="filterText"
-                type="search"
-                class="settingsFilter"
-                placeholder="Filter settings on this tab"
-                aria-label="Filter settings on this tab"
-                @keydown.esc="filterText = ''"
-            />
-        </div>
-    </div>
     <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody">
         <GeneralSettingsTab
             v-if="activeTab == 'general'"
@@ -258,6 +257,18 @@ const switchTab = async (key) => {
     filterText.value = '';
     router.replace({ hash: `#${key}` });
 };
+
+// The URL hash can change without this page reloading (browser Back, a quick-find jump to another tab while
+// already here): follow it. If the unsaved-changes question is declined, put the hash back to the open tab.
+watch(
+    () => route.hash,
+    async (hash) => {
+        const key = hash.slice(1);
+        if (!tabs.some((tab) => tab.key === key) || key === activeTab.value) return;
+        await switchTab(key);
+        if (activeTab.value !== key) router.replace({ hash: `#${activeTab.value}` });
+    }
+);
 
 const saveEnabled = computed(() => dirtyTabs.value.includes(activeTab.value));
 
@@ -575,38 +586,6 @@ const testOIDC = () => {
 </script>
 
 <style lang="less">
-.settingsFilterRow {
-    max-width: 650px;
-    margin-bottom: 1rem;
-
-    // The icon is centred on the box itself (not the row, which has padding of its own).
-    .settingsFilterBox {
-        position: relative;
-        margin: 0 5px;
-    }
-
-    .settingsFilterIcon {
-        position: absolute;
-        left: 14px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: @subtle-text-color;
-        pointer-events: none;
-    }
-
-    .settingsFilter {
-        box-sizing: border-box;
-        width: 100%;
-        height: 35px;
-        padding: 6px 16px 6px 38px;
-        margin: 0;
-        border: 1px solid @input-border-color;
-        border-radius: 4px;
-        background-color: @input-background-color;
-        color: @input-text-color;
-    }
-}
-
 .settingsBody .filteredOut {
     display: none !important;
 }
