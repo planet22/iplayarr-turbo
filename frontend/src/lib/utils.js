@@ -226,3 +226,13 @@ export function formatRelativeTime(timestamp, now = Date.now()) {
     }
     return 'just now';
 }
+
+// A shuffled copy (Fisher-Yates); the original list is left alone.
+export function shuffled(list) {
+    const copy = [...list];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+}

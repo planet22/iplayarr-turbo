@@ -39,11 +39,17 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    // Hold back the artwork (a carousel's slides that are not near the one in view).
+    deferArtwork: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const { canPlay, play, download } = useBrowseActions();
 
 const heroStyle = computed(() => {
+    if (props.deferArtwork) return {};
     const url = getThumbnailUrl(props.item.thumbnail);
     return url ? { 'background-image': `url(${url})` } : {};
 });
