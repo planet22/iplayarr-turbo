@@ -75,9 +75,9 @@ label="Refresh Index" icon="address-book" :no-link="true"
                 <font-awesome-icon :icon="['fas', 'desktop']" fixed-width />
                 <span>Native Search</span>
             </div>
-            <div class="mobileOnly versionInfo">
-                <div v-for="line in versionLines" :key="line">{{ line }}</div>
-                <a href="https://github.com/planet22/iplayarr-turbo" aria-label="GitHub" target="_blank">
+            <div class="versionInfo" :title="versionTooltip">
+                <div v-for="line in versionLines" :key="line.text" :class="{ updateAvailable: line.update }">{{ line.text }}</div>
+                <a class="mobileOnly" href="https://github.com/planet22/iplayarr-turbo" aria-label="GitHub" target="_blank">
                     <font-awesome-icon :icon="['fab', 'github']" fixed-width />
                     <span>GitHub</span>
                 </a>
@@ -140,10 +140,22 @@ const toolVersions = inject('toolVersions');
 
 const versionLines = computed(() => {
     const lines = [];
-    if (hiddenSettings?.value?.VERSION) lines.push(`v${hiddenSettings.value.VERSION}`);
-    if (toolVersions?.value?.getIplayer?.current) lines.push(`get_iplayer: ${toolVersions.value.getIplayer.current}`);
-    if (toolVersions?.value?.ytdlp?.current) lines.push(`yt-dlp: ${toolVersions.value.ytdlp.current}`);
+    if (hiddenSettings?.value?.VERSION) lines.push({ text: `v${hiddenSettings.value.VERSION}` });
+    if (toolVersions?.value?.getIplayer?.current) {
+        lines.push({ text: `get_iplayer: ${toolVersions.value.getIplayer.current}`, update: toolVersions.value.getIplayer.updateAvailable });
+    }
+    if (toolVersions?.value?.ytdlp?.current) {
+        lines.push({ text: `yt-dlp: ${toolVersions.value.ytdlp.current}`, update: toolVersions.value.ytdlp.updateAvailable });
+    }
     return lines;
+});
+
+// Hover text on the version block: which tools have an update waiting.
+const versionTooltip = computed(() => {
+    const notes = [];
+    if (toolVersions?.value?.getIplayer?.updateAvailable) notes.push(`get_iplayer update available (${toolVersions.value.getIplayer.latest})`);
+    if (toolVersions?.value?.ytdlp?.updateAvailable) notes.push(`yt-dlp update available (${toolVersions.value.ytdlp.latest})`);
+    return notes.length ? `${notes.join(' - ')} - see Settings > Download Client` : 'Installed versions';
 });
 
 const toggleLHN = () => {
@@ -232,6 +244,10 @@ const handleClickOutside = (event) => {
         margin-top: 12px;
         font-size: 12px;
         color: @subtle-text-color;
+
+        .updateAvailable {
+            color: @warn-color;
+        }
 
         a {
             display: inline-block;

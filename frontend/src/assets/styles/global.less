@@ -50,6 +50,17 @@ select:not([multiple]) {
     }
 }
 
+// Phones: the page title bar and the toolbar run edge to edge (their rule and background reach both sides of the
+// screen), while their text and buttons stay lined up with the content's own side gap.
+@media (max-width: @mobile-breakpoint) {
+    .content :is(.inner-content, .browsePage) > :is(.PageHeader, .SettingsPageToolbar) {
+        margin-left: -1rem;
+        margin-right: -1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}
+
 .clickable:not(:disabled) {
     cursor: pointer;
 }

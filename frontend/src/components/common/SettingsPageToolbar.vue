@@ -1,5 +1,5 @@
 <template>
-    <div ref="rootEl" :class="['SettingsPageToolbar', inlineFilters ? 'inlineFilters' : '']">
+    <div ref="rootEl" :class="['SettingsPageToolbar', inlineFilters ? 'inlineFilters' : '', filtersLast ? 'filtersLast' : '']">
         <div>
             <button v-if="canGoBack && isFirstToolbar" class="SettingsPageToolbar-button clickable" title="Back" aria-label="Back" @click="goBack">
                 <font-awesome-icon :icon="['fas', 'arrow-left']" />
@@ -190,6 +190,12 @@ defineProps({
     },
     // Phones: keep the filter boxes on the same row as the buttons instead of dropping them onto their own row.
     inlineFilters: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    // Put the filter after the other buttons (to the right of them) and let its box fill the rest of the row.
+    filtersLast: {
         type: Boolean,
         required: false,
         default: false,
@@ -528,12 +534,45 @@ const handleClickOutside = (event) => {
             min-width: 0;
             padding: 6px 0 6px 6px;
         }
+
     }
 }
 
 @media (max-width: @mobile-breakpoint) {
     .SettingsPageToolbar .SettingsPageToolbar-button {
         min-height: 40px;
+    }
+}
+
+// filtersLast (Settings): the filter sits after the other buttons and fills the rest of the row. Written at the
+// toolbar's own level, since the rules above are nested inside its button row. On phones the filter keeps its
+// own full-width row under the buttons.
+@media (max-width: @mobile-breakpoint) {
+    // The filter stays on the button row and takes whatever width the buttons leave.
+    .SettingsPageToolbar.filtersLast .SettingsPageToolbar-filters {
+        order: 10;
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 6px 0 6px 6px;
+
+        .tableFilter {
+            flex: 1 1 auto;
+            min-width: 0;
+            width: 100%;
+            font-size: 14px;
+        }
+    }
+}
+
+@media (min-width: @desktop-breakpoint) {
+    .SettingsPageToolbar.filtersLast .SettingsPageToolbar-filters {
+        order: 10;
+        flex: 1 1 0;
+        min-width: 0;
+
+        input.tableFilter {
+            max-width: none;
+        }
     }
 }
 </style>

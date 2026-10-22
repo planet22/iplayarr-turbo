@@ -79,6 +79,13 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-model="quickFindEnabled"
+        field="appearance:quickFind"
+        name="Show Quick Find Button"
+        tooltip="Show the lightning-bolt button in the top bar that opens quick find (jump to any page, setting or programme). Ctrl+K (Cmd+K on a Mac) opens it either way."
+        :options="trueOrFalse"
+    />
+    <SelectInput
         v-if="showAdvanced"
         v-model="qualityBadgesEnabled"
         :advanced="true"
@@ -178,6 +185,10 @@ const pillColorsEnabled = computed({
 const topBarMode = computed({
     get: () => appearance.topBar,
     set: (value) => (appearance.topBar = value),
+});
+const quickFindEnabled = computed({
+    get: () => String(appearance.quickFind),
+    set: (value) => (appearance.quickFind = value === 'true'),
 });
 const infoMessagesEnabled = computed({
     get: () => String(appearance.infoMessages),

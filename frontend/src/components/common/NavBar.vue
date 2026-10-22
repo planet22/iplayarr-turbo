@@ -35,19 +35,12 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
         </div>
         <div class="right">
             <button
-                v-if="authState.user" type="button" class="quickFind desktopOnly" title="Quick find (Ctrl+K)"
+                v-if="authState.user && quickFind.enabled" type="button" class="quickFind desktopOnly" title="Quick find (Ctrl+K)"
                 aria-label="Quick find" @click="openCommandPalette"
             >
                 <font-awesome-icon :icon="['fas', 'bolt']" />
             </button>
             <ColorModeToggle v-if="authState.user" />
-            <span
-v-if="authState.user && versionLabel" class="versionLabel desktopOnly"
-                :class="{ updateAvailable: toolVersions?.getIplayer?.updateAvailable || toolVersions?.ytdlp?.updateAvailable }"
-                :title="versionTooltip"
-            >
-                {{ versionLabel }}
-            </span>
             <a href="https://github.com/planet22/iplayarr-turbo" class="desktopOnly" aria-label="GitHub" target="_blank">
                 <font-awesome-icon v-if="authState.user" class="desktopOnly clickable" :icon="['fab', 'github']" />
             </a>
@@ -59,11 +52,12 @@ v-if="authState.user && versionLabel" class="versionLabel desktopOnly"
 import { getBasePath } from '@/lib/utils';
 
 const logoUrl = `${getBasePath()}/iplayarr.png`;
-import { computed, defineExpose, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { defineExpose, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ColorModeToggle from '@/components/common/ColorModeToggle.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import { useQuickFind } from '@/lib/quickFind';
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
 import { getPidFromBBCUrl } from '@/lib/utils';
@@ -74,35 +68,9 @@ const router = useRouter();
 // const globalSettings = inject('globalSettings');
 const toggleLeftHandNav = inject('toggleLeftHandNav');
 const openCommandPalette = inject('openCommandPalette');
+const { state: quickFind } = useQuickFind();
 const authState = inject('authState');
-const hiddenSettings = inject('hiddenSettings');
-const toolVersions = inject('toolVersions');
 const searchTerm = ref('');
-
-const versionLabel = computed(() => {
-    const parts = [];
-    if (hiddenSettings?.value?.VERSION) {
-        parts.push(`v${hiddenSettings.value.VERSION}`);
-    }
-    if (toolVersions?.value?.getIplayer?.current) {
-        parts.push(`get_iplayer: ${toolVersions.value.getIplayer.current}`);
-    }
-    if (toolVersions?.value?.ytdlp?.current) {
-        parts.push(`yt-dlp: ${toolVersions.value.ytdlp.current}`);
-    }
-    return parts.join(' • ');
-});
-
-const versionTooltip = computed(() => {
-    const notes = [];
-    if (toolVersions?.value?.getIplayer?.updateAvailable) {
-        notes.push(`get_iplayer update available (${toolVersions.value.getIplayer.latest})`);
-    }
-    if (toolVersions?.value?.ytdlp?.updateAvailable) {
-        notes.push(`yt-dlp update available (${toolVersions.value.ytdlp.latest})`);
-    }
-    return notes.length ? `${notes.join(' - ')} - see Settings > Download Client` : 'Installed tool versions';
-});
 
 watch(
     () => route.query.searchTerm,
@@ -260,8 +228,10 @@ defineExpose({ clearSearch });
             }
 
             @media (max-width: @mobile-breakpoint) {
-                padding: 0 1rem;
-                margin-left: 1rem;
+                padding: 0 0.5rem;
+                margin-left: 0.5rem;
+                // Lets the search box give way on a narrow phone instead of pushing the buttons off the edge.
+                min-width: 0;
             }
 
             .searchPanel {
@@ -269,12 +239,14 @@ defineExpose({ clearSearch });
                 align-items: center;
                 gap: 10px;
                 height: 100%;
+                min-width: 0;
 
                 .searchWrap {
                     position: relative;
                     display: flex;
                     align-items: center;
                     height: 100%;
+                    min-width: 0;
                 }
 
                 .suggestions {
@@ -339,6 +311,8 @@ defineExpose({ clearSearch });
                     color: @primary-text-color;
                     border-radius: 0px;
                     transition: border-bottom-color 0.3s ease-out;
+                    min-width: 0;
+                    max-width: 100%;
 
                     &:focus {
                         outline: none;
@@ -369,16 +343,6 @@ defineExpose({ clearSearch });
             align-items: center;
             justify-content: flex-end;
             gap: 16px;
-
-            .versionLabel {
-                font-size: 12px;
-                color: @subtle-text-color;
-                white-space: nowrap;
-
-                &.updateAvailable {
-                    color: @warn-color;
-                }
-            }
 
             a {
                 width: 30px;

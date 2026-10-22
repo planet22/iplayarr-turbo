@@ -3,6 +3,7 @@
         <PageHeader title="Settings" />
         <SettingsPageToolbar
             inline-filters
+            filters-last
             :save-enabled="saveEnabled"
             :icons="['save', 'advanced']"
             @save="saveConfig"

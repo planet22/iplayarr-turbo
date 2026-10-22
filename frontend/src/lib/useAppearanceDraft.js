@@ -5,6 +5,7 @@ import { useChannelTools } from '@/lib/channelTools';
 import { useInfoMessages } from '@/lib/infoMessages';
 import { usePagingMinimum } from '@/lib/pagingMinimum';
 import { useQualityBadges } from '@/lib/qualityBadges';
+import { useQuickFind } from '@/lib/quickFind';
 import { useTheme } from '@/lib/theme';
 import { useTopBar } from '@/lib/topBar';
 
@@ -18,6 +19,7 @@ export function useAppearanceDraft() {
     const topBar = useTopBar();
     const infoMessages = useInfoMessages();
     const pagingMinimum = usePagingMinimum();
+    const quickFind = useQuickFind();
     const theme = useTheme();
 
     const read = () => ({
@@ -26,6 +28,7 @@ export function useAppearanceDraft() {
         channelTools: channelTools.state.enabled,
         topBar: topBar.state.mode,
         infoMessages: infoMessages.state.enabled,
+        quickFind: quickFind.state.enabled,
         pagingMinimum: pagingMinimum.state.minimum,
         theme: theme.state.theme,
         colorMode: theme.state.modePreference,
@@ -51,6 +54,7 @@ export function useAppearanceDraft() {
         channelTools.setEnabled(draft.channelTools);
         topBar.setMode(draft.topBar);
         infoMessages.setEnabled(draft.infoMessages);
+        quickFind.setEnabled(draft.quickFind);
         pagingMinimum.setMinimum(draft.pagingMinimum);
         theme.setTheme(draft.theme);
         theme.setModePreference(draft.colorMode);
