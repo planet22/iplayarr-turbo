@@ -4,10 +4,10 @@
             <span v-if="item.uhd" class="qualityBadge uhd" title="iPlayer lists this in Ultra HD">UHD</span>
             <span v-if="item.hdr" class="qualityBadge hdr" title="iPlayer lists this in HDR">HDR</span>
         </template>
-        <span v-if="state.enabled && hasVersion('audio-described')" class="qualityBadge version" title="Audio described version available" aria-label="Audio described version available">
+        <span v-if="state.versions && hasVersion('audio-described')" class="qualityBadge version" title="Audio described version available" aria-label="Audio described version available">
             <font-awesome-icon :icon="['fas', 'audio-description']" />
         </span>
-        <span v-if="state.enabled && hasVersion('signed')" class="qualityBadge version" title="Signed version available" aria-label="Signed version available">
+        <span v-if="state.versions && hasVersion('signed')" class="qualityBadge version" title="Signed version available" aria-label="Signed version available">
             <font-awesome-icon :icon="['fas', 'sign-language']" />
         </span>
         <span v-if="showSubtitles" class="qualityBadge version" title="Subtitles" aria-label="Subtitles">
@@ -32,7 +32,9 @@ const { state } = useQualityBadges();
 // Subtitles are on an episode, not a series or programme; search results (no `kind`) are episodes.
 const isEpisode = computed(() => !props.item.kind || props.item.kind === 'episode');
 const showSubtitles = computed(() => state.subtitles && isEpisode.value);
-const showQuality = computed(() => state.enabled && (props.item.uhd || props.item.hdr || hasVersion('audio-described') || hasVersion('signed')));
+const showQuality = computed(
+    () => (state.enabled && (props.item.uhd || props.item.hdr)) || (state.versions && (hasVersion('audio-described') || hasVersion('signed')))
+);
 const hasVersion = (id) => !!props.item.versions?.includes(id);
 </script>
 

@@ -128,8 +128,17 @@
         v-model="qualityBadgesEnabled"
         :advanced="true"
         field="appearance:qualityBadges"
-        name="Show Quality Badges"
-        tooltip="Mark HDR, Ultra HD, audio described and signed programmes where iPlayer lists them. HDR/UHD is only a label: iPlayarr streams HD at most."
+        name="Show HDR / UHD Badges"
+        tooltip="Show an HDR or Ultra HD badge where iPlayer lists it. It is only a label: iPlayarr streams HD at most."
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="versionBadgesEnabled"
+        :advanced="true"
+        field="appearance:versionBadges"
+        name="Show AD / Signed Badges"
+        tooltip="Mark programmes that have an audio described or signed version."
         :options="trueOrFalse"
     />
     <SelectInput
@@ -245,6 +254,10 @@ const pagingMinimumText = computed({
 const qualityBadgesEnabled = computed({
     get: () => String(appearance.qualityBadges),
     set: (value) => (appearance.qualityBadges = value === 'true'),
+});
+const versionBadgesEnabled = computed({
+    get: () => String(appearance.versionBadges),
+    set: (value) => (appearance.versionBadges = value === 'true'),
 });
 const subtitleBadgesEnabled = computed({
     get: () => String(appearance.subtitleBadges),
