@@ -74,11 +74,11 @@ describe('searchSettingsService', () => {
 
         it('always separates manual searches, per setting combination', async () => {
             setConfig(base);
-            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual:V1|true');
+            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual-prefix:V1|true');
             setConfig({ ...base, MANUAL_NATIVE_SEARCH_ENGINE: 'V2' });
-            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual:V2|true');
+            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual-prefix:V2|true');
             setConfig({ ...base, MANUAL_NATIVE_SEARCH: 'false' });
-            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual:get_iplayer');
+            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual-prefix:get_iplayer');
         });
     });
 });

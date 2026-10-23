@@ -61,11 +61,11 @@ class SearchSettingsService {
     }
 
     // Appended to the search cache key. Manual searches match word prefixes, so they always get their
-    // own entries (per setting combination) and are never served to Sonarr/Radarr, or the other way round.
+    // own entries (per setting combination; "prefix" versions the key so entries from before prefix matching are never reused) and are never served to Sonarr/Radarr, or the other way round.
     async cacheSuffix(): Promise<string> {
         if (searchContext() !== 'manual') return '';
         const { native, engine, matchAllWords } = await this.effective('manual');
-        return `|manual:${native ? `${engine}|${matchAllWords}` : 'get_iplayer'}`;
+        return `|manual-prefix:${native ? `${engine}|${matchAllWords}` : 'get_iplayer'}`;
     }
 }
 
