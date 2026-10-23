@@ -8,6 +8,7 @@
         tabindex="-1"
         @keydown="onKeydown"
         @pointerdown="takeOver"
+        @mousedown="noAutoscroll"
         @wheel.passive="takeOver"
         @mouseenter="hovered = true"
         @mouseleave="hovered = false"
@@ -125,6 +126,13 @@ const step = (delta) => {
 const takeOver = () => {
     tookOver.value = true;
     arrived(); // a finger on the carousel cancels any scroll in flight: follow the finger
+};
+
+// A middle click on a horizontal scroller starts the browser's auto-scroll, and moving the mouse then races
+// through every slide. The carousel is not for that, so the middle button is ignored - except on a link,
+// where it still opens a new tab.
+const noAutoscroll = (event) => {
+    if (event.button === 1 && !event.target.closest?.('a')) event.preventDefault();
 };
 
 const onKeydown = (event) => {
