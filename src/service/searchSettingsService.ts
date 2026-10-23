@@ -20,7 +20,7 @@ export interface EffectiveSearchSettings {
     engine?: 'V1' | 'V2';
     matchAllWords?: boolean;
     requestedSeriesOnly?: boolean;
-    // Which settings are not overridden for this context and follow the indexer (NZB) ones.
+    // Which settings are not overridden for this context and follow the NZB search ones.
     inherited: string[];
 }
 

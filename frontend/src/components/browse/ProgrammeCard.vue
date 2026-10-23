@@ -163,6 +163,10 @@ const statusBadges = computed(() => {
             background-color: rgba(0, 0, 0, 0.45);
             color: #fff;
             font-size: 12px;
+
+            svg {
+                display: block;
+            }
         }
 
         &.selected {

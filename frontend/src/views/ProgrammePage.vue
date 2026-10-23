@@ -120,22 +120,45 @@
                         {{ seasonLabel(season) }}
                     </button>
                 </div>
-                <div class="seasonActions">
-                    <span v-if="loadingMore" class="loadingMore">
+                <div v-if="loadingMore" class="seasonActions">
+                    <span class="loadingMore">
                         <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
                         Loading more episodes… ({{ loadedCount }} so far)
                     </span>
-                    <button :class="['clickable', 'seasonDownload', duplicatesBannerDownload ? 'hideMobile' : '']" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
-                        <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-download']" :spin="downloadingSeason" />
-                        Download {{ programme.seasons.length > 1 ? seasonLabel(programme.seasons[selected]) : 'all' }}
-                        ({{ episodes.length }})
+                </div>
+                <!-- Phones: the pager takes the whole row, so the actions sit on a row of their own above it. -->
+                <div v-if="isMobile" class="seasonActions">
+                    <button v-if="!duplicatesBannerDownload" class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
+                        <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                        {{ seasonDownloadLabel }}
+                    </button>
+                    <button class="clickable seasonSort" :title="sortTitle" :aria-label="sortTitle" @click="toggleSort">
+                        <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
                     </button>
                 </div>
-                <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length" />
+                <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length">
+                    <template v-if="!isMobile" #leading>
+                        <div class="seasonActions inline">
+                            <button class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
+                                <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                                {{ seasonDownloadLabel }}
+                            </button>
+                            <button class="clickable seasonSort" :title="sortTitle" :aria-label="sortTitle" @click="toggleSort">
+                                <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
+                            </button>
+                        </div>
+                    </template>
+                </TablePagination>
                 <div class="episodeList">
                     <div v-for="episode in pagedEpisodes" :key="episode.pid" class="episodeRow">
-                        <img v-if="episode.thumbnail" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title" loading="lazy" @error="hideBrokenImage" />
-                        <div v-else class="episodeNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                        <!-- The thumbnail opens the same episode popup as the download button. -->
+                        <img
+                            v-if="episode.thumbnail" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
+                            loading="lazy" role="button" tabindex="0" @error="hideBrokenImage" @click="download(episode)" @keydown.enter="download(episode)"
+                        />
+                        <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="download(episode)" @keydown.enter="download(episode)">
+                            <font-awesome-icon :icon="['fas', 'tv']" />
+                        </div>
                         <div class="episodeInfo">
                             <div class="episodeTitle">
                                 <span v-if="getSeriesEpisodeLabel(episode)" class="episodeLabel">{{ getSeriesEpisodeLabel(episode) }}</span>
@@ -193,6 +216,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage, roundUpMinutes } from '@/lib/utils';
 
@@ -271,11 +295,25 @@ const newestFirst = (a, b) => {
     return (b.episode ?? -1) - (a.episode ?? -1);
 };
 
-const episodes = computed(() => [...(programme.value?.seasons[selected.value]?.episodes ?? [])].sort(newestFirst));
+// Newest first unless flipped with the sort button.
+const oldestFirst = ref(false);
+const episodes = computed(() =>
+    [...(programme.value?.seasons[selected.value]?.episodes ?? [])].sort(oldestFirst.value ? (a, b) => newestFirst(b, a) : newestFirst)
+);
 
 const {
     page: episodePage, pageSize: episodePageSize, pagedItems: pagedEpisodes,
 } = usePagination(episodes);
+
+const sortTitle = computed(() => (oldestFirst.value ? 'Oldest first - click for newest first' : 'Newest first - click for oldest first'));
+const toggleSort = () => {
+    oldestFirst.value = !oldestFirst.value;
+    episodePage.value = 1;
+};
+const seasonDownloadLabel = computed(
+    () => `Download ${programme.value.seasons.length > 1 ? seasonLabel(programme.value.seasons[selected.value]) : 'all'} (${episodes.value.length})`
+);
+const isMobile = useIsMobile();
 
 // Episode descriptions are clamped to three lines; a "... more" link (or a tap on the text) opens the rest.
 const openDescriptions = reactive({});
@@ -680,6 +718,10 @@ const duplicatesBannerDownload = computed(
     }
 }
 
+.episodeThumb {
+    cursor: pointer;
+}
+
 .seasonActions {
     display: flex;
     align-items: center;
@@ -687,17 +729,36 @@ const duplicatesBannerDownload = computed(
     gap: 14px;
     margin-bottom: 4px;
 
+    // Inside the pager's left-hand slot, beside the page controls.
+    &.inline {
+        margin-bottom: 0;
+        gap: 6px;
+    }
+
     @media (max-width: @mobile-breakpoint) {
-        flex-direction: column;
-        align-items: stretch;
+        justify-content: stretch;
         gap: 6px;
 
         .seasonDownload {
+            flex: 1;
             padding: 9px 14px;
+        }
+    }
 
-            &.hideMobile {
-                display: none;
-            }
+    .seasonSort {
+        flex: 0 0 auto;
+        padding: 6px 12px;
+        border-radius: 4px;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+
+        &:hover {
+            background-color: @settings-button-hover-background-color;
+        }
+
+        @media (max-width: @mobile-breakpoint) {
+            padding: 9px 14px;
         }
     }
 

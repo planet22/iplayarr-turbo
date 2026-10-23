@@ -38,11 +38,6 @@
         </template>
     </SettingsPageToolbar>
     <div v-if="!loading" class="inner-content scroll-x">
-        <p v-if="searchTerm && searchSettingsLine" class="searchSettingsNote">
-            <font-awesome-icon :icon="['fas', 'sliders']" />
-            <span>{{ searchSettingsLine }}</span>
-            <router-link :to="{ path: '/settings', hash: '#general' }">Change in Settings</router-link>
-        </p>
         <div v-if="searchResults.length" class="resultsToolbar">
             <span class="resultCount">
                 {{ filteredResults.length }} result{{ filteredResults.length === 1 ? '' : 's' }}
@@ -177,6 +172,11 @@
             </div>
             <div v-if="!searchResults.length" class="emptyHint">Try fewer words, or one of your recent searches below.</div>
         </div>
+        <p v-if="searchTerm && searchSettingsLine" class="searchSettingsNote">
+            <font-awesome-icon :icon="['fas', 'sliders']" />
+            <span>{{ searchSettingsLine }}</span>
+            <router-link :to="{ path: '/settings', hash: '#general' }">Change in Settings</router-link>
+        </p>
         <div v-if="showHome" class="searchHome">
             <section v-if="recent.length">
                 <h3>Recent searches</h3>
@@ -241,12 +241,10 @@ const searchSettingsLine = computed(() => {
     if (!settings) return '';
     const parts = [settings.native ? `Native ${settings.engine === 'V2' ? '2.0' : '1.0'}` : 'get_iplayer search'];
     if (settings.native) {
-        parts.push(settings.matchAllWords ? 'all words must match' : 'any word may match');
+        parts.push(settings.matchAllWords ? 'all words' : 'any word');
         if (settings.requestedSeriesOnly) parts.push('requested series only');
     }
-    // All four inherited: manual search is simply doing what Sonarr and Radarr get.
-    const shared = settings.inherited.length === 4 ? ' (same as Sonarr/Radarr)' : '';
-    return `Manual search: ${parts.join(' · ')}${shared}`;
+    return `Search: ${parts.join(' · ')}`;
 });
 
 const toolbarIcons = computed(() => {
@@ -658,7 +656,7 @@ watch(
     flex-wrap: wrap;
     align-items: center;
     gap: 4px 8px;
-    margin: 0 0 10px;
+    margin: 14px 0 0;
     font-size: 13px;
     color: @subtle-text-color;
 
@@ -739,6 +737,11 @@ watch(
     }
 
     button {
+        // Flex centring keeps the icon glyph in the middle of the square whatever the font metrics.
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
         width: 32px;
         height: 32px;
         border: 1px solid @settings-button-border-color;

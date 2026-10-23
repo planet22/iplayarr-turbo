@@ -11,12 +11,12 @@
         button-tooltip="Regenerate API Key"
         @action="emit('generate-api-key')"
     />
-    <SettingsSubheading text="Search" />
+    <SettingsSubheading text="NZB Search" />
     <SelectInput
         v-model="config.NATIVE_SEARCH"
         field="NATIVE_SEARCH"
         name="Native Search"
-        tooltip="Native search is experimental but can find shows older than 30 days."
+        tooltip="Native search is experimental but can find shows older than 30 days. NZB search is what Sonarr and Radarr use."
         :error="validationErrors.config?.NATIVE_SEARCH"
         :options="trueOrFalse"
     />
@@ -55,7 +55,7 @@
         v-model="config.MANUAL_NATIVE_SEARCH"
         field="MANUAL_NATIVE_SEARCH"
         name="Native Search"
-        tooltip="Applies to the Search page only. Sonarr and Radarr searches keep using the Native Search setting above."
+        tooltip="Applies to the Search page only. NZB search (Sonarr and Radarr) keeps using the Native Search setting above."
         :error="validationErrors.config?.MANUAL_NATIVE_SEARCH"
         :options="withInherit(trueOrFalse)"
     />
@@ -208,12 +208,12 @@ const nativeSearchEngines = [
     { key: 'V2', value: 'Native 2.0 (experimental)' },
 ];
 
-// Manual search can follow the indexer setting (the default) or override it.
-const withInherit = (options) => [{ key: 'inherit', value: 'Same as indexer' }, ...options];
+// Manual search can follow the NZB search setting (the default) or override it.
+const withInherit = (options) => [{ key: 'inherit', value: 'Same as NZB search' }, ...options];
 
 const config = inject('settingsConfig');
 // What the Search page will actually use, so only the options that apply are offered.
-const manualValue = (manual, indexer) => (config.value[manual] && config.value[manual] !== 'inherit' ? config.value[manual] : config.value[indexer]);
+const manualValue = (manual, nzb) => (config.value[manual] && config.value[manual] !== 'inherit' ? config.value[manual] : config.value[nzb]);
 const manualNative = computed(() => manualValue('MANUAL_NATIVE_SEARCH', 'NATIVE_SEARCH') == 'true');
 const manualEngine = computed(() => manualValue('MANUAL_NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_ENGINE'));
 const validationErrors = inject('settingsValidationErrors');
