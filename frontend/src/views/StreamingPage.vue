@@ -470,9 +470,7 @@ async function clearHistory() {
 
 // Pills here are fully rounded (smooth ends) rather than square-cornered.
 .streamingPage .pill {
-    // A touch more room below than above: lowercase text has no ascenders to fill the top, so equal
-    // padding makes it look like it sits low in the pill.
-    padding: 0.5px 8px 1.5px;
+    padding: 1px 8px;
     border-radius: 999px;
 }
 
