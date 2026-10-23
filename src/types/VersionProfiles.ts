@@ -12,10 +12,9 @@ export interface VersionProfile {
     maxQualityId?: string;
 }
 
-// The non-original versions a programme can have. The plain version is not listed: it is always the
+// The non-original versions a programme can have (subtitles are not one: BBC offers them on every version). The plain version is not listed: it is always the
 // primary result and is chosen by default everywhere.
 export const versionProfiles: VersionProfile[] = [
     { id: 'audio-described', name: 'Audio described', tag: 'AUDIO.DESCRIBED', match: /audio.?described|dubbed audio/i, getIplayerVersion: 'audiodescribed', maxQualityId: 'sd' },
     { id: 'signed', name: 'Signed', tag: 'SIGNED', match: /\bsigned\b/i, getIplayerVersion: 'signed' },
-    { id: 'open-subtitles', name: 'Open subtitles', tag: 'OPENSUBS', match: /open.?subtitles/i, getIplayerVersion: 'opensubtitles' },
 ];

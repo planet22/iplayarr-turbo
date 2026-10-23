@@ -8,6 +8,7 @@ import browseService, {
     parseIsoDurationMinutes,
     parseQualityFlags,
     parseSkipMarkers,
+    parseVersionIds,
     shuffled,
     toBrowseItem,
     toBrowseItems,
@@ -804,5 +805,20 @@ describe('parseQualityFlags', () => {
         const element = { id: 'm002whth', title: 'A Good Girl', type: 'episode', versions: [version('original', false, true)] };
         expect(toBrowseItem(element)).toMatchObject({ pid: 'm002whth', uhd: true });
         expect(toBrowseItem({ ...element, versions: [version('original', false, false)] })).not.toHaveProperty('uhd');
+    });
+});
+
+describe('parseVersionIds', () => {
+    it('lists the audio described and signed versions of an episode or a list item\'s latest episode', () => {
+        expect(parseVersionIds({ versions: [{ kind: 'original' }, { kind: 'signed' }, { kind: 'audio-described' }] })).toEqual({ versions: ['audio-described', 'signed'] });
+        expect(parseVersionIds({ initial_children: [{ versions: [{ kind: 'original' }, { kind: 'audio-described' }] }] })).toEqual({ versions: ['audio-described'] });
+    });
+
+    it('sets nothing for an original-only or empty element, and is carried onto browse items only when set', () => {
+        expect(parseVersionIds({ versions: [{ kind: 'original' }] })).toEqual({});
+        expect(parseVersionIds(undefined)).toEqual({});
+        const element = { id: 'm00336jl', title: 'Week 4 Results', type: 'episode', versions: [{ kind: 'original' }, { kind: 'audio-described' }] };
+        expect(toBrowseItem(element)).toMatchObject({ pid: 'm00336jl', versions: ['audio-described'] });
+        expect(toBrowseItem({ ...element, versions: [{ kind: 'original' }] })).not.toHaveProperty('versions');
     });
 });

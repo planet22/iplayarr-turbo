@@ -21,8 +21,9 @@ import {
     BrowseSuggestion,
 } from '../types/Browse';
 import { IPlayerDetails } from '../types/IPlayerDetails';
-import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { VideoType } from '../types/IPlayerSearchResult';
+import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
+import { versionProfiles } from '../types/VersionProfiles';
 import { splitArrayIntoChunks } from '../utils/Utils';
 import categoryDiscoverService from './categoryDiscoverService';
 import { readableTextColor } from './channelLogoService';
@@ -69,6 +70,13 @@ export function parseQualityFlags(element: any): { hdr?: true; uhd?: true } {
     return { ...(version?.hdr === true ? { hdr: true as const } : {}), ...(version?.uhd === true ? { uhd: true as const } : {}) };
 }
 
+// Which non-standard versions (audio described, signed) iPlayer lists for the same episode.
+export function parseVersionIds(element: any): { versions?: string[] } {
+    const versions: any[] = element?.versions ?? element?.initial_children?.[0]?.versions ?? [];
+    const ids = versionProfiles.filter(({ id }) => versions.some((v) => v?.kind === id)).map(({ id }) => id);
+    return ids.length ? { versions: ids } : {};
+}
+
 export function toBrowseItem(element: any): BrowseItem | undefined {
     if (!element?.id || !element?.title) return undefined;
     // Rails like a channel's "highlights" mix in category/collection promo tiles whose id isn't a
@@ -98,6 +106,7 @@ export function toBrowseItem(element: any): BrowseItem | undefined {
         channel: element.master_brand?.titles?.small ?? element.master_brand?.titles?.medium,
         category: element.labels?.category,
         ...parseQualityFlags(element),
+        ...parseVersionIds(element),
     };
 }
 

@@ -7,18 +7,22 @@ import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
 import statisticsService from '../service/stats/StatisticsService';
+import { versionTypesFor } from '../service/stream/versionVpid';
 import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
 import { MediaMode } from '../types/enums/MediaMode';
 import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
+import { qualityProfiles } from '../types/QualityProfiles';
 import { QueueLibraryMetadata } from '../types/QueueEntry';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
+import { versionProfiles } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
 import { isValidPid } from '../utils/pathSafety';
 import { runInSearchContext } from '../utils/searchContext';
 import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
-import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../utils/Utils';
+import { calculateSeasonAndEpisode, getQualityProfile, parseSeasonEpisodeFromFilename } from '../utils/Utils';
+import { addAvailableVersions, applyVersionToRelease } from '../utils/videoVersion';
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import CustomChannelsRoute from './json-api/CustomChannelsRoute';
@@ -110,7 +114,7 @@ router.get('/search', async (req: Request, res: Response) => {
             runInSearchContext('manual', () => searchFacade.search(q))
         );
         recordManualSearch(q, result, trace);
-        res.json(result);
+        res.json(await addAvailableVersions(result));
     } catch (error: any) {
         res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: error?.message || 'Search failed' } as ApiResponse);
     }
@@ -143,11 +147,18 @@ router.get('/search/stream', async (req: Request, res: Response) => {
         if (open) res.write(`${JSON.stringify(line)}\n`);
     };
 
+    // Each batch is marked with the versions its programmes have before it is sent; chained so batches keep their order.
+    let sending: Promise<void> = Promise.resolve();
     try {
         const { result, trace } = await withSearchTrace(() =>
-            runInSearchContext('manual', () => searchFacade.searchStreaming(q, (batch) => send(batch)))
+            runInSearchContext('manual', () =>
+                searchFacade.searchStreaming(q, (batch) => {
+                    sending = sending.then(async () => send(await addAvailableVersions(batch)));
+                })
+            )
         );
         recordManualSearch(q, result, trace);
+        await sending;
         send({ done: true });
     } catch (error: any) {
         send({ error: error?.message || 'Search failed' });
@@ -165,8 +176,20 @@ router.get('/details', async (req: Request, res: Response) => {
     res.json(details[0]);
 });
 
+// The non-standard versions (audio described, signed) this programme has, for the download dialog.
+router.get('/programme-versions', async (req: Request, res: Response) => {
+    const { pid } = req.query as any;
+    if (!isValidPid(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
+        return;
+    }
+    const found = await versionTypesFor(pid).catch(() => []);
+    const types = found.map((v) => v.types.join(' ')).join('\n');
+    res.json(versionProfiles.filter(({ match }) => match.test(types)).map(({ id, name, tag, maxQualityId }) => ({ id, name, tag, maxQualityId })));
+});
+
 router.get('/download', async (req: Request, res: Response) => {
-    const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime, media } = req.query as any;
+    const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime, media, version, quality } = req.query as any;
     let { nzbName, type } = req.query as any;
     if (!isValidPid(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
@@ -259,6 +282,15 @@ router.get('/download', async (req: Request, res: Response) => {
         } catch {
             // Best-effort only - proceed without library metadata.
         }
+    }
+
+    // A chosen version (audio described...) and/or quality, named and carried like a Sonarr/Radarr grab of one.
+    const versionProfile = versionProfiles.find(({ id }) => id === version);
+    const qualityProfile = qualityProfiles.find(({ id }) => id === quality);
+    if (versionProfile || qualityProfile) {
+        const applied = applyVersionToRelease(nzbName, versionProfile, qualityProfile, await getQualityProfile());
+        nzbName = applied.nzbName;
+        library = { ...(library ?? { title: nzbName }), quality: applied.quality, version: versionProfile?.id };
     }
 
     // The default source (manual) is used, hence undefined.

@@ -22,6 +22,8 @@ export interface BrowseItem {
     // streams HD at most; these just mark titles BBC lists as HDR / Ultra HD.
     hdr?: boolean;
     uhd?: boolean;
+    // The non-standard versions (audio-described, signed) the (latest) episode has - see VersionProfiles.
+    versions?: string[];
 }
 
 export interface BrowseRail {

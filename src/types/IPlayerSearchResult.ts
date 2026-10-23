@@ -29,6 +29,9 @@ export interface IPlayerSearchResult {
     // Set on version variants (EXTRA_VERSIONS): the version profile id (e.g. audio-described) to
     // download. Unset means the plain version.
     version?: string;
+    // The non-standard versions (audio-described, signed) this programme has, where known - the Search page
+    // filters on and badges them. Not set on Sonarr/Radarr results.
+    versions?: string[];
 }
 
 export interface IplayerSearchResultRequest {

@@ -1,7 +1,7 @@
 import { IPlayerSearchResult, VideoType } from '../../src/types/IPlayerSearchResult';
 import { qualityProfiles } from '../../src/types/QualityProfiles';
 import { versionProfiles } from '../../src/types/VersionProfiles';
-import { expandVersionVariants, parseExtraVersions } from '../../src/utils/videoVersion';
+import { addAvailableVersions, applyVersionToRelease, expandVersionVariants, parseExtraVersions } from '../../src/utils/videoVersion';
 
 const base = { pid: 'p1', title: 'T', nzbName: 'T.S01E01.WEBDL.720p-BBC', size: 1000, type: VideoType.TV } as IPlayerSearchResult;
 const ad = versionProfiles.filter(({ id }) => id === 'audio-described');
@@ -74,5 +74,39 @@ describe('videoVersion', () => {
         expect(names).toHaveLength(5);
         expect(new Set(names).size).toBe(5);
         expect(lookup).toHaveBeenCalledTimes(1);
+    });
+
+    describe('applyVersionToRelease', () => {
+        const fhd = qualityProfiles.find(({ id }) => id === 'fhd')!;
+        const sd = qualityProfiles.find(({ id }) => id === 'sd')!;
+        const name = 'T.S01E01.WEBDL.720p-BBC';
+
+        it('leaves a plain download at the default quality alone', () => {
+            expect(applyVersionToRelease(name, undefined, undefined, hd)).toEqual({ nzbName: name, quality: undefined });
+        });
+
+        it('renames for an explicit quality', () => {
+            expect(applyVersionToRelease(name, undefined, sd, hd)).toEqual({ nzbName: 'T.S01E01.WEBDL.540p-BBC', quality: 'sd' });
+            expect(applyVersionToRelease(name, undefined, hd, hd)).toEqual({ nzbName: name, quality: 'hd' });
+        });
+
+        it('tags a version and caps it at what BBC serves, whether or not a quality was asked for', () => {
+            expect(applyVersionToRelease(name, ad[0], undefined, hd)).toEqual({ nzbName: 'T.S01E01.AUDIO.DESCRIBED.WEBDL.540p-BBC', quality: 'sd' });
+            expect(applyVersionToRelease(name, ad[0], fhd, hd)).toMatchObject({ quality: 'sd' });
+            expect(applyVersionToRelease(name, signed[0], undefined, hd)).toEqual({ nzbName: 'T.S01E01.SIGNED.WEBDL.720p-BBC', quality: undefined });
+        });
+    });
+
+    describe('addAvailableVersions', () => {
+        it('marks only the programmes that have versions, and survives a failed lookup', async () => {
+            const lookup = jest.fn(async (pid: string) => {
+                if (pid === 'bad') throw new Error('down');
+                return pid === 'p1' ? [{ types: ['Original version'] }, { types: ['Dubbed Audio Described'] }, { types: ['Signed'] }] : [{ types: ['Original version'] }];
+            });
+            const out = await addAvailableVersions([base, { ...base, pid: 'p2' }, { ...base, pid: 'bad' }], lookup);
+            expect(out[0].versions).toEqual(['audio-described', 'signed']);
+            expect(out[1].versions).toBeUndefined();
+            expect(out[2].versions).toBeUndefined();
+        });
     });
 });

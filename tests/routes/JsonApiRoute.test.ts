@@ -267,6 +267,43 @@ describe('JsonApiRoute', () => {
         });
     });
 
+    describe('GET /programme-versions', () => {
+        it('lists the audio described and signed versions a programme has', async () => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({
+                programme: { versions: [{ pid: 'o', types: ['Original version'] }, { pid: 'a', types: ['Dubbed Audio Described'] }] },
+            });
+            const res = await request(app).get('/programme-versions').query({ pid: 'p01xyz' });
+            expect(res.status).toBe(200);
+            expect(res.body.map(({ id }: any) => id)).toEqual(['audio-described']);
+        });
+
+        it('is empty when BBC cannot be asked, and rejects a bad pid', async () => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockRejectedValue(new Error('down'));
+            expect((await request(app).get('/programme-versions').query({ pid: 'p01xyz' })).body).toEqual([]);
+            expect((await request(app).get('/programme-versions').query({ pid: '../x' })).status).toBe(400);
+        });
+    });
+
+    describe('GET /download with a version or quality', () => {
+        it('tags and caps an audio described download and carries the version on the queue entry', async () => {
+            const addToQueueMock = queueService.addToQueue as jest.Mock;
+            addToQueueMock.mockImplementation(() => { });
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
+            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'Show.S01E01.WEBDL.720p-BBC', type: 'TV', title: 'Show', version: 'audio-described' }).expect(200);
+            const [, name, , , library] = addToQueueMock.mock.calls.pop();
+            expect(name).toBe('Show.S01E01.AUDIO.DESCRIBED.WEBDL.540p-BBC');
+            expect(library).toMatchObject({ title: 'Show', version: 'audio-described', quality: 'sd' });
+        });
+
+        it('ignores an unknown version or quality', async () => {
+            const addToQueueMock = queueService.addToQueue as jest.Mock;
+            addToQueueMock.mockImplementation(() => { });
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
+            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv', version: 'bogus', quality: 'bogus' }).expect(200);
+            expect(addToQueueMock).toHaveBeenLastCalledWith('p01xyz', 'show.nzb', 'tv', undefined, undefined, undefined, undefined);
+        });
+    });
+
     describe('GET /cache-refresh', () => {
         it('should trigger cache refresh and return success', async () => {
             const refreshCacheMock = scheduleFacade.refreshCache as jest.Mock;
