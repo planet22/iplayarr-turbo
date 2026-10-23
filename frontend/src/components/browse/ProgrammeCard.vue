@@ -16,7 +16,11 @@
                     <font-awesome-icon :icon="['fas', badge.icon]" />
                 </span>
             </span>
-            <span v-if="item.kind !== 'episode'" class="kind">{{ item.kind === 'brand' ? 'Programme' : 'Series' }}</span>
+            <!-- Compact mode: a tiny icon for what it is (TV, film, series) instead of the Programme / Series label. -->
+            <span v-if="iconBadges" class="kindIcon" role="img" :title="kindLabel" :aria-label="kindLabel">
+                <font-awesome-icon :icon="['fas', kindIcon]" />
+            </span>
+            <span v-else-if="item.kind !== 'episode'" class="kind">{{ item.kind === 'brand' ? 'Programme' : 'Series' }}</span>
             <span v-if="selectable" class="selectBadge" aria-hidden="true">
                 <font-awesome-icon v-if="selected" :icon="['fas', 'check']" />
             </span>
@@ -57,6 +61,11 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    // Show a small TV / film / series icon on the thumbnail instead of the Programme / Series label.
+    iconBadges: {
+        type: Boolean,
+        default: false,
+    },
     selected: {
         type: Boolean,
         default: false,
@@ -69,6 +78,14 @@ const onCardClick = () => {
 };
 
 const { canPlay, play, download } = useBrowseActions();
+const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === 'MOVIE');
+const kindIcon = computed(() => (props.item.kind === 'series' ? 'layer-group' : isMovie.value ? 'film' : 'tv'));
+const kindLabel = computed(() => {
+    if (props.item.kind === 'series') return 'Series';
+    if (isMovie.value) return 'Film';
+    return props.item.kind === 'brand' ? 'Programme' : 'TV';
+});
+
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
 
 // Already in the queue, already downloaded, or a show you subscribe to.
@@ -191,6 +208,25 @@ const statusBadges = computed(() => {
         border-radius: 2px;
         background-color: rgba(0, 0, 0, 0.7);
         color: #fff;
+    }
+
+    .kindIcon {
+        position: absolute;
+        bottom: 6px;
+        left: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 3px;
+        background-color: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        font-size: 11px;
+
+        svg {
+            display: block;
+        }
     }
 
     .overlay {

@@ -46,7 +46,16 @@
                     <font-awesome-icon :icon="['fas', 'circle-notch']" spin /> more arriving
                 </span>
             </span>
-            <ViewToggle :model-value="viewMode" :modes="['table', 'posters']" @update:model-value="setViewMode" />
+            <div class="viewControls">
+                <button
+                    v-if="viewMode === 'posters'" type="button" :class="['clickable', 'smallIconsToggle', smallIcons ? 'on' : '']"
+                    :aria-pressed="smallIcons" :title="smallIcons ? 'Showing small TV / film icons' : 'Show small TV / film icons on posters'"
+                    aria-label="Small icons on posters" @click="toggleSmallIcons"
+                >
+                    <font-awesome-icon :icon="['fas', 'film']" />
+                </button>
+                <ViewToggle :model-value="viewMode" :modes="['table', 'posters']" @update:model-value="setViewMode" />
+            </div>
         </div>
         <div v-if="typeOptions.length > 2 || channelOptions.length > 2" class="channelChips" role="group" aria-label="Filter results">
             <template v-if="typeOptions.length > 2">
@@ -80,7 +89,8 @@
         <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
             <ProgrammeCard
                 v-for="item in posterItems" :key="item.pid" :item="item"
-                :selectable="selectMode" :selected="!!item.result.checked" @toggle="item.result.checked = !item.result.checked"
+                :selectable="selectMode" :selected="!!item.result.checked" :icon-badges="smallIcons"
+                @toggle="item.result.checked = !item.result.checked"
             />
         </div>
         <table v-else-if="filteredResults.length" class="resultsTable responsive-table">
@@ -434,6 +444,25 @@ watch(
     { immediate: true }
 );
 
+// Small TV / film icons on the poster thumbnails, remembered per browser (storage may be unavailable).
+const SMALL_ICONS_KEY = 'iplayarr.searchSmallIcons';
+const readSmallIcons = () => {
+    try {
+        return localStorage.getItem(SMALL_ICONS_KEY) === 'true';
+    } catch {
+        return false;
+    }
+};
+const smallIcons = ref(readSmallIcons());
+const toggleSmallIcons = () => {
+    smallIcons.value = !smallIcons.value;
+    try {
+        localStorage.setItem(SMALL_ICONS_KEY, String(smallIcons.value));
+    } catch {
+        // Not persisted - the toggle still works for this session.
+    }
+};
+
 const posterItems = computed(() =>
     pagedResults.value.map((result) => ({
         pid: result.pid,
@@ -646,6 +675,31 @@ watch(
                     margin-top: 4px;
                 }
             }
+        }
+    }
+}
+
+.viewControls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .smallIconsToggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 1px solid @settings-button-border-color;
+        border-radius: 4px;
+        background: transparent;
+        color: @subtle-text-color;
+
+        &.on {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
         }
     }
 }
