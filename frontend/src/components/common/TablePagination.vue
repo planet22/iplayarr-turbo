@@ -153,9 +153,9 @@ const onPageSizeChange = (event) => {
 
 .navButton {
     // First/last jumps are dropped on phones so the page buttons and the per-page
-    // dropdown fit on one row.
+    // dropdown fit on one row (tablets have room for the full pager).
     &.edgeButton {
-        @media (max-width: @mobile-breakpoint) {
+        @media (max-width: @phone-breakpoint) {
             display: none;
         }
     }
@@ -209,7 +209,7 @@ const onPageSizeChange = (event) => {
         font-size: 13px;
         color: @subtle-text-color;
 
-        @media (max-width: @mobile-breakpoint) {
+        @media (max-width: @phone-breakpoint) {
             display: none;
         }
     }
@@ -240,6 +240,34 @@ const onPageSizeChange = (event) => {
 
     .pageSize select {
         height: @touch-target;
+    }
+}
+
+// Phones: slightly smaller targets so prev, five page slots, next and the per-page select share one row.
+@media (max-width: @phone-breakpoint) {
+    .pageControls {
+        flex-wrap: nowrap;
+        gap: 4px;
+    }
+
+    .listPagination {
+        flex-wrap: nowrap;
+        gap: 6px;
+    }
+
+    .navButton,
+    .pageButton {
+        min-width: 34px;
+        height: 34px;
+        padding: 0 4px;
+    }
+
+    .ellipsis {
+        min-width: 14px;
+    }
+
+    .pageSize select {
+        height: 34px;
     }
 }
 </style>

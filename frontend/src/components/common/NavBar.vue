@@ -35,7 +35,7 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
         </div>
         <div class="right">
             <button
-                v-if="authState.user && quickFind.enabled" type="button" class="quickFind desktopOnly" title="Quick find (Ctrl+K)"
+                v-if="authState.user && quickFind.enabled" type="button" class="quickFind" title="Quick find (Ctrl+K)"
                 aria-label="Quick find" @click="openCommandPalette"
             >
                 <font-awesome-icon :icon="['fas', 'bolt']" />
@@ -212,7 +212,7 @@ defineExpose({ clearSearch });
 
     > div {
         @media (max-width: @mobile-breakpoint) {
-            flex: 1;
+            flex: 0 0 auto;
         }
 
         &.left {
@@ -228,6 +228,8 @@ defineExpose({ clearSearch });
             }
 
             @media (max-width: @mobile-breakpoint) {
+                // Takes all the room the logo and right-hand icons leave, so the search box is as wide as it can be.
+                flex: 1 1 0;
                 padding: 0 0.5rem;
                 margin-left: 0.5rem;
                 // Lets the search box give way on a narrow phone instead of pushing the buttons off the edge.
@@ -241,12 +243,20 @@ defineExpose({ clearSearch });
                 height: 100%;
                 min-width: 0;
 
+                @media (max-width: @mobile-breakpoint) {
+                    width: 100%;
+                }
+
                 .searchWrap {
                     position: relative;
                     display: flex;
                     align-items: center;
                     height: 100%;
                     min-width: 0;
+
+                    @media (max-width: @mobile-breakpoint) {
+                        flex: 1 1 auto;
+                    }
                 }
 
                 .suggestions {
@@ -313,6 +323,10 @@ defineExpose({ clearSearch });
                     transition: border-bottom-color 0.3s ease-out;
                     min-width: 0;
                     max-width: 100%;
+
+                    @media (max-width: @mobile-breakpoint) {
+                        width: 100%;
+                    }
 
                     &:focus {
                         outline: none;
