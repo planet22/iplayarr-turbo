@@ -3,7 +3,7 @@
         <PageHeader title="Subscriptions" />
         <SettingsPageToolbar
             :icons="['refresh']" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
-            :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"
+            refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"
         />
         <InfoBar small>New episodes are queued automatically, checked hourly or on demand.</InfoBar>
         <LoadingIndicator v-if="!loaded" />
@@ -35,8 +35,8 @@
                         {{ subscription.lastQueuedCount }}
                     </span>
                     <div v-if="subscription.arrOnly" class="rowActions">
-                        <button class="clickable" title="Unsubscribe" @click="remove(subscription)">
-                            <font-awesome-icon :icon="['fas', 'trash']" />
+                        <button class="clickable" title="Stop tracking (Sonarr/Radarr only)" aria-label="Stop tracking" @click="remove(subscription)">
+                            <font-awesome-icon :icon="['fas', 'link-slash']" />
                         </button>
                     </div>
                 </template>
@@ -59,10 +59,10 @@
                             <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
                         </button>
                         <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
-                            <font-awesome-icon :icon="['fas', 'rotate']" :spin="busy[subscription.id]" />
+                            <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                         </button>
-                        <button class="clickable" title="Unsubscribe" @click="remove(subscription)">
-                            <font-awesome-icon :icon="['fas', 'trash']" />
+                        <button class="clickable" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
+                            <font-awesome-icon :icon="['fas', 'bell-slash']" />
                         </button>
                     </div>
                 </div>
@@ -98,10 +98,10 @@
                         <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
                     </button>
                     <button v-if="!subscription.arrOnly" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
-                        <font-awesome-icon :icon="['fas', 'rotate']" :spin="busy[subscription.id]" />
+                        <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
-                    <button class="clickable" title="Unsubscribe" @click="remove(subscription)">
-                        <font-awesome-icon :icon="['fas', 'trash']" />
+                    <button class="clickable" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
+                        <font-awesome-icon :icon="['fas', 'bell-slash']" />
                     </button>
                 </div>
             </div>

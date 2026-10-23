@@ -80,7 +80,7 @@
                 :aria-label="refreshTitle || refreshLabel || 'Refresh'"
                 @click="emit('refresh')"
             >
-                <font-awesome-icon :icon="['fas', 'arrows-rotate']" :spin="refreshing" />
+                <font-awesome-icon :icon="['fas', refreshIcon]" :spin="refreshing && refreshIcon === 'arrows-rotate'" :beat-fade="refreshing && refreshIcon !== 'arrows-rotate'" />
                 <div v-if="refreshLabel && !iconOnly" class="SettingsPageToolbar-label">{{ refreshLabel }}</div>
             </button>
             <button
@@ -298,6 +298,11 @@ defineProps({
         type: Boolean,
         required: false,
         default: false,
+    },
+    // Font Awesome solid icon name, for pages where "refresh" is really an action (e.g. check and download).
+    refreshIcon: {
+        type: String,
+        default: 'arrows-rotate',
     },
     refreshLabel: {
         type: String,

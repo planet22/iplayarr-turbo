@@ -4,7 +4,7 @@
     </div>
     <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force>
         <!-- Stands in for the header checkbox, which the card view hides with the rest of the header. -->
-        <template v-if="cardView" #leading>
+        <template v-if="cardView && sortedHistory.length" #leading>
             <CheckInput v-model="allChecked" class="selectAll" title="Select all" />
         </template>
     </TablePagination>
