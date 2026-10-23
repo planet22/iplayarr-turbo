@@ -16,11 +16,8 @@
             :subtitle="searchResult.episodeTitle"
         />
         <div class="outputNote">
-            <font-awesome-icon :icon="['fas', isStrm ? 'link' : 'file-video']" />
-            <span v-if="isStrm">Creates a small <strong>.strm</strong> link - no video file is downloaded.</span>
-            <span v-else>
-                Downloads the full video as <strong>{{ outputFormat }}</strong> using {{ clientName }}.
-            </span>
+            <font-awesome-icon :icon="['fas', summary.strm ? 'link' : 'file-video']" />
+            <span>{{ summary.text }}</span>
         </div>
         <div class="infoSection">
             <TextInput
@@ -37,6 +34,7 @@ import { computed, defineEmits, defineProps, inject, ref } from 'vue';
 
 import TextInput from '@/components/common/form/TextInput.vue';
 import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
+import { describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
 import { ipFetch } from '@/lib/ipFetch';
 import { buildDownloadQuery } from '@/lib/utils';
 
@@ -57,10 +55,10 @@ const emit = defineEmits(['downloaded']);
 
 // What this download will produce, from the Media Mode / Download Client / Output Format settings.
 const globalSettings = inject('globalSettings', ref({}));
-const isStrm = computed(() => globalSettings.value?.MEDIA_MODE !== 'download');
-const outputFormat = computed(() => (globalSettings.value?.OUTPUT_FORMAT === 'mkv' ? 'MKV' : 'MP4'));
-const CLIENT_NAMES = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'the native downloader' };
-const clientName = computed(() => CLIENT_NAMES[globalSettings.value?.DOWNLOAD_CLIENT] ?? 'the configured client');
+// The size is shown only for a real file download, and only when it is known (a search result's size, or its runtime).
+const summary = computed(() =>
+    describeDownload(globalSettings.value, { totalMb: estimateSizeMb(globalSettings.value, searchResult.value) })
+);
 
 const download = async () => {
     const response = await ipFetch(`json-api/download?${buildDownloadQuery(searchResult.value)}`);

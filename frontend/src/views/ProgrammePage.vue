@@ -205,7 +205,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, inject, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
@@ -216,6 +216,7 @@ import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
+import { describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
 import { ipFetch } from '@/lib/ipFetch';
 import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
@@ -233,6 +234,7 @@ const selected = ref(0);
 const downloadingSeason = ref(false);
 
 const { canPlay, play, download } = useBrowseActions();
+const globalSettings = inject('globalSettings', ref({}));
 
 // Subscribing is per show: after the server climbs an episode to its brand, programme.pid is the
 // brand pid that subscriptions are keyed by.
@@ -394,7 +396,11 @@ const downloadAll = () => {
 
 const downloadBatch = async (batch, label) => {
     if (batch.length === 0) return;
-    if (!(await dialogService.confirm('Download', `Download ${batch.length} episodes of ${label}?`))) return;
+    // What it will produce, and the combined size of the episodes whose runtime is known.
+    const sizes = batch.map((episode) => estimateSizeMb(globalSettings.value, { runtimeMinutes: episode.runtime }));
+    const totalMb = sizes.reduce((sum, size) => sum + (size ?? 0), 0);
+    const summary = describeDownload(globalSettings.value, { count: batch.length, totalMb: sizes.some((size) => size === undefined) ? undefined : totalMb });
+    if (!(await dialogService.confirm('Download', `Download ${batch.length} episodes of ${label}?`, summary.text))) return;
 
     downloadingSeason.value = true;
     const failed = [];

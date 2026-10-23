@@ -204,7 +204,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -218,6 +218,7 @@ import ViewToggle from '@/components/common/ViewToggle.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
+import { describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { streamSearch } from '@/lib/searchStream';
@@ -228,6 +229,7 @@ import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 const route = useRoute();
 const router = useRouter();
 
+const globalSettings = inject('globalSettings', ref({}));
 const searchEl = ref(null);
 const selectMode = ref(false);
 const searchResults = ref([]);
@@ -552,7 +554,12 @@ const preview = (searchResult) => {
 const multipleImmediateDownload = async () => {
     const selectedResults = filteredResults.value.filter((result) => result.checked);
     if (selectedResults.length > 0) {
-        if (await dialogService.confirm('Download', `Do you want to download ${selectedResults.length} items?`)) {
+        const sizes = selectedResults.map((result) => estimateSizeMb(globalSettings.value, result));
+        const summary = describeDownload(globalSettings.value, {
+            count: selectedResults.length,
+            totalMb: sizes.some((size) => size === undefined) ? undefined : sizes.reduce((sum, size) => sum + size, 0),
+        });
+        if (await dialogService.confirm('Download', `Do you want to download ${selectedResults.length} items?`, summary.text)) {
             loading.value = true;
             for (const item of selectedResults) {
                 await immediateDownload(item);
