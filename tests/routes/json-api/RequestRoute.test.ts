@@ -26,10 +26,17 @@ describe('RequestRoute', () => {
     });
 
     it('requests a title with monitor and tags', async () => {
-        mocked.request.mockResolvedValue({ arrId: 5, created: true });
+        mocked.request.mockResolvedValue({ arrId: 5, created: true, tracked: false });
         const res = await request(app).post('/').send({ ...body, monitor: 'future', tags: [1, 2] });
-        expect(res.body).toEqual({ status: true, arrId: 5, created: true });
+        expect(res.body).toEqual({ status: true, arrId: 5, created: true, tracked: false });
         expect(mocked.request).toHaveBeenCalledWith({ ...body, monitor: 'future', tags: [1, 2] });
+    });
+
+    it('passes a valid pid through and rejects a malformed one', async () => {
+        mocked.request.mockResolvedValue({ arrId: 5, created: true, tracked: true });
+        await request(app).post('/').send({ ...body, pid: 'b006abcd' }).expect(200);
+        expect(mocked.request).toHaveBeenCalledWith(expect.objectContaining({ pid: 'b006abcd' }));
+        expect((await request(app).post('/').send({ ...body, pid: '../x' })).status).toBe(400);
     });
 
     it('rejects invalid input', async () => {
@@ -46,7 +53,7 @@ describe('RequestRoute', () => {
     });
 
     it('rate limits after 10 requests', async () => {
-        mocked.request.mockResolvedValue({ arrId: 1, created: false });
+        mocked.request.mockResolvedValue({ arrId: 1, created: false, tracked: false });
         for (let i = 0; i < 10; i++) expect((await request(app).post('/').send(body)).status).toBe(200);
         const blocked = await request(app).post('/').send(body);
         expect(blocked.status).toBe(429);

@@ -48,7 +48,7 @@
                             : 'The BBC programme pages are not responding, so these details come from iPlayer\'s listings.'
                     }}
                 </p>
-                <div v-if="programme.kind !== 'episode' || subscription" class="subscribeRow">
+                <div v-if="programme.kind !== 'episode' || entry" class="subscribeRow">
                     <button
                         :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
                         @click="toggleSubscription"
@@ -66,6 +66,7 @@
                         Download all ({{ loadedCount }})
                     </button>
                     <button
+                        v-if="!entry?.arr"
                         class="clickable subscribeButton"
                         :disabled="requesting"
                         title="Add to Sonarr/Radarr and let it pick the best release"
@@ -84,13 +85,23 @@
                         {{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}
                     </button>
                     <span
-                        v-if="subscription && subscription.arr"
+                        v-if="entry && entry.arr"
                         class="subscribeButton on arrChip"
-                        :title="`In ${arrAppName(subscription.arr.appId)} as ${subscription.arr.title}`"
+                        :title="`In ${arrAppName(entry.arr.appId)} as ${entry.arr.title}`"
                     >
                         <font-awesome-icon :icon="['fas', 'check']" />
-                        {{ arrAppName(subscription.arr.appId) }}
+                        {{ arrAppName(entry.arr.appId) }}
                     </span>
+                    <button
+                        v-if="entry && entry.arrOnly"
+                        class="clickable subscribeButton"
+                        :disabled="subscribing"
+                        title="Remove from Sonarr/Radarr tracking"
+                        @click="removeArrOnly"
+                    >
+                        <font-awesome-icon :icon="['fas', 'link-slash']" />
+                        Remove
+                    </button>
                 </div>
                 </div>
             </div>
@@ -200,7 +211,10 @@ const { canPlay, play, download } = useBrowseActions();
 const { load: loadSubscriptions, findByPid, subscribe, unsubscribe, toggleArr } = useSubscriptions();
 const { loadAppNames, arrAppName } = useArrAppNames();
 const subscribing = ref(false);
-const subscription = computed(() => (programme.value ? findByPid(programme.value.pid) : undefined));
+// The show's record, whether iPlayarr downloads it or it is only held in Sonarr/Radarr (arrOnly).
+const entry = computed(() => (programme.value ? findByPid(programme.value.pid) : undefined));
+// "Subscribed" means iPlayarr itself downloads new episodes - not merely requested from Sonarr/Radarr.
+const subscription = computed(() => (entry.value && !entry.value.arrOnly ? entry.value : undefined));
 
 const toggleSubscription = async () => {
     subscribing.value = true;
@@ -222,9 +236,19 @@ const requesting = ref(false);
 const requestProgramme = async () => {
     requesting.value = true;
     try {
-        await requestFromArr(programme.value.title);
+        // Recorded as an arr-only subscription, so refresh the list to show it.
+        if (await requestFromArr(programme.value.title, programme.value.pid)) await loadSubscriptions();
     } finally {
         requesting.value = false;
+    }
+};
+
+const removeArrOnly = async () => {
+    subscribing.value = true;
+    try {
+        await unsubscribe(entry.value);
+    } finally {
+        subscribing.value = false;
     }
 };
 

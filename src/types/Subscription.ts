@@ -35,6 +35,8 @@ export interface SubscribeOptions {
     downloadAll?: boolean;
     // Record the show without any iPlayarr checking or queuing (Sonarr/Radarr handles downloads).
     arrOnly?: boolean;
+    // Link to set straight away (a request: the show was just added to Sonarr/Radarr).
+    arr?: SubscriptionArrLink;
 }
 
 export interface SubscriptionCheckResult {

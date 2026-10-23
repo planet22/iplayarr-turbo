@@ -68,7 +68,8 @@ export function useSubscriptions() {
             return 'subscribed-arr';
         }
         await load();
-        if (await offerArrLink(data)) await load();
+        // An upgraded Sonarr/Radarr-only show is already linked.
+        if (!data.arr && (await offerArrLink(data))) await load();
         return downloadAll ? 'subscribed-all' : downloadLatest ? 'subscribed-latest' : 'subscribed';
     };
 

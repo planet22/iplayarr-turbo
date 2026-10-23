@@ -79,7 +79,10 @@ const statusBadges = computed(() => {
     const badges = [];
     if (itemStatus?.value.downloaded.has(pid)) badges.push({ key: 'downloaded', icon: 'circle-check', label: 'Downloaded' });
     else if (itemStatus?.value.queued.has(pid)) badges.push({ key: 'queued', icon: 'clock', label: 'In the queue' });
-    if (findByPid(seriesPid ?? pid) || findByPid(pid)) badges.push({ key: 'subscribed', icon: 'bell', label: 'Subscribed' });
+    // Only a show iPlayarr downloads is "subscribed"; one held in Sonarr/Radarr alone is just in there.
+    const entry = findByPid(seriesPid ?? pid) || findByPid(pid);
+    if (entry && !entry.arrOnly) badges.push({ key: 'subscribed', icon: 'bell', label: 'Subscribed' });
+    else if (entry) badges.push({ key: 'in-arr', icon: 'link', label: 'In Sonarr/Radarr' });
     return badges;
 });
 </script>

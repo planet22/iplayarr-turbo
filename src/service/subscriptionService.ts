@@ -73,7 +73,9 @@ class SubscriptionService {
             throw new SubscriptionError('This programme is not part of a show that can be subscribed to');
         }
         const existing = (await this.list()).find((s) => s.pid === brandPid);
-        if (existing) return existing;
+        // A show only held in Sonarr/Radarr (arrOnly) isn't subscribed: subscribing for real
+        // upgrades it in place, keeping its arr link.
+        if (existing && (!existing.arrOnly || options.arrOnly)) return existing;
 
         const { programme } = await iplayerDetailsService.getMetadata(brandPid);
         const episodes = await this.listEpisodes(brandPid);
@@ -84,19 +86,22 @@ class SubscriptionService {
         }
 
         const subscription: Subscription = {
-            id: v4(),
+            id: existing?.id ?? v4(),
             pid: brandPid,
             title: programme.display_title?.title ?? programme.title,
             thumbnail: programme.image ? `json-api/thumbnail/${programme.image.pid}.jpg` : undefined,
             channel: programme.ownership?.service?.title,
-            createdAt: new Date().toISOString(),
+            createdAt: existing?.createdAt ?? new Date().toISOString(),
+            ...(existing?.arr ? { arr: existing.arr } : {}),
             // "Download everything" starts with nothing seen: the first check then queues every
             // available episode (de-duplicated, retried and named like any other), without making
             // this request wait for hundreds of metadata lookups.
             seen: options.downloadAll ? [] : episodes.map(({ id }) => id),
             ...(options.arrOnly ? { arrOnly: true } : {}),
+            ...(options.arr ? { arr: options.arr } : {}),
         };
-        await storage.setItem(STORAGE_KEY, [...(await this.list()), subscription]);
+        const others = (await this.list()).filter((s) => s.id !== existing?.id);
+        await storage.setItem(STORAGE_KEY, [...others, subscription]);
 
         if (options.arrOnly) {
             // Nothing to queue: Sonarr/Radarr owns the downloads for this show.

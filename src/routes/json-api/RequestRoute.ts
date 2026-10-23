@@ -44,8 +44,9 @@ router.post('/', async (req: Request, res: Response) => {
         res.status(429).json({ error: ApiError.INVALID_INPUT, message: 'Too many requests - try again shortly' } as ApiResponse);
         return;
     }
-    const { appId, externalId, title, rootFolderPath, qualityProfileId, monitor, tags } = req.body ?? {};
+    const { appId, externalId, title, rootFolderPath, qualityProfileId, monitor, tags, pid } = req.body ?? {};
     if (
+        (pid !== undefined && !(typeof pid === 'string' && /^[a-z0-9]{6,}$/i.test(pid))) ||
         typeof appId !== 'string' ||
         !Number.isInteger(externalId) ||
         typeof title !== 'string' ||
@@ -60,7 +61,7 @@ router.post('/', async (req: Request, res: Response) => {
     requestLimiter.recordFailure(key);
     try {
         const result = await subscriptionArrService.request({
-            appId, externalId, title, rootFolderPath, qualityProfileId, monitor, tags,
+            appId, externalId, title, rootFolderPath, qualityProfileId, monitor, tags, pid,
         });
         res.json({ status: true, ...result });
     } catch (error) {

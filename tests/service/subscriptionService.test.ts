@@ -315,6 +315,23 @@ describe('subscriptionService', () => {
             expect(details.getSeriesEpisodes).not.toHaveBeenCalled();
         });
 
+        it('subscribing to an arrOnly show upgrades it in place and keeps its link', async () => {
+            const link = { appId: 'a1', arrId: 7, title: 'Show', addedByUs: true };
+            const first = await subscriptionService.subscribe('m00episode', { arrOnly: true, arr: link });
+            const upgraded = await subscriptionService.subscribe('m00episode');
+            expect(upgraded.id).toBe(first.id);
+            expect(upgraded.arrOnly).toBeUndefined();
+            expect(upgraded.arr).toEqual(link);
+            const all = await subscriptionService.list();
+            expect(all).toHaveLength(1);
+            expect(all[0].arrOnly).toBeUndefined();
+        });
+
+        it('subscribing arrOnly again returns the existing record', async () => {
+            const first = await subscriptionService.subscribe('m00episode', { arrOnly: true });
+            expect((await subscriptionService.subscribe('m00episode', { arrOnly: true })).id).toBe(first.id);
+        });
+
         it('leaves arrOnly unset for a normal subscription', async () => {
             expect((await subscriptionService.subscribe('m00episode')).arrOnly).toBeUndefined();
         });

@@ -6,6 +6,7 @@
         :show-confirm="!loading && !!selected"
         :confirm-label="selected?.existingId ? 'Link' : 'Add'"
         @confirm="confirm"
+        @dismiss="emit('cancel')"
     >
         <form class="searchRow" @submit.prevent="search">
             <input v-model="searchTerm" type="text" placeholder="Search by title" :disabled="loading" />
@@ -74,7 +75,7 @@ import SelectInput from '../common/form/SelectInput.vue';
 import LoadingIndicator from '../common/LoadingIndicator.vue';
 import IPlayarrModal from './IPlayarrModal.vue';
 
-const emit = defineEmits(['select']);
+const emit = defineEmits(['select', 'cancel']);
 const props = defineProps({
     app: { type: Object, required: true },
     term: { type: String, required: true },

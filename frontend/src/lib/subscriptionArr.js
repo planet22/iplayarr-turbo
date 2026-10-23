@@ -43,6 +43,7 @@ const chooseMatch = (app, term) =>
                     finish(choice);
                     modal.close();
                 },
+                onCancel: () => finish(undefined),
                 onClosed: () => finish(undefined),
             },
         });
@@ -74,7 +75,8 @@ export async function linkToArr(subscription) {
 
 // Overseerr-style request: add the title to Sonarr/Radarr and trigger a normal search. Sonarr/Radarr
 // then picks the best release from all its indexers - iPlayarr is only the discovery surface.
-export async function requestFromArr(title) {
+// With `pid`, the request is recorded as an arr-only subscription so it can be seen and undone later.
+export async function requestFromArr(title, pid) {
     const apps = await ipFetch(`${BASE}/apps`);
     if (!apps.ok) return fail('Unable to load apps', apps.data);
     if (!apps.data.length) return fail('No Sonarr or Radarr', { message: 'Add a Sonarr or Radarr app first.' });
@@ -87,6 +89,7 @@ export async function requestFromArr(title) {
     if (!choice) return false;
 
     const { ok, data } = await ipFetch('json-api/request', 'POST', {
+        ...(pid ? { pid } : {}),
         appId: app.id,
         externalId: choice.match.externalId,
         title: choice.match.title,

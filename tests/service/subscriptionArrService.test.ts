@@ -133,4 +133,39 @@ describe('subscriptionArrService', () => {
             await expect(subscriptionArrService.unlink('s1', true)).rejects.toThrow('not linked');
         });
     });
+
+    describe('request', () => {
+        const link = { appId: 'a1', arrId: 77, title: 'Show', addedByUs: true };
+
+        beforeEach(() => {
+            library.monitorOptions.mockReturnValue(['all']);
+            library.add.mockResolvedValue({ id: 77, created: true });
+        });
+
+        it('adds, searches and records an arr-only subscription when given a pid', async () => {
+            subs.subscribe.mockResolvedValue({ id: 's1' } as any);
+            const result = await subscriptionArrService.request({ ...request, pid: 'b006abcd' });
+            expect(library.add).toHaveBeenCalledWith(app, 11, expect.objectContaining({ searchOnAdd: false }));
+            expect(library.searchItem).toHaveBeenCalledWith(app, 77);
+            expect(subs.subscribe).toHaveBeenCalledWith('b006abcd', { arrOnly: true, arr: link });
+            expect(subs.setArrLink).toHaveBeenCalledWith('s1', link);
+            expect(result).toEqual({ arrId: 77, created: true, tracked: true });
+        });
+
+        it('keeps the link of an existing subscription', async () => {
+            subs.subscribe.mockResolvedValue({ id: 's1', arr: { ...link, addedByUs: false } } as any);
+            expect((await subscriptionArrService.request({ ...request, pid: 'b006abcd' })).tracked).toBe(true);
+            expect(subs.setArrLink).not.toHaveBeenCalled();
+        });
+
+        it('does not record anything without a pid', async () => {
+            expect((await subscriptionArrService.request(request)).tracked).toBe(false);
+            expect(subs.subscribe).not.toHaveBeenCalled();
+        });
+
+        it('still succeeds when the BBC lookup for tracking fails', async () => {
+            subs.subscribe.mockRejectedValue(new Error('bbc down'));
+            expect(await subscriptionArrService.request({ ...request, pid: 'b006abcd' })).toEqual({ arrId: 77, created: true, tracked: false });
+        });
+    });
 });
