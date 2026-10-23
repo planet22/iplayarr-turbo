@@ -17,6 +17,7 @@ import { getPotentialRoman, getQualityProfile, sanitizeLunrQuery, splitArrayInto
 import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
+import searchSettingsService from '../searchSettingsService';
 import AbstractSearchService from './AbstractSearchService';
 import nativeSearchService from './NativeSearchService';
 import newSearchCache from './newSearchCache';
@@ -61,7 +62,7 @@ interface ContainerLookup {
 class NativeSearchV2Service implements AbstractSearchService {
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
-        const matchAllWords = (await configService.getParameter(IplayarrParameter.SEARCH_MATCH_ALL_WORDS)) !== 'false';
+        const matchAllWords = (await searchSettingsService.get(IplayarrParameter.SEARCH_MATCH_ALL_WORDS)) !== 'false';
 
         // Nothing matched every word: retry with the trailing words dropped ("Show Name Episode Title"
         // -> "Show Name"), keeping the all-words rule against the shorter term.
@@ -232,7 +233,7 @@ class NativeSearchV2Service implements AbstractSearchService {
     // (season offsets) or airdate numbering renumbers episodes, so another container could match.
     async narrowsBySeason(season?: number, synonym?: Synonym): Promise<boolean> {
         if (!season || synonym) return false;
-        const enabled = (await configService.getParameter(IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY)) === 'true';
+        const enabled = (await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY)) === 'true';
         const airdateNumbering = (await configService.getParameter(IplayarrParameter.AIRDATE_NUMBERING)) === 'true';
         return enabled && !airdateNumbering;
     }

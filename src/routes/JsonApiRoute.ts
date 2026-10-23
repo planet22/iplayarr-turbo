@@ -5,6 +5,7 @@ import scheduleFacade from '../facade/scheduleFacade';
 import searchFacade from '../facade/searchFacade';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
+import searchSettingsService from '../service/searchSettingsService';
 import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
 import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
@@ -13,6 +14,7 @@ import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { VideoEventType } from '../types/VideoEvent';
 import { isValidPid } from '../utils/pathSafety';
+import { runInSearchContext } from '../utils/searchContext';
 import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../utils/Utils';
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
@@ -77,11 +79,17 @@ router.post('/nzb/test', async (req: Request, res: Response) => {
 router.get('/search', async (req: Request, res: Response) => {
     const { q } = req.query as any;
     try {
-        const result: IPlayerSearchResult[] = await searchFacade.search(q);
+        const result: IPlayerSearchResult[] = await runInSearchContext('manual', () => searchFacade.search(q));
         res.json(result);
     } catch (error: any) {
         res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: error?.message || 'Search failed' } as ApiResponse);
     }
+});
+
+// How a manual search is currently set up (native or not, engine, all-words) for the Search page's
+// status line.
+router.get('/search/settings', async (_, res: Response) => {
+    res.json(await searchSettingsService.effective('manual'));
 });
 
 // Same search as /search, sent as newline-delimited JSON: one array of results per line as they are
@@ -106,7 +114,7 @@ router.get('/search/stream', async (req: Request, res: Response) => {
     };
 
     try {
-        await searchFacade.searchStreaming(q, (batch) => send(batch));
+        await runInSearchContext('manual', () => searchFacade.searchStreaming(q, (batch) => send(batch)));
         send({ done: true });
     } catch (error: any) {
         send({ error: error?.message || 'Search failed' });

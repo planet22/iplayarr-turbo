@@ -53,7 +53,7 @@
                         :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
                         @click="toggleSubscription"
                     >
-                        <font-awesome-icon :icon="['fas', subscribing ? 'circle-notch' : 'bell']" :spin="subscribing" />
+                        <font-awesome-icon :icon="['fas', 'bell']" />
                         {{ subscription ? 'Subscribed' : 'Subscribe' }}
                     </button>
                     <button
@@ -72,7 +72,7 @@
                         title="Add to Sonarr/Radarr and let it pick the best release"
                         @click="requestProgramme"
                     >
-                        <font-awesome-icon :icon="['fas', requesting ? 'circle-notch' : 'plus']" :spin="requesting" />
+                        <font-awesome-icon :icon="['fas', 'plus']" />
                         Request
                     </button>
                     <button

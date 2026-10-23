@@ -1,9 +1,9 @@
-import configService from '../service/configService';
 import DbCacheService from '../service/db/dbCacheService';
 import AbstractSearchService from '../service/search/AbstractSearchService';
 import getIplayerSearchService from '../service/search/GetIplayerSearchService';
 import nativeSearchService from '../service/search/NativeSearchService';
 import nativeSearchV2Service from '../service/search/NativeSearchV2Service';
+import searchSettingsService from '../service/searchSettingsService';
 import skyhookService from '../service/skyhook/SkyhookService';
 import synonymService from '../service/synonymService';
 import { NativeSearchEngine } from '../types/enums/NativeSearchEngine';
@@ -71,7 +71,8 @@ class SearchFacade {
         // Native Search 2.0 can fetch only the requested series' episodes (a config option). Such a
         // result set is partial, so it is cached under its own key and never served to another season.
         const narrowToSeason = service === nativeSearchV2Service && (await nativeSearchV2Service.narrowsBySeason(season, synonym));
-        const cacheKey = narrowToSeason ? `${term}#season${season}` : term;
+        // A manual search whose settings differ from Sonarr/Radarr's gets its own cache entries.
+        const cacheKey = (narrowToSeason ? `${term}#season${season}` : term) + (await searchSettingsService.cacheSuffix());
         let results: IPlayerSearchResult[] | undefined = await this.searchCache.get(cacheKey);
         if (!results) {
             results = await runWithSeasonHint(narrowToSeason ? season : undefined, async () => onBatch
@@ -154,10 +155,10 @@ class SearchFacade {
     }
 
     async #getService(): Promise<AbstractSearchService> {
-        const nativeSearchEnabled = await configService.getParameter(IplayarrParameter.NATIVE_SEARCH);
+        const nativeSearchEnabled = await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH);
         if (nativeSearchEnabled != 'true') return getIplayerSearchService;
         // The one place the native engine is chosen: anything but an explicit V2 gets the original.
-        const engine = await configService.getParameter(IplayarrParameter.NATIVE_SEARCH_ENGINE);
+        const engine = await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH_ENGINE);
         return engine == NativeSearchEngine.V2 ? nativeSearchV2Service : nativeSearchService;
     }
 

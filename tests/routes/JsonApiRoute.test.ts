@@ -10,13 +10,16 @@ jest.mock('../../src/facade/scheduleFacade');
 jest.mock('../../src/facade/searchFacade');
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/service/queueService');
+jest.mock('../../src/service/searchSettingsService');
 
 import nzbFacade from '../../src/facade/nzbFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import searchFacade from '../../src/facade/searchFacade';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
+import searchSettingsService from '../../src/service/searchSettingsService';
 import { ApiError } from '../../src/types/responses/ApiResponse';
+import { searchContext } from '../../src/utils/searchContext';
 
 const app = express();
 app.use(bodyParser.json());
@@ -64,6 +67,31 @@ describe('JsonApiRoute', () => {
 
             expect(res.status).toBe(200);
             expect(res.body).toEqual(mockResults);
+        });
+    });
+
+    describe('manual search context', () => {
+        it('runs /search and /search/stream as a manual search', async () => {
+            const seen: string[] = [];
+            (searchFacade.search as jest.Mock).mockImplementation(async () => {
+                seen.push(searchContext());
+                return [];
+            });
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async () => {
+                seen.push(searchContext());
+                return [];
+            });
+            await request(app).get('/search').query({ q: 'test' });
+            await request(app).get('/search/stream').query({ q: 'test' });
+            expect(seen).toEqual(['manual', 'manual']);
+        });
+
+        it('GET /search/settings describes the manual setup', async () => {
+            const state = { native: true, engine: 'V2', matchAllWords: true, inherited: [] };
+            (searchSettingsService.effective as jest.Mock).mockResolvedValue(state);
+            const res = await request(app).get('/search/settings');
+            expect(res.body).toEqual(state);
+            expect(searchSettingsService.effective).toHaveBeenCalledWith('manual');
         });
     });
 

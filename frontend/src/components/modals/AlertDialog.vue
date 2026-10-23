@@ -8,6 +8,7 @@
         :confirm-label="confirmLabel"
         :danger="danger"
         @cancel="emit('cancel')"
+        @dismiss="emit('cancel')"
         @confirm="emit('confirm', selected)"
     >
         <p :class="[subtext ? 'hasLower' : '']">

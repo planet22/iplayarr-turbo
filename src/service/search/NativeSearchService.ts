@@ -12,9 +12,9 @@ import { Synonym } from '../../types/Synonym';
 import { traceCandidate } from '../../utils/searchTrace';
 import { firstMissingTerm } from '../../utils/titleMatch';
 import { createNZBName, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
-import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
+import searchSettingsService from '../searchSettingsService';
 import AbstractSearchService from './AbstractSearchService';
 import newSearchCache from './newSearchCache';
 
@@ -23,7 +23,7 @@ class NativeSearchService implements AbstractSearchService {
 
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
-        const matchAllWords = (await configService.getParameter(IplayarrParameter.SEARCH_MATCH_ALL_WORDS)) !== 'false';
+        const matchAllWords = (await searchSettingsService.get(IplayarrParameter.SEARCH_MATCH_ALL_WORDS)) !== 'false';
         const url = `https://ibl.api.bbc.co.uk/ibl/v1/new-search?q=${encodeURIComponent(term)}`;
         let results: IPlayerNewSearchResult[] | undefined = await newSearchCache.get(term.toLowerCase());
         if (!results) {

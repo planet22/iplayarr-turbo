@@ -38,6 +38,11 @@
         </template>
     </SettingsPageToolbar>
     <div v-if="!loading" class="inner-content scroll-x">
+        <p v-if="searchTerm && searchSettingsLine" class="searchSettingsNote">
+            <font-awesome-icon :icon="['fas', 'sliders']" />
+            <span>{{ searchSettingsLine }}</span>
+            <router-link :to="{ path: '/settings', hash: '#general' }">Change in Settings</router-link>
+        </p>
         <div v-if="searchResults.length" class="resultsToolbar">
             <span class="resultCount">
                 {{ filteredResults.length }} result{{ filteredResults.length === 1 ? '' : 's' }}
@@ -220,6 +225,29 @@ const loading = ref(searchTerm.value !== '');
 const loadingMore = ref(false); // results still arriving after the first batch has been shown
 const filter = ref('All');
 const allChecked = ref(false);
+
+// How manual search is set up right now, so a surprising result can be traced to a setting.
+const manualSettings = ref(undefined);
+const loadManualSettings = async () => {
+    try {
+        const { ok, data } = await ipFetch('json-api/search/settings');
+        manualSettings.value = ok ? data : undefined;
+    } catch {
+        manualSettings.value = undefined;
+    }
+};
+const searchSettingsLine = computed(() => {
+    const settings = manualSettings.value;
+    if (!settings) return '';
+    const parts = [settings.native ? `Native ${settings.engine === 'V2' ? '2.0' : '1.0'}` : 'get_iplayer search'];
+    if (settings.native) {
+        parts.push(settings.matchAllWords ? 'all words must match' : 'any word may match');
+        if (settings.requestedSeriesOnly) parts.push('requested series only');
+    }
+    // All four inherited: manual search is simply doing what Sonarr and Radarr get.
+    const shared = settings.inherited.length === 4 ? ' (same as Sonarr/Radarr)' : '';
+    return `Manual search: ${parts.join(' · ')}${shared}`;
+});
 
 const toolbarIcons = computed(() => {
     const icons = [];
@@ -445,6 +473,7 @@ watch(
             searchResults.value = [];
             searchTerm.value = newSearchTerm;
             searchInput.value = newSearchTerm;
+            loadManualSettings();
             try {
                 await streamSearch(
                     newSearchTerm,
@@ -621,6 +650,20 @@ watch(
                 }
             }
         }
+    }
+}
+
+.searchSettingsNote {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: @subtle-text-color;
+
+    a {
+        color: @brand-color;
     }
 }
 

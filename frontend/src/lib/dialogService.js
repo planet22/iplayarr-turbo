@@ -38,6 +38,8 @@ const dialogService = {
                         resolve(false);
                         formModal.close();
                     },
+                    // Escape or a click outside closes the modal without either button.
+                    onClosed: () => resolve(false),
                 },
             });
             formModal.open();
@@ -62,6 +64,8 @@ const dialogService = {
                         resolve(false);
                         formModal.close();
                     },
+                    // Escape or a click outside closes the modal without either button.
+                    onClosed: () => resolve(false),
                 },
             });
             formModal.open();
