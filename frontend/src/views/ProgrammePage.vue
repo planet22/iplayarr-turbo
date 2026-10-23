@@ -299,8 +299,17 @@ const newestFirst = (a, b) => {
     return (b.episode ?? -1) - (a.episode ?? -1);
 };
 
-// Newest first unless flipped with the sort button.
-const oldestFirst = ref(false);
+// Newest first unless flipped with the sort button; the choice is remembered per browser (storage can
+// be unavailable, e.g. in a private window, so every access is guarded).
+const SORT_KEY = 'iplayarr.programmeOldestFirst';
+const readOldestFirst = () => {
+    try {
+        return localStorage.getItem(SORT_KEY) === 'true';
+    } catch {
+        return false;
+    }
+};
+const oldestFirst = ref(readOldestFirst());
 const episodes = computed(() =>
     [...(programme.value?.seasons[selected.value]?.episodes ?? [])].sort(oldestFirst.value ? (a, b) => newestFirst(b, a) : newestFirst)
 );
@@ -313,6 +322,11 @@ const sortTitle = computed(() => (oldestFirst.value ? 'Oldest first - click for 
 const toggleSort = () => {
     oldestFirst.value = !oldestFirst.value;
     episodePage.value = 1;
+    try {
+        localStorage.setItem(SORT_KEY, String(oldestFirst.value));
+    } catch {
+        // Not persisted - the toggle still works for this session.
+    }
 };
 const seasonDownloadLabel = computed(
     () => `Download ${programme.value.seasons.length > 1 ? seasonLabel(programme.value.seasons[selected.value]) : 'all'} (${episodes.value.length})`
