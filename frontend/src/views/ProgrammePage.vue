@@ -158,13 +158,24 @@
                 </TablePagination>
                 <div class="episodeList">
                     <div v-for="episode in pagedEpisodes" :key="episode.pid" class="episodeRow">
-                        <!-- The thumbnail opens the same episode popup as the download button. -->
-                        <img
-                            v-if="episode.thumbnail" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
-                            loading="lazy" role="button" tabindex="0" @error="hideBrokenImage" @click="download(episode)" @keydown.enter="download(episode)"
-                        />
-                        <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="download(episode)" @keydown.enter="download(episode)">
-                            <font-awesome-icon :icon="['fas', 'tv']" />
+                        <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
+                        <div class="episodeThumbWrap">
+                            <img
+                                v-if="episode.thumbnail" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
+                                loading="lazy" role="button" tabindex="0" @error="hideBrokenImage" @click="download(episode)" @keydown.enter="download(episode)"
+                            />
+                            <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="download(episode)" @keydown.enter="download(episode)">
+                                <font-awesome-icon :icon="['fas', 'tv']" />
+                            </div>
+                            <div class="overlay">
+                                <button v-if="canPlay" class="clickable" title="Play Video" @click="play(episode)">
+                                    <font-awesome-icon :icon="['fas', 'play']" />
+                                </button>
+                                <button class="clickable" title="Download" @click="download(episode)">
+                                    <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                                </button>
+                            </div>
+                            <QualityBadges :item="episode" class="thumbBadges" />
                         </div>
                         <div class="episodeInfo">
                             <div class="episodeTitle">
@@ -191,14 +202,6 @@
                                 <span v-if="episode.firstBroadcast">{{ formatDate(episode.firstBroadcast) }}</span>
                             </div>
                         </div>
-                        <div class="episodeActions">
-                            <button v-if="canPlay" class="clickable" title="Play Video" @click="play(episode)">
-                                <font-awesome-icon :icon="['fas', 'play']" />
-                            </button>
-                            <button class="clickable" title="Download" @click="download(episode)">
-                                <font-awesome-icon :icon="['fas', 'cloud-download']" />
-                            </button>
-                        </div>
                     </div>
                 </div>
                 <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length" />
@@ -214,6 +217,7 @@ import { useRoute, useRouter } from 'vue-router';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
+import QualityBadges from '@/components/common/QualityBadges.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
@@ -867,19 +871,37 @@ const duplicatesBannerDownload = computed(
     padding: 12px 0;
     border-bottom: 1px solid @toolbar-background-color;
 
+    .episodeThumbWrap {
+        position: relative;
+        flex: 0 0 240px;
+        width: 240px;
+
+        @media (max-width: @mobile-breakpoint) {
+            flex-basis: 200px;
+            width: 200px;
+        }
+
+        // Phones: the thumbnail runs the full width above the text.
+        @media (max-width: 600px) {
+            flex-basis: auto;
+            width: 100%;
+        }
+    }
+
     img,
     .episodeNoThumb {
-        flex: 0 0 160px;
-        width: 160px;
+        display: block;
+        width: 100%;
         aspect-ratio: 16 / 9;
         object-fit: cover;
         border-radius: 4px;
         background-color: @nav-background-color;
+    }
 
-        @media (max-width: @mobile-breakpoint) {
-            flex-basis: 100px;
-            width: 100px;
-        }
+    @media (max-width: 600px) {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
     }
 
     .episodeNoThumb {
@@ -945,22 +967,35 @@ const duplicatesBannerDownload = computed(
         }
     }
 
-    .episodeActions {
-        display: flex;
-        flex-shrink: 0;
-        gap: 8px;
+    // Same look as a programme card: bottom right, the subtitles icon in the corner; the buttons show on hover.
+    .thumbBadges {
+        position: absolute;
+        bottom: 6px;
+        right: 6px;
+    }
 
-        @media (max-width: @mobile-breakpoint) {
-            flex-direction: column;
-        }
+    .overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        border-radius: 4px;
+        background-color: rgba(0, 0, 0, 0.55);
+        opacity: 0;
+        transition: opacity 150ms;
+        // Only the buttons catch clicks; the rest of the thumbnail still opens the episode popup.
+        pointer-events: none;
 
         button {
+            pointer-events: auto;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 0;
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             border: 1px solid @settings-button-border-color;
             background-color: @settings-button-background-color;
@@ -971,6 +1006,32 @@ const duplicatesBannerDownload = computed(
                 border-color: @brand-color;
                 color: @on-brand-color;
             }
+        }
+    }
+
+    .episodeThumbWrap:hover .overlay,
+    .episodeThumbWrap:focus-within .overlay {
+        opacity: 1;
+    }
+
+    // Touch devices have no hover, so keep the buttons reachable, with the badges above them.
+    @media (hover: none) {
+        .overlay {
+            opacity: 1;
+            align-items: flex-end;
+            justify-content: flex-end;
+            padding: 6px;
+            background: none;
+
+            button {
+                width: 34px;
+                height: 34px;
+                opacity: 0.9;
+            }
+        }
+
+        .thumbBadges {
+            bottom: 46px;
         }
     }
 }

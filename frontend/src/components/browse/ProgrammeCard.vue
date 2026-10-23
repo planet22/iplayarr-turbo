@@ -284,8 +284,12 @@ const statusBadges = computed(() => {
         }
     }
 
-    // Touch devices have no hover, so keep the actions reachable.
+    // Touch devices have no hover, so keep the actions reachable (the badges move up out of their way).
     @media (hover: none) {
+        .thumb:has(.overlay) .thumbBadges {
+            bottom: 46px;
+        }
+
         .overlay {
             opacity: 1;
             align-items: flex-end;
