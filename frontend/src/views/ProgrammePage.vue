@@ -110,14 +110,19 @@
         <div class="browsePage">
             <EmptyState v-if="programme.seasons.length === 0" icon="film" title="No episodes are currently available" hint="They may not be on iPlayer right now." />
             <template v-else>
-                <div v-if="programme.seasons.length > 1" class="seasonTabs">
+                <div v-if="programme.seasons.length > 1" class="seasonTabs" role="group" aria-label="Series">
+                    <span class="seasonCaption">Series</span>
                     <button
                         v-for="(season, index) in programme.seasons"
                         :key="index"
                         :class="['clickable', 'seasonTab', index === selected ? 'active' : '']"
+                        :title="seasonLabel(season)"
+                        :aria-label="seasonLabel(season)"
                         @click="selectSeason(index)"
                     >
-                        {{ seasonLabel(season) }}
+                        <font-awesome-icon v-if="season.series === 0" :icon="['fas', 'star']" />
+                        <font-awesome-icon v-else-if="season.series == null" :icon="['fas', 'list']" />
+                        <template v-else>{{ season.series }}</template>
                     </button>
                 </div>
                 <div v-if="loadingMore" class="seasonActions">
@@ -313,7 +318,8 @@ const toggleSort = () => {
 const seasonDownloadLabel = computed(
     () => `Download ${programme.value.seasons.length > 1 ? seasonLabel(programme.value.seasons[selected.value]) : 'all'} (${episodes.value.length})`
 );
-const isMobile = useIsMobile();
+// Below this the pager fills the row, so the sort and series download sit on a row of their own.
+const isMobile = useIsMobile('(max-width: 600px)');
 
 // Episode descriptions are clamped to three lines; a "... more" link (or a tap on the text) opens the rest.
 const openDescriptions = reactive({});
@@ -736,7 +742,7 @@ const duplicatesBannerDownload = computed(
         gap: 6px;
     }
 
-    @media (max-width: @mobile-breakpoint) {
+    @media (max-width: 600px) {
         justify-content: stretch;
         gap: 6px;
 
@@ -758,7 +764,7 @@ const duplicatesBannerDownload = computed(
             background-color: @settings-button-hover-background-color;
         }
 
-        @media (max-width: @mobile-breakpoint) {
+        @media (max-width: 600px) {
             padding: 9px 14px;
         }
     }
@@ -789,8 +795,22 @@ const duplicatesBannerDownload = computed(
     gap: 6px;
     margin-bottom: 1rem;
 
+    .seasonCaption {
+        align-self: center;
+        margin-right: 4px;
+        font-size: 13px;
+        color: @subtle-text-color;
+    }
+
+    // Every tab the same size: a number (or an icon for Specials / Episodes), full name on hover.
     .seasonTab {
-        padding: 6px 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 42px;
+        height: 36px;
+        padding: 0;
+        font-weight: 600;
         border-radius: 4px;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
