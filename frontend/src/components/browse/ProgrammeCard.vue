@@ -81,11 +81,12 @@ const onCardClick = () => {
 
 const { canPlay, play, download } = useBrowseActions();
 const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === 'MOVIE');
-// TV or film, plus what the Programme / Series label said when the card is a whole show or series.
+// TV or film, plus whether the card is a whole programme, a series or a single episode.
 const kindBadges = computed(() => {
     const badges = [isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
     if (props.item.kind === 'brand') badges.push({ icon: 'clapperboard', label: 'Programme' });
     else if (props.item.kind === 'series') badges.push({ icon: 'layer-group', label: 'Series' });
+    else badges.push({ icon: 'circle-play', label: 'Episode' });
     return badges;
 });
 
@@ -229,6 +230,8 @@ const statusBadges = computed(() => {
         height: 20px;
         border-radius: 3px;
         background-color: rgba(0, 0, 0, 0.7);
+        // A faint rim so the chip still reads over a dark poster.
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
         color: #fff;
         font-size: 11px;
 
