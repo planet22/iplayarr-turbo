@@ -17,8 +17,10 @@
                 </span>
             </span>
             <!-- Compact mode: a tiny icon for what it is (TV, film, series) instead of the Programme / Series label. -->
-            <span v-if="iconBadges" class="kindIcon" role="img" :title="kindLabel" :aria-label="kindLabel">
-                <font-awesome-icon :icon="['fas', kindIcon]" />
+            <span v-if="iconBadges" class="kindIcons">
+                <span v-for="badge in kindBadges" :key="badge.label" class="kindIcon" role="img" :title="badge.label" :aria-label="badge.label">
+                    <font-awesome-icon :icon="['fas', badge.icon]" />
+                </span>
             </span>
             <span v-else-if="item.kind !== 'episode'" class="kind">{{ item.kind === 'brand' ? 'Programme' : 'Series' }}</span>
             <span v-if="selectable" class="selectBadge" aria-hidden="true">
@@ -79,11 +81,12 @@ const onCardClick = () => {
 
 const { canPlay, play, download } = useBrowseActions();
 const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === 'MOVIE');
-const kindIcon = computed(() => (props.item.kind === 'series' ? 'layer-group' : isMovie.value ? 'film' : 'tv'));
-const kindLabel = computed(() => {
-    if (props.item.kind === 'series') return 'Series';
-    if (isMovie.value) return 'Film';
-    return props.item.kind === 'brand' ? 'Programme' : 'TV';
+// TV or film, plus what the Programme / Series label said when the card is a whole show or series.
+const kindBadges = computed(() => {
+    const badges = [isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
+    if (props.item.kind === 'brand') badges.push({ icon: 'clapperboard', label: 'Programme' });
+    else if (props.item.kind === 'series') badges.push({ icon: 'layer-group', label: 'Series' });
+    return badges;
 });
 
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
@@ -210,10 +213,15 @@ const statusBadges = computed(() => {
         color: #fff;
     }
 
-    .kindIcon {
+    .kindIcons {
         position: absolute;
         bottom: 6px;
         left: 6px;
+        display: flex;
+        gap: 4px;
+    }
+
+    .kindIcon {
         display: flex;
         align-items: center;
         justify-content: center;

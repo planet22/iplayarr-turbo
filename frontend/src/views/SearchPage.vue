@@ -28,6 +28,17 @@
             <button
                 v-if="viewMode === 'posters' && searchResults.length"
                 type="button"
+                :class="{ enabled: smallIcons }"
+                :aria-pressed="smallIcons"
+                :title="smallIcons ? 'Showing small TV / film / series icons on posters' : 'Show small TV / film / series icons on posters'"
+                aria-label="Small icons on posters"
+                @click="toggleSmallIcons"
+            >
+                <font-awesome-icon :icon="['fas', 'icons']" />
+            </button>
+            <button
+                v-if="viewMode === 'posters' && searchResults.length"
+                type="button"
                 :class="{ enabled: selectMode }"
                 :title="selectMode ? 'Done selecting' : 'Select results to download'"
                 :aria-label="selectMode ? 'Done selecting' : 'Select results to download'"
@@ -46,16 +57,7 @@
                     <font-awesome-icon :icon="['fas', 'circle-notch']" spin /> more arriving
                 </span>
             </span>
-            <div class="viewControls">
-                <button
-                    v-if="viewMode === 'posters'" type="button" :class="['clickable', 'smallIconsToggle', smallIcons ? 'on' : '']"
-                    :aria-pressed="smallIcons" :title="smallIcons ? 'Showing small TV / film icons' : 'Show small TV / film icons on posters'"
-                    aria-label="Small icons on posters" @click="toggleSmallIcons"
-                >
-                    <font-awesome-icon :icon="['fas', 'film']" />
-                </button>
-                <ViewToggle :model-value="viewMode" :modes="['table', 'posters']" @update:model-value="setViewMode" />
-            </div>
+            <ViewToggle :model-value="viewMode" :modes="['table', 'posters']" @update:model-value="setViewMode" />
         </div>
         <div v-if="typeOptions.length > 2 || channelOptions.length > 2" class="channelChips" role="group" aria-label="Filter results">
             <template v-if="typeOptions.length > 2">
@@ -675,31 +677,6 @@ watch(
                     margin-top: 4px;
                 }
             }
-        }
-    }
-}
-
-.viewControls {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-
-    .smallIconsToggle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        padding: 0;
-        border: 1px solid @settings-button-border-color;
-        border-radius: 4px;
-        background: transparent;
-        color: @subtle-text-color;
-
-        &.on {
-            background-color: @brand-color;
-            border-color: @brand-color;
-            color: @on-brand-color;
         }
     }
 }
