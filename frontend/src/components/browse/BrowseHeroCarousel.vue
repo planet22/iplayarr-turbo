@@ -23,7 +23,7 @@
                 aria-roledescription="slide"
                 :aria-label="`${index + 1} of ${items.length}`"
             >
-                <BrowseHero :item="item" :defer-artwork="Math.abs(index - active) > NEAR" />
+                <BrowseHero :item="item" :defer-artwork="Math.abs(index - active) > 1" />
             </div>
         </div>
 
@@ -52,7 +52,6 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BrowseHero from '@/components/browse/BrowseHero.vue';
-import { getThumbnailUrl } from '@/lib/utils';
 
 const props = defineProps({
     items: {
@@ -62,8 +61,6 @@ const props = defineProps({
 });
 
 const AUTOPLAY_MS = 8000;
-// Slides this close to the one in view have their artwork loaded (and decoded) ahead of time.
-const NEAR = 2;
 
 const root = ref(null);
 const track = ref(null);
@@ -85,21 +82,6 @@ const arrived = () => {
     heading = null;
     clearTimeout(headingGuard);
 };
-
-// The artwork is big. Decoding it only when a slide first scrolls into view stalls the slide animation (it
-// jumps, freezes, then slides), so the neighbours' images are fetched and decoded before they are needed.
-const warmed = new Set();
-const warmArtwork = (center) => {
-    for (let i = center - 1; i <= center + NEAR; i++) {
-        const url = props.items[i] && getThumbnailUrl(props.items[i].thumbnail);
-        if (!url || warmed.has(url)) continue;
-        warmed.add(url);
-        const image = new Image();
-        image.src = url;
-        image.decode?.().catch(() => {});
-    }
-};
-watch(active, warmArtwork, { immediate: true });
 
 const goTo = (index) => {
     const el = track.value;
@@ -227,8 +209,6 @@ onBeforeUnmount(() => {
     scroll-snap-align: start;
     // One swipe moves one slide, however fast.
     scroll-snap-stop: always;
-    // Each slide is its own composited layer, painted ahead of time, so scrolling only moves layers.
-    will-change: transform;
 
     // The carousel owns the corners and the gap below; the slide fills its frame.
     :deep(.browseHero) {
