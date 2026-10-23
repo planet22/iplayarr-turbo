@@ -400,7 +400,7 @@ const downloadBatch = async (batch, label) => {
     const sizes = batch.map((episode) => estimateSizeMb(globalSettings.value, { runtimeMinutes: episode.runtime }));
     const totalMb = sizes.reduce((sum, size) => sum + (size ?? 0), 0);
     const summary = describeDownload(globalSettings.value, { count: batch.length, totalMb: sizes.some((size) => size === undefined) ? undefined : totalMb });
-    if (!(await dialogService.confirm('Download', `Download ${batch.length} episodes of ${label}?`, summary.text))) return;
+    if (!(await dialogService.confirm('Download', `Download ${batch.length} episodes of ${label}?`, undefined, { note: { text: summary.text, tone: summary.tone } }))) return;
 
     downloadingSeason.value = true;
     const failed = [];

@@ -28,6 +28,7 @@ const dialogService = {
                     text,
                     subtext,
                     showCancel: true,
+                    ...(options.note ? { note: options.note } : {}),
                     ...(options.confirmLabel ? { confirmLabel: options.confirmLabel } : {}),
                     danger: !!options.danger,
                     onConfirm: () => {

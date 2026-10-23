@@ -17,6 +17,10 @@
         <p v-if="subtext" class="sub">
             {{ subtext }}
         </p>
+        <div v-if="note" :class="['noteBox', note.tone]" role="note">
+            <font-awesome-icon :icon="['fas', note.tone === 'warning' ? 'triangle-exclamation' : 'circle-info']" />
+            <span>{{ note.text }}</span>
+        </div>
         <div class="alertDialogSelect">
             <SelectInput v-if="options" v-model="selected" :options="computedOptions" />
         </div>
@@ -40,6 +44,8 @@ const props = defineProps({
         default: false,
     },
     options: Array,
+    // An optional callout under the text: { text, tone: 'info' | 'warning' }.
+    note: Object,
     confirmLabel: {
         type: String,
         default: 'OK',
@@ -55,6 +61,34 @@ const computedOptions = computed(() => {
 </script>
 
 <style lang="less" scoped>
+.noteBox {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 14px 0 18px;
+    padding: 10px 12px;
+    border-left: 4px solid @brand-color;
+    border-radius: 4px;
+    background-color: @nav-active-background-color;
+    font-size: 14px;
+    line-height: 1.4;
+
+    svg {
+        flex: none;
+        margin-top: 2px;
+        color: @brand-color;
+    }
+
+    &.warning {
+        border-left-color: @warn-color;
+        background-color: color-mix(in srgb, @warn-color 14%, transparent);
+
+        svg {
+            color: @warn-color;
+        }
+    }
+}
+
 p {
     &.sub {
         font-size: 14px;

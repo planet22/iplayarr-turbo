@@ -559,7 +559,7 @@ const multipleImmediateDownload = async () => {
             count: selectedResults.length,
             totalMb: sizes.some((size) => size === undefined) ? undefined : sizes.reduce((sum, size) => sum + size, 0),
         });
-        if (await dialogService.confirm('Download', `Do you want to download ${selectedResults.length} items?`, summary.text)) {
+        if (await dialogService.confirm('Download', `Do you want to download ${selectedResults.length} items?`, undefined, { note: { text: summary.text, tone: summary.tone } })) {
             loading.value = true;
             for (const item of selectedResults) {
                 await immediateDownload(item);

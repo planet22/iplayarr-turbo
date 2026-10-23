@@ -20,17 +20,21 @@ export const estimateSizeMb = (settings, { size, runtimeSeconds, runtimeMinutes 
 // What a download of `count` items will produce, from the Media Mode / Download Client / Output Format
 // settings. `totalMb` (optional) is the combined size when it is known.
 export const describeDownload = (settings, { count = 1, totalMb } = {}) => {
+    // The text never starts with "Download": it sits under a "Download ...?" question.
     if (isStrmMode(settings)) {
         return {
             strm: true,
-            text: count > 1 ? `Creates ${count} small .strm links - no video is downloaded.` : 'Creates a small .strm link - no video file is downloaded.',
+            tone: 'info',
+            text: count > 1 ? `Creates ${count} small .strm links instead of video files.` : 'Creates a small .strm link instead of a video file.',
         };
     }
     const format = settings?.OUTPUT_FORMAT === 'mkv' ? 'MKV' : 'MP4';
     const client = CLIENT_NAMES[settings?.DOWNLOAD_CLIENT] ?? 'the configured client';
-    const size = totalMb ? ` (about ${formatStorageSize(totalMb)}${count > 1 ? ' in total' : ''})` : '';
+    const size = totalMb ? `, about ${formatStorageSize(totalMb)}${count > 1 ? ' in total' : ''}` : '';
     return {
         strm: false,
-        text: `Downloads ${count > 1 ? `${count} full videos` : 'the full video'} as ${format} using ${client}${size}.`,
+        // Real files use disk space and bandwidth, so this one is flagged.
+        tone: 'warning',
+        text: `Saves ${count > 1 ? `${count} full videos` : 'the full video'} as ${format} using ${client}${size}.`,
     };
 };

@@ -15,8 +15,8 @@
             :title="`${searchResult.title}${searchResult.series && searchResult.episode ? ` - Series ${searchResult.series}, Episode ${searchResult.episode}` : ''}`"
             :subtitle="searchResult.episodeTitle"
         />
-        <div class="outputNote">
-            <font-awesome-icon :icon="['fas', summary.strm ? 'link' : 'file-video']" />
+        <div :class="['outputNote', summary.tone]">
+            <font-awesome-icon :icon="['fas', summary.strm ? 'link' : 'triangle-exclamation']" />
             <span>{{ summary.text }}</span>
         </div>
         <div class="infoSection">
@@ -87,6 +87,16 @@ const download = async () => {
     svg {
         flex: none;
         color: @brand-color;
+    }
+
+    // A real file download: same warning look as the batch confirmation.
+    &.warning {
+        border-left: 4px solid @warn-color;
+        background-color: color-mix(in srgb, @warn-color 14%, transparent);
+
+        svg {
+            color: @warn-color;
+        }
     }
 }
 </style>
