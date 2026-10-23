@@ -111,7 +111,6 @@
             <EmptyState v-if="programme.seasons.length === 0" icon="film" title="No episodes are currently available" hint="They may not be on iPlayer right now." />
             <template v-else>
                 <div v-if="programme.seasons.length > 1" class="seasonTabs" role="group" aria-label="Series">
-                    <span class="seasonCaption">Series</span>
                     <button
                         v-for="(season, index) in programme.seasons"
                         :key="index"
@@ -122,7 +121,7 @@
                     >
                         <font-awesome-icon v-if="season.series === 0" :icon="['fas', 'star']" />
                         <font-awesome-icon v-else-if="season.series == null" :icon="['fas', 'list']" />
-                        <template v-else>{{ season.series }}</template>
+                        <template v-else>S{{ season.series }}</template>
                     </button>
                 </div>
                 <div v-if="loadingMore" class="seasonActions">
@@ -795,19 +794,12 @@ const duplicatesBannerDownload = computed(
     gap: 6px;
     margin-bottom: 1rem;
 
-    .seasonCaption {
-        align-self: center;
-        margin-right: 4px;
-        font-size: 13px;
-        color: @subtle-text-color;
-    }
-
-    // Every tab the same size: a number (or an icon for Specials / Episodes), full name on hover.
+    // Every tab the same size: "S2" (or an icon for Specials / Episodes), full name on hover.
     .seasonTab {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 42px;
+        width: 46px;
         height: 36px;
         padding: 0;
         font-weight: 600;
