@@ -72,12 +72,9 @@ describe('searchSettingsService', () => {
             expect(await searchSettingsService.cacheSuffix()).toBe('');
         });
 
-        it('is empty for a manual search that behaves like an nzb one', async () => {
+        it('always separates manual searches, per setting combination', async () => {
             setConfig(base);
-            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('');
-        });
-
-        it('separates a manual search whose settings differ', async () => {
+            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual:V1|true');
             setConfig({ ...base, MANUAL_NATIVE_SEARCH_ENGINE: 'V2' });
             expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual:V2|true');
             setConfig({ ...base, MANUAL_NATIVE_SEARCH: 'false' });

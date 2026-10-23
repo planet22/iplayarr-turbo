@@ -60,14 +60,12 @@ class SearchSettingsService {
         };
     }
 
-    // Appended to the search cache key. Empty unless a manual search would behave differently from an
-    // NZB one, so identical settings keep sharing results and manual ones are never served to Sonarr.
+    // Appended to the search cache key. Manual searches match word prefixes, so they always get their
+    // own entries (per setting combination) and are never served to Sonarr/Radarr, or the other way round.
     async cacheSuffix(): Promise<string> {
         if (searchContext() !== 'manual') return '';
-        const fingerprint = ({ native, engine, matchAllWords }: EffectiveSearchSettings) =>
-            native ? `${engine}|${matchAllWords}` : 'get_iplayer';
-        const [manual, nzb] = await Promise.all([this.effective('manual'), this.effective('nzb')]);
-        return fingerprint(manual) === fingerprint(nzb) ? '' : `|manual:${fingerprint(manual)}`;
+        const { native, engine, matchAllWords } = await this.effective('manual');
+        return `|manual:${native ? `${engine}|${matchAllWords}` : 'get_iplayer'}`;
     }
 }
 

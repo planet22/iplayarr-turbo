@@ -9,6 +9,7 @@ import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
 import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/responses/iplayer/IPlayerNewSearchResponse';
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
+import { lunrSearchQuery } from '../../utils/lunrQuery';
 import { traceCandidate } from '../../utils/searchTrace';
 import { firstMissingTerm } from '../../utils/titleMatch';
 import { createNZBName, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
@@ -164,7 +165,7 @@ class NativeSearchService implements AbstractSearchService {
             return [];
         }
         try {
-            const hits = lunrIndex.search(sanitizedTerm);
+            const hits = lunrIndex.search(lunrSearchQuery(sanitizedTerm));
             const titles = new Map(results.map(({ id, title }) => [id, title]));
             const hitRefs = new Set(hits.map(({ ref }) => ref));
             for (const { id, title } of results) {
