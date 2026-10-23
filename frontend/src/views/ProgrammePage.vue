@@ -128,23 +128,23 @@
                 </div>
                 <!-- Phones: the pager takes the whole row, so the actions sit on a row of their own above it. -->
                 <div v-if="isMobile" class="seasonActions">
+                    <button class="clickable seasonSort" :title="sortTitle" :aria-label="sortTitle" @click="toggleSort">
+                        <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
+                    </button>
                     <button v-if="!duplicatesBannerDownload" class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
                         <font-awesome-icon :icon="['fas', 'cloud-download']" />
                         {{ seasonDownloadLabel }}
-                    </button>
-                    <button class="clickable seasonSort" :title="sortTitle" :aria-label="sortTitle" @click="toggleSort">
-                        <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
                     </button>
                 </div>
                 <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length">
                     <template v-if="!isMobile" #leading>
                         <div class="seasonActions inline">
+                            <button class="clickable seasonSort" :title="sortTitle" :aria-label="sortTitle" @click="toggleSort">
+                                <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
+                            </button>
                             <button class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
                                 <font-awesome-icon :icon="['fas', 'cloud-download']" />
                                 {{ seasonDownloadLabel }}
-                            </button>
-                            <button class="clickable seasonSort" :title="sortTitle" :aria-label="sortTitle" @click="toggleSort">
-                                <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
                             </button>
                         </div>
                     </template>
@@ -724,7 +724,8 @@ const duplicatesBannerDownload = computed(
 
 .seasonActions {
     display: flex;
-    align-items: center;
+    // Stretch (not centre) so the sort button is always exactly as tall as the download button.
+    align-items: stretch;
     justify-content: flex-end;
     gap: 14px;
     margin-bottom: 4px;
