@@ -93,7 +93,7 @@
                 field="STREAM_LIVE_DASH_1080"
                 :advanced="true"
                 name="Live 1080p (Experimental)"
-                tooltip="Play live channels in 1080p HEVC instead of 720p. Needs a player that supports HEVC, and has no subtitles. Clear Jellyfin's channel cache after changing."
+                tooltip="Play live channels in 1080p HEVC, not 720p. Needs a player with HEVC; no subtitles. Clear Jellyfin's channel cache after changing."
                 :error="validationErrors.config?.STREAM_LIVE_DASH_1080"
                 :options="liveTvOptions"
             />
@@ -103,7 +103,7 @@
                 field="LIVE_UHD_EVENT_FEEDS"
                 :advanced="true"
                 name="UHD Event Feeds"
-                tooltip="Show BBC's 4K event channels. They only have video during big events and need a UK IP and a player that handles 4K HEVC."
+                tooltip="Show BBC's 4K event channels. Only live during big events; needs a UK IP and a 4K HEVC player."
                 :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
                 :options="liveTvOptions"
             />

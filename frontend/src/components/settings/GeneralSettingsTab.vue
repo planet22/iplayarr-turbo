@@ -36,7 +36,7 @@
         field="NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
         :advanced="true"
         name="Requested Series Only (2.0)"
-        tooltip="Only fetch the season Sonarr/Radarr asks for, not the whole show. Faster for long-running shows. Not used with synonyms or Airdate Numbering."
+        tooltip="Only fetch the season Sonarr/Radarr asks for. Faster for long shows. Not used with synonyms or Airdate Numbering."
         :error="validationErrors.config?.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
         :options="trueOrFalse"
     />
@@ -104,14 +104,14 @@
         v-model="channelToolsEnabled"
         field="appearance:channelTools"
         name="Show Channel Editing Tools"
-        tooltip="Show the arrange, library, Live TV and customise buttons on the Channels page (rename, recolour, logos, add your own channels). Off keeps the page simple."
+        tooltip="Show the arrange, library, Live TV and customise buttons on the Channels page. Off keeps it simple."
         :options="trueOrFalse"
     />
     <SelectInput
         v-model="quickFindEnabled"
         field="appearance:quickFind"
         name="Show Quick Find Button"
-        tooltip="Show the lightning-bolt button in the top bar that opens quick find (jump to any page, setting or programme). Ctrl+K (Cmd+K on a Mac) opens it either way."
+        tooltip="Show the lightning-bolt button in the top bar for quick find. Ctrl+K (Cmd+K on a Mac) works either way."
         :options="trueOrFalse"
     />
     <SelectInput
@@ -129,7 +129,7 @@
         :advanced="true"
         field="appearance:topBar"
         name="Top Bar on Phones"
-        tooltip="Slim keeps the top bar (menu, search) on screen while you scroll. Hide on scroll gives it back when you scroll up."
+        tooltip="Slim keeps the top bar on screen while you scroll. Hide on scroll shows it again when you scroll up."
         :options="TOP_BAR_MODES"
     />
     <SelectInput

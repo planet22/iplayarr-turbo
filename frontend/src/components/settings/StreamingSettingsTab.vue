@@ -71,7 +71,7 @@
             field="STREAM_MODE"
             :advanced="true"
             name="Stream Mode"
-            tooltip="Direct (recommended) allows seeking. Progressive MKV needs ffmpeg installed and on the PATH, and cannot seek within an in-progress stream."
+            tooltip="Direct (recommended) allows seeking. Progressive MKV needs ffmpeg and cannot seek mid-stream."
             :error="validationErrors.config?.STREAM_MODE"
             :options="streamModes"
         />
@@ -122,6 +122,7 @@
         />
         <div v-if="appStatus.length" class="jellyfinStatus">
             <label>App Connections</label>
+            <div class="statusField">
             <ul class="statusList">
                 <li v-for="server in appStatus" :key="server.id">
                     <span class="statusName">
@@ -139,6 +140,9 @@
                         </span>
                     </li>
             </ul>
+            <!-- Takes the room the info icon takes beside each field, so the list ends where the dropdowns do. -->
+            <InfoTip text="" class="statusSpacer" aria-hidden="true" />
+            </div>
         </div>
         <InfoBar v-if="hasType('jellyfin') && jellyfinLoaded && !hasJellyfinApp" clazz="info">
             No Jellyfin server is configured. <router-link to="/apps">Add Jellyfin on the Apps page</router-link>.
@@ -169,7 +173,7 @@
             :advanced="true"
             type-override="number"
             name="Minimum Valid Before Action"
-            tooltip="Failures only count after this many links pass first, which shows BBC is up. This many failures in a row stops the check."
+            tooltip="Failures only count after this many links pass first (BBC is up). This many failures in a row stops the check."
             :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
         />
         <TextInput
@@ -187,6 +191,7 @@
 <script setup>
 import { computed, defineEmits, defineProps, inject, onMounted, ref } from 'vue';
 
+import InfoTip from '@/components/common/form/InfoTip.vue';
 import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
@@ -322,17 +327,30 @@ const showAdvanced = inject('settingsShowAdvanced');
         color: @table-text-color;
     }
 
-    // Same width as the selects beside it (their info icon takes the last 32px).
+    // The list sits where a select does, with a hidden info icon after it so both end at the same place.
+    .statusField {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: flex-start;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    .statusSpacer {
+        visibility: hidden;
+    }
+
     .statusList {
         flex: 1 1 auto;
+        min-width: 0;
+        box-sizing: border-box;
+        margin: 0;
 
         .statusType {
             margin-left: 8px;
             font-size: 12px;
             color: @subtle-text-color;
         }
-
-        margin-right: 32px;
     }
 
     @media (max-width: @mobile-breakpoint) {

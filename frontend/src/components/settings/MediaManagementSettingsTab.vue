@@ -37,7 +37,7 @@
         field="LIVE_STRM_DIR"
         :advanced="true"
         name="Live Channels Directory"
-        tooltip="Where live channel .strm files are saved. Point a Jellyfin library here. Leave blank to use the Complete Directory."
+        tooltip="Where live channel .strm files go. Point a Jellyfin library here. Blank uses the Complete Directory."
         :error="validationErrors.config?.LIVE_STRM_DIR"
     />
     <SettingsSubheading text="Quality" />
@@ -53,7 +53,7 @@
         v-model="config.EXTRA_VIDEO_QUALITIES"
         field="EXTRA_VIDEO_QUALITIES"
         name="Additional Qualities"
-        tooltip="Offer these extra qualities as separate results so Sonarr/Radarr can pick one. Leave empty to offer only the Video Quality."
+        tooltip="Offer these qualities as extra results so Sonarr/Radarr can pick one. Empty offers only the Video Quality."
         :error="validationErrors.config?.EXTRA_VIDEO_QUALITIES"
         :options="qualityProfiles"
     />
@@ -61,7 +61,7 @@
         v-model="config.EXTRA_VERSIONS"
         field="EXTRA_VERSIONS"
         name="Additional Versions"
-        tooltip="Offer these versions of a programme (where BBC has them) as separate results, named with the tag shown. Sonarr/Radarr do not detect them on their own: add a Custom Format matching the tag, e.g. AUDIO[ ._-]?DESCRIBED. Native downloads, get_iplayer downloads and native streaming only. Leave empty to offer only the standard version."
+        tooltip="Also list these versions, tagged in the name (e.g. AUDIO.DESCRIBED). Match the tag with a Sonarr/Radarr Custom Format."
         :error="validationErrors.config?.EXTRA_VERSIONS"
         :options="versionProfiles"
     />
@@ -79,7 +79,7 @@
         field="RELEASE_LANGUAGE"
         :advanced="true"
         name="Release Language"
-        tooltip="Adds a language tag like ENGLISH to release names. Use it if Sonarr/Radarr shows the language as Unknown and will not grab automatically."
+        tooltip="Adds a language tag like ENGLISH to release names. Use it if Sonarr/Radarr shows an Unknown language and won't grab."
         :error="validationErrors.config?.RELEASE_LANGUAGE"
         :options="releaseLanguages"
     />
@@ -90,7 +90,7 @@
         field="AIRDATE_NUMBERING"
         :advanced="true"
         name="Airdate Numbering"
-        tooltip="Number episodes by UK air date using TheTVDB, not iPlayer's own numbers, which often do not match. Uses iPlayer's numbers if nothing matches."
+        tooltip="Number episodes by UK air date (TheTVDB) instead of iPlayer's numbers. Falls back to iPlayer's if nothing matches."
         :error="validationErrors.config?.AIRDATE_NUMBERING"
         :options="trueOrFalse"
     />
