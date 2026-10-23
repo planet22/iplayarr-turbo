@@ -86,7 +86,7 @@ const kindBadges = computed(() => {
     const badges = [isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
     if (props.item.kind === 'brand') badges.push({ icon: 'clapperboard', label: 'Programme' });
     else if (props.item.kind === 'series') badges.push({ icon: 'layer-group', label: 'Series' });
-    else badges.push({ icon: 'circle-play', label: 'Episode' });
+    else badges.push({ icon: 'file-video', label: 'Episode' });
     return badges;
 });
 
