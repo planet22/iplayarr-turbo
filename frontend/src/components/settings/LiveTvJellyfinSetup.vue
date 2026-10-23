@@ -13,11 +13,10 @@
                 :options="serverOptions"
                 @update:model-value="config.LIVE_TV_JELLYFIN_APPS = $event"
             />
-            <div v-if="chosen.length" class="jellyfinTable">
-                <div class="jtRow jtHead">
-                    <span>Server</span>
-                    <span v-for="item in itemsFor('')" :key="item.key">{{ item.short }}</span>
-                </div>
+            <div v-if="chosen.length" class="jellyfinRow">
+              <div class="jtBox">
+              <div class="jtField">
+              <div class="jellyfinTable">
                 <template v-for="server in chosen" :key="server.id">
                     <div class="jtRow">
                         <span class="jtName">{{ server.name }}</span>
@@ -58,6 +57,11 @@
                     </div>
                     <InfoBar v-if="messages[server.id]" :clazz="messages[server.id].clazz" small>{{ messages[server.id].text }}</InfoBar>
                 </template>
+              </div>
+              <!-- Takes the room the info icon takes beside each field, so the card ends where the dropdown does. -->
+              <InfoTip text="" class="jtSpacer" aria-hidden="true" />
+              </div>
+              </div>
             </div>
         </template>
     </div>
@@ -66,6 +70,7 @@
 <script setup>
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue';
 
+import InfoTip from '@/components/common/form/InfoTip.vue';
 import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import { ipFetch } from '@/lib/ipFetch';
@@ -89,8 +94,8 @@ const chosen = computed(() => {
 
 const key = (serverId, what, method) => `${serverId}:${what}:${method}`;
 const itemsFor = (serverId) => [
-    { key: 'tuner', label: 'Channels (M3U tuner)', short: 'Channels', present: !!statuses[serverId]?.tuner },
-    { key: 'guide', label: 'Guide (XMLTV)', short: 'Guide', present: !!statuses[serverId]?.guide },
+    { key: 'tuner', label: 'Channels (M3U tuner)', present: !!statuses[serverId]?.tuner },
+    { key: 'guide', label: 'Guide (XMLTV)', present: !!statuses[serverId]?.guide },
 ];
 
 const report = (serverId, ok, text) => {
@@ -134,12 +139,46 @@ onMounted(async () => {
 </script>
 
 <style lang="less" scoped>
-// One row per server, one column per thing to set up: a tick says it is in Jellyfin, the buttons add/update or remove it.
-// Ends where the selects above end (a form row is 650px wide, its info icon takes the last 32px).
-.jellyfinTable {
-    max-width: 618px;
-    margin-right: 32px;
+// One card per server: its name on top, then a line for each thing to set up - a tick says it is in Jellyfin, the
+// buttons add/update or remove it. Same card at every width, laid out like a field so it lines up with the dropdown
+// above it: the label column (250px + 20px gap) is left empty, and a hidden info icon takes the icon's place.
+.jellyfinRow {
+    display: flex;
+    max-width: 650px;
     margin-bottom: 1.5rem;
+
+    &::before {
+        content: '';
+        flex: 0 0 270px;
+    }
+
+    .jtBox {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .jtField {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .jtSpacer {
+        visibility: hidden;
+    }
+
+    // Phones: the label sits above its field, so there is no label column.
+    @media (max-width: @mobile-breakpoint) {
+        &::before {
+            display: none;
+        }
+    }
+}
+
+.jellyfinTable {
+    flex: 1 1 auto;
+    min-width: 0;
+    box-sizing: border-box;
     border: 1px solid @input-border-color;
     border-radius: 4px;
     background-color: @input-background-color;
@@ -148,30 +187,14 @@ onMounted(async () => {
 
     .jtRow {
         display: grid;
-        grid-template-columns: minmax(90px, 1fr) repeat(2, 112px);
+        grid-template-columns: 1fr;
         align-items: center;
-        gap: 0 12px;
-        padding: 6px 12px;
+        gap: 6px;
+        padding: 10px 12px;
         border-top: 1px solid @input-border-color;
 
         &:first-child {
             border-top: 0;
-        }
-    }
-
-    .jtHead {
-        padding-top: 8px;
-        padding-bottom: 8px;
-        background-color: @nav-active-background-color;
-        color: @subtle-text-color;
-        font-size: 12px;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-
-        // Header text sits over the cell's tick, not the buttons.
-        span:not(:first-child) {
-            text-align: start;
         }
     }
 
@@ -191,7 +214,11 @@ onMounted(async () => {
         gap: 6px;
 
         .jtLabel {
-            display: none;
+            display: block;
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: 13px;
+            color: @table-text-color;
         }
     }
 
@@ -230,27 +257,5 @@ onMounted(async () => {
         }
     }
 
-    // Phones: the server name heads a card; its two items sit under it with their label beside the controls.
-    @media (max-width: @mobile-breakpoint) {
-        .jtHead {
-            display: none;
-        }
-
-        .jtRow {
-            grid-template-columns: 1fr;
-            gap: 6px;
-            padding: 10px 12px;
-        }
-
-        .jtCell {
-            .jtLabel {
-                display: block;
-                flex: 1 1 auto;
-                min-width: 0;
-                font-size: 13px;
-                color: @table-text-color;
-            }
-        }
-    }
 }
 </style>
