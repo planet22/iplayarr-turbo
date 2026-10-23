@@ -38,7 +38,7 @@ describe('videoVersion', () => {
         );
         const out = await expandVersionVariants([base, other], ad, hd, lookup);
         expect(out).toHaveLength(3);
-        expect(out[2]).toMatchObject({ pid: 'p1', version: 'audio-described', nzbName: 'T.S01E01.AUDIO.DESCRIBED.WEBDL.396p-BBC', quality: 'web', size: 360 });
+        expect(out[2]).toMatchObject({ pid: 'p1', version: 'audio-described', nzbName: 'T.S01E01.AUDIO.DESCRIBED.WEBDL.540p-BBC', quality: 'sd', size: 540 });
         expect(out[0]).toBe(base);
     });
 
@@ -53,13 +53,26 @@ describe('videoVersion', () => {
         expect(notCapped.quality).toBeUndefined();
     });
 
-    it('adds no variant when the lookup fails, and does not expand quality variants', async () => {
+    it('adds no variant when the lookup fails', async () => {
         const failing = jest.fn().mockRejectedValue(new Error('down'));
         expect(await expandVersionVariants([base], ad, hd, failing)).toEqual([base]);
-        const qualityVariant = { ...base, quality: 'fhd' };
-        const lookup = jest.fn(async () => [{ types: ['Audio Described'] }]);
-        const out = await expandVersionVariants([base, qualityVariant], ad, hd, lookup);
-        expect(out.filter((r) => r.version)).toHaveLength(1);
+    });
+
+    it('covers each additional quality, listing the ones that land on the same capped quality once', async () => {
+        const fhdVariant = { ...base, quality: 'fhd', nzbName: 'T.S01E01.WEBDL.1080p-BBC' };
+        const webVariant = { ...base, quality: 'web', nzbName: 'T.S01E01.WEBDL.396p-BBC' };
+        const lookup = jest.fn(async () => [{ types: ['Audio Described'] }, { types: ['Signed'] }]);
+        const out = await expandVersionVariants([base, fhdVariant, webVariant], [...ad, ...signed], hd, lookup);
+        const names = out.filter((r) => r.version).map((r) => r.nzbName);
+        expect(names).toEqual([
+            'T.S01E01.AUDIO.DESCRIBED.WEBDL.540p-BBC', // hd and fhd both land here
+            'T.S01E01.SIGNED.WEBDL.720p-BBC',
+            'T.S01E01.AUDIO.DESCRIBED.WEBDL.396p-BBC', // already below the cap
+            'T.S01E01.SIGNED.WEBDL.396p-BBC',
+            'T.S01E01.SIGNED.WEBDL.1080p-BBC',
+        ].sort((a, b) => names.indexOf(a) - names.indexOf(b)));
+        expect(names).toHaveLength(5);
+        expect(new Set(names).size).toBe(5);
         expect(lookup).toHaveBeenCalledTimes(1);
     });
 });

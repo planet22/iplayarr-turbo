@@ -3,7 +3,7 @@ import { qualityProfiles } from '../../types/QualityProfiles';
 import configService from '../configService';
 import queueService from '../queueService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from '../stream/bbcHttp';
-import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from '../stream/mediaSelectorPairs';
+import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, versionMediaSelectorPairs } from '../stream/mediaSelectorPairs';
 import { cached, vpidTtlMs } from '../stream/resolveCache';
 import { vpidCache } from '../stream/streamProbeCache';
 import { fetchVersionVpid } from '../stream/versionVpid';
@@ -65,14 +65,14 @@ function hlsHrefs(xml: string): string[] {
     return hrefs;
 }
 
-async function resolveMasterPlaylistUrl(vpid: string): Promise<string> {
+async function resolveMasterPlaylistUrl(vpid: string, version?: string): Promise<string> {
     const bodies: string[] = [];
-    for (const pair of orderedMediaSelectorPairs('native')) {
+    for (const pair of version ? versionMediaSelectorPairs : orderedMediaSelectorPairs('native')) {
         const xml = await fetchText(mediaSelectorUrl(pair, vpid));
         bodies.push(xml);
         const hrefs = hlsHrefs(xml);
         if (hrefs.length > 0) {
-            rememberMediaSelectorPair('native', pair);
+            if (!version) rememberMediaSelectorPair('native', pair);
             return resolveRedirect(hrefs[0]);
         }
     }
@@ -107,7 +107,7 @@ async function qualityChain(pid: string, jobId?: string): Promise<string[]> {
 export async function resolveDownloadUrl(pid: string, onStep: (message: string) => void = () => undefined, jobId?: string): Promise<string> {
     onStep('Looking up the programme on BBC iPlayer');
     const version = queueService.getFromQueue(pid, jobId)?.library?.version;
-    const masterUrl = await resolveMasterPlaylistUrl(await resolveVpid(pid, version));
+    const masterUrl = await resolveMasterPlaylistUrl(await resolveVpid(pid, version), version);
     const variants = parseVariants(await fetchText(masterUrl), masterUrl);
     if (variants.length === 0) {
         onStep('Stream offers a single quality, using it');

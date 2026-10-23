@@ -29,6 +29,14 @@ export function orderedMediaSelectorPairs(scope: string): MediaSelectorPair[] {
     return first ? [first, ...allMediaSelectorPairs.filter((pair) => pair !== first)] : allMediaSelectorPairs;
 }
 
+// A non-plain version (audio described...) is served at a higher resolution by `pc` than by `iptv-all`
+// (540p against 396p for audio described), so it is looked up there first. Nothing is remembered for it,
+// so the plain version's remembered pair is left alone.
+export const versionMediaSelectorPairs: MediaSelectorPair[] = [
+    ...allMediaSelectorPairs.filter(({ mediaSet }) => mediaSet === 'pc'),
+    ...allMediaSelectorPairs.filter(({ mediaSet }) => mediaSet !== 'pc'),
+];
+
 export function rememberMediaSelectorPair(scope: string, pair: MediaSelectorPair): void {
     lastWorking.set(scope, sameKey(pair));
 }

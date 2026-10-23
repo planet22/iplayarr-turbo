@@ -22,8 +22,9 @@ type VersionLookup = (pid: string) => Promise<{ types: string[] }[]>;
 
 // One extra result per enabled version that the programme actually has, named with the version's tag
 // (so Sonarr/Radarr can match it with a Custom Format) and tagged so the download fetches that
-// version. Only the primary-quality results are expanded: the version's own rendition is a single
-// quality, so repeating it for every extra quality would just list duplicates.
+// version. Every quality on offer (the primary and any Additional Qualities) gets one. A version BBC
+// serves lower than a quality (audio described stops at 540p) is named, sized and fetched at what it
+// really is, and the qualities that land on the same one are listed once.
 export async function expandVersionVariants(
     results: IPlayerSearchResult[],
     profiles: VersionProfile[],
@@ -31,33 +32,40 @@ export async function expandVersionVariants(
     lookup: VersionLookup = versionTypesFor
 ): Promise<IPlayerSearchResult[]> {
     if (!profiles.length) return results;
-    const base = results.filter((result) => !result.quality && !result.version);
+    const base = results.filter((result) => !result.version);
+    const pids = [...new Set(base.map(({ pid }) => pid))];
     const available = new Map<string, string>();
-    for (let i = 0; i < base.length; i += lookupBatchSize) {
+    for (let i = 0; i < pids.length; i += lookupBatchSize) {
         await Promise.all(
-            base.slice(i, i + lookupBatchSize).map(async ({ pid }) => {
+            pids.slice(i, i + lookupBatchSize).map(async (pid) => {
                 // A failed lookup just means no variant for that programme this time.
                 const versions = await lookup(pid).catch(() => []);
                 available.set(pid, versions.map((v) => v.types.join(' ')).join('\n'));
             })
         );
     }
-    const variants = base.flatMap((result) =>
-        profiles
+    const seen = new Set<string>();
+    const variants = base.flatMap((result) => {
+        const own = qualityProfiles.find(({ id }) => id === result.quality) ?? primary;
+        return profiles
             .filter((profile) => profile.match.test(available.get(result.pid) ?? ''))
-            .map((profile) => {
-                // A version served at a lower quality is named, sized and fetched at that quality.
+            .flatMap((profile) => {
                 const max = qualityProfiles.find(({ id }) => id === profile.maxQualityId);
-                const capped = max && parseInt(max.quality) < parseInt(primary.quality) ? max : undefined;
-                const name = result.nzbName && capped ? swapQualityInName(result.nzbName, primary.quality, capped.quality) : result.nzbName;
-                return {
-                    ...result,
-                    version: profile.id,
-                    ...(capped ? { quality: capped.id } : {}),
-                    nzbName: name ? insertLanguageTag(name, profile.tag) : name,
-                    size: result.size != null && capped ? Math.floor((result.size * capped.sizeFactor) / primary.sizeFactor) : result.size,
-                };
-            })
-    );
+                const capped = max && parseInt(max.quality) < parseInt(own.quality) ? max : undefined;
+                const key = `${result.pid}|${profile.id}|${(capped ?? own).id}`;
+                if (seen.has(key)) return [];
+                seen.add(key);
+                const name = result.nzbName && capped ? swapQualityInName(result.nzbName, own.quality, capped.quality) : result.nzbName;
+                return [
+                    {
+                        ...result,
+                        version: profile.id,
+                        ...(capped ? { quality: capped.id } : {}),
+                        nzbName: name ? insertLanguageTag(name, profile.tag) : name,
+                        size: result.size != null && capped ? Math.floor((result.size * capped.sizeFactor) / own.sizeFactor) : result.size,
+                    },
+                ];
+            });
+    });
     return [...results, ...variants];
 }

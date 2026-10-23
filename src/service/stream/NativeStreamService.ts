@@ -10,7 +10,7 @@ import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
-import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
+import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, versionMediaSelectorPairs } from './mediaSelectorPairs';
 import { cached, resolveTtlMs, vpidTtlMs } from './resolveCache';
 import { hqProbeCache, vpidCache } from './streamProbeCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
@@ -341,12 +341,13 @@ class NativeStreamService implements AbstractStreamService {
         // The common path: stay sequential rather than firing requests that would be thrown away,
         // but start with the pair that answered last time (see mediaSelectorPairs.ts).
         const bodies: string[] = [];
-        for (const pair of orderedMediaSelectorPairs('native')) {
+        const version = requestedVersion();
+        for (const pair of version ? versionMediaSelectorPairs : orderedMediaSelectorPairs('native')) {
             const xml = await fetchText(mediaSelectorUrl(pair, vpid));
             bodies.push(xml);
             const hrefs = hrefsFrom(xml);
             if (hrefs.length > 0) {
-                rememberMediaSelectorPair('native', pair);
+                if (!version) rememberMediaSelectorPair('native', pair);
                 return { hrefs };
             }
         }
