@@ -6,14 +6,19 @@
                     <img :src="logoUrl" alt="Logo" />
                     <p class="desktopOnly">iPlayarr Turbo</p>
                 </RouterLink>
-                <font-awesome-icon
-v-if="authState.user" class="mobileOnly clickable burgerMenu" :icon="['fas', 'bars']"
-                    @click="toggleLeftHandNav" />
+                <button
+                    v-if="authState.user" type="button" class="mobileOnly navIconButton burgerMenu" title="Menu"
+                    aria-label="Menu" @click="toggleLeftHandNav"
+                >
+                    <font-awesome-icon :icon="['fas', 'bars']" />
+                </button>
             </div>
         </div>
         <div class="middle">
             <div v-if="authState.user && route.name !== 'search'" class="searchPanel">
-                <font-awesome-icon :icon="['fas', 'search']" />
+                <button type="button" class="navIconButton" title="Search" aria-label="Search" @click="onSearchButton">
+                    <font-awesome-icon :icon="['fas', 'search']" />
+                </button>
                 <div class="searchWrap">
                     <input
 v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Download Url"
@@ -35,7 +40,7 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
         </div>
         <div class="right">
             <button
-                v-if="authState.user && quickFind.enabled" type="button" class="quickFind" title="Quick find (Ctrl+K)"
+                v-if="authState.user && quickFind.enabled" type="button" class="navIconButton quickFind" title="Quick find (Ctrl+K)"
                 aria-label="Quick find" @click="openCommandPalette"
             >
                 <font-awesome-icon :icon="['fas', 'bolt']" />
@@ -186,6 +191,12 @@ const search = async () => {
     }
 };
 
+// The magnifier is a real button: with something typed it searches, otherwise it opens the Search page.
+const onSearchButton = () => {
+    if (searchTerm.value.trim()) search();
+    else router.push({ name: 'search' });
+};
+
 const clearSearch = () => {
     searchTerm.value = '';
 };
@@ -197,6 +208,11 @@ defineExpose({ clearSearch });
 .NavBar {
     display: flex;
     padding: 0px 20px;
+
+    // Phones: every pixel of the bar goes to the search box.
+    @media (max-width: @mobile-breakpoint) {
+        padding: 0 8px;
+    }
     background-color: @nav-background-color;
     // A faint line along the bottom edge splits the bar from the page. Inset, so the bar's height (which
     // the layout offsets from) is unchanged; derived from the text colour so it works in every theme.
@@ -230,8 +246,8 @@ defineExpose({ clearSearch });
             @media (max-width: @mobile-breakpoint) {
                 // Takes all the room the logo and right-hand icons leave, so the search box is as wide as it can be.
                 flex: 1 1 0;
-                padding: 0 0.5rem;
-                margin-left: 0.5rem;
+                padding: 0 0.25rem;
+                margin-left: 0;
                 // Lets the search box give way on a narrow phone instead of pushing the buttons off the edge.
                 min-width: 0;
             }
@@ -239,7 +255,7 @@ defineExpose({ clearSearch });
             .searchPanel {
                 display: flex;
                 align-items: center;
-                gap: 10px;
+                gap: 4px;
                 height: 100%;
                 min-width: 0;
 
@@ -358,6 +374,11 @@ defineExpose({ clearSearch });
             justify-content: flex-end;
             gap: 16px;
 
+            // The icon buttons sit close together so the search box gets the room.
+            @media (max-width: @mobile-breakpoint) {
+                gap: 0;
+            }
+
             a {
                 width: 30px;
                 height: var(--navbar-height, 60px);
@@ -391,7 +412,7 @@ defineExpose({ clearSearch });
         }
 
         .burgerMenu {
-            margin-left: 1.5rem;
+            margin-left: 0.5rem;
         }
     }
 

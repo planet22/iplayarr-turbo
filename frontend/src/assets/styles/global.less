@@ -404,19 +404,24 @@ select:focus-visible {
 }
 
 // Top bar button that opens the Ctrl/Cmd+K quick find.
-.NavBar .quickFind {
-    margin-right: 8px;
-    padding: 5px 9px;
-    border: 1px solid @settings-button-border-color;
+// The top bar's icon buttons (menu, search, quick find) share one size and look.
+.NavBar .navIconButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
     border-radius: 6px;
     background: none;
     color: @primary-text-color;
     cursor: pointer;
 
     &:hover {
-        border-color: @brand-color;
+        background-color: @settings-button-hover-background-color;
         color: @brand-color;
-        background: none;
     }
 }
 
