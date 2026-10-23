@@ -102,3 +102,18 @@ describe('YTDLPDownloadService', () => {
     });
   });
 });
+
+describe('YTDLPDownloadService with a version', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('refuses a grab of another version, which yt-dlp cannot pick, without starting a process', async () => {
+    (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { version: 'audio-described' } });
+
+    await expect(ytdlpDownloadService.download('test-pid', '/fake/dir', 'job-1')).rejects.toThrow('yt-dlp cannot download audio described');
+
+    expect(queueService.getFromQueue).toHaveBeenCalledWith('test-pid', 'job-1');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+});

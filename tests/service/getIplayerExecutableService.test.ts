@@ -136,6 +136,29 @@ describe('GetIplayerExecutableService', () => {
             expect(result.args).toContain(`${mockDownloadDir}/${mockPid}`);
             expect(result.args).toContain(`--pid=${mockPid}`);
         });
+
+        describe('--versions', () => {
+            const versionArgs = async (library?: { version?: string }) => {
+                mockedConfigService.getParameter.mockImplementation((key: IplayarrParameter) =>
+                    Promise.resolve(key === IplayarrParameter.GET_IPLAYER_EXEC ? 'get_iplayer' : undefined)
+                );
+                (queueService.getFromQueue as jest.Mock).mockReturnValue(library ? { library } : undefined);
+                const { args } = await service.getAllDownloadParameters('p01abc', '/mock/dir', 'job-1');
+                return args.filter((arg) => arg.startsWith('--versions'));
+            };
+
+            it('asks get_iplayer for the audio described or signed version a queue entry is of', async () => {
+                expect(await versionArgs({ version: 'audio-described' })).toEqual(['--versions=audiodescribed']);
+                expect(await versionArgs({ version: 'signed' })).toEqual(['--versions=signed']);
+                expect(queueService.getFromQueue).toHaveBeenCalledWith('p01abc', 'job-1');
+            });
+
+            it('adds nothing for the standard version, an unknown one or no queue entry', async () => {
+                expect(await versionArgs({})).toEqual([]);
+                expect(await versionArgs({ version: 'bogus' })).toEqual([]);
+                expect(await versionArgs()).toEqual([]);
+            });
+        });
     });
 
     describe('getSearchParameters', () => {

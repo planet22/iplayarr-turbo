@@ -12,6 +12,7 @@ import { StreamClient } from '../../../src/types/enums/StreamClient';
 import { StreamMode } from '../../../src/types/enums/StreamMode';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { requestedQuality } from '../../../src/utils/qualityContext';
+import { requestedVersion } from '../../../src/utils/versionContext';
 
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn() } }));
@@ -209,5 +210,44 @@ describe('StreamEndpoint ?quality override', () => {
         const req = { ...makeReq('m0026fkl'), query: { pid: 'm0026fkl', quality: '../../x' } };
         await StreamEndpoint(req, makeRes());
         expect(seen).toBeUndefined();
+    });
+});
+
+describe('StreamEndpoint ?version override', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (configService.getParameter as jest.Mock).mockImplementation(async (param: IplayarrParameter) => {
+            if (param === IplayarrParameter.STREAM_CLIENT) return StreamClient.GET_IPLAYER;
+            if (param === IplayarrParameter.STREAM_MODE) return StreamMode.DIRECT;
+            return undefined;
+        });
+        (configService.getParameters as jest.Mock).mockResolvedValue([]);
+    });
+
+    it('serves a valid ?version with the native client, whatever client is configured, and makes it visible to it', async () => {
+        let seen: string | undefined;
+        (NativeStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedVersion();
+        });
+        const req = { ...makeReq('m00336jl'), query: { pid: 'm00336jl', version: 'audio-described' } };
+        await StreamEndpoint(req, makeRes());
+
+        expect(seen).toBe('audio-described');
+        expect(NativeStreamService.streamDirect).toHaveBeenCalled();
+        expect(GetIplayerStreamService.streamDirect).not.toHaveBeenCalled();
+        expect((streamSessionService.start as jest.Mock).mock.calls[0][2]).toBe(StreamClient.NATIVE);
+    });
+
+    it('ignores an unknown ?version and keeps the configured client', async () => {
+        let seen: string | undefined = 'unset';
+        (GetIplayerStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedVersion();
+        });
+        const req = { ...makeReq('m00336jl'), query: { pid: 'm00336jl', version: '../../x' } };
+        await StreamEndpoint(req, makeRes());
+
+        expect(seen).toBeUndefined();
+        expect(GetIplayerStreamService.streamDirect).toHaveBeenCalled();
+        expect(NativeStreamService.streamDirect).not.toHaveBeenCalled();
     });
 });

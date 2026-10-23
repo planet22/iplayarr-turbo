@@ -116,6 +116,55 @@ describe('JsonApiRoute', () => {
         });
     });
 
+    describe('versions on manual search results', () => {
+        const metadataFor = async (pid: string) => ({
+            programme: {
+                versions:
+                    pid === 'p1'
+                        ? [{ pid: 'o', types: ['Original version'] }, { pid: 'a', types: ['Dubbed Audio Described'] }, { pid: 's', types: ['Signed'] }]
+                        : [{ pid: 'o2', types: ['Original version'] }],
+            },
+        });
+
+        beforeEach(() => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockImplementation(metadataFor);
+            (statisticsService.addSearch as jest.Mock).mockResolvedValue(undefined);
+        });
+
+        it('marks /search results with the audio described and signed versions their programme has', async () => {
+            (searchFacade.search as jest.Mock).mockResolvedValue([
+                { pid: 'p1', title: 'One', type: 'TV' },
+                { pid: 'p2', title: 'Two', type: 'TV' },
+            ]);
+            const res = await request(app).get('/search').query({ q: 'x' });
+            expect(res.body[0].versions).toEqual(['audio-described', 'signed']);
+            expect(res.body[1]).not.toHaveProperty('versions');
+        });
+
+        it('marks each /search/stream batch before sending it, in order, and still finishes with done', async () => {
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async (_q: string, onBatch: (batch: unknown[]) => void) => {
+                onBatch([{ pid: 'p1', title: 'One', type: 'TV' }]);
+                onBatch([{ pid: 'p2', title: 'Two', type: 'TV' }]);
+                return [];
+            });
+            const res = await request(app).get('/search/stream').query({ q: 'x' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines).toHaveLength(3);
+            expect(lines[0][0]).toMatchObject({ pid: 'p1', versions: ['audio-described', 'signed'] });
+            expect(lines[1][0].pid).toBe('p2');
+            expect(lines[1][0]).not.toHaveProperty('versions');
+            expect(lines[2]).toEqual({ done: true });
+        });
+
+        it('still returns the results when BBC cannot be asked about versions', async () => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockRejectedValue(new Error('down'));
+            (searchFacade.search as jest.Mock).mockResolvedValue([{ pid: 'p1', title: 'One', type: 'TV' }]);
+            const res = await request(app).get('/search').query({ q: 'x' });
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual([{ pid: 'p1', title: 'One', type: 'TV' }]);
+        });
+    });
+
     describe('GET /details', () => {
         it('should return episode details', async () => {
             const mockDetails = [{ title: 'Test Show', pid: 'p01abc' }];

@@ -4,12 +4,14 @@ import https from 'https';
 
 import configService from '../../../src/service/configService';
 import getIplayerExecutableService from '../../../src/service/getIplayerExecutableService';
+import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import { attemptFhdUpgrade } from '../../../src/service/stream/experimental/bbcFhdUpgrade';
 import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 import service from '../../../src/service/stream/NativeStreamService';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
+import { runWithVersion } from '../../../src/utils/versionContext';
 
 jest.mock('http');
 jest.mock('https');
@@ -18,6 +20,7 @@ jest.mock('../../../src/service/getIplayerExecutableService', () => ({
     __esModule: true,
     default: { getQualityFallbackChain: jest.fn() },
 }));
+jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn() } }));
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn() } }));
 jest.mock('../../../src/service/stream/experimental/bbcFhdUpgrade', () => ({ attemptFhdUpgrade: jest.fn() }));
 jest.mock('../../../src/service/stream/streamProxyUtils');
@@ -543,6 +546,50 @@ describe('NativeStreamService', () => {
             route = withCaptions({ body: '<html>not captions' });
             await service.streamDirect('p1', subReq, res, 'sess');
             expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', subReq, res, 5, 'sess');
+        });
+    });
+
+    describe('a version', () => {
+        const req2: any = {};
+        const res2: any = {};
+        const mediaSelectorUrls = () =>
+            (https.get as jest.Mock).mock.calls.map((c) => c[0] as string).filter((u) => u.includes('mediaselector'));
+
+        beforeEach(() => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({
+                programme: { versions: [{ pid: 'orig', types: ['Original version'] }, { pid: 'adpid', types: ['Dubbed Audio Described'] }] },
+            });
+        });
+
+        it('streams the version\'s own vpid, found on the programme page rather than in playlist.json, asking pc first', async () => {
+            await runWithVersion('audio-described', () => service.streamDirect('pv1', req2, res2, 'sess'));
+            const urls = (https.get as jest.Mock).mock.calls.map((c) => c[0] as string);
+            expect(urls.some((u) => u.includes('/playlist.json'))).toBe(false);
+            expect(mediaSelectorUrls()[0]).toContain('/mediaset/pc/');
+            expect(mediaSelectorUrls()[0]).toContain('/vpid/adpid/');
+            expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req2, res2, 5, 'sess');
+        });
+
+        it('keeps the standard and the version of one programme apart, in the resolve cache and in the vpid cache', async () => {
+            await service.streamDirect('pv2', req2, res2);
+            await runWithVersion('audio-described', () => service.streamDirect('pv2', req2, res2));
+            await service.streamDirect('pv2', req2, res2);
+            const vpids = mediaSelectorUrls().map((u) => /\/vpid\/([^/]+)\//.exec(u)?.[1]);
+            expect(vpids).toEqual(['plain', 'adpid']);
+            clearResolveCache();
+            await runWithVersion('audio-described', () => service.streamDirect('pv2', req2, res2));
+            expect(iplayerDetailsService.getMetadata).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not remember the pc pair a version was answered by for the standard version', async () => {
+            await runWithVersion('audio-described', () => service.streamDirect('pv3', req2, res2));
+            await service.streamDirect('pv3', req2, res2);
+            expect(mediaSelectorUrls().filter((u) => u.includes('/vpid/plain/'))[0]).toContain('/mediaset/iptv-all/');
+        });
+
+        it('fails clearly when the programme has no such version', async () => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { versions: [{ pid: 'orig', types: ['Original version'] }] } });
+            await expect(runWithVersion('signed', () => service.streamDirect('pv4', req2, res2))).rejects.toThrow('pv4 has no signed version');
         });
     });
 });

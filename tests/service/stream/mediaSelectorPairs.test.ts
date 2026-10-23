@@ -4,6 +4,7 @@ import {
     mediaSelectorUrl,
     orderedMediaSelectorPairs,
     rememberMediaSelectorPair,
+    versionMediaSelectorPairs,
 } from '../../../src/service/stream/mediaSelectorPairs';
 
 describe('mediaSelectorPairs', () => {
@@ -53,5 +54,24 @@ describe('mediaSelectorPairs', () => {
         expect(url).toMatch(
             /^https:\/\/open\.live\.bbc\.co\.uk\/mediaselector\/5\/select\/version\/2\.0\/mediaset\/pc\/vpid\/p123\/format\/xml\?cb=\d+$/
         );
+    });
+});
+
+describe('versionMediaSelectorPairs', () => {
+    beforeEach(() => clearRememberedMediaSelectorPairs());
+
+    it('asks pc first (it serves a non-standard version at a higher resolution), then the rest in their usual order', () => {
+        expect(versionMediaSelectorPairs).toEqual([
+            { mediaSet: 'pc', version: 6 },
+            { mediaSet: 'pc', version: 5 },
+            { mediaSet: 'iptv-all', version: 6 },
+            { mediaSet: 'iptv-all', version: 5 },
+        ]);
+        expect(versionMediaSelectorPairs).toHaveLength(allMediaSelectorPairs.length);
+    });
+
+    it('is not changed by what the standard version remembers', () => {
+        rememberMediaSelectorPair('native', { mediaSet: 'iptv-all', version: 5 });
+        expect(versionMediaSelectorPairs[0]).toEqual({ mediaSet: 'pc', version: 6 });
     });
 });

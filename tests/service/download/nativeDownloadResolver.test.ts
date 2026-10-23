@@ -3,6 +3,7 @@ import { resolveDownloadUrl } from '../../../src/service/download/nativeDownload
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import queueService from '../../../src/service/queueService';
 import { fetchText, fetchTextWithStatus, resolveRedirect } from '../../../src/service/stream/bbcHttp';
+import { clearRememberedMediaSelectorPairs, orderedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 
 jest.mock('../../../src/service/stream/bbcHttp', () => ({
     ...jest.requireActual('../../../src/service/stream/bbcHttp'),
@@ -124,5 +125,45 @@ describe('resolveDownloadUrl with a version', () => {
         await resolveDownloadUrl('pver');
         expect((fetchText as jest.Mock).mock.calls[0][0]).toContain('/vpid/adpid/');
         expect(fetchTextWithStatus).not.toHaveBeenCalled();
+    });
+
+    const adMetadata = {
+        programme: { versions: [{ pid: 'orig', types: ['Original version'] }, { pid: 'adpid', types: ['Dubbed Audio Described'] }] },
+    };
+
+    it('asks the pc mediaset first for a version, and does not remember the pair that answered', async () => {
+        clearRememberedMediaSelectorPairs();
+        (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { version: 'audio-described' } });
+        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(adMetadata);
+        await resolveDownloadUrl('pver-pc');
+        expect((fetchText as jest.Mock).mock.calls[0][0]).toContain('/mediaset/pc/');
+        expect(orderedMediaSelectorPairs('native')[0]).toEqual({ mediaSet: 'iptv-all', version: 6 });
+    });
+
+    it('moves on to the next mediaset when pc has nothing for the version', async () => {
+        (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { version: 'audio-described' } });
+        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(adMetadata);
+        (fetchText as jest.Mock).mockImplementation(async (u: string) => {
+            if (u.includes('/mediaset/pc/')) return '<error id="selectionunavailable"/>';
+            return u.includes('mediaselector') ? selector : master;
+        });
+        await expect(resolveDownloadUrl('pver-fallback')).resolves.toBe('https://cdn/v720.m3u8');
+        const selectorUrls = (fetchText as jest.Mock).mock.calls.map((c) => c[0] as string).filter((u) => u.includes('mediaselector'));
+        expect(selectorUrls[0]).toContain('/mediaset/pc/');
+        expect(selectorUrls.some((u) => u.includes('/mediaset/iptv-all/'))).toBe(true);
+    });
+
+    it('still remembers the answering pair for the standard version', async () => {
+        clearRememberedMediaSelectorPairs();
+        (fetchTextWithStatus as jest.Mock).mockResolvedValue({
+            statusCode: 200,
+            body: JSON.stringify({ allAvailableVersions: [{ pid: 'plain', types: ['Original'] }] }),
+        });
+        (fetchText as jest.Mock).mockImplementation(async (u: string) => {
+            if (u.includes('/mediaset/iptv-all/')) return '<error id="selectionunavailable"/>';
+            return u.includes('mediaselector') ? selector : master;
+        });
+        await resolveDownloadUrl('pplain-remember');
+        expect(orderedMediaSelectorPairs('native')[0].mediaSet).toBe('pc');
     });
 });
