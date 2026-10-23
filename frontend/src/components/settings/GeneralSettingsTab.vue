@@ -119,8 +119,8 @@
         v-model="qualityBadgesEnabled"
         :advanced="true"
         field="appearance:qualityBadges"
-        name="Show HDR / UHD Badges"
-        tooltip="Show an HDR or Ultra HD badge where iPlayer lists it. It is only a label: iPlayarr streams HD at most."
+        name="Show Quality Badges"
+        tooltip="Mark HDR, Ultra HD, audio described and signed programmes where iPlayer lists them. HDR/UHD is only a label: iPlayarr streams HD at most."
         :options="trueOrFalse"
     />
     <SelectInput

@@ -59,13 +59,22 @@
             </span>
             <ViewToggle :model-value="viewMode" :modes="['table', 'posters']" @update:model-value="setViewMode" />
         </div>
-        <div v-if="typeOptions.length > 2 || channelOptions.length > 2" class="channelChips" role="group" aria-label="Filter results">
+        <div v-if="typeOptions.length > 2 || channelOptions.length > 2 || versionOptions.length > 1" class="channelChips" role="group" aria-label="Filter results">
             <template v-if="typeOptions.length > 2">
                 <button
                     v-for="option in typeOptions" :key="`type-${option}`" type="button"
                     :class="['chip', filter === option ? 'active' : '']" @click="selectFilter(option)"
                 >
                     {{ option === 'All' ? 'All types' : option }}
+                </button>
+                <span v-if="channelOptions.length > 2 || versionOptions.length > 1" class="chipDivider" aria-hidden="true"></span>
+            </template>
+            <template v-if="versionOptions.length > 1">
+                <button
+                    v-for="option in versionOptions" :key="`version-${option.key}`" type="button"
+                    :class="['chip', versionFilter === option.key ? 'active' : '']" @click="pickVersion(option.key)"
+                >
+                    <font-awesome-icon v-if="option.icon" :icon="['fas', option.icon]" /> {{ option.label }}
                 </button>
                 <span v-if="channelOptions.length > 2" class="chipDivider" aria-hidden="true"></span>
             </template>
@@ -138,6 +147,7 @@
                     </td>
                     <td class="text" @click="download(result)">
                         {{ result.title }}
+                        <QualityBadges :item="result" class="titleBadges" />
                         <div class="filename">{{ result.nzbName }}</div>
                     </td>
                     <td
@@ -212,6 +222,7 @@ import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import QualityBadges from '@/components/common/QualityBadges.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import ViewToggle from '@/components/common/ViewToggle.vue';
@@ -387,6 +398,7 @@ const runSearch = () => {
     closeSuggestions();
     filter.value = 'All';
     channelFilter.value = 'All';
+    versionFilter.value = 'All';
     router.push({ name: 'search', query: { searchTerm: searchInput.value } });
 };
 
@@ -402,11 +414,27 @@ const channelOptions = computed(() => [
     ...[...new Set(searchResults.value.map(({ channel }) => channel).filter(Boolean))].sort(),
 ]);
 
+// Only the versions some result actually has are offered.
+const versionLabels = [
+    { key: 'audio-described', label: 'Audio described', icon: 'audio-description' },
+    { key: 'signed', label: 'Signed', icon: 'sign-language' },
+];
+const versionFilter = ref('All');
+const versionOptions = computed(() => [
+    { key: 'All', label: 'All versions' },
+    ...versionLabels.filter(({ key }) => searchResults.value.some((result) => result.versions?.includes(key))),
+]);
+const pickVersion = (key) => {
+    versionFilter.value = key;
+    resultsPage.value = 1;
+};
+
 const filteredResults = computed(() => {
     return searchResults.value.filter(
-        ({ type, channel }) =>
+        ({ type, channel, versions }) =>
             (filter.value == 'All' || type == filter.value.toUpperCase()) &&
-            (channelFilter.value == 'All' || channel == channelFilter.value)
+            (channelFilter.value == 'All' || channel == channelFilter.value) &&
+            (versionFilter.value == 'All' || versions?.includes(versionFilter.value))
     );
 });
 
@@ -481,6 +509,7 @@ const posterItems = computed(() =>
         channel: result.channel,
         pubDate: result.pubDate,
         nzbName: result.nzbName,
+        versions: result.versions,
         thumbnail: thumbnails.value[result.pid],
         result,
     }))
@@ -498,6 +527,7 @@ watch(
             const abort = (searchAbort = new AbortController());
             filter.value = 'All';
             channelFilter.value = 'All';
+    versionFilter.value = 'All';
             loading.value = true;
             loadingMore.value = true;
             searchResults.value = [];
@@ -794,6 +824,10 @@ watch(
             cursor: default;
         }
     }
+}
+
+.titleBadges {
+    margin-left: 6px;
 }
 
 .chipDivider {

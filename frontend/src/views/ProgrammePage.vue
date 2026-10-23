@@ -79,10 +79,13 @@
                         v-if="subscription && !subscription.arrOnly"
                         class="clickable subscribeButton"
                         :disabled="subscribing"
+                        :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
                         @click="toggleArrWithBusy"
                     >
                         <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
-                        {{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}
+                        <!-- Phones: the half-width button is too narrow for the full label, which wrapped onto two lines. -->
+                        <span class="labelLong">{{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}</span>
+                        <span class="labelShort">{{ subscription.arr ? 'Unlink' : 'Sonarr/Radarr' }}</span>
                     </button>
                     <span
                         v-if="entry && entry.arr"
@@ -637,6 +640,10 @@ const duplicatesBannerDownload = computed(
     }
 }
 
+.labelShort {
+    display: none;
+}
+
 .subscribeRow {
     // Buttons keep their natural width; the gap is the same 10px between them in both directions.
     display: flex;
@@ -649,6 +656,14 @@ const duplicatesBannerDownload = computed(
     @media (max-width: 600px) {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+
+        .labelLong {
+            display: none;
+        }
+
+        .labelShort {
+            display: inline;
+        }
 
         > .subscribeButton {
             padding: 9px 8px;
