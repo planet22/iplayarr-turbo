@@ -1,5 +1,6 @@
 import configService from '../../../src/service/configService';
 import { resolveDownloadUrl } from '../../../src/service/download/nativeDownloadResolver';
+import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import queueService from '../../../src/service/queueService';
 import { fetchText, fetchTextWithStatus, resolveRedirect } from '../../../src/service/stream/bbcHttp';
 
@@ -10,6 +11,7 @@ jest.mock('../../../src/service/stream/bbcHttp', () => ({
     resolveRedirect: jest.fn(),
 }));
 jest.mock('../../../src/service/configService', () => ({ getParameter: jest.fn() }));
+jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn() } }));
 jest.mock('../../../src/service/queueService', () => ({ __esModule: true, default: { getFromQueue: jest.fn() } }));
 
 // 396p is offered twice, the lower bitrate listed first, as BBC does.
@@ -103,5 +105,24 @@ describe('resolveDownloadUrl', () => {
     it('explains why no stream was found', async () => {
         (fetchText as jest.Mock).mockResolvedValue('<error id="geolocation"/>');
         await expect(resolveDownloadUrl('p1')).rejects.toThrow('geolocation');
+    });
+});
+
+describe('resolveDownloadUrl with a version', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        (resolveRedirect as jest.Mock).mockImplementation(async (u: string) => u);
+        (fetchText as jest.Mock).mockImplementation(async (u: string) => (u.includes('mediaselector') ? selector : master));
+        (configService.getParameter as jest.Mock).mockResolvedValue('hd');
+    });
+
+    it('uses the version\'s own vpid, not the plain one from playlist.json', async () => {
+        (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { version: 'audio-described' } });
+        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({
+            programme: { versions: [{ pid: 'orig', types: ['Original version'] }, { pid: 'adpid', types: ['Dubbed Audio Described'] }] },
+        });
+        await resolveDownloadUrl('pver');
+        expect((fetchText as jest.Mock).mock.calls[0][0]).toContain('/vpid/adpid/');
+        expect(fetchTextWithStatus).not.toHaveBeenCalled();
     });
 });

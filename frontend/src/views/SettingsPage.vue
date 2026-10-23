@@ -31,6 +31,7 @@
         <MediaManagementSettingsTab
             v-if="activeTab == 'mediaManagement'"
             :quality-profiles="qualityProfiles"
+            :version-profiles="versionProfiles"
             :output-formats="outputFormats"
             :true-or-false="trueOrFalse"
             :nfo-write-modes="nfoWriteModes"
@@ -120,7 +121,7 @@ const TAB_KEYS = {
     ],
     mediaManagement: [
         'DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'LIVE_STRM_DIR', 'VIDEO_QUALITY', 'EXTRA_VIDEO_QUALITIES',
-        'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'OUTPUT_FORMAT',
+        'EXTRA_VERSIONS', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'OUTPUT_FORMAT',
         'MEDIA_MODE', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON',
     ],
     downloadClient: ['ACTIVE_LIMIT', 'DOWNLOAD_CLIENT', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS'],
@@ -196,6 +197,7 @@ provide('settingsShowAdvanced', showAdvanced);
 provide('infoTips', true);
 
 const qualityProfiles = ref([]);
+const versionProfiles = ref([]);
 const trueOrFalse = ref([
     { key: 'true', value: 'Enabled' },
     { key: 'false', value: 'Disabled' },
@@ -374,9 +376,10 @@ const oidcTested = ref(false);
 let oidcChannel;
 
 onMounted(async () => {
-    const [configResponse, qpResponse] = await Promise.all([
+    const [configResponse, qpResponse, vpResponse] = await Promise.all([
         ipFetch('json-api/config'),
         ipFetch('json-api/config/qualityProfiles'),
+        ipFetch('json-api/config/versionProfiles'),
     ]);
 
     config.value = configResponse.data;
@@ -387,6 +390,7 @@ onMounted(async () => {
         key: id,
         value: `${name} (${quality})`,
     }));
+    versionProfiles.value = vpResponse.data.map(({ id, name, tag }) => ({ key: id, value: `${name} (${tag})` }));
 
     watch(
         config,

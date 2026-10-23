@@ -48,7 +48,7 @@ describe('StrmDownloadService', () => {
             await strmDownloadService.postProcess('abc123', '/fake/dir');
 
             expect(configService.getParameter).toHaveBeenCalledWith('STREAM_KEY');
-            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'the-stream-key', undefined);
+            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'the-stream-key', undefined, undefined);
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 expect.stringContaining('stream.strm'),
                 'http://host:4404/api?mode=stream&pid=abc123&streamkey=the-stream-key',
@@ -64,7 +64,7 @@ describe('StrmDownloadService', () => {
             await strmDownloadService.postProcess('abc123', '/fake/dir', 0, 'job-2');
 
             expect(queueService.getFromQueue).toHaveBeenCalledWith('abc123', 'job-2');
-            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'k', 'web');
+            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'k', 'web', undefined);
         });
 
         it('bakes the queue entry\'s variant quality into the stream URL', async () => {
@@ -74,7 +74,17 @@ describe('StrmDownloadService', () => {
 
             await strmDownloadService.postProcess('abc123', '/fake/dir');
 
-            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'k', 'sd');
+            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'k', 'sd', undefined);
+        });
+
+        it('bakes the queue entry\'s version into the stream URL', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('k');
+            (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { version: 'audio-described' } });
+            (createStrmContent as jest.Mock).mockResolvedValue('url');
+
+            await strmDownloadService.postProcess('abc123', '/fake/dir');
+
+            expect(createStrmContent).toHaveBeenCalledWith('abc123', 'k', undefined, 'audio-described');
         });
     });
 });

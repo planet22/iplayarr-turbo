@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { requestedQuality } from '../../utils/qualityContext';
+import { requestedVersion } from '../../utils/versionContext';
 import configService from '../configService';
 import getIplayerExecutableService from '../getIplayerExecutableService';
 import loggingService from '../loggingService';
@@ -15,6 +16,7 @@ import { hqProbeCache, vpidCache } from './streamProbeCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
 import { loadSubtitleTrack, SubtitleTrack } from './subtitles/captionsSource';
+import { fetchVersionVpid } from './versionVpid';
 
 interface ProgrammeVersion {
     pid: string;
@@ -96,7 +98,7 @@ class NativeStreamService implements AbstractStreamService {
             ].map((parameter) => configService.getParameter(parameter))
         );
         // A per-request ?quality= override (qualityContext) steers the fixed-variant pick too.
-        const key = `native:${pid}:${settings.join('|')}:${requestedQuality() ?? ''}`;
+        const key = `native:${pid}:${settings.join('|')}:${requestedQuality() ?? ''}${requestedVersion() ? `:${requestedVersion()}` : ''}`;
         // The values just read are handed on rather than re-read for each step of the resolve.
         const options: ResolveOptions = {
             adaptive: (settings[0] ?? 'true') !== 'false',
@@ -199,6 +201,11 @@ class NativeStreamService implements AbstractStreamService {
         // A pid's versions rarely change, so this is cached much longer than the stream URL itself.
         // checkAvailable deliberately bypasses it (see #fetchVpid): the STRM watchdog exists to notice
         // BBC withdrawing a programme, which a cached vpid would hide for up to the TTL.
+        // A per-request ?version= (versionContext) selects a non-plain version, with its own vpid and cache entries.
+        const version = requestedVersion();
+        if (version) {
+            return cached(`vpid:${pid}:${version}`, vpidTtlMs, () => vpidCache.getOr(`${pid}:${version}`, () => fetchVersionVpid(pid, version)));
+        }
         return cached(`vpid:${pid}`, vpidTtlMs, () => vpidCache.getOr(pid, () => this.#fetchVpid(pid)));
     }
 

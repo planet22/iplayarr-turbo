@@ -50,6 +50,7 @@ const configService = {
             '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC',
         VIDEO_QUALITY: 'fhd',
         EXTRA_VIDEO_QUALITIES: '',
+        EXTRA_VERSIONS: '',
         AIRDATE_NUMBERING: 'false',
         RELEASE_LANGUAGE: 'none',
         SEARCH_MATCH_ALL_WORDS: 'true',

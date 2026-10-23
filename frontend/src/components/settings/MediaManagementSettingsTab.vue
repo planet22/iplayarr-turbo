@@ -57,6 +57,14 @@
         :error="validationErrors.config?.EXTRA_VIDEO_QUALITIES"
         :options="qualityProfiles"
     />
+    <MultiSelectInput
+        v-model="config.EXTRA_VERSIONS"
+        field="EXTRA_VERSIONS"
+        name="Additional Versions"
+        tooltip="Offer these versions of a programme (where BBC has them) as separate results, named with the tag shown. Sonarr/Radarr do not detect them on their own: add a Custom Format matching the tag, e.g. AUDIO[ ._-]?DESCRIBED. Native downloads, get_iplayer downloads and native streaming only. Leave empty to offer only the standard version."
+        :error="validationErrors.config?.EXTRA_VERSIONS"
+        :options="versionProfiles"
+    />
     <SelectInput
         v-model="config.OUTPUT_FORMAT"
         field="OUTPUT_FORMAT"
@@ -157,6 +165,10 @@ defineProps({
         required: true,
     },
     qualityProfiles: {
+        type: Array,
+        required: true,
+    },
+    versionProfiles: {
         type: Array,
         required: true,
     },

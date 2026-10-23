@@ -12,6 +12,7 @@ import { NewzNabAttr, NewzNabSearchResponse } from '../../types/responses/newzna
 import { withSearchTrace } from '../../utils/searchTrace';
 import { createNZBDownloadLink, getQualityProfile } from '../../utils/Utils';
 import { expandQualityVariants, parseExtraQualities } from '../../utils/videoQuality';
+import { expandVersionVariants, parseExtraVersions } from '../../utils/videoVersion';
 
 interface SearchRequest {
     q: string;
@@ -43,6 +44,7 @@ export default async (req: Request, res: Response) => {
         primaryQuality.id
     );
     results = expandQualityVariants(results, primaryQuality, extraQualities);
+    results = await expandVersionVariants(results, parseExtraVersions((await configService.getParameter(IplayarrParameter.EXTRA_VERSIONS)) as string));
 
     const historyItems: SearchHistoryResultItem[] = results.map(({ nzbName, title, type, size, pubDate, pid }) => ({
         title: nzbName ?? title,
@@ -76,7 +78,8 @@ export default async (req: Request, res: Response) => {
             return {
                 title: result.nzbName,
                 description: result.nzbName,
-                guid: `https://www.bbc.co.uk/iplayer/episodes/${result.pid}`,
+                // A version variant is its own release, so it gets its own guid (Sonarr history/blocklist).
+                guid: `https://www.bbc.co.uk/iplayer/episodes/${result.pid}${result.version ? `#${result.version}` : ''}`,
                 comments: `https://www.bbc.co.uk/iplayer/episodes/${result.pid}`,
                 size: result.size ? String(result.size * 1048576) : '2147483648',
                 category: categoriesForType(result.type),

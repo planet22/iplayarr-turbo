@@ -26,6 +26,10 @@ class YTDLPDownloadService implements AbstractDownloadService {
     }
 
     async download(pid: string, directory: string, jobId?: string): Promise<ChildProcess> {
+        // yt-dlp picks the programme version itself and can't be steered to another one.
+        if (queueService.getFromQueue(pid, jobId)?.library?.version) {
+            throw new Error('yt-dlp cannot download audio described or other versions - use the native or get_iplayer download client');
+        }
         const executable: SpawnExecutable = await this.#getExecutable();
         const videoQuality =
             queueService.getFromQueue(pid, jobId)?.library?.quality ??

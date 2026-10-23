@@ -22,6 +22,8 @@ export interface QueueLibraryMetadata {
     runtimeSeconds?: number;
     // Quality profile id this grab was made at, when it differs from VIDEO_QUALITY.
     quality?: string;
+    // Version profile id this grab is of (audio-described...), when not the plain version.
+    version?: string;
     // Synopsis, fetched best-effort from iplayerDetailsService at NFO-write time
     // (not carried through the NZB round-trip like the other fields) - populates
     // the .nfo <plot> tag.

@@ -10,6 +10,7 @@ import { LogLine, LogLineLevel } from '../types/LogLine';
 import { QueueEntry } from '../types/QueueEntry';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
+import { versionProfiles } from '../types/VersionProfiles';
 import { resolveInside, sanitizeFileName } from '../utils/pathSafety';
 import { requestedQuality } from '../utils/qualityContext';
 import { calculateSeasonAndEpisode, copyWithFallback, createNZBName, parseEpisodeDetailStrings } from '../utils/Utils';
@@ -50,6 +51,13 @@ export class GetIplayerExecutableService {
         };
     }
 
+    // A grab of a non-plain version (audio described...) tells get_iplayer which version to fetch.
+    #getVersionParams(pid: string, jobId?: string): string[] {
+        const versionId = queueService.getFromQueue(pid, jobId)?.library?.version;
+        const profile = versionProfiles.find(({ id }) => id === versionId);
+        return profile ? [`--versions=${profile.getIplayerVersion}`] : [];
+    }
+
     async #getQualityParam(pid?: string, jobId?: string): Promise<string> {
         const chain: string[] = await this.getQualityFallbackChain(pid, jobId);
         return `--tv-quality=${chain.join(',')}`;
@@ -77,6 +85,7 @@ export class GetIplayerExecutableService {
         const allArgs: string[] = [
             ...args,
             ...additionalParams,
+            ...this.#getVersionParams(pid, jobId),
             await this.#getQualityParam(pid, jobId),
             '--output',
             directory,

@@ -6,6 +6,7 @@ import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from
 import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from '../stream/mediaSelectorPairs';
 import { cached, vpidTtlMs } from '../stream/resolveCache';
 import { vpidCache } from '../stream/streamProbeCache';
+import { fetchVersionVpid } from '../stream/versionVpid';
 
 // Resolves a pid to the one media URL a download should fetch, using only BBC's public APIs. This is
 // independent of the streaming feature: no STREAM_* settings, no resolve caches (the URL is used
@@ -22,7 +23,11 @@ interface Variant {
     url: string;
 }
 
-function resolveVpid(pid: string): Promise<string> {
+function resolveVpid(pid: string, version?: string): Promise<string> {
+    // A non-plain version (audio described...) has its own vpid, cached apart from the plain one.
+    if (version) {
+        return cached(`vpid:${pid}:${version}`, vpidTtlMs, () => vpidCache.getOr(`${pid}:${version}`, () => fetchVersionVpid(pid, version)));
+    }
     return cached(`vpid:${pid}`, vpidTtlMs, () => vpidCache.getOr(pid, () => fetchVpid(pid)));
 }
 
@@ -101,7 +106,8 @@ async function qualityChain(pid: string, jobId?: string): Promise<string[]> {
 // `onStep` is told what is happening, for the download's log.
 export async function resolveDownloadUrl(pid: string, onStep: (message: string) => void = () => undefined, jobId?: string): Promise<string> {
     onStep('Looking up the programme on BBC iPlayer');
-    const masterUrl = await resolveMasterPlaylistUrl(await resolveVpid(pid));
+    const version = queueService.getFromQueue(pid, jobId)?.library?.version;
+    const masterUrl = await resolveMasterPlaylistUrl(await resolveVpid(pid, version));
     const variants = parseVariants(await fetchText(masterUrl), masterUrl);
     if (variants.length === 0) {
         onStep('Stream offers a single quality, using it');

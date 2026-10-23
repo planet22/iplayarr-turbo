@@ -12,6 +12,7 @@ import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { QueueEntry } from '../../types/QueueEntry';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { versionProfiles } from '../../types/VersionProfiles';
 import { VideoEventType } from '../../types/VideoEvent';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
 import { maskConfig, restoreConfig } from '../../utils/secretMask';
@@ -170,6 +171,10 @@ async function rewriteStrmKeys(
 
 router.get('/qualityProfiles', (_, res: Response) => {
     res.json(qualityProfiles);
+});
+
+router.get('/versionProfiles', (_, res: Response) => {
+    res.json(versionProfiles.map(({ id, name, tag }) => ({ id, name, tag })));
 });
 
 export default router;

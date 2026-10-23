@@ -26,6 +26,9 @@ export interface IPlayerSearchResult {
     // Set on extra-quality variants (EXTRA_VIDEO_QUALITIES): the profile id to download at. Unset
     // means the VIDEO_QUALITY setting.
     quality?: string;
+    // Set on version variants (EXTRA_VERSIONS): the version profile id (e.g. audio-described) to
+    // download. Unset means the plain version.
+    version?: string;
 }
 
 export interface IplayerSearchResultRequest {

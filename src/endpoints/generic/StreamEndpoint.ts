@@ -21,6 +21,7 @@ import { qualityProfiles } from '../../types/QualityProfiles';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { isValidPid } from '../../utils/pathSafety';
 import { requestedQuality, runWithQuality } from '../../utils/qualityContext';
+import { requestedVersion, runWithVersion } from '../../utils/versionContext';
 
 // Media-server library scans (ffprobe) hit .strm URLs on every scan. Probing doesn't need a
 // transcode - just enough of the stream to read its headers/codec info - so probes are always
@@ -56,7 +57,10 @@ async function buildSettingsSnapshot(client: StreamClient): Promise<Record<strin
 }
 
 async function getStreamService(): Promise<{ client: StreamClient; service: AbstractStreamService }> {
-    const client: StreamClient = (await configService.getParameter(IplayarrParameter.STREAM_CLIENT)) as StreamClient;
+    // Only the native client can pick another version (audio described...), so a request for one uses it.
+    const client: StreamClient = requestedVersion()
+        ? StreamClient.NATIVE
+        : ((await configService.getParameter(IplayarrParameter.STREAM_CLIENT)) as StreamClient);
     switch (client) {
         case StreamClient.YTDLP:
             return { client: StreamClient.YTDLP, service: YTDLPStreamService };
@@ -137,7 +141,7 @@ async function handleSubtitles(req: Request, res: Response): Promise<void> {
 }
 
 export default (req: Request, res: Response): Promise<void> =>
-    runWithQuality(req.query.quality, () => handleStream(req, res));
+    runWithQuality(req.query.quality, () => runWithVersion(req.query.version, () => handleStream(req, res)));
 
 async function handleStream(req: Request, res: Response): Promise<void> {
     const { pid, token } = req.query as any;

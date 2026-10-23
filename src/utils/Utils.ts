@@ -110,7 +110,7 @@ export function isLegacyMD5Hash(value: string): boolean {
 
 export async function createNZBDownloadLink(
     req: Request,
-    { pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds, quality }: IPlayerSearchResult,
+    { pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds, quality, version }: IPlayerSearchResult,
     apiKey: string,
     app?: string
 ): Promise<string> {
@@ -134,7 +134,8 @@ export async function createNZBDownloadLink(
         (channel ? `&channel=${encodeURIComponent(channel)}` : '') +
         (pubDate ? `&pubDate=${encodeURIComponent(pubDate.toISOString())}` : '') +
         (runtimeSeconds != null ? `&runtime=${encodeURIComponent(runtimeSeconds)}` : '') +
-        (quality ? `&quality=${encodeURIComponent(quality)}` : '');
+        (quality ? `&quality=${encodeURIComponent(quality)}` : '') +
+        (version ? `&version=${encodeURIComponent(version)}` : '');
     return `${baseUrl}/api?mode=nzb-download&pid=${encodeURIComponent(pid)}&nzbName=${encodeURIComponent(nzbName ?? '')}&type=${encodeURIComponent(type)}&apikey=${encodeURIComponent(apiKey)}${app ? `&app=${encodeURIComponent(app)}` : ''}${libraryParams}`;
 }
 
@@ -142,9 +143,9 @@ export async function createNZBDownloadLink(
 // queueService, not from an HTTP request), so the stream URL is built from the configured
 // STREAM_BASE_URL rather than derived per-request like createNZBDownloadLink above.
 // Uses STREAM_KEY, deliberately not API_KEY - see ApiRoute.ts's mode=stream branch for why.
-export async function createStrmContent(pid: string, streamKey: string, quality?: string): Promise<string> {
+export async function createStrmContent(pid: string, streamKey: string, quality?: string, version?: string): Promise<string> {
     const streamBaseUrl: string = (await configService.getParameter(IplayarrParameter.STREAM_BASE_URL)) as string;
-    return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${quality ? `&quality=${encodeURIComponent(quality)}` : ''}`;
+    return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${quality ? `&quality=${encodeURIComponent(quality)}` : ''}${version ? `&version=${encodeURIComponent(version)}` : ''}`;
 }
 
 // Inverse of createStrmContent, for the STRM Watchdog: returns the BBC pid a .strm file points at, or

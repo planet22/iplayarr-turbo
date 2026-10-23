@@ -158,6 +158,12 @@ describe('Utils', () => {
             );
         });
 
+        it('carries a version variant through as &version=', async () => {
+            await expect(Utils.createNZBDownloadLink(req, { ...base, version: 'audio-described' }, 'apikey')).resolves.toBe(
+                'http://localhost:4404/api?mode=nzb-download&pid=123&nzbName=test.nzb&type=MOVIE&apikey=apikey&title=Test%20Movie&version=audio-described'
+            );
+        });
+
         it('carries series/episode/episodeTitle/channel/pubDate through as extra query params', async () => {
             const tvResult: IPlayerSearchResult = {
                 ...base,
@@ -193,6 +199,14 @@ describe('Utils', () => {
 
             await expect(Utils.createStrmContent('m0026fkl', 'k', 'sd')).resolves.toBe(
                 'http://h:4404/api?mode=stream&pid=m0026fkl&streamkey=k&quality=sd'
+            );
+        });
+
+        it('appends a version when given', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('http://h:4404');
+
+            await expect(Utils.createStrmContent('m0026fkl', 'k', undefined, 'audio-described')).resolves.toBe(
+                'http://h:4404/api?mode=stream&pid=m0026fkl&streamkey=k&version=audio-described'
             );
         });
 
