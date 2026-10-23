@@ -85,11 +85,18 @@ const cycle = () => {
         }
     }
 
+    // The phone button matches the other top bar icons: same size, same hover highlight.
     .cycle {
         width: 34px;
         height: 34px;
+        border-radius: 6px;
         font-size: 16px;
         color: @primary-text-color;
+
+        &:hover {
+            background-color: @settings-button-hover-background-color;
+            color: @brand-color;
+        }
     }
 }
 
