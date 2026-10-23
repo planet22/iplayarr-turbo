@@ -1,7 +1,9 @@
 import { versionTypesFor } from '../service/stream/versionVpid';
 import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
+import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 import { VersionProfile, versionProfiles } from '../types/VersionProfiles';
 import { insertLanguageTag } from './Utils';
+import { swapQualityInName } from './videoQuality';
 
 // "audio-described,signed" -> the matching profiles, anything unknown dropped.
 export function parseExtraVersions(value: string | undefined): VersionProfile[] {
@@ -25,6 +27,7 @@ type VersionLookup = (pid: string) => Promise<{ types: string[] }[]>;
 export async function expandVersionVariants(
     results: IPlayerSearchResult[],
     profiles: VersionProfile[],
+    primary: QualityProfile,
     lookup: VersionLookup = versionTypesFor
 ): Promise<IPlayerSearchResult[]> {
     if (!profiles.length) return results;
@@ -42,12 +45,19 @@ export async function expandVersionVariants(
     const variants = base.flatMap((result) =>
         profiles
             .filter((profile) => profile.match.test(available.get(result.pid) ?? ''))
-            .map((profile) => ({
-                ...result,
-                version: profile.id,
-                nzbName: result.nzbName ? insertLanguageTag(result.nzbName, profile.tag) : result.nzbName,
-                size: result.size != null ? Math.max(1, Math.floor(result.size * profile.sizeFactor)) : result.size,
-            }))
+            .map((profile) => {
+                // A version served at a lower quality is named, sized and fetched at that quality.
+                const max = qualityProfiles.find(({ id }) => id === profile.maxQualityId);
+                const capped = max && parseInt(max.quality) < parseInt(primary.quality) ? max : undefined;
+                const name = result.nzbName && capped ? swapQualityInName(result.nzbName, primary.quality, capped.quality) : result.nzbName;
+                return {
+                    ...result,
+                    version: profile.id,
+                    ...(capped ? { quality: capped.id } : {}),
+                    nzbName: name ? insertLanguageTag(name, profile.tag) : name,
+                    size: result.size != null && capped ? Math.floor((result.size * capped.sizeFactor) / primary.sizeFactor) : result.size,
+                };
+            })
     );
     return [...results, ...variants];
 }

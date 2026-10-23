@@ -1,9 +1,13 @@
 import { IPlayerSearchResult, VideoType } from '../../src/types/IPlayerSearchResult';
+import { qualityProfiles } from '../../src/types/QualityProfiles';
 import { versionProfiles } from '../../src/types/VersionProfiles';
 import { expandVersionVariants, parseExtraVersions } from '../../src/utils/videoVersion';
 
 const base = { pid: 'p1', title: 'T', nzbName: 'T.S01E01.WEBDL.720p-BBC', size: 1000, type: VideoType.TV } as IPlayerSearchResult;
 const ad = versionProfiles.filter(({ id }) => id === 'audio-described');
+const signed = versionProfiles.filter(({ id }) => id === 'signed');
+const hd = qualityProfiles.find(({ id }) => id === 'hd')!;
+const mobile = qualityProfiles.find(({ id }) => id === 'mobile')!;
 
 describe('videoVersion', () => {
     it('parses enabled versions, dropping unknown ids', () => {
@@ -22,7 +26,7 @@ describe('videoVersion', () => {
 
     it('returns the results untouched, without any lookup, when no version is enabled', async () => {
         const lookup = jest.fn();
-        const out = await expandVersionVariants([base], [], lookup);
+        const out = await expandVersionVariants([base], [], hd, lookup);
         expect(out).toEqual([base]);
         expect(lookup).not.toHaveBeenCalled();
     });
@@ -32,18 +36,29 @@ describe('videoVersion', () => {
         const lookup = jest.fn(async (pid: string) =>
             pid === 'p1' ? [{ types: ['Original version'] }, { types: ['Dubbed Audio Described'] }] : [{ types: ['Original version'] }]
         );
-        const out = await expandVersionVariants([base, other], ad, lookup);
+        const out = await expandVersionVariants([base, other], ad, hd, lookup);
         expect(out).toHaveLength(3);
-        expect(out[2]).toMatchObject({ pid: 'p1', version: 'audio-described', nzbName: 'T.S01E01.AUDIO.DESCRIBED.WEBDL.720p-BBC', size: 200 });
+        expect(out[2]).toMatchObject({ pid: 'p1', version: 'audio-described', nzbName: 'T.S01E01.AUDIO.DESCRIBED.WEBDL.396p-BBC', quality: 'web', size: 360 });
         expect(out[0]).toBe(base);
+    });
+
+    it('keeps the name and quality for a version served at the same quality, or when the cap is not lower', async () => {
+        const lookup = jest.fn(async () => [{ types: ['Signed'] }, { types: ['Audio Described'] }]);
+        const [, sameQuality] = await expandVersionVariants([base], signed, hd, lookup);
+        expect(sameQuality).toMatchObject({ version: 'signed', nzbName: 'T.S01E01.SIGNED.WEBDL.720p-BBC', size: 1000 });
+        expect(sameQuality.quality).toBeUndefined();
+        const lowBase = { ...base, nzbName: 'T.S01E01.WEBDL.288p-BBC' };
+        const [, notCapped] = await expandVersionVariants([lowBase], ad, mobile, lookup);
+        expect(notCapped).toMatchObject({ nzbName: 'T.S01E01.AUDIO.DESCRIBED.WEBDL.288p-BBC', size: 1000 });
+        expect(notCapped.quality).toBeUndefined();
     });
 
     it('adds no variant when the lookup fails, and does not expand quality variants', async () => {
         const failing = jest.fn().mockRejectedValue(new Error('down'));
-        expect(await expandVersionVariants([base], ad, failing)).toEqual([base]);
+        expect(await expandVersionVariants([base], ad, hd, failing)).toEqual([base]);
         const qualityVariant = { ...base, quality: 'fhd' };
         const lookup = jest.fn(async () => [{ types: ['Audio Described'] }]);
-        const out = await expandVersionVariants([base, qualityVariant], ad, lookup);
+        const out = await expandVersionVariants([base, qualityVariant], ad, hd, lookup);
         expect(out.filter((r) => r.version)).toHaveLength(1);
         expect(lookup).toHaveBeenCalledTimes(1);
     });

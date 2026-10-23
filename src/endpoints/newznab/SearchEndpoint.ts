@@ -44,7 +44,7 @@ export default async (req: Request, res: Response) => {
         primaryQuality.id
     );
     results = expandQualityVariants(results, primaryQuality, extraQualities);
-    results = await expandVersionVariants(results, parseExtraVersions((await configService.getParameter(IplayarrParameter.EXTRA_VERSIONS)) as string));
+    results = await expandVersionVariants(results, parseExtraVersions((await configService.getParameter(IplayarrParameter.EXTRA_VERSIONS)) as string), primaryQuality);
 
     const historyItems: SearchHistoryResultItem[] = results.map(({ nzbName, title, type, size, pubDate, pid }) => ({
         title: nzbName ?? title,

@@ -111,9 +111,9 @@ describe('SearchEndpoint', () => {
         await SearchEndpoint(req as Request, res as Response);
 
         const items = (await parseStringPromise(sendMock.mock.calls[0][0])).rss.channel[0].item;
-        expect(items.map((i: any) => i.title[0])).toEqual(['Test.Show.S01E02.WEBDL.720p-BBC', 'Test.Show.S01E02.AUDIO.DESCRIBED.WEBDL.720p-BBC']);
+        expect(items.map((i: any) => i.title[0])).toEqual(['Test.Show.S01E02.WEBDL.720p-BBC', 'Test.Show.S01E02.AUDIO.DESCRIBED.WEBDL.396p-BBC']);
         expect(items.map((i: any) => i.guid[0])).toEqual(['https://www.bbc.co.uk/iplayer/episodes/xyz123', 'https://www.bbc.co.uk/iplayer/episodes/xyz123#audio-described']);
-        expect(Utils.createNZBDownloadLink).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ version: 'audio-described' }), 'mockkey', 'radarr');
+        expect(Utils.createNZBDownloadLink).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ version: 'audio-described', quality: 'web' }), 'mockkey', 'radarr');
         lookup.mockRestore();
         await configService.setParameter(IplayarrParameter.EXTRA_VERSIONS, '');
     });
