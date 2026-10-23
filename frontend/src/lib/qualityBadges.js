@@ -1,29 +1,39 @@
 import { reactive } from 'vue';
 
-// Whether Browse cards mark programmes that iPlayer lists as HDR / Ultra HD. A purely cosmetic,
-// per-browser preference (like the channel pill colours), off by default, and shared module-wide
-// since the same choice applies to every card and hero in the app.
+// Whether cards and rows mark programmes: HDR / Ultra HD, and the audio described and signed versions
+// (`enabled`), and, separately, subtitles (`subtitles`). Purely cosmetic, per-browser preferences (like the
+// channel pill colours), both on unless switched off, and shared module-wide since the same choice applies
+// to every card, row and hero in the app.
 const STORAGE_KEY = 'iplayarr.qualityBadges.enabled';
+const SUBTITLES_KEY = 'iplayarr.subtitleBadges.enabled';
 
-const loadEnabled = () => {
+const load = (key) => {
     try {
-        return localStorage.getItem(STORAGE_KEY) === 'true';
+        return localStorage.getItem(key) !== 'false';
     } catch {
-        return false;
+        return true;
     }
 };
 
-const state = reactive({ enabled: loadEnabled() });
+const state = reactive({ enabled: load(STORAGE_KEY), subtitles: load(SUBTITLES_KEY) });
+
+const save = (key, value) => {
+    try {
+        localStorage.setItem(key, String(value));
+    } catch {
+        // Best-effort; the preference just won't survive a reload.
+    }
+};
 
 export const useQualityBadges = () => {
     const setEnabled = (value) => {
         state.enabled = value;
-        try {
-            localStorage.setItem(STORAGE_KEY, String(value));
-        } catch {
-            // Best-effort; the preference just won't survive a reload.
-        }
+        save(STORAGE_KEY, value);
+    };
+    const setSubtitles = (value) => {
+        state.subtitles = value;
+        save(SUBTITLES_KEY, value);
     };
 
-    return { state, setEnabled };
+    return { state, setEnabled, setSubtitles };
 };

@@ -25,6 +25,7 @@ export function useAppearanceDraft() {
     const read = () => ({
         pillColors: pillColors.state.enabled,
         qualityBadges: qualityBadges.state.enabled,
+        subtitleBadges: qualityBadges.state.subtitles,
         channelTools: channelTools.state.enabled,
         topBar: topBar.state.mode,
         infoMessages: infoMessages.state.enabled,
@@ -51,6 +52,7 @@ export function useAppearanceDraft() {
     const apply = () => {
         pillColors.setEnabled(draft.pillColors);
         qualityBadges.setEnabled(draft.qualityBadges);
+        qualityBadges.setSubtitles(draft.subtitleBadges);
         channelTools.setEnabled(draft.channelTools);
         topBar.setMode(draft.topBar);
         infoMessages.setEnabled(draft.infoMessages);

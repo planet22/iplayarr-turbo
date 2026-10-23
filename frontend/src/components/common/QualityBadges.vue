@@ -1,18 +1,23 @@
 <template>
-    <span v-if="state.enabled && (item.uhd || item.hdr || hasVersion('audio-described') || hasVersion('signed'))" class="qualityBadges">
-        <span v-if="item.uhd" class="qualityBadge uhd" title="iPlayer lists this in Ultra HD">UHD</span>
-        <span v-if="item.hdr" class="qualityBadge hdr" title="iPlayer lists this in HDR">HDR</span>
-        <span v-if="hasVersion('audio-described')" class="qualityBadge version" title="Audio described version available" aria-label="Audio described version available">
+    <span v-if="showSubtitles || showQuality" class="qualityBadges">
+        <span v-if="showSubtitles" class="qualityBadge version" title="Subtitles" aria-label="Subtitles">
+            <font-awesome-icon :icon="['fas', 'closed-captioning']" />
+        </span>
+        <template v-if="state.enabled">
+            <span v-if="item.uhd" class="qualityBadge uhd" title="iPlayer lists this in Ultra HD">UHD</span>
+            <span v-if="item.hdr" class="qualityBadge hdr" title="iPlayer lists this in HDR">HDR</span>
+        </template>
+        <span v-if="state.enabled && hasVersion('audio-described')" class="qualityBadge version" title="Audio described version available" aria-label="Audio described version available">
             <font-awesome-icon :icon="['fas', 'audio-description']" />
         </span>
-        <span v-if="hasVersion('signed')" class="qualityBadge version" title="Signed version available" aria-label="Signed version available">
+        <span v-if="state.enabled && hasVersion('signed')" class="qualityBadge version" title="Signed version available" aria-label="Signed version available">
             <font-awesome-icon :icon="['fas', 'sign-language']" />
         </span>
     </span>
 </template>
 
 <script setup>
-import { defineProps } from 'vue';
+import { computed, defineProps } from 'vue';
 
 import { useQualityBadges } from '@/lib/qualityBadges';
 
@@ -24,6 +29,10 @@ const props = defineProps({
 });
 
 const { state } = useQualityBadges();
+// Subtitles are on an episode, not a series or programme; search results (no `kind`) are episodes.
+const isEpisode = computed(() => !props.item.kind || props.item.kind === 'episode');
+const showSubtitles = computed(() => state.subtitles && isEpisode.value);
+const showQuality = computed(() => state.enabled && (props.item.uhd || props.item.hdr || hasVersion('audio-described') || hasVersion('signed')));
 const hasVersion = (id) => !!props.item.versions?.includes(id);
 </script>
 

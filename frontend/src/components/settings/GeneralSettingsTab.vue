@@ -21,6 +21,15 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="showAdvanced"
+        v-model="subtitleBadgesEnabled"
+        :advanced="true"
+        field="appearance:subtitleBadges"
+        name="Show Subtitle Badge"
+        tooltip="Mark episodes with a subtitles icon. BBC gives most programmes subtitles, so this is not checked per programme."
+        :options="trueOrFalse"
+    />
+    <SelectInput
         v-if="showAdvanced && config.NATIVE_SEARCH == 'true'"
         v-model="config.NATIVE_SEARCH_ENGINE"
         field="NATIVE_SEARCH_ENGINE"
@@ -236,6 +245,10 @@ const pagingMinimumText = computed({
 const qualityBadgesEnabled = computed({
     get: () => String(appearance.qualityBadges),
     set: (value) => (appearance.qualityBadges = value === 'true'),
+});
+const subtitleBadgesEnabled = computed({
+    get: () => String(appearance.subtitleBadges),
+    set: (value) => (appearance.subtitleBadges = value === 'true'),
 });
 const channelToolsEnabled = computed({
     get: () => String(appearance.channelTools),
