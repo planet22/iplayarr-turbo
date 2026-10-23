@@ -6,6 +6,7 @@ import downloadFacade from '../../src/facade/downloadFacade';
 import configService from '../../src/service/configService';
 import GetIplayerDownloadService from '../../src/service/download/GetIplayerDownloadService';
 import NativeDownloadService from '../../src/service/download/NativeDownloadService';
+import StrmDownloadService from '../../src/service/download/StrmDownloadService';
 import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
@@ -164,6 +165,24 @@ describe('DownloadFacade', () => {
 
             expect(NativeDownloadService.download).toHaveBeenCalledWith('test-pid', '/downloads/test-pid');
             expect(GetIplayerDownloadService.download).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['strm', 'download', StrmDownloadService, 'STRM'],
+            ['download', 'strm', NativeDownloadService, DownloadClient.NATIVE],
+        ])('a queued %s override beats the %s Media Mode setting', async (override, setting, expected, client) => {
+            const values: Record<string, string> = { DOWNLOAD_DIR: '/downloads', DOWNLOAD_CLIENT: DownloadClient.NATIVE, MEDIA_MODE: setting };
+            (configService.getParameter as jest.Mock).mockImplementation((param: string) => Promise.resolve(values[param]));
+            const queueItem: any = { pid: 'test-pid', nzbName: 'x', mediaMode: override };
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(queueItem);
+            const child = { stdout: { on: jest.fn() }, stderr: { on: jest.fn() }, on: jest.fn() };
+            const spy = jest.spyOn(expected as any, 'download').mockResolvedValue(child as any);
+
+            await downloadFacade.download('test-pid');
+
+            expect(spy).toHaveBeenCalled();
+            expect(queueItem.client).toBe(client);
+            spy.mockRestore();
         });
 
         it('selects NativeDownloadService when DOWNLOAD_CLIENT is NATIVE', async () => {

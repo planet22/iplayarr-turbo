@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 
 import downloadFacade from '../facade/downloadFacade';
 import { DownloadDetails } from '../types/DownloadDetails';
+import { MediaMode } from '../types/enums/MediaMode';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
@@ -33,7 +34,9 @@ const queueService = {
         // actually is Sonarr/Radarr/Prowlarr handing this off via the SABnzbd-compatible
         // endpoint (AddFileEndpoint.ts) - every other caller forgetting to pass `source`
         // should fail safe into the shared directory, not the *arr-only one.
-        source: QueueEntrySource = QueueEntrySource.MANUAL
+        source: QueueEntrySource = QueueEntrySource.MANUAL,
+        // Makes this download a .strm link or a real file whatever the Media Mode setting says.
+        mediaMode?: MediaMode
     ): void => {
         // pid and nzbName end up in directory and file names (and the pid in upstream URLs and
         // process arguments), so they are checked at the one place everything enters the queue.
@@ -51,6 +54,7 @@ const queueService = {
             appId,
             library,
             source,
+            ...(mediaMode ? { mediaMode } : {}),
         };
         queue.push(queueEntry);
         activeJobs.set(pid, queueEntry.jobId as string);

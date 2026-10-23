@@ -105,10 +105,10 @@ onBeforeUnmount(() => {
 
 .connection-lost-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    // inset (not width/height 100% plus padding) so the padding sits inside the screen: on a phone the
+    // panel was pushed off the right edge.
+    inset: 0;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -124,6 +124,7 @@ onBeforeUnmount(() => {
     align-items: center;
     text-align: center;
     gap: 1rem;
+    box-sizing: border-box;
     width: 100%;
     max-width: 420px;
     padding: 2rem 1.5rem;

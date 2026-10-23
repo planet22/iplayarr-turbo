@@ -1,6 +1,7 @@
 import { ChildProcess } from 'child_process';
 
 import { DownloadDetails } from './DownloadDetails';
+import { MediaMode } from './enums/MediaMode';
 import { QueueEntrySource } from './enums/QueueEntrySource';
 import { VideoType } from './IPlayerSearchResult';
 import { QueueEntryStatus } from './responses/sabnzbd/QueueResponse';
@@ -45,6 +46,9 @@ export interface QueueEntry {
     // explicitly. Used to scope WRITE_NFO_STRM (NfoWriteMode).
     source?: QueueEntrySource;
     extension?: string;
+    // Overrides the Media Mode setting for this one download (a .strm link or a real file), chosen in the
+    // download confirmation. Unset follows the setting.
+    mediaMode?: MediaMode;
     // What fetched it: a DownloadClient value, or STRM when only a .strm pointer was written.
     client?: string;
     library?: QueueLibraryMetadata;

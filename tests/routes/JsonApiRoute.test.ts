@@ -117,7 +117,7 @@ describe('JsonApiRoute', () => {
                 .get('/download')
                 .query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv' });
 
-            expect(addToQueueMock).toHaveBeenCalledWith('p01xyz', 'show.nzb', 'tv');
+            expect(addToQueueMock).toHaveBeenCalledWith('p01xyz', 'show.nzb', 'tv', undefined, undefined, undefined, undefined);
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ status: true });
         });
@@ -146,7 +146,7 @@ describe('JsonApiRoute', () => {
                 episodeTitle: 'The Episode',
                 channel: 'BBC One',
                 pubDate: '2024-01-02T00:00:00.000Z',
-            });
+            }, undefined, undefined);
             expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();
         });
 
@@ -192,7 +192,9 @@ describe('JsonApiRoute', () => {
                     episodeTitle: 'The Real Title',
                     channel: 'BBC One',
                     pubDate: '2024-01-02',
-                }
+                },
+                undefined,
+                undefined
             );
         });
 
@@ -221,8 +223,26 @@ describe('JsonApiRoute', () => {
                 'Show.Name.S02E05',
                 'tv',
                 undefined,
-                expect.objectContaining({ title: 'Show Name', series: 2, episode: 5 })
+                expect.objectContaining({ title: 'Show Name', series: 2, episode: 5 }),
+                undefined,
+                undefined
             );
+        });
+
+        it('passes a per-download media mode through and rejects an unknown one', async () => {
+            const addToQueueMock = queueService.addToQueue as jest.Mock;
+            addToQueueMock.mockImplementation(() => { });
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
+
+            for (const media of ['strm', 'download']) {
+                await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv', media }).expect(200);
+                expect(addToQueueMock).toHaveBeenLastCalledWith('p01xyz', 'show.nzb', 'tv', undefined, undefined, undefined, media);
+            }
+
+            addToQueueMock.mockClear();
+            const bad = await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv', media: 'bogus' });
+            expect(bad.status).toBe(400);
+            expect(addToQueueMock).not.toHaveBeenCalled();
         });
     });
 

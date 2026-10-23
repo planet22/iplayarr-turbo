@@ -8,6 +8,7 @@ import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
 import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
+import { MediaMode } from '../types/enums/MediaMode';
 import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
 import { QueueLibraryMetadata } from '../types/QueueEntry';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
@@ -133,10 +134,17 @@ router.get('/details', async (req: Request, res: Response) => {
 });
 
 router.get('/download', async (req: Request, res: Response) => {
-    const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime } = req.query as any;
+    const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime, media } = req.query as any;
     let { nzbName, type } = req.query as any;
     if (!isValidPid(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
+        return;
+    }
+
+    // Optional per-download choice of a .strm link or a real file, overriding the Media Mode setting.
+    const mediaMode: MediaMode | undefined = Object.values(MediaMode).includes(media) ? media : undefined;
+    if (media !== undefined && !mediaMode) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'media must be "strm" or "download"' } as ApiResponse);
         return;
     }
 
@@ -221,11 +229,8 @@ router.get('/download', async (req: Request, res: Response) => {
         }
     }
 
-    if (library) {
-        queueService.addToQueue(pid, nzbName, type, undefined, library);
-    } else {
-        queueService.addToQueue(pid, nzbName, type);
-    }
+    // The default source (manual) is used, hence undefined.
+    queueService.addToQueue(pid, nzbName, type, undefined, library, undefined, mediaMode);
     videoEventService.record(VideoEventType.QUEUED, `Queued "${nzbName}" for download`, { pid });
     res.json({ status: true });
 });

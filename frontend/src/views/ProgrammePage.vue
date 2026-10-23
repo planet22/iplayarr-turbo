@@ -216,7 +216,7 @@ import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
-import { describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
+import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
 import { ipFetch } from '@/lib/ipFetch';
 import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
@@ -399,14 +399,19 @@ const downloadBatch = async (batch, label) => {
     // What it will produce, and the combined size of the episodes whose runtime is known.
     const sizes = batch.map((episode) => estimateSizeMb(globalSettings.value, { runtimeMinutes: episode.runtime }));
     const totalMb = sizes.reduce((sum, size) => sum + (size ?? 0), 0);
-    const summary = describeDownload(globalSettings.value, { count: batch.length, totalMb: sizes.some((size) => size === undefined) ? undefined : totalMb });
-    if (!(await dialogService.confirm('Download', `Download ${batch.length} episodes of ${label}?`, undefined, { note: { text: summary.text, tone: summary.tone } }))) return;
+    const media = await dialogService.confirmDownload(`Download ${batch.length} episodes of ${label}?`, {
+        count: batch.length,
+        totalMb: sizes.some((size) => size === undefined) ? undefined : totalMb,
+    });
+    if (!media) return;
+    // Only sent when it differs from the setting.
+    const override = media === defaultMediaMode(globalSettings.value) ? undefined : media;
 
     downloadingSeason.value = true;
     const failed = [];
     for (const episode of batch) {
         try {
-            const response = await ipFetch(`json-api/download?${buildDownloadQuery(toDownloadResult(episode))}`);
+            const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...toDownloadResult(episode), media: override })}`);
             if (!response.ok) failed.push(episode);
         } catch {
             failed.push(episode);

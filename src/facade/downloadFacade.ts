@@ -49,8 +49,8 @@ class DownloadFacade {
     async download(pid: string, jobId?: string): Promise<ChildProcess> {
         const key = jobId ?? pid;
         const pidDir: string = await this.#createPidDirectory(key);
-        const { service, client } = await this.#getService();
         const queueItem = queueService.getFromQueue(pid, jobId);
+        const { service, client } = await this.#getService(queueItem?.mediaMode);
         if (queueItem) {
             queueItem.client = client;
         }
@@ -262,8 +262,8 @@ class DownloadFacade {
         }
     }
 
-    async #getService(): Promise<{ service: AbstractDownloadService; client: string }> {
-        const mediaMode: MediaMode = (await configService.getParameter(IplayarrParameter.MEDIA_MODE)) as MediaMode;
+    async #getService(override?: MediaMode): Promise<{ service: AbstractDownloadService; client: string }> {
+        const mediaMode: MediaMode = override ?? ((await configService.getParameter(IplayarrParameter.MEDIA_MODE)) as MediaMode);
         if (mediaMode === MediaMode.STRM) {
             return { service: StrmDownloadService, client: 'STRM' };
         }

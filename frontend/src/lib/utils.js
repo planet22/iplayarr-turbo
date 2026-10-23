@@ -8,7 +8,7 @@ export const getHost = () => getBasePath();
 // structured show/season/episode metadata through so the backend can build a Jellyfin-style
 // library folder for it (libraryPathBuilder.ts) - not just pid/nzbName/type. Shared by
 // SearchPage's immediate/bulk download and DownloadConfirmModal's confirm-and-download.
-export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds }) => {
+export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds, media }) => {
     const params = new URLSearchParams({ pid, nzbName, type });
     if (title) params.set('title', title);
     if (series != null) params.set('series', series);
@@ -17,6 +17,8 @@ export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode,
     if (channel) params.set('channel', channel);
     if (pubDate) params.set('pubDate', pubDate);
     if (runtimeSeconds != null) params.set('runtime', runtimeSeconds);
+    // 'strm' | 'download' for this download only; left out to follow the Media Mode setting.
+    if (media) params.set('media', media);
     return params.toString();
 };
 

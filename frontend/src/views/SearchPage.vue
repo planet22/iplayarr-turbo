@@ -218,7 +218,7 @@ import ViewToggle from '@/components/common/ViewToggle.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
-import { describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
+import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { streamSearch } from '@/lib/searchStream';
@@ -540,8 +540,8 @@ const download = (searchResult) => {
     modal.open();
 };
 
-const immediateDownload = async (searchResult) => {
-    const response = await ipFetch(`json-api/download?${buildDownloadQuery(searchResult)}`);
+const immediateDownload = async (searchResult, media) => {
+    const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult, media })}`);
     if (response.ok) {
         router.push('/queue');
     }
@@ -555,14 +555,16 @@ const multipleImmediateDownload = async () => {
     const selectedResults = filteredResults.value.filter((result) => result.checked);
     if (selectedResults.length > 0) {
         const sizes = selectedResults.map((result) => estimateSizeMb(globalSettings.value, result));
-        const summary = describeDownload(globalSettings.value, {
+        const media = await dialogService.confirmDownload(`Do you want to download ${selectedResults.length} items?`, {
             count: selectedResults.length,
             totalMb: sizes.some((size) => size === undefined) ? undefined : sizes.reduce((sum, size) => sum + size, 0),
         });
-        if (await dialogService.confirm('Download', `Do you want to download ${selectedResults.length} items?`, undefined, { note: { text: summary.text, tone: summary.tone } })) {
+        if (media) {
             loading.value = true;
+            // Only sent when it differs from the setting.
+            const override = media === defaultMediaMode(globalSettings.value) ? undefined : media;
             for (const item of selectedResults) {
-                await immediateDownload(item);
+                await immediateDownload(item, override);
             }
         }
     }

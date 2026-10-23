@@ -8,6 +8,9 @@ const CLIENT_NAMES = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'the
 
 export const isStrmMode = (settings) => settings?.MEDIA_MODE !== 'download';
 
+// What the Media Mode setting produces when nothing overrides it: 'strm' or 'download'.
+export const defaultMediaMode = (settings) => (isStrmMode(settings) ? 'strm' : 'download');
+
 // Estimated size in MB of one video, from a known size (search results carry one) or its runtime in seconds.
 // undefined when neither is known.
 export const estimateSizeMb = (settings, { size, runtimeSeconds, runtimeMinutes } = {}) => {
@@ -19,9 +22,10 @@ export const estimateSizeMb = (settings, { size, runtimeSeconds, runtimeMinutes 
 
 // What a download of `count` items will produce, from the Media Mode / Download Client / Output Format
 // settings. `totalMb` (optional) is the combined size when it is known.
-export const describeDownload = (settings, { count = 1, totalMb } = {}) => {
+// `mode` ('strm' | 'download') is a per-download choice that overrides the setting.
+export const describeDownload = (settings, { count = 1, totalMb, mode } = {}) => {
     // The text never starts with "Download": it sits under a "Download ...?" question.
-    if (isStrmMode(settings)) {
+    if ((mode ?? defaultMediaMode(settings)) === 'strm') {
         return {
             strm: true,
             tone: 'info',
