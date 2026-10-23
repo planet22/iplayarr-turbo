@@ -6,6 +6,7 @@ import searchFacade from '../facade/searchFacade';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
+import statisticsService from '../service/stats/StatisticsService';
 import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
 import { MediaMode } from '../types/enums/MediaMode';
@@ -16,6 +17,7 @@ import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataRespo
 import { VideoEventType } from '../types/VideoEvent';
 import { isValidPid } from '../utils/pathSafety';
 import { runInSearchContext } from '../utils/searchContext';
+import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
 import { calculateSeasonAndEpisode, parseSeasonEpisodeFromFilename } from '../utils/Utils';
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
@@ -77,10 +79,37 @@ router.post('/nzb/test', async (req: Request, res: Response) => {
     }
 });
 
+// Searches typed on the Search page go into the search history like Sonarr/Radarr's do (just with no app), so the
+// Search page can offer them again as recent searches. Capped, as a broad search can have hundreds of results.
+const HISTORY_ITEM_LIMIT = 100;
+const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace: SearchTrace) => {
+    if (typeof term !== 'string' || !term.trim() || term === '*') return;
+    // Recording is best effort: it must never fail (or slow) the search itself.
+    Promise.resolve()
+        .then(() => statisticsService.addSearch({
+            term,
+            results: results.length,
+            time: new Date().getTime(),
+            items: results.slice(0, HISTORY_ITEM_LIMIT).map(({ nzbName, title, type, size, pubDate, pid }) => ({
+                title: nzbName ?? title,
+                type,
+                size,
+                pubDate,
+                pid,
+            })),
+            // Only what was dropped: the kept ones are already in `items`.
+            trace: { ...trace, candidates: trace.candidates.filter(({ kept }) => !kept) },
+        }))
+        .catch(() => undefined);
+};
+
 router.get('/search', async (req: Request, res: Response) => {
     const { q } = req.query as any;
     try {
-        const result: IPlayerSearchResult[] = await runInSearchContext('manual', () => searchFacade.search(q));
+        const { result, trace } = await withSearchTrace(() =>
+            runInSearchContext('manual', () => searchFacade.search(q))
+        );
+        recordManualSearch(q, result, trace);
         res.json(result);
     } catch (error: any) {
         res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: error?.message || 'Search failed' } as ApiResponse);
@@ -115,7 +144,10 @@ router.get('/search/stream', async (req: Request, res: Response) => {
     };
 
     try {
-        await runInSearchContext('manual', () => searchFacade.searchStreaming(q, (batch) => send(batch)));
+        const { result, trace } = await withSearchTrace(() =>
+            runInSearchContext('manual', () => searchFacade.searchStreaming(q, (batch) => send(batch)))
+        );
+        recordManualSearch(q, result, trace);
         send({ done: true });
     } catch (error: any) {
         send({ error: error?.message || 'Search failed' });

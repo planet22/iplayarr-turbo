@@ -11,6 +11,7 @@ jest.mock('../../src/facade/searchFacade');
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/service/queueService');
 jest.mock('../../src/service/searchSettingsService');
+jest.mock('../../src/service/stats/StatisticsService');
 
 import nzbFacade from '../../src/facade/nzbFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
@@ -18,6 +19,7 @@ import searchFacade from '../../src/facade/searchFacade';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
 import searchSettingsService from '../../src/service/searchSettingsService';
+import statisticsService from '../../src/service/stats/StatisticsService';
 import { ApiError } from '../../src/types/responses/ApiResponse';
 import { searchContext } from '../../src/utils/searchContext';
 
@@ -84,6 +86,25 @@ describe('JsonApiRoute', () => {
             await request(app).get('/search').query({ q: 'test' });
             await request(app).get('/search/stream').query({ q: 'test' });
             expect(seen).toEqual(['manual', 'manual']);
+        });
+
+        it('records manual searches in the search history, without an app', async () => {
+            (statisticsService.addSearch as jest.Mock).mockResolvedValue(undefined);
+            (searchFacade.search as jest.Mock).mockResolvedValue([{ title: 'Doc', nzbName: 'Doc.S01', type: 'TV', pid: 'p01abc', size: 5 }]);
+            (searchFacade.searchStreaming as jest.Mock).mockResolvedValue([]);
+
+            await request(app).get('/search').query({ q: 'doc' });
+            await request(app).get('/search/stream').query({ q: 'bake' });
+            await request(app).get('/search').query({ q: '*' });
+
+            expect(statisticsService.addSearch).toHaveBeenCalledTimes(2);
+            expect(statisticsService.addSearch).toHaveBeenNthCalledWith(1, expect.objectContaining({
+                term: 'doc',
+                results: 1,
+                items: [expect.objectContaining({ title: 'Doc.S01', pid: 'p01abc' })],
+            }));
+            expect((statisticsService.addSearch as jest.Mock).mock.calls[0][0].appId).toBeUndefined();
+            expect(statisticsService.addSearch).toHaveBeenNthCalledWith(2, expect.objectContaining({ term: 'bake', results: 0 }));
         });
 
         it('GET /search/settings describes the manual setup', async () => {
