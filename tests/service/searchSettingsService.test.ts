@@ -39,16 +39,24 @@ describe('searchSettingsService', () => {
                 native: true,
                 engine: 'V2',
                 matchAllWords: false,
-                requestedSeriesOnly: true,
-                inherited: ['NATIVE_SEARCH', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY'],
+                inherited: ['NATIVE_SEARCH'],
             });
+        });
+
+        it('never narrows a manual search to the requested series, but does for nzb', async () => {
+            setConfig({ ...base, NATIVE_SEARCH_ENGINE: 'V2', NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'true' });
+            expect((await searchSettingsService.effective('manual')).requestedSeriesOnly).toBeUndefined();
+            expect((await searchSettingsService.effective('nzb')).requestedSeriesOnly).toBe(true);
+            await runInSearchContext('manual', async () =>
+                expect(await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY)).toBe('false')
+            );
         });
 
         it('reports only native: false when native search is off', async () => {
             setConfig({ ...base, MANUAL_NATIVE_SEARCH: 'false' });
             expect(await searchSettingsService.effective('manual')).toEqual({
                 native: false,
-                inherited: ['NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'SEARCH_MATCH_ALL_WORDS'],
+                inherited: ['NATIVE_SEARCH_ENGINE', 'SEARCH_MATCH_ALL_WORDS'],
             });
         });
 

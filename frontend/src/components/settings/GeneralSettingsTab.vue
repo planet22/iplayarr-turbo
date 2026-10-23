@@ -70,16 +70,6 @@
         :options="withInherit(nativeSearchEngines)"
     />
     <SelectInput
-        v-if="showAdvanced && manualNative && manualEngine == 'V2'"
-        v-model="config.MANUAL_NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
-        field="MANUAL_NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
-        :advanced="true"
-        name="Requested Series Only (2.0)"
-        tooltip="Applies to the Search page only. Only takes effect when the search names a series, e.g. 'Show Series 2'."
-        :error="validationErrors.config?.MANUAL_NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY"
-        :options="withInherit(trueOrFalse)"
-    />
-    <SelectInput
         v-if="showAdvanced && manualNative"
         v-model="config.MANUAL_SEARCH_MATCH_ALL_WORDS"
         field="MANUAL_SEARCH_MATCH_ALL_WORDS"
@@ -215,7 +205,6 @@ const config = inject('settingsConfig');
 // What the Search page will actually use, so only the options that apply are offered.
 const manualValue = (manual, nzb) => (config.value[manual] && config.value[manual] !== 'inherit' ? config.value[manual] : config.value[nzb]);
 const manualNative = computed(() => manualValue('MANUAL_NATIVE_SEARCH', 'NATIVE_SEARCH') == 'true');
-const manualEngine = computed(() => manualValue('MANUAL_NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_ENGINE'));
 const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
 

@@ -55,7 +55,6 @@ const configService = {
         SEARCH_MATCH_ALL_WORDS: 'true',
         MANUAL_NATIVE_SEARCH: 'inherit',
         MANUAL_NATIVE_SEARCH_ENGINE: 'inherit',
-        MANUAL_NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'inherit',
         MANUAL_SEARCH_MATCH_ALL_WORDS: 'inherit',
         NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'false',
         RSS_FEED_HOURS: '48',

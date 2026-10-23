@@ -9,11 +9,11 @@ export const INHERIT = 'inherit';
 const MANUAL_TWIN = {
     [IplayarrParameter.NATIVE_SEARCH]: IplayarrParameter.MANUAL_NATIVE_SEARCH,
     [IplayarrParameter.NATIVE_SEARCH_ENGINE]: IplayarrParameter.MANUAL_NATIVE_SEARCH_ENGINE,
-    [IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY]: IplayarrParameter.MANUAL_NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY,
     [IplayarrParameter.SEARCH_MATCH_ALL_WORDS]: IplayarrParameter.MANUAL_SEARCH_MATCH_ALL_WORDS,
 } as const;
 
-type SearchSettingKey = keyof typeof MANUAL_TWIN;
+// Requested-series-only has no manual twin: a manual search always lists the whole show.
+type SearchSettingKey = keyof typeof MANUAL_TWIN | IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY;
 
 export interface EffectiveSearchSettings {
     native: boolean;
@@ -28,6 +28,7 @@ class SearchSettingsService {
     // The value of a search setting for the current search context (manual overrides, else NZB).
     async get(key: SearchSettingKey, context: SearchContext = searchContext()): Promise<string | undefined> {
         if (context === 'manual') {
+            if (key === IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY) return 'false';
             const override = await configService.getParameter(MANUAL_TWIN[key]);
             if (override && override !== INHERIT) return override;
         }
@@ -54,7 +55,7 @@ class SearchSettingsService {
             native: true,
             engine: v2 ? 'V2' : 'V1',
             matchAllWords: words !== 'false',
-            ...(v2 ? { requestedSeriesOnly: series === 'true' } : {}),
+            ...(v2 && series === 'true' ? { requestedSeriesOnly: true } : {}),
             inherited,
         };
     }
