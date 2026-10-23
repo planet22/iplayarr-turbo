@@ -249,6 +249,12 @@ watch(
     }
 }
 
+// Pills here are fully rounded (smooth ends) rather than square-cornered.
+.queueTable .pill {
+    padding: 1px 8px;
+    border-radius: 999px;
+}
+
 .queueTable {
     max-width: 100%;
     width: 100%;

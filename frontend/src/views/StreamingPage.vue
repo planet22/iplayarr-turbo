@@ -1,5 +1,5 @@
 <template>
-    <div class="inner-content scroll-x">
+    <div class="inner-content scroll-x streamingPage">
         <PageHeader title="Active Streams" />
         <div class="viewToggleRow">
             <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
@@ -466,6 +466,12 @@ async function clearHistory() {
         opacity: 0.35;
         transform: scale(0.7);
     }
+}
+
+// Pills here are fully rounded (smooth ends) rather than square-cornered.
+.streamingPage .pill {
+    padding: 1px 8px;
+    border-radius: 999px;
 }
 
 .tableToolbar {
