@@ -139,9 +139,10 @@ const statusBadges = computed(() => {
         color: @subtle-text-color;
     }
 
+    // Bottom right, opposite the type icons: the subtitles icon in the corner, the version / quality badges beside it.
     .thumbBadges {
         position: absolute;
-        top: 6px;
+        bottom: 6px;
         right: 6px;
     }
 

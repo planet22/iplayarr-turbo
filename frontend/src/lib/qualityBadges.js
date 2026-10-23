@@ -2,16 +2,16 @@ import { reactive } from 'vue';
 
 // Whether cards and rows mark programmes: HDR / Ultra HD, and the audio described and signed versions
 // (`enabled`), and, separately, subtitles (`subtitles`). Purely cosmetic, per-browser preferences (like the
-// channel pill colours), both on unless switched off, and shared module-wide since the same choice applies
+// channel pill colours), both off unless switched on, and shared module-wide since the same choice applies
 // to every card, row and hero in the app.
 const STORAGE_KEY = 'iplayarr.qualityBadges.enabled';
 const SUBTITLES_KEY = 'iplayarr.subtitleBadges.enabled';
 
 const load = (key) => {
     try {
-        return localStorage.getItem(key) !== 'false';
+        return localStorage.getItem(key) === 'true';
     } catch {
-        return true;
+        return false;
     }
 };
 

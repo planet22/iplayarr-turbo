@@ -1,8 +1,5 @@
 <template>
     <span v-if="showSubtitles || showQuality" class="qualityBadges">
-        <span v-if="showSubtitles" class="qualityBadge version" title="Subtitles" aria-label="Subtitles">
-            <font-awesome-icon :icon="['fas', 'closed-captioning']" />
-        </span>
         <template v-if="state.enabled">
             <span v-if="item.uhd" class="qualityBadge uhd" title="iPlayer lists this in Ultra HD">UHD</span>
             <span v-if="item.hdr" class="qualityBadge hdr" title="iPlayer lists this in HDR">HDR</span>
@@ -12,6 +9,9 @@
         </span>
         <span v-if="state.enabled && hasVersion('signed')" class="qualityBadge version" title="Signed version available" aria-label="Signed version available">
             <font-awesome-icon :icon="['fas', 'sign-language']" />
+        </span>
+        <span v-if="showSubtitles" class="qualityBadge version" title="Subtitles" aria-label="Subtitles">
+            <font-awesome-icon :icon="['fas', 'closed-captioning']" />
         </span>
     </span>
 </template>
