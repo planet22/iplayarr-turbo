@@ -11,7 +11,7 @@
     <td class="chipCol" data-title="Subs">
         <span v-if="subtitles" class="pill" :class="subtitles == 'On' ? 'success' : 'grey'">{{ subtitles }}</span>
     </td>
-    <td class="chipCol" data-title="Video Quality">
+    <td class="chipCol hideLg" data-title="Video Quality">
         <span v-if="videoQuality" class="pill grey">{{ videoQuality }}</span>
     </td>
 </template>

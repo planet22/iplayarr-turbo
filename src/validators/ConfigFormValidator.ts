@@ -82,13 +82,15 @@ export class ConfigFormValidator extends Validator {
         ) {
             validatorError['LIVE_TV_EPG_OFFSET'] = 'Please provide a whole number of minutes between -1440 and 1440';
         }
-        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION']) {
+        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
             if (input[key] !== undefined && input[key] !== 'true' && input[key] !== 'false') {
                 validatorError[key] = 'Must be true or false';
             }
         }
-        if (input.DOWNLOAD_DEFAULT_VERSION && !versionProfiles.some(({ id }) => id === input.DOWNLOAD_DEFAULT_VERSION)) {
-            validatorError['DOWNLOAD_DEFAULT_VERSION'] = 'Unknown version';
+        for (const key of ['DOWNLOAD_DEFAULT_VERSION', 'PLAY_DEFAULT_VERSION']) {
+            if (input[key] && !versionProfiles.some(({ id }) => id === input[key])) {
+                validatorError[key] = 'Unknown version';
+            }
         }
         if (input.AUTH_TYPE === 'oidc') {
             if (!input.OIDC_CONFIG_URL) {

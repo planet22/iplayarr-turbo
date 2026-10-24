@@ -8,6 +8,8 @@ import { reactive } from 'vue';
 const KEYS = {
     ask: 'iplayarr.downloadVersions.ask',
     preferred: 'iplayarr.downloadVersions.preferred',
+    playAsk: 'iplayarr.playVersions.ask',
+    playPreferred: 'iplayarr.playVersions.preferred',
 };
 export const PREFERRED_VERSIONS = ['', 'audio-described', 'signed'];
 
@@ -27,10 +29,15 @@ const write = (key, value) => {
     }
 };
 
-const stored = read(KEYS.preferred);
+const storedChoice = (key) => (PREFERRED_VERSIONS.includes(read(key)) ? read(key) : '');
 const state = reactive({
     ask: read(KEYS.ask) !== 'false',
-    preferred: PREFERRED_VERSIONS.includes(stored) ? stored : '',
+    preferred: storedChoice(KEYS.preferred),
+    // The same two choices for the play button, and whether the stream client can play another version at all
+    // (only the native one can).
+    playAsk: read(KEYS.playAsk) !== 'false',
+    playPreferred: storedChoice(KEYS.playPreferred),
+    nativeStream: true,
 });
 
 export const useDownloadVersionPrefs = () => ({
@@ -42,5 +49,16 @@ export const useDownloadVersionPrefs = () => ({
     setPreferred: (value) => {
         state.preferred = PREFERRED_VERSIONS.includes(value) ? value : '';
         write(KEYS.preferred, state.preferred);
+    },
+    setPlayAsk: (value) => {
+        state.playAsk = value === true;
+        write(KEYS.playAsk, String(state.playAsk));
+    },
+    setPlayPreferred: (value) => {
+        state.playPreferred = PREFERRED_VERSIONS.includes(value) ? value : '';
+        write(KEYS.playPreferred, state.playPreferred);
+    },
+    setNativeStream: (value) => {
+        state.nativeStream = value === true;
     },
 });

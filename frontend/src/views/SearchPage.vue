@@ -233,6 +233,7 @@ import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
 import { askAboutVersions, batchVersionKey, initialVersionKey, offeredVersions, planDownloads, quickVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
+import { playProgramme } from '@/lib/playVersion';
 import { streamSearch } from '@/lib/searchStream';
 import { usePagination } from '@/lib/usePagination';
 import { useViewMode } from '@/lib/useViewMode';
@@ -589,7 +590,9 @@ const sendDownload = async (searchResult, media, version) => {
 };
 
 const preview = (searchResult) => {
-    playInPip(searchResult.pid, searchResult.title);
+    // A result that is itself a version (the audio described row) plays that cut; others ask or use the default.
+    if (searchResult.version) playInPip(searchResult.pid, searchResult.title, false, searchResult.version);
+    else playProgramme(searchResult.pid, searchResult.title, searchResult.versions);
 };
 
 const multipleImmediateDownload = async () => {

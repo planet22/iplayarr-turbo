@@ -105,6 +105,9 @@ const configService = {
         DOWNLOAD_ASK_VERSION: 'true',
         // '' is the standard version; otherwise a version profile id (audio-described, signed).
         DOWNLOAD_DEFAULT_VERSION: '',
+        // The same two choices for the play button (the picture-in-picture player).
+        PLAY_ASK_VERSION: 'true',
+        PLAY_DEFAULT_VERSION: '',
     } as ConfigMap,
 
     getParameter: async (parameter: IplayarrParameter): Promise<string | undefined> => {

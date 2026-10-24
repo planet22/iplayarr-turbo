@@ -1,12 +1,16 @@
 <template>
     <div class="throughputSpark" :title="tooltip">
-        <svg class="spark" :width="width" :height="height" :viewBox="`0 0 ${width} ${height}`" aria-hidden="true">
+        <!-- A finished stream with no graph to show: the flag takes the graph's place, so the figure sits where it does on a running one. -->
+        <span v-if="flagInSlot" class="finishedSlot" :style="{ width: `${width}px`, height: `${height}px` }">
+            <font-awesome-icon :icon="['fas', 'flag-checkered']" />
+        </span>
+        <svg v-else class="spark" :width="width" :height="height" :viewBox="`0 0 ${width} ${height}`" aria-hidden="true">
             <polyline v-if="line" class="area" :points="area" />
             <polyline v-if="line" class="line" :points="line" />
         </svg>
         <span class="rate">
             <!-- A finished stream: the flag marks the figure as the whole-session average, not a live rate. -->
-            <font-awesome-icon v-if="finished && label" class="finishedIcon" :icon="['fas', 'flag-checkered']" />
+            <font-awesome-icon v-if="finished && label && !flagInSlot" class="finishedIcon" :icon="['fas', 'flag-checkered']" />
             {{ label }}
         </span>
     </div>
@@ -65,6 +69,7 @@ const value = computed(() =>
         : currentRate(props.throughput, props.now)
 );
 const label = computed(() => (props.bytesTransferred || props.throughput ? formatRate(value.value) : ''));
+const flagInSlot = computed(() => finished.value && Boolean(label.value) && !line.value);
 const tooltip = computed(() =>
     props.throughput || props.bytesTransferred
         ? `${finished.value ? 'Average over the whole session' : 'Right now (last 3s)'}: ${formatRate(value.value)} - peak in the last minute: ${formatRate(peak.value)}`
@@ -96,7 +101,18 @@ const tooltip = computed(() =>
         }
     }
 
+    .finishedSlot {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        opacity: 0.7;
+    }
+
     .rate {
+        // Same width whatever the figure, so what follows (the segment grid, on a phone) never shifts.
+        min-width: 58px;
         font-size: 12px;
         font-variant-numeric: tabular-nums;
 

@@ -110,6 +110,7 @@ import { channelLabel } from '@/lib/channelPillColors';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
+import { playProgramme } from '@/lib/playVersion';
 import { formatDate, formatStorageSize } from '@/lib/utils';
 
 import MediaInfoHero from '../common/MediaInfoHero.vue';
@@ -183,7 +184,9 @@ const qualityLabel = computed(() => {
 const pad = (n) => String(n).padStart(2, '0');
 
 const preview = () => {
-    playInPip(props.pid, item.value?.nzbName || fallbackTitle.value || props.pid);
+    const title = item.value?.nzbName || fallbackTitle.value || props.pid;
+    if (item.value?.library?.version) playInPip(props.pid, title, false, item.value.library.version);
+    else playProgramme(props.pid, title);
 };
 
 const deleteItem = async () => {

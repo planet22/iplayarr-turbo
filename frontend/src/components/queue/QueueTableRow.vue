@@ -166,6 +166,7 @@ import { useModal } from 'vue-final-modal';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
+import { playProgramme } from '@/lib/playVersion';
 import { formatDate, formatStorageSize, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
 
 import ChannelPill from '../common/ChannelPill.vue';
@@ -229,8 +230,10 @@ const seriesEpisodeLabel = computed(() => getSeriesEpisodeLabel(props.details));
 // episode can be told apart.
 const badgeItem = computed(() => ({ versions: props.item.library?.version ? [props.item.library.version] : [] }));
 
-const preview = ({ pid, nzbName }) => {
-    playInPip(pid, nzbName);
+// A queued audio described / signed download plays that cut; a standard one asks or uses the default, like any play button.
+const preview = ({ pid, nzbName, library }) => {
+    if (library?.version) playInPip(pid, nzbName, false, library.version);
+    else playProgramme(pid, nzbName);
 };
 
 // The job id (when the entry has one) picks out this download - the same programme can have several.

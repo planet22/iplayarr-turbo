@@ -84,6 +84,24 @@
             tooltip="Folder for temporary streaming files. Leave blank to use the system temp folder."
             :error="validationErrors.config?.STREAM_CACHE_DIR"
         />
+        <template v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE' && config.UI_VERSION_BADGES === 'true'">
+            <SelectInput
+                v-model="config.PLAY_ASK_VERSION"
+                field="PLAY_ASK_VERSION"
+                :advanced="true"
+                name="Ask Which Version to Play"
+                tooltip="When something has an audio described or signed version, ask which to play. Off plays the default version below, whenever the programme has it. The player can switch version either way."
+                :options="askOptions"
+            />
+            <SelectInput
+                v-model="playDefaultVersion"
+                field="PLAY_DEFAULT_VERSION"
+                :advanced="true"
+                name="Default Version to Play"
+                tooltip="Used when Ask Which Version to Play is off, and pre-selected when it is on. Programmes without that version play the standard one."
+                :options="versionDefaults"
+            />
+        </template>
 
     <SettingsSubheading text="STRM Watchdog" />
     <SelectInput
@@ -311,6 +329,22 @@ onMounted(async () => {
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
+
+// The audio described / signed choices for the play button (the native client is the only one that can play another cut).
+const askOptions = [
+    { key: 'true', value: 'Yes' },
+    { key: 'false', value: 'No, use the default' },
+];
+const versionDefaults = [
+    { key: '', value: 'Standard version' },
+    { key: 'audio-described', value: 'Audio described, when available' },
+    { key: 'signed', value: 'Signed, when available' },
+];
+// '' (the standard version) is stored as an empty value, which the server treats as unset.
+const playDefaultVersion = computed({
+    get: () => config.value.PLAY_DEFAULT_VERSION ?? '',
+    set: (value) => (config.value.PLAY_DEFAULT_VERSION = value),
+});
 </script>
 
 <style lang="less" scoped>

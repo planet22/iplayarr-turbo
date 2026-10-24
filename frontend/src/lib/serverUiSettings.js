@@ -21,4 +21,7 @@ export const applyServerUiSettings = (config) => {
     const downloads = useDownloadVersionPrefs();
     downloads.setAsk(on('DOWNLOAD_ASK_VERSION', true));
     downloads.setPreferred(config.DOWNLOAD_DEFAULT_VERSION ?? '');
+    downloads.setPlayAsk(on('PLAY_ASK_VERSION', true));
+    downloads.setPlayPreferred(config.PLAY_DEFAULT_VERSION ?? '');
+    downloads.setNativeStream((config.STREAM_CLIENT ?? 'NATIVE') === 'NATIVE');
 };
