@@ -3,7 +3,7 @@
         compact
         :title="title"
         :show-cancel="showCancel"
-        cancel-label="Cancel"
+        :cancel-label="cancelLabel"
         :show-confirm="true"
         :confirm-label="confirmLabel"
         :danger="danger"
@@ -49,6 +49,11 @@ const props = defineProps({
     confirmLabel: {
         type: String,
         default: 'OK',
+    },
+    // For yes/no questions where "Cancel" doesn't fit the answer ("Not now").
+    cancelLabel: {
+        type: String,
+        default: 'Cancel',
     },
     danger: Boolean,
 });

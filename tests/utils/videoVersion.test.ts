@@ -1,7 +1,11 @@
+import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { IPlayerSearchResult, VideoType } from '../../src/types/IPlayerSearchResult';
 import { qualityProfiles } from '../../src/types/QualityProfiles';
 import { versionProfiles } from '../../src/types/VersionProfiles';
-import { addAvailableVersions, applyVersionToRelease, expandVersionVariants, parseExtraVersions } from '../../src/utils/videoVersion';
+import { addAvailableVersions, applyVersionToRelease, cachedVersionIds, expandVersionVariants, parseExtraVersions } from '../../src/utils/videoVersion';
+
+jest.mock('../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { metadataCache: { get: jest.fn() } } }));
+const cacheGet = iplayerDetailsService.metadataCache.get as jest.Mock;
 
 const base = { pid: 'p1', title: 'T', nzbName: 'T.S01E01.WEBDL.720p-BBC', size: 1000, type: VideoType.TV } as IPlayerSearchResult;
 const ad = versionProfiles.filter(({ id }) => id === 'audio-described');
@@ -10,6 +14,25 @@ const hd = qualityProfiles.find(({ id }) => id === 'hd')!;
 const mobile = qualityProfiles.find(({ id }) => id === 'mobile')!;
 
 describe('videoVersion', () => {
+    describe('cachedVersionIds', () => {
+        it('reads the versions from cached metadata without asking the BBC', async () => {
+            cacheGet.mockResolvedValue({ programme: { versions: [{ pid: 'v1', types: ['Original'] }, { pid: 'v2', types: ['Audiodescribed'] }] } });
+            expect(await cachedVersionIds('p1')).toEqual(['audio-described']);
+        });
+
+        it('says nothing when the metadata is not cached, or the lookup fails', async () => {
+            cacheGet.mockResolvedValue(undefined);
+            expect(await cachedVersionIds('p1')).toBeUndefined();
+            cacheGet.mockRejectedValue(new Error('db down'));
+            expect(await cachedVersionIds('p1')).toBeUndefined();
+        });
+
+        it('returns an empty list for a cached programme with only the plain version', async () => {
+            cacheGet.mockResolvedValue({ programme: { versions: [{ pid: 'v1', types: ['Original'] }] } });
+            expect(await cachedVersionIds('p1')).toEqual([]);
+        });
+    });
+
     it('parses enabled versions, dropping unknown ids', () => {
         expect(parseExtraVersions('audio-described, bogus,signed').map(({ id }) => id)).toEqual(['audio-described', 'signed']);
         expect(parseExtraVersions('')).toEqual([]);

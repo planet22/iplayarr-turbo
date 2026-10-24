@@ -230,6 +230,7 @@ import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
+import { askAboutVersions, batchVersionKey, initialVersionKey, offeredVersions, planDownloads, quickVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { streamSearch } from '@/lib/searchStream';
@@ -570,8 +571,18 @@ const download = (searchResult) => {
     modal.open();
 };
 
-const immediateDownload = async (searchResult, media) => {
-    const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult, media })}`);
+// The download button on a row. A result with audio described / signed versions asks which one (the download
+// dialog has the choice) unless Settings says to use the default.
+const immediateDownload = async (searchResult, media, version = quickVersion(searchResult)) => {
+    if (media === undefined && version === undefined && askAboutVersions() && !searchResult.version && searchResult.versions?.length) {
+        download(searchResult);
+        return;
+    }
+    await sendDownload(searchResult, media, version);
+};
+
+const sendDownload = async (searchResult, media, version) => {
+    const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult, media, version })}`);
     if (response.ok) {
         router.push('/queue');
     }
@@ -585,16 +596,19 @@ const multipleImmediateDownload = async () => {
     const selectedResults = filteredResults.value.filter((result) => result.checked);
     if (selectedResults.length > 0) {
         const sizes = selectedResults.map((result) => estimateSizeMb(globalSettings.value, result));
-        const media = await dialogService.confirmDownload(`Do you want to download ${selectedResults.length} items?`, {
+        const offered = offeredVersions(selectedResults);
+        const choice = await dialogService.confirmDownload(`Do you want to download ${selectedResults.length} items?`, {
             count: selectedResults.length,
             totalMb: sizes.some((size) => size === undefined) ? undefined : sizes.reduce((sum, size) => sum + size, 0),
+            versions: offered,
+            initialVersion: initialVersionKey(offered),
         });
-        if (media) {
+        if (choice) {
             loading.value = true;
             // Only sent when it differs from the setting.
-            const override = media === defaultMediaMode(globalSettings.value) ? undefined : media;
-            for (const item of selectedResults) {
-                await immediateDownload(item, override);
+            const override = choice.media === defaultMediaMode(globalSettings.value) ? undefined : choice.media;
+            for (const { item, version } of planDownloads(selectedResults, batchVersionKey(choice, offered))) {
+                await sendDownload(item, override, version);
             }
         }
     }

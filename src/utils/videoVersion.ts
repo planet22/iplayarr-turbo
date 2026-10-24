@@ -1,3 +1,4 @@
+import iplayerDetailsService from '../service/iplayerDetailsService';
 import { versionTypesFor } from '../service/stream/versionVpid';
 import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
 import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
@@ -34,9 +35,23 @@ export function applyVersionToRelease(
 
 const lookupBatchSize = 8;
 
+// The version ids (audio-described, signed) among a programme's BBC version types.
+const versionIdsIn = (types: string) => versionProfiles.filter(({ match }) => match.test(types)).map(({ id }) => id);
+
+// What is already known about a programme's versions without asking the BBC: undefined when its metadata
+// is not cached, so a caller can leave the lookup for later.
+export async function cachedVersionIds(pid: string): Promise<string[] | undefined> {
+    try {
+        const versions = (await iplayerDetailsService.metadataCache.get(pid))?.programme?.versions;
+        return Array.isArray(versions) ? versionIdsIn(versions.map((v) => (v.types ?? []).join(' ')).join('\n')) : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 // Marks each result with the non-standard versions its programme has (the Search page's filter and badges).
 // BBC's answer is cached a day, so a repeat search costs nothing; a failed lookup just leaves a result unmarked.
-export async function addAvailableVersions(results: IPlayerSearchResult[], lookup: VersionLookup = versionTypesFor): Promise<IPlayerSearchResult[]> {
+export async function addAvailableVersions<T extends { pid: string; versions?: string[] }>(results: T[], lookup: VersionLookup = versionTypesFor): Promise<T[]> {
     const found = new Map<string, string[]>();
     const pids = [...new Set(results.map(({ pid }) => pid))];
     for (let i = 0; i < pids.length; i += lookupBatchSize) {

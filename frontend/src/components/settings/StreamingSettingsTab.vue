@@ -27,6 +27,15 @@
             :options="streamClients"
         />
         <SelectInput
+            v-if="config.STREAM_CLIENT == 'NATIVE'"
+            v-model="config.STREAM_SUBTITLES"
+            field="STREAM_SUBTITLES"
+            name="Native Subtitles"
+            tooltip="Offer BBC subtitles as a selectable track, where available. Direct mode only."
+            :error="validationErrors.config?.STREAM_SUBTITLES"
+            :options="subtitlesOptions"
+        />
+        <SelectInput
             v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_ADAPTIVE"
             field="STREAM_NATIVE_ADAPTIVE"
@@ -55,15 +64,6 @@
             tooltip="Try to unlock true 1080p instead of BBC's usual 720p (recommended)."
             :error="validationErrors.config?.STREAM_NATIVE_EXPERIMENTAL_FHD"
             :options="experimentalFhdOptions"
-        />
-        <SelectInput
-            v-if="config.STREAM_CLIENT == 'NATIVE'"
-            v-model="config.STREAM_SUBTITLES"
-            field="STREAM_SUBTITLES"
-            name="Native Subtitles"
-            tooltip="Offer BBC subtitles as a selectable track, where available. Direct mode only."
-            :error="validationErrors.config?.STREAM_SUBTITLES"
-            :options="subtitlesOptions"
         />
         <SelectInput
             v-if="showAdvanced"
@@ -162,6 +162,9 @@
             field="STRM_WATCHDOG_CONCURRENCY"
             :advanced="true"
             type-override="number"
+            :min="1"
+            :max="10"
+            :step="1"
             name="Parallel Checks"
             tooltip="How many links to check at once (1-10, default 4). Lower is gentler on BBC."
             :error="validationErrors.config?.STRM_WATCHDOG_CONCURRENCY"
@@ -172,6 +175,9 @@
             field="STRM_WATCHDOG_FAIL_THRESHOLD"
             :advanced="true"
             type-override="number"
+            :min="1"
+            :max="1000"
+            :step="1"
             name="Minimum Valid Before Action"
             tooltip="Failures only count after this many links pass first (BBC is up). This many failures in a row stops the check."
             :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"

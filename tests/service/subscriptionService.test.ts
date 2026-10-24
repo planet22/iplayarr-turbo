@@ -1,6 +1,7 @@
 import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
+import { versionTypesFor } from '../../src/service/stream/versionVpid';
 import subscriptionService, { SubscriptionError } from '../../src/service/subscriptionService';
 import synonymService from '../../src/service/synonymService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
@@ -21,11 +22,13 @@ jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/service/historyService');
 jest.mock('../../src/service/queueService');
 jest.mock('../../src/service/synonymService');
+jest.mock('../../src/service/stream/versionVpid');
 jest.mock('../../src/service/videoEventService');
 jest.mock('../../src/service/loggingService');
 jest.mock('../../src/utils/Utils', () => ({
     ...jest.requireActual('../../src/utils/Utils'),
     createNZBName: jest.fn(),
+    getQualityProfile: jest.fn().mockResolvedValue({ id: 'hd', name: 'HD', quality: '720p', sizeFactor: 0.61 }),
 }));
 
 const details = jest.mocked(iplayerDetailsService);
@@ -33,6 +36,7 @@ const history = jest.mocked(historyService);
 const queue = jest.mocked(queueService);
 const synonyms = jest.mocked(synonymService);
 const createNZBName = jest.mocked(Utils.createNZBName);
+const versionTypes = jest.mocked(versionTypesFor);
 
 const ep = (id: string, date = '2026-01-01T00:00:00Z', type: 'episode' | 'series' | 'brand' = 'episode') => ({
     id,
@@ -63,7 +67,9 @@ describe('subscriptionService', () => {
         details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2')] as any);
         details.details.mockImplementation(async (pids: string[]) => pids.map(detail));
         history.getHistory.mockResolvedValue([]);
-        queue.getFromQueue.mockReturnValue(undefined);
+        queue.getQueue.mockReturnValue([]);
+        versionTypes.mockResolvedValue([]);
+        (Utils.getQualityProfile as jest.Mock).mockResolvedValue({ id: 'hd', name: 'HD', quality: '720p', sizeFactor: 0.61 });
         synonyms.getSynonym.mockResolvedValue(undefined);
         createNZBName.mockResolvedValue('The.Show.S02E03');
     });
@@ -105,6 +111,16 @@ describe('subscriptionService', () => {
             });
             expect(await subscriptionService.list()).toHaveLength(1);
             expect(queue.addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('creates one subscription when several requests for the same show arrive together', async () => {
+            const results = await Promise.all([
+                subscriptionService.subscribe('m00episode'),
+                subscriptionService.subscribe('m00episode'),
+                subscriptionService.subscribe('m00episode'),
+            ]);
+            expect(await subscriptionService.list()).toHaveLength(1);
+            expect(new Set(results.map(({ id }) => id)).size).toBe(1);
         });
 
         it('returns the existing subscription instead of duplicating it', async () => {
@@ -176,7 +192,7 @@ describe('subscriptionService', () => {
         it('skips episodes already queued or downloaded elsewhere, but marks them handled', async () => {
             const sub = await subscribed();
             details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('inq'), ep('inhist')] as any);
-            queue.getFromQueue.mockImplementation((pid: string) => (pid === 'inq' ? ({ pid } as any) : undefined));
+            queue.getQueue.mockReturnValue([{ pid: 'inq' } as any]);
             history.getHistory.mockResolvedValue([{ pid: 'inhist' } as any]);
             const result = await subscriptionService.check(sub);
             expect(result.queued).toEqual([]);
@@ -277,6 +293,91 @@ describe('subscriptionService', () => {
             release();
             await subscriptionService.whenIdle();
             expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('versions', () => {
+        const audioDescribed = [{ types: ['Audiodescribed'] }] as any;
+        const subscribedWith = async (versions: string[]) => {
+            await subscriptionService.subscribe('m00episode', { versions });
+            return (await subscriptionService.list())[0];
+        };
+
+        it('keeps only known version ids and baselines existing episodes so nothing is back-filled', async () => {
+            const sub = await subscribedWith(['audio-described', 'bogus']);
+            expect(sub.versions).toEqual(['audio-described']);
+            expect(sub.seenVersions).toEqual({ 'audio-described': ['e1', 'e2'] });
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2')] as any);
+            expect((await subscriptionService.check(sub)).queued).toEqual([]);
+            expect(versionTypes).not.toHaveBeenCalled();
+        });
+
+        it('queues the plain episode and its audio described version', async () => {
+            const sub = await subscribedWith(['audio-described']);
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3', new Date().toISOString())] as any);
+            versionTypes.mockResolvedValue(audioDescribed);
+            await subscriptionService.check(sub);
+            expect(queue.addToQueue).toHaveBeenCalledTimes(2);
+            expect(queue.addToQueue).toHaveBeenNthCalledWith(1, 'e3', 'The.Show.S02E03', VideoType.TV, undefined, expect.not.objectContaining({ version: expect.anything() }));
+            expect(queue.addToQueue).toHaveBeenNthCalledWith(
+                2,
+                'e3',
+                expect.stringContaining('AUDIO.DESCRIBED'),
+                VideoType.TV,
+                undefined,
+                expect.objectContaining({ version: 'audio-described', quality: 'sd' })
+            );
+            expect((await subscriptionService.list())[0].seenVersions?.['audio-described']).toContain('e3');
+        });
+
+        it('retries a version BBC has not published yet, without re-queuing the plain episode', async () => {
+            const sub = await subscribedWith(['audio-described']);
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3', new Date().toISOString())] as any);
+            await subscriptionService.check(sub);
+            expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+            expect((await subscriptionService.list())[0].seenVersions?.['audio-described']).not.toContain('e3');
+
+            versionTypes.mockResolvedValue(audioDescribed);
+            const retry = await subscriptionService.check((await subscriptionService.list())[0]);
+            expect(retry.queued).toEqual(['e3']);
+            expect(queue.addToQueue).toHaveBeenCalledTimes(2);
+            expect(queue.addToQueue).toHaveBeenLastCalledWith('e3', expect.any(String), VideoType.TV, undefined, expect.objectContaining({ version: 'audio-described' }));
+        });
+
+        it('gives up on a version once the episode is older than the window', async () => {
+            const sub = await subscribedWith(['signed']);
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('old', '2026-01-02T00:00:00Z')] as any);
+            versionTypes.mockResolvedValue([{ types: ['Signed'] }] as any);
+            await subscriptionService.check(sub);
+            expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+            expect((await subscriptionService.list())[0].seenVersions?.signed).toContain('old');
+        });
+
+        it('does not let the plain episode in the queue hide its version, nor the reverse', async () => {
+            const sub = await subscribedWith(['audio-described']);
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3', new Date().toISOString())] as any);
+            versionTypes.mockResolvedValue(audioDescribed);
+            queue.getQueue.mockReturnValue([{ pid: 'e3', library: { title: 'The Show' } } as any]);
+            await subscriptionService.check(sub);
+            // Plain e3 was already queued elsewhere; the audio described one is still fetched.
+            expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+            expect(queue.addToQueue).toHaveBeenCalledWith('e3', expect.any(String), VideoType.TV, undefined, expect.objectContaining({ version: 'audio-described' }));
+        });
+
+        it('setVersions switches a version on for new episodes only, and off again', async () => {
+            const sub = await subscribedWith([]);
+            expect(sub.versions).toBeUndefined();
+            const on = await subscriptionService.setVersions(sub.id, ['signed']);
+            expect(on?.versions).toEqual(['signed']);
+            expect(on?.seenVersions).toEqual({ signed: ['e1', 'e2'] });
+            const off = await subscriptionService.setVersions(sub.id, []);
+            expect(off?.versions).toEqual([]);
+            expect(await subscriptionService.setVersions('nope', ['signed'])).toBeUndefined();
+        });
+
+        it('ignores versions on an arrOnly show', async () => {
+            await subscriptionService.subscribe('m00episode', { arrOnly: true, versions: ['signed'] });
+            expect((await subscriptionService.list())[0].versions).toBeUndefined();
         });
     });
 

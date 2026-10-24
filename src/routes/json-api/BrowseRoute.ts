@@ -5,6 +5,7 @@ import browseService from '../../service/browseService';
 import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
 import liveChannelService from '../../service/liveChannelService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { addAvailableVersions } from '../../utils/videoVersion';
 
 const router = Router();
 
@@ -59,6 +60,18 @@ router.put(
             if (error instanceof CategoryDiscoverError) return invalid(res, error.message);
             throw error;
         }
+    })
+);
+
+// The audio described / signed versions of some episodes ({ pid: ids }), asked for in the background by the
+// programme page when it shows those badges. The BBC's answer is cached a day, so a repeat costs nothing.
+router.get(
+    '/versions',
+    handle(async (req, res) => {
+        const pids = String(req.query.pids ?? '').split(',').filter(Boolean);
+        if (pids.length === 0 || pids.length > MAX_DETAIL_PIDS || !pids.every((pid) => PID_REGEX.test(pid))) return invalid(res, 'pids must be a list of programme ids');
+        const found = await addAvailableVersions<{ pid: string; versions?: string[] }>(pids.map((pid) => ({ pid })));
+        res.json(Object.fromEntries(found.map(({ pid, versions }) => [pid, versions ?? []])));
     })
 );
 

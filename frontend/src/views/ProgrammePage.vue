@@ -77,12 +77,12 @@
                     </button>
                     <button
                         v-if="subscription && !subscription.arrOnly"
-                        class="clickable subscribeButton"
+                        :class="['clickable', 'subscribeButton', subscription.arr ? 'on' : '']"
                         :disabled="subscribing"
                         :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
                         @click="toggleArrWithBusy"
                     >
-                        <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
+                        <font-awesome-icon :icon="['fas', 'right-left']" />
                         <!-- Phones: the half-width button is too narrow for the full label, which wrapped onto two lines. -->
                         <span class="labelLong">{{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}</span>
                         <span class="labelShort">{{ subscription.arr ? 'Unlink' : 'Sonarr/Radarr' }}</span>
@@ -102,7 +102,7 @@
                         title="Remove from Sonarr/Radarr tracking"
                         @click="removeArrOnly"
                     >
-                        <font-awesome-icon :icon="['fas', 'link-slash']" />
+                        <font-awesome-icon :icon="['fas', 'xmark']" />
                         Remove
                     </button>
                 </div>
@@ -159,7 +159,7 @@
                 <div class="episodeList">
                     <div v-for="episode in pagedEpisodes" :key="episode.pid" class="episodeRow">
                         <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
-                        <div class="episodeThumbWrap">
+                        <div :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '']">
                             <img
                                 v-if="episode.thumbnail" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
                                 loading="lazy" role="button" tabindex="0" @error="hideBrokenImage" @click="download(episode)" @keydown.enter="download(episode)"
@@ -224,7 +224,9 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
+import { batchVersionKey, initialVersionKey, offeredVersions, planDownloads, resolveEpisodeVersions } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
+import { useQualityBadges } from '@/lib/qualityBadges';
 import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
@@ -403,22 +405,29 @@ const downloadAll = () => {
 
 const downloadBatch = async (batch, label) => {
     if (batch.length === 0) return;
+    // Which episodes have audio described / signed versions, so the choice (or the default) can use them.
+    batch = await resolveEpisodeVersions(batch);
+    const offered = offeredVersions(batch);
     // What it will produce, and the combined size of the episodes whose runtime is known.
     const sizes = batch.map((episode) => estimateSizeMb(globalSettings.value, { runtimeMinutes: episode.runtime }));
     const totalMb = sizes.reduce((sum, size) => sum + (size ?? 0), 0);
-    const media = await dialogService.confirmDownload(`Download ${batch.length} episodes of ${label}?`, {
+    const choice = await dialogService.confirmDownload(`Download ${batch.length} episodes of ${label}?`, {
         count: batch.length,
         totalMb: sizes.some((size) => size === undefined) ? undefined : totalMb,
+        versions: offered,
+        initialVersion: initialVersionKey(offered),
     });
-    if (!media) return;
+    if (!choice) return;
+    const { media } = choice;
+    const versionKey = batchVersionKey(choice, offered);
     // Only sent when it differs from the setting.
     const override = media === defaultMediaMode(globalSettings.value) ? undefined : media;
 
     downloadingSeason.value = true;
     const failed = [];
-    for (const episode of batch) {
+    for (const { item: episode, version } of planDownloads(batch, versionKey)) {
         try {
-            const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...toDownloadResult(episode), media: override })}`);
+            const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...toDownloadResult(episode), media: override, version })}`);
             if (!response.ok) failed.push(episode);
         } catch {
             failed.push(episode);
@@ -457,6 +466,45 @@ const loadRemainingPages = async (pid, first) => {
         ({ page, hasMore } = next);
     }
 };
+
+// Audio described / signed badges: the server marks the episodes whose answer it already had; the rest are asked
+// for here in small batches in the background, and only when those badges are switched on.
+const { state: badgeState } = useQualityBadges();
+// Any of the HDR / UHD, AD / signed or subtitle badges is switched on (on touch they take the bottom right of an episode's thumbnail).
+const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles);
+const askedVersions = new Set();
+const resolveVersions = async () => {
+    const pid = route.params.pid;
+    if (!badgeState.versions || !programme.value) return;
+    const pending = programme.value.seasons
+        .flatMap((season) => season.episodes)
+        .filter((episode) => !episode.versionsChecked && !askedVersions.has(episode.pid))
+        .map((episode) => episode.pid);
+    for (let i = 0; i < pending.length; i += 10) {
+        const chunk = pending.slice(i, i + 10);
+        chunk.forEach((episodePid) => askedVersions.add(episodePid));
+        let found;
+        try {
+            found = await browseFetch(`versions?pids=${chunk.join(',')}`);
+        } catch {
+            chunk.forEach((episodePid) => askedVersions.delete(episodePid));
+            return;
+        }
+        if (route.params.pid !== pid || !programme.value) return;
+        programme.value = {
+            ...programme.value,
+            seasons: programme.value.seasons.map((season) => ({
+                ...season,
+                episodes: season.episodes.map((episode) =>
+                    found[episode.pid]
+                        ? { ...episode, versionsChecked: true, ...(found[episode.pid].length ? { versions: found[episode.pid] } : {}) }
+                        : episode
+                ),
+            })),
+        };
+    }
+};
+watch([loadedCount, () => route.params.pid, () => badgeState.versions], resolveVersions);
 
 // Bumped by Try again to load the same programme once more.
 const reloadKey = ref(0);
@@ -1032,6 +1080,18 @@ const duplicatesBannerDownload = computed(
 
         .thumbBadges {
             bottom: 46px;
+        }
+
+        // With badges switched on they keep the bottom right and the buttons go top left.
+        .episodeThumbWrap.badgesOn {
+            .overlay {
+                align-items: flex-start;
+                justify-content: flex-start;
+            }
+
+            .thumbBadges {
+                bottom: 6px;
+            }
         }
     }
 }

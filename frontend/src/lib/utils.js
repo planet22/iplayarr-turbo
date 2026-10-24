@@ -208,25 +208,25 @@ export function formatDateTimeWithMillis(dateString) {
     return day === undefined ? undefined : `${day}, ${formatTime(dateString, { seconds: true, millis: true })}`;
 }
 
-// "20 seconds ago" style relative time. `now` defaults to Date.now() but can be passed in so
-// callers can drive this off a ticking ref and get a reactive re-render as time passes.
-export function formatRelativeTime(timestamp, now = Date.now()) {
+// "20 seconds ago" style relative time ("20s ago" when `short`, for the phone cards). `now` defaults to Date.now()
+// but can be passed in so callers can drive this off a ticking ref and get a reactive re-render as time passes.
+export function formatRelativeTime(timestamp, now = Date.now(), short = false) {
     if (!timestamp) {
         return 'Never';
     }
     const diffSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
     const units = [
-        ['year', 31536000],
-        ['month', 2592000],
-        ['day', 86400],
-        ['hour', 3600],
-        ['minute', 60],
-        ['second', 1],
+        ['year', 31536000, 'y'],
+        ['month', 2592000, 'mo'],
+        ['day', 86400, 'd'],
+        ['hour', 3600, 'h'],
+        ['minute', 60, 'm'],
+        ['second', 1, 's'],
     ];
-    for (const [unit, secondsInUnit] of units) {
+    for (const [unit, secondsInUnit, abbreviation] of units) {
         const value = Math.floor(diffSeconds / secondsInUnit);
         if (value >= 1) {
-            return `${value} ${unit}${value === 1 ? '' : 's'} ago`;
+            return short ? `${value}${abbreviation} ago` : `${value} ${unit}${value === 1 ? '' : 's'} ago`;
         }
     }
     return 'just now';

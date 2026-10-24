@@ -25,6 +25,7 @@ import { VideoType } from '../types/IPlayerSearchResult';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { versionProfiles } from '../types/VersionProfiles';
 import { splitArrayIntoChunks } from '../utils/Utils';
+import { cachedVersionIds } from '../utils/videoVersion';
 import categoryDiscoverService from './categoryDiscoverService';
 import { readableTextColor } from './channelLogoService';
 import DbCacheService from './db/dbCacheService';
@@ -251,6 +252,7 @@ export function iblEpisodeToDetails(element: any): IPlayerDetails {
         thumbnail: imagePid ? `json-api/thumbnail/${imagePid}.jpg` : undefined,
         type: VideoType.TV,
         seriesPid: element.tleo_id,
+        ...parseVersionIds(element),
     };
 }
 
@@ -750,6 +752,15 @@ class BrowseService {
             const degraded = await this.#programmeFromIbl(pid, safePage).catch(() => undefined);
             if (degraded && degraded.seasons.length > 0) return degraded;
         }
+        // Mark the episodes that have an audio described / signed version, for the badges, from what is cached
+        // already. The rest are left unchecked: the page asks for them in the background (and only when it
+        // shows those badges), so this response never waits on the BBC for them.
+        episodes = await Promise.all(
+            episodes.map(async (episode) => {
+                const ids = await cachedVersionIds(episode.pid);
+                return ids === undefined ? episode : { ...episode, versionsChecked: true, ...(ids.length ? { versions: ids } : {}) };
+            })
+        );
         return { ...base, seasons: this.#groupSeasons(episodes), page: safePage, hasMore };
     }
 

@@ -48,6 +48,7 @@ import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
 import { defaultMediaMode, describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
+import { preferredVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { buildDownloadQuery } from '@/lib/utils';
 
@@ -90,6 +91,8 @@ onMounted(async () => {
         ipFetch('json-api/config/qualityProfiles'),
     ]);
     if (versionResponse.ok) versions.value = versionResponse.data;
+    // Start on the default version (Settings > Download Client) when this programme has it, unless the result is already a version.
+    if (!props.result.version && versions.value.some(({ id }) => id === preferredVersion())) version.value = preferredVersion();
     if (profileResponse.ok) profiles.value = profileResponse.data;
 });
 

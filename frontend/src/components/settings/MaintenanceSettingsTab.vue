@@ -49,6 +49,8 @@
                             :class="{ changed: ttlEntryChanged(ttlDraft[cache.prefix]) }"
                             type="number"
                             min="1"
+                            max="3650"
+                            step="1"
                             :disabled="cacheBusy[cache.prefix]"
                             @input="ttlDraft[cache.prefix].resetPending = false"
                         />

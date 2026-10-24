@@ -57,12 +57,6 @@ const hasVersion = (id) => !!props.item.versions?.includes(id);
     background-color: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.35);
 
-    &.uhd {
-        background-color: rgba(0, 0, 0, 0.7);
-        border-color: @brand-color;
-        color: @brand-color;
-    }
-
     &.version {
         font-size: 12px;
     }

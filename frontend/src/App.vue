@@ -21,6 +21,7 @@ import { ModalsContainer } from 'vue-final-modal';
 import { RouterView } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { applyServerUiSettings } from '@/lib/serverUiSettings';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { getBasePath } from '@/lib/utils';
 
@@ -99,6 +100,7 @@ provide('refreshToolVersions', refreshToolVersions);
 
 const refreshGlobalSettings = async () => {
     globalSettings.value = (await ipFetch('json-api/config')).data;
+    applyServerUiSettings(globalSettings.value);
 };
 provide('refreshGlobalSettings', refreshGlobalSettings);
 

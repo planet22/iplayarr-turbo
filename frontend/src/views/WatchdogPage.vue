@@ -228,7 +228,7 @@
                         {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') }}
                     </span>
                     <span class="linkMeta" title="Last checked">
-                        <font-awesome-icon :icon="['fas', 'clock']" />{{ formatRelativeTime(Date.parse(item.lastChecked)) }}
+                        <font-awesome-icon :icon="['fas', 'clock']" />{{ formatRelativeTime(Date.parse(item.lastChecked), undefined, true) }}
                     </span>
                     <span v-if="(item.actions || []).length" class="linkMeta">{{ item.actions.join(', ') }}</span>
                 </template>

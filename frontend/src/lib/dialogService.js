@@ -19,7 +19,7 @@ const dialogService = {
         formModal.open();
     },
 
-    // options: { danger, confirmLabel } - a red, verb-labelled confirm button for destructive actions.
+    // options: { danger, confirmLabel, cancelLabel } - a red, verb-labelled confirm button for destructive actions.
     confirm: async (title, text, subtext, options = {}) => {
         return new Promise((resolve) => {
             const formModal = useModal({
@@ -31,6 +31,7 @@ const dialogService = {
                     showCancel: true,
                     ...(options.note ? { note: options.note } : {}),
                     ...(options.confirmLabel ? { confirmLabel: options.confirmLabel } : {}),
+                    ...(options.cancelLabel ? { cancelLabel: options.cancelLabel } : {}),
                     danger: !!options.danger,
                     onConfirm: () => {
                         resolve(true);
@@ -48,8 +49,9 @@ const dialogService = {
         });
     },
 
-    // Confirms a batch of downloads and resolves with the chosen mode ('strm' | 'download'), or false if cancelled.
-    confirmDownload: (text, { count, totalMb }) => {
+    // Confirms a batch of downloads and resolves with { media: 'strm' | 'download', version } (see planDownloads in
+    // downloadVersions.js), or false if cancelled. `versions` lists the extra versions to offer a choice of.
+    confirmDownload: (text, { count, totalMb, versions = [], initialVersion = '' }) => {
         return new Promise((resolve) => {
             const formModal = useModal({
                 component: DownloadBatchConfirm,
@@ -57,8 +59,10 @@ const dialogService = {
                     text,
                     count,
                     totalMb,
-                    onConfirm: (mode) => {
-                        resolve(mode);
+                    versions,
+                    initialVersion,
+                    onConfirm: (choice) => {
+                        resolve(choice);
                         formModal.close();
                     },
                     onCancel: () => {

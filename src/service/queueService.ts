@@ -74,8 +74,11 @@ const queueService = {
     },
 
     moveQueue: async (): Promise<void> => {
-        const activeLimit: number = parseInt(
-            (await configService.getParameter(IplayarrParameter.ACTIVE_LIMIT)) as string
+        // Never below one: 0, a negative or a non-number from an old or hand-edited setting would otherwise stall
+        // the queue (or, as NaN, run everything at once).
+        const activeLimit: number = Math.max(
+            1,
+            parseInt((await configService.getParameter(IplayarrParameter.ACTIVE_LIMIT)) as string) || 3
         );
 
         // Always re-read `queue` rather than holding snapshots across the await below: other

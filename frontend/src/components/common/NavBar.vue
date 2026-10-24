@@ -61,6 +61,8 @@ import { defineExpose, inject, onBeforeUnmount, onMounted, ref, watch } from 'vu
 import { useRoute, useRouter } from 'vue-router';
 
 import ColorModeToggle from '@/components/common/ColorModeToggle.vue';
+import dialogService from '@/lib/dialogService';
+import { askAboutVersions, preferredVersion, versionsActive } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { useQuickFind } from '@/lib/quickFind';
 import toastService from '@/lib/toastService';
@@ -175,11 +177,35 @@ onBeforeUnmount(() => {
     window.removeEventListener('scroll', onScroll);
 });
 
+// An episode link with an audio described / signed version asks which to download (or uses the default from
+// Settings > Download Client). Returns the version id, '' for the standard one, or false if cancelled.
+const chooseVersion = async (pid) => {
+    if (!versionsActive()) return '';
+    let found = [];
+    try {
+        const { ok, data } = await ipFetch(`json-api/programme-versions?pid=${encodeURIComponent(pid)}`);
+        if (ok && Array.isArray(data)) found = data;
+    } catch {
+        return '';
+    }
+    if (found.length === 0) return '';
+    if (!askAboutVersions()) return found.some(({ id }) => id === preferredVersion()) ? preferredVersion() : '';
+    const standard = 'Standard version';
+    const choice = await dialogService.select('Download which version?', 'This programme also has other versions.', undefined, [
+        standard,
+        ...found.map(({ name }) => name),
+    ]);
+    if (!choice) return false;
+    return found.find(({ name }) => name === choice)?.id ?? '';
+};
+
 const search = async () => {
     closeSuggestions();
     const pid = getPidFromBBCUrl(searchTerm.value);
     if (pid) {
-        const { ok, data } = await ipFetch(`json-api/download?pid=${pid}`, 'GET');
+        const version = await chooseVersion(pid);
+        if (version === false) return;
+        const { ok, data } = await ipFetch(`json-api/download?pid=${pid}${version ? `&version=${version}` : ''}`, 'GET');
         if (ok) {
             searchTerm.value = '';
             toastService.success('Download queued', { action: { label: 'View queue', onClick: () => router.push('/queue') } });

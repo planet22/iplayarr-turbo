@@ -5,7 +5,7 @@
         v-bind="selectable ? {} : { to: `/browse/programme/${item.seriesPid ?? item.pid}` }"
         @click="onCardClick"
     >
-        <div class="thumb">
+        <div :class="['thumb', badgesOn ? 'badgesOn' : '']">
             <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" @error="hideBrokenImage" />
             <div v-else class="noThumb">
                 <font-awesome-icon :icon="['fas', 'tv']" size="2x" />
@@ -49,6 +49,7 @@ import { RouterLink } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
+import { useQualityBadges } from '@/lib/qualityBadges';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
@@ -80,6 +81,8 @@ const onCardClick = () => {
 };
 
 const { canPlay, play, download } = useBrowseActions();
+const { state: badgeState } = useQualityBadges();
+const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles);
 const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === 'MOVIE');
 // TV or film, plus whether the card is a whole programme, a series or a single episode.
 const kindBadges = computed(() => {
@@ -302,6 +305,16 @@ const statusBadges = computed(() => {
                 height: 34px;
                 opacity: 0.9;
             }
+        }
+
+        // With badges switched on they keep the bottom right and the buttons go top left.
+        .thumb.badgesOn:has(.overlay) .thumbBadges {
+            bottom: 6px;
+        }
+
+        .thumb.badgesOn .overlay {
+            align-items: flex-start;
+            justify-content: flex-start;
         }
     }
 

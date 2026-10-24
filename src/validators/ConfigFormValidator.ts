@@ -2,7 +2,27 @@ import Handlebars from 'handlebars';
 
 import nzbFacade from '../facade/nzbFacade';
 import { FilenameTemplateContext } from '../types/FilenameTemplateContext';
+import { versionProfiles } from '../types/VersionProfiles';
 import { Validator } from './Validator';
+
+// Download Limit: how many downloads run at once. 10 is far past what the BBC's servers or a NAS will sustain.
+export const MAX_ACTIVE_LIMIT = 10;
+// Hours the RSS feed looks back (default 48): a month is already a very heavy listing.
+export const MAX_RSS_FEED_HOURS = 720;
+
+// A setting that must be a whole number from min to max. `required` ones must be given; the others may be blank
+// (the default applies) or left out of the request.
+function checkWholeNumber(errors: { [key: string]: string }, input: any, key: string, label: string, min: number, max: number, required: boolean): void {
+    const value = input[key];
+    if (!required && (value === undefined || value === null || value === '')) return;
+    if (value === '' || value === undefined || value === null || isNaN(Number(value))) {
+        errors[key] = `${label} must be a number`;
+    } else if (Number(value) < 0) {
+        errors[key] = `${label} must be a positive number`;
+    } else if (!Number.isInteger(Number(value)) || Number(value) < min || Number(value) > max) {
+        errors[key] = `${label} must be a whole number from ${min} to ${max}`;
+    }
+}
 
 export class ConfigFormValidator extends Validator {
     async validate(input: any): Promise<{ [key: string]: string }> {
@@ -16,17 +36,11 @@ export class ConfigFormValidator extends Validator {
         if (input.ARR_COMPLETE_DIR && !this.directoryExists(input.ARR_COMPLETE_DIR)) {
             validatorError['ARR_COMPLETE_DIR'] = `Directory ${input.ARR_COMPLETE_DIR} does not exist`;
         }
-        if (!this.isNumber(input.ACTIVE_LIMIT)) {
-            validatorError['ACTIVE_LIMIT'] = 'Download limit must be a number';
-        } else if (input.ACTIVE_LIMIT < 0) {
-            validatorError['ACTIVE_LIMIT'] = 'Download limit must be a positive number';
-        }
-
-        if (!this.isNumber(input.RSS_FEED_HOURS)) {
-            validatorError['RSS_FEED_HOURS'] = 'RSS Feed Hours must be a number';
-        } else if (input.RSS_FEED_HOURS < 0) {
-            validatorError['RSS_FEED_HOURS'] = 'RSS Feed Hours must be a positive number';
-        }
+        checkWholeNumber(validatorError, input, 'ACTIVE_LIMIT', 'Download limit', 1, MAX_ACTIVE_LIMIT, true);
+        checkWholeNumber(validatorError, input, 'RSS_FEED_HOURS', 'RSS Feed Hours', 1, MAX_RSS_FEED_HOURS, true);
+        checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_CONCURRENCY', 'Parallel checks', 1, 10, false);
+        checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', 1, 1000, false);
+        checkWholeNumber(validatorError, input, 'STREAM_HISTORY_RETENTION_DAYS', 'Stream history retention', 1, 3650, false);
 
         if (!input.AUTH_USERNAME) {
             validatorError['AUTH_USERNAME'] = 'Please provide a Username';
@@ -67,6 +81,14 @@ export class ConfigFormValidator extends Validator {
             !(/^-?\d+$/.test(String(input.LIVE_TV_EPG_OFFSET)) && Math.abs(Number(input.LIVE_TV_EPG_OFFSET)) <= 1440)
         ) {
             validatorError['LIVE_TV_EPG_OFFSET'] = 'Please provide a whole number of minutes between -1440 and 1440';
+        }
+        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION']) {
+            if (input[key] !== undefined && input[key] !== 'true' && input[key] !== 'false') {
+                validatorError[key] = 'Must be true or false';
+            }
+        }
+        if (input.DOWNLOAD_DEFAULT_VERSION && !versionProfiles.some(({ id }) => id === input.DOWNLOAD_DEFAULT_VERSION)) {
+            validatorError['DOWNLOAD_DEFAULT_VERSION'] = 'Unknown version';
         }
         if (input.AUTH_TYPE === 'oidc') {
             if (!input.OIDC_CONFIG_URL) {

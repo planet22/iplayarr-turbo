@@ -196,7 +196,26 @@ class ArrLibraryService {
             const { data } = await axios.post(this.#url(app, this.#resource(app)), body, this.#headers(app));
             return { id: data.id, created: true };
         } catch (error) {
-            throw new Error(extractArrErrorMessage(error));
+            // Sonarr/Radarr refuse a second entry with the same title slug even when its TVDB/TMDB id differs (the
+            // same show listed twice upstream). The one already in the library is the show: link to that, as for
+            // any show that is already there, and never claim to have added it.
+            const message = extractArrErrorMessage(error);
+            if (/TitleSlug/i.test(message) && raw.titleSlug) {
+                const existing = await this.#findBySlug(app, raw.titleSlug);
+                if (existing) return { id: existing, created: false };
+            }
+            throw new Error(message);
+        }
+    }
+
+    // The id of the library entry with this title slug, if the library has one.
+    async #findBySlug(app: App, titleSlug: string): Promise<number | undefined> {
+        try {
+            const { data } = await axios.get(this.#url(app, this.#resource(app)), this.#headers(app));
+            const match = (Array.isArray(data) ? data : []).find((item: any) => item.titleSlug === titleSlug);
+            return match?.id > 0 ? match.id : undefined;
+        } catch {
+            return undefined;
         }
     }
 

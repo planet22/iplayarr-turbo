@@ -1,35 +1,22 @@
 import { computed, reactive, watch } from 'vue';
 
-import { useChannelPillColors } from '@/lib/channelPillColors';
-import { useChannelTools } from '@/lib/channelTools';
-import { useInfoMessages } from '@/lib/infoMessages';
 import { usePagingMinimum } from '@/lib/pagingMinimum';
-import { useQualityBadges } from '@/lib/qualityBadges';
 import { useQuickFind } from '@/lib/quickFind';
 import { useTheme } from '@/lib/theme';
 import { useTopBar } from '@/lib/topBar';
 
-// The per-browser Appearance preferences (General tab), held as a draft so they only take effect when the
-// settings page's Save button applies them, like every server setting. The libs stay the source of truth for
-// the applied values; `draft` is what the form edits and `changed` lists the names that differ.
+// The per-browser Appearance preferences (General tab: colour scheme and mode, quick find, top bar on phones, items
+// before paging), held as a draft so they only take effect when the settings page's Save button applies them, like
+// every server setting. The libs stay the source of truth for the applied values; `draft` is what the form edits and
+// `changed` lists the names that differ.
 export function useAppearanceDraft() {
-    const pillColors = useChannelPillColors();
-    const qualityBadges = useQualityBadges();
-    const channelTools = useChannelTools();
     const topBar = useTopBar();
-    const infoMessages = useInfoMessages();
     const pagingMinimum = usePagingMinimum();
     const quickFind = useQuickFind();
     const theme = useTheme();
 
     const read = () => ({
-        pillColors: pillColors.state.enabled,
-        qualityBadges: qualityBadges.state.enabled,
-        versionBadges: qualityBadges.state.versions,
-        subtitleBadges: qualityBadges.state.subtitles,
-        channelTools: channelTools.state.enabled,
         topBar: topBar.state.mode,
-        infoMessages: infoMessages.state.enabled,
         quickFind: quickFind.state.enabled,
         pagingMinimum: pagingMinimum.state.minimum,
         theme: theme.state.theme,
@@ -51,13 +38,7 @@ export function useAppearanceDraft() {
     });
 
     const apply = () => {
-        pillColors.setEnabled(draft.pillColors);
-        qualityBadges.setEnabled(draft.qualityBadges);
-        qualityBadges.setVersions(draft.versionBadges);
-        qualityBadges.setSubtitles(draft.subtitleBadges);
-        channelTools.setEnabled(draft.channelTools);
         topBar.setMode(draft.topBar);
-        infoMessages.setEnabled(draft.infoMessages);
         quickFind.setEnabled(draft.quickFind);
         pagingMinimum.setMinimum(draft.pagingMinimum);
         theme.setTheme(draft.theme);

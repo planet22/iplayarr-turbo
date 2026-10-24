@@ -94,18 +94,11 @@
         :options="COLOR_MODES"
     />
     <SelectInput
-        v-model="pillColorsEnabled"
-        field="appearance:pillColors"
-        name="Colour Channel Pills by Logo"
-        tooltip="Colour channel labels to match each BBC logo."
-        :options="trueOrFalse"
-    />
-    <SelectInput
-        v-model="channelToolsEnabled"
-        field="appearance:channelTools"
-        name="Show Channel Editing Tools"
-        tooltip="Show the arrange, library, Live TV and customise buttons on the Channels page. Off keeps it simple."
-        :options="trueOrFalse"
+        v-model="topBarMode"
+        field="appearance:topBar"
+        name="Top Bar on Phones"
+        tooltip="Slim keeps the top bar on screen while you scroll. Hide on scroll shows it again when you scroll up."
+        :options="TOP_BAR_MODES"
     />
     <SelectInput
         v-model="quickFindEnabled"
@@ -115,48 +108,51 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-model="config.UI_INFO_MESSAGES"
+        field="UI_INFO_MESSAGES"
+        name="Show Info Messages"
+        tooltip="Show the blue explanatory notes at the top of pages. Warnings and errors always show."
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-model="config.UI_PILL_COLORS"
+        field="UI_PILL_COLORS"
+        name="Colour Channel Pills by Logo"
+        tooltip="Colour channel labels to match each BBC logo."
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-model="config.UI_CHANNEL_TOOLS"
+        field="UI_CHANNEL_TOOLS"
+        name="Show Channel Editing Tools"
+        tooltip="Show the arrange, library, Live TV and customise buttons on the Channels page. Off keeps it simple."
+        :options="trueOrFalse"
+    />
+    <SelectInput
         v-if="showAdvanced"
-        v-model="qualityBadgesEnabled"
+        v-model="config.UI_QUALITY_BADGES"
         :advanced="true"
-        field="appearance:qualityBadges"
+        field="UI_QUALITY_BADGES"
         name="Show HDR / UHD Badges"
         tooltip="Show an HDR or Ultra HD badge where iPlayer lists it. It is only a label: iPlayarr streams HD at most."
         :options="trueOrFalse"
     />
     <SelectInput
         v-if="showAdvanced"
-        v-model="versionBadgesEnabled"
+        v-model="config.UI_VERSION_BADGES"
         :advanced="true"
-        field="appearance:versionBadges"
+        field="UI_VERSION_BADGES"
         name="Show AD / Signed Badges"
         tooltip="Mark programmes that have an audio described or signed version."
         :options="trueOrFalse"
     />
     <SelectInput
         v-if="showAdvanced"
-        v-model="subtitleBadgesEnabled"
+        v-model="config.UI_SUBTITLE_BADGES"
         :advanced="true"
-        field="appearance:subtitleBadges"
+        field="UI_SUBTITLE_BADGES"
         name="Show Subtitle Badge"
         tooltip="Mark episodes with a subtitles icon. Not checked per programme: BBC gives most of them subtitles."
-        :options="trueOrFalse"
-    />
-    <SelectInput
-        v-if="showAdvanced"
-        v-model="topBarMode"
-        :advanced="true"
-        field="appearance:topBar"
-        name="Top Bar on Phones"
-        tooltip="Slim keeps the top bar on screen while you scroll. Hide on scroll shows it again when you scroll up."
-        :options="TOP_BAR_MODES"
-    />
-    <SelectInput
-        v-if="showAdvanced"
-        v-model="infoMessagesEnabled"
-        :advanced="true"
-        field="appearance:infoMessages"
-        name="Show Info Messages"
-        tooltip="Show the blue explanatory notes at the top of pages. Warnings and errors always show."
         :options="trueOrFalse"
     />
     <TextInput
@@ -165,6 +161,9 @@
         :advanced="true"
         field="appearance:pagingMinimum"
         type-override="number"
+        :min="0"
+        :max="1000"
+        :step="1"
         name="Items Before Paging"
         tooltip="A list only shows page controls when it has more items than this. Set 0 to always show them."
     />
@@ -177,8 +176,11 @@
             field="RSS_FEED_HOURS"
             :advanced="true"
             type-override="number"
+            :min="1"
+            :max="720"
+            :step="1"
             name="Hours in RSS Feed"
-            tooltip="How many hours back the RSS feed covers."
+            tooltip="How many hours back the RSS feed covers (1-720, default 48)."
             :error="validationErrors.config?.RSS_FEED_HOURS"
         />
         <SelectInput
@@ -228,13 +230,10 @@ const showAdvanced = inject('settingsShowAdvanced');
 
 const emit = defineEmits(['generate-api-key']);
 
-// The per-browser Appearance preferences are drafts held by the settings page; Save applies them.
+// The colour scheme / mode, top bar, quick find and paging preferences are per-browser drafts held by the settings page; Save applies them.
+// The rest of Appearance (pill colours, badges, info messages, channel tools) are server settings like any other.
 const appearance = inject('settingsAppearance');
 const { state: themeState } = useTheme();
-const pillColorsEnabled = computed({
-    get: () => String(appearance.pillColors),
-    set: (value) => (appearance.pillColors = value === 'true'),
-});
 const topBarMode = computed({
     get: () => appearance.topBar,
     set: (value) => (appearance.topBar = value),
@@ -243,28 +242,8 @@ const quickFindEnabled = computed({
     get: () => String(appearance.quickFind),
     set: (value) => (appearance.quickFind = value === 'true'),
 });
-const infoMessagesEnabled = computed({
-    get: () => String(appearance.infoMessages),
-    set: (value) => (appearance.infoMessages = value === 'true'),
-});
 const pagingMinimumText = computed({
     get: () => String(appearance.pagingMinimum),
     set: (value) => (appearance.pagingMinimum = parseInt(value, 10)),
-});
-const qualityBadgesEnabled = computed({
-    get: () => String(appearance.qualityBadges),
-    set: (value) => (appearance.qualityBadges = value === 'true'),
-});
-const versionBadgesEnabled = computed({
-    get: () => String(appearance.versionBadges),
-    set: (value) => (appearance.versionBadges = value === 'true'),
-});
-const subtitleBadgesEnabled = computed({
-    get: () => String(appearance.subtitleBadges),
-    set: (value) => (appearance.subtitleBadges = value === 'true'),
-});
-const channelToolsEnabled = computed({
-    get: () => String(appearance.channelTools),
-    set: (value) => (appearance.channelTools = value === 'true'),
 });
 </script>

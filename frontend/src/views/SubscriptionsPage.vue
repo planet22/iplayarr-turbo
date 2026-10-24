@@ -36,27 +36,38 @@
                     </span>
                     <div v-if="subscription.arrOnly" class="rowActions">
                         <button class="clickable" title="Stop tracking (Sonarr/Radarr only)" aria-label="Stop tracking" @click="remove(subscription)">
-                            <font-awesome-icon :icon="['fas', 'link-slash']" />
+                            <font-awesome-icon :icon="['fas', 'xmark']" />
                         </button>
                     </div>
                 </template>
                 <div v-if="!subscription.arrOnly || subscription.lastQueuedAt" class="cardInfoRow">
                     <div class="cardLines">
                         <div v-if="!subscription.arrOnly" class="cardLine" title="Last checked">
-                            <font-awesome-icon :icon="['fas', 'clock']" />{{ checkedLabel(subscription) }}
+                            <font-awesome-icon :icon="['fas', 'clock']" />{{ checkedLabel(subscription, true) }}
                         </div>
                         <div v-if="subscription.lastQueuedAt" class="cardLine" title="Last download">
-                            <font-awesome-icon :icon="['fas', 'download']" />{{ formatRelativeTime(Date.parse(subscription.lastQueuedAt)) }}
+                            <font-awesome-icon :icon="['fas', 'download']" />{{ formatRelativeTime(Date.parse(subscription.lastQueuedAt), undefined, true) }}
                         </div>
                     </div>
                     <div v-if="!subscription.arrOnly" class="rowActions">
                         <button
-                            class="clickable"
-                            :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
+                            :class="['clickable', 'stateToggle', subscription.arr ? 'on' : '']"
+                            :title="subscription.arr ? 'Linked to Sonarr/Radarr (click to unlink)' : 'Add to Sonarr/Radarr'"
+                            :aria-label="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
+                            :aria-pressed="!!subscription.arr"
                             :disabled="busy[subscription.id]"
                             @click="toggleArrWithBusy(subscription)"
                         >
-                            <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
+                            <font-awesome-icon :icon="['fas', 'right-left']" />
+                        </button>
+                        <button
+                            v-for="version in subscriptionVersions" :key="version.id"
+                            :class="['clickable', 'stateToggle', subscription.versions?.includes(version.id) ? 'on' : '']"
+                            :title="`${version.name} versions: ${subscription.versions?.includes(version.id) ? 'on' : 'off'} (new episodes only)`"
+                            :aria-label="`${version.name} versions`" :aria-pressed="!!subscription.versions?.includes(version.id)"
+                            :disabled="busy[subscription.id]" @click="toggleVersionWithBusy(subscription, version.id)"
+                        >
+                            <font-awesome-icon :icon="['fas', version.icon]" />
                         </button>
                         <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                             <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
@@ -90,13 +101,26 @@
                 <div class="rowActions">
                     <button
                         v-if="!subscription.arrOnly"
-                        class="clickable"
-                        :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
+                        :class="['clickable', 'stateToggle', subscription.arr ? 'on' : '']"
+                        :title="subscription.arr ? 'Linked to Sonarr/Radarr (click to unlink)' : 'Add to Sonarr/Radarr'"
+                        :aria-label="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
+                        :aria-pressed="!!subscription.arr"
                         :disabled="busy[subscription.id]"
                         @click="toggleArrWithBusy(subscription)"
                     >
-                        <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
+                        <font-awesome-icon :icon="['fas', 'right-left']" />
                     </button>
+                    <template v-if="!subscription.arrOnly">
+                        <button
+                            v-for="version in subscriptionVersions" :key="version.id"
+                            :class="['clickable', 'stateToggle', subscription.versions?.includes(version.id) ? 'on' : '']"
+                            :title="`${version.name} versions: ${subscription.versions?.includes(version.id) ? 'on' : 'off'} (new episodes only)`"
+                            :aria-label="`${version.name} versions`" :aria-pressed="!!subscription.versions?.includes(version.id)"
+                            :disabled="busy[subscription.id]" @click="toggleVersionWithBusy(subscription, version.id)"
+                        >
+                            <font-awesome-icon :icon="['fas', version.icon]" />
+                        </button>
+                    </template>
                     <button v-if="!subscription.arrOnly" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
@@ -176,14 +200,14 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
-import { useSubscriptions } from '@/lib/subscriptions';
+import { subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
 import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { formatRelativeTime, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const isMobile = useIsMobile();
-const { subscriptions, loaded, load, unsubscribe, toggleArr } = useSubscriptions();
+const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion } = useSubscriptions();
 const { page, pageSize, pagedItems } = usePagination(subscriptions);
 const busy = reactive({});
 // Live channel logos that failed to load fall back to the TV icon.
@@ -210,8 +234,8 @@ const arrPillTitle = ({ arr, arrOnly }) => {
     return arrOnly ? `${where} - downloads are handled there, not by iPlayarr` : where;
 };
 
-const checkedLabel = (subscription) =>
-    subscription.lastChecked ? formatRelativeTime(Date.parse(subscription.lastChecked)) : 'not yet';
+const checkedLabel = (subscription, short = false) =>
+    subscription.lastChecked ? formatRelativeTime(Date.parse(subscription.lastChecked), undefined, short) : 'not yet';
 
 const summarise = (results) => {
     const queued = results.reduce((n, r) => n + r.queued.length, 0);
@@ -253,6 +277,15 @@ const toggleArrWithBusy = async (subscription) => {
     busy[subscription.id] = true;
     try {
         await toggleArr(subscription);
+    } finally {
+        busy[subscription.id] = false;
+    }
+};
+
+const toggleVersionWithBusy = async (subscription, versionId) => {
+    busy[subscription.id] = true;
+    try {
+        await toggleVersion(subscription, versionId);
     } finally {
         busy[subscription.id] = false;
     }
@@ -355,6 +388,17 @@ const removeLive = async (live) => {
             background-color: @brand-color;
             border-color: @brand-color;
             color: @on-brand-color;
+        }
+
+        // A version switched on for this show.
+        &.stateToggle.on {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
+        }
+
+        &.stateToggle:not(.on) {
+            opacity: 0.6;
         }
     }
 }

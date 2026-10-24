@@ -32,11 +32,16 @@
             <button
                 v-if="icons.some((i) => i == 'advanced')"
                 class="SettingsPageToolbar-button clickable"
-                title="Toggle advanced settings"
-                aria-label="Toggle advanced settings"
+                :title="advancedOn ? 'Advanced settings shown (click to hide)' : 'Show advanced settings'"
+                :aria-label="advancedOn ? 'Hide advanced settings' : 'Show advanced settings'"
+                :aria-pressed="advancedOn"
                 @click="emit('toggleAdvanced')"
             >
-                <font-awesome-icon :icon="['fas', 'cog']" />
+                <!-- A cog with a tick on it while the advanced settings are showing. -->
+                <span class="advancedIcon">
+                    <font-awesome-icon :icon="['fas', 'cog']" />
+                    <font-awesome-icon v-if="advancedOn" class="advancedTick" :icon="['fas', 'check']" />
+                </span>
                 <div v-if="!iconOnly" class="SettingsPageToolbar-label">Toggle Advanced</div>
             </button>
             <button
@@ -181,6 +186,12 @@ const showFilterDropdown = ref(false);
 const dropdownDiv = ref(null);
 
 defineProps({
+    // The 'advanced' button's state: the advanced settings are showing.
+    advancedOn: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     // Buttons show just their icon, with the label as the tooltip. On by default so every page's toolbar
     // matches; pass :icon-only="false" to bring the words back.
     iconOnly: {
@@ -347,6 +358,24 @@ const handleClickOutside = (event) => {
 </script>
 
 <style lang="less">
+.SettingsPageToolbar .advancedIcon {
+    position: relative;
+    display: inline-flex;
+
+    // The tick sits on the cog's lower right, ringed so it reads against it.
+    .advancedTick {
+        position: absolute;
+        right: -7px;
+        bottom: -6px;
+        padding: 2px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background-color: @brand-color;
+        color: @on-brand-color;
+    }
+}
+
 .SettingsPageToolbar {
     min-height: 44px;
     background-color: @toolbar-background-color;

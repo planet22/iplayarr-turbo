@@ -96,6 +96,15 @@ const configService = {
         STRM_WATCHDOG_ARR_ACTION: 'none',
         STRM_WATCHDOG_FAIL_THRESHOLD: '10',
         STRM_WATCHDOG_CONCURRENCY: '4',
+        UI_PILL_COLORS: 'true',
+        UI_CHANNEL_TOOLS: 'false',
+        UI_INFO_MESSAGES: 'true',
+        UI_QUALITY_BADGES: 'false',
+        UI_VERSION_BADGES: 'false',
+        UI_SUBTITLE_BADGES: 'false',
+        DOWNLOAD_ASK_VERSION: 'true',
+        // '' is the standard version; otherwise a version profile id (audio-described, signed).
+        DOWNLOAD_DEFAULT_VERSION: '',
     } as ConfigMap,
 
     getParameter: async (parameter: IplayarrParameter): Promise<string | undefined> => {

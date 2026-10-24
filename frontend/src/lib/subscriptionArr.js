@@ -139,7 +139,9 @@ export async function offerArrLink(subscription) {
     if (!(await hasArrApps())) return false;
     const wanted = await dialogService.confirm(
         'Add to Sonarr/Radarr?',
-        `Also add ${subscription.title} to Sonarr or Radarr? You can do this later from the Subscriptions page.`
+        `Also add ${subscription.title} to Sonarr or Radarr? You can do this later from the Subscriptions page.`,
+        undefined,
+        { confirmLabel: 'Add', cancelLabel: 'Not now' }
     );
     return wanted ? linkToArr(subscription) : false;
 }

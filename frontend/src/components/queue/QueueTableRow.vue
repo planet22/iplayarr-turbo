@@ -14,6 +14,8 @@
                     <div v-else class="cardImg thumbnail-placeholder clickable" @click="openInfo(item)">
                         <font-awesome-icon :icon="['fas', item.type == 'TV' ? 'tv' : 'film']" />
                     </div>
+                    <!-- Phones: under the thumbnail (tablets show them beside the output icon, below). -->
+                    <QualityBadges :item="badgeItem" class="badgesUnderThumb" />
                 </div>
                 <div class="cardBody">
                     <a
@@ -45,6 +47,7 @@
                             :icon="['fas', outputLabel == 'STRM' ? 'link' : 'file-video']"
                             :title="outputLabel == 'STRM' ? 'STRM link' : 'File'"
                         />
+                        <QualityBadges :item="badgeItem" class="badgesInMeta" />
                     </div>
                 </div>
                 <div class="cardDetails">
@@ -105,6 +108,7 @@
             <div v-if="details?.channel || seriesEpisodeLabel" class="subtle channelLine">
                 <ChannelPill :channel="details?.channel" />
                 <span v-if="seriesEpisodeLabel">{{ seriesEpisodeLabel }}</span>
+                <QualityBadges :item="badgeItem" />
             </div>
         </td>
         <td data-title="Type">
@@ -167,6 +171,7 @@ import { formatDate, formatStorageSize, getProgrammeThumbnailUrl, getSeriesEpiso
 import ChannelPill from '../common/ChannelPill.vue';
 import CheckInput from '../common/form/CheckInput.vue';
 import ProgressBar from '../common/ProgressBar.vue';
+import QualityBadges from '../common/QualityBadges.vue';
 import VideoInfoModal from '../modals/VideoInfoModal.vue';
 
 const props = defineProps({
@@ -218,6 +223,11 @@ const outputLabel = computed(() => {
 });
 
 const seriesEpisodeLabel = computed(() => getSeriesEpisodeLabel(props.details));
+
+// The badges follow the same settings as the browse cards: the version this download is (audio described /
+// signed), and subtitles (every episode has them), so a plain and an audio described download of one
+// episode can be told apart.
+const badgeItem = computed(() => ({ versions: props.item.library?.version ? [props.item.library.version] : [] }));
 
 const preview = ({ pid, nzbName }) => {
     playInPip(pid, nzbName);
@@ -288,6 +298,21 @@ const getDeleteIcon = ({ status }) => {
     align-items: center;
     flex-wrap: wrap;
     gap: 6px 8px;
+}
+
+.badgesUnderThumb {
+    display: none;
+    margin-top: 4px;
+}
+
+@media (max-width: 520px) {
+    .badgesUnderThumb {
+        display: inline-flex;
+    }
+
+    .badgesInMeta {
+        display: none;
+    }
 }
 
 .actionCol span {

@@ -111,6 +111,9 @@
                 name="Channel number"
                 tooltip="Jellyfin's channel number for this channel. Blank follows the Channels page order."
                 type-override="number"
+                :min="1"
+                :max="9999"
+                :step="1"
             />
         </div>
         <div v-if="channel" class="dangerRow">

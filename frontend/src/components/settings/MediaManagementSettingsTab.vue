@@ -8,6 +8,14 @@
         :error="validationErrors.config?.MEDIA_MODE"
         :options="mediaModes"
     />
+    <SelectInput
+        v-model="config.OUTPUT_FORMAT"
+        field="OUTPUT_FORMAT"
+        name="Output Format?"
+        tooltip="The video file format."
+        :error="validationErrors.config?.OUTPUT_FORMAT"
+        :options="outputFormats"
+    />
     <TextInput
         v-model="config.DOWNLOAD_DIR"
         field="DOWNLOAD_DIR"
@@ -65,14 +73,7 @@
         :error="validationErrors.config?.EXTRA_VERSIONS"
         :options="versionProfiles"
     />
-    <SelectInput
-        v-model="config.OUTPUT_FORMAT"
-        field="OUTPUT_FORMAT"
-        name="Output Format?"
-        tooltip="The video file format."
-        :error="validationErrors.config?.OUTPUT_FORMAT"
-        :options="outputFormats"
-    />
+    <SettingsSubheading text="Naming and library" />
     <SelectInput
         v-if="showAdvanced"
         v-model="config.RELEASE_LANGUAGE"
@@ -83,7 +84,6 @@
         :error="validationErrors.config?.RELEASE_LANGUAGE"
         :options="releaseLanguages"
     />
-    <SettingsSubheading text="Naming and library" />
     <SelectInput
         v-if="showAdvanced"
         v-model="config.AIRDATE_NUMBERING"

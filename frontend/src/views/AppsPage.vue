@@ -8,7 +8,7 @@
         <div class="block-reset" />
         <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm">
             <a class="appBox" @click="openForm(item)">
-                <span class="lastSeen" title="Last Seen">{{ formatRelativeTime(item.lastSeen, now) }}</span>
+                <span class="lastSeen" title="Last Seen">{{ formatRelativeTime(item.lastSeen, now, true) }}</span>
                 <div class="major">
                     <img class="appImg" :src="`/img/${item.type.toLowerCase()}.svg`" />
                     <span class="appName">
@@ -66,7 +66,7 @@
                     @change="saveMapping(mapping)"
                 />
                 <template #foot>
-                    <span>Last seen {{ formatRelativeTime(mapping.lastSeen, now) }}</span>
+                    <span>Last seen {{ formatRelativeTime(mapping.lastSeen, now, true) }}</span>
                     <button class="clickable uaCardButton" title="Remove" @click="removeMapping(mapping)">
                         <font-awesome-icon :icon="['fas', 'trash']" />
                     </button>

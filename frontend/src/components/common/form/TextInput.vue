@@ -17,6 +17,9 @@
                     v-model="localValue"
                     :class="{ monospace }"
                     :type="typeOverride"
+                    :min="min"
+                    :max="max"
+                    :step="step"
                     :placeholder="placeholder"
                     :disabled="disabled"
                 />
@@ -73,6 +76,22 @@ const props = defineProps({
         type: String,
         required: false,
         default: 'text',
+    },
+    // For a number box: the range its arrows (and the browser's own check) stay within, and the step.
+    min: {
+        type: Number,
+        required: false,
+        default: undefined,
+    },
+    max: {
+        type: Number,
+        required: false,
+        default: undefined,
+    },
+    step: {
+        type: Number,
+        required: false,
+        default: undefined,
     },
     error: {
         type: String,
