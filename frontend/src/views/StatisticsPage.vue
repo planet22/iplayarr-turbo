@@ -5,39 +5,34 @@
             :icons="['filter']" :filter-enabled="range != 'All'" :filter-options="availableRanges"
             :selected-filter="range" @select-filter="selectRange" />
         <legend>Server</legend>
-        <div class="statRow">
-            <div class="statCard">
-                <font-awesome-icon class="statIcon" :icon="['fas', 'clock']" />
-                <div class="statBody">
-                    <span class="statLabel">Uptime</span>
-                    <span class="statValue">{{ msToTime(uptime.uptime) }}</span>
-                </div>
-            </div>
-        </div>
-
-        <template v-if="caches.length">
-            <legend>Caches</legend>
-            <InfoBar small>Hit rate counts lookups since the server last started.</InfoBar>
-            <div class="statRow cacheRow">
-                <div v-for="cache in caches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
-                    <div class="cacheName">{{ cache.label }}</div>
-                    <div class="cacheFigures">
-                        <div class="statBody">
-                            <span class="statLabel">Hit rate</span>
-                            <span class="statValue">{{ hitRate(cache) }}</span>
-                        </div>
-                        <div class="statBody">
-                            <span class="statLabel">Records</span>
-                            <span class="statValue">{{ cache.count.toLocaleString() }}</span>
-                        </div>
-                        <div class="statBody">
-                            <span class="statLabel">Space</span>
-                            <span class="statValue">{{ formatSize(cache.sizeBytes) }}</span>
-                        </div>
+        <div class="statRow cacheRow">
+            <div class="statCard cacheCard">
+                <div class="cacheName">Uptime</div>
+                <div class="cacheFigures uptimeFigures">
+                    <div class="statBody">
+                        <span class="statLabel">Running for</span>
+                        <span class="statValue">{{ msToTime(uptime.uptime) }}</span>
                     </div>
                 </div>
             </div>
-        </template>
+            <div v-for="cache in caches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
+                <div class="cacheName">{{ cache.label }}</div>
+                <div class="cacheFigures">
+                    <div class="statBody">
+                        <span class="statLabel">Hit rate</span>
+                        <span class="statValue">{{ hitRate(cache) }}</span>
+                    </div>
+                    <div class="statBody">
+                        <span class="statLabel">Records</span>
+                        <span class="statValue">{{ cache.count.toLocaleString() }}</span>
+                    </div>
+                    <div class="statBody">
+                        <span class="statLabel">Space</span>
+                        <span class="statValue">{{ formatSize(cache.sizeBytes) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div class="legendRow">
             <legend>Activity</legend>
@@ -129,7 +124,6 @@ import BarChart from '@/components/charts/BarChart.vue';
 import LineChart from '@/components/charts/LineChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
@@ -430,8 +424,12 @@ const selectRange = (option) => {
 // A grid, so every tile is the same size and the columns line up row to row.
 .statRow.cacheRow {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    grid-template-columns: repeat(6, 1fr);
     gap: 0.5rem;
+
+    @media (max-width: 1200px) {
+        grid-template-columns: repeat(3, 1fr);
+    }
 }
 
 .statRow .statCard.cacheCard {
@@ -455,6 +453,11 @@ const selectRange = (option) => {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 8px;
+
+        // Uptime has the one figure, so it takes the whole tile.
+        &.uptimeFigures {
+            grid-template-columns: 1fr;
+        }
 
         .statLabel {
             font-size: 9px;
