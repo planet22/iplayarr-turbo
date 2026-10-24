@@ -93,7 +93,18 @@ let originalApiKey = undefined;
 let originalUhdFeeds = undefined;
 
 const config = ref({});
-const showAdvanced = ref(false);
+// Whether the advanced settings are showing. Kept in this browser, so it survives leaving the page (the sidebar, the
+// back button, a reload) rather than starting off again each time.
+const ADVANCED_KEY = 'iplayarr.settings.showAdvanced';
+const showAdvanced = ref(
+    (() => {
+        try {
+            return localStorage.getItem(ADVANCED_KEY) === 'true';
+        } catch {
+            return false;
+        }
+    })()
+);
 const refreshGlobalSettings = inject('refreshGlobalSettings');
 
 const tabs = [
@@ -523,6 +534,11 @@ const saveConfig = async () => {
 
 const toggleAdvanced = () => {
     showAdvanced.value = !showAdvanced.value;
+    try {
+        localStorage.setItem(ADVANCED_KEY, String(showAdvanced.value));
+    } catch {
+        // Best-effort; it just won't be remembered.
+    }
 };
 
 const generateApiKey = async () => {
