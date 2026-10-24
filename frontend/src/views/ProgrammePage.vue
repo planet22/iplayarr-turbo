@@ -66,7 +66,7 @@
                         Download all ({{ loadedCount }})
                     </button>
                     <button
-                        v-if="!entry?.arr"
+                        v-if="!entry?.arr && !subscription"
                         class="clickable subscribeButton"
                         :disabled="requesting"
                         title="Add to Sonarr/Radarr and let it pick the best release"

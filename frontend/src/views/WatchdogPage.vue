@@ -5,8 +5,8 @@
             :icons="['run', 'refresh']"
             :running="live.running" :run-disabled="live.running ? stopping : !canRun"
             :stop-label="stopping ? 'Stopping…' : 'Stop'"
-            :refreshing="refreshing"
-            :refresh-disabled="live.running || refreshing" :refresh-label="refreshing ? 'Refreshing…' : 'Refresh Links'"
+            :refreshing="refreshing || listing"
+            :refresh-disabled="live.running || refreshing || listing" :refresh-label="refreshing || listing ? 'Refreshing…' : 'Refresh Links'"
             refresh-title="Re-list links from the sources and update the counts, without checking them against BBC"
             @run="runNow" @stop="stopRun" @refresh="refreshCounts"
         />

@@ -30,26 +30,28 @@
                     <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                     <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                 </template>
-                <template v-if="subscription.lastQueuedAt || subscription.arrOnly" #corner>
-                    <span v-if="subscription.lastQueuedAt" class="pill" :title="`${subscription.lastQueuedCount} episode${subscription.lastQueuedCount === 1 ? '' : 's'} in the last download`">
+                <template v-if="subscription.lastQueuedAt" #corner>
+                    <span class="pill" :title="`${subscription.lastQueuedCount} episode${subscription.lastQueuedCount === 1 ? '' : 's'} in the last download`">
                         {{ subscription.lastQueuedCount }}
                     </span>
-                    <div v-if="subscription.arrOnly" class="rowActions">
-                        <button class="clickable" title="Stop tracking (Sonarr/Radarr only)" aria-label="Stop tracking" @click="remove(subscription)">
-                            <font-awesome-icon :icon="['fas', 'xmark']" />
-                        </button>
-                    </div>
                 </template>
-                <div v-if="!subscription.arrOnly || subscription.lastQueuedAt" class="cardInfoRow">
+                <div class="cardInfoRow">
                     <div class="cardLines">
-                        <div v-if="!subscription.arrOnly" class="cardLine" title="Last checked">
-                            <font-awesome-icon :icon="['fas', 'clock']" />{{ checkedLabel(subscription, true) }}
+                        <div class="cardLine" title="Last checked">
+                            <font-awesome-icon :icon="['fas', 'clock']" />{{ subscription.arrOnly ? 'n/a' : checkedLabel(subscription, true) }}
                         </div>
-                        <div v-if="subscription.lastQueuedAt" class="cardLine" title="Last download">
-                            <font-awesome-icon :icon="['fas', 'download']" />{{ formatRelativeTime(Date.parse(subscription.lastQueuedAt), undefined, true) }}
+                        <div v-if="subscription.lastQueuedAt || subscription.arrOnly" class="cardLine" title="Last download">
+                            <font-awesome-icon :icon="['fas', 'download']" />{{ subscription.lastQueuedAt ? formatRelativeTime(Date.parse(subscription.lastQueuedAt), undefined, true) : 'n/a' }}
                         </div>
                     </div>
-                    <div v-if="!subscription.arrOnly" class="rowActions">
+                    <div v-if="subscription.arrOnly" class="rowActions">
+                        <button class="clickable stateToggle on" title="Sonarr/Radarr only (click to stop tracking)" aria-label="Stop tracking" aria-pressed="true" @click="remove(subscription)">
+                            <font-awesome-icon :icon="['fas', 'right-left']" />
+                        </button>
+                        <!-- Gaps where the buttons don't apply, so the icon lines up with the other cards. -->
+                        <span v-for="n in subscriptionVersions.length + 2" :key="n" class="actionGap" aria-hidden="true"></span>
+                    </div>
+                    <div v-else class="rowActions">
                         <button
                             :class="['clickable', 'stateToggle', subscription.arr ? 'on' : '']"
                             :title="subscription.arr ? 'Linked to Sonarr/Radarr (click to unlink)' : 'Add to Sonarr/Radarr'"
@@ -100,7 +102,16 @@
                 </div>
                 <div class="rowActions">
                     <button
-                        v-if="!subscription.arrOnly"
+                        v-if="subscription.arrOnly"
+                        class="clickable stateToggle on"
+                        title="Sonarr/Radarr only (click to stop tracking)"
+                        aria-label="Stop tracking" aria-pressed="true"
+                        @click="remove(subscription)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'right-left']" />
+                    </button>
+                    <button
+                        v-else
                         :class="['clickable', 'stateToggle', subscription.arr ? 'on' : '']"
                         :title="subscription.arr ? 'Linked to Sonarr/Radarr (click to unlink)' : 'Add to Sonarr/Radarr'"
                         :aria-label="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
@@ -120,13 +131,17 @@
                         >
                             <font-awesome-icon :icon="['fas', version.icon]" />
                         </button>
+                        <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
+                            <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
+                        </button>
+                        <button class="clickable" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
+                            <font-awesome-icon :icon="['fas', 'bell-slash']" />
+                        </button>
                     </template>
-                    <button v-if="!subscription.arrOnly" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
-                        <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
-                    </button>
-                    <button class="clickable" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
-                        <font-awesome-icon :icon="['fas', 'bell-slash']" />
-                    </button>
+                    <!-- Gaps where the buttons don't apply, so the Sonarr/Radarr icon lines up with the other rows. -->
+                    <template v-else>
+                        <span v-for="n in subscriptionVersions.length + 2" :key="n" class="actionGap" aria-hidden="true"></span>
+                    </template>
                 </div>
             </div>
         </div>
@@ -372,6 +387,11 @@ const removeLive = async (live) => {
     gap: 8px;
     flex-shrink: 0;
 
+    .actionGap {
+        width: 36px;
+        height: 36px;
+    }
+
     button {
         display: flex;
         align-items: center;
@@ -411,8 +431,16 @@ const removeLive = async (live) => {
     gap: 10px;
 }
 
+// Fixed width so every card's buttons start in the same place, whatever the times say.
 .cardLines {
+    flex: 0 0 84px;
     min-width: 0;
+}
+
+.cardInfoRow .rowActions {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: flex-end;
 }
 
 .cardLine {
@@ -434,7 +462,8 @@ const removeLive = async (live) => {
 }
 
 @media (max-width: @mobile-breakpoint) {
-    .cardList :deep(button) {
+    .cardList :deep(button),
+    .cardList .actionGap {
         width: 40px;
         height: 40px;
     }
