@@ -18,7 +18,7 @@
         <DownloadModeToggle v-model="mode" />
         <div class="infoSection">
             <SelectInput
-                v-if="versionOptions.length > 1"
+                v-if="askVersions && versionOptions.length > 1"
                 v-model="version"
                 name="Version"
                 tooltip="Audio described and signed versions are separate cuts."
@@ -48,7 +48,7 @@ import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import MediaInfoHero from '@/components/common/MediaInfoHero.vue';
 import { defaultMediaMode, describeDownload, estimateSizeMb } from '@/lib/downloadSummary';
-import { preferredVersion } from '@/lib/downloadVersions';
+import { askAboutVersions, preferredVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { buildDownloadQuery } from '@/lib/utils';
 
@@ -73,6 +73,9 @@ const version = ref('');
 const quality = ref('');
 const versions = ref([]);
 const profiles = ref([]);
+// The Version choice is only offered while Settings says to ask (and the AD / Signed badges are on); otherwise the
+// default version is used, as for every other download button.
+const askVersions = askAboutVersions();
 const versionOptions = computed(() => [{ key: '', value: 'Standard' }, ...versions.value.map(({ id, name }) => ({ key: id, value: name }))]);
 const chosenVersion = computed(() => versions.value.find(({ id }) => id === version.value));
 const qualityOptions = computed(() => {
