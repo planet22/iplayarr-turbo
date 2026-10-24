@@ -32,7 +32,7 @@
     </InfoBar>
     <LoadingIndicator v-if="!cachesLoaded" />
     <div v-else class="scheduledTasks cacheGrid">
-        <div v-for="cache in caches" :key="cache.prefix" class="taskRow">
+        <div v-for="cache in orderedCaches" :key="cache.prefix" class="taskRow">
             <div class="info">
                 <div class="label">
                     {{ cache.label }}
@@ -112,7 +112,7 @@
 </template>
 
 <script setup>
-import { inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
@@ -146,6 +146,22 @@ const { tasks, loaded, running, load, runNow } = useScheduledTasks();
 
 
 const { caches, loaded: cachesLoaded, busy: cacheBusy, error: cacheError, clearingAll, load: loadCaches, clear, clearAll } = useCaches();
+
+// Caches grouped by what they hold, rather than in the order the server registered them: what the browse pages
+// show, BBC programme data, search and schedule feeds, the Sonarr (Skyhook) lookups, then streaming. A cache
+// the list does not know about goes last.
+const CACHE_ORDER = [
+    'browse_short', 'browse_long', 'browse_schedule', 'thumbnails',
+    'metadata_cache', 'episode_details', 'ibl_episodes', 'ibl_new_search',
+    'search_cache', 'search_trace_cache', 'schedule_cache', 'schedule_page_pids',
+    'skyhook_series_cache', 'skyhook_episode_cache',
+    'stream_vpid', 'stream_hq_probe',
+];
+const cacheRank = (prefix) => {
+    const index = CACHE_ORDER.indexOf(prefix);
+    return index === -1 ? CACHE_ORDER.length : index;
+};
+const orderedCaches = computed(() => [...caches.value].sort((a, b) => cacheRank(a.prefix) - cacheRank(b.prefix)));
 
 // Each cache's lifetime is a draft held by the settings page (Save applies it). Follow the server value
 // unless the user is part-way through editing that row.
@@ -254,8 +270,14 @@ onMounted(() => {
     display: none;
 }
 
+// The "Keep for" hourglass is the same size as the Clear button's trash can.
 .keepIcon {
     flex: 0 0 auto;
+    font-size: 16px;
+}
+
+.taskRow .rowActions button svg {
+    font-size: 16px;
 }
 
 .ttlEditor {
