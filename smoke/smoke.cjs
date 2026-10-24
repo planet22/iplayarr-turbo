@@ -162,7 +162,6 @@ async function apiLayer(ctx) {
     // App state endpoints
     await check(A, 'versions (get_iplayer/yt-dlp)', '/json-api/versions', (r) => !!r.json?.getIplayer || 'no getIplayer');
     await check(A, 'uptime', '/json-api/stats/uptime', (r) => typeof r.json?.uptime === 'number' || 'no uptime');
-    await check(A, 'cacheSizes', '/json-api/stats/cacheSizes', isJson);
     await check(A, 'searchHistory', '/json-api/stats/searchHistory', isJson);
     await check(A, 'grabHistory', '/json-api/stats/grabHistory', isJson);
     await check(A, 'failedGrabHistory', '/json-api/stats/failedGrabHistory', isJson);

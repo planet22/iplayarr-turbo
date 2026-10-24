@@ -106,6 +106,18 @@ describe('DbCacheService', () => {
             expect((await statsFor('typed_b')).count).toBe(1);
         });
 
+        it('tallies hits and misses per type', async () => {
+            const before = await statsFor('typed_b');
+            await other.set('h', 'z');
+            await other.get('h');
+            await other.get('h');
+            await other.get('absent');
+
+            const after = await statsFor('typed_b');
+            expect(after.hits - before.hits).toBe(2);
+            expect(after.misses - before.misses).toBe(1);
+        });
+
         it('clears one type only, and rejects unknown types', async () => {
             await typed.set('1', 'x');
             await other.set('1', 'z');
@@ -186,22 +198,6 @@ describe('DbCacheService', () => {
             expect(await service.get('a')).toBeUndefined();
             expect(await service.get('b')).toBeUndefined();
             expect(await other.get('a')).toBe('keep');
-        });
-    });
-
-    describe('getCacheSizeInMB', () => {
-        it('is 0.00 when empty', async () => {
-            expect(await DbCacheService.getCacheSizeInMB(['test_'])).toBe('0.00');
-        });
-
-        it('sums the size of entries under the given prefixes only', async () => {
-            const big = 'x'.repeat(1024 * 1024);
-            await prisma.cache.create({ data: { key: 'test_a', value: big, expiresAt: Date.now() + 60000 } });
-            await prisma.cache.create({ data: { key: 'other_a', value: big, expiresAt: Date.now() + 60000 } });
-
-            expect(await DbCacheService.getCacheSizeInMB(['test_'])).toBe('1.00');
-            expect(await DbCacheService.getCacheSizeInMB(['test_', 'other_'])).toBe('2.00');
-            expect(await DbCacheService.getCacheSizeInMB(['nope_'])).toBe('0.00');
         });
     });
 

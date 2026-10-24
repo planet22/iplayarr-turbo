@@ -12,9 +12,14 @@ export interface CacheTypeStats extends CacheTypeInfo {
     overridden: boolean;
     count: number;
     sizeBytes: number;
+    // Lookups answered from the cache / not, across restarts.
+    hits: number;
+    misses: number;
 }
 
 const TTL_OVERRIDES_KEY = 'cacheTtlOverrides';
+const LOOKUPS_KEY = 'cacheLookups';
+const LOOKUPS_FLUSH_MS = 30_000;
 export const MIN_CACHE_TTL = 60;
 export const MAX_CACHE_TTL = 365 * 24 * 60 * 60;
 
@@ -25,6 +30,50 @@ export default class DbCacheService<T> {
     // Caches constructed with a label show up on the Maintenance page, where their TTL can be overridden.
     private static registry: Map<string, CacheTypeInfo> = new Map();
     private static overridesLoad?: Promise<Map<string, number>>;
+    // Hit/miss counts per cache, kept in memory and saved to the database every so often so the hit rate
+    // survives restarts. Saved counts are added to whatever has been tallied before they finish loading.
+    private static lookups: Map<string, { hits: number; misses: number }> = new Map();
+    private static lookupsLoad?: Promise<void>;
+    private static flushTimer?: NodeJS.Timeout;
+
+    static lookupsFor(prefix: string): { hits: number; misses: number } {
+        return DbCacheService.lookups.get(prefix) ?? { hits: 0, misses: 0 };
+    }
+
+    static async loadLookups(): Promise<void> {
+        DbCacheService.lookupsLoad ??= (async () => {
+            try {
+                await dbReady();
+                const row = await prisma.keyValue.findUnique({ where: { key: LOOKUPS_KEY } });
+                for (const [prefix, saved] of Object.entries<{ hits: number; misses: number }>(row ? JSON.parse(row.value) : {})) {
+                    const entry = DbCacheService.lookupsFor(prefix);
+                    DbCacheService.lookups.set(prefix, { hits: entry.hits + saved.hits, misses: entry.misses + saved.misses });
+                }
+            } catch {
+                // Start counting from zero.
+            }
+        })();
+        return DbCacheService.lookupsLoad;
+    }
+
+    static tally(prefix: string, hit: boolean): void {
+        const entry = DbCacheService.lookupsFor(prefix);
+        if (hit) entry.hits += 1;
+        else entry.misses += 1;
+        DbCacheService.lookups.set(prefix, entry);
+        DbCacheService.flushTimer ??= setTimeout(() => void DbCacheService.flushLookups(), LOOKUPS_FLUSH_MS).unref();
+    }
+
+    static async flushLookups(): Promise<void> {
+        DbCacheService.flushTimer = undefined;
+        try {
+            await DbCacheService.loadLookups();
+            const value = JSON.stringify(Object.fromEntries(DbCacheService.lookups));
+            await prisma.keyValue.upsert({ where: { key: LOOKUPS_KEY }, create: { key: LOOKUPS_KEY, value }, update: { value } });
+        } catch {
+            // Try again with the next batch of lookups.
+        }
+    }
 
     constructor(prefix: string, ttl: number, meta?: { label: string; description: string }) {
         this.prefix = prefix;
@@ -48,6 +97,7 @@ export default class DbCacheService<T> {
     /** Stats for every labelled cache: live (unexpired) item count, stored size and effective TTL. */
     static async getStats(): Promise<CacheTypeStats[]> {
         await dbReady();
+        await DbCacheService.loadLookups();
         const overrides = await DbCacheService.overrides();
         const now = Date.now();
         return Promise.all(
@@ -65,6 +115,7 @@ export default class DbCacheService<T> {
                     overridden: overrides.has(info.prefix),
                     count: Number(rows[0]?.n ?? 0),
                     sizeBytes: Number(rows[0]?.bytes ?? 0),
+                    ...DbCacheService.lookupsFor(info.prefix),
                 };
             })
         );
@@ -104,6 +155,7 @@ export default class DbCacheService<T> {
     /** Forgets the in-memory TTL overrides so the next use re-reads them (tests reset the database). */
     static resetOverridesForTests(): void {
         DbCacheService.overridesLoad = undefined;
+        DbCacheService.lookupsLoad = undefined;
     }
 
     private fullKey(key: string): string {
@@ -133,12 +185,18 @@ export default class DbCacheService<T> {
         try {
             await dbReady();
             const row = await prisma.cache.findUnique({ where: { key: this.fullKey(key) } });
-            if (!row) return undefined;
-            if (Number(row.expiresAt) <= Date.now()) {
-                await prisma.cache.deleteMany({ where: { key: row.key } });
+            if (!row) {
+                DbCacheService.tally(this.prefix, false);
                 return undefined;
             }
-            return JSON.parse(row.value) as T;
+            if (Number(row.expiresAt) <= Date.now()) {
+                await prisma.cache.deleteMany({ where: { key: row.key } });
+                DbCacheService.tally(this.prefix, false);
+                return undefined;
+            }
+            const value = JSON.parse(row.value) as T;
+            DbCacheService.tally(this.prefix, true);
+            return value;
         } catch {
             return undefined;
         }
@@ -167,21 +225,6 @@ export default class DbCacheService<T> {
     async clear(): Promise<void> {
         await dbReady();
         await prisma.cache.deleteMany({ where: { key: { startsWith: `${this.prefix}_` } } });
-    }
-
-    /** Total stored size, in MB, of the cache entries whose key starts with any of the given prefixes. */
-    static async getCacheSizeInMB(prefixes: string[]): Promise<string> {
-        await dbReady();
-        let totalBytes = 0;
-        for (const prefix of prefixes) {
-            const rows = await prisma.$queryRawUnsafe<{ bytes: number | bigint | null }[]>(
-                'SELECT SUM(LENGTH(CAST("value" AS BLOB)) + LENGTH(CAST("key" AS BLOB))) AS bytes FROM "Cache" WHERE substr("key", 1, ?) = ?',
-                prefix.length,
-                prefix
-            );
-            totalBytes += Number(rows[0]?.bytes ?? 0);
-        }
-        return (totalBytes / (1024 * 1024)).toFixed(2);
     }
 
     static async purgeExpired(): Promise<void> {

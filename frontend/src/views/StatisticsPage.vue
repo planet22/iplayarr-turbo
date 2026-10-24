@@ -13,21 +13,31 @@
                     <span class="statValue">{{ msToTime(uptime.uptime) }}</span>
                 </div>
             </div>
-            <div class="statCard">
-                <font-awesome-icon class="statIcon" :icon="['fas', 'magnifying-glass']" />
-                <div class="statBody">
-                    <span class="statLabel">Search Cache Size</span>
-                    <span class="statValue">{{ cacheSizes.search }}MB</span>
-                </div>
-            </div>
-            <div class="statCard">
-                <font-awesome-icon class="statIcon" :icon="['fas', 'calendar-days']" />
-                <div class="statBody">
-                    <span class="statLabel">Schedule Cache Size</span>
-                    <span class="statValue">{{ cacheSizes.schedule }}MB</span>
-                </div>
-            </div>
         </div>
+
+        <template v-if="caches.length">
+            <legend>Caches</legend>
+            <InfoBar small>Hit rate counts lookups since the server last started.</InfoBar>
+            <div class="statRow cacheRow">
+                <div v-for="cache in caches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
+                    <div class="cacheName">{{ cache.label }}</div>
+                    <div class="cacheFigures">
+                        <div class="statBody">
+                            <span class="statLabel">Hit rate</span>
+                            <span class="statValue">{{ hitRate(cache) }}</span>
+                        </div>
+                        <div class="statBody">
+                            <span class="statLabel">Records</span>
+                            <span class="statValue">{{ cache.count.toLocaleString() }}</span>
+                        </div>
+                        <div class="statBody">
+                            <span class="statLabel">Space</span>
+                            <span class="statValue">{{ formatSize(cache.sizeBytes) }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
 
         <div class="legendRow">
             <legend>Activity</legend>
@@ -119,6 +129,7 @@ import BarChart from '@/components/charts/BarChart.vue';
 import LineChart from '@/components/charts/LineChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
+import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
@@ -127,7 +138,7 @@ import { ipFetch } from '@/lib/ipFetch';
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90, All: Infinity };
 
 const uptime = ref({ uptime: 0 });
-const cacheSizes = ref([]);
+const caches = ref([]);
 const searchHistory = ref([]);
 const grabHistory = ref([]);
 const failedGrabHistory = ref([]);
@@ -153,8 +164,12 @@ async function updateStats() {
     failedGrabHistory.value = (await ipFetch('json-api/stats/failedGrabHistory')).data;
     apps.value = (await ipFetch('json-api/apps')).data;
     uptime.value = (await ipFetch('json-api/stats/uptime')).data;
-    cacheSizes.value = (await ipFetch('json-api/stats/cacheSizes')).data;
+    const cacheList = await ipFetch('json-api/maintenance/caches');
+    if (cacheList.ok) caches.value = cacheList.data;
 }
+
+const hitRate = ({ hits, misses }) => (hits + misses ? `${Math.round((hits / (hits + misses)) * 100)}%` : 'n/a');
+const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
 
 const cutoffTime = computed(() => {
     const days = RANGE_DAYS[range.value];
@@ -412,6 +427,46 @@ const selectRange = (option) => {
     }
 }
 
+// A grid, so every tile is the same size and the columns line up row to row.
+.statRow.cacheRow {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 0.5rem;
+}
+
+.statRow .statCard.cacheCard {
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 8px 12px;
+
+    .cacheName {
+        font-size: 13px;
+        font-weight: 600;
+        color: @primary-text-color;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    // Three equal columns, so the labels and numbers line up from tile to tile.
+    .cacheFigures {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+
+        .statLabel {
+            font-size: 9px;
+        }
+
+        .statValue {
+            font-size: 14px;
+            font-weight: 400;
+        }
+    }
+}
+
 .chartRow {
     display: flex;
     flex-wrap: wrap;
@@ -448,6 +503,19 @@ const selectRange = (option) => {
         .statRow {
             gap: 0.6rem;
             margin-bottom: 1.25rem;
+
+            &.cacheRow {
+                gap: 0.4rem;
+                grid-template-columns: repeat(2, 1fr);
+
+                .statCard.cacheCard {
+                    padding: 6px 10px;
+
+                    .statValue {
+                        font-size: 13px;
+                    }
+                }
+            }
 
             .statCard {
                 flex-basis: 100%;

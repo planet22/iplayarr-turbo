@@ -15,7 +15,7 @@ const config = jest.mocked(configService);
 describe('cacheAdminService', () => {
     beforeEach(() => {
         jest.resetAllMocks();
-        thumbs.stats.mockResolvedValue({ count: 12, sizeBytes: 3456 });
+        thumbs.stats.mockResolvedValue({ count: 12, sizeBytes: 3456, hits: 0, misses: 0 });
         thumbs.clearAll.mockResolvedValue(12);
         config.getParameter.mockResolvedValue('30');
     });

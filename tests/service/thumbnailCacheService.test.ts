@@ -66,12 +66,12 @@ describe('thumbnailCacheService', () => {
             fs.writeFileSync(path.join(dir, 'b.small.jpg'), Buffer.alloc(50));
             fs.writeFileSync(path.join(dir, 'c.jpg.123.tmp'), Buffer.alloc(999));
 
-            expect(await thumbnailCacheService.stats()).toEqual({ count: 2, sizeBytes: 150 });
+            expect(await thumbnailCacheService.stats()).toMatchObject({ count: 2, sizeBytes: 150 });
         });
 
         it('reports an empty cache when the folder does not exist yet', async () => {
             (Utils.getThumbnailCacheDir as jest.Mock).mockResolvedValue(path.join(dir, 'nope'));
-            expect(await thumbnailCacheService.stats()).toEqual({ count: 0, sizeBytes: 0 });
+            expect(await thumbnailCacheService.stats()).toMatchObject({ count: 0, sizeBytes: 0 });
             expect(await thumbnailCacheService.clearAll()).toBe(0);
         });
 

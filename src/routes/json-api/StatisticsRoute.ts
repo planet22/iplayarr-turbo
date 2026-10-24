@@ -55,9 +55,4 @@ router.get('/uptime', async (_, res: Response) => {
     res.json({ uptime });
 });
 
-router.get('/cacheSizes', async (_, res: Response) => {
-    const cacheSizes = await statisticsService.getCacheSizes();
-    res.json(cacheSizes);
-});
-
 export default router;

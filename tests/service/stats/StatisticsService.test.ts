@@ -1,4 +1,3 @@
-import DbCacheService from '../../../src/service/db/dbCacheService';
 import { dbReady, prisma } from '../../../src/service/db/prismaService';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 import { GrabHistoryEntry } from '../../../src/types/data/GrabHistoryEntry';
@@ -177,28 +176,5 @@ describe('statisticsService', () => {
         const result = await statisticsService.getUptime();
 
         expect(result).toBe(0);
-    });
-
-    describe('DbCacheService.getCacheSizes', () => {
-        it('returns the correct cache sizes for search and schedule', async () => {
-            const getCacheSizeInMBSpy = jest
-                .spyOn(DbCacheService, 'getCacheSizeInMB')
-                .mockImplementation((patterns: string[]) => {
-                    if (patterns.includes('search_cache_')) return Promise.resolve('1.23');
-                    if (patterns.includes('schedule_cache_')) return Promise.resolve('4.56');
-                    return Promise.resolve('0.00');
-                });
-
-            const sizes = await statisticsService.getCacheSizes();
-
-            expect(sizes).toEqual({
-                search: '1.23',
-                schedule: '4.56'
-            })
-
-            expect(getCacheSizeInMBSpy).toHaveBeenCalledTimes(2);
-            expect(getCacheSizeInMBSpy).toHaveBeenCalledWith(['search_cache_']);
-            expect(getCacheSizeInMBSpy).toHaveBeenCalledWith(['schedule_cache_']);
-        });
     });
 });

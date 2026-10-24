@@ -4,7 +4,6 @@ import { SearchHistoryEntry } from '../../types/data/SearchHistoryEntry';
 import { AbstractFIFOQueue } from '../../types/utils/AbstractFIFOQueue';
 import { DbFIFOQueue } from '../../types/utils/DbFIFOQueue';
 import { summariseSearchHistory } from '../../utils/searchHistorySummary';
-import DbCacheService from '../db/dbCacheService';
 import { dbReady, prisma } from '../db/prismaService';
 import socketService from '../socketService';
 
@@ -77,15 +76,6 @@ class StatisticsService {
             return Date.now() - parseInt(row.value);
         } else {
             return 0;
-        }
-    }
-
-    async getCacheSizes(): Promise<{ [key: string]: string }> {
-        const [search_size, schedule_size] = await Promise.all([DbCacheService.getCacheSizeInMB(['search_cache_']), DbCacheService.getCacheSizeInMB(['schedule_cache_'])]);
-
-        return {
-            search: search_size,
-            schedule: schedule_size
         }
     }
 }

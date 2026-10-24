@@ -5,8 +5,11 @@ import path from 'path';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { getThumbnailCacheDir } from '../utils/Utils';
 import configService from './configService';
+import DbCacheService from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
 
+// Hit/miss counts are kept with the database caches' (requests served from disk vs fetched from BBC).
+const THUMBNAILS_PREFIX = 'thumbnails';
 const IMAGE_PID_PATTERN = /^[a-z0-9]+$/i;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -44,11 +47,13 @@ class ThumbnailCacheService {
                 const now = new Date();
                 fs.promises.utimes(filePath, now, now).catch(() => { /* best effort */ });
             }
+            DbCacheService.tally(THUMBNAILS_PREFIX, true);
             return filePath;
         } catch {
             // Not cached yet - fall through to fetch.
         }
 
+        DbCacheService.tally(THUMBNAILS_PREFIX, false);
         const key = small ? `${imagePid}:small` : imagePid;
         if (!this.inFlight.has(key)) {
             const pending = this.fetchAndStore(imagePid, small).finally(() => this.inFlight.delete(key));
@@ -109,7 +114,7 @@ class ThumbnailCacheService {
     }
 
     // How many thumbnails are on disk and how much space they take.
-    async stats(): Promise<{ count: number; sizeBytes: number }> {
+    async stats(): Promise<{ count: number; sizeBytes: number; hits: number; misses: number }> {
         let count = 0;
         let sizeBytes = 0;
         for (const filePath of await this.#listThumbnails()) {
@@ -120,7 +125,8 @@ class ThumbnailCacheService {
                 // Deleted since readdir - not counted.
             }
         }
-        return { count, sizeBytes };
+        await DbCacheService.loadLookups();
+        return { count, sizeBytes, ...DbCacheService.lookupsFor(THUMBNAILS_PREFIX) };
     }
 
     // Deletes every cached thumbnail; they are fetched again on demand.
