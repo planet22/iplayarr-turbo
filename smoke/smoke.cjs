@@ -138,8 +138,21 @@ async function apiLayer(ctx) {
         await check(A, 'thumbnail proxy', `/json-api/thumbnail/pid/${ctx.pid}`, (r) => r.status === 200 && /image/.test(r.ct) || `ct ${r.ct}`, { warnOnly: true });
     }
     ctx.manualSettings = (await http('/json-api/search/settings')).json;
-    for (const term of ['doctor', 'traitors', 'strictly', 'bake off'])
-        await check(A, `manual search "${term}" returns results`, `/json-api/search?q=${encodeURIComponent(term)}`, (r) => (Array.isArray(r.json) && r.json.length > 0) || `0 results with manual settings ${JSON.stringify(ctx.manualSettings)} - manual and NZB search have independent settings, so only suspicious if these settings should match`, { timeout: 90000, warnOnly: true });
+    for (const term of ['doctor', 'traitors', 'traitor', 'strictly', 'celebrity traitors', 'bake off', 'dancing'])
+        await check(A, `manual search "${term}" returns results`, `/json-api/search?q=${encodeURIComponent(term)}`, (r) => (Array.isArray(r.json) && r.json.length > 0) || `0 results with manual settings ${JSON.stringify(ctx.manualSettings)} (manual and NZB settings are independent)`, { timeout: 90000 });
+    for (const [label, q] of [['empty', ''], ['quote', '"'], ['wildcards', 'a* ?* ~'], ['lucene syntax', 'title:(a OR b) -c +d'], ['unicode', 'café ☃'], ['very long', 'x'.repeat(3000)], ['sql-ish', "'; DROP TABLE Cache;--"]]) {
+        const r = await http(`/json-api/search?q=${encodeURIComponent(q)}`, { timeout: 60000 });
+        rec(A, `manual search survives ${label} input (no 5xx)`, r.status > 0 && r.status < 500 ? 'PASS' : 'FAIL', `HTTP ${r.status} ${r.error || ''}`);
+        const n = await http(`/api?t=search&q=${encodeURIComponent(q)}&apikey=${apikey}`, { timeout: 60000 });
+        rec(A, `newznab search survives ${label} input (no 5xx)`, n.status > 0 && n.status < 500 ? 'PASS' : 'FAIL', `HTTP ${n.status} ${n.error || ''}`);
+    }
+    if (ctx.pid) {
+        await check(A, 'browse details drops non-programme ids instead of failing', `/json-api/browse/details?pids=bbc_four,${ctx.pid}`, (r) => (r.status === 200 && Array.isArray(r.json) && r.json.some((d) => d.pid === ctx.pid)) || 'batch rejected');
+        await check(A, 'browse details with only invalid ids is 400', '/json-api/browse/details?pids=bbc_four', (r) => r.status === 400 || `HTTP ${r.status}`);
+        await check(A, 'browse details over 40 ids is 400', `/json-api/browse/details?pids=${Array(41).fill(ctx.pid).join(',')}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    }
+    const lim = parseInt(cfg.ACTIVE_LIMIT, 10);
+    rec(A, 'stored ACTIVE_LIMIT within 1-10', lim >= 1 && lim <= 10 ? 'PASS' : 'FAIL', String(cfg.ACTIVE_LIMIT));
     await check(A, 'browse bad pid rejected', '/json-api/browse/programme/!!bad', (r) => r.status === 400 || `HTTP ${r.status}`);
 
     // Native stream (HLS master from BBC; upstream-dependent so WARN not FAIL)
@@ -232,6 +245,7 @@ const ROUTES = [
     ['/search', 'Search', ['input']],
     ['/queue', 'Queue', []],
     ['/info?item={item}', 'Queue info', []],
+    ['/info', 'Queue info (opened bare, no item)', []],
     ['/subscriptions', 'Subscriptions', []],
     ['/synonyms', 'Synonyms', []],
     ['/offSchedule', 'Off schedule', []],
