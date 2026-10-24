@@ -29,6 +29,14 @@ The third choice starts the subscription with *nothing* seen, so the first check
 
 The subscribe dialog also offers **Sonarr/Radarr only**: the show is recorded but iPlayarr never checks or queues anything for it, leaving downloads to Sonarr/Radarr. It only makes sense together with a Sonarr/Radarr link (below).
 
+### Versions
+
+If audio described / signed badges are on (Settings → General → Appearance), the subscribe dialog can also ask which versions to follow, and the Subscriptions page has **AD** and **Signed** toggles per show. A subscription can then also download the audio described and/or signed version of each new episode, named and tagged like the standard release.
+
+- Versions are **never back-filled**: only episodes that appear after you turn a version on are considered.
+- The BBC often publishes these versions later than the standard episode, so each episode is re-checked for 30 days after it first appears.
+- Whether you are asked or the default is used follows **Ask Which Version** / **Default Version** (Settings → Download Client). See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
+
 ## Linking to Sonarr/Radarr
 
 A subscription can be added to a Sonarr or Radarr library from the Programme and Subscriptions pages (needs the app set up on the Apps page).
@@ -36,6 +44,8 @@ A subscription can be added to a Sonarr or Radarr library from the Programme and
 - A poster-card match dialog looks the show up in the app (editable search, retry if the lookup fails) and lets you pick the **root folder** and **quality profile**.
 - The subscription then shows the app-name chip; press it again to unlink. Unsubscribing a linked show offers to **remove it from Sonarr/Radarr or keep it**.
 - Only entries iPlayarr itself added can be removed from Sonarr/Radarr, and their files are always kept.
+- If the app already has the show under the same title slug with a different id, iPlayarr links to that entry instead of failing.
+- The **Request** action on a programme page also records the show as a Sonarr/Radarr-only subscription with its link, so you can see and undo it. Only shows iPlayarr itself downloads count as "Subscribed"; subscribing to a Sonarr/Radarr-only show upgrades it in place.
 
 ## Subscriptions page (`/subscriptions`)
 
@@ -64,6 +74,8 @@ Subscribed downloads behave like any other download:
 - **File type:** a full video, or a small `.strm` pointer if `MEDIA_MODE=strm` ([STREAMING.md](STREAMING.md)), in which case they complete almost instantly.
 - **`.nfo` files:** subscriptions are tagged as *manual* downloads (not as coming from Sonarr/Radarr), so they get `.nfo` metadata when `WRITE_NFO_STRM` is `all` or `manual`, and not when it is `nzb`.
 
+Concurrent subscribe requests for the same show no longer create duplicates.
+
 ## Limits
 
 - Checks are hourly, with no setting to change that.
@@ -80,7 +92,7 @@ Subscribed downloads behave like any other download:
 
 ## Storage and API
 
-Subscriptions live in Redis under the `subscriptions` key (see [REDIS.md](REDIS.md)). The seen list is kept inside each subscription, so history pruning does not cause re-downloads. The UI uses these endpoints, under `/json-api/subscriptions`:
+Subscriptions live in the database under the `subscriptions` key (see [DATABASE.md](DATABASE.md)). The seen list is kept inside each subscription, so history pruning does not cause re-downloads. The UI uses these endpoints, under `/json-api/subscriptions`:
 
 | Endpoint | Does |
 | --- | --- |
@@ -89,6 +101,7 @@ Subscriptions live in Redis under the `subscriptions` key (see [REDIS.md](REDIS.
 | `POST /` with `"arrOnly": true` | Subscribe without iPlayarr checking or queuing (Sonarr/Radarr handles downloads) |
 | `POST /check` | Check every subscription now |
 | `POST /:id/check` | Check one subscription now |
+| `PUT /:id/versions` | Set which extra versions (`audio-described`, `signed`) to download for new episodes |
 | `DELETE /:id` | Unsubscribe |
 
 Further endpoints:

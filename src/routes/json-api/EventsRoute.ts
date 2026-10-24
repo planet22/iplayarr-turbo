@@ -6,11 +6,14 @@ import { VideoEvent } from '../../types/VideoEvent';
 const router = Router();
 
 router.get('/', async (req: Request, res: Response) => {
-    const { pid, type, level } = req.query as { pid?: string; type?: string; level?: string };
+    const { pid, jobId, type, level } = req.query as { pid?: string; jobId?: string; type?: string; level?: string };
     let events: VideoEvent[] = await videoEventService.getEvents();
 
     if (pid) {
         events = events.filter((event) => event.pid === pid);
+    }
+    if (jobId) {
+        events = events.filter((event) => event.jobId === jobId);
     }
     if (type) {
         events = events.filter((event) => event.type === type);

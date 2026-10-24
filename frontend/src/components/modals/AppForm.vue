@@ -55,6 +55,9 @@
                         name="Priority"
                         placeholder="25"
                         type-override="number"
+                        :min="1"
+                        :max="50"
+                        :step="1"
                         :tooltip="`NZB Client Priority, (lower number is first)`"
                         :error="validationErrors?.priority"
                     />
@@ -70,7 +73,7 @@
                 </template>
 
                 <template v-if="showForm('callback')">
-                    <InfoBar v-if="form.type == 'PROWLARR'" class="warning">
+                    <InfoBar v-if="form.type == 'PROWLARR'" clazz="warning">
                         Prowlarr cannot force download client affinity in downstream Arrs
                     </InfoBar>
                     <SelectInput
@@ -91,6 +94,9 @@
                         v-model="form.iplayarr.port"
                         name="iPlayarr Turbo Port"
                         type-override="number"
+                        :min="1"
+                        :max="65535"
+                        :step="1"
                         :tooltip="`iPlayarr Turbo Port for connection from ${capitalize(form.type)}`"
                     />
                 </template>
@@ -118,6 +124,9 @@
                         name="Priority"
                         placeholder="1"
                         type-override="number"
+                        :min="1"
+                        :max="50"
+                        :step="1"
                         :tooltip="`Download Client Priority in ${capitalize(form.type)} (lower number is first)`"
                         :error="validationErrors?.download_client_priority"
                     />
@@ -145,6 +154,9 @@
                         name="Priority"
                         placeholder="25"
                         type-override="number"
+                        :min="1"
+                        :max="50"
+                        :step="1"
                         :tooltip="`Priority in ${capitalize(form.type)}`"
                         :error="validationErrors?.indexer_priority"
                     />

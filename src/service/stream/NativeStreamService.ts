@@ -1,21 +1,33 @@
 import { Request, Response } from 'express';
-import http from 'http';
-import https from 'https';
 
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
+import { requestedQuality } from '../../utils/qualityContext';
+import { requestedVersion } from '../../utils/versionContext';
 import configService from '../configService';
 import getIplayerExecutableService from '../getIplayerExecutableService';
 import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
+import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
+import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, versionMediaSelectorPairs } from './mediaSelectorPairs';
+import { cached, resolveTtlMs, vpidTtlMs } from './resolveCache';
+import { hqProbeCache, vpidCache } from './streamProbeCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
+import { loadSubtitleTrack, SubtitleTrack } from './subtitles/captionsSource';
+import { fetchVersionVpid } from './versionVpid';
 
 interface ProgrammeVersion {
     pid: string;
     types: string[];
     duration?: number;
+}
+
+interface ResolveOptions {
+    adaptive: boolean;
+    probeHq: boolean;
+    experimentalFhd: boolean;
 }
 
 interface MasterPlaylistVariant {
@@ -31,56 +43,14 @@ interface MasterPlaylistVariant {
 // combined, original...) before version selection even happens, and each version is a genuinely
 // slow multi-hop CDN negotiation (live-confirmed: ~13-15s each, 40s+ for typical multi-version
 // content) - see GetIplayerStreamService.ts. This resolves only the one version actually needed.
-const mediaSelectorVersions = [6, 5];
-const mediaSets = ['iptv-all', 'pc'];
 // get_stream_data always excludes this supplier by default (push @exclude_supplier, 'vbidi').
 const excludedSupplierRegex = /vbidi/i;
 const specialVersionTypeRegex = /(described|description|sign|open subtitles)/i;
 const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
-const redirectStatusCodes = [301, 302, 303, 307, 308];
-const maxRedirects = 5;
 
-function decodeXmlEntities(value: string): string {
-    return value.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, '\'');
-}
-
-function parseAttributes(raw: string): Record<string, string> {
-    const attrs: Record<string, string> = {};
-    for (const match of raw.matchAll(/([\w:-]+)="([^"]*)"/g)) {
-        attrs[match[1]] = decodeXmlEntities(match[2]);
-    }
-    return attrs;
-}
-
-// Deliberately tolerant of non-2xx statuses - the mediaselector caller inspects the response
-// body (via unavailableRegex) regardless of status code to decide whether to try the next
-// (mediaset, version) combination, since BBC returns things like 410 Gone with a meaningful body
-// for a combination it simply doesn't have. Callers that DO need to distinguish "not found" from
-// a real body (e.g. #resolveVpid) check statusCode themselves via fetchTextWithStatus.
-function fetchText(url: string): Promise<string> {
-    return fetchTextWithStatus(url).then(({ body }) => body);
-}
-
-// BBC's Unified Streaming Platform packager (see the MPD's own generator comment) trims the ABR
-// ladder for requests that don't look like a real browser - confirmed live: the exact same
-// mediaselector connection served only up to 720p with no User-Agent header, but a real desktop
-// browser UA (what get_iplayer always sends, randomized per get_iplayer's own user_agent() list)
-// unlocks the full ladder including genuine 1080p on titles that have it.
-const desktopUserAgent =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.81 Safari/537.36';
-
-function fetchTextWithStatus(url: string): Promise<{ statusCode: number; body: string }> {
-    const client = url.startsWith('https') ? https : http;
-    return new Promise((resolve, reject) => {
-        client
-            .get(url, { headers: { 'User-Agent': desktopUserAgent } }, (res) => {
-                let body = '';
-                res.on('data', (chunk) => (body += chunk));
-                res.on('end', () => resolve({ statusCode: res.statusCode ?? 0, body }));
-            })
-            .on('error', reject);
-    });
-}
+// The fetch/redirect helpers (and the reasoning for the desktop User-Agent and for tolerating
+// non-2xx statuses, which mediaselector callers rely on) live in bbcHttp.ts, shared with
+// LiveStreamService and the segment proxy.
 
 // Parses an HLS master playlist's #EXT-X-STREAM-INF/URI pairs into (width, height, absolute URL)
 // - used both when STREAM_NATIVE_ADAPTIVE is off and one fixed variant needs to be picked out
@@ -106,25 +76,6 @@ function parseMasterVariants(body: string, baseUrl: string): MasterPlaylistVaria
     return variants;
 }
 
-// Resolves a URL's final destination after following redirects (HEAD only - we just need the
-// resolved location, not the body), same trick get_iplayer's parse_hls_connection uses to turn
-// the mediaselector's connection href into the actual signed CDN master playlist URL.
-function resolveRedirect(url: string, redirectsLeft = maxRedirects): Promise<string> {
-    const client = url.startsWith('https') ? https : http;
-    return new Promise((resolve, reject) => {
-        const req = client.request(url, { method: 'HEAD', headers: { 'User-Agent': desktopUserAgent } }, (res) => {
-            res.resume();
-            if (redirectStatusCodes.includes(res.statusCode ?? 0) && res.headers.location && redirectsLeft > 0) {
-                resolveRedirect(new URL(res.headers.location, url).toString(), redirectsLeft - 1).then(resolve, reject);
-                return;
-            }
-            resolve(url);
-        });
-        req.on('error', reject);
-        req.end();
-    });
-}
-
 class NativeStreamService implements AbstractStreamService {
     // The connection resolved here is itself a full HLS master playlist listing every
     // bitrate/resolution BBC offers on that connection (commonly up to 720p only - see
@@ -136,8 +87,34 @@ class NativeStreamService implements AbstractStreamService {
     // fixed variant is picked using the same VIDEO_QUALITY setting and fallback chain
     // GetIplayerStreamService uses.
     async #resolveUrl(pid: string, sessionId?: string): Promise<string> {
+        // Every setting that changes what gets resolved is part of the cache key, so flipping one
+        // in the Settings UI takes effect on the next request rather than after the TTL.
+        const settings = await Promise.all(
+            [
+                IplayarrParameter.STREAM_NATIVE_ADAPTIVE,
+                IplayarrParameter.STREAM_NATIVE_HQ_PROBE,
+                IplayarrParameter.STREAM_NATIVE_EXPERIMENTAL_FHD,
+                IplayarrParameter.VIDEO_QUALITY,
+            ].map((parameter) => configService.getParameter(parameter))
+        );
+        // A per-request ?quality= override (qualityContext) steers the fixed-variant pick too.
+        const key = `native:${pid}:${settings.join('|')}:${requestedQuality() ?? ''}${requestedVersion() ? `:${requestedVersion()}` : ''}`;
+        // The values just read are handed on rather than re-read for each step of the resolve.
+        const options: ResolveOptions = {
+            adaptive: (settings[0] ?? 'true') !== 'false',
+            probeHq: settings[1] === 'true',
+            experimentalFhd: settings[2] === 'true',
+        };
+        const { url, resolution } = await cached(key, resolveTtlMs, () => this.#resolve(pid, options));
+        if (sessionId && resolution) {
+            streamSessionService.setResolution(sessionId, resolution);
+        }
+        return url;
+    }
+
+    async #resolve(pid: string, { adaptive, probeHq, experimentalFhd }: ResolveOptions): Promise<{ url: string; resolution?: string }> {
         const vpid = await this.#resolveVpid(pid);
-        const masterPlaylistUrl = await this.#resolveMasterPlaylistUrl(vpid);
+        const masterPlaylistUrl = await this.#resolveMasterPlaylistUrl(vpid, probeHq);
 
         // EXPERIMENTAL - see experimental/bbcFhdUpgrade.ts for what this is, why it's isolated
         // there, and step-by-step instructions for re-verifying/updating it against get_iplayer's
@@ -145,40 +122,25 @@ class NativeStreamService implements AbstractStreamService {
         // adaptive/fixed branch below: when it finds a genuine 1080p stream, that single verified
         // URL is used directly rather than the standard ladder, in either mode - there's no
         // advertised ladder entry for it to slot into adaptively.
-        const experimentalFhd = (await configService.getParameter(IplayarrParameter.STREAM_NATIVE_EXPERIMENTAL_FHD)) === 'true';
         if (experimentalFhd) {
             const upgraded = await this.#tryExperimentalFhdUpgrade(masterPlaylistUrl);
             if (upgraded) {
-                if (sessionId) {
-                    streamSessionService.setResolution(sessionId, '1080');
-                }
-                return upgraded;
+                return { url: upgraded, resolution: '1080' };
             }
         }
 
-        const adaptive = ((await configService.getParameter(IplayarrParameter.STREAM_NATIVE_ADAPTIVE)) ?? 'true') !== 'false';
         if (adaptive) {
             // The full ladder is handed to the player, which picks its own resolution based on
             // network conditions - there's no single "served" resolution to report server-side.
-            if (sessionId) {
-                streamSessionService.setResolution(sessionId, 'Adaptive');
-            }
-            return masterPlaylistUrl;
+            return { url: masterPlaylistUrl, resolution: 'Adaptive' };
         }
         try {
-            const { url, resolution } = await this.#selectFixedVariant(masterPlaylistUrl);
-            if (sessionId && resolution) {
-                streamSessionService.setResolution(sessionId, resolution);
-            }
-            return url;
+            return await this.#selectFixedVariant(masterPlaylistUrl);
         } catch (err: any) {
             // Falling back to the full ABR ladder still plays fine - failing the whole stream
             // over a parsing hiccup in an optional quality-pinning step would not.
             loggingService.error(`NativeStreamService: failed to pin a fixed quality, falling back to adaptive - ${err?.message}`);
-            if (sessionId) {
-                streamSessionService.setResolution(sessionId, 'Adaptive');
-            }
-            return masterPlaylistUrl;
+            return { url: masterPlaylistUrl, resolution: 'Adaptive' };
         }
     }
 
@@ -235,7 +197,19 @@ class NativeStreamService implements AbstractStreamService {
     // audiodescribed, signed, combined...) with its own vpid - mirrors get_iplayer's
     // get_verpids_json/parse_versions. Prefers the plain version (no audio-description/signing
     // track), same preference get_iplayer's own version_search_order gives it by default.
-    async #resolveVpid(pid: string): Promise<string> {
+    #resolveVpid(pid: string): Promise<string> {
+        // A pid's versions rarely change, so this is cached much longer than the stream URL itself.
+        // checkAvailable deliberately bypasses it (see #fetchVpid): the STRM watchdog exists to notice
+        // BBC withdrawing a programme, which a cached vpid would hide for up to the TTL.
+        // A per-request ?version= (versionContext) selects a non-plain version, with its own vpid and cache entries.
+        const version = requestedVersion();
+        if (version) {
+            return cached(`vpid:${pid}:${version}`, vpidTtlMs, () => vpidCache.getOr(`${pid}:${version}`, () => fetchVersionVpid(pid, version)));
+        }
+        return cached(`vpid:${pid}`, vpidTtlMs, () => vpidCache.getOr(pid, () => this.#fetchVpid(pid)));
+    }
+
+    async #fetchVpid(pid: string): Promise<string> {
         const { statusCode, body } = await fetchTextWithStatus(`https://www.bbc.co.uk/programmes/${pid}/playlist.json`);
         if (statusCode < 200 || statusCode >= 300) {
             throw new Error(`No programme found for pid ${pid} (status ${statusCode})`);
@@ -259,27 +233,46 @@ class NativeStreamService implements AbstractStreamService {
     // programmes advertise a 1080p-capable connection whose HLS master never actually exceeds
     // 720p), so the only way to know which connection is genuinely higher quality is to look at
     // what it actually serves. This costs one extra fetch per candidate connection, hence opt-in.
-    async #resolveMasterPlaylistUrl(vpid: string): Promise<string> {
-        const probeHq = (await configService.getParameter(IplayarrParameter.STREAM_NATIVE_HQ_PROBE)) === 'true';
-        const hrefs = await this.#resolveHlsConnections(vpid, !probeHq);
+    //
+    // `probeHq` is passed by callers that have already read the setting; the watchdog's
+    // checkAvailable doesn't, so it is read here.
+    async #resolveMasterPlaylistUrl(vpid: string, probeHqSetting?: boolean): Promise<string> {
+        const probeHq = probeHqSetting ?? (await configService.getParameter(IplayarrParameter.STREAM_NATIVE_HQ_PROBE)) === 'true';
+        if (probeHq) {
+            const remembered = await this.#rememberedProbeWinner(vpid);
+            if (remembered) {
+                return remembered;
+            }
+        }
+        const { hrefs, reason, sources } = await this.#resolveHlsConnections(vpid, !probeHq);
         if (hrefs.length === 0) {
-            throw new Error(`No HLS stream connection found for vpid ${vpid}`);
+            throw new Error(`No HLS stream connection found for vpid ${vpid}${reason ? ` (BBC says: ${reason})` : ''}`);
         }
         if (!probeHq) {
             return resolveRedirect(hrefs[0]);
         }
 
-        let best: { url: string; height: number } | undefined;
-        for (const href of hrefs) {
-            try {
-                const masterPlaylistUrl = await resolveRedirect(href);
-                const body = await fetchText(masterPlaylistUrl);
-                const maxHeight = Math.max(0, ...parseMasterVariants(body, masterPlaylistUrl).map((v) => v.height));
-                if (!best || maxHeight > best.height) {
-                    best = { url: masterPlaylistUrl, height: maxHeight };
+        // Candidates are independent, so they're probed concurrently; results are still compared in
+        // the original connection order, so a tie keeps going to the earlier (preferred) one.
+        const probed = await Promise.all(
+            hrefs.map(async (href) => {
+                try {
+                    const masterPlaylistUrl = await resolveRedirect(href);
+                    const body = await fetchText(masterPlaylistUrl);
+                    const maxHeight = Math.max(0, ...parseMasterVariants(body, masterPlaylistUrl).map((v) => v.height));
+                    return { url: masterPlaylistUrl, height: maxHeight };
+                } catch (err: any) {
+                    loggingService.error(`NativeStreamService: failed probing candidate HLS connection - ${err?.message}`);
+                    return undefined;
                 }
-            } catch (err: any) {
-                loggingService.error(`NativeStreamService: failed probing candidate HLS connection - ${err?.message}`);
+            })
+        );
+        let best: { url: string; height: number } | undefined;
+        let bestIndex = -1;
+        for (const [index, candidate] of probed.entries()) {
+            if (candidate && (!best || candidate.height > best.height)) {
+                best = candidate;
+                bestIndex = index;
             }
         }
         if (!best) {
@@ -287,7 +280,35 @@ class NativeStreamService implements AbstractStreamService {
             // than failing the whole stream over what's likely a transient fetch error.
             return resolveRedirect(hrefs[0]);
         }
+        const source = sources?.[bestIndex];
+        if (source && best.height > 0) {
+            await hqProbeCache.set(vpid, { ...source.pair, index: source.index, height: best.height }).catch(() => undefined);
+        }
         return best.url;
+    }
+
+    // Repeat plays skip the all-connections probe: ask mediaselector just once, for the pair that won before, and
+    // take the connection at the remembered position. Anything unexpected (programme withdrawn, connections
+    // reshuffled) forgets the result and falls back to the full probe, which also reports availability properly.
+    async #rememberedProbeWinner(vpid: string): Promise<string | undefined> {
+        const winner = await hqProbeCache.get(vpid);
+        if (!winner) {
+            return undefined;
+        }
+        try {
+            const href = this.#hlsHrefsFrom(await fetchText(mediaSelectorUrl(winner, vpid)))[winner.index];
+            if (href) {
+                return await resolveRedirect(href);
+            }
+        } catch (err: any) {
+            loggingService.error(`NativeStreamService: remembered HQ connection failed, re-probing - ${err?.message}`);
+        }
+        await hqProbeCache.del(vpid).catch(() => undefined);
+        return undefined;
+    }
+
+    #hlsHrefsFrom(xml: string): string[] {
+        return unavailableRegex.test(xml) ? [] : this.#extractHlsHrefs(xml);
     }
 
     // BBC's mediaselector XML API - the same endpoint get_iplayer's get_stream_data hits, once
@@ -295,22 +316,42 @@ class NativeStreamService implements AbstractStreamService {
     // but for this ONE vpid only (get_stream_data does this for every version it's given).
     // stopAtFirst=true (the default, non-probing path) returns as soon as one usable connection
     // is found; set false to keep walking every pair and collect every candidate instead.
-    async #resolveHlsConnections(vpid: string, stopAtFirst: boolean): Promise<string[]> {
-        const hrefs: string[] = [];
-        for (const mediaSet of mediaSets) {
-            for (const msVersion of mediaSelectorVersions) {
-                const url = `https://open.live.bbc.co.uk/mediaselector/${msVersion}/select/version/2.0/mediaset/${mediaSet}/vpid/${vpid}/format/xml?cb=${Date.now()}`;
-                const xml = await fetchText(url);
-                if (unavailableRegex.test(xml)) {
-                    continue;
-                }
-                hrefs.push(...this.#extractHlsHrefs(xml));
-                if (stopAtFirst && hrefs.length > 0) {
-                    return hrefs;
-                }
+    // `reason` is BBC's own explanation (the <error id="..."> mediaselector answers with, e.g.
+    // "geolocation") from the last pair that gave one, so a failure can say why - not just "none found".
+    async #resolveHlsConnections(
+        vpid: string,
+        stopAtFirst: boolean
+    ): Promise<{ hrefs: string[]; reason?: string; sources?: { pair: MediaSelectorPair; index: number }[] }> {
+        const hrefsFrom = (xml: string): string[] => this.#hlsHrefsFrom(xml);
+        const reasonFrom = (xmls: string[]): string | undefined => xmls.map((xml) => /<error\s+id="([^"]+)"/.exec(xml)?.[1]).filter(Boolean).pop();
+
+        if (!stopAtFirst) {
+            // Collecting every candidate needs every (mediaset, version) pair anyway, so fetch them
+            // all at once; Promise.all keeps the results in pair order, which is the preference order.
+            const bodies = await Promise.all(allMediaSelectorPairs.map((pair) => fetchText(mediaSelectorUrl(pair, vpid))));
+            const perPair = bodies.map(hrefsFrom);
+            return {
+                hrefs: perPair.flat(),
+                reason: reasonFrom(bodies),
+                // Where each href came from, in the same order, so a probe winner can be remembered.
+                sources: perPair.flatMap((list, i) => list.map((_, index) => ({ pair: allMediaSelectorPairs[i], index }))),
+            };
+        }
+
+        // The common path: stay sequential rather than firing requests that would be thrown away,
+        // but start with the pair that answered last time (see mediaSelectorPairs.ts).
+        const bodies: string[] = [];
+        const version = requestedVersion();
+        for (const pair of version ? versionMediaSelectorPairs : orderedMediaSelectorPairs('native')) {
+            const xml = await fetchText(mediaSelectorUrl(pair, vpid));
+            bodies.push(xml);
+            const hrefs = hrefsFrom(xml);
+            if (hrefs.length > 0) {
+                if (!version) rememberMediaSelectorPair('native', pair);
+                return { hrefs };
             }
         }
-        return hrefs;
+        return { hrefs: [], reason: reasonFrom(bodies) };
     }
 
     #extractHlsHrefs(xml: string): string[] {
@@ -346,12 +387,48 @@ class NativeStreamService implements AbstractStreamService {
     // the master playlist URL (mediaselector) exactly like a real stream would, without fetching any
     // media. Throws if BBC no longer serves it.
     async checkAvailable(pid: string): Promise<void> {
-        await this.#resolveMasterPlaylistUrl(await this.#resolveVpid(pid));
+        await this.#resolveMasterPlaylistUrl(await this.#fetchVpid(pid));
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
         const url = await this.#resolveUrl(pid, sessionId);
-        await proxyUrl(url, req, res, 5, sessionId);
+        // Subtitles are strictly opt-in (STREAM_SUBTITLES) and additive: with the setting off, or no
+        // captions for the programme, this is exactly the plain proxy call it always was.
+        const subtitlePlaylistUri = await this.#subtitlePlaylistUri(pid, req);
+        if (subtitlePlaylistUri) {
+            await proxyUrl(url, req, res, 5, sessionId, false, subtitlePlaylistUri);
+        } else {
+            await proxyUrl(url, req, res, 5, sessionId);
+        }
+    }
+
+    async subtitlesEnabled(): Promise<boolean> {
+        return (await configService.getParameter(IplayarrParameter.STREAM_SUBTITLES)) === 'true';
+    }
+
+    // The programme's captions converted to WebVTT, or undefined when subtitles are off or the
+    // programme has none. Never throws.
+    async getSubtitles(pid: string): Promise<SubtitleTrack | undefined> {
+        if (!(await this.subtitlesEnabled())) {
+            return undefined;
+        }
+        try {
+            return await loadSubtitleTrack(await this.#resolveVpid(pid), (message) => loggingService.error(`NativeStreamService: ${message}`));
+        } catch (err: any) {
+            loggingService.error(`NativeStreamService: subtitles unavailable for ${pid} - ${err?.message}`);
+            return undefined;
+        }
+    }
+
+    // Relative URL of the subtitle rendition's playlist (served by StreamEndpoint) when this
+    // programme has captions to offer. Carries the caller's stream key, like every other reference
+    // the proxy hands out.
+    async #subtitlePlaylistUri(pid: string, req: Request): Promise<string | undefined> {
+        if (!(await this.getSubtitles(pid))) {
+            return undefined;
+        }
+        const streamKey = (req.query?.streamkey as string) ?? '';
+        return `/api/subs.m3u8?mode=stream&pid=${encodeURIComponent(pid)}&subs=playlist&streamkey=${encodeURIComponent(streamKey)}`;
     }
 
     async streamProgressiveMkv(pid: string, res: Response, sessionId?: string): Promise<void> {

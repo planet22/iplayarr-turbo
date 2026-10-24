@@ -3,36 +3,45 @@ import { Index } from 'lunr';
 import lunr from 'lunr';
 
 import { searchResultLimit } from '../../constants/iPlayarrConstants';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { IPlayerDetails } from '../../types/IPlayerDetails';
 import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
 import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/responses/iplayer/IPlayerNewSearchResponse';
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
+import { lunrSearchQuery } from '../../utils/lunrQuery';
+import { traceCandidate } from '../../utils/searchTrace';
+import { firstMissingTerm } from '../../utils/titleMatch';
 import { createNZBName, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
 import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
+import searchSettingsService from '../searchSettingsService';
 import AbstractSearchService from './AbstractSearchService';
+import newSearchCache from './newSearchCache';
 
 const maxEpisodePages = 10;
-
 class NativeSearchService implements AbstractSearchService {
 
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
+        const matchAllWords = (await searchSettingsService.get(IplayarrParameter.SEARCH_MATCH_ALL_WORDS)) !== 'false';
         const url = `https://ibl.api.bbc.co.uk/ibl/v1/new-search?q=${encodeURIComponent(term)}`;
-        let response: AxiosResponse<IPlayerNewSearchResponse>;
-        try {
-            response = await axios.get(url);
-        } catch (err: any) {
-            loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
-            return [];
+        let results: IPlayerNewSearchResult[] | undefined = await newSearchCache.get(term.toLowerCase());
+        if (!results) {
+            let response: AxiosResponse<IPlayerNewSearchResponse>;
+            try {
+                response = await axios.get(url);
+            } catch (err: any) {
+                loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
+                return [];
+            }
+            if (response.status == 200) {
+                results = response.data.new_search.results;
+                await newSearchCache.set(term.toLowerCase(), results).catch(() => undefined);
+            }
         }
-        if (response.status == 200) {
-            const {
-                new_search: { results },
-            } = response.data;
-
-            const lunrResults: Index.Result[] = this.#indexAndReSearch(term, results);
+        if (results) {
+            const lunrResults: Index.Result[] = this.#indexAndReSearch(term, results, matchAllWords);
             const pidLedger: string[] = [];
             const infoPidLedger: Set<string> = new Set();
 
@@ -138,9 +147,13 @@ class NativeSearchService implements AbstractSearchService {
         };
     }
 
-    #indexAndReSearch(term: string, results: IPlayerNewSearchResult[]): Index.Result[] {
+    #indexAndReSearch(term: string, results: IPlayerNewSearchResult[], matchAllWords: boolean): Index.Result[] {
         //Index them each and search again, iPlayer's search is WAY to fuzzy
         const lunrIndex: lunr.Index = lunr(function (this: lunr.Builder) {
+            // lunr's default stop words (him, her, and, the...) would erase titles like "Him & Her"
+            // from both the index and the query, so nothing could ever match them.
+            this.pipeline.remove(lunr.stopWordFilter);
+            this.searchPipeline.remove(lunr.stopWordFilter);
             this.ref('pid');
             this.field('pid');
             this.field('title');
@@ -152,7 +165,24 @@ class NativeSearchService implements AbstractSearchService {
             return [];
         }
         try {
-            return lunrIndex.search(sanitizedTerm);
+            const hits = lunrIndex.search(lunrSearchQuery(sanitizedTerm));
+            const titles = new Map(results.map(({ id, title }) => [id, title]));
+            const hitRefs = new Set(hits.map(({ ref }) => ref));
+            for (const { id, title } of results) {
+                if (!hitRefs.has(id)) {
+                    traceCandidate({ title, stage: 'bbc', kept: false, reason: 'no-match', detail: 'None of the search words match this title' });
+                }
+            }
+            return hits.filter(({ ref }) => {
+                const title = titles.get(ref) ?? '';
+                const missing = matchAllWords ? firstMissingTerm(title, term) : undefined;
+                traceCandidate(
+                    missing === undefined
+                        ? { title, stage: 'bbc', kept: true }
+                        : { title, stage: 'bbc', kept: false, reason: 'missing-word', detail: `Missing the word "${missing}"` }
+                );
+                return missing === undefined;
+            });
         } catch (err: any) {
             if (err && err.name === 'QueryParseError') {
                 loggingService.error(`Lunr QueryParseError for term "${term}": ${err.message}`);

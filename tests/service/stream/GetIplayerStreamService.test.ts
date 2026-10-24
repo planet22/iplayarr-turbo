@@ -1,5 +1,6 @@
 import getIplayerExecutableService from '../../../src/service/getIplayerExecutableService';
 import service from '../../../src/service/stream/GetIplayerStreamService';
+import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { spawnCollectOutput } from '../../../src/service/stream/spawnWithTimeout';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
@@ -24,6 +25,7 @@ describe('GetIplayerStreamService', () => {
 
     beforeEach(() => {
         jest.resetAllMocks();
+        clearResolveCache();
         (getIplayerExecutableService.getAllStreamInfoParameters as jest.Mock).mockResolvedValue({ exec: 'gip', args: ['--streaminfo'] });
         (getIplayerExecutableService.getQualityFallbackChain as jest.Mock).mockResolvedValue(['hd', 'sd']);
     });
@@ -53,6 +55,31 @@ describe('GetIplayerStreamService', () => {
         await service.streamProgressiveMkv('p1', res, 'sess');
         expect(remuxToMkv).toHaveBeenCalledWith('https://y', 'p1', res, 'sess');
         expect(streamSessionService.setResolution).not.toHaveBeenCalled();
+    });
+
+    it('reuses a resolved stream for the same pid, reporting the resolution to each session', async () => {
+        setOutput(block('hlshd2', 'https://b', '9', 'video', 'gip 1280x720'));
+        await service.streamDirect('p1', req, res, 'a');
+        await service.streamDirect('p1', req, res, 'b');
+        expect(spawnCollectOutput).toHaveBeenCalledTimes(1);
+        expect(streamSessionService.setResolution).toHaveBeenCalledWith('a', '720');
+        expect(streamSessionService.setResolution).toHaveBeenCalledWith('b', '720');
+        expect(proxyUrl).toHaveBeenLastCalledWith('https://b', req, res, 5, 'b');
+    });
+
+    it('resolves again for another pid or a different quality chain, and after a failure', async () => {
+        setOutput(block('hlshd1', 'https://a', '1'));
+        await service.streamDirect('p1', req, res);
+        await service.streamDirect('p2', req, res);
+        (getIplayerExecutableService.getQualityFallbackChain as jest.Mock).mockResolvedValue(['sd']);
+        await service.streamDirect('p1', req, res);
+        expect(spawnCollectOutput).toHaveBeenCalledTimes(3);
+
+        setOutput('garbage');
+        await expect(service.streamDirect('p3', req, res)).rejects.toThrow();
+        setOutput(block('hlshd1', 'https://ok', '1'));
+        await service.streamDirect('p3', req, res);
+        expect(proxyUrl).toHaveBeenLastCalledWith('https://ok', req, res, 5, undefined);
     });
 
     it('throws when no stream is resolved', async () => {

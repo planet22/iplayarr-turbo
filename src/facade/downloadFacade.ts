@@ -3,9 +3,11 @@ import fs from 'fs';
 import path from 'path';
 
 import { progressRegex, timestampFile } from '../constants/iPlayarrConstants';
+import activeJobs from '../service/activeJobs';
 import configService from '../service/configService';
 import AbstractDownloadService from '../service/download/AbstractDownloadService';
 import GetIplayerDownloadService from '../service/download/GetIplayerDownloadService';
+import NativeDownloadService from '../service/download/NativeDownloadService';
 import StrmDownloadService from '../service/download/StrmDownloadService';
 import YTDLPDownloadService from '../service/download/YTDLPDownloadService';
 import historyService from '../service/historyService';
@@ -20,42 +22,72 @@ import { MediaMode } from '../types/enums/MediaMode';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { LogLine, LogLineLevel } from '../types/LogLine';
+import { qualityProfiles } from '../types/QualityProfiles';
 import { QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
+import { classifyDownloadFailure, recordDownloadOutput, takeDownloadOutput } from '../utils/downloadFailure';
+import { newPartState, overallProgress, PartPlan, PartState } from '../utils/downloadProgress';
+import { formatBytes } from '../utils/formatters';
 import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
 import { buildStrmToolJson } from '../utils/strmToolBuilder';
 import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
 
-class DownloadFacade {
-    async download(pid: string): Promise<ChildProcess> {
-        const pidDir: string = await this.#createPidDirectory(pid);
-        const service: AbstractDownloadService = await this.#getService();
-        const process: ChildProcess = await service.download(pid, pidDir);
+// yt-dlp fetches the video and the audio as two separate downloads, each reporting its own 0-100%.
+const partPlans: Partial<Record<string, PartPlan>> = {
+    [DownloadClient.YTDLP]: { names: ['video', 'audio'] },
+};
 
-        process.stderr?.on('data', this.#processError);
-        process.stdout?.on('data', (data) => this.#processOutput(pid, data));
-        process.on('close', (code) => this.#processComplete(pid, pidDir, code, service));
+class DownloadFacade {
+    #partStates = new Map<string, PartState>();
+    #partPlans = new Map<string, PartPlan | undefined>();
+
+    // `jobId` is the queue entry being downloaded. The same programme can be downloading more than once at a
+    // time (different resolutions), so everything per-download - its working directory, progress state, queue
+    // entry, events - is keyed by the job, with the pid only as the fallback for a caller that has none.
+    async download(pid: string, jobId?: string): Promise<ChildProcess> {
+        const key = jobId ?? pid;
+        const pidDir: string = await this.#createPidDirectory(key);
+        const queueItem = queueService.getFromQueue(pid, jobId);
+        const { service, client } = await this.#getService(queueItem?.mediaMode);
+        if (queueItem) {
+            queueItem.client = client;
+        }
+        this.#partStates.set(key, newPartState());
+        this.#partPlans.set(key, partPlans[client]);
+        const process: ChildProcess = await (jobId ? service.download(pid, pidDir, jobId) : service.download(pid, pidDir));
+
+        process.stderr?.on('data', (data) => this.#processError(pid, jobId, data));
+        process.stdout?.on('data', (data) => this.#processOutput(pid, jobId, data));
+        process.on('close', (code) => {
+            this.#partStates.delete(key);
+            this.#partPlans.delete(key);
+            return this.#processComplete(pid, jobId, pidDir, code, service);
+        });
 
         return process;
     }
 
-    #processError(data: any): void {
-        loggingService.error(data);
+    #processError(pid: string, jobId: string | undefined, data: any): void {
+        // toString: a raw Buffer would be logged as a byte array.
+        const text = data.toString();
+        recordDownloadOutput(jobId ?? pid, text);
+        loggingService.error(text);
     }
 
-    #processOutput(pid: string, data: any): void {
+    #processOutput(pid: string, jobId: string | undefined, data: any): void {
+        recordDownloadOutput(jobId ?? pid, data.toString());
         console.log(data.toString());
-        const logLine: LogLine = { level: LogLineLevel.INFO, id: pid, message: data.toString(), timestamp: new Date() };
+        const logLine: LogLine = { level: LogLineLevel.INFO, id: pid, jobId: jobId ?? activeJobs.get(pid), message: data.toString(), timestamp: new Date() };
         socketService.emit('log', logLine);
-        const downloadDetails: DownloadDetails | undefined = this.#parseProgress(pid, data);
+        const downloadDetails: DownloadDetails | undefined = this.#parseProgress(pid, jobId, data);
         if (downloadDetails) {
-            queueService.updateQueue(pid, downloadDetails);
+            queueService.updateQueue(pid, downloadDetails, jobId);
         }
     }
 
-    async #processComplete(pid: string, directory: string, code: any, service: AbstractDownloadService): Promise<void> {
+    async #processComplete(pid: string, jobId: string | undefined, directory: string, code: any, service: AbstractDownloadService): Promise<void> {
         const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
         const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
         const useFolderStructure =
@@ -64,13 +96,14 @@ class DownloadFacade {
         const writeStrmToolJson = (await configService.getParameter(IplayarrParameter.WRITE_STRMTOOL_JSON)) === 'true';
         const streamMode = await configService.getParameter(IplayarrParameter.STREAM_MODE);
         const videoQuality = await configService.getParameter(IplayarrParameter.VIDEO_QUALITY);
+        const output = takeDownloadOutput(jobId ?? pid);
 
         if (code === 0) {
-            const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
+            const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid, jobId);
             if (queueItem) {
                 try {
                     // Run the download method postProcess
-                    await service.postProcess(pid, directory, code);
+                    await (jobId ? service.postProcess(pid, directory, code, jobId) : service.postProcess(pid, directory, code));
 
                     //Move the resultant file
                     loggingService.debug(pid, `Looking for video files in ${directory}`);
@@ -110,13 +143,26 @@ class DownloadFacade {
                         queueItem.extension = extension;
                         queueItem.libraryPath = libraryPath.relativePath;
 
+                        // Replaces the running estimate with the real size of what was saved.
+                        let sizeText = '';
+                        try {
+                            const bytes = fs.statSync(libraryPath.fullPath).size;
+                            if (bytes > 0) {
+                                queueItem.details = { ...queueItem.details, size: Number((bytes / 1048576).toPrecision(4)), sizeLeft: 0 };
+                                const quality = qualityProfiles.find(({ id }) => id === queueItem.library?.quality)?.quality ?? /(\d{3,4}p)/.exec(queueItem.nzbName)?.[1];
+                                sizeText = ` (${[quality, formatBytes(bytes)].filter(Boolean).join(', ')})`;
+                            }
+                        } catch {
+                            // The size is informational only.
+                        }
+
                         if (shouldWriteNfo(nfoWriteMode, queueItem.source)) {
                             await this.#writeLibrarySidecarFiles(
                                 queueItem,
                                 libraryPath,
                                 writeStrmToolJson,
                                 streamMode,
-                                videoQuality
+                                queueItem.library?.quality ?? videoQuality
                             );
                         }
 
@@ -124,15 +170,15 @@ class DownloadFacade {
                             extension === 'strm' ? VideoEventType.STRM_CREATED : VideoEventType.DOWNLOAD_COMPLETE,
                             extension === 'strm'
                                 ? `Created .strm pointer for "${queueItem.nzbName}"`
-                                : `Downloaded "${queueItem.nzbName}"`,
-                            { pid }
+                                : `Downloaded "${queueItem.nzbName}"${sizeText}`,
+                            { pid, jobId }
                         );
                     } else {
                         loggingService.error(`get-iplayer exited successfully but produced no video file for ${pid}`);
                         videoEventService.record(
                             VideoEventType.DOWNLOAD_FAILED,
                             `No video file produced for "${queueItem.nzbName}"`,
-                            { pid, level: 'error' }
+                            { pid, jobId, level: 'error' }
                         );
                     }
 
@@ -140,6 +186,9 @@ class DownloadFacade {
                     loggingService.debug(pid, `Deleting old directory ${directory}`);
                     fs.rmSync(directory, { recursive: true, force: true });
 
+                    if (!videoFile) {
+                        queueItem.failMessage = classifyDownloadFailure(output) ?? 'get_iplayer produced no video file';
+                    }
                     await historyService.addHistory(
                         queueItem,
                         videoFile ? QueueEntryStatus.COMPLETE : QueueEntryStatus.FAILED
@@ -149,16 +198,25 @@ class DownloadFacade {
                 }
             }
         } else {
-            const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid);
+            const queueItem: QueueEntry | undefined = queueService.getFromQueue(pid, jobId);
             if (queueItem) {
+                const reason = classifyDownloadFailure(output);
                 videoEventService.record(
                     VideoEventType.DOWNLOAD_FAILED,
-                    `Download process for "${queueItem.nzbName}" exited with code ${code}`,
-                    { pid, level: 'error' }
+                    `Download process for "${queueItem.nzbName}" exited with code ${code}${reason ? `: ${reason}` : ''}`,
+                    { pid, jobId, level: 'error' }
                 );
+                // Tell Sonarr/Radarr it failed (so it can blocklist and look elsewhere) rather than
+                // letting the item silently vanish from the queue with no history entry.
+                queueItem.failMessage = reason ?? `Download exited with code ${code}`;
+                try {
+                    await historyService.addHistory(queueItem, QueueEntryStatus.FAILED);
+                } catch (err) {
+                    loggingService.error(err);
+                }
             }
         }
-        queueService.removeFromQueue(pid);
+        queueService.removeFromQueue(pid, jobId);
     }
 
     // Writes Jellyfin-compatible .nfo metadata next to the completed file.
@@ -204,10 +262,10 @@ class DownloadFacade {
         }
     }
 
-    async #getService(): Promise<AbstractDownloadService> {
-        const mediaMode: MediaMode = (await configService.getParameter(IplayarrParameter.MEDIA_MODE)) as MediaMode;
+    async #getService(override?: MediaMode): Promise<{ service: AbstractDownloadService; client: string }> {
+        const mediaMode: MediaMode = override ?? ((await configService.getParameter(IplayarrParameter.MEDIA_MODE)) as MediaMode);
         if (mediaMode === MediaMode.STRM) {
-            return StrmDownloadService;
+            return { service: StrmDownloadService, client: 'STRM' };
         }
 
         const client: DownloadClient = (await configService.getParameter(
@@ -215,22 +273,25 @@ class DownloadFacade {
         )) as DownloadClient;
         switch (client) {
             case DownloadClient.YTDLP:
-                return YTDLPDownloadService;
+                return { service: YTDLPDownloadService, client };
             case DownloadClient.GET_IPLAYER:
+                return { service: GetIplayerDownloadService, client };
+            case DownloadClient.NATIVE:
             default:
-                return GetIplayerDownloadService;
+                return { service: NativeDownloadService, client: DownloadClient.NATIVE };
         }
     }
 
-    async #createPidDirectory(pid: string): Promise<string> {
+    // One working directory per download (named for its job, or the pid when there is none).
+    async #createPidDirectory(name: string): Promise<string> {
         const downloadDir: string = (await configService.getParameter(IplayarrParameter.DOWNLOAD_DIR)) as string;
-        const pidDir = `${downloadDir}/${pid}`;
+        const pidDir = `${downloadDir}/${name}`;
         fs.mkdirSync(pidDir, { recursive: true });
         fs.writeFileSync(`${pidDir}/${timestampFile}`, '');
         return pidDir;
     }
 
-    #parseProgress(pid: string, data: any): DownloadDetails | undefined {
+    #parseProgress(pid: string, jobId: string | undefined, data: any): DownloadDetails | undefined {
         const lines: string[] = data.toString().split('\n');
         const progressLines: string[] = lines.filter((l) => progressRegex.exec(l));
         if (progressLines.length > 0) {
@@ -239,16 +300,23 @@ class DownloadFacade {
             if (match) {
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const [_, progress, size, speed, eta] = match;
-                const percentFactor = (100 - parseFloat(progress)) / 100;
-
-                const sizeLeft = size ? parseFloat(size) * percentFactor : undefined;
+                const overall = overallProgress(
+                    this.#partStates.get(jobId ?? pid) ?? newPartState(),
+                    parseFloat(progress),
+                    this.#partPlans.get(jobId ?? pid)
+                );
+                // The size a client reports is an estimate that wobbles (and, for a download made of several
+                // parts, changes with each part), so what is shown never shrinks while a download runs.
+                const reportedSize = convertToMB(size ?? '');
+                const sizeMb = Math.max(queueService.getFromQueue(pid, jobId)?.details?.size ?? 0, reportedSize);
                 const deltaDetails: Partial<DownloadDetails> = {
                     uuid: pid,
-                    progress: parseFloat(progress),
-                    size: convertToMB(size),
+                    progress: overall.progress,
+                    part: overall.part,
+                    size: sizeMb,
                     speed: convertToMB(speed),
-                    eta: getETA(eta, convertToMB(size), convertToMB(speed), parseFloat(progress)),
-                    sizeLeft,
+                    eta: getETA(eta, reportedSize, convertToMB(speed), parseFloat(progress)),
+                    sizeLeft: sizeMb ? sizeMb * (1 - overall.progress / 100) : undefined,
                 };
 
                 return deltaDetails;
@@ -275,7 +343,7 @@ class DownloadFacade {
                 .map(async (entry) => {
                     // Skip directories that belong to a download still active in the queue - it
                     // may still be writing files well past the timestamp threshold.
-                    if (queueService.getFromQueue(entry.name)) return;
+                    if (queueService.getFromQueue(entry.name) || queueService.getFromQueue(entry.name, entry.name)) return;
 
                     const dirPath: string = path.join(downloadDir, entry.name);
                     const filePath: string = path.join(dirPath, timestampFile);
@@ -295,7 +363,7 @@ class DownloadFacade {
                     // download reusing this same pid (same directory, freshly recreated) started
                     // between the stat above and now - addToQueue() always happens before that
                     // download creates/rewrites this directory, so this reliably catches it.
-                    if (queueService.getFromQueue(entry.name)) return;
+                    if (queueService.getFromQueue(entry.name) || queueService.getFromQueue(entry.name, entry.name)) return;
 
                     try {
                         await fs.promises.rm(dirPath, { recursive: true, force: true });

@@ -2,24 +2,32 @@ import axios from 'axios';
 
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import browseService, {
+    dedupeRails,
     extractElements,
     parseIplayerState,
+    parseIsoDurationMinutes,
+    parseQualityFlags,
+    parseSkipMarkers,
+    parseVersionIds,
+    shuffled,
     toBrowseItem,
     toBrowseItems,
 } from '../../src/service/browseService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
+import liveChannelService from '../../src/service/liveChannelService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 
 jest.mock('axios');
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/facade/scheduleFacade');
 jest.mock('../../src/service/loggingService');
-jest.mock('../../src/service/redis/redisCacheService', () => ({
+jest.mock('../../src/service/db/dbCacheService', () => ({
     __esModule: true,
     default: class {
         async getOr(key: string, fn: (key: string) => Promise<unknown>) {
             return fn(key);
         }
+        async set() {}
     },
 }));
 
@@ -37,6 +45,27 @@ const element = (id: string, extra: object = {}) => ({
     master_brand: { titles: { small: 'BBC One' } },
     labels: { category: 'Drama' },
     ...extra,
+});
+
+describe('dedupeRails / shuffled', () => {
+    const item = (pid: string, title: string) => ({ pid, title, kind: 'episode' as const, type: VideoType.TV });
+
+    it('drops repeats by pid and title across rails, keeping repeats within a rail', () => {
+        const rails = dedupeRails([
+            { id: 'a', title: 'A', items: [item('1', 'Show'), item('2', 'Show'), item('3', 'Other')] },
+            { id: 'b', title: 'B', items: [item('1', 'Show'), item('4', ' show '), item('5', 'New')] },
+            { id: 'c', title: 'C', items: [item('3', 'Other')] },
+        ]);
+        expect(rails.map((r) => r.id)).toEqual(['a', 'b']);
+        expect(rails[0].items.map((i) => i.pid)).toEqual(['1', '2', '3']);
+        expect(rails[1].items.map((i) => i.pid)).toEqual(['5']);
+    });
+
+    it('shuffled keeps the same members without mutating the input', () => {
+        const input = [1, 2, 3, 4, 5];
+        expect(shuffled(input).sort()).toEqual(input);
+        expect(input).toEqual([1, 2, 3, 4, 5]);
+    });
 });
 
 describe('browseService helpers', () => {
@@ -105,10 +134,24 @@ describe('browseService', () => {
         pubDate: new Date(Date.now() - daysAgo * 86400000),
     });
 
+    const iblByPath = (routes: Record<string, any>) =>
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            const key = Object.keys(routes).find((k) => url.includes(k));
+            if (!key) throw new Error(`unrouted ${url}`);
+            const value = routes[key];
+            if (value instanceof Error) throw value;
+            return { data: value };
+        });
+
     it('home returns non-empty rails and drops failed ones', async () => {
-        mockedAxios.get
-            .mockResolvedValueOnce({ data: { home_highlights: { elements: [element('h1')] } } })
-            .mockRejectedValueOnce(new Error('boom'));
+        iblByPath({
+            'channels/bbc_one_london/highlights': { home_highlights: { elements: [element('h1')] } },
+            'groups/popular': new Error('boom'),
+            'channels/bbc_two_england': { elements: [] },
+            'channels/bbc_three': new Error('boom'),
+            'channels/bbc_four': { elements: [] },
+            categories: { categories: [] },
+        });
         mockedSchedule.getFeed.mockResolvedValue([]);
         const rails = await browseService.home();
         expect(rails).toHaveLength(1);
@@ -116,12 +159,54 @@ describe('browseService', () => {
         expect(rails[0].items[0].pid).toBe('h1');
     });
 
-    it('home places Recently Added after Featured', async () => {
-        mockedAxios.get.mockResolvedValue({ data: { elements: [element('x1')] } });
+    it('home places Recently Added after Featured and adds channel and category rails', async () => {
+        const named = (pid: string, channel = 'BBC One') => ({
+            ...element(pid),
+            title: `Show ${pid}`,
+            master_brand: { titles: { small: channel } },
+        });
+        iblByPath({
+            'channels/bbc_one_london': { elements: [named('a')] },
+            'groups/popular': { elements: [named('b')] },
+            'channels/bbc_two_england': { elements: [named('c', 'BBC Two')] },
+            'channels/bbc_three': { elements: [named('d', 'BBC Three')] },
+            'channels/bbc_four': { elements: [named('e', 'BBC Four')] },
+            'categories/comedy/programmes?per_page=30': { elements: [named('f')] },
+            'categories/drama/programmes?per_page=30': { elements: [named('g')] },
+            'categories/comedy/programmes?per_page=6': { elements: [] },
+            'categories/drama/programmes?per_page=6': { elements: [] },
+            categories: { categories: [{ id: 'comedy', title: 'Comedy' }, { id: 'drama', title: 'Drama' }] },
+        });
         mockedSchedule.getFeed.mockResolvedValue([feedResult('f1', 1)]);
         mockedDetails.details.mockResolvedValue([]);
         const rails = await browseService.home();
-        expect(rails.map((r) => r.id)).toEqual(['highlights', 'recent', 'popular']);
+        const ids = rails.map((r) => r.id);
+        expect(ids.slice(0, 3)).toEqual(['highlights', 'recent', 'popular']);
+        expect(ids).toEqual(expect.arrayContaining(['channel_bbc_two_england', 'channel_bbc_three', 'channel_bbc_four']));
+        expect(ids.filter((id) => id.startsWith('category_'))).toHaveLength(2);
+    });
+
+    it('channelRail keeps only the channel own shows from highlights and programmes', async () => {
+        const on = (pid: string, channel: string) => ({ ...element(pid), master_brand: { titles: { small: channel } } });
+        iblByPath({
+            highlights: { elements: [on('h-own', 'BBC Four'), on('h-other', 'BBC Two')] },
+            programmes: { elements: [on('p-own', 'BBC Four'), on('h-own', 'BBC Four'), on('p-other', 'BBC One')] },
+        });
+        const rail = await browseService.channelRail('bbc_four');
+        expect(rail.title).toBe('On BBC Four');
+        expect(rail.items.map((i) => i.pid)).toEqual(['h-own', 'p-own']);
+    });
+
+    it('home drops programmes already shown in an earlier rail', async () => {
+        iblByPath({
+            'channels/bbc_one_london': { elements: [element('dup'), element('only-featured')] },
+            'groups/popular': { elements: [element('dup')] },
+            'channels/': { elements: [] },
+            categories: { categories: [] },
+        });
+        mockedSchedule.getFeed.mockResolvedValue([]);
+        const rails = await browseService.home();
+        expect(rails.map((r) => r.id)).toEqual(['highlights']);
     });
 
     it('recentlyAdded sorts newest first, caps the list and enriches from details', async () => {
@@ -283,6 +368,48 @@ describe('browseService', () => {
         const result = await browseService.nowNext('bbc_one_london', new Date('2026-10-03T19:30:00Z'));
         expect(result.now?.item.pid).toBe('s2');
         expect(result.next?.item.pid).toBe('s3');
+    });
+
+    it('schedule lists enabled channels in the configured order and keeps a channel with no schedule', async () => {
+        await liveChannelService.setOrder(['bbc_two_england', 'bbc_one_wales_hd', 'bbc_one_london']);
+        await liveChannelService.setEnabled('bbc_one_wales_hd', true);
+        await liveChannelService.setEnabled('bbc_four', false);
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            if (url.includes('bbc_one_wales/')) throw new Error('404');
+            return { data: { schedule: { elements: [broadcast('s1', '2026-10-03T18:00:00Z', '2026-10-03T19:00:00Z')] } } };
+        });
+        const result = await browseService.schedule('2026-10-03');
+        const ids = result.map((row) => row.channel.id);
+        expect(ids.slice(0, 3)).toEqual(['bbc_two_england', 'bbc_one_wales_hd', 'bbc_one_london']);
+        expect(ids).not.toContain('bbc_four');
+        expect(result[1].slots).toEqual([]);
+        expect(result[0].slots).toHaveLength(1);
+    });
+
+    it('schedule versions the captioned logo url of optional channels only', async () => {
+        await liveChannelService.setEnabled('bbc_one_wales_hd', true);
+        mockedAxios.get.mockResolvedValue({ data: { schedule: { elements: [] } } });
+        const rows = await browseService.schedule('2026-10-03');
+        const logo = (id: string) => rows.find((row) => row.channel.id === id)?.channel.logo;
+        expect(logo('bbc_one_london')).toBe('json-api/browse/channel-logo/bbc_one.svg');
+        expect(logo('bbc_one_wales_hd')).toBe(
+            `json-api/browse/channel-logo/bbc_one_wales_hd.svg?v=${liveChannelService.logoVersion}`
+        );
+    });
+
+    it('refreshSchedule re-fetches each shown channel by its schedule id and survives a failing channel', async () => {
+        await liveChannelService.setEnabled('bbc_one_wales_hd', true);
+        const set = jest.spyOn(browseService.scheduleCache, 'set');
+        mockedAxios.get.mockImplementation(async (url: string) => {
+            if (url.includes('/bbc_three/')) throw new Error('boom');
+            return { data: { schedule: { elements: [] } } };
+        });
+        await expect(browseService.refreshSchedule('2026-10-03')).resolves.toBeUndefined();
+        const paths = set.mock.calls.map(([path]) => path);
+        expect(paths).toContain('channels/bbc_one_wales/schedule/2026-10-03');
+        expect(paths).toContain('channels/bbc_one_london/schedule/2026-10-03');
+        expect(paths).not.toContain('channels/bbc_three/schedule/2026-10-03');
+        set.mockRestore();
     });
 
     it('nowNext falls through to tomorrow when today has no next slot', async () => {
@@ -492,5 +619,206 @@ describe('browseService', () => {
             { series: undefined, episodes: [expect.objectContaining({ pid: 'b00ep001' })] },
         ]);
         expect(mockedDetails.getSeriesEpisodes).not.toHaveBeenCalled();
+    });
+
+    describe('programme while the BBC programme pages are down', () => {
+        const iblEpisode = (id: string, extra: object = {}) => ({
+            id,
+            type: 'episode',
+            title: 'Time',
+            subtitle: 'Series 3: Episode 3',
+            original_title: 'Episode 3',
+            tleo_id: 'p09brand',
+            tleo_type: 'brand',
+            synopses: { medium: 'Episode synopsis' },
+            images: { standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0ep1234.jpg' },
+            master_brand: { titles: { small: 'BBC One' } },
+            labels: { category: 'Crime Drama' },
+            release_date_time: '2026-10-11T00:00:00.000Z',
+            versions: [{ kind: 'original', duration: { value: 'PT1H1M30S' } }],
+            ...extra,
+        });
+        const show = {
+            id: 'p09brand',
+            title: 'Time',
+            tleo_type: 'brand',
+            synopses: { medium: 'Show synopsis' },
+            images: { standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0show12.jpg' },
+            master_brand: { titles: { small: 'BBC One' } },
+            labels: { category: 'Crime Drama' },
+        };
+        const routes = (table: Record<string, unknown>) =>
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                const key = Object.keys(table).find((k) => url.endsWith(k));
+                if (!key) throw new Error(`unexpected ${url}`);
+                return { data: table[key] };
+            });
+
+        beforeEach(() => mockedDetails.getMetadata.mockRejectedValue(new Error('BBC down')));
+
+        it('builds a brand page from iBL and flags it degraded', async () => {
+            routes({
+                'programmes/p09brand': { programmes: [show] },
+                'programmes/p09brand/episodes?per_page=30&page=1': { programme_episodes: { elements: [iblEpisode('e3'), { id: 's', type: 'series' }] } },
+            });
+            const result = await browseService.programme('p09brand');
+            expect(result).toMatchObject({
+                pid: 'p09brand',
+                kind: 'brand',
+                title: 'Time',
+                synopsis: 'Show synopsis',
+                thumbnail: 'json-api/thumbnail/p0show12.jpg',
+                channel: 'BBC One',
+                category: 'Crime Drama',
+                degraded: true,
+                missing: [],
+                hasMore: false,
+            });
+            expect(result.seasons).toEqual([
+                {
+                    series: 3,
+                    episodes: [
+                        expect.objectContaining({
+                            pid: 'e3',
+                            episode: 3,
+                            series: 3,
+                            episodeTitle: 'Episode 3',
+                            description: 'Episode synopsis',
+                            runtime: 61.5,
+                            thumbnail: 'json-api/thumbnail/p0ep1234.jpg',
+                        }),
+                    ],
+                },
+            ]);
+        });
+
+        it('climbs an episode pid to its show and lists only the fields iBL lacks as missing', async () => {
+            const bare = { ...show, synopses: undefined, images: undefined };
+            routes({
+                'programmes/e3': { programmes: [] },
+                'episodes/e3': { episodes: [iblEpisode('e3')] },
+                'programmes/p09brand': { programmes: [bare] },
+                'programmes/p09brand/episodes?per_page=30&page=2': { programme_episodes: { elements: [iblEpisode('e3')] } },
+            });
+            const result = await browseService.programme('e3', 2);
+            expect(result).toMatchObject({ pid: 'p09brand', degraded: true, page: 2, missing: ['synopsis', 'thumbnail'] });
+        });
+
+        it('shows a standalone episode on its own', async () => {
+            routes({
+                'programmes/e9': { programmes: [] },
+                'episodes/e9': { episodes: [iblEpisode('e9', { tleo_id: 'e9', tleo_type: 'episode', subtitle: undefined, original_title: undefined })] },
+            });
+            const result = await browseService.programme('e9');
+            expect(result).toMatchObject({ pid: 'e9', kind: 'episode', degraded: true, hasMore: false });
+            expect(result.seasons[0].episodes.map((e) => e.pid)).toEqual(['e9']);
+        });
+
+        it('reports more pages while iBL returns a full page', async () => {
+            routes({
+                'programmes/p09brand': { programmes: [show] },
+                'programmes/p09brand/episodes?per_page=30&page=1': {
+                    programme_episodes: { elements: Array.from({ length: 30 }, (_, i) => iblEpisode(`e${i}`)) },
+                },
+            });
+            expect((await browseService.programme('p09brand')).hasMore).toBe(true);
+        });
+
+        it('rethrows the original error when iBL does not know the pid either', async () => {
+            routes({ 'programmes/nope': { programmes: [] }, 'episodes/nope': { episodes: [] } });
+            await expect(browseService.programme('nope')).rejects.toThrow('BBC down');
+        });
+
+        it('falls back when metadata loads but no episode lookup does', async () => {
+            mockedDetails.getMetadata.mockReset();
+            mockedDetails.getMetadata.mockResolvedValue({ programme: { type: 'brand', pid: 'p09brand', title: 'Time' } } as any);
+            mockedDetails.getSeriesEpisodes.mockResolvedValue([{ id: 'e3', type: 'episode', title: 't' }] as any);
+            mockedDetails.detailsForEpisodeMetadata.mockResolvedValue([]);
+            routes({
+                'programmes/p09brand': { programmes: [show] },
+                'programmes/p09brand/episodes?per_page=30&page=1': { programme_episodes: { elements: [iblEpisode('e3')] } },
+            });
+            const result = await browseService.programme('p09brand');
+            expect(result.degraded).toBe(true);
+            expect(result.seasons[0].episodes).toHaveLength(1);
+        });
+    });
+});
+
+describe('parseIsoDurationMinutes', () => {
+    it('reads ISO 8601 durations', () => {
+        expect(parseIsoDurationMinutes('PT1H1M34.040S')).toBeCloseTo(61.567, 2);
+        expect(parseIsoDurationMinutes('PT58M')).toBe(58);
+        expect(parseIsoDurationMinutes('PT')).toBeUndefined();
+        expect(parseIsoDurationMinutes(undefined)).toBeUndefined();
+    });
+});
+
+describe('parseSkipMarkers', () => {
+    const skip = (subtype: string, from: number, to: number) => ({
+        type: 'skip',
+        subtype,
+        interaction_points: { show_from: from, skip_to: to },
+    });
+
+    it('returns intro and recap spans from the original version, sorted by start', () => {
+        const episode = {
+            versions: [
+                { kind: 'signed', interactions: [skip('intro', 1, 2)] },
+                { kind: 'original', interactions: [skip('intro', 60, 90), skip('recap', 5, 40), { type: 'other' }] },
+            ],
+        };
+        expect(parseSkipMarkers(episode)).toEqual([
+            { type: 'recap', start: 5, end: 40 },
+            { type: 'intro', start: 60, end: 90 },
+        ]);
+    });
+
+    it('ignores malformed spans and unknown subtypes, and tolerates missing data', () => {
+        const episode = { versions: [{ interactions: [skip('credits', 1, 9), skip('intro', 30, 10), skip('intro', -1, 5)] }] };
+        expect(parseSkipMarkers(episode)).toEqual([]);
+        expect(parseSkipMarkers(undefined)).toEqual([]);
+        expect(parseSkipMarkers({})).toEqual([]);
+    });
+});
+
+describe('parseQualityFlags', () => {
+    const version = (kind: string, hdr: boolean, uhd: boolean) => ({ kind, hd: true, hdr, uhd });
+
+    it('reads the original version of an episode', () => {
+        const episode = { versions: [version('audio-described', false, false), version('original', true, true)] };
+        expect(parseQualityFlags(episode)).toEqual({ hdr: true, uhd: true });
+        expect(parseQualityFlags({ versions: [version('original', false, true)] })).toEqual({ uhd: true });
+    });
+
+    it('reads a list item through its latest episode', () => {
+        expect(parseQualityFlags({ initial_children: [{ versions: [version('original', true, false)] }] })).toEqual({ hdr: true });
+    });
+
+    it('sets nothing when the flags are false or missing', () => {
+        expect(parseQualityFlags({ versions: [version('original', false, false)] })).toEqual({});
+        expect(parseQualityFlags({})).toEqual({});
+        expect(parseQualityFlags(undefined)).toEqual({});
+    });
+
+    it('is carried onto browse items only when set', () => {
+        const element = { id: 'm002whth', title: 'A Good Girl', type: 'episode', versions: [version('original', false, true)] };
+        expect(toBrowseItem(element)).toMatchObject({ pid: 'm002whth', uhd: true });
+        expect(toBrowseItem({ ...element, versions: [version('original', false, false)] })).not.toHaveProperty('uhd');
+    });
+});
+
+describe('parseVersionIds', () => {
+    it('lists the audio described and signed versions of an episode or a list item\'s latest episode', () => {
+        expect(parseVersionIds({ versions: [{ kind: 'original' }, { kind: 'signed' }, { kind: 'audio-described' }] })).toEqual({ versions: ['audio-described', 'signed'] });
+        expect(parseVersionIds({ initial_children: [{ versions: [{ kind: 'original' }, { kind: 'audio-described' }] }] })).toEqual({ versions: ['audio-described'] });
+    });
+
+    it('sets nothing for an original-only or empty element, and is carried onto browse items only when set', () => {
+        expect(parseVersionIds({ versions: [{ kind: 'original' }] })).toEqual({});
+        expect(parseVersionIds(undefined)).toEqual({});
+        const element = { id: 'm00336jl', title: 'Week 4 Results', type: 'episode', versions: [{ kind: 'original' }, { kind: 'audio-described' }] };
+        expect(toBrowseItem(element)).toMatchObject({ pid: 'm00336jl', versions: ['audio-described'] });
+        expect(toBrowseItem({ ...element, versions: [{ kind: 'original' }] })).not.toHaveProperty('versions');
     });
 });

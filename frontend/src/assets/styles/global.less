@@ -1,3 +1,11 @@
+// Tokens derived from the active theme's colours, so they follow every theme and mode.
+:root {
+    --brand-soft-color: color-mix(in srgb, var(--brand-color) 35%, transparent);
+    // Unsaved edits are amber, so the (pink) Save button is the only brand-coloured thing asking for attention.
+    --changed-color: var(--caution-color);
+    --changed-soft-color: color-mix(in srgb, var(--caution-color) 35%, transparent);
+}
+
 body {
     padding: 0px;
     margin: 0px;
@@ -5,6 +13,25 @@ body {
     color: @primary-text-color;
     background-color: @page-background-color;
     min-height: 100vh;
+}
+
+// Safari does not inherit the page font into form controls (cards built on <button> fall back to serif).
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
+}
+
+// iOS Safari paints native selects white and ignores their background/colour; dropping the native look
+// makes the dark input styling apply, and the chevron is drawn back in.
+select:not([multiple]) {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 28px !important;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" fill="none" stroke="%23ccc" stroke-width="1.5"><path d="M1 1l4 4 4-4"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 10px center;
 }
 
 .main-layout {
@@ -18,7 +45,19 @@ body {
     min-width: 0;
 
     .inner-content {
-        padding: 1rem;
+        // Tighter at the top, so the title (or toolbar) sits close to the nav bar.
+        padding: 0.5rem 1rem 1rem;
+    }
+}
+
+// Phones: the page title bar and the toolbar run edge to edge (their rule and background reach both sides of the
+// screen), while their text and buttons stay lined up with the content's own side gap.
+@media (max-width: @mobile-breakpoint) {
+    .content :is(.inner-content, .browsePage) > :is(.PageHeader, .SettingsPageToolbar) {
+        margin-left: -1rem;
+        margin-right: -1rem;
+        padding-left: 1rem;
+        padding-right: 1rem;
     }
 }
 
@@ -30,7 +69,7 @@ body {
     text-align: right;
 }
 
-@media (min-width: @mobile-breakpoint) {
+@media (min-width: @desktop-breakpoint) {
     .mobileOnly {
         display: none !important;
     }
@@ -95,9 +134,16 @@ body {
                 display: none;
             }
 
+            // Low-value cells (IDs, secondary timestamps) that a phone card can do without.
+            td.hide-mobile {
+                display: none;
+            }
+
+            // Quiet labels, so the values carry the card rather than "Label: value" pairs of equal weight.
             td[data-title]:not(.text)::before {
                 content: attr(data-title) ':';
-                font-weight: bold;
+                font-weight: normal;
+                font-size: 12px;
                 color: @subtle-text-color;
             }
 
@@ -157,7 +203,7 @@ legend {
     &.TV {
         background-color: @primary-color;
         border-color: @primary-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 
     &.MOVIE {
@@ -169,19 +215,19 @@ legend {
     &.primary {
         background-color: @primary-color;
         border-color: @primary-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 
     &.warn {
         background-color: @warn-color;
         border-color: @warn-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 
     &.success {
         background-color: @success-color;
         border-color: @success-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 
     &.error {
@@ -194,16 +240,48 @@ legend {
     &.UNKNOWN {
         background-color: @grey-pill-background-color;
         border-color: @grey-pill-background-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 }
 
-input:focus,
-textarea:focus,
-select:focus,
-button:focus {
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+button:focus:not(:focus-visible) {
     outline: none;
     box-shadow: none;
+}
+
+// The rule above removes the browser's own focus outline, so keyboard users get this one instead. It only
+// appears for keyboard focus (:focus-visible), never on a mouse click or tap.
+:focus-visible {
+    outline: 2px solid @brand-color;
+    outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+    outline-offset: 0;
+}
+
+// Anyone who asks their system for less motion gets effectively none.
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+// Blur and dim the page behind any modal (vue-final-modal's overlay), so a dark dialog stands out from a dark page.
+.vfm--overlay {
+    background-color: @overlay-color;
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
 }
 
 .iplayarr-modal {
@@ -226,12 +304,12 @@ button:focus {
         overflow-y: auto;
         // Breathing room for the scrollbar so it doesn't sit flush against input boxes.
         padding-right: 10px;
-        @media (min-width: @mobile-breakpoint) {
+        @media (min-width: @desktop-breakpoint) {
             max-height: 75vh;
         }
     }
 
-    @media (min-width: @mobile-breakpoint) {
+    @media (min-width: @desktop-breakpoint) {
         min-width: 640px;
         max-width: 80%;
     }
@@ -251,6 +329,25 @@ button:focus {
         display: flex;
         flex-direction: column;
         height: 100%;
+
+        &.compact {
+            box-sizing: border-box;
+            border: 1px solid @settings-button-border-color;
+            width: calc(100vw - 32px);
+            height: auto;
+            max-height: 85dvh;
+            padding-top: 20px;
+            border-radius: 8px;
+
+            .modal-inner {
+                padding-right: 0;
+            }
+
+            .button-container.floor {
+                margin-top: 1.25rem;
+                margin-bottom: 0;
+            }
+        }
     }
 
     .button-container {
@@ -284,6 +381,20 @@ button:focus {
                 background-color: @error-color;
             }
 
+            // Confirm button of a destructive question: red, with the verb as its label.
+            &.danger {
+                background-color: @error-color;
+                border-color: @error-color;
+                color: @error-text-color;
+                font-weight: 600;
+
+                &:hover:not(:disabled) {
+                    background-color: @error-color;
+                    border-color: @error-color;
+                    filter: brightness(1.1);
+                }
+            }
+
             &:hover:not(:disabled) {
                 border-color: @settings-button-hover-border-color;
                 background-color: @settings-button-hover-background-color;
@@ -292,9 +403,31 @@ button:focus {
     }
 }
 
+// Top bar button that opens the Ctrl/Cmd+K quick find.
+// The top bar's icon buttons (menu, search, quick find) share one size and look.
+.NavBar .navIconButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    color: @primary-text-color;
+    cursor: pointer;
+
+    &:hover {
+        background-color: @settings-button-hover-background-color;
+        color: @brand-color;
+    }
+}
+
 // Browse screens (Discover / Channels / Categories / A-Z)
 .browsePage {
-    padding: 1rem;
+    padding: 0.5rem 1rem 1rem;
 
     h1.browseTitle {
         margin: 0 0 1rem;
@@ -308,9 +441,14 @@ button:focus {
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
 
+    // Tablets (iPad portrait is 768) get three across; only phones drop to two.
     @media (max-width: @mobile-breakpoint) {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
+    }
+
+    @media (max-width: 480px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -337,4 +475,99 @@ button:focus {
     font-size: 16px;
     color: @subtle-text-color;
     background-color: @nav-background-color;
+}
+
+// Top bar height, read by the bar itself and by the sidebar that sits under it on phones. Phones get the
+// slim bar unless the Settings > General "Top Bar on Phones" choice is to let it scroll away.
+:root {
+    --navbar-height: 60px;
+}
+
+@media (max-width: @mobile-breakpoint) {
+    :root:not([data-top-bar='off']) {
+        --navbar-height: 48px;
+    }
+
+    // Slim and auto keep the bar on screen; auto also slides it up out of the way (NavBar toggles .barHidden).
+    :root:not([data-top-bar='off']) .NavBar {
+        position: sticky;
+        top: 0;
+    }
+
+    :root[data-top-bar='auto'] .NavBar {
+        transition: transform 0.25s ease-in-out;
+
+        &.barHidden {
+            transform: translateY(-100%);
+        }
+    }
+}
+
+// Right-aligned ViewToggle above a table / card list.
+.viewToggleRow {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 6px;
+}
+
+// A list of DataCards in place of a table.
+.cardList .empty {
+    padding: 16px;
+    text-align: center;
+    color: @subtle-text-color;
+}
+
+// Read-only list for settings rows that show a status instead of an input (Jellyfin connections): the box looks
+// like the text/select inputs, one row per item with its name on the left and a status icon (tooltip says more) on the right.
+.statusList {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid @input-border-color;
+    border-radius: 4px;
+    background-color: @input-background-color;
+    box-shadow: inset 0 1px 1px @primary-box-shadow;
+    color: @input-text-color;
+    font-size: 14px;
+    overflow: hidden;
+
+    li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        box-sizing: border-box;
+        min-height: 33px;
+        padding: 6px 16px;
+
+        & + li {
+            border-top: 1px solid @input-border-color;
+        }
+    }
+
+    .statusName {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+.statusIcon {
+    flex: 0 0 auto;
+    font-size: 16px;
+    cursor: default;
+
+    &.ok {
+        color: @positive-color;
+    }
+
+    &.fail {
+        color: @danger-color;
+    }
+
+    &.pending {
+        color: @subtle-text-color;
+    }
 }

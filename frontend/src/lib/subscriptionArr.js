@@ -4,6 +4,7 @@ import { useModal } from 'vue-final-modal';
 import ArrMatchDialog from '@/components/modals/ArrMatchDialog.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 const BASE = 'json-api/subscriptions/arr';
 const UNLINK_AND_REMOVE = 'Unlink and remove it from Sonarr/Radarr';
@@ -12,7 +13,7 @@ const UNSUB_AND_REMOVE = 'Unsubscribe and remove it from Sonarr/Radarr';
 const UNSUB_KEEP = 'Unsubscribe, but keep it in Sonarr/Radarr';
 
 const fail = (title, data) => {
-    dialogService.alert(title, data?.message || 'Something went wrong');
+    toastService.error(title, { detail: data?.message || 'Something went wrong' });
     return false;
 };
 
@@ -42,6 +43,7 @@ const chooseMatch = (app, term) =>
                     finish(choice);
                     modal.close();
                 },
+                onCancel: () => finish(undefined),
                 onClosed: () => finish(undefined),
             },
         });
@@ -69,6 +71,34 @@ export async function linkToArr(subscription) {
         qualityProfileId: choice.qualityProfileId,
     });
     return ok ? true : fail('Unable to add', data);
+}
+
+// Overseerr-style request: add the title to Sonarr/Radarr and trigger a normal search. Sonarr/Radarr
+// then picks the best release from all its indexers - iPlayarr is only the discovery surface.
+// With `pid`, the request is recorded as an arr-only subscription so it can be seen and undone later.
+export async function requestFromArr(title, pid) {
+    const apps = await ipFetch(`${BASE}/apps`);
+    if (!apps.ok) return fail('Unable to load apps', apps.data);
+    if (!apps.data.length) return fail('No Sonarr or Radarr', { message: 'Add a Sonarr or Radarr app first.' });
+    const app = apps.data.length === 1
+        ? apps.data[0]
+        : await pick('Request in which app?', title, apps.data, ({ name }) => name);
+    if (!app) return false;
+
+    const choice = await chooseMatch(app, title);
+    if (!choice) return false;
+
+    const { ok, data } = await ipFetch('json-api/request', 'POST', {
+        ...(pid ? { pid } : {}),
+        appId: app.id,
+        externalId: choice.match.externalId,
+        title: choice.match.title,
+        rootFolderPath: choice.rootFolderPath,
+        qualityProfileId: choice.qualityProfileId,
+    });
+    if (!ok) return fail('Unable to request', data);
+    toastService.success(`${choice.match.title} ${data.created ? 'added to' : 'searched again in'} ${app.name}`, { detail: `${app.name} will pick the best release from your indexers.` });
+    return true;
 }
 
 // Names of the Sonarr/Radarr apps, by id, for labelling a linked subscription. Shared and loaded
@@ -109,7 +139,9 @@ export async function offerArrLink(subscription) {
     if (!(await hasArrApps())) return false;
     const wanted = await dialogService.confirm(
         'Add to Sonarr/Radarr?',
-        `Also add ${subscription.title} to Sonarr or Radarr? You can do this later from the Subscriptions page.`
+        `Also add ${subscription.title} to Sonarr or Radarr? You can do this later from the Subscriptions page.`,
+        undefined,
+        { confirmLabel: 'Add', cancelLabel: 'Not now' }
     );
     return wanted ? linkToArr(subscription) : false;
 }

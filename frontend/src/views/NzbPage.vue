@@ -1,6 +1,9 @@
 <template>
     <div class="inner-content scroll-x">
         <PageHeader title="Recent Searches" />
+        <div class="viewToggleRow">
+            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
+        </div>
         <SettingsPageToolbar
             :icons="['delete', 'filterToggle']" delete-label="Clear searches"
             :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
@@ -11,7 +14,25 @@
                 <DateRangeFilter v-model="searchDateFrom" v-model:model-value-to="searchDateTo" />
             </template>
         </SettingsPageToolbar>
-        <table class="dataTable responsive-table">
+        <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
+        <div v-if="cardView" class="cardList">
+            <DataCard v-for="(entry, index) in pagedSearches" :key="index">
+                <template #title>{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</template>
+                <template v-if="entry.series != null || entry.episode != null" #subtitle>
+                    {{ [entry.series != null ? `Season ${entry.series}` : '', entry.episode != null ? `Episode ${entry.episode}` : ''].filter(Boolean).join(' · ') }}
+                </template>
+                <template #chips>
+                    <span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span>
+                    <a v-if="entry.hasDetail" class="clickable" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
+                    <span v-else>{{ resultsLabel(entry) }}</span>
+                </template>
+                <template #foot>
+                    <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
+                </template>
+            </DataCard>
+            <div v-if="sortedSearches.length == 0" class="empty">No searches recorded yet</div>
+        </div>
+        <table v-else class="dataTable">
             <colgroup>
                 <col style="width: 36ch" />
                 <col style="width: 10ch" />
@@ -54,8 +75,8 @@
                     <td data-title="Season">{{ entry.series ?? '' }}</td>
                     <td data-title="Episode">{{ entry.episode ?? '' }}</td>
                     <td data-title="Results">
-                        <a v-if="entry.items?.length" class="clickable" @click="showResults(entry)">{{ entry.results }}</a>
-                        <template v-else>{{ entry.results }}</template>
+                        <a v-if="entry.hasDetail" class="clickable" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
+                        <template v-else>{{ resultsLabel(entry) }}</template>
                     </td>
                     <td></td>
                     <td data-title="Type"><span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span></td>
@@ -80,7 +101,36 @@
                 <DateRangeFilter v-model="grabDateFrom" v-model:model-value-to="grabDateTo" />
             </template>
         </SettingsPageToolbar>
-        <table class="dataTable streamsTable responsive-table">
+        <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
+        <div v-if="cardView" class="cardList">
+            <DataCard v-for="(entry, index) in pagedGrabs" :key="index">
+                <template #thumb>
+                    <img
+                        v-if="getProgrammeThumbnailUrl(entry.pid)"
+                        class="clickable"
+                        :src="getProgrammeThumbnailUrl(entry.pid)"
+                        @click="openInfo(entry.pid)"
+                        @error="hideBrokenImage"
+                    />
+                    <div v-else class="thumbnail-placeholder"></div>
+                </template>
+                <template #title>
+                    <a class="clickable" @click="openInfo(entry.pid)">{{ detailsFor(entry.pid)?.title ?? entry.nzbName }}</a>
+                </template>
+                <template v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" #subtitle>
+                    {{ [channelLabel(detailsFor(entry.pid)?.channel), seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
+                </template>
+                <template #chips>
+                    <span class="pill">{{ entry.type }}</span>
+                </template>
+                <template #foot>
+                    <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
+                    <span>{{ entry.pid }}</span>
+                </template>
+            </DataCard>
+            <div v-if="sortedGrabs.length == 0" class="empty">No grabs recorded yet</div>
+        </div>
+        <table v-else class="dataTable streamsTable">
             <colgroup>
                 <col style="width: 70px" />
                 <col style="width: 14ch" />
@@ -127,7 +177,7 @@
                             {{ detailsFor(entry.pid)?.title ?? entry.nzbName }}
                         </a>
                         <div v-if="detailsFor(entry.pid)?.channel || seriesEpisodeLabel(entry.pid)" class="subtle">
-                            {{ [detailsFor(entry.pid)?.channel, seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
+                            {{ [channelLabel(detailsFor(entry.pid)?.channel), seriesEpisodeLabel(entry.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td data-title="Type"><span class="pill">{{ entry.type }}</span></td>
@@ -152,7 +202,22 @@
                 <DateRangeFilter v-model="failedGrabDateFrom" v-model:model-value-to="failedGrabDateTo" />
             </template>
         </SettingsPageToolbar>
-        <table class="dataTable responsive-table">
+        <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="sortedFailedGrabs.length" />
+        <div v-if="cardView" class="cardList">
+            <DataCard v-for="(entry, index) in pagedFailedGrabs" :key="index">
+                <template #title>{{ entry.nzbName }}</template>
+                <template #chips>
+                    <span class="pill error">Failed</span>
+                </template>
+                <template v-if="entry.error">{{ entry.error }}</template>
+                <template #foot>
+                    <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
+                    <span>{{ entry.pid }}</span>
+                </template>
+            </DataCard>
+            <div v-if="sortedFailedGrabs.length == 0" class="empty">No failed grabs</div>
+        </div>
+        <table v-else class="dataTable">
             <colgroup>
                 <col style="width: 14ch" />
                 <col />
@@ -200,21 +265,33 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import DataCard from '@/components/common/DataCard.vue';
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
+import ViewToggle from '@/components/common/ViewToggle.vue';
 import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
-import { details, loadDetails } from '@/lib/detailsCache';
+import { channelLabel } from '@/lib/channelPillColors';
+import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
+import { useViewMode } from '@/lib/useViewMode';
 import {
     formatDateTimeWithMillis, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage,
 } from '@/lib/utils';
+
+// Cards on phones (dense tables), tables on wide screens; either can be chosen and is remembered.
+const { viewMode, setViewMode } = useViewMode('iplayarr.nzbViewMode', {
+    modes: ['table', 'cards'],
+    desktop: 'table',
+    mobile: 'cards',
+});
+const cardView = computed(() => viewMode.value === 'cards');
 
 const searchHistory = ref([]);
 const grabHistory = ref([]);
@@ -233,11 +310,18 @@ function seriesEpisodeLabel(pid) {
 }
 
 function loadMissingDetails() {
-    const pids = grabHistory.value.map(({ pid }) => pid);
-    [...new Set(pids)].filter(Boolean).forEach(loadDetails);
+    // Only what is on screen - the history can run to hundreds of rows but one page is shown at a time.
+    [...new Set(pagedGrabs.value.map(({ pid }) => pid))].filter(Boolean).forEach(loadDetails);
 }
 
-watch(grabHistory, loadMissingDetails);
+// Once the visible page is requested, quietly warm the next few pages of thumbnails in the
+// background, so paging doesn't wait on BBC. Capped: the history holds hundreds of grabs and
+// warming them all would keep the browser's connections busy for no benefit.
+const PREFETCH_PAGES = 3;
+
+function prefetchRest() {
+    prefetchThumbnails(sortedGrabs.value.map(({ pid }) => pid), grabPageSize.value * PREFETCH_PAGES);
+}
 
 function openInfo(pid) {
     const infoModal = useModal({
@@ -255,9 +339,8 @@ function appName(appId) {
 // Searches don't record a type of their own: it is the type the results share (none when they are
 // mixed or unknown), or TV when the search named a season/episode.
 function searchType(entry) {
-    const types = new Set((entry.items ?? []).map(({ type }) => type).filter((type) => type && type != 'UNKNOWN'));
-    if (types.size == 1) return [...types][0];
-    if (!types.size && (entry.series != null || entry.episode != null)) return 'TV';
+    if (entry.type) return entry.type;
+    if (entry.series != null || entry.episode != null) return 'TV';
     return '';
 }
 
@@ -332,13 +415,15 @@ const {
 const {
     page: grabPage, pageSize: grabPageSize, pagedItems: pagedGrabs,
 } = usePagination(sortedGrabs);
+
+watch(pagedGrabs, loadMissingDetails);
+watch(grabHistory, prefetchRest);
 const {
     page: failedGrabPage, pageSize: failedGrabPageSize, pagedItems: pagedFailedGrabs,
 } = usePagination(sortedFailedGrabs);
 
 onMounted(async () => {
     await refresh();
-    apps.value = (await ipFetch('json-api/apps')).data;
 
     socket.value?.on('searchHistory', (data) => {
         searchHistory.value = data.filter(({ term }) => term != '*');
@@ -358,9 +443,22 @@ onBeforeUnmount(() => {
 });
 
 async function refresh() {
-    searchHistory.value = (await ipFetch('json-api/stats/searchHistory?filterRss=true')).data;
-    grabHistory.value = (await ipFetch('json-api/stats/grabHistory')).data;
-    failedGrabHistory.value = (await ipFetch('json-api/stats/failedGrabHistory')).data;
+    const [searches, grabs, failedGrabs, appList] = await Promise.all([
+        ipFetch('json-api/stats/searchHistory?filterRss=true&summary=true'),
+        ipFetch('json-api/stats/grabHistory'),
+        ipFetch('json-api/stats/failedGrabHistory'),
+        ipFetch('json-api/apps'),
+    ]);
+    searchHistory.value = searches.data;
+    grabHistory.value = grabs.data;
+    failedGrabHistory.value = failedGrabs.data;
+    apps.value = appList.data;
+}
+
+// Returned results out of everything the search found, e.g. 45/60 (60+ when the list was capped).
+function resultsLabel(entry) {
+    if (!entry.filteredOut) return entry.results;
+    return `${entry.results}/${entry.results + entry.filteredOut}${entry.truncated ? '+' : ''}`;
 }
 
 function formatDate(time) {
@@ -368,19 +466,21 @@ function formatDate(time) {
     return formatDateTimeWithMillis(time);
 }
 
-function showResults(entry) {
+async function showResults(entry) {
+    const { items, trace } = (await ipFetch(`json-api/stats/searchHistory/detail?term=${encodeURIComponent(entry.term)}&time=${entry.time}`)).data;
     const resultsModal = useModal({
         component: SearchResultsDialog,
         attrs: {
             term: entry.term,
-            items: entry.items,
+            items,
+            trace,
         },
     });
     resultsModal.open();
 }
 
 const clearFailedGrabs = async () => {
-    if (await dialogService.confirm('Clear Failed Grabs', 'Are you sure you want to clear the failed grabs log?')) {
+    if (await dialogService.confirm('Clear Failed Grabs', 'Are you sure you want to clear the failed grabs log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/stats/failedGrabHistory', 'DELETE');
         failedGrabHistory.value = [];
         failedGrabPage.value = 1;
@@ -388,7 +488,7 @@ const clearFailedGrabs = async () => {
 };
 
 const clearSearches = async () => {
-    if (await dialogService.confirm('Clear Recent Searches', 'Are you sure you want to clear the recent searches log?')) {
+    if (await dialogService.confirm('Clear Recent Searches', 'Are you sure you want to clear the recent searches log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/stats/searchHistory', 'DELETE');
         searchHistory.value = [];
         searchPage.value = 1;
@@ -396,7 +496,7 @@ const clearSearches = async () => {
 };
 
 const clearGrabs = async () => {
-    if (await dialogService.confirm('Clear Recent Grabs', 'Are you sure you want to clear the recent grabs log?')) {
+    if (await dialogService.confirm('Clear Recent Grabs', 'Are you sure you want to clear the recent grabs log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/stats/grabHistory', 'DELETE');
         grabHistory.value = [];
         grabPage.value = 1;

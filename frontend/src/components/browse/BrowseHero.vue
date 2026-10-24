@@ -1,7 +1,10 @@
 <template>
     <div class="browseHero" :style="heroStyle">
         <div class="heroContent">
-            <ChannelPill :channel="item.channel" />
+            <div class="heroBadges">
+                <ChannelPill :channel="item.channel" />
+                <QualityBadges :item="item" />
+            </div>
             <h1>{{ item.title }}</h1>
             <h2 v-if="item.subtitle">{{ item.subtitle }}</h2>
             <p v-if="item.synopsis">{{ item.synopsis }}</p>
@@ -27,6 +30,7 @@
 import { computed, defineProps } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
+import QualityBadges from '@/components/common/QualityBadges.vue';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { getThumbnailUrl } from '@/lib/utils';
 
@@ -35,11 +39,17 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    // Hold back the artwork (a carousel's slides that are not near the one in view).
+    deferArtwork: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const { canPlay, play, download } = useBrowseActions();
 
 const heroStyle = computed(() => {
+    if (props.deferArtwork) return {};
     const url = getThumbnailUrl(props.item.thumbnail);
     return url ? { 'background-image': `url(${url})` } : {};
 });
@@ -62,6 +72,24 @@ const heroStyle = computed(() => {
         box-sizing: border-box;
         padding: 2rem;
         background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.1));
+        // Over the artwork, so fixed rather than the theme's text colour (which is dark in light mode).
+        color: #fff;
+
+        .heroBadges {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+
+            // Fixed height so the pill is the same size with or without badges; thumbnail badges keep their own size.
+            :deep(.qualityBadge),
+            :deep(.channelPill) {
+                display: inline-flex;
+                align-items: center;
+                box-sizing: border-box;
+                min-height: 20px;
+            }
+        }
 
         h1 {
             margin: 8px 0 0;
@@ -121,11 +149,6 @@ const heroStyle = computed(() => {
             gap: 8px;
             margin-top: 12px;
         }
-
-        .heroButton {
-            padding: 6px 12px;
-            font-size: 14px;
-        }
     }
 
     .heroButton {
@@ -148,6 +171,31 @@ const heroStyle = computed(() => {
         &.primary {
             background-color: @brand-color;
             border-color: @brand-color;
+            color: @on-brand-color;
+        }
+    }
+
+    // Phones (declared after .heroButton so it wins): Play / Download / More info share one row.
+    @media (max-width: @mobile-breakpoint) {
+        .heroActions {
+            flex-wrap: nowrap;
+        }
+
+        .heroButton {
+            flex: 1 1 0;
+            min-width: 0;
+            justify-content: center;
+            gap: 5px;
+            padding: 8px 4px;
+            font-size: 14px;
+            white-space: nowrap;
+
+            // Very narrow phones: keep all three in the row.
+            @media (max-width: 360px) {
+                gap: 4px;
+                padding: 8px 2px;
+                font-size: 13px;
+            }
         }
     }
 }

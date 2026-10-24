@@ -1,7 +1,9 @@
 <template>
-    <div v-if="showControls" class="listPagination">
-        <div class="spacer" />
-        <nav class="pageControls" aria-label="pagination">
+    <div v-if="showPager || $slots.leading" class="listPagination">
+        <div class="spacer">
+            <slot name="leading" />
+        </div>
+        <nav v-if="showPager" class="pageControls" aria-label="pagination">
             <button
                 v-if="!compact"
                 class="clickable navButton edgeButton" aria-label="go to first page" :disabled="modelValue <= 1"
@@ -41,7 +43,7 @@
                 <font-awesome-icon :icon="['fas', 'angles-right']" />
             </button>
         </nav>
-        <div class="pageSize">
+        <div v-if="showPager" class="pageSize">
             <span class="perPageLabel">Per page:</span>
             <select :value="pageSize" aria-label="items per page" @change="onPageSizeChange">
                 <option v-for="size in pageSizes" :key="size" :value="size">
@@ -55,6 +57,8 @@
 <script setup>
 import { computed, defineEmits, defineProps } from 'vue';
 
+import { usePagingMinimum } from '@/lib/pagingMinimum';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { PAGE_SIZES } from '@/lib/usePagination';
 
 const props = defineProps({
@@ -63,6 +67,8 @@ const props = defineProps({
     pageSize: { type: Number, required: true },
     pageSizes: { type: Array, required: false, default: () => PAGE_SIZES },
     compact: { type: Boolean, required: false, default: false },
+    // Show the pager whatever the "Items Before Paging" preference says (lists that need it even when short).
+    force: { type: Boolean, required: false, default: false },
 });
 
 const emit = defineEmits(['update:modelValue', 'update:pageSize']);
@@ -70,9 +76,25 @@ const emit = defineEmits(['update:modelValue', 'update:pageSize']);
 const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)));
 const showControls = computed(() => props.total > 0);
 
+// A short list is shown whole, without a pager (the cut-off is the Settings > General "Items Before Paging"
+// preference). Never when the list would not fit on the one page, or its rows would be cut off.
+const { state: pagingMinimum } = usePagingMinimum();
+const showPager = computed(
+    () => showControls.value && (props.force || props.total > pagingMinimum.minimum || props.total > props.pageSize)
+);
+
+// On a phone the page list collapses sooner (at most five slots), so the per-page select stays on the same row.
+const isPhone = useIsMobile('(max-width: 480px)');
+
 const pageItems = computed(() => {
     const total = totalPages.value;
     const current = props.modelValue;
+
+    if (isPhone.value && total > 5) {
+        if (current <= 3) return [1, 2, 3, 'right-ellipsis', total];
+        if (current >= total - 2) return [1, 'left-ellipsis', total - 2, total - 1, total];
+        return [1, 'left-ellipsis', current, 'right-ellipsis', total];
+    }
 
     if (total <= 7) {
         return Array.from({ length: total }, (_, index) => index + 1);
@@ -112,12 +134,12 @@ const onPageSizeChange = (event) => {
     position: relative;
     min-height: 34px;
 
+    // Takes the spare width, so the page buttons and per-page select always sit at the right edge
+    // (a page can put something, like a select-all checkbox, on the left).
     .spacer {
         flex: 1 1 0;
-
-        @media (max-width: @mobile-breakpoint) {
-            display: none;
-        }
+        display: flex;
+        align-items: center;
     }
 }
 
@@ -131,9 +153,9 @@ const onPageSizeChange = (event) => {
 
 .navButton {
     // First/last jumps are dropped on phones so the page buttons and the per-page
-    // dropdown fit on one row.
+    // dropdown fit on one row (tablets have room for the full pager).
     &.edgeButton {
-        @media (max-width: @mobile-breakpoint) {
+        @media (max-width: @phone-breakpoint) {
             display: none;
         }
     }
@@ -163,7 +185,7 @@ const onPageSizeChange = (event) => {
     &.active {
         background-color: @primary-color;
         border-color: @primary-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
         font-weight: bold;
         cursor: default;
     }
@@ -187,7 +209,7 @@ const onPageSizeChange = (event) => {
         font-size: 13px;
         color: @subtle-text-color;
 
-        @media (max-width: @mobile-breakpoint) {
+        @media (max-width: @phone-breakpoint) {
             display: none;
         }
     }
@@ -199,6 +221,53 @@ const onPageSizeChange = (event) => {
         border-radius: 4px;
         background-color: @input-background-color;
         color: @input-text-color;
+        // iOS Safari paints native selects white and ignores the colours above unless the native look is dropped.
+        -webkit-appearance: none;
+        appearance: none;
+        padding-right: 24px;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" fill="none" stroke="%23ccc" stroke-width="1.5"><path d="M1 1l4 4 4-4"/></svg>');
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+    }
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .navButton,
+    .pageButton {
+        min-width: @touch-target;
+        height: @touch-target;
+    }
+
+    .pageSize select {
+        height: @touch-target;
+    }
+}
+
+// Phones: slightly smaller targets so prev, five page slots, next and the per-page select share one row.
+@media (max-width: @phone-breakpoint) {
+    .pageControls {
+        flex-wrap: nowrap;
+        gap: 4px;
+    }
+
+    .listPagination {
+        flex-wrap: nowrap;
+        gap: 6px;
+    }
+
+    .navButton,
+    .pageButton {
+        min-width: 34px;
+        height: 34px;
+        padding: 0 4px;
+    }
+
+    .ellipsis {
+        min-width: 14px;
+    }
+
+    .pageSize select {
+        height: 34px;
     }
 }
 </style>

@@ -1,31 +1,52 @@
 import 'module-alias/register';
 
-import cors from 'cors';
 import express, { Express, NextFunction, Request, Response } from 'express';
+import fs from 'fs';
 import http, { Server } from 'http';
 import path from 'path';
 import { Server as SocketIOServer } from 'socket.io';
 import { v4 as uuidv4 } from 'uuid';
 
+import customChannelFacade from './facade/customChannelFacade';
 import ApiRoute from './routes/ApiRoute';
 import AuthRoute, { addAuthMiddleware, isAuthenticatedRequest, sessionMiddleware } from './routes/AuthRoute';
 import JsonApiRoute from './routes/JsonApiRoute';
 import { encryptStoredApps } from './service/appService';
 import { ensureNonDefaultPassword } from './service/auth/initialCredentialsService';
 import configService, { encryptStoredSettings } from './service/configService';
+import { dbReady, prisma } from './service/db/prismaService';
+import { importFromRedisIfNeeded } from './service/db/redisImportService';
 import liveSubscriptionService from './service/liveSubscriptionService';
 import loggingService from './service/loggingService';
-import { redis } from './service/redis/redisService';
 import socketService from './service/socketService';
 import StatisticsService from './service/stats/StatisticsService';
 import taskService from './service/taskService';
 import { IplayarrParameter } from './types/IplayarrParameters';
+import { basePath, rewriteIndexHtml, stripBasePath } from './utils/basePath';
 import { redactBody, redactHeaders, redactUrl } from './utils/logRedaction';
 
-const isDebug = process.env.DEBUG == 'true';
 
 const app: Express = express();
 app.disable('x-powered-by');
+
+// BASE_PATH (e.g. /iplayarr) serves everything under that prefix, for reverse proxies that keep it.
+const BASE_PATH = basePath();
+if (BASE_PATH) {
+    app.use((req: Request, res: Response, next: NextFunction) => {
+        // The container healthcheck calls /ping directly, without the prefix.
+        if (req.url === '/ping') {
+            next();
+            return;
+        }
+        const stripped = stripBasePath(req.url, BASE_PATH);
+        if (stripped === undefined) {
+            res.status(404).end();
+            return;
+        }
+        req.url = stripped;
+        next();
+    });
+}
 
 // Express 4 does not catch a rejected promise in an async route; without this a single bad request
 // that makes one reject would terminate the whole process.
@@ -47,17 +68,6 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 });
 const port: number = parseInt(process.env[IplayarrParameter.PORT.toString()] || '4404');
 
-if (isDebug) {
-    app.use(
-        cors({
-            origin: (origin, callback) => {
-                callback(null, origin);
-            },
-            credentials: true,
-        })
-    );
-}
-
 // Session and Auth
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -67,22 +77,24 @@ app.use('/auth', AuthRoute);
 // Healthcheck endpoint (unauthenticated)
 app.get('/ping', async (_req: Request, res: Response) => {
     try {
-        await redis.ping();
+        await dbReady();
+        await prisma.$queryRaw`SELECT 1`;
         res.json({ status: 'OK' });
     } catch (error : any) {
-        loggingService.error('Healthcheck: Redis error', error?.message);
+        loggingService.error('Healthcheck: database error', error?.message);
         res.status(503).json({ status: 'ERROR' });
     }
 });
 
-app.use(express.static(path.join(process.cwd(), 'frontend', 'dist')));
+const distDir = path.join(process.cwd(), 'frontend', 'dist');
+app.use(express.static(distDir, { index: false }));
 
 // Middleware
 app.use((req: Request, _: Response, next: NextFunction) => {
     loggingService.debug('Request received:');
     loggingService.debug('Method:', req.method);
     // Credentials (API/stream keys in the query, cookies, passwords in bodies) must not reach the
-    // debug log: it is persisted to Redis and pushed over sockets to the UI.
+    // debug log: it is persisted to the database and pushed over sockets to the UI.
     loggingService.debug('URL:', redactUrl(req.url));
     loggingService.debug('Headers:', redactHeaders(req.headers));
     loggingService.debug('Body:', redactBody(req.body));
@@ -92,8 +104,14 @@ app.use((req: Request, _: Response, next: NextFunction) => {
 // Routes
 app.use('/api', ApiRoute);
 app.use('/json-api', JsonApiRoute);
-app.get('*', (req, res) => {
-    res.sendFile(path.join(process.cwd(), 'frontend', 'dist', 'index.html'));
+app.get('*', (_req, res) => {
+    fs.readFile(path.join(distDir, 'index.html'), 'utf8', (err, html) => {
+        if (err) {
+            res.status(404).end();
+            return;
+        }
+        res.type('html').send(rewriteIndexHtml(html, BASE_PATH));
+    });
 });
 
 // Last-resort error handler: Express's default one sends a stack trace to the client.
@@ -110,9 +128,8 @@ app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
 // Start the server
 const server: Server = http.createServer(app);
 
-const io = isDebug
-    ? new SocketIOServer(server, { cors: { origin: true, credentials: true } })
-    : new SocketIOServer(server);
+const ioPath = `${BASE_PATH}/socket.io`;
+const io = new SocketIOServer(server, { path: ioPath });
 // The queue, history, stream and log feeds carry the same data as the authenticated /json-api, so a
 // socket needs the same login: read the session cookie off the handshake and refuse without one.
 if (sessionMiddleware) {
@@ -127,7 +144,26 @@ io.use(async (socket, next) => {
 });
 socketService.registerIo(io);
 
+const startServer = () => {
+    server.listen(port, () => {
+        loggingService.log(`Server running at http://localhost:${port}`);
+        StatisticsService.setUptime();
+    });
+
+    //Cron
+    taskService.init();
+
+    liveSubscriptionService.resync();
+};
+
 (async () => {
+    await dbReady();
+    // Before the server listens, so the user's channels are known to the first request.
+    await customChannelFacade.startup().catch((err) => loggingService.error('Custom channels failed to load', err?.message ?? err));
+    await importFromRedisIfNeeded(loggingService.log).catch((err) =>
+        loggingService.error('Redis import failed', err?.message ?? err)
+    );
+    startServer();
     await encryptStoredSettings();
     await encryptStoredApps();
     await ensureNonDefaultPassword();
@@ -149,13 +185,3 @@ socketService.registerIo(io);
         await configService.setParameter(IplayarrParameter.STREAM_KEY, uuidv4());
     }
 })();
-
-server.listen(port, () => {
-    loggingService.log(`Server running at http://localhost:${port}`);
-    StatisticsService.setUptime();
-});
-
-//Cron
-taskService.init();
-
-liveSubscriptionService.resync();

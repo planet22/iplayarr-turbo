@@ -4,7 +4,10 @@ import { parseStringPromise } from 'xml2js';
 import SearchEndpoint from '../../../src/endpoints/newznab/SearchEndpoint';
 import searchFacade from '../../../src/facade/searchFacade';
 import appService from '../../../src/service/appService';
+import configService from '../../../src/service/configService';
 import statisticsService from '../../../src/service/stats/StatisticsService';
+import * as versionVpid from '../../../src/service/stream/versionVpid';
+import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { VideoType } from '../../../src/types/IPlayerSearchResult';
 import * as Utils from '../../../src/utils/Utils';
 
@@ -84,7 +87,35 @@ describe('SearchEndpoint', () => {
                     pid: 'xyz123',
                 },
             ],
+            trace: { candidates: [] },
         });
+    });
+
+    it('adds no version variants while EXTRA_VERSIONS is empty', async () => {
+        const lookup = jest.spyOn(versionVpid, 'versionTypesFor');
+        (searchFacade.search as jest.Mock).mockResolvedValue([{ pid: 'xyz123', type: VideoType.TV, nzbName: 'Test.Show.S01E02.WEBDL.720p-BBC', size: 1500 }]);
+
+        await SearchEndpoint(req as Request, res as Response);
+
+        const parsed = await parseStringPromise(sendMock.mock.calls[0][0]);
+        expect(parsed.rss.channel[0].item).toHaveLength(1);
+        expect(lookup).not.toHaveBeenCalled();
+        lookup.mockRestore();
+    });
+
+    it('offers an audio described variant, with its own tag and guid, when enabled and the programme has one', async () => {
+        await configService.setParameter(IplayarrParameter.EXTRA_VERSIONS, 'audio-described');
+        const lookup = jest.spyOn(versionVpid, 'versionTypesFor').mockResolvedValue([{ pid: 'o', types: ['Original version'] }, { pid: 'a', types: ['Dubbed Audio Described'] }]);
+        (searchFacade.search as jest.Mock).mockResolvedValue([{ pid: 'xyz123', type: VideoType.TV, nzbName: 'Test.Show.S01E02.WEBDL.720p-BBC', size: 1500 }]);
+
+        await SearchEndpoint(req as Request, res as Response);
+
+        const items = (await parseStringPromise(sendMock.mock.calls[0][0])).rss.channel[0].item;
+        expect(items.map((i: any) => i.title[0])).toEqual(['Test.Show.S01E02.WEBDL.720p-BBC', 'Test.Show.S01E02.AUDIO.DESCRIBED.WEBDL.540p-BBC']);
+        expect(items.map((i: any) => i.guid[0])).toEqual(['https://www.bbc.co.uk/iplayer/episodes/xyz123', 'https://www.bbc.co.uk/iplayer/episodes/xyz123#audio-described']);
+        expect(Utils.createNZBDownloadLink).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ version: 'audio-described', quality: 'sd' }), 'mockkey', 'radarr');
+        lookup.mockRestore();
+        await configService.setParameter(IplayarrParameter.EXTRA_VERSIONS, '');
     });
 
     it('falls back to matching the User-Agent header when app is not supplied', async () => {

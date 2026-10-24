@@ -2,20 +2,86 @@
     <div class="inner-content">
         <PageHeader title="Subscriptions" />
         <SettingsPageToolbar
-            :icons="['refresh']" :refresh-label="checkingAll ? 'Checking…' : 'Check All Now'"
-            :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"
+            :icons="['refresh']" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
+            refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"
         />
-        <p>
-            New episodes of these shows are queued for download automatically. They are checked every hour, or on
-            demand.
-        </p>
+        <InfoBar small>New episodes are queued automatically, checked hourly or on demand.</InfoBar>
         <LoadingIndicator v-if="!loaded" />
-        <p v-else-if="subscriptions.length === 0">
-            No subscriptions yet. Open a show from
-            <RouterLink to="/browse">Discover</RouterLink> and press Subscribe.
-        </p>
+        <EmptyState
+            v-else-if="subscriptions.length === 0" icon="bell" title="No subscriptions yet"
+            hint="Open a show and press Subscribe, and new episodes are queued for you automatically."
+        >
+            <RouterLink to="/browse">Browse programmes</RouterLink>
+        </EmptyState>
         <TablePagination v-if="loaded && subscriptions.length" v-model="page" v-model:page-size="pageSize" :total="subscriptions.length" />
-        <div v-if="loaded && subscriptions.length" class="subscriptionList">
+        <div v-if="isMobile && loaded && subscriptions.length" class="cardList">
+            <DataCard v-for="subscription in pagedItems" :key="subscription.id">
+                <template #thumb>
+                    <RouterLink :to="`/browse/programme/${subscription.pid}`">
+                        <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
+                        <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    </RouterLink>
+                </template>
+                <template #title>
+                    <RouterLink :to="`/browse/programme/${subscription.pid}`" class="cardTitle">{{ subscription.title }}</RouterLink>
+                </template>
+                <template #chips>
+                    <ChannelPill :channel="subscription.channel" />
+                    <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
+                    <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
+                </template>
+                <template v-if="subscription.lastQueuedAt" #corner>
+                    <span class="pill" :title="`${subscription.lastQueuedCount} episode${subscription.lastQueuedCount === 1 ? '' : 's'} in the last download`">
+                        {{ subscription.lastQueuedCount }}
+                    </span>
+                </template>
+                <div class="cardInfoRow">
+                    <div class="cardLines">
+                        <div class="cardLine" title="Last checked">
+                            <font-awesome-icon :icon="['fas', 'clock']" />{{ subscription.arrOnly ? 'n/a' : checkedLabel(subscription, true) }}
+                        </div>
+                        <div v-if="subscription.lastQueuedAt || subscription.arrOnly" class="cardLine" title="Last download">
+                            <font-awesome-icon :icon="['fas', 'download']" />{{ subscription.lastQueuedAt ? formatRelativeTime(Date.parse(subscription.lastQueuedAt), undefined, true) : 'n/a' }}
+                        </div>
+                    </div>
+                    <div v-if="subscription.arrOnly" class="rowActions">
+                        <button class="clickable stateToggle on" title="Sonarr/Radarr only (click to stop tracking)" aria-label="Stop tracking" aria-pressed="true" @click="remove(subscription)">
+                            <font-awesome-icon :icon="['fas', 'right-left']" />
+                        </button>
+                        <!-- Gaps where the buttons don't apply, so the icon lines up with the other cards. -->
+                        <span v-for="n in subscriptionVersions.length + 2" :key="n" class="actionGap" aria-hidden="true"></span>
+                    </div>
+                    <div v-else class="rowActions">
+                        <button
+                            :class="['clickable', 'stateToggle', subscription.arr ? 'on' : '']"
+                            :title="subscription.arr ? 'Linked to Sonarr/Radarr (click to unlink)' : 'Add to Sonarr/Radarr'"
+                            :aria-label="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
+                            :aria-pressed="!!subscription.arr"
+                            :disabled="busy[subscription.id]"
+                            @click="toggleArrWithBusy(subscription)"
+                        >
+                            <font-awesome-icon :icon="['fas', 'right-left']" />
+                        </button>
+                        <button
+                            v-for="version in subscriptionVersions" :key="version.id"
+                            :class="['clickable', 'stateToggle', subscription.versions?.includes(version.id) ? 'on' : '']"
+                            :title="`${version.name} versions: ${subscription.versions?.includes(version.id) ? 'on' : 'off'} (new episodes only)`"
+                            :aria-label="`${version.name} versions`" :aria-pressed="!!subscription.versions?.includes(version.id)"
+                            :disabled="busy[subscription.id]" @click="toggleVersionWithBusy(subscription, version.id)"
+                        >
+                            <font-awesome-icon :icon="['fas', version.icon]" />
+                        </button>
+                        <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
+                            <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
+                        </button>
+                        <button class="clickable" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
+                            <font-awesome-icon :icon="['fas', 'bell-slash']" />
+                        </button>
+                    </div>
+                </div>
+            </DataCard>
+        </div>
+        <div v-else-if="loaded && subscriptions.length" class="subscriptionList">
             <div v-for="subscription in pagedItems" :key="subscription.id" class="subscriptionRow">
                 <RouterLink :to="`/browse/programme/${subscription.pid}`" class="thumbLink">
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
@@ -31,25 +97,51 @@
                             ({{ subscription.lastQueuedCount }} episode{{ subscription.lastQueuedCount === 1 ? '' : 's' }})
                         </span>
                         <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
-                        <span v-if="subscription.arr" class="pill" :title="subscription.arrOnly ? `In ${arrAppName(subscription.arr.appId)} as ${subscription.arr.title} - downloads are handled there, not by iPlayarr` : `In ${arrAppName(subscription.arr.appId)} as ${subscription.arr.title}`">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
+                        <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                     </div>
                 </div>
                 <div class="rowActions">
                     <button
-                        v-if="!subscription.arrOnly"
-                        class="clickable"
-                        :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
+                        v-if="subscription.arrOnly"
+                        class="clickable stateToggle on"
+                        title="Sonarr/Radarr only (click to stop tracking)"
+                        aria-label="Stop tracking" aria-pressed="true"
+                        @click="remove(subscription)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'right-left']" />
+                    </button>
+                    <button
+                        v-else
+                        :class="['clickable', 'stateToggle', subscription.arr ? 'on' : '']"
+                        :title="subscription.arr ? 'Linked to Sonarr/Radarr (click to unlink)' : 'Add to Sonarr/Radarr'"
+                        :aria-label="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
+                        :aria-pressed="!!subscription.arr"
                         :disabled="busy[subscription.id]"
                         @click="toggleArrWithBusy(subscription)"
                     >
-                        <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
+                        <font-awesome-icon :icon="['fas', 'right-left']" />
                     </button>
-                    <button v-if="!subscription.arrOnly" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
-                        <font-awesome-icon :icon="['fas', 'rotate']" :spin="busy[subscription.id]" />
-                    </button>
-                    <button class="clickable" title="Unsubscribe" @click="remove(subscription)">
-                        <font-awesome-icon :icon="['fas', 'trash']" />
-                    </button>
+                    <template v-if="!subscription.arrOnly">
+                        <button
+                            v-for="version in subscriptionVersions" :key="version.id"
+                            :class="['clickable', 'stateToggle', subscription.versions?.includes(version.id) ? 'on' : '']"
+                            :title="`${version.name} versions: ${subscription.versions?.includes(version.id) ? 'on' : 'off'} (new episodes only)`"
+                            :aria-label="`${version.name} versions`" :aria-pressed="!!subscription.versions?.includes(version.id)"
+                            :disabled="busy[subscription.id]" @click="toggleVersionWithBusy(subscription, version.id)"
+                        >
+                            <font-awesome-icon :icon="['fas', version.icon]" />
+                        </button>
+                        <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
+                            <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
+                        </button>
+                        <button class="clickable" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
+                            <font-awesome-icon :icon="['fas', 'bell-slash']" />
+                        </button>
+                    </template>
+                    <!-- Gaps where the buttons don't apply, so the Sonarr/Radarr icon lines up with the other rows. -->
+                    <template v-else>
+                        <span v-for="n in subscriptionVersions.length + 2" :key="n" class="actionGap" aria-hidden="true"></span>
+                    </template>
                 </div>
             </div>
         </div>
@@ -57,11 +149,31 @@
 
         <template v-if="liveSubscriptions.length">
             <legend class="liveLegend">Live channels</legend>
-            <p>
-                These BBC live channels have a .strm file in your library folder, so your media server lists them.
-                Add more from <RouterLink to="/browse/channels">Channels</RouterLink>.
-            </p>
-            <div class="subscriptionList">
+            <InfoBar small>
+                Live channels with a .strm file in your library, so your media server lists them. Add more from
+                <RouterLink to="/browse/channels">Channels</RouterLink>.
+            </InfoBar>
+            <div v-if="isMobile" class="cardList">
+                <DataCard v-for="live in liveSubscriptions" :key="live.channelId">
+                    <template #thumb>
+                        <img v-if="live.logo && !failedLogos[live.channelId]" class="channelLogo" :src="getThumbnailUrl(live.logo)" :alt="live.title" @error="failedLogos[live.channelId] = true" />
+                        <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    </template>
+                    <template #title>{{ live.title }}</template>
+                    <template #chips>
+                        <span class="pill">Live</span>
+                        <span class="cardLine">{{ live.file }}</span>
+                    </template>
+                    <template #corner>
+                        <div class="rowActions">
+                            <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="removeLive(live)">
+                                <font-awesome-icon :icon="['fas', 'trash']" />
+                            </button>
+                        </div>
+                    </template>
+                </DataCard>
+            </div>
+            <div v-else class="subscriptionList">
                 <div v-for="live in liveSubscriptions" :key="live.channelId" class="subscriptionRow">
                     <div class="thumbLink liveLogo">
                         <img
@@ -78,7 +190,7 @@
                         </div>
                     </div>
                     <div class="rowActions">
-                        <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="unsubscribeLive(live.channelId)">
+                        <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="removeLive(live)">
                             <font-awesome-icon :icon="['fas', 'trash']" />
                         </button>
                     </div>
@@ -92,6 +204,9 @@
 import { onMounted, reactive, ref } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
+import DataCard from '@/components/common/DataCard.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
+import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -100,11 +215,14 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
-import { useSubscriptions } from '@/lib/subscriptions';
+import { subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
+import toastService from '@/lib/toastService';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { formatRelativeTime, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
-const { subscriptions, loaded, load, unsubscribe, toggleArr } = useSubscriptions();
+const isMobile = useIsMobile();
+const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion } = useSubscriptions();
 const { page, pageSize, pagedItems } = usePagination(subscriptions);
 const busy = reactive({});
 // Live channel logos that failed to load fall back to the TV icon.
@@ -126,20 +244,25 @@ onMounted(() => {
     loadAppNames();
 });
 
-const checkedLabel = (subscription) =>
-    subscription.lastChecked ? formatRelativeTime(Date.parse(subscription.lastChecked)) : 'not yet';
+const arrPillTitle = ({ arr, arrOnly }) => {
+    const where = `In ${arrAppName(arr.appId)} as ${arr.title}`;
+    return arrOnly ? `${where} - downloads are handled there, not by iPlayarr` : where;
+};
+
+const checkedLabel = (subscription, short = false) =>
+    subscription.lastChecked ? formatRelativeTime(Date.parse(subscription.lastChecked), undefined, short) : 'not yet';
 
 const summarise = (results) => {
     const queued = results.reduce((n, r) => n + r.queued.length, 0);
     const failed = results.filter((r) => r.error);
     if (failed.length) {
-        dialogService.alert(
-            'Check finished with errors',
-            `${queued} new episode(s) queued.`,
-            failed.map((r) => `${r.title}: ${r.error}`).join('; ')
-        );
+        toastService.error(`Check finished with errors (${queued} new episode(s) queued)`, {
+            detail: failed.map((r) => `${r.title}: ${r.error}`).join('; '),
+        });
+    } else if (queued) {
+        toastService.success(`${queued} new episode(s) queued for download`);
     } else {
-        dialogService.alert('Check complete', queued ? `${queued} new episode(s) queued for download.` : 'No new episodes.');
+        toastService.info('No new episodes');
     }
 };
 
@@ -174,7 +297,30 @@ const toggleArrWithBusy = async (subscription) => {
     }
 };
 
+const toggleVersionWithBusy = async (subscription, versionId) => {
+    busy[subscription.id] = true;
+    try {
+        await toggleVersion(subscription, versionId);
+    } finally {
+        busy[subscription.id] = false;
+    }
+};
+
 const remove = (subscription) => unsubscribe(subscription);
+
+// Removing a live channel deletes its .strm from the library, so ask first (like unsubscribing from a show).
+const removeLive = async (live) => {
+    if (
+        await dialogService.confirm(
+            'Remove live channel',
+            `Remove ${live.title} from your library?`,
+            'Its .strm file is deleted. You can add it again from Channels.',
+            { danger: true, confirmLabel: 'Remove' }
+        )
+    ) {
+        unsubscribeLive(live.channelId);
+    }
+};
 </script>
 
 <style lang="less" scoped>
@@ -234,29 +380,92 @@ const remove = (subscription) => unsubscribe(subscription);
             color: @subtle-text-color;
         }
     }
+}
 
-    .rowActions {
+.rowActions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+
+    .actionGap {
+        width: 36px;
+        height: 36px;
+    }
+
+    button {
         display: flex;
-        gap: 8px;
-        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
 
-        button {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            border: 1px solid @settings-button-border-color;
-            background-color: @settings-button-background-color;
-            color: @primary-text-color;
-
-            &:hover:not(:disabled) {
-                background-color: @brand-color;
-                border-color: @brand-color;
-            }
+        &:hover:not(:disabled) {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
         }
+
+        // A version switched on for this show.
+        &.stateToggle.on {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
+        }
+
+        &.stateToggle:not(.on) {
+            opacity: 0.6;
+        }
+    }
+}
+
+// Info lines on the left, the action buttons on the right of the same row.
+.cardInfoRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+// Fixed width so every card's buttons start in the same place, whatever the times say.
+.cardLines {
+    flex: 0 0 84px;
+    min-width: 0;
+}
+
+.cardInfoRow .rowActions {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: flex-end;
+}
+
+.cardLine {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: @subtle-text-color;
+    overflow-wrap: anywhere;
+
+    + .cardLine {
+        margin-top: 4px;
+    }
+}
+
+.cardTitle {
+    color: @primary-text-color;
+    text-decoration: none;
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .cardList :deep(button),
+    .cardList .actionGap {
+        width: 40px;
+        height: 40px;
     }
 }
 </style>

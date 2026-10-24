@@ -3,11 +3,16 @@ import { Builder } from 'xml2js';
 
 import searchFacade from '../../facade/searchFacade';
 import appService from '../../service/appService';
+import configService from '../../service/configService';
 import statisticsService from '../../service/stats/StatisticsService';
 import { SearchHistoryEntry, SearchHistoryResultItem } from '../../types/data/SearchHistoryEntry';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { IPlayerSearchResult, VideoType } from '../../types/IPlayerSearchResult';
 import { NewzNabAttr, NewzNabSearchResponse } from '../../types/responses/newznab/NewzNabSearchResponse';
-import { createNZBDownloadLink } from '../../utils/Utils';
+import { withSearchTrace } from '../../utils/searchTrace';
+import { createNZBDownloadLink, getQualityProfile } from '../../utils/Utils';
+import { expandQualityVariants, parseExtraQualities } from '../../utils/videoQuality';
+import { expandVersionVariants, parseExtraVersions } from '../../utils/videoVersion';
 
 interface SearchRequest {
     q: string;
@@ -26,11 +31,20 @@ export default async (req: Request, res: Response) => {
         queryApp ?? (await appService.findAppByUserAgent(req.headers['user-agent']))?.id;
     const cat: string[] | undefined = catList ? catList.split(',') : undefined;
     const searchTerm = q ?? '*';
-    let results: IPlayerSearchResult[] = await searchFacade.search(searchTerm, season, ep);
+    const { result: found, trace } = await withSearchTrace(() => searchFacade.search(searchTerm, season, ep));
+    let results: IPlayerSearchResult[] = found;
 
     if (cat) {
         results = results.filter(({ type }) => categoriesForType(type).some((category) => cat.includes(category)));
     }
+
+    const primaryQuality = await getQualityProfile();
+    const extraQualities = parseExtraQualities(
+        (await configService.getParameter(IplayarrParameter.EXTRA_VIDEO_QUALITIES)) as string,
+        primaryQuality.id
+    );
+    results = expandQualityVariants(results, primaryQuality, extraQualities);
+    results = await expandVersionVariants(results, parseExtraVersions((await configService.getParameter(IplayarrParameter.EXTRA_VERSIONS)) as string), primaryQuality);
 
     const historyItems: SearchHistoryResultItem[] = results.map(({ nzbName, title, type, size, pubDate, pid }) => ({
         title: nzbName ?? title,
@@ -48,6 +62,8 @@ export default async (req: Request, res: Response) => {
         episode: ep,
         time: new Date().getTime(),
         items: historyItems,
+        // Only what was dropped: the kept ones are already in `items`, and history is stored per search.
+        trace: searchTerm == '*' ? undefined : { ...trace, candidates: trace.candidates.filter(({ kept }) => !kept) },
     };
     statisticsService.addSearch(historyEntry);
 
@@ -62,7 +78,8 @@ export default async (req: Request, res: Response) => {
             return {
                 title: result.nzbName,
                 description: result.nzbName,
-                guid: `https://www.bbc.co.uk/iplayer/episodes/${result.pid}`,
+                // A version variant is its own release, so it gets its own guid (Sonarr history/blocklist).
+                guid: `https://www.bbc.co.uk/iplayer/episodes/${result.pid}${result.version ? `#${result.version}` : ''}`,
                 comments: `https://www.bbc.co.uk/iplayer/episodes/${result.pid}`,
                 size: result.size ? String(result.size * 1048576) : '2147483648',
                 category: categoriesForType(result.type),

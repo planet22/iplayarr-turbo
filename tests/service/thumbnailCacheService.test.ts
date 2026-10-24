@@ -60,6 +60,31 @@ describe('thumbnailCacheService', () => {
         expect(fs.readdirSync(dir)).toEqual([]);
     });
 
+    describe('stats / clearAll', () => {
+        it('counts and sizes only the .jpg thumbnails', async () => {
+            fs.writeFileSync(path.join(dir, 'a.jpg'), Buffer.alloc(100));
+            fs.writeFileSync(path.join(dir, 'b.small.jpg'), Buffer.alloc(50));
+            fs.writeFileSync(path.join(dir, 'c.jpg.123.tmp'), Buffer.alloc(999));
+
+            expect(await thumbnailCacheService.stats()).toMatchObject({ count: 2, sizeBytes: 150 });
+        });
+
+        it('reports an empty cache when the folder does not exist yet', async () => {
+            (Utils.getThumbnailCacheDir as jest.Mock).mockResolvedValue(path.join(dir, 'nope'));
+            expect(await thumbnailCacheService.stats()).toMatchObject({ count: 0, sizeBytes: 0 });
+            expect(await thumbnailCacheService.clearAll()).toBe(0);
+        });
+
+        it('clearAll deletes every thumbnail and nothing else', async () => {
+            fs.writeFileSync(path.join(dir, 'a.jpg'), 'x');
+            fs.writeFileSync(path.join(dir, 'b.small.jpg'), 'x');
+            fs.writeFileSync(path.join(dir, 'keep.txt'), 'x');
+
+            expect(await thumbnailCacheService.clearAll()).toBe(2);
+            expect(fs.readdirSync(dir)).toEqual(['keep.txt']);
+        });
+    });
+
     describe('cleanup', () => {
         it('deletes only stale jpgs, using the configured retention', async () => {
             (configService.getParameter as jest.Mock).mockResolvedValue('10');

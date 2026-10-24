@@ -9,6 +9,8 @@ const router = Router();
 
 interface DeleteRequest {
     pid: string;
+    // Picks out one download when a programme has several (different resolutions).
+    jobId?: string;
 }
 
 router.get('/queue', (_: Request, res: Response) => {
@@ -22,16 +24,16 @@ router.get('/history', async (_: Request, res: Response) => {
 });
 
 router.delete('/history', async (req: Request, res: Response) => {
-    const { pid } = req.query as any as DeleteRequest;
-    await historyService.removeHistory(pid);
+    const { pid, jobId } = req.query as any as DeleteRequest;
+    await historyService.removeHistory(pid, false, jobId);
     const history = (await historyService.getHistory()) || [];
     socketService.emit('history', history);
     res.json(history);
 });
 
 router.delete('/queue', async (req: Request, res: Response) => {
-    const { pid } = req.query as any as DeleteRequest;
-    queueService.cancelItem(pid);
+    const { pid, jobId } = req.query as any as DeleteRequest;
+    queueService.cancelItem(pid, false, jobId);
     const queue: QueueEntry[] = queueService.getQueue() || [];
     socketService.emit('queue', queue);
     res.json(queue);

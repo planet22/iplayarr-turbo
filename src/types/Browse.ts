@@ -18,6 +18,12 @@ export interface BrowseItem {
     thumbnail?: string;
     channel?: string;
     category?: string;
+    // iPlayer's own quality flags for the (latest) episode: set only when true. Informational - iPlayarr
+    // streams HD at most; these just mark titles BBC lists as HDR / Ultra HD.
+    hdr?: boolean;
+    uhd?: boolean;
+    // The non-standard versions (audio-described, signed) the (latest) episode has - see VersionProfiles.
+    versions?: string[];
 }
 
 export interface BrowseRail {
@@ -34,6 +40,8 @@ export interface BrowsePage {
 }
 
 export interface BrowseCategory {
+    // Featured on the Discover page (set when listing, never cached).
+    discover?: boolean;
     id: string;
     title: string;
     // Artwork borrowed from the category's first programme, for the image tiles.
@@ -56,6 +64,13 @@ export interface BrowseSlot {
     categories?: string[];
 }
 
+// A "Skip intro" / "Skip recap" span within an episode, in seconds from the start.
+export interface BrowseSkipMarker {
+    type: 'intro' | 'recap';
+    start: number;
+    end: number;
+}
+
 export interface BrowseNowNext {
     now?: BrowseSlot;
     next?: BrowseSlot;
@@ -76,6 +91,16 @@ export interface BrowseChannel {
     logo?: string;
     // True when the channel can be watched live through LiveStreamService (see LiveChannels.ts).
     live?: boolean;
+    // One of the user's own live channels (no BBC schedule or programmes).
+    custom?: boolean;
+    // A live feed with no iPlayer channel page (the optional nations/regions) - it can only be watched.
+    liveOnly?: boolean;
+    // False when the channel is switched off in the Channels page's arrange mode (it stays in its place there).
+    enabled?: boolean;
+    // Whether the channel has its own rail on the Discover page.
+    discover?: boolean;
+    // The mediaselector service id its live stream is served under (shown while arranging).
+    vpid?: string;
 }
 
 export interface BrowseSeason {
@@ -96,4 +121,8 @@ export interface BrowseProgramme {
     // Which page of the show's episode list `seasons` holds, and whether the BBC has further pages.
     page: number;
     hasMore: boolean;
+    // Set when the BBC's programme pages were unreachable and the page was built from iPlayer's listing API
+    // alone; `missing` then names the fields of this object that nothing could supply.
+    degraded?: boolean;
+    missing?: ('synopsis' | 'thumbnail' | 'channel' | 'category')[];
 }

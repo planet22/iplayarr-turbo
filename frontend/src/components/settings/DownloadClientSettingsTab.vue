@@ -1,26 +1,34 @@
 <template>
-    <legend>Download Client</legend>
-    <TextInput
-        v-model="config.ACTIVE_LIMIT"
-        name="Download Limit"
-        tooltip="The number of simultaneous downloads."
-        type-override="number"
-        :error="validationErrors.config?.ACTIVE_LIMIT"
-    />
+    <SettingsSubheading text="Client" />
     <SelectInput
         v-model="config.DOWNLOAD_CLIENT"
+        field="DOWNLOAD_CLIENT"
         name="Download Client?"
-        tooltip="Which Download Client to use"
+        tooltip="The tool used to download."
         :error="validationErrors.config?.DOWNLOAD_CLIENT"
         :options="downloadClients"
     />
 
+    <TextInput
+        v-if="showAdvanced"
+        v-model="config.ACTIVE_LIMIT"
+        field="ACTIVE_LIMIT"
+        :advanced="true"
+        name="Download Limit"
+        tooltip="How many downloads can run at once (1-10, default 3)."
+        type-override="number"
+        :min="1"
+        :max="10"
+        :step="1"
+        :error="validationErrors.config?.ACTIVE_LIMIT"
+    />
     <template v-if="showAdvanced">
         <TextInput
             v-model="config.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
+            field="ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
             :advanced="true"
             name="Additional Download Parameters"
-            :tooltip="paramsLocked ? lockedReason : 'Extra parameters to pass to get_iplayer for download'"
+            :tooltip="paramsLocked ? lockedReason : 'Extra options passed to get_iplayer.'"
             :disabled="paramsLocked"
             :error="validationErrors.config?.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"
         />
@@ -29,11 +37,31 @@
         </button>
     </template>
 
+    <template v-if="showAdvanced && config.UI_VERSION_BADGES === 'true'">
+        <SettingsSubheading text="Versions" />
+        <SelectInput
+            v-model="config.DOWNLOAD_ASK_VERSION"
+            :advanced="true"
+            field="DOWNLOAD_ASK_VERSION"
+            name="Ask Which Version"
+            tooltip="When something has an audio described or signed version, ask which to download or subscribe to. Off uses the default version below, whenever the item has it."
+            :options="askOptions"
+        />
+        <SelectInput
+            v-model="defaultVersion"
+            :advanced="true"
+            field="DOWNLOAD_DEFAULT_VERSION"
+            name="Default Version"
+            tooltip="Used when Ask Which Version is off, and pre-selected when it is on. Items without that version download as the standard one."
+            :options="versionDefaults"
+        />
+    </template>
+
     <InfoBar>
         Looking for NZB Passthrough? Check the <RouterLink to="/apps"> Apps </RouterLink> section
     </InfoBar>
 
-    <legend>Tool Versions</legend>
+    <SettingsSubheading text="Tool versions" />
     <div class="toolVersionRow">
         <div class="toolVersionInfo">
             <strong>get_iplayer</strong>
@@ -75,8 +103,9 @@ import { RouterLink } from 'vue-router';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
-import dialogService from '@/lib/dialogService';
+import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 defineProps({
     downloadClients: {
@@ -90,6 +119,22 @@ const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
 const toolVersions = inject('toolVersions');
 const refreshToolVersions = inject('refreshToolVersions');
+
+// Only offered while the AD / Signed badges are on (Settings > General > Appearance).
+const askOptions = [
+    { key: 'true', value: 'Yes' },
+    { key: 'false', value: 'No, use the default' },
+];
+const versionDefaults = [
+    { key: '', value: 'Standard version' },
+    { key: 'audio-described', value: 'Audio described, when available' },
+    { key: 'signed', value: 'Signed, when available' },
+];
+// '' (the standard version) is stored as an empty value, which the server treats as unset.
+const defaultVersion = computed({
+    get: () => config.value.DOWNLOAD_DEFAULT_VERSION ?? '',
+    set: (value) => (config.value.DOWNLOAD_DEFAULT_VERSION = value),
+});
 
 // Executable-related settings are locked while login is disabled (see SettingsGuard on the server).
 const lockedSettings = ref([]);
@@ -120,7 +165,8 @@ async function update(tool) {
     try {
         const response = await ipFetch('json-api/versions/update', 'POST', { tool });
         await refreshToolVersions();
-        await dialogService.alert(response.data.success ? 'Success' : 'Update Failed', response.data.message);
+        if (response.data.success) toastService.success(response.data.message);
+        else toastService.error('Update failed', { detail: response.data.message });
     } finally {
         updating[key] = false;
     }

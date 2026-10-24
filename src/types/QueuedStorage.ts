@@ -1,69 +1,47 @@
-import { redis } from '../service/redis/redisService';
+import { dbReady, prisma } from '../service/db/prismaService';
 
 export class QueuedStorage {
-    private current: Promise<void>;
+    private current: Promise<void> = Promise.resolve();
 
-    constructor() {
-        this.current = Promise.resolve(); // Start with a resolved promise
+    // Operations run strictly one after another, so a read never sees a half-finished write.
+    private enqueue<T>(op: () => Promise<T>): Promise<T> {
+        const result = this.current.then(async () => {
+            await dbReady();
+            return op();
+        });
+        this.current = result.then(
+            () => undefined,
+            () => undefined
+        );
+        return result;
     }
 
     async values(): Promise<any[]> {
-        return new Promise((resolve, reject) => {
-            this.current = this.current.then(async () => {
-                try {
-                    const keys = await redis.keys('*');
-                    const values = await redis.mget(keys);
-                    resolve(values.map((value) => (value ? JSON.parse(value) : undefined)));
-                } catch (error) {
-                    reject(error);
-                }
-            });
+        return this.enqueue(async () => {
+            const rows = await prisma.keyValue.findMany();
+            return rows.map((row) => (row.value ? JSON.parse(row.value) : undefined));
         });
     }
 
     async keys(): Promise<string[]> {
-        return new Promise((resolve, reject) => {
-            this.current = this.current.then(() => redis.keys('*').then(resolve, reject));
-        });
+        return this.enqueue(async () => (await prisma.keyValue.findMany({ select: { key: true } })).map((r) => r.key));
     }
 
     async getItem(key: string): Promise<any> {
-        return new Promise((resolve, reject) => {
-            this.current = this.current.then(() =>
-                redis.get(key).then((str: string | null) => resolve(str ? JSON.parse(str) : undefined), reject)
-            );
+        return this.enqueue(async () => {
+            const row = await prisma.keyValue.findUnique({ where: { key } });
+            return row ? JSON.parse(row.value) : undefined;
         });
     }
 
     async setItem(key: string, value: any): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
-            this.current = this.current.then(() =>
-                redis
-                    .set(key, JSON.stringify(value))
-                    .then(() => {
-                        redis
-                            .save()
-                            .then(() => resolve())
-                            .catch(reject);
-                    })
-                    .catch(reject)
-            );
-        });
+        const json = JSON.stringify(value);
+        await this.enqueue(() =>
+            prisma.keyValue.upsert({ where: { key }, create: { key, value: json }, update: { value: json } })
+        );
     }
 
     async removeItem(key: string): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
-            this.current = this.current.then(() =>
-                redis
-                    .del(key)
-                    .then(() => {
-                        redis
-                            .save()
-                            .then(() => resolve())
-                            .catch(reject);
-                    })
-                    .catch(reject)
-            );
-        });
+        await this.enqueue(() => prisma.keyValue.deleteMany({ where: { key } }));
     }
 }

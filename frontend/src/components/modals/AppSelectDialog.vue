@@ -1,5 +1,5 @@
 <template>
-    <IPlayarrModal title="Select App">
+    <IPlayarrModal compact title="Select App">
         <ListEditor v-slot="{ item }" :show-add="false" :items="apps">
             <a @click.prevent="emit('selectApp', item)">
                 <div class="major">

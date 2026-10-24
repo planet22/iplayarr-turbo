@@ -30,8 +30,17 @@ const followlog = ref(true);
 
 watch(
     () => route.query.item,
-    async (newJson) => {
-        item.value = JSON.parse(newJson);
+    (newJson) => {
+        try {
+            const parsed = JSON.parse(newJson);
+            if (parsed && typeof parsed === 'object') {
+                item.value = parsed;
+                return;
+            }
+        } catch {
+            // missing or malformed item param: fall through to the queue
+        }
+        router.replace('/queue');
     },
     { immediate: true }
 );
@@ -41,7 +50,7 @@ const toggleFollow = () => {
 };
 
 const deleteQueueItem = async () => {
-    if (await dialogService.confirm('Cancel', 'Are you sure you want to cancel this download?')) {
+    if (await dialogService.confirm('Cancel', 'Are you sure you want to cancel this download?', undefined, { danger: true, confirmLabel: 'Cancel download' })) {
         ipFetch(`json-api/queue/queue?pid=${item.value.pid}`, 'DELETE');
         router.push('/queue');
     }

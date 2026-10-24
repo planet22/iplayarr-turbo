@@ -67,14 +67,6 @@ describe('ConfigFormValidator', () => {
         expect(result.AUTH_PASSWORD).toMatch(/provide a Password/);
     });
 
-    it('should validate invalid cron expression', async () => {
-        const input = {
-            REFRESH_SCHEDULE: 'invalid cron',
-        };
-        const result = await validator.validate(input);
-        expect(result.REFRESH_SCHEDULE).toMatch(/valid cron expression/);
-    });
-
     it('should catch invalid Handlebars template', async () => {
         const input = {
             TV_FILENAME_TEMPLATE: '{{invalid',

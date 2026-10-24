@@ -5,7 +5,8 @@
             :icons="['run', 'refresh']"
             :running="live.running" :run-disabled="live.running ? stopping : !canRun"
             :stop-label="stopping ? 'Stopping…' : 'Stop'"
-            :refresh-disabled="live.running || refreshing" :refresh-label="refreshing ? 'Refreshing…' : 'Refresh Links'"
+            :refreshing="refreshing || listing"
+            :refresh-disabled="live.running || refreshing || listing" :refresh-label="refreshing || listing ? 'Refreshing…' : 'Refresh Links'"
             refresh-title="Re-list links from the sources and update the counts, without checking them against BBC"
             @run="runNow" @stop="stopRun" @refresh="refreshCounts"
         />
@@ -14,7 +15,7 @@
         </InfoBar>
         <InfoBar v-if="runError">{{ runError }}</InfoBar>
         <InfoBar v-if="live.notice">{{ live.notice }}</InfoBar>
-        <InfoBar v-for="warning in live.warnings || []" :key="warning" class="warning">{{ warning }}</InfoBar>
+        <InfoBar v-for="warning in live.warnings || []" :key="warning" clazz="warning">{{ warning }}</InfoBar>
 
         <div class="statRow">
             <div class="statCard">
@@ -65,8 +66,9 @@
         <div class="statRow">
             <div class="statCard progressCard">
                 <div class="progressHeader">
-                    <span class="statLabel">{{ live.running ? 'Checking' : 'Idle' }}</span>
-                    <span class="progressText">{{ live.checked }} / {{ live.total }}</span>
+                    <span class="statLabel">{{ live.running ? 'Checking' : listing ? 'Refreshing' : 'Idle' }}</span>
+                    <span v-if="listing" class="progressText">{{ live.collecting.done }} / {{ live.collecting.total }}</span>
+                    <span v-else class="progressText">{{ live.checked }} / {{ live.total }}</span>
                 </div>
                 <div class="progressTrack">
                     <div class="progressFill" :style="{ width: progressPercent + '%' }" />
@@ -75,7 +77,7 @@
                     <template v-if="live.running && live.currentPid">
                         Checking <router-link :to="`/browse/programme/${live.currentPid}`">{{ live.currentPid }}</router-link>
                     </template>
-                    <template v-else-if="live.running && live.collecting">
+                    <template v-else-if="live.collecting">
                         Collecting from {{ live.collecting.name }}<template v-if="live.collecting.total">{{ ' ' }}{{ live.collecting.done }} / {{ live.collecting.total }}</template>
                     </template>
                     <template v-else-if="live.running">Collecting from sources...</template>
@@ -109,7 +111,7 @@
                         <span class="statValue">{{ lastRun?.invalid ?? 0 }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="runs.map((r) => r.invalid)" color="#f05050" />
+                <SparklineChart :data="runs.map((r) => r.invalid)" color="danger-color" />
             </div>
             <div class="statCard sparkline">
                 <div class="statCardHeader">
@@ -119,7 +121,7 @@
                         <span class="statValue">{{ failureRate(lastRun).toFixed(2) }}%</span>
                     </div>
                 </div>
-                <SparklineChart :data="runs.map(failureRate)" color="#888888" />
+                <SparklineChart :data="runs.map(failureRate)" color="chart-6" />
             </div>
         </div>
         <div class="chartRow">
@@ -129,8 +131,8 @@
                     :local-time="true"
                     :window-minutes="live.running ? 2 : 0"
                     :series="[
-                        { name: 'Checked', data: checkedSeries, color: '#F12D7F' },
-                        { name: 'Failed', data: failedSeries, color: '#f05050' },
+                        { name: 'Checked', data: checkedSeries, color: 'chart-1' },
+                        { name: 'Failed', data: failedSeries, color: 'danger-color' },
                     ]"
                 />
             </div>
@@ -139,7 +141,7 @@
         <PageHeader title="Library Access" />
         <SettingsPageToolbar
             :icons="['refresh']" :refresh-label="checkingAccess ? 'Checking…' : 'Check Access'"
-            :refresh-disabled="checkingAccess" @refresh="checkAccess"
+            :refreshing="checkingAccess" :refresh-disabled="checkingAccess" @refresh="checkAccess"
         />
         <InfoBar v-if="accessError">{{ accessError }}</InfoBar>
         <p v-if="!access" class="empty">
@@ -195,8 +197,47 @@
         />
         <p v-if="!sortedItems.length" class="empty">No links have been checked yet.</p>
         <template v-else>
+        <div class="viewToggleRow">
+            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
+        </div>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
-        <table class="dataTable responsive-table">
+        <div v-if="cardView" class="cardList">
+            <DataCard v-for="item in pagedItems" :key="item.pid">
+                <template #thumb>
+                    <img
+                        v-if="getProgrammeThumbnailUrl(item.pid)"
+                        class="clickable"
+                        :src="getProgrammeThumbnailUrl(item.pid)"
+                        @click="router.push(`/browse/programme/${item.pid}`)"
+                        @error="hideBrokenImage"
+                    />
+                    <div v-else class="thumbnail-placeholder"></div>
+                </template>
+                <template #title>
+                    <router-link :to="`/browse/programme/${item.pid}`">{{ details[item.pid]?.title ?? item.pid }}</router-link>
+                </template>
+                <template v-if="details[item.pid]?.title || getSeriesEpisodeLabel(details[item.pid])" #subtitle>
+                    {{ [details[item.pid]?.title ? item.pid : '', getSeriesEpisodeLabel(details[item.pid])].filter(Boolean).join(' · ') }}
+                </template>
+                <template #chips>
+                    <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
+                        {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
+                    </span>
+                    <span v-if="item.status == 'ok' && item.failCount" class="pill grey">1 strike</span>
+                    <span v-if="(item.sourceNames || item.sources || []).length" class="linkMeta">
+                        {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') }}
+                    </span>
+                    <span class="linkMeta" title="Last checked">
+                        <font-awesome-icon :icon="['fas', 'clock']" />{{ formatRelativeTime(Date.parse(item.lastChecked), undefined, true) }}
+                    </span>
+                    <span v-if="(item.actions || []).length" class="linkMeta">{{ item.actions.join(', ') }}</span>
+                </template>
+                <template v-if="item.status == 'invalid' && (item.message || (item.files || []).length)">
+                    {{ item.message || (item.files || []).join(', ') }}
+                </template>
+            </DataCard>
+        </div>
+        <table v-else class="dataTable">
             <thead>
                 <tr>
                     <th>Programme</th>
@@ -221,7 +262,7 @@
                     </td>
                     <td data-title="Checked">{{ formatRelativeTime(Date.parse(item.lastChecked)) }}</td>
                     <td data-title="Action">{{ (item.actions || []).join(', ') }}</td>
-                    <td class="detail">{{ item.message || (item.files || []).join(', ') }}</td>
+                    <td :class="['detail', item.status == 'ok' ? 'hide-mobile' : '']">{{ item.message || (item.files || []).join(', ') }}</td>
                 </tr>
             </tbody>
         </table>
@@ -232,20 +273,34 @@
 
 <script setup>
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 
 import LineChart from '@/components/charts/LineChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
+import DataCard from '@/components/common/DataCard.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import Pagination from '@/components/common/TablePagination.vue';
+import ViewToggle from '@/components/common/ViewToggle.vue';
 import TypeCounts from '@/components/watchdog/TypeCounts.vue';
+import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
-import { formatRelativeTime } from '@/lib/utils';
+import { useViewMode } from '@/lib/useViewMode';
+import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
 
 const socket = inject('socket');
+const router = useRouter();
+
+// Cards on phones (six columns, long paths), table on wide screens; either can be chosen and is remembered.
+const { viewMode, setViewMode } = useViewMode('iplayarr.watchdogViewMode', {
+    modes: ['table', 'cards'],
+    desktop: 'table',
+    mobile: 'cards',
+});
+const cardView = computed(() => viewMode.value === 'cards');
 
 const status = ref({
     enabled: false,
@@ -287,6 +342,13 @@ const {
     pageSize: linkPageSize,
     pagedItems,
 } = usePagination(sortedItems);
+
+// Titles and posters for the card view, only for the page on screen.
+watch(
+    [pagedItems, cardView],
+    () => cardView.value && pagedItems.value.forEach(({ pid }) => loadDetails(pid)),
+    { immediate: true }
+);
 const sourceLabels = { history: 'iPlayarr', arr: 'Sonarr/Radarr', jellyfin: 'Jellyfin' };
 // What kind of source listed an item. Older stored items predate `types`, so fall back to their source.
 const typesOf = (item) =>
@@ -304,7 +366,12 @@ const tracked = computed(() => ({
     total: status.value.tracked?.total ?? status.value.items.length,
     types: status.value.tracked?.types ?? countTypes(status.value.items),
 }));
-const progressPercent = computed(() => (live.value.total ? Math.round((live.value.checked / live.value.total) * 100) : 0));
+// Refresh Links lists the sources without a run, so the card shows that listing's progress instead.
+const listing = computed(() => !live.value.running && !!live.value.collecting);
+const progressPercent = computed(() => {
+    const { done, total } = listing.value ? live.value.collecting : { done: live.value.checked, total: live.value.total };
+    return total ? Math.round((done / total) * 100) : 0;
+});
 const canRun = computed(() => status.value.enabled && !live.value.running);
 const lastRunDuration = computed(() =>
     lastRun.value ? Date.parse(lastRun.value.finishedAt) - Date.parse(lastRun.value.startedAt) : 0
@@ -340,7 +407,7 @@ const onStatus = (data) => {
 };
 
 async function clearItems() {
-    if (!(await dialogService.confirm('Clear Table', 'Clear the list of checked links? They will be listed again on the next run.'))) return;
+    if (!(await dialogService.confirm('Clear Table', 'Clear the list of checked links? They will be listed again on the next run.', undefined, { danger: true, confirmLabel: 'Clear' }))) return;
     const { ok, data } = await ipFetch('json-api/watchdog/items', 'DELETE');
     if (!ok) runError.value = data?.message ?? 'Could not clear the table';
 }
@@ -414,13 +481,48 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="less">
+// Source, check time and any action, in the pill row of a Links card.
+.linkMeta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: @subtle-text-color;
+}
+
 .legendRow {
     flex-wrap: wrap;
 }
 
 @media (max-width: @mobile-breakpoint) {
-    .statRow .statCard {
-        flex-basis: 100%;
+    // Tighter than the desktop cards so the page is not a long scroll of big tiles.
+    .statRow {
+        gap: 8px;
+        margin-bottom: 1rem;
+
+        .statCard {
+            flex-basis: 100%;
+            padding: 10px 14px;
+            gap: 12px;
+
+            .statValue {
+                font-size: 24px;
+            }
+        }
+    }
+
+    // Library Access: each source reads as its own card, with the detail text on its own line.
+    .accessResults .accessRow {
+        padding: 10px;
+        background-color: @nav-active-background-color;
+        border-radius: 6px;
+        box-shadow: 0 0 10px 1px @primary-box-shadow;
+        font-size: 13px;
+
+        .detail {
+            flex-basis: 100%;
+            font-size: 12px;
+        }
     }
 }
 
@@ -450,7 +552,7 @@ onBeforeUnmount(() => {
     code {
         padding: 2px 6px;
         border-radius: 3px;
-        background-color: rgba(255, 255, 255, 0.1);
+        background-color: @hover-tint;
     }
 }
 
@@ -511,7 +613,7 @@ onBeforeUnmount(() => {
         width: 100%;
         height: 8px;
         border-radius: 4px;
-        background-color: rgba(255, 255, 255, 0.15);
+        background-color: @table-row-hover-color;
         overflow: hidden;
     }
 

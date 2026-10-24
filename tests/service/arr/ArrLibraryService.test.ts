@@ -136,6 +136,31 @@ describe('ArrLibraryService', () => {
             mockedAxios.post.mockRejectedValue({ isAxiosError: true, message: 'x', response: { status: 400, data: [{ errorMessage: 'Path invalid' }] } });
             await expect(arrLibraryService.add(sonarr, 11, options)).rejects.toThrow('Path invalid');
         });
+
+        it('links to the entry already in the library when it has the same title slug under another id', async () => {
+            // The lookup finds the show under tvdb 11, but Sonarr already holds "2point4-children" under another id.
+            mockedAxios.get.mockImplementation(async (url: string) => ({
+                data: url.includes('/lookup') ? [{ tvdbId: 11, id: 0, titleSlug: '2point4-children' }] : [{ id: 41, titleSlug: 'other' }, { id: 42, titleSlug: '2point4-children' }],
+            }));
+            mockedAxios.post.mockRejectedValue({
+                isAxiosError: true,
+                message: 'x',
+                response: { status: 500, data: { message: 'constraint failed UNIQUE constraint failed: Series.TitleSlug' } },
+            });
+            expect(await arrLibraryService.add(sonarr, 11, options)).toEqual({ id: 42, created: false });
+        });
+
+        it('still fails on a title slug clash when no library entry has that slug', async () => {
+            mockedAxios.get.mockImplementation(async (url: string) => ({
+                data: url.includes('/lookup') ? [{ tvdbId: 11, id: 0, titleSlug: 'x' }] : [{ id: 1, titleSlug: 'y' }],
+            }));
+            mockedAxios.post.mockRejectedValue({
+                isAxiosError: true,
+                message: 'x',
+                response: { status: 500, data: { message: 'UNIQUE constraint failed: Series.TitleSlug' } },
+            });
+            await expect(arrLibraryService.add(sonarr, 11, options)).rejects.toThrow('TitleSlug');
+        });
     });
 
     describe('remove', () => {

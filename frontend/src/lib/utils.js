@@ -1,12 +1,14 @@
-export const getHost = () => {
-    return import.meta.env.DEV ? `http://${window.location.hostname}:4404` : '';
-};
+// URL prefix the server injects into index.html when it runs under BASE_PATH ('' otherwise).
+export const getBasePath = () => window.__BASE_PATH__ || '';
+
+// Requests are always same-origin: in dev the Vite proxy (vite.config.mjs) forwards them to the backend.
+export const getHost = () => getBasePath();
 
 // Builds the query string for json-api/download from a full search result, carrying the
 // structured show/season/episode metadata through so the backend can build a Jellyfin-style
 // library folder for it (libraryPathBuilder.ts) - not just pid/nzbName/type. Shared by
 // SearchPage's immediate/bulk download and DownloadConfirmModal's confirm-and-download.
-export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds }) => {
+export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtimeSeconds, media, version, quality }) => {
     const params = new URLSearchParams({ pid, nzbName, type });
     if (title) params.set('title', title);
     if (series != null) params.set('series', series);
@@ -15,6 +17,11 @@ export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode,
     if (channel) params.set('channel', channel);
     if (pubDate) params.set('pubDate', pubDate);
     if (runtimeSeconds != null) params.set('runtime', runtimeSeconds);
+    // 'strm' | 'download' for this download only; left out to follow the Media Mode setting.
+    if (media) params.set('media', media);
+    // A version (audio-described, signed) and/or quality profile id for this download only; left out for the standard one.
+    if (version) params.set('version', version);
+    if (quality) params.set('quality', quality);
     return params.toString();
 };
 
@@ -83,6 +90,11 @@ export const getPidFromBBCUrl = (url) => {
 
 export const formatStorageSize = (mb) => {
     if (mb) {
+        // A .strm pointer is a few hundred bytes - show those as KB (or B), not "0.00 MB".
+        if (mb < 1) {
+            const kb = mb * 1024;
+            return kb >= 1 ? kb.toFixed(1) + ' KB' : Math.round(kb * 1024) + ' B';
+        }
         if (mb >= 1024) {
             return (mb / 1024).toFixed(2) + ' GB';
         }
@@ -136,48 +148,96 @@ export function getCleanSceneTitle(title) {
     return cleanTitle.trim().replaceAll('+', ' ');
 }
 
-export function formatDate(dateString, dateStyle, timeStyle) {
-    const date = dateString != null ? new Date(dateString) : undefined;
-    return isNaN(date?.getTime())
-        ? undefined
-        : new Intl.DateTimeFormat('en-GB', {
-              dateStyle: dateStyle ?? 'medium',
-              timeStyle: timeStyle ?? 'short',
-              hour12: true,
-          }).format(date);
-}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-export function formatDateTimeWithMillis(dateString) {
-    const date = dateString != null ? new Date(dateString) : undefined;
+// Every date and time the UI shows goes through these, so they all read alike: "21 Oct 2026" and "4.00pm".
+// `timeZone` is for the guide's UK/local switch; elsewhere it is the browser's own zone.
+const clockParts = (date, timeZone) =>
+    Object.fromEntries(
+        new Intl.DateTimeFormat('en-GB', {
+            timeZone,
+            hourCycle: 'h23',
+            year: 'numeric',
+            month: 'numeric',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            second: 'numeric',
+        })
+            .formatToParts(date)
+            .map((part) => [part.type, Number(part.value)])
+    );
+
+// "4.00pm", "12.30am". With seconds "4.00.05pm"; with milliseconds too "4.00.05.123pm" (logs, events, streams).
+export function formatTime(value, { seconds = false, millis = false, timeZone } = {}) {
+    const date = value != null ? new Date(value) : undefined;
     if (isNaN(date?.getTime())) {
         return undefined;
     }
-    const datePart = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(date);
-    const timePart = new Intl.DateTimeFormat('en-GB', { timeStyle: 'medium', hour12: false }).format(date);
-    const millis = String(date.getMilliseconds()).padStart(3, '0');
-    return `${datePart} ${timePart}.${millis}`;
+    const { hour, minute, second } = clockParts(date, timeZone);
+    const pad = (n, width = 2) => String(n).padStart(width, '0');
+    let text = `${hour % 12 || 12}.${pad(minute)}`;
+    if (seconds || millis) text += `.${pad(second)}`;
+    if (millis) text += `.${pad(date.getMilliseconds(), 3)}`;
+    return text + (hour < 12 ? 'am' : 'pm');
 }
 
-// "20 seconds ago" style relative time. `now` defaults to Date.now() but can be passed in so
-// callers can drive this off a ticking ref and get a reactive re-render as time passes.
-export function formatRelativeTime(timestamp, now = Date.now()) {
+// "21 Oct 2026".
+export function formatShortDate(value, timeZone) {
+    const date = value != null ? new Date(value) : undefined;
+    if (isNaN(date?.getTime())) {
+        return undefined;
+    }
+    const { year, month, day } = clockParts(date, timeZone);
+    return `${day} ${MONTHS[month - 1]} ${year}`;
+}
+
+// "21 Oct 2026, 4.00pm". The two style arguments are accepted for older callers and ignored; pass
+// timeStyle 'none' for the date alone.
+export function formatDate(dateString, _dateStyle, timeStyle) {
+    const day = formatShortDate(dateString);
+    if (day === undefined) {
+        return undefined;
+    }
+    return timeStyle === 'none' ? day : `${day}, ${formatTime(dateString)}`;
+}
+
+// "21 Oct 2026, 4.00.05.123pm" - for logs, events and streams, where the exact moment matters.
+export function formatDateTimeWithMillis(dateString) {
+    const day = formatShortDate(dateString);
+    return day === undefined ? undefined : `${day}, ${formatTime(dateString, { seconds: true, millis: true })}`;
+}
+
+// "20 seconds ago" style relative time ("20s ago" when `short`, for the phone cards). `now` defaults to Date.now()
+// but can be passed in so callers can drive this off a ticking ref and get a reactive re-render as time passes.
+export function formatRelativeTime(timestamp, now = Date.now(), short = false) {
     if (!timestamp) {
         return 'Never';
     }
     const diffSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
     const units = [
-        ['year', 31536000],
-        ['month', 2592000],
-        ['day', 86400],
-        ['hour', 3600],
-        ['minute', 60],
-        ['second', 1],
+        ['year', 31536000, 'y'],
+        ['month', 2592000, 'mo'],
+        ['day', 86400, 'd'],
+        ['hour', 3600, 'h'],
+        ['minute', 60, 'm'],
+        ['second', 1, 's'],
     ];
-    for (const [unit, secondsInUnit] of units) {
+    for (const [unit, secondsInUnit, abbreviation] of units) {
         const value = Math.floor(diffSeconds / secondsInUnit);
         if (value >= 1) {
-            return `${value} ${unit}${value === 1 ? '' : 's'} ago`;
+            return short ? `${value}${abbreviation} ago` : `${value} ${unit}${value === 1 ? '' : 's'} ago`;
         }
     }
     return 'just now';
+}
+
+// A shuffled copy (Fisher-Yates); the original list is left alone.
+export function shuffled(list) {
+    const copy = [...list];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
 }

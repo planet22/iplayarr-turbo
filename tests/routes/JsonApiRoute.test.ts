@@ -10,13 +10,18 @@ jest.mock('../../src/facade/scheduleFacade');
 jest.mock('../../src/facade/searchFacade');
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/service/queueService');
+jest.mock('../../src/service/searchSettingsService');
+jest.mock('../../src/service/stats/StatisticsService');
 
 import nzbFacade from '../../src/facade/nzbFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import searchFacade from '../../src/facade/searchFacade';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
+import searchSettingsService from '../../src/service/searchSettingsService';
+import statisticsService from '../../src/service/stats/StatisticsService';
 import { ApiError } from '../../src/types/responses/ApiResponse';
+import { searchContext } from '../../src/utils/searchContext';
 
 const app = express();
 app.use(bodyParser.json());
@@ -67,6 +72,99 @@ describe('JsonApiRoute', () => {
         });
     });
 
+    describe('manual search context', () => {
+        it('runs /search and /search/stream as a manual search', async () => {
+            const seen: string[] = [];
+            (searchFacade.search as jest.Mock).mockImplementation(async () => {
+                seen.push(searchContext());
+                return [];
+            });
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async () => {
+                seen.push(searchContext());
+                return [];
+            });
+            await request(app).get('/search').query({ q: 'test' });
+            await request(app).get('/search/stream').query({ q: 'test' });
+            expect(seen).toEqual(['manual', 'manual']);
+        });
+
+        it('records manual searches in the search history, without an app', async () => {
+            (statisticsService.addSearch as jest.Mock).mockResolvedValue(undefined);
+            (searchFacade.search as jest.Mock).mockResolvedValue([{ title: 'Doc', nzbName: 'Doc.S01', type: 'TV', pid: 'p01abc', size: 5 }]);
+            (searchFacade.searchStreaming as jest.Mock).mockResolvedValue([]);
+
+            await request(app).get('/search').query({ q: 'doc' });
+            await request(app).get('/search/stream').query({ q: 'bake' });
+            await request(app).get('/search').query({ q: '*' });
+
+            expect(statisticsService.addSearch).toHaveBeenCalledTimes(2);
+            expect(statisticsService.addSearch).toHaveBeenNthCalledWith(1, expect.objectContaining({
+                term: 'doc',
+                results: 1,
+                items: [expect.objectContaining({ title: 'Doc.S01', pid: 'p01abc' })],
+            }));
+            expect((statisticsService.addSearch as jest.Mock).mock.calls[0][0].appId).toBeUndefined();
+            expect(statisticsService.addSearch).toHaveBeenNthCalledWith(2, expect.objectContaining({ term: 'bake', results: 0 }));
+        });
+
+        it('GET /search/settings describes the manual setup', async () => {
+            const state = { native: true, engine: 'V2', matchAllWords: true, inherited: [] };
+            (searchSettingsService.effective as jest.Mock).mockResolvedValue(state);
+            const res = await request(app).get('/search/settings');
+            expect(res.body).toEqual(state);
+            expect(searchSettingsService.effective).toHaveBeenCalledWith('manual');
+        });
+    });
+
+    describe('versions on manual search results', () => {
+        const metadataFor = async (pid: string) => ({
+            programme: {
+                versions:
+                    pid === 'p1'
+                        ? [{ pid: 'o', types: ['Original version'] }, { pid: 'a', types: ['Dubbed Audio Described'] }, { pid: 's', types: ['Signed'] }]
+                        : [{ pid: 'o2', types: ['Original version'] }],
+            },
+        });
+
+        beforeEach(() => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockImplementation(metadataFor);
+            (statisticsService.addSearch as jest.Mock).mockResolvedValue(undefined);
+        });
+
+        it('marks /search results with the audio described and signed versions their programme has', async () => {
+            (searchFacade.search as jest.Mock).mockResolvedValue([
+                { pid: 'p1', title: 'One', type: 'TV' },
+                { pid: 'p2', title: 'Two', type: 'TV' },
+            ]);
+            const res = await request(app).get('/search').query({ q: 'x' });
+            expect(res.body[0].versions).toEqual(['audio-described', 'signed']);
+            expect(res.body[1]).not.toHaveProperty('versions');
+        });
+
+        it('marks each /search/stream batch before sending it, in order, and still finishes with done', async () => {
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async (_q: string, onBatch: (batch: unknown[]) => void) => {
+                onBatch([{ pid: 'p1', title: 'One', type: 'TV' }]);
+                onBatch([{ pid: 'p2', title: 'Two', type: 'TV' }]);
+                return [];
+            });
+            const res = await request(app).get('/search/stream').query({ q: 'x' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines).toHaveLength(3);
+            expect(lines[0][0]).toMatchObject({ pid: 'p1', versions: ['audio-described', 'signed'] });
+            expect(lines[1][0].pid).toBe('p2');
+            expect(lines[1][0]).not.toHaveProperty('versions');
+            expect(lines[2]).toEqual({ done: true });
+        });
+
+        it('still returns the results when BBC cannot be asked about versions', async () => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockRejectedValue(new Error('down'));
+            (searchFacade.search as jest.Mock).mockResolvedValue([{ pid: 'p1', title: 'One', type: 'TV' }]);
+            const res = await request(app).get('/search').query({ q: 'x' });
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual([{ pid: 'p1', title: 'One', type: 'TV' }]);
+        });
+    });
+
     describe('GET /details', () => {
         it('should return episode details', async () => {
             const mockDetails = [{ title: 'Test Show', pid: 'p01abc' }];
@@ -89,7 +187,7 @@ describe('JsonApiRoute', () => {
                 .get('/download')
                 .query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv' });
 
-            expect(addToQueueMock).toHaveBeenCalledWith('p01xyz', 'show.nzb', 'tv');
+            expect(addToQueueMock).toHaveBeenCalledWith('p01xyz', 'show.nzb', 'tv', undefined, undefined, undefined, undefined);
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ status: true });
         });
@@ -118,7 +216,7 @@ describe('JsonApiRoute', () => {
                 episodeTitle: 'The Episode',
                 channel: 'BBC One',
                 pubDate: '2024-01-02T00:00:00.000Z',
-            });
+            }, undefined, undefined);
             expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();
         });
 
@@ -164,7 +262,9 @@ describe('JsonApiRoute', () => {
                     episodeTitle: 'The Real Title',
                     channel: 'BBC One',
                     pubDate: '2024-01-02',
-                }
+                },
+                undefined,
+                undefined
             );
         });
 
@@ -193,8 +293,63 @@ describe('JsonApiRoute', () => {
                 'Show.Name.S02E05',
                 'tv',
                 undefined,
-                expect.objectContaining({ title: 'Show Name', series: 2, episode: 5 })
+                expect.objectContaining({ title: 'Show Name', series: 2, episode: 5 }),
+                undefined,
+                undefined
             );
+        });
+
+        it('passes a per-download media mode through and rejects an unknown one', async () => {
+            const addToQueueMock = queueService.addToQueue as jest.Mock;
+            addToQueueMock.mockImplementation(() => { });
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
+
+            for (const media of ['strm', 'download']) {
+                await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv', media }).expect(200);
+                expect(addToQueueMock).toHaveBeenLastCalledWith('p01xyz', 'show.nzb', 'tv', undefined, undefined, undefined, media);
+            }
+
+            addToQueueMock.mockClear();
+            const bad = await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv', media: 'bogus' });
+            expect(bad.status).toBe(400);
+            expect(addToQueueMock).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('GET /programme-versions', () => {
+        it('lists the audio described and signed versions a programme has', async () => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({
+                programme: { versions: [{ pid: 'o', types: ['Original version'] }, { pid: 'a', types: ['Dubbed Audio Described'] }] },
+            });
+            const res = await request(app).get('/programme-versions').query({ pid: 'p01xyz' });
+            expect(res.status).toBe(200);
+            expect(res.body.map(({ id }: any) => id)).toEqual(['audio-described']);
+        });
+
+        it('is empty when BBC cannot be asked, and rejects a bad pid', async () => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockRejectedValue(new Error('down'));
+            expect((await request(app).get('/programme-versions').query({ pid: 'p01xyz' })).body).toEqual([]);
+            expect((await request(app).get('/programme-versions').query({ pid: '../x' })).status).toBe(400);
+        });
+    });
+
+    describe('GET /download with a version or quality', () => {
+        it('tags and caps an audio described download and carries the version on the queue entry', async () => {
+            const addToQueueMock = queueService.addToQueue as jest.Mock;
+            addToQueueMock.mockImplementation(() => { });
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
+            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'Show.S01E01.WEBDL.720p-BBC', type: 'TV', title: 'Show', version: 'audio-described' }).expect(200);
+            const [, name, , , library] = addToQueueMock.mock.calls.pop();
+            expect(name).toBe('Show.S01E01.AUDIO.DESCRIBED.WEBDL.540p-BBC');
+            expect(library).toMatchObject({ title: 'Show', version: 'audio-described', quality: 'sd' });
+        });
+
+        it('ignores an unknown version or quality', async () => {
+            const addToQueueMock = queueService.addToQueue as jest.Mock;
+            addToQueueMock.mockImplementation(() => { });
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue(undefined);
+            await request(app).get('/download').query({ pid: 'p01xyz', nzbName: 'show.nzb', type: 'tv', version: 'bogus', quality: 'bogus' }).expect(200);
+            expect(addToQueueMock).toHaveBeenLastCalledWith('p01xyz', 'show.nzb', 'tv', undefined, undefined, undefined, undefined);
         });
     });
 

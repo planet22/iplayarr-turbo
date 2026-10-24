@@ -1,9 +1,10 @@
 import dotenv from 'dotenv';
 
 import searchFacade from '../facade/searchFacade';
-import { IplayarrParameter } from '../types/IplayarrParameters';
+import { IplayarrParameter, NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
+import episodeDetailsCache from './episodeDetailsCache';
 
 dotenv.config();
 
@@ -23,6 +24,14 @@ export async function encryptStoredSettings(): Promise<void> {
     if (Object.keys(raw).some((key) => ENCRYPTED_SETTINGS.includes(key) && raw[key] && !isEncrypted(raw[key]))) {
         await storage.setItem('config', encryptSettings(decryptSettings(raw)));
     }
+}
+
+// A whole-number setting outside its validated range is pulled back into it (non-numbers are left alone).
+function clampToLimits(key: string, value: string | undefined): string | undefined {
+    const limits = NUMERIC_SETTING_LIMITS[key];
+    const n = Number(value);
+    if (!limits || !value || isNaN(n)) return value;
+    return String(Math.min(limits.max, Math.max(limits.min, Math.round(n))));
 }
 
 const configService = {
@@ -48,6 +57,15 @@ const configService = {
         TV_FILENAME_TEMPLATE:
             '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC',
         VIDEO_QUALITY: 'fhd',
+        EXTRA_VIDEO_QUALITIES: '',
+        EXTRA_VERSIONS: '',
+        AIRDATE_NUMBERING: 'false',
+        RELEASE_LANGUAGE: 'none',
+        SEARCH_MATCH_ALL_WORDS: 'true',
+        MANUAL_NATIVE_SEARCH: 'inherit',
+        MANUAL_NATIVE_SEARCH_ENGINE: 'inherit',
+        MANUAL_SEARCH_MATCH_ALL_WORDS: 'inherit',
+        NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'false',
         RSS_FEED_HOURS: '48',
         // 'false' re-fetches/re-parses only today's BBC schedule page per channel each refresh,
         // reusing a cached result for any day that's already fully passed (it can't change once
@@ -59,7 +77,7 @@ const configService = {
         ARCHIVE_ENABLED: 'false',
         THUMBNAIL_RETENTION_DAYS: '30',
         STREAM_HISTORY_RETENTION_DAYS: '30',
-        DOWNLOAD_CLIENT: 'GET_IPLAYER',
+        DOWNLOAD_CLIENT: 'NATIVE',
         OUTPUT_FORMAT: 'mp4',
         AUTH_TYPE: 'form',
         MEDIA_MODE: 'strm',
@@ -68,6 +86,9 @@ const configService = {
         STREAM_NATIVE_ADAPTIVE: 'false',
         STREAM_NATIVE_HQ_PROBE: 'false',
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
+        STREAM_SUBTITLES: 'false',
+        STREAM_LIVE_DASH_1080: 'false',
+        LIVE_UHD_EVENT_FEEDS: 'false',
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
@@ -83,15 +104,27 @@ const configService = {
         STRM_WATCHDOG_ARR_ACTION: 'none',
         STRM_WATCHDOG_FAIL_THRESHOLD: '10',
         STRM_WATCHDOG_CONCURRENCY: '4',
+        UI_PILL_COLORS: 'true',
+        UI_CHANNEL_TOOLS: 'false',
+        UI_INFO_MESSAGES: 'true',
+        UI_QUALITY_BADGES: 'false',
+        UI_VERSION_BADGES: 'false',
+        UI_SUBTITLE_BADGES: 'false',
+        DOWNLOAD_ASK_VERSION: 'true',
+        // '' is the standard version; otherwise a version profile id (audio-described, signed).
+        DOWNLOAD_DEFAULT_VERSION: '',
+        // The same two choices for the play button (the picture-in-picture player).
+        PLAY_ASK_VERSION: 'true',
+        PLAY_DEFAULT_VERSION: '',
     } as ConfigMap,
 
     getParameter: async (parameter: IplayarrParameter): Promise<string | undefined> => {
         const configMap = await getConfigMap();
-        return (
+        const value =
             configMap[parameter.toString()] ||
             process.env[parameter.toString()] ||
-            configService.defaultConfigMap[parameter.toString()]
-        );
+            configService.defaultConfigMap[parameter.toString()];
+        return clampToLimits(parameter.toString(), value);
     },
 
     getParameters: async (...parameters: IplayarrParameter[]): Promise<(string | undefined)[]> => {
@@ -104,6 +137,10 @@ const configService = {
         configMap[parameter] = value;
         await storage.setItem('config', encryptSettings(configMap));
         if ((parameter == IplayarrParameter.NATIVE_SEARCH || parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE) && oldValue != value) {
+            searchFacade.clearSearchCache();
+        }
+        if (parameter == IplayarrParameter.AIRDATE_NUMBERING && oldValue != value) {
+            await episodeDetailsCache.clear();
             searchFacade.clearSearchCache();
         }
     },

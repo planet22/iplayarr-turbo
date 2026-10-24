@@ -1,12 +1,19 @@
 <template>
-    <LoadingIndicator v-if="loading" />
-    <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
+    <div class="browsePage programmeHeader">
+        <SettingsPageToolbar />
+    </div>
+    <SkeletonLoader v-if="loading" variant="banner" />
+    <ErrorState v-else-if="error" :message="error" @retry="reload" />
     <template v-else-if="programme">
         <div class="programmeBanner">
             <div class="bannerBackdrop" :style="bannerStyle" />
-            <div class="programmeBannerContent">
+            <div :class="['programmeBannerContent', posterUrl || isMissing('thumbnail') ? 'hasPoster' : '']">
                 <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
+                <div v-else-if="isMissing('thumbnail')" class="poster missing" title="Artwork unavailable" role="img" aria-label="Artwork unavailable">
+                    <font-awesome-icon :icon="['fas', 'image']" />
+                </div>
                 <div class="programmeText">
+                <div class="programmeHead">
                 <h1>{{ programme.title }}</h1>
                 <div class="programmeMeta">
                     <span :class="['pill', 'grey']">
@@ -16,20 +23,37 @@
                     <ChannelPill :channel="programme.channel">
                         <font-awesome-icon :icon="['fas', 'tower-broadcast']" />
                     </ChannelPill>
+                    <span v-if="isMissing('channel')" class="pill grey missing" title="Channel unavailable">
+                        <font-awesome-icon :icon="['fas', 'tower-broadcast']" />Channel
+                    </span>
                     <span v-if="programme.category" :class="['pill', 'grey']">{{ programme.category }}</span>
-                    <span :class="['pill', 'grey']">
+                    <span v-else-if="isMissing('category')" class="pill grey missing" title="Category unavailable">Category</span>
+                    <span v-if="programme.degraded" class="pill grey missing" title="The BBC programme page is unavailable right now">
+                        <font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" />Link
+                    </span>
+                    <span v-else :class="['pill', 'grey']">
                         <a :href="`https://www.bbc.co.uk/programmes/${programme.pid}`" target="_blank" rel="noopener noreferrer">
                             <font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" />Link
                         </a>
                     </span>
                 </div>
+                </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>
-                <div v-if="programme.kind !== 'episode' || subscription" class="subscribeRow">
+                <p v-else-if="isMissing('synopsis')" class="missing synopsisMissing">Synopsis unavailable</p>
+                <p v-if="programme.degraded" class="degradedNote" role="status">
+                    <font-awesome-icon :icon="['fas', 'circle-info']" />
+                    {{
+                        programme.missing?.length
+                            ? 'The BBC programme pages are not responding, so some details are missing. Episodes below come from iPlayer.'
+                            : 'The BBC programme pages are not responding, so these details come from iPlayer\'s listings.'
+                    }}
+                </p>
+                <div v-if="programme.kind !== 'episode' || entry" class="subscribeRow">
                     <button
                         :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
                         @click="toggleSubscription"
                     >
-                        <font-awesome-icon :icon="['fas', subscribing ? 'circle-notch' : 'bell']" :spin="subscribing" />
+                        <font-awesome-icon :icon="['fas', 'bell']" />
                         {{ subscription ? 'Subscribed' : 'Subscribe' }}
                     </button>
                     <button
@@ -42,74 +66,141 @@
                         Download all ({{ loadedCount }})
                     </button>
                     <button
-                        v-if="subscription && !subscription.arrOnly"
+                        v-if="!entry?.arr && !subscription"
                         class="clickable subscribeButton"
+                        :disabled="requesting"
+                        title="Add to Sonarr/Radarr and let it pick the best release"
+                        @click="requestProgramme"
+                    >
+                        <font-awesome-icon :icon="['fas', 'plus']" />
+                        Request
+                    </button>
+                    <button
+                        v-if="subscription && !subscription.arrOnly"
+                        :class="['clickable', 'subscribeButton', subscription.arr ? 'on' : '']"
                         :disabled="subscribing"
+                        :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
                         @click="toggleArrWithBusy"
                     >
-                        <font-awesome-icon :icon="['fas', subscription.arr ? 'link-slash' : 'link']" />
-                        {{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}
+                        <font-awesome-icon :icon="['fas', 'right-left']" />
+                        <!-- Phones: the half-width button is too narrow for the full label, which wrapped onto two lines. -->
+                        <span class="labelLong">{{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}</span>
+                        <span class="labelShort">{{ subscription.arr ? 'Unlink' : 'Sonarr/Radarr' }}</span>
                     </button>
                     <span
-                        v-if="subscription && subscription.arr"
+                        v-if="entry && entry.arr"
                         class="subscribeButton on arrChip"
-                        :title="`In ${arrAppName(subscription.arr.appId)} as ${subscription.arr.title}`"
+                        :title="`In ${arrAppName(entry.arr.appId)} as ${entry.arr.title}`"
                     >
                         <font-awesome-icon :icon="['fas', 'check']" />
-                        {{ arrAppName(subscription.arr.appId) }}
+                        {{ arrAppName(entry.arr.appId) }}
                     </span>
+                    <button
+                        v-if="entry && entry.arrOnly"
+                        class="clickable subscribeButton"
+                        :disabled="subscribing"
+                        title="Remove from Sonarr/Radarr tracking"
+                        @click="removeArrOnly"
+                    >
+                        <font-awesome-icon :icon="['fas', 'xmark']" />
+                        Remove
+                    </button>
                 </div>
                 </div>
             </div>
         </div>
 
         <div class="browsePage">
-            <p v-if="programme.seasons.length === 0">No episodes are currently available.</p>
+            <EmptyState v-if="programme.seasons.length === 0" icon="film" title="No episodes are currently available" hint="They may not be on iPlayer right now." />
             <template v-else>
-                <div v-if="programme.seasons.length > 1" class="seasonTabs">
+                <div v-if="programme.seasons.length > 1" class="seasonTabs" role="group" aria-label="Series">
                     <button
                         v-for="(season, index) in programme.seasons"
                         :key="index"
                         :class="['clickable', 'seasonTab', index === selected ? 'active' : '']"
+                        :title="seasonLabel(season)"
+                        :aria-label="seasonLabel(season)"
                         @click="selectSeason(index)"
                     >
-                        {{ seasonLabel(season) }}
+                        <font-awesome-icon v-if="season.series === 0" :icon="['fas', 'star']" />
+                        <font-awesome-icon v-else-if="season.series == null" :icon="['fas', 'list']" />
+                        <template v-else>S{{ season.series }}</template>
                     </button>
                 </div>
-                <div class="seasonActions">
-                    <span v-if="loadingMore" class="loadingMore">
+                <div v-if="loadingMore" class="seasonActions">
+                    <span class="loadingMore">
                         <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
                         Loading more episodes… ({{ loadedCount }} so far)
                     </span>
-                    <button class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
-                        <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-download']" :spin="downloadingSeason" />
-                        Download {{ programme.seasons.length > 1 ? seasonLabel(programme.seasons[selected]) : 'all' }}
-                        ({{ episodes.length }})
+                </div>
+                <!-- Phones: the pager takes the whole row, so the actions sit on a row of their own above it. -->
+                <div v-if="isMobile" class="seasonActions">
+                    <button class="clickable seasonSort" :title="sortTitle" :aria-label="sortTitle" @click="toggleSort">
+                        <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
+                    </button>
+                    <button v-if="!duplicatesBannerDownload" class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
+                        <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                        {{ seasonDownloadLabel }}
                     </button>
                 </div>
-                <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length" />
+                <TablePagination v-model="episodePage" v-model:page-size="episodePageSize" :total="episodes.length">
+                    <template v-if="!isMobile" #leading>
+                        <div class="seasonActions inline">
+                            <button class="clickable seasonSort" :title="sortTitle" :aria-label="sortTitle" @click="toggleSort">
+                                <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
+                            </button>
+                            <button class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
+                                <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                                {{ seasonDownloadLabel }}
+                            </button>
+                        </div>
+                    </template>
+                </TablePagination>
                 <div class="episodeList">
                     <div v-for="episode in pagedEpisodes" :key="episode.pid" class="episodeRow">
-                        <img v-if="episode.thumbnail" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title" loading="lazy" @error="hideBrokenImage" />
-                        <div v-else class="episodeNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                        <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
+                        <div :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '']">
+                            <img
+                                v-if="episode.thumbnail" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
+                                loading="lazy" role="button" tabindex="0" @error="hideBrokenImage" @click="download(episode)" @keydown.enter="download(episode)"
+                            />
+                            <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="download(episode)" @keydown.enter="download(episode)">
+                                <font-awesome-icon :icon="['fas', 'tv']" />
+                            </div>
+                            <div class="overlay">
+                                <button v-if="canPlay" class="clickable" title="Play Video" @click="play(episode)">
+                                    <font-awesome-icon :icon="['fas', 'play']" />
+                                </button>
+                                <button class="clickable" title="Download" @click="download(episode)">
+                                    <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                                </button>
+                            </div>
+                            <QualityBadges :item="episode" class="thumbBadges" />
+                        </div>
                         <div class="episodeInfo">
                             <div class="episodeTitle">
                                 <span v-if="getSeriesEpisodeLabel(episode)" class="episodeLabel">{{ getSeriesEpisodeLabel(episode) }}</span>
                                 {{ episode.episodeTitle || episode.title }}
                             </div>
-                            <div v-if="episode.description" class="episodeDescription">{{ episode.description }}</div>
+                            <div
+                                v-if="episode.description"
+                                :ref="(el) => measureDescription(el, episode.pid)"
+                                :class="['episodeDescription', openDescriptions[episode.pid] ? 'open' : '', clampedDescriptions[episode.pid] ? 'clamped' : '']"
+                                @click="toggleDescription(episode.pid)"
+                            >
+                                {{ episode.description }}
+                            </div>
+                            <a
+                                v-if="clampedDescriptions[episode.pid] || openDescriptions[episode.pid]"
+                                class="descriptionToggle clickable"
+                                @click="toggleDescription(episode.pid)"
+                            >
+                                {{ openDescriptions[episode.pid] ? 'less' : '… more' }}
+                            </a>
                             <div class="episodeDetails">
                                 <span v-if="episode.runtime">{{ roundUpMinutes(episode.runtime) }} min</span>
                                 <span v-if="episode.firstBroadcast">{{ formatDate(episode.firstBroadcast) }}</span>
                             </div>
-                        </div>
-                        <div class="episodeActions">
-                            <button v-if="canPlay" class="clickable" title="Play Video" @click="play(episode)">
-                                <font-awesome-icon :icon="['fas', 'play']" />
-                            </button>
-                            <button class="clickable" title="Download" @click="download(episode)">
-                                <font-awesome-icon :icon="['fas', 'cloud-download']" />
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -120,19 +211,26 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, inject, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
-import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
+import QualityBadges from '@/components/common/QualityBadges.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
+import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
+import { batchVersionKey, initialVersionKey, offeredVersions, planDownloads, resolveEpisodeVersions } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
-import { useArrAppNames } from '@/lib/subscriptionArr';
+import { useQualityBadges } from '@/lib/qualityBadges';
+import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage, roundUpMinutes } from '@/lib/utils';
 
@@ -145,13 +243,17 @@ const selected = ref(0);
 const downloadingSeason = ref(false);
 
 const { canPlay, play, download } = useBrowseActions();
+const globalSettings = inject('globalSettings', ref({}));
 
 // Subscribing is per show: after the server climbs an episode to its brand, programme.pid is the
 // brand pid that subscriptions are keyed by.
 const { load: loadSubscriptions, findByPid, subscribe, unsubscribe, toggleArr } = useSubscriptions();
 const { loadAppNames, arrAppName } = useArrAppNames();
 const subscribing = ref(false);
-const subscription = computed(() => (programme.value ? findByPid(programme.value.pid) : undefined));
+// The show's record, whether iPlayarr downloads it or it is only held in Sonarr/Radarr (arrOnly).
+const entry = computed(() => (programme.value ? findByPid(programme.value.pid) : undefined));
+// "Subscribed" means iPlayarr itself downloads new episodes - not merely requested from Sonarr/Radarr.
+const subscription = computed(() => (entry.value && !entry.value.arrOnly ? entry.value : undefined));
 
 const toggleSubscription = async () => {
     subscribing.value = true;
@@ -164,6 +266,26 @@ const toggleSubscription = async () => {
             // Both of these put downloads in the queue straight away - show them.
             if (outcome === 'subscribed-latest' || outcome === 'subscribed-all') router.push('/queue');
         }
+    } finally {
+        subscribing.value = false;
+    }
+};
+
+const requesting = ref(false);
+const requestProgramme = async () => {
+    requesting.value = true;
+    try {
+        // Recorded as an arr-only subscription, so refresh the list to show it.
+        if (await requestFromArr(programme.value.title, programme.value.pid)) await loadSubscriptions();
+    } finally {
+        requesting.value = false;
+    }
+};
+
+const removeArrOnly = async () => {
+    subscribing.value = true;
+    try {
+        await unsubscribe(entry.value);
     } finally {
         subscribing.value = false;
     }
@@ -188,11 +310,54 @@ const newestFirst = (a, b) => {
     return (b.episode ?? -1) - (a.episode ?? -1);
 };
 
-const episodes = computed(() => [...(programme.value?.seasons[selected.value]?.episodes ?? [])].sort(newestFirst));
+// Newest first unless flipped with the sort button; the choice is remembered per browser (storage can
+// be unavailable, e.g. in a private window, so every access is guarded).
+const SORT_KEY = 'iplayarr.programmeOldestFirst';
+const readOldestFirst = () => {
+    try {
+        return localStorage.getItem(SORT_KEY) === 'true';
+    } catch {
+        return false;
+    }
+};
+const oldestFirst = ref(readOldestFirst());
+const episodes = computed(() =>
+    [...(programme.value?.seasons[selected.value]?.episodes ?? [])].sort(oldestFirst.value ? (a, b) => newestFirst(b, a) : newestFirst)
+);
 
 const {
     page: episodePage, pageSize: episodePageSize, pagedItems: pagedEpisodes,
 } = usePagination(episodes);
+
+const sortTitle = computed(() => (oldestFirst.value ? 'Oldest first - click for newest first' : 'Newest first - click for oldest first'));
+const toggleSort = () => {
+    oldestFirst.value = !oldestFirst.value;
+    episodePage.value = 1;
+    try {
+        localStorage.setItem(SORT_KEY, String(oldestFirst.value));
+    } catch {
+        // Not persisted - the toggle still works for this session.
+    }
+};
+const seasonDownloadLabel = computed(
+    () => `Download ${programme.value.seasons.length > 1 ? seasonLabel(programme.value.seasons[selected.value]) : 'all'} (${episodes.value.length})`
+);
+// Below this the pager fills the row, so the sort and series download sit on a row of their own.
+const isMobile = useIsMobile('(max-width: 600px)');
+
+// Episode descriptions are clamped to three lines; a "... more" link (or a tap on the text) opens the rest.
+const openDescriptions = reactive({});
+const clampedDescriptions = reactive({});
+const toggleDescription = (pid) => {
+    if (clampedDescriptions[pid] || openDescriptions[pid]) openDescriptions[pid] = !openDescriptions[pid];
+};
+// Called whenever the row renders: note whether the clamp is actually cutting text off. An opened
+// description keeps its flag, so the "less" link stays.
+const measureDescription = (el, pid) => {
+    if (!el || openDescriptions[pid]) return;
+    clampedDescriptions[pid] = el.scrollHeight > el.clientHeight + 1;
+};
+
 const selectSeason = (index) => {
     selected.value = index;
     episodePage.value = 1;
@@ -212,6 +377,9 @@ const mergeSeasons = (current, incoming) => {
     }
     return [...bySeries.values()].sort((a, b) => (a.series ?? Infinity) - (b.series ?? Infinity));
 };
+
+// Fields the server could not supply while the BBC's programme pages are down; shown as greyed placeholders.
+const isMissing = (field) => !!programme.value?.degraded && !!programme.value.missing?.includes(field);
 
 const posterUrl = computed(() => getThumbnailUrl(programme.value?.thumbnail));
 
@@ -237,13 +405,29 @@ const downloadAll = () => {
 
 const downloadBatch = async (batch, label) => {
     if (batch.length === 0) return;
-    if (!(await dialogService.confirm('Download', `Download ${batch.length} episodes of ${label}?`))) return;
+    // Which episodes have audio described / signed versions, so the choice (or the default) can use them.
+    batch = await resolveEpisodeVersions(batch);
+    const offered = offeredVersions(batch);
+    // What it will produce, and the combined size of the episodes whose runtime is known.
+    const sizes = batch.map((episode) => estimateSizeMb(globalSettings.value, { runtimeMinutes: episode.runtime }));
+    const totalMb = sizes.reduce((sum, size) => sum + (size ?? 0), 0);
+    const choice = await dialogService.confirmDownload(`Download ${batch.length} episodes of ${label}?`, {
+        count: batch.length,
+        totalMb: sizes.some((size) => size === undefined) ? undefined : totalMb,
+        versions: offered,
+        initialVersion: initialVersionKey(offered),
+    });
+    if (!choice) return;
+    const { media } = choice;
+    const versionKey = batchVersionKey(choice, offered);
+    // Only sent when it differs from the setting.
+    const override = media === defaultMediaMode(globalSettings.value) ? undefined : media;
 
     downloadingSeason.value = true;
     const failed = [];
-    for (const episode of batch) {
+    for (const { item: episode, version } of planDownloads(batch, versionKey)) {
         try {
-            const response = await ipFetch(`json-api/download?${buildDownloadQuery(toDownloadResult(episode))}`);
+            const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...toDownloadResult(episode), media: override, version })}`);
             if (!response.ok) failed.push(episode);
         } catch {
             failed.push(episode);
@@ -283,9 +467,52 @@ const loadRemainingPages = async (pid, first) => {
     }
 };
 
+// Audio described / signed badges: the server marks the episodes whose answer it already had; the rest are asked
+// for here in small batches in the background, and only when those badges are switched on.
+const { state: badgeState } = useQualityBadges();
+// Any of the HDR / UHD, AD / signed or subtitle badges is switched on (on touch they take the bottom right of an episode's thumbnail).
+const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles);
+const askedVersions = new Set();
+const resolveVersions = async () => {
+    const pid = route.params.pid;
+    if (!badgeState.versions || !programme.value) return;
+    const pending = programme.value.seasons
+        .flatMap((season) => season.episodes)
+        .filter((episode) => !episode.versionsChecked && !askedVersions.has(episode.pid))
+        .map((episode) => episode.pid);
+    for (let i = 0; i < pending.length; i += 10) {
+        const chunk = pending.slice(i, i + 10);
+        chunk.forEach((episodePid) => askedVersions.add(episodePid));
+        let found;
+        try {
+            found = await browseFetch(`versions?pids=${chunk.join(',')}`);
+        } catch {
+            chunk.forEach((episodePid) => askedVersions.delete(episodePid));
+            return;
+        }
+        if (route.params.pid !== pid || !programme.value) return;
+        programme.value = {
+            ...programme.value,
+            seasons: programme.value.seasons.map((season) => ({
+                ...season,
+                episodes: season.episodes.map((episode) =>
+                    found[episode.pid]
+                        ? { ...episode, versionsChecked: true, ...(found[episode.pid].length ? { versions: found[episode.pid] } : {}) }
+                        : episode
+                ),
+            })),
+        };
+    }
+};
+watch([loadedCount, () => route.params.pid, () => badgeState.versions], resolveVersions);
+
+// Bumped by Try again to load the same programme once more.
+const reloadKey = ref(0);
+const reload = () => reloadKey.value++;
+
 watch(
-    () => route.params.pid,
-    async (pid) => {
+    () => [route.params.pid, reloadKey.value],
+    async ([pid]) => {
         if (!pid) return;
         loading.value = true;
         loadingMore.value = false;
@@ -312,9 +539,33 @@ watch(
     },
     { immediate: true }
 );
+
+// On a phone the banner's "Download all" and the season bar's would sit a screen apart, doing the same thing.
+const duplicatesBannerDownload = computed(
+    () => programme.value?.seasons.length === 1 && (programme.value.kind !== 'episode' || !!subscription.value)
+);
 </script>
 
 <style lang="less" scoped>
+// A toolbar with no title above it sits flush between the nav bar and the banner: no page padding or
+// margin around it.
+.programmeHeader {
+    padding: 0;
+
+    :deep(.SettingsPageToolbar) {
+        margin: 0;
+    }
+
+    // This wrapper has no padding for the global phone rule's negative margins to cancel, so they would push
+    // the toolbar past both screen edges.
+    @media (max-width: @mobile-breakpoint) {
+        &.browsePage :deep(.SettingsPageToolbar) {
+            margin-left: 0;
+            margin-right: 0;
+        }
+    }
+}
+
 .programmeBanner {
     background-color: @nav-background-color;
     background-size: cover;
@@ -362,7 +613,42 @@ watch(
     }
 }
 
-// Blurred full-width backdrop with the artwork also shown as a poster beside the details.
+// Fields the BBC could not supply: greyed, dashed placeholders (white-on-artwork stays readable).
+.programmeBanner {
+    .missing {
+        opacity: 0.55;
+        border: 1px dashed rgba(255, 255, 255, 0.55);
+        background: transparent;
+        font-style: italic;
+    }
+
+    p.missing {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+
+    .poster.missing {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        background: rgba(255, 255, 255, 0.08);
+        font-style: normal;
+    }
+
+    p.degradedNote {
+        margin: 10px 0 0;
+        font-size: 13px;
+        opacity: 0.75;
+
+        svg {
+            margin-right: 6px;
+        }
+    }
+}
+
+// Blurred full-width backdrop with the artwork also shown as a 16:9 still beside the details.
 .programmeBanner {
     position: relative;
     overflow: hidden;
@@ -382,19 +668,21 @@ watch(
         align-items: flex-start;
         gap: 24px;
         background-color: rgba(0, 0, 0, 0.55);
+        // Over the artwork backdrop: fixed white, not the theme's text colour (dark in light mode).
+        color: #fff;
     }
 
     .poster {
-        flex: 0 0 150px;
-        width: 150px;
-        aspect-ratio: 2 / 3;
+        flex: 0 0 280px;
+        width: 280px;
+        aspect-ratio: 16 / 9;
         object-fit: cover;
         border-radius: 4px;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
 
         @media (max-width: @mobile-breakpoint) {
-            flex-basis: 90px;
-            width: 90px;
+            flex-basis: 130px;
+            width: 130px;
         }
     }
 
@@ -404,12 +692,94 @@ watch(
     }
 }
 
+.labelShort {
+    display: none;
+}
+
 .subscribeRow {
+    // Buttons keep their natural width; the gap is the same 10px between them in both directions.
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 10px;
+    gap: 10px;
     margin-top: 14px;
+
+    // Phone width: two columns share the full width; an odd button out spans the whole row.
+    @media (max-width: 600px) {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+
+        .labelLong {
+            display: none;
+        }
+
+        .labelShort {
+            display: inline;
+        }
+
+        > .subscribeButton {
+            padding: 9px 8px;
+            font-size: 14px;
+            text-align: center;
+
+            &:last-child:nth-child(odd) {
+                grid-column: 1 / -1;
+            }
+        }
+    }
+}
+
+// Phones: poster beside the title and pills, then the synopsis and buttons across the full width,
+// instead of everything squeezed into the narrow column right of the poster.
+@media (max-width: @mobile-breakpoint) {
+    .programmeBanner .programmeBannerContent {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        gap: 12px;
+        padding: 1rem;
+
+        &:not(.hasPoster) {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .poster {
+            width: 112px;
+            flex-basis: auto;
+        }
+
+        .programmeText {
+            display: contents;
+        }
+
+        .programmeHead {
+            min-width: 0;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .programmeMeta {
+            margin-bottom: 0;
+            gap: 6px;
+
+            .pill.grey,
+            .pill.channelPill {
+                font-size: 13px;
+            }
+        }
+
+        p,
+        .subscribeRow {
+            grid-column: 1 / -1;
+            margin: 0;
+        }
+
+        p {
+            font-size: 14px;
+        }
+    }
 }
 
 .subscribeButton {
@@ -431,6 +801,7 @@ watch(
     &.on {
         background-color: @brand-color;
         border-color: @brand-color;
+        color: @on-brand-color;
     }
 
     // Same size as the buttons, but a status label rather than something to press.
@@ -438,17 +809,56 @@ watch(
     &.arrChip:hover:not(:disabled) {
         background-color: @brand-color;
         border-color: @brand-color;
+        color: @on-brand-color;
         cursor: default;
         user-select: none;
     }
 }
 
+.episodeThumb {
+    cursor: pointer;
+}
+
 .seasonActions {
     display: flex;
-    align-items: center;
+    // Stretch (not centre) so the sort button is always exactly as tall as the download button.
+    align-items: stretch;
     justify-content: flex-end;
     gap: 14px;
     margin-bottom: 4px;
+
+    // Inside the pager's left-hand slot, beside the page controls.
+    &.inline {
+        margin-bottom: 0;
+        gap: 6px;
+    }
+
+    @media (max-width: 600px) {
+        justify-content: stretch;
+        gap: 6px;
+
+        .seasonDownload {
+            flex: 1;
+            padding: 9px 14px;
+        }
+    }
+
+    .seasonSort {
+        flex: 0 0 auto;
+        padding: 6px 12px;
+        border-radius: 4px;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+
+        &:hover {
+            background-color: @settings-button-hover-background-color;
+        }
+
+        @media (max-width: 600px) {
+            padding: 9px 14px;
+        }
+    }
 
     .loadingMore {
         color: @subtle-text-color;
@@ -465,6 +875,7 @@ watch(
         &:hover:not(:disabled) {
             background-color: @brand-color;
             border-color: @brand-color;
+            color: @on-brand-color;
         }
     }
 }
@@ -475,8 +886,15 @@ watch(
     gap: 6px;
     margin-bottom: 1rem;
 
+    // Every tab the same size: "S2" (or an icon for Specials / Episodes), full name on hover.
     .seasonTab {
-        padding: 6px 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 46px;
+        height: 36px;
+        padding: 0;
+        font-weight: 600;
         border-radius: 4px;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
@@ -489,6 +907,7 @@ watch(
         &.active {
             background-color: @brand-color;
             border-color: @brand-color;
+            color: @on-brand-color;
         }
     }
 }
@@ -500,19 +919,37 @@ watch(
     padding: 12px 0;
     border-bottom: 1px solid @toolbar-background-color;
 
+    .episodeThumbWrap {
+        position: relative;
+        flex: 0 0 240px;
+        width: 240px;
+
+        @media (max-width: @mobile-breakpoint) {
+            flex-basis: 200px;
+            width: 200px;
+        }
+
+        // Phones: the thumbnail runs the full width above the text.
+        @media (max-width: 600px) {
+            flex-basis: auto;
+            width: 100%;
+        }
+    }
+
     img,
     .episodeNoThumb {
-        flex: 0 0 160px;
-        width: 160px;
+        display: block;
+        width: 100%;
         aspect-ratio: 16 / 9;
         object-fit: cover;
         border-radius: 4px;
         background-color: @nav-background-color;
+    }
 
-        @media (max-width: @mobile-breakpoint) {
-            flex-basis: 100px;
-            width: 100px;
-        }
+    @media (max-width: 600px) {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
     }
 
     .episodeNoThumb {
@@ -534,6 +971,25 @@ watch(
             display: block;
             color: @subtle-text-color;
             font-size: 12px;
+        }
+
+        .descriptionToggle {
+            display: inline-block;
+            margin-top: 2px;
+            font-size: 12px;
+            color: @brand-color;
+        }
+
+        .episodeDescription.clamped,
+        .episodeDescription.open {
+            cursor: pointer;
+        }
+
+        .episodeDescription.open {
+            display: block;
+            overflow: visible;
+            -webkit-line-clamp: unset;
+            line-clamp: unset;
         }
 
         .episodeDescription {
@@ -559,22 +1015,35 @@ watch(
         }
     }
 
-    .episodeActions {
-        display: flex;
-        flex-shrink: 0;
-        gap: 8px;
+    // Same look as a programme card: bottom right, the subtitles icon in the corner; the buttons show on hover.
+    .thumbBadges {
+        position: absolute;
+        bottom: 6px;
+        right: 6px;
+    }
 
-        @media (max-width: @mobile-breakpoint) {
-            flex-direction: column;
-        }
+    .overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        border-radius: 4px;
+        background-color: rgba(0, 0, 0, 0.55);
+        opacity: 0;
+        transition: opacity 150ms;
+        // Only the buttons catch clicks; the rest of the thumbnail still opens the episode popup.
+        pointer-events: none;
 
         button {
+            pointer-events: auto;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 0;
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             border: 1px solid @settings-button-border-color;
             background-color: @settings-button-background-color;
@@ -583,6 +1052,45 @@ watch(
             &:hover {
                 background-color: @brand-color;
                 border-color: @brand-color;
+                color: @on-brand-color;
+            }
+        }
+    }
+
+    .episodeThumbWrap:hover .overlay,
+    .episodeThumbWrap:focus-within .overlay {
+        opacity: 1;
+    }
+
+    // Touch devices have no hover, so keep the buttons reachable, with the badges above them.
+    @media (hover: none) {
+        .overlay {
+            opacity: 1;
+            align-items: flex-end;
+            justify-content: flex-end;
+            padding: 6px;
+            background: none;
+
+            button {
+                width: 34px;
+                height: 34px;
+                opacity: 0.9;
+            }
+        }
+
+        .thumbBadges {
+            bottom: 46px;
+        }
+
+        // With badges switched on they keep the bottom right and the buttons go top left.
+        .episodeThumbWrap.badgesOn {
+            .overlay {
+                align-items: flex-start;
+                justify-content: flex-start;
+            }
+
+            .thumbBadges {
+                bottom: 6px;
             }
         }
     }

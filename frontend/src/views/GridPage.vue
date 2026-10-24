@@ -1,6 +1,17 @@
 <template>
     <div class="browsePage">
         <PageHeader :title="heading" />
+        <SettingsPageToolbar inline-filters>
+            <template v-if="items.length" #filters>
+                <span v-if="rails.length" class="gridFiltersTitle">All programmes</span>
+                <input v-model="textFilter" type="text" class="tableFilter" placeholder="Filter by title" />
+                <select v-if="channelOptions.length > 2" v-model="channelFilter" class="gridFilter">
+                    <option v-for="option in channelOptions" :key="option" :value="option">
+                        {{ option === 'All' ? 'All channels' : option }}
+                    </option>
+                </select>
+            </template>
+        </SettingsPageToolbar>
         <div v-if="isAtoZ" class="letterBar">
             <RouterLink
                 v-for="l in letters"
@@ -11,23 +22,14 @@
                 {{ l === '0' ? '0-9' : l.toUpperCase() }}
             </RouterLink>
         </div>
-        <InfoBar v-if="error" clazz="danger">{{ error }}</InfoBar>
-        <div v-if="items.length" class="gridFilters">
-            <span v-if="rails.length" class="gridFiltersTitle">All programmes</span>
-            <input v-model="textFilter" type="text" class="gridFilter" placeholder="Filter by title" />
-            <select v-if="channelOptions.length > 2" v-model="channelFilter" class="gridFilter">
-                <option v-for="option in channelOptions" :key="option" :value="option">
-                    {{ option === 'All' ? 'All channels' : option }}
-                </option>
-            </select>
-        </div>
+        <ErrorState v-if="error" :message="error" @retry="fetchAll" />
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
         <div v-if="pagedItems.length" class="browseGrid">
             <ProgrammeCard v-for="item in pagedItems" :key="item.pid" :item="item" />
         </div>
         <p v-else-if="items.length && !loadingAll">Nothing matches that filter.</p>
-        <LoadingIndicator v-if="loading" />
-        <p v-else-if="!error && items.length === 0">No programmes found.</p>
+        <SkeletonLoader v-if="loading" pagination :count="gridPageSize" />
+        <EmptyState v-else-if="!error && items.length === 0" icon="tv" title="No programmes found" hint="Nothing is listed here right now." />
         <p v-else-if="loadingAll" class="loadingMoreNote">Loading more ({{ items.length }} of {{ total ?? '…' }})&hellip;</p>
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
         <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
@@ -40,9 +42,11 @@ import { useRoute } from 'vue-router';
 
 import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
-import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch } from '@/lib/browse';
 import { usePagination } from '@/lib/usePagination';
@@ -168,44 +172,35 @@ watch(
 </script>
 
 <style lang="less" scoped>
-.gridFilters {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-    min-height: 44px;
-    padding: 6px 1rem;
-    margin: 0 0 1rem;
-    background-color: @toolbar-background-color;
+// The toolbar carries Back and the filters; keep a gap before the content.
+.browsePage :deep(.SettingsPageToolbar) {
+    margin-bottom: 1rem;
+}
 
+.gridFiltersTitle {
+    margin-right: 6px;
+    font-size: 14px;
+    color: @primary-text-color;
+}
+
+.gridFilter {
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 4px;
+    border: 1px solid @settings-button-border-color;
+    background-color: @settings-button-background-color;
+    color: @primary-text-color;
+}
+
+@media (max-width: @mobile-breakpoint) {
     .gridFiltersTitle {
-        margin-right: 6px;
-        font-size: 14px;
-        color: @primary-text-color;
+        display: none;
     }
 
     .gridFilter {
-        height: 32px;
-        padding: 0 10px;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-    }
-
-    @media (max-width: @mobile-breakpoint) {
-        flex-wrap: nowrap;
-        gap: 6px;
-
-        .gridFiltersTitle {
-            display: none;
-        }
-
-        .gridFilter {
-            flex: 1 1 0;
-            min-width: 0;
-            width: auto;
-        }
+        flex: 1 1 0;
+        min-width: 0;
+        width: auto;
     }
 }
 
@@ -239,6 +234,7 @@ watch(
         &.active {
             background-color: @brand-color;
             border-color: @brand-color;
+            color: @on-brand-color;
         }
     }
 }

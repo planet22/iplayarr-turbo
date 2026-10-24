@@ -3,10 +3,12 @@ import { Request, Response } from 'express';
 import { SpawnExecutable } from '../../types/GetIplayer/SpawnExecutable';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
+import { requestedQuality } from '../../utils/qualityContext';
 import { getStreamCacheDir } from '../../utils/Utils';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import AbstractStreamService from './AbstractStreamService';
+import { cached, resolveTtlMs } from './resolveCache';
 import { spawnCollectOutput } from './spawnWithTimeout';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
@@ -23,8 +25,18 @@ class YTDLPStreamService implements AbstractStreamService {
     // Uses a single combined format selector (unlike the download service's bestvideo+bestaudio
     // pair) since a proxy/redirect needs one fetchable URL, not two streams to merge locally.
     async #resolveUrl(pid: string, sessionId?: string): Promise<string> {
+        // The effective quality (a per-request ?quality= override, else the setting) is in the key so
+        // a different quality is never served the previous quality's URL.
+        const videoQuality = requestedQuality() ?? ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
+        const { url, resolution } = await cached(`yt-dlp:${pid}:${videoQuality}`, resolveTtlMs, () => this.#resolve(pid, videoQuality));
+        if (sessionId && resolution) {
+            streamSessionService.setResolution(sessionId, resolution);
+        }
+        return url;
+    }
+
+    async #resolve(pid: string, videoQuality: string): Promise<{ url: string; resolution?: string }> {
         const executable: SpawnExecutable = await this.#getExecutable();
-        const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
         const widthStr = qualityProfiles.find(({ id }) => id == videoQuality)?.quality;
         const width = widthStr ? parseInt(widthStr) : NaN;
 
@@ -50,10 +62,7 @@ class YTDLPStreamService implements AbstractStreamService {
         // reads an HLS master playlist, or get_iplayer, whose --streaminfo reports it directly).
         // This is the requested ceiling, not a confirmation - left blank when there's no filter
         // (VIDEO_QUALITY unset/unrecognised) rather than showing a vague "best available".
-        if (sessionId && !isNaN(width)) {
-            streamSessionService.setResolution(sessionId, `${width}`);
-        }
-        return url;
+        return { url, resolution: isNaN(width) ? undefined : `${width}` };
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {

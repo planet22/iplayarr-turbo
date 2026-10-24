@@ -1,15 +1,18 @@
 import fs from 'fs';
 import path from 'path';
 
-import { BrowseChannels } from '../constants/BrowseChannels';
-import { isLiveChannel } from '../constants/LiveChannels';
+import { hasCustomLogo } from '../constants/CustomChannels';
+import { allLiveChannels, isLiveChannel, liveChannelInfo } from '../constants/LiveChannels';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { LiveSubscription } from '../types/LiveSubscription';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { buildLiveChannelNfo } from '../utils/nfoBuilder';
+import { sanitizeFileName } from '../utils/pathSafety';
 import { createStrmContent } from '../utils/Utils';
 import browseService from './browseService';
+import channelLogoService from './channelLogoService';
 import configService from './configService';
+import liveChannelService from './liveChannelService';
 import loggingService from './loggingService';
 
 const storage: QueuedStorage = new QueuedStorage();
@@ -28,10 +31,16 @@ class LiveSubscriptionService {
         return (await storage.getItem(STORAGE_KEY)) || [];
     }
 
-    // With each channel's logo (the same one the Channels tiles use) attached for display.
+    // With each channel's logo (the same one the Channels tiles use) attached for display, in the order
+    // set on the Channels page.
     async list(): Promise<LiveSubscription[]> {
-        return (await this.#stored()).map((s) => {
-            const masterBrand = BrowseChannels.find(({ id }) => id === s.channelId)?.masterBrand;
+        const order = await liveChannelService.order();
+        const stored = (await this.#stored()).sort((a, b) => order.indexOf(a.channelId) - order.indexOf(b.channelId));
+        return stored.map((s) => {
+            const masterBrand = liveChannelInfo(s.channelId)?.masterBrand;
+            if (hasCustomLogo(s.channelId)) {
+                return { ...s, logo: `json-api/live-channels/logo/${s.channelId}?v=${liveChannelService.logoVersion}` };
+            }
             return { ...s, logo: masterBrand ? `json-api/browse/channel-logo/${masterBrand}.svg` : undefined };
         });
     }
@@ -55,7 +64,7 @@ class LiveSubscriptionService {
     }
 
     #channel(channelId: string): { id: string; title: string } {
-        const channel = BrowseChannels.find(({ id }) => id === channelId);
+        const channel = liveChannelInfo(channelId);
         if (!isLiveChannel(channelId) || !channel) {
             throw new LiveSubscriptionError(`${channelId} is not a live channel`);
         }
@@ -87,7 +96,10 @@ class LiveSubscriptionService {
     // Jellyfin cannot use the SVG logo the UI shows, so rasterise it onto the logo's own background
     // colour. sharp is loaded lazily so a missing native binary only costs the poster.
     async #poster(channelId: string): Promise<Buffer | undefined> {
-        const masterBrand = BrowseChannels.find(({ id }) => id === channelId)?.masterBrand;
+        if (hasCustomLogo(channelId)) {
+            return channelLogoService.render(channelId, 1000, 1000, 'jpeg');
+        }
+        const masterBrand = liveChannelInfo(channelId)?.masterBrand;
         const svg = masterBrand ? await browseService.channelLogo(masterBrand) : undefined;
         if (!svg) {
             return undefined;
@@ -113,8 +125,12 @@ class LiveSubscriptionService {
     // Idempotent: an existing subscription just has its file rewritten.
     async subscribe(channelId: string): Promise<LiveSubscription> {
         const { title } = this.#channel(channelId);
+        if (!(await liveChannelService.isEnabled(channelId))) {
+            throw new LiveSubscriptionError(`${title} is disabled in Settings > Live Channels`);
+        }
         const dir = await this.#directory();
-        const file = `${title}.strm`;
+        // Built-in titles are plain; a renamed or custom channel's is the user's, so it is made safe as a file name.
+        const file = `${sanitizeFileName(title) || 'channel'}.strm`;
         await this.#write(dir, file, channelId);
         const all = await this.#stored();
         const existing = all.find((s) => s.channelId === channelId);
@@ -128,7 +144,8 @@ class LiveSubscriptionService {
 
     async subscribeAll(): Promise<LiveSubscription[]> {
         const added: LiveSubscription[] = [];
-        for (const { id } of BrowseChannels.filter(({ id }) => isLiveChannel(id))) {
+        for (const { id } of allLiveChannels()) {
+            if (!(await liveChannelService.isEnabled(id))) continue;
             added.push(await this.subscribe(id));
         }
         return added;

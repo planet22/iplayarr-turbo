@@ -1,18 +1,22 @@
 <template>
     <IPlayarrModal :title="`Segment activity - ${pid}`" :show-close="true" close-label="Close">
-        <div class="segmentDialogHeader">
-            <div class="segmentDialogSummary">
-                {{ delivered.length }} / {{ total || '?' }} segments delivered ({{ pct }}%)
-                <span v-if="currentSegmentIndex != null" class="current">
-                    Last requested segment {{ currentSegmentIndex }}
-                </span>
-                <span v-if="allDelivered" class="allDone">All delivered</span>
-                <span v-if="bytesTransferred"> - {{ formatStorageSize(bytesTransferred / 1048576) }} transferred</span>
+        <div class="segmentStats">
+            <div class="segmentStat">
+                <span class="statValue">{{ delivered.length }} <span class="statOf">/ {{ total || '?' }}</span></span>
+                <span class="statLabel">segments delivered</span>
             </div>
-            <button type="button" class="expandButton clickable" @click="expandedView = !expandedView">
-                <font-awesome-icon :icon="['fas', expandedView ? 'compress' : 'expand']" />
-                {{ expandedView ? 'Collapse' : 'Expand' }}
-            </button>
+            <div class="segmentStat">
+                <span class="statValue">{{ pct }}%</span>
+                <span class="statLabel">{{ allDelivered ? 'all delivered' : 'of the programme' }}</span>
+            </div>
+            <div v-if="currentSegmentIndex != null" class="segmentStat">
+                <span class="statValue current">{{ currentSegmentIndex }}</span>
+                <span class="statLabel">last requested</span>
+            </div>
+            <div v-if="bytesTransferred" class="segmentStat">
+                <span class="statValue">{{ formatStorageSize(bytesTransferred / 1048576) }}</span>
+                <span class="statLabel">transferred</span>
+            </div>
         </div>
         <div
             class="segmentGrid"
@@ -25,9 +29,13 @@ v-for="n in total" :key="n" :class="['segCell', cellClass(n - 1)]"
             >{{ expandedView ? n - 1 : '' }}</span>
         </div>
         <div class="segmentDialogLegend">
-            <span class="segCell delivered" /> Delivered
-            <span class="segCell" /> Not yet requested
-            <span class="segCell current" /> Most recent request
+            <span class="legendItem"><span class="segCell delivered" /> Delivered</span>
+            <span class="legendItem"><span class="segCell" /> Not yet requested</span>
+            <span class="legendItem"><span class="segCell current" /> Most recent request</span>
+            <button type="button" class="expandButton clickable" @click="expandedView = !expandedView">
+                <font-awesome-icon :icon="['fas', expandedView ? 'compress' : 'expand']" />
+                {{ expandedView ? 'Collapse' : 'Expand' }}
+            </button>
         </div>
     </IPlayarrModal>
 </template>
@@ -96,30 +104,42 @@ function cellTitle(index) {
 </script>
 
 <style lang="less">
-.segmentDialogHeader {
+// The headline numbers as small stat blocks that wrap as a group, rather than one sentence that broke mid-phrase.
+.segmentStats {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
     flex-wrap: wrap;
+    gap: 8px 22px;
     margin-bottom: 0.75rem;
 }
 
-.segmentDialogSummary {
-    font-weight: bold;
+.segmentStat {
+    display: flex;
+    flex-direction: column;
 
-    .current {
-        margin-left: 8px;
-        color: @primary-color;
+    .statValue {
+        font-size: 18px;
+        font-weight: bold;
+        font-variant-numeric: tabular-nums;
+
+        &.current {
+            color: @primary-color;
+        }
     }
 
-    .allDone {
-        margin-left: 8px;
-        color: @success-color;
+    .statOf {
+        font-size: 13px;
+        font-weight: normal;
+        color: @subtle-text-color;
+    }
+
+    .statLabel {
+        font-size: 11px;
+        color: @subtle-text-color;
     }
 }
 
 .expandButton {
+    margin-left: auto;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -137,14 +157,22 @@ function cellTitle(index) {
 
 .segmentDialogLegend {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    gap: 6px 14px;
     margin-top: 0.75rem;
+    margin-bottom: 1rem;
     font-size: 12px;
     color: @subtle-text-color;
 
-    .segCell {
-        margin-left: 8px;
+    .legendItem {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+    }
+
+    .legendItem .segCell {
         width: 10px;
         height: 10px;
     }
@@ -153,7 +181,11 @@ function cellTitle(index) {
 .segmentGrid {
     display: grid;
     gap: 3px;
-    max-height: 320px;
+    // As tall as the screen allows (phones are full screen, so there is plenty), scrolling inside only when it must.
+    // On a phone the grid takes everything between the numbers and the buttons; larger screens keep a cap.
+    max-height: calc(100vh - 300px);
+    max-height: calc(100dvh - 300px);
+    padding-bottom: 1px;
     overflow-y: auto;
     overflow-x: hidden;
     justify-content: start;
@@ -165,9 +197,10 @@ function cellTitle(index) {
     // clip real columns off the right edge. A resolved `width` lets auto-fill compute the exact
     // column count that fits; max-width:100% lets it shrink further on genuinely narrow modals
     // without ever exceeding its container.
-    @media (min-width: @mobile-breakpoint) {
+    @media (min-width: @desktop-breakpoint) {
         width: 650px;
         max-width: 100%;
+        max-height: clamp(220px, calc(100vh - 360px), 640px);
     }
 
     &.expanded {

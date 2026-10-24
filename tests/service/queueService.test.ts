@@ -117,6 +117,64 @@ describe('queueService', () => {
         });
     });
 
+    describe('jobId', () => {
+        it('gives each queued download its own job id', () => {
+            queueService.addToQueue('job1', 'Job One', VideoType.TV);
+            queueService.addToQueue('job2', 'Job Two', VideoType.TV);
+
+            const first = queueService.getFromQueue('job1')?.jobId;
+            const second = queueService.getFromQueue('job2')?.jobId;
+            expect(first).toEqual(expect.any(String));
+            expect(second).toEqual(expect.any(String));
+            expect(first).not.toBe(second);
+        });
+    });
+
+    describe('several downloads of one programme', () => {
+        const queueTwo = () => {
+            queueService.addToQueue('multi', 'Multi 720p', VideoType.TV);
+            queueService.addToQueue('multi', 'Multi 396p', VideoType.TV);
+            const [first, second] = queueService.getQueue().filter(({ pid }) => pid === 'multi');
+            return { first, second };
+        };
+
+        it('looks up, updates and removes one download by its job id', () => {
+            const { first, second } = queueTwo();
+            expect(queueService.getFromQueue('multi', second.jobId)).toBe(second);
+
+            queueService.updateQueue('multi', { progress: 40 }, second.jobId);
+            expect(second.details?.progress).toBe(40);
+            expect(first.details?.progress).toBeUndefined();
+
+            queueService.removeFromQueue('multi', first.jobId);
+            expect(queueService.getFromQueue('multi', first.jobId)).toBeUndefined();
+            expect(queueService.getFromQueue('multi', second.jobId)).toBe(second);
+            queueService.removeFromQueue('multi', second.jobId);
+        });
+
+        it('cancels only the named download, killing only its process', () => {
+            const mockSpawn = spawn as jest.Mock;
+            mockSpawn.mockClear();
+            const { first, second } = queueTwo();
+            first.process = { pid: 111 } as any;
+            second.process = { pid: 222 } as any;
+
+            queueService.cancelItem('multi', false, second.jobId);
+
+            expect(mockSpawn).toHaveBeenCalledTimes(1);
+            expect(mockSpawn).toHaveBeenCalledWith('kill', ['-9', '222']);
+            expect(queueService.getFromQueue('multi', first.jobId)).toBe(first);
+            queueService.removeFromQueue('multi', first.jobId);
+        });
+
+        it('treats a bare pid as every download of the programme (what Sonarr can name)', () => {
+            const { first, second } = queueTwo();
+            queueService.removeFromQueue('multi');
+            expect(queueService.getFromQueue('multi', first.jobId)).toBeUndefined();
+            expect(queueService.getFromQueue('multi', second.jobId)).toBeUndefined();
+        });
+    });
+
     describe('updateQueue', () => {
         it('updates a queue item\'s details', () => {
             queueService.addToQueue('456', 'Another NZB', VideoType.MOVIE);
@@ -152,7 +210,7 @@ describe('queueService', () => {
             expect(videoEventService.record).toHaveBeenCalledWith(
                 VideoEventType.CANCELLED,
                 'Cancelled "Kill NZB"',
-                { pid: 'killme' }
+                { pid: 'killme', jobId: expect.any(String) }
             );
         });
 

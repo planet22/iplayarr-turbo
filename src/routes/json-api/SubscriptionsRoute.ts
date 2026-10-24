@@ -12,7 +12,7 @@ router.get('/', async (_, res: Response) => {
 });
 
 router.post('/', async (req: Request, res: Response) => {
-    const { pid, downloadLatest, downloadAll, arrOnly } = req.body ?? {};
+    const { pid, downloadLatest, downloadAll, arrOnly, versions } = req.body ?? {};
     if (typeof pid !== 'string' || !PID_REGEX.test(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A valid pid is required' } as ApiResponse);
         return;
@@ -23,6 +23,7 @@ router.post('/', async (req: Request, res: Response) => {
                 downloadLatest: downloadLatest === true,
                 downloadAll: downloadAll === true,
                 ...(arrOnly === true ? { arrOnly: true } : {}),
+                ...(Array.isArray(versions) ? { versions: versions.filter((v) => typeof v === 'string') } : {}),
             })
         );
     } catch (error: any) {
@@ -46,6 +47,25 @@ router.post('/:id/check', async (req: Request, res: Response) => {
         return;
     }
     res.json(result);
+});
+
+router.put('/:id/versions', async (req: Request, res: Response) => {
+    const { versions } = req.body ?? {};
+    if (!Array.isArray(versions)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'versions must be a list' } as ApiResponse);
+        return;
+    }
+    try {
+        const updated = await subscriptionService.setVersions(req.params.id as string, versions.filter((v) => typeof v === 'string'));
+        if (updated) res.json(updated);
+        else res.status(404).json({ error: ApiError.INVALID_INPUT, message: 'Subscription not found' } as ApiResponse);
+    } catch (error: any) {
+        const known = error instanceof SubscriptionError;
+        res.status(known ? 400 : 500).json({
+            error: known ? ApiError.INVALID_INPUT : ApiError.INTERNAL_ERROR,
+            message: error?.message || 'Unable to update versions',
+        } as ApiResponse);
+    }
 });
 
 router.delete('/:id', async (req: Request, res: Response) => {

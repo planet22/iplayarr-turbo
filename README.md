@@ -37,28 +37,30 @@ Log in with that, then set your own under **Settings → Authentication**. It is
 Other things you will notice after upgrading (details in [docs/SECURITY.md](docs/SECURITY.md)):
 
 - Everyone is signed out once (the login-cookie secret is now generated instead of a built-in default).
-- Your stored credentials (Sonarr/Radarr/Jellyfin API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) are **encrypted in Redis** with a key kept outside Redis — `secrets.key` in your `/data` (cache) volume, or `SECRETS_KEY` if you set it. **Back that key up with your Redis data.** Without it, stored keys can't be read after a restore.
+- Your stored credentials (Sonarr/Radarr/Jellyfin API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) are **encrypted in the database** with a key kept outside it — `secrets.key` in your `/data` (cache) volume, or `SECRETS_KEY` if you set it. **Back that key up with your `/config` data.** Without it, stored keys can't be read after a restore.
 - The Apps and Settings pages show saved keys/passwords as `********`; leave them as they are to keep the saved value.
 - After 10 wrong logins from one address you are locked out for 15 minutes.
 - The UI can't be embedded in other sites by default; set `ALLOW_EMBEDDING=true` if you embed it in a dashboard.
+- Behind a reverse proxy that keeps a URL prefix (like Sonarr's URL Base)? Set `BASE_PATH=/iplayarr` and the UI, API and websocket are all served under it. The container healthcheck (`/ping`) stays unprefixed.
 - With login disabled (`AUTH_TYPE=none`) the executable-related settings (`GET_IPLAYER_EXEC`, `YTDLP_EXEC`, additional download parameters) can't be changed from the UI; set them as environment variables.
 
 ## 📚 Further documentation
 
 This README covers the basics. For more detail, see `docs/`:
 
-- [CONFIG.md](docs/CONFIG.md) / [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) — full settings reference
+- [CONFIG.md](docs/CONFIG.md) / [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) — full settings reference, audio described / signed versions, caches and scheduled tasks
 - [INSTALLATION.md](docs/INSTALLATION.md) — Docker deployment, volumes, PUID/PGID, updating
 - [AUTHENTICATION.md](docs/AUTHENTICATION.md) — auth types, initial password, upgrading, password reset, OIDC
 - [SECURITY.md](docs/SECURITY.md) — security review, what was hardened, credential encryption, residual risks
-- [REDIS.md](docs/REDIS.md) — what's stored in Redis, backup/restore
+- [DATABASE.md](docs/DATABASE.md) — what's stored in the SQLite database, backup/restore, upgrading from Redis
 - [SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) — how the dual-protocol trick works, troubleshooting a failed Test
 - [STREAMING.md](docs/STREAMING.md) and [LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) — `.strm` mode and Jellyfin-style library layout
 - [GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md) — from a running container to watching and downloading BBC programmes
-- [BROWSE.md](docs/BROWSE.md) — Discover, Channels, Categories, A to Z, type-ahead search
+- [BROWSE.md](docs/BROWSE.md) — Discover, Channels (arrange, optional channels), Categories, A to Z, type-ahead search
 - [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show, link shows to Sonarr/Radarr, live channels
 - [WATCHDOG.md](docs/WATCHDOG.md) — daily check that `.strm` links still resolve on BBC
-- [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI
+- [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI, quick find (Ctrl+K)
+- [THEMING.md](docs/THEMING.md) — colour schemes and light/dark mode
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common issues
 - [DEVELOPMENT.md](docs/DEVELOPMENT.md) — contributor setup, testing, linting
 - [media-servers/](docs/media-servers/) — Jellyfin, Plex, Emby specifics
@@ -203,6 +205,7 @@ There's a few more optional settings too:
 | STREAM_CACHE_DIR               | Where temporary files are stored while streaming. Defaults to a temp folder                                                                                                                                                                                                                                                                                                                |
 | STREAM_NATIVE_ADAPTIVE         | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to false                                                                                                                                                                                                                                                                 |
 | STREAM_NATIVE_HQ_PROBE         | With STREAM_CLIENT=NATIVE, verify real stream quality before playing (adds a short delay). Defaults to false                                                                                                                                                                                                                                                                               |
+| STREAM_SUBTITLES               | With STREAM_CLIENT=NATIVE and STREAM_MODE=direct, offer the BBC's captions as an English subtitle track on native streams, on-demand and live. Off by default. See [docs/STREAMING.md](docs/STREAMING.md#subtitles) |
 | STREAM_NATIVE_EXPERIMENTAL_FHD | With STREAM_CLIENT=NATIVE, try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to true                                                                                                                                                                                                                                                                         |
 | THUMBNAIL_CACHE_DIR            | Where cached BBC episode thumbnails are stored                                                                                                                                                                                                                                                                                                                                             |
 | THUMBNAIL_RETENTION_DAYS       | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                                      |
@@ -282,23 +285,16 @@ To run iPlayarr Turbo locally for development:
 ### Prerequisites
 
 - Node.js (see `.node-version` for current version)
-- Docker (for local dev instance of Redis)
 
 ### Installation
 
 1. Install dependencies for both backend and frontend:
 
 ```bash
-npm run install:both
+npm install
 ```
 
-2. Start Redis using Docker (or see Redis section below to use another instance):
-
-```bash
-npm run serve:redis
-```
-
-3. Start the development server (runs backend and frontend concurrently):
+2. Start the development server (runs backend and frontend concurrently):
 
 ```bash
 npm run dev
@@ -320,15 +316,8 @@ The application will be available at:
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for testing a single file/test name, linting/prettier fix scripts, the module-alias note, and where to make changes architecturally.
 
-## Redis
+## Database
 
-iPlayarr Turbo uses Redis for storage. This is built into the container and **doesn't require any additional setup**, but if you would like to use a standalone redis instance, set the following settings:
+iPlayarr Turbo stores everything in a single SQLite file (`/config/iplayarr.db` in the container) via Prisma. There is nothing to set up and no extra service to run. Keep your `/config` mount and you keep your settings.
 
-- REDIS_HOST
-- REDIS_PORT
-- REDIS_PASSWORD (optional)
-- REDIS_SSL (optionally 'true')
-
-If these are all set, it will not start the bundled version of Redis.
-
-See [docs/REDIS.md](docs/REDIS.md) for what's actually stored in Redis and backup/restore notes.
+Upgrading from a version that used Redis? Your data is imported automatically on first start. See [docs/DATABASE.md](docs/DATABASE.md) for details, what's stored and backup/restore notes.

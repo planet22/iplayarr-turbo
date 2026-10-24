@@ -1,51 +1,65 @@
 <template>
-    <div class="inner-content scroll-x">
+    <div class="inner-content scroll-x streamingPage">
         <PageHeader title="Active Streams" />
-        <table class="dataTable streamsTable responsive-table">
+        <div class="viewToggleRow">
+            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
+        </div>
+        <div v-if="cardView" class="cardList streamCards">
+            <StreamCard
+                v-for="session in streams.active"
+                :key="session.id"
+                :session="session"
+                :history="false"
+                :thumbnail="thumbnailFor(session)"
+                :title="session.title ?? detailsFor(session.pid)?.title ?? session.pid"
+                :subtitle="[channelLabel(detailsFor(session.pid)?.channel), seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ')"
+                :mode="modeLabel(session)"
+                :client-ip="formatClientIp(session.clientIp)"
+                :started="formatDate(session.startedAt)"
+                :duration="formatDuration(session.startedAt, null)"
+                :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
+                :now="now"
+                :stopping="stopping.has(session.id)"
+                @info="openInfo(session)"
+                @stop="stopStream(session)"
+                @segments="openSegments(session)"
+            />
+            <div v-if="streams.active.length == 0" class="empty">No streams currently playing</div>
+        </div>
+        <div v-else class="tableScroll"><table class="dataTable streamsTable">
+            <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
             <colgroup>
-                <col style="width: 70px" />
-                <!-- A fixed px width, not a bare flexible <col/> - under table-layout:fixed a
-                     column with no specified width gets whatever's left after every other column
-                     claims its share, which can be 0 (and was: invisible, unclickable title) once
-                     enough ch-sized columns are added up. Fixed like every other column instead,
-                     so it can never collapse and both tables size it identically. -->
-                <col style="width: 200px" />
-                <!-- ch (not px): sized to the actual text/chip content (e.g. "Full-HD (1080p)",
-                     "::ffff:172.19.0.3") so it doesn't clip whenever real values run longer than
-                     a guessed pixel width - see the equivalent note on QueueTable.vue. Mode/Client
-                     IP/Started widths are shared with the history table below so columns that
-                     exist in both line up; Started has no value here (a running stream has no end
-                     to pair it with - Duration already covers "how long"), but keeps its column so
-                     Duration/Transferred/Segments still land under the same columns as history. -->
-                <col style="width: 18ch" />
-                <col style="width: 10ch" />
-                <col style="width: 6ch" />
-                <col style="width: 6ch" />
-                <col style="width: 18ch" />
-                <col style="width: 11ch" />
-                <col style="width: 20ch" />
-                <col style="width: 26ch" />
-                <col style="width: 10ch" />
-                <col style="width: 13ch" />
-                <col style="width: 110px" />
                 <col style="width: 64px" />
+                <col style="width: 170px" />
+                <col style="width: 94px" />
+                <col style="width: 50px" />
+                <col style="width: 50px" />
+                <col style="width: 44px" />
+                <col style="width: 44px" />
+                <col class="hideLg" style="width: 110px" />
+                <col style="width: 76px" />
+                <col style="width: 165px" />
+                <col style="width: 90px" />
+                <col style="width: 150px" />
+                <col style="width: 146px" />
+                <col style="width: 60px" />
             </colgroup>
             <thead>
                 <tr>
                     <th />
                     <th>Video</th>
-                    <th>Mode</th>
+                    <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
                     <th class="chipCol" title="Native FHD upgrade">FHD</th>
-                    <th class="chipCol" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
+                    <th class="chipCol" title="Native subtitles (on-demand and live)">Subs</th>
+                    <th class="chipCol hideLg" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
-                    <th>Client IP</th>
-                    <th />
-                    <th>Duration</th>
-                    <th>Transferred</th>
+                    <th>Client / Started</th>
+                    <th class="numCol">Duration / Size</th>
+                    <th class="numCol" title="Throughput over the last minute, and the rate right now (finished streams: their final minute, and the session average)">Rate</th>
                     <th>Segments</th>
-                    <th>Action</th>
+                    <th class="centerCol">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -61,25 +75,32 @@
                         />
                         <div v-else class="thumbnail-placeholder"></div>
                     </td>
-                    <td class="text">
+                    <td class="text videoCol">
                         <a class="clickable" @click="openInfo(session)">
                             {{ session.title ?? detailsFor(session.pid)?.title ?? session.pid }}
                         </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
-                            {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
+                            {{ [channelLabel(detailsFor(session.pid)?.channel), seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
-                    <td data-title="Mode">
+                    <td class="chipCol" data-title="Mode">
                         <span class="pill">{{ modeLabel(session) }}</span>
                     </td>
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td data-title="Client IP">{{ formatClientIp(session.clientIp) }}</td>
-                    <td />
-                    <td data-title="Duration">{{ formatDuration(session.startedAt) }}</td>
-                    <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
+                    <td data-title="Client / Started">
+                        <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
+                        <div class="subtle">{{ formatDate(session.startedAt) }}</div>
+                    </td>
+                    <td class="numCol" data-title="Duration / Size">
+                        <div>{{ formatDuration(session.startedAt, null) }}</div>
+                        <div class="subtle">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</div>
+                    </td>
+                    <td class="numCol" data-title="Rate">
+                        <ThroughputSpark :throughput="session.throughput" :now="now" :bytes-transferred="session.bytesTransferred ?? 0" />
+                    </td>
                     <td data-title="Segments">
                         <span v-if="session.live" class="liveBadge"><span class="liveDot" />Live</span>
                         <SegmentActivityStrip
@@ -87,6 +108,9 @@
                             :total="session.totalSegments"
                             :delivered="session.deliveredSegments ?? []"
                             :current-segment-index="session.currentSegmentIndex ?? null"
+                            :cell-size="3"
+                            :max-cols="40"
+                            :max-rows="6"
                             @click="openSegments(session)"
                         />
                     </td>
@@ -104,44 +128,65 @@
                     <td colspan="14" class="empty">No streams currently playing</td>
                 </tr>
             </tbody>
-        </table>
+        </table></div>
 
         <PageHeader title="Stream History" />
         <SettingsPageToolbar :icons="['delete']" delete-label="Clear stream history" @delete-queue-item="clearHistory" />
         <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
-        <table class="dataTable streamsTable responsive-table">
+        <div v-if="cardView" class="cardList streamCards">
+            <StreamCard
+                v-for="session in pagedHistory"
+                :key="session.id"
+                :session="session"
+                :history="true"
+                :thumbnail="thumbnailFor(session)"
+                :title="session.title ?? detailsFor(session.pid)?.title ?? session.pid"
+                :subtitle="[channelLabel(detailsFor(session.pid)?.channel), seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ')"
+                :mode="modeLabel(session)"
+                :client-ip="formatClientIp(session.clientIp)"
+                :started="formatDate(session.startedAt)"
+                :duration="formatDuration(session.startedAt, session.endedAt)"
+                :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
+                :now="now"
+                :stopping="stopping.has(session.id)"
+                @info="openInfo(session)"
+                @stop="stopStream(session)"
+                @segments="openSegments(session)"
+            />
+            <div v-if="reversedHistory.length == 0" class="empty">No streaming history yet</div>
+        </div>
+        <div v-else class="tableScroll"><table class="dataTable streamsTable">
+            <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
             <colgroup>
-                <col style="width: 70px" />
-                <col style="width: 200px" />
-                <col style="width: 18ch" />
-                <col style="width: 10ch" />
-                <col style="width: 6ch" />
-                <col style="width: 6ch" />
-                <col style="width: 18ch" />
-                <col style="width: 11ch" />
-                <col style="width: 20ch" />
-                <col style="width: 26ch" />
-                <col style="width: 10ch" />
-                <col style="width: 13ch" />
-                <col style="width: 110px" />
-                <!-- No per-row action here (nothing to stop on a finished stream) - kept so this
-                     column still lines up under the active-streams table's Action column. -->
                 <col style="width: 64px" />
+                <col style="width: 170px" />
+                <col style="width: 94px" />
+                <col style="width: 50px" />
+                <col style="width: 50px" />
+                <col style="width: 44px" />
+                <col style="width: 44px" />
+                <col class="hideLg" style="width: 110px" />
+                <col style="width: 76px" />
+                <col style="width: 165px" />
+                <col style="width: 90px" />
+                <col style="width: 150px" />
+                <col style="width: 146px" />
+                <col style="width: 60px" />
             </colgroup>
             <thead>
                 <tr>
                     <th />
                     <th>Video</th>
-                    <th>Mode</th>
+                    <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
                     <th class="chipCol" title="Native FHD upgrade">FHD</th>
-                    <th class="chipCol" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
+                    <th class="chipCol" title="Native subtitles (on-demand and live)">Subs</th>
+                    <th class="chipCol hideLg" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
-                    <th>Client IP</th>
-                    <th>Started</th>
-                    <th>Duration</th>
-                    <th>Transferred</th>
+                    <th>Client / Started</th>
+                    <th class="numCol">Duration / Size</th>
+                    <th class="numCol" title="Throughput over the last minute, and the rate right now (finished streams: their final minute, and the session average)">Rate</th>
                     <th>Segments</th>
                     <th />
                 </tr>
@@ -159,32 +204,48 @@
                         />
                         <div v-else class="thumbnail-placeholder"></div>
                     </td>
-                    <td class="text">
+                    <td class="text videoCol">
                         <a class="clickable" @click="openInfo(session)">
                             {{ session.title ?? detailsFor(session.pid)?.title ?? session.pid }}
                         </a>
                         <div v-if="detailsFor(session.pid)?.channel || seriesEpisodeLabel(session.pid)" class="subtle">
-                            {{ [detailsFor(session.pid)?.channel, seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
+                            {{ [channelLabel(detailsFor(session.pid)?.channel), seriesEpisodeLabel(session.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
-                    <td data-title="Mode">
+                    <td class="chipCol" data-title="Mode">
                         <span class="pill">{{ modeLabel(session) }}</span>
                     </td>
                     <SettingsChips :settings="session.settings" />
                     <td class="chipCol" data-title="Res">
                         <span v-if="session.resolution" class="pill grey">{{ session.resolution }}</span>
                     </td>
-                    <td data-title="Client IP">{{ formatClientIp(session.clientIp) }}</td>
-                    <td data-title="Started">{{ formatDate(session.startedAt) }}</td>
-                    <td data-title="Duration">{{ formatDuration(session.startedAt, session.endedAt) }}</td>
-                    <td data-title="Transferred">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</td>
+                    <td data-title="Client / Started">
+                        <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
+                        <div class="subtle">{{ formatDate(session.startedAt) }}</div>
+                    </td>
+                    <td class="numCol" data-title="Duration / Size">
+                        <div>{{ formatDuration(session.startedAt, session.endedAt) }}</div>
+                        <div class="subtle">{{ session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : '' }}</div>
+                    </td>
+                    <td class="numCol" data-title="Rate">
+                        <ThroughputSpark
+                            :throughput="session.throughput"
+                            :now="now"
+                            :ended-at="session.endedAt"
+                            :started-at="session.startedAt"
+                            :bytes-transferred="session.bytesTransferred ?? 0"
+                        />
+                    </td>
                     <td data-title="Segments">
-                        <span v-if="session.live" class="liveBadge">Live</span>
+                        <!-- Live streams have no segment total to show once they've ended - left blank. -->
                         <SegmentActivityStrip
-                            v-else-if="session.totalSegments"
+                            v-if="!session.live && session.totalSegments"
                             :total="session.totalSegments"
                             :delivered="session.deliveredSegments ?? []"
                             :current-segment-index="session.currentSegmentIndex ?? null"
+                            :cell-size="3"
+                            :max-cols="40"
+                            :max-rows="6"
                             @click="openSegments(session)"
                         />
                     </td>
@@ -194,22 +255,25 @@
                     <td colspan="14" class="empty">No streaming history yet</td>
                 </tr>
             </tbody>
-        </table>
+        </table></div>
         <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
     </div>
 </template>
 
 <script setup>
-import { computed, inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import ViewToggle from '@/components/common/ViewToggle.vue';
+import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { useViewMode } from '@/lib/useViewMode';
 import {
 formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
@@ -218,8 +282,18 @@ import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
 import SegmentActivityDialog from '../components/streaming/SegmentActivityDialog.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';
 import SettingsChips from '../components/streaming/SettingsChips.vue';
+import StreamCard from '../components/streaming/StreamCard.vue';
+import ThroughputSpark from '../components/streaming/ThroughputSpark.vue';
 
 const streams = inject('streams');
+
+// Cards on phones (16 columns do not fit), table on wide screens; either can be chosen and is remembered.
+const { viewMode, setViewMode } = useViewMode('iplayarr.streamsViewMode', {
+    modes: ['table', 'cards'],
+    desktop: 'table',
+    mobile: 'cards',
+});
+const cardView = computed(() => viewMode.value === 'cards');
 
 const stopping = ref(new Set());
 
@@ -259,11 +333,25 @@ function loadMissingDetails() {
     [...new Set(pids)].filter(Boolean).forEach(loadDetails);
 }
 
+// Session details are only needed when a pid appears for the first time, not on every update (the
+// active sessions now change several times a second), so watch the set of pids rather than `streams`.
+const pidSignature = computed(() =>
+    [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid).join(',')
+);
+
+// A running session's Duration is wall-clock time since it started, so it needs a clock of its own:
+// computed only at render, it moved whenever a socket update happened to arrive - unevenly, and
+// not at all between updates.
+const now = ref(Date.now());
+let clock;
+
 onMounted(() => {
     loadMissingDetails();
     loadChannelLogos();
+    clock = setInterval(() => (now.value = Date.now()), 1000);
 });
-watch(streams, loadMissingDetails);
+onBeforeUnmount(() => clearInterval(clock));
+watch(pidSignature, loadMissingDetails);
 
 const clientLabels = {
     GET_IPLAYER: 'iplayer',
@@ -298,7 +386,7 @@ function formatDate(value) {
 
 function formatDuration(start, end) {
     if (!start) return '';
-    const totalSeconds = Math.max(0, Math.floor(((end ? new Date(end) : new Date()) - new Date(start)) / 1000));
+    const totalSeconds = Math.max(0, Math.floor(((end ? new Date(end) : now.value) - new Date(start)) / 1000));
     const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
     const seconds = String(totalSeconds % 60).padStart(2, '0');
     return `${minutes}:${seconds}`;
@@ -308,7 +396,7 @@ async function stopStream(session) {
     if (stopping.value.has(session.id)) {
         return;
     }
-    if (!(await dialogService.confirm('Stop stream', 'Are you sure you want to stop this stream?'))) {
+    if (!(await dialogService.confirm('Stop stream', 'Are you sure you want to stop this stream?', undefined, { danger: true, confirmLabel: 'Stop stream' }))) {
         return;
     }
     stopping.value.add(session.id);
@@ -333,7 +421,7 @@ function openSegments(session) {
 }
 
 async function clearHistory() {
-    if (await dialogService.confirm('Clear Stream History', 'Are you sure you want to clear the stream history?')) {
+    if (await dialogService.confirm('Clear Stream History', 'Are you sure you want to clear the stream history?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         // The 'streams' socket push updates streams.value.history once the server confirms it -
         // no need to clear it here too, same as stopStream above.
         await ipFetch('json-api/streams/history', 'DELETE');
@@ -371,6 +459,12 @@ async function clearHistory() {
         opacity: 0.35;
         transform: scale(0.7);
     }
+}
+
+// Pills here are fully rounded (smooth ends) rather than square-cornered.
+.streamingPage .pill {
+    padding: 1px 8px;
+    border-radius: 999px;
 }
 
 .tableToolbar {
@@ -470,6 +564,32 @@ async function clearHistory() {
     }
 }
 
+// Very wide screens: the (horizontal) cards sit two across.
+@media (min-width: 1500px) {
+    .streamCards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 12px;
+
+        .empty {
+            grid-column: 1 / -1;
+        }
+    }
+}
+
+// The table is wider than the content area on most screens: scroll sideways instead of clipping the last columns.
+.tableScroll {
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+// Video Quality (only for the get_iplayer / yt-dlp clients) is on the cards and in the info popup; the table drops them below a wide screen.
+@media (max-width: 1799px) {
+    .streamsTable .hideLg {
+        display: none;
+    }
+}
+
 .streamsTable {
     // Fixed so <colgroup> widths are authoritative regardless of cell content - without this,
     // the browser sizes columns from their content on every render, so a page of rows with empty
@@ -480,6 +600,7 @@ async function clearHistory() {
     table-layout: fixed;
 
     td, th {
+        vertical-align: middle;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -513,21 +634,52 @@ async function clearHistory() {
         color: @subtle-text-color;
     }
 
-    // Chip columns (Quality/Probe/FHD/Video Quality/Res) are deliberately much tighter than the
-    // table's normal cell padding - each one only ever holds a single short pill, so the default
-    // 8px td padding (and thead th's own 8px) just wastes width the Video (title) column could
-    // use instead. thead/tbody qualifiers needed to out-specify .dataTable's own `thead th` /
-    // `tbody td` padding rules above, which would otherwise win over a same-specificity `.chipCol`.
-    thead th.chipCol,
-    tbody td.chipCol {
-        padding: 4px 3px;
+    // Numbers (and the rate graph) sit against the right edge of their column, their headers with them.
+    .numCol {
+        text-align: right;
+
+        .throughputSpark {
+            justify-content: flex-end;
+        }
     }
 
-    .chipCol .pill {
+    // Pills centre in their row (an inline-block rides the text baseline, which sat them a little high).
+    td .pill {
+        vertical-align: middle;
+        line-height: 1.4;
+    }
+
+    // Headers wrap rather than truncate.
+    thead th {
+        white-space: normal;
+    }
+
+    // Pill columns are tight: each only ever holds one short pill.
+    thead th.chipCol,
+    tbody td.chipCol {
+        padding: 4px 2px;
+    }
+
+    .chipCol .pill,
+    td .pill {
         display: inline-block;
         max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
+        vertical-align: middle;
+        line-height: 1.4;
+    }
+
+    .videoCol a {
+        overflow-wrap: anywhere;
+    }
+
+    .clientIp {
+        font-size: 12px;
+    }
+
+    .centerCol {
+        text-align: center;
     }
 
     .actionCol {

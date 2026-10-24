@@ -124,6 +124,17 @@ describe('AddFileEndpoint', () => {
         );
     });
 
+    it('carries a known version onto the queue entry, and drops an unknown one', async () => {
+        const withVersion = (value: string) => VALID_NZB_XML_WITH_LIBRARY_META.replace('</head>', `<meta type="version" _="${value}"/></head>`);
+        req.files = [toFile(withVersion('audio-described'))] as any;
+        await handler(req as Request, res as Response);
+        expect((queueService.addToQueue as jest.Mock).mock.calls.pop()[4]).toMatchObject({ version: 'audio-described' });
+
+        req.files = [toFile(withVersion('bogus'))] as any;
+        await handler(req as Request, res as Response);
+        expect((queueService.addToQueue as jest.Mock).mock.calls.pop()[4].version).toBeUndefined();
+    });
+
     it('responds 500 when the NZB is invalid and no configured app can take it', async () => {
         req.files = [toFile(NZB_MISSING_TITLE_XML)] as any;
         (appService.getAllApps as jest.Mock).mockResolvedValue([]);

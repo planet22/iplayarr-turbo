@@ -1,6 +1,8 @@
 import { App } from '../types/App';
+import { SubscriptionArrLink } from '../types/Subscription';
 import appService from './appService';
 import arrLibraryService, { ArrAddOptions, ArrLibraryItem, ArrQualityProfile, ArrRootFolder } from './arr/ArrLibraryService';
+import loggingService from './loggingService';
 import subscriptionService from './subscriptionService';
 
 export class SubscriptionArrError extends Error {}
@@ -39,6 +41,41 @@ class SubscriptionArrService {
             arrLibraryService.getQualityProfiles(app),
         ]);
         return { rootFolders, qualityProfiles };
+    }
+
+    async tags(appId: string) {
+        return arrLibraryService.getTags(await this.#getApp(appId));
+    }
+
+    async monitorOptions(appId: string): Promise<string[]> {
+        return arrLibraryService.monitorOptions(await this.#getApp(appId));
+    }
+
+    // Overseerr-style request: add the title to the library and trigger a normal search. The
+    // release actually grabbed is chosen by Sonarr/Radarr across all its indexers, not by us.
+    async request(request: LinkRequest & { pid?: string }): Promise<{ arrId: number; created: boolean; tracked: boolean }> {
+        const app = await this.#getApp(request.appId);
+        if (request.monitor && !arrLibraryService.monitorOptions(app).includes(request.monitor)) {
+            throw new SubscriptionArrError('Unsupported monitor option');
+        }
+        // Searching is done explicitly below so an already-present title is searched too.
+        const { id, created } = await arrLibraryService.add(app, request.externalId, { ...request, searchOnAdd: false });
+        await arrLibraryService.searchItem(app, id);
+        const tracked = request.pid ? await this.#track(request.pid, { appId: app.id, arrId: id, title: request.title, addedByUs: created }) : false;
+        return { arrId: id, created, tracked };
+    }
+
+    // Records a request as an arr-only subscription so it shows up, and can be undone, like any
+    // other link. Best effort: the title is already in Sonarr/Radarr, so a BBC lookup failure here
+    // must not fail the request. An existing subscription keeps its own link.
+    async #track(pid: string, arr: SubscriptionArrLink): Promise<boolean> {
+        try {
+            const subscription = await subscriptionService.subscribe(pid, { arrOnly: true, arr });
+            return subscription.arr ? true : await subscriptionService.setArrLink(subscription.id, arr);
+        } catch (error) {
+            loggingService.error(`Request: could not record "${arr.title}" as a subscription: ${error}`);
+            return false;
+        }
     }
 
     async link(subscriptionId: string, request: LinkRequest): Promise<void> {

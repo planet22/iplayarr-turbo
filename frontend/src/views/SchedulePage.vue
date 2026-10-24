@@ -1,32 +1,35 @@
 <template>
     <div class="browsePage schedulePage">
-        <PageHeader title="Guide">
-            <template #center>
-            <div class="dateNav">
-                <button type="button" @click="shiftDay(-1)"><font-awesome-icon :icon="['fas', 'chevron-left']" /></button>
-                <span class="currentDate">{{ dateLabel }}</span>
-                <button type="button" @click="shiftDay(1)"><font-awesome-icon :icon="['fas', 'chevron-right']" /></button>
-                <button v-if="!isToday" type="button" class="todayButton" @click="goToday">Today</button>
-            </div>
-            </template>
-            <div class="zoomNav">
-                <button
-                    type="button" :class="['zoneButton', useLocalTime ? 'active' : '']" :title="zoneTooltip"
-                    @click="toggleZone"
-                >
-                    <font-awesome-icon :icon="['fas', 'globe']" />
-                    <span>{{ useLocalTime ? 'Local' : 'UK' }}</span>
+        <PageHeader :title="`Guide - ${dateLabel}`" />
+        <SettingsPageToolbar>
+            <template #nav>
+                <button type="button" title="Previous day" aria-label="Previous day" @click="shiftDay(-1)">
+                    <font-awesome-icon :icon="['fas', 'chevron-left']" />
                 </button>
-                <button type="button" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
+                <button type="button" title="Next day" aria-label="Next day" @click="shiftDay(1)">
+                    <font-awesome-icon :icon="['fas', 'chevron-right']" />
+                </button>
+                <button v-if="!isToday" type="button" title="Today" aria-label="Today" @click="goToday">
+                    <font-awesome-icon :icon="['fas', 'calendar-day']" />
+                </button>
+            </template>
+            <template #actions>
+                <button
+                    type="button" :title="zoneTooltip"
+                    :aria-label="zoneTooltip" @click="toggleZone"
+                >
+                    <font-awesome-icon :icon="['fas', useLocalTime ? 'location-dot' : 'crown']" />
+                </button>
+                <button type="button" aria-label="Zoom out" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
                 </button>
-                <button type="button" :disabled="pxPerMinute >= ZOOM_MAX" @click="zoomIn">
+                <button type="button" aria-label="Zoom in" :disabled="pxPerMinute >= ZOOM_MAX" @click="zoomIn">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" />
                 </button>
-            </div>
-        </PageHeader>
+            </template>
+        </SettingsPageToolbar>
         <LoadingIndicator v-if="loading" />
-        <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
+        <ErrorState v-else-if="error" :message="error" @retry="load()" />
         <InfoBar v-else-if="channels.length === 0">Nothing scheduled for this day.</InfoBar>
         <div v-else class="scheduleGrid">
             <div class="channelColumn">
@@ -54,6 +57,7 @@
                         </span>
                     </div>
                     <div v-for="row in channels" :key="row.channel.id" class="channelRow">
+                        <span v-if="row.slots.length === 0" class="noSchedule">No schedule available</span>
                         <RouterLink
                             v-for="slot in row.slots" :key="slot.item.pid" :to="`/browse/programme/${slot.item.pid}`"
                             :class="['programmeBlock', isLive(slot) ? 'live' : '']"
@@ -78,11 +82,13 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { browseFetch } from '@/lib/browse';
-import { getThumbnailUrl } from '@/lib/utils';
+import { formatTime as formatClock, getThumbnailUrl } from '@/lib/utils';
 
 const ZOOM_STEP = 0.5;
 const ZOOM_MIN = 1;
@@ -172,8 +178,10 @@ const toggleZone = () => {
         // Preference just won't persist.
     }
 };
-const displayTime = (ms) =>
-    new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: displayZone.value });
+const displayTime = (ms) => formatClock(ms, { timeZone: displayZone.value });
+// Midnight is where the ruler shows the date instead of a time.
+const isMidnight = (ms) =>
+    new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: displayZone.value }) === '00:00';
 
 // The date shown in the toolbar follows whichever day is in the middle of the viewport, so it
 // updates as you scroll across midnight. selectedDate (which anchors the loaded window) catches up
@@ -239,7 +247,7 @@ const hourMarks = computed(() => {
     const marks = [];
     for (let ms = dayStart.value.getTime(); ms < dayEnd.value.getTime(); ms += 3600000) {
         const label = displayTime(ms);
-        const midnight = label === '00:00';
+        const midnight = isMidnight(ms);
         marks.push({
             left: ((ms - dayStart.value) / 60000) * pxPerMinute.value,
             label: midnight
@@ -388,59 +396,9 @@ onBeforeUnmount(() => {
     }
 }
 
-.dateNav,
-.zoomNav {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-
-    button {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-        cursor: pointer;
-
-        &:hover:not(:disabled) {
-            border-color: @brand-color;
-        }
-
-        &:disabled {
-            opacity: 0.4;
-            cursor: default;
-        }
-    }
-}
-
-.zoomNav .zoneButton {
-    width: auto;
-    gap: 6px;
-    padding: 0 10px;
-    font-size: 13px;
-
-    &.active {
-        border-color: @brand-color;
-    }
-}
-
-.dateNav {
-    .todayButton {
-        width: auto;
-        padding: 0 12px;
-        font-size: 13px;
-    }
-
-    .currentDate {
-        min-width: 150px;
-        text-align: center;
-        font-size: 15px;
-        font-weight: 600;
-    }
+// The buttons take the toolbar's own look; only the spacing under the bar needs styling here.
+.schedulePage :deep(.SettingsPageToolbar) {
+    margin-bottom: 12px;
 }
 
 @row-height: 64px;
@@ -529,7 +487,7 @@ onBeforeUnmount(() => {
     position: absolute;
     top: 0;
     bottom: 0;
-    background-color: rgba(255, 255, 255, 0.06);
+    background-color: @hover-tint;
     pointer-events: none;
     z-index: 1;
 }
@@ -567,8 +525,18 @@ onBeforeUnmount(() => {
     border-top: 1px solid @settings-button-border-color;
 
     &:nth-child(odd) {
-        background-color: fade(@settings-button-background-color, 40%);
+        background-color: color-mix(in srgb, @settings-button-background-color 40%, transparent);
     }
+}
+
+.noSchedule {
+    position: sticky;
+    left: 0;
+    display: inline-block;
+    padding: 0 12px;
+    line-height: @row-height;
+    font-size: 12px;
+    color: @subtle-text-color;
 }
 
 .programmeBlock {

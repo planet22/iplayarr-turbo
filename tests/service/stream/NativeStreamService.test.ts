@@ -4,10 +4,14 @@ import https from 'https';
 
 import configService from '../../../src/service/configService';
 import getIplayerExecutableService from '../../../src/service/getIplayerExecutableService';
+import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import { attemptFhdUpgrade } from '../../../src/service/stream/experimental/bbcFhdUpgrade';
+import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 import service from '../../../src/service/stream/NativeStreamService';
+import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
+import { runWithVersion } from '../../../src/utils/versionContext';
 
 jest.mock('http');
 jest.mock('https');
@@ -16,6 +20,7 @@ jest.mock('../../../src/service/getIplayerExecutableService', () => ({
     __esModule: true,
     default: { getQualityFallbackChain: jest.fn() },
 }));
+jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn() } }));
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn() } }));
 jest.mock('../../../src/service/stream/experimental/bbcFhdUpgrade', () => ({ attemptFhdUpgrade: jest.fn() }));
 jest.mock('../../../src/service/stream/streamProxyUtils');
@@ -101,6 +106,8 @@ describe('NativeStreamService', () => {
 
     beforeEach(() => {
         jest.resetAllMocks();
+        clearResolveCache();
+        clearRememberedMediaSelectorPairs();
         installNetwork();
         route = defaultRoute;
         setConfig({});
@@ -111,6 +118,29 @@ describe('NativeStreamService', () => {
         await service.streamDirect('p1', req, res, 'sess');
         expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req, res, 5, 'sess');
         expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Adaptive');
+    });
+
+    it('persists the vpid, so a repeat resolve does not refetch playlist.json', async () => {
+        let playlistCalls = 0;
+        route = (url, m) => {
+            if (url.includes('/playlist.json')) playlistCalls++;
+            return defaultRoute(url, m);
+        };
+        await service.streamDirect('p1', req, res);
+        clearResolveCache();
+        await service.streamDirect('p1', req, res);
+        expect(playlistCalls).toBe(1);
+    });
+
+    it('checkAvailable never uses the persisted vpid', async () => {
+        let playlistCalls = 0;
+        route = (url, m) => {
+            if (url.includes('/playlist.json')) playlistCalls++;
+            return defaultRoute(url, m);
+        };
+        await service.streamDirect('p1', req, res);
+        await service.checkAvailable('p1');
+        expect(playlistCalls).toBe(2);
     });
 
     it('prefers the plain programme version when resolving the vpid', async () => {
@@ -231,6 +261,52 @@ describe('NativeStreamService', () => {
             expect(proxyUrl).toHaveBeenCalledWith('https://hq/master.m3u8', req, res, 5, undefined);
         });
 
+        it('remembers the winning connection (and the vpid) so a repeat play makes one mediaselector call', async () => {
+            let selectorCalls = 0;
+            let playlistCalls = 0;
+            route = (url, m) => {
+                if (url.includes('/playlist.json')) playlistCalls++;
+                if (url.includes('mediaselector')) {
+                    selectorCalls++;
+                    return { body: twoConnections };
+                }
+                if (url.startsWith('https://hq/master.m3u8')) return { body: master(1080) };
+                return defaultRoute(url, m);
+            };
+            await service.streamDirect('p1', req, res);
+            expect(selectorCalls).toBe(4);
+
+            clearResolveCache();
+            selectorCalls = 0;
+            await service.streamDirect('p1', req, res);
+
+            expect(selectorCalls).toBe(1);
+            expect(playlistCalls).toBe(1);
+            expect(proxyUrl).toHaveBeenLastCalledWith('https://hq/master.m3u8', req, res, 5, undefined);
+        });
+
+        it('forgets a remembered connection that has gone and re-probes', async () => {
+            let selectorCalls = 0;
+            let remembered = true;
+            route = (url, m) => {
+                if (url.includes('mediaselector')) {
+                    selectorCalls++;
+                    return { body: remembered ? twoConnections : mediaXml([conn('transferFormat="hls" protocol="https" supplier="a" href="https://cdn/redirect?only"')]) };
+                }
+                if (url.startsWith('https://hq/master.m3u8')) return { body: master(1080) };
+                return defaultRoute(url, m);
+            };
+            await service.streamDirect('p1', req, res);
+
+            clearResolveCache();
+            remembered = false;
+            selectorCalls = 0;
+            await service.streamDirect('p1', req, res);
+
+            expect(selectorCalls).toBe(1 + 4);
+            expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, undefined);
+        });
+
         it('skips candidates that fail to probe', async () => {
             route = (url, m) => {
                 if (url.includes('mediaselector')) return { body: twoConnections };
@@ -280,6 +356,11 @@ describe('NativeStreamService', () => {
             await expect(service.streamDirect('p1', req, res)).rejects.toThrow('No HLS stream connection found for vpid plain');
         });
 
+        it('says why, in BBC\'s own words, when mediaselector gave a reason', async () => {
+            route = (url, m) => (url.includes('mediaselector') ? { body: '<error id="geolocation"/>' } : defaultRoute(url, m));
+            await expect(service.streamDirect('p1', req, res)).rejects.toThrow('(BBC says: geolocation)');
+        });
+
         it('ignores non-video media and keeps walking pairs until one has connections', async () => {
             let calls = 0;
             route = (url, m) => {
@@ -300,6 +381,215 @@ describe('NativeStreamService', () => {
             await service.streamDirect('p1', req, res);
             expect(proxyUrl).toHaveBeenCalledWith('http://loop/x', req, res, 5, undefined);
             expect((http.request as jest.Mock).mock.calls.length).toBe(6);
+        });
+    });
+
+    describe('resolve caching', () => {
+        const fetched = (fragment: string) =>
+            (https.get as jest.Mock).mock.calls.filter((c) => (c[0] as string).includes(fragment)).length;
+
+        it('resolves a pid once and reuses it, still reporting the resolution to each session', async () => {
+            await service.streamDirect('p1', req, res, 'a');
+            await service.streamDirect('p1', req, res, 'b');
+            expect(fetched('/playlist.json')).toBe(1);
+            expect(fetched('mediaselector')).toBe(1);
+            expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, 'b');
+            expect(streamSessionService.setResolution).toHaveBeenCalledWith('a', 'Adaptive');
+            expect(streamSessionService.setResolution).toHaveBeenCalledWith('b', 'Adaptive');
+        });
+
+        it('shares one resolve between concurrent requests', async () => {
+            await Promise.all([service.streamDirect('p1', req, res), service.streamDirect('p1', req, res)]);
+            expect(fetched('/playlist.json')).toBe(1);
+        });
+
+        it('keeps different pids apart', async () => {
+            await service.streamDirect('p1', req, res);
+            await service.streamDirect('p2', req, res);
+            expect(fetched('/playlist.json')).toBe(2);
+        });
+
+        it('does not serve a stale result after a relevant setting changes', async () => {
+            await service.streamDirect('p1', req, res);
+            setConfig({ STREAM_NATIVE_ADAPTIVE: 'false' });
+            await service.streamDirect('p1', req, res, 'sess');
+            expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', '720');
+        });
+
+        it('does not cache a failed resolve', async () => {
+            route = (url, m) => (url.includes('/playlist.json') ? { status: 500 } : defaultRoute(url, m));
+            await expect(service.streamDirect('p1', req, res)).rejects.toThrow('status 500');
+            route = defaultRoute;
+            await service.streamDirect('p1', req, res);
+            expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req, res, 5, undefined);
+        });
+
+        it('reuses the cached vpid across stream URL resolves', async () => {
+            await service.streamDirect('p1', req, res);
+            setConfig({ STREAM_NATIVE_ADAPTIVE: 'false' });
+            await service.streamDirect('p1', req, res);
+            expect(fetched('/playlist.json')).toBe(1);
+        });
+
+        it('checkAvailable always asks BBC afresh, so a withdrawn programme is noticed', async () => {
+            await service.streamDirect('p1', req, res);
+            await service.checkAvailable('p1');
+            expect(fetched('/playlist.json')).toBe(2);
+            route = (url, m) => (url.includes('/playlist.json') ? { status: 404 } : defaultRoute(url, m));
+            await expect(service.checkAvailable('p1')).rejects.toThrow('status 404');
+        });
+    });
+
+    describe('mediaselector pair memory', () => {
+        const unavailable = '<error id="geolocation"/>';
+        let selectorCalls: string[];
+        const answerOnlyFrom = (answers: (url: string) => boolean) => {
+            route = (url, m) => {
+                if (!url.includes('mediaselector')) return defaultRoute(url, m);
+                selectorCalls.push(url.replace(/^.*mediaselector\/(\d)\/.*mediaset\/([\w-]+)\/.*$/, '$2/v$1'));
+                return { body: answers(url) ? goodXml : unavailable };
+            };
+        };
+        beforeEach(() => (selectorCalls = []));
+
+        it('starts with the pair that answered last time, so later resolves skip the failing ones', async () => {
+            answerOnlyFrom((url) => url.includes('/mediaset/pc/') && url.includes('/mediaselector/6/'));
+            await service.streamDirect('p1', req, res);
+            expect(selectorCalls).toEqual(['iptv-all/v6', 'iptv-all/v5', 'pc/v6']);
+
+            selectorCalls.length = 0;
+            await service.streamDirect('p2', req, res);
+            expect(selectorCalls).toEqual(['pc/v6']);
+        });
+
+        it('falls back through the full list when the remembered pair stops answering', async () => {
+            answerOnlyFrom((url) => url.includes('/mediaset/pc/') && url.includes('/mediaselector/6/'));
+            await service.streamDirect('p1', req, res);
+
+            selectorCalls.length = 0;
+            answerOnlyFrom((url) => url.includes('/mediaset/iptv-all/') && url.includes('/mediaselector/6/'));
+            await service.streamDirect('p3', req, res);
+            expect(selectorCalls).toEqual(['pc/v6', 'iptv-all/v6']);
+
+            selectorCalls.length = 0;
+            await service.streamDirect('p4', req, res);
+            expect(selectorCalls).toEqual(['iptv-all/v6']);
+        });
+    });
+
+    describe('HQ probe concurrency', () => {
+        beforeEach(() => setConfig({ STREAM_NATIVE_HQ_PROBE: 'true' }));
+
+        it('queries every mediaselector pair and prefers the earlier connection on a tie', async () => {
+            const tied = mediaXml([
+                conn('transferFormat="hls" protocol="https" supplier="a" href="https://first/master.m3u8"'),
+                conn('transferFormat="hls" protocol="https" supplier="b" href="https://second/master.m3u8"'),
+            ]);
+            route = (url, m) => {
+                if (url.includes('mediaselector')) return { body: tied };
+                if (url.endsWith('/master.m3u8')) return { body: master(720) };
+                return defaultRoute(url, m);
+            };
+            await service.streamDirect('p1', req, res);
+            const selectorCalls = (https.get as jest.Mock).mock.calls.filter((c) => (c[0] as string).includes('mediaselector'));
+            expect(selectorCalls).toHaveLength(4);
+            expect(proxyUrl).toHaveBeenCalledWith('https://first/master.m3u8', req, res, 5, undefined);
+        });
+    });
+
+    describe('subtitles', () => {
+        const subReq: any = { query: { streamkey: 'k y' } };
+        const ttml =
+            '<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p begin="00:00:01.000" end="00:00:02.000">Hi</p></div></body></tt>';
+        const withCaptions = (captionBody: Reply = { body: ttml }): Router => (url, m) => {
+            if (url.includes('mediaselector')) {
+                return { body: goodXml.replace('</mediaSelection>', mediaXml([conn('transferFormat="plain" protocol="https" href="https://c/cap.xml"')], 'captions').replace('<mediaSelection>', '')) };
+            }
+            if (url === 'https://c/cap.xml') return captionBody;
+            return defaultRoute(url, m);
+        };
+
+        it('is off by default: no caption lookups and the plain proxy call', async () => {
+            route = withCaptions();
+            await service.streamDirect('p1', subReq, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', subReq, res, 5, 'sess');
+            expect((https.get as jest.Mock).mock.calls.some((c) => (c[0] as string).includes('cap.xml'))).toBe(false);
+            expect(await service.getSubtitles('p1')).toBeUndefined();
+        });
+
+        it('hands the proxy a subtitle playlist uri when enabled and captions exist', async () => {
+            setConfig({ STREAM_SUBTITLES: 'true' });
+            route = withCaptions();
+            await service.streamDirect('p1', subReq, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith(
+                'https://cdn/master.m3u8',
+                subReq,
+                res,
+                5,
+                'sess',
+                false,
+                '/api/subs.m3u8?mode=stream&pid=p1&subs=playlist&streamkey=k%20y'
+            );
+            const track = await service.getSubtitles('p1');
+            expect(track?.vtt).toContain('00:00:11.000 --> 00:00:12.000');
+            expect(track?.durationSeconds).toBe(2);
+        });
+
+        it('falls back to the plain proxy call when the programme has no captions', async () => {
+            setConfig({ STREAM_SUBTITLES: 'true' });
+            await service.streamDirect('p1', subReq, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', subReq, res, 5, 'sess');
+        });
+
+        it('falls back to the plain proxy call when the captions are unusable', async () => {
+            setConfig({ STREAM_SUBTITLES: 'true' });
+            route = withCaptions({ body: '<html>not captions' });
+            await service.streamDirect('p1', subReq, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', subReq, res, 5, 'sess');
+        });
+    });
+
+    describe('a version', () => {
+        const req2: any = {};
+        const res2: any = {};
+        const mediaSelectorUrls = () =>
+            (https.get as jest.Mock).mock.calls.map((c) => c[0] as string).filter((u) => u.includes('mediaselector'));
+
+        beforeEach(() => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({
+                programme: { versions: [{ pid: 'orig', types: ['Original version'] }, { pid: 'adpid', types: ['Dubbed Audio Described'] }] },
+            });
+        });
+
+        it('streams the version\'s own vpid, found on the programme page rather than in playlist.json, asking pc first', async () => {
+            await runWithVersion('audio-described', () => service.streamDirect('pv1', req2, res2, 'sess'));
+            const urls = (https.get as jest.Mock).mock.calls.map((c) => c[0] as string);
+            expect(urls.some((u) => u.includes('/playlist.json'))).toBe(false);
+            expect(mediaSelectorUrls()[0]).toContain('/mediaset/pc/');
+            expect(mediaSelectorUrls()[0]).toContain('/vpid/adpid/');
+            expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req2, res2, 5, 'sess');
+        });
+
+        it('keeps the standard and the version of one programme apart, in the resolve cache and in the vpid cache', async () => {
+            await service.streamDirect('pv2', req2, res2);
+            await runWithVersion('audio-described', () => service.streamDirect('pv2', req2, res2));
+            await service.streamDirect('pv2', req2, res2);
+            const vpids = mediaSelectorUrls().map((u) => /\/vpid\/([^/]+)\//.exec(u)?.[1]);
+            expect(vpids).toEqual(['plain', 'adpid']);
+            clearResolveCache();
+            await runWithVersion('audio-described', () => service.streamDirect('pv2', req2, res2));
+            expect(iplayerDetailsService.getMetadata).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not remember the pc pair a version was answered by for the standard version', async () => {
+            await runWithVersion('audio-described', () => service.streamDirect('pv3', req2, res2));
+            await service.streamDirect('pv3', req2, res2);
+            expect(mediaSelectorUrls().filter((u) => u.includes('/vpid/plain/'))[0]).toContain('/mediaset/iptv-all/');
+        });
+
+        it('fails clearly when the programme has no such version', async () => {
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { versions: [{ pid: 'orig', types: ['Original version'] }] } });
+            await expect(runWithVersion('signed', () => service.streamDirect('pv4', req2, res2))).rejects.toThrow('pv4 has no signed version');
         });
     });
 });

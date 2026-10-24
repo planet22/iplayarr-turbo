@@ -1,12 +1,26 @@
 import { ref } from 'vue';
 
 import dialogService from '@/lib/dialogService';
+import { askAboutVersions, preferredVersion, versionsActive } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { hasArrApps, linkToArr, offerArrLink, unlinkFromArr } from '@/lib/subscriptionArr';
+import toastService from '@/lib/toastService';
 
 const ARR_ONLY = 'Add to Sonarr/Radarr only - subscribed, but no downloads by iPlayarr';
 const NEW_ONLY = 'Only new episodes from now on';
 const NEW_AND_LATEST = 'New episodes, and download the latest one now';
+const PLAIN_ONLY = 'Just the standard version';
+const VERSION_CHOICES = {
+    'Also audio described': ['audio-described'],
+    'Also signed': ['signed'],
+    'Also audio described and signed': ['audio-described', 'signed'],
+};
+
+// The extra versions a subscription can also download, as the Subscriptions page lists them.
+export const subscriptionVersions = [
+    { id: 'audio-described', name: 'Audio described', icon: 'audio-description' },
+    { id: 'signed', name: 'Signed', icon: 'sign-language' },
+];
 const allLabel = (count) =>
     count > 0 ? `Download all ${count} available episodes now, plus new ones` : 'Download all available episodes now, plus new ones';
 
@@ -44,6 +58,21 @@ export function useSubscriptions() {
         );
         if (!choice) return undefined;
         const arrOnly = choice === ARR_ONLY;
+        // Audio described / signed versions are offered only while the AD / Signed badges are on (and asked about unless
+        // Settings > Download Client says to use the default), so everyone else subscribes in one step (they can still
+        // switch them on from the Subscriptions page). A subscription adds them to the standard version.
+        let versions = [];
+        if (!arrOnly && versionsActive() && !askAboutVersions() && preferredVersion()) versions = [preferredVersion()];
+        if (!arrOnly && askAboutVersions()) {
+            const extra = await dialogService.select(
+                `Audio described and signed versions of ${programme.title}?`,
+                'Downloaded as well as the standard version, for new episodes only, when the BBC has published them.',
+                undefined,
+                [PLAIN_ONLY, ...Object.keys(VERSION_CHOICES)]
+            );
+            if (!extra) return undefined;
+            versions = VERSION_CHOICES[extra] ?? [];
+        }
         const downloadAll = choice === allLabel(episodeCount);
         const downloadLatest = choice === NEW_AND_LATEST;
         const { data, ok } = await ipFetch('json-api/subscriptions', 'POST', {
@@ -51,9 +80,10 @@ export function useSubscriptions() {
             downloadLatest,
             downloadAll,
             ...(arrOnly ? { arrOnly: true } : {}),
+            ...(versions.length ? { versions } : {}),
         });
         if (!ok) {
-            dialogService.alert('Unable to subscribe', data?.message || 'Something went wrong');
+            toastService.error('Unable to subscribe', { detail: data?.message || 'Something went wrong' });
             return undefined;
         }
         if (arrOnly) {
@@ -67,7 +97,8 @@ export function useSubscriptions() {
             return 'subscribed-arr';
         }
         await load();
-        if (await offerArrLink(data)) await load();
+        // An upgraded Sonarr/Radarr-only show is already linked.
+        if (!data.arr && (await offerArrLink(data))) await load();
         return downloadAll ? 'subscribed-all' : downloadLatest ? 'subscribed-latest' : 'subscribed';
     };
 
@@ -78,14 +109,14 @@ export function useSubscriptions() {
         // When iPlayarr added the show to Sonarr/Radarr, the remove-or-keep choice below doubles as
         // the confirmation, so there is a single prompt.
         const choiceFollows = subscription.arr?.addedByUs;
-        if (!choiceFollows && !(await dialogService.confirm('Unsubscribe', text))) {
+        if (!choiceFollows && !(await dialogService.confirm('Unsubscribe', text, undefined, { danger: true, confirmLabel: 'Unsubscribe' }))) {
             return false;
         }
         // A linked show is unlinked first (offering to remove it from Sonarr/Radarr if we added it).
         if (subscription.arr && !(await unlinkFromArr(subscription, { unsubscribing: true }))) return false;
         const { ok, data } = await ipFetch(`json-api/subscriptions/${subscription.id}`, 'DELETE');
         if (!ok) {
-            dialogService.alert('Unable to unsubscribe', data?.message || 'Something went wrong');
+            toastService.error('Unable to unsubscribe', { detail: data?.message || 'Something went wrong' });
             return false;
         }
         await load();
@@ -100,5 +131,18 @@ export function useSubscriptions() {
         return changed;
     };
 
-    return { subscriptions, loaded, load, findByPid, subscribe, unsubscribe, toggleArr };
+    // Switches one extra version on or off for a subscription (new episodes only).
+    const toggleVersion = async (subscription, versionId) => {
+        const current = subscription.versions ?? [];
+        const versions = current.includes(versionId) ? current.filter((id) => id !== versionId) : [...current, versionId];
+        const { ok, data } = await ipFetch(`json-api/subscriptions/${subscription.id}/versions`, 'PUT', { versions });
+        if (!ok) {
+            toastService.error('Unable to change versions', { detail: data?.message || 'Something went wrong' });
+            return false;
+        }
+        await load();
+        return true;
+    };
+
+    return { subscriptions, loaded, load, findByPid, subscribe, unsubscribe, toggleArr, toggleVersion };
 }

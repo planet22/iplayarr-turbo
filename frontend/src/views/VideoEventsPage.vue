@@ -11,8 +11,46 @@
                 <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
             </template>
         </SettingsPageToolbar>
+        <div class="viewToggleRow">
+            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
+        </div>
         <TablePagination v-model="eventsPage" v-model:page-size="eventsPageSize" :total="sortedEvents.length" />
-        <table class="dataTable eventLogTable responsive-table">
+        <div v-if="cardView" class="cardList">
+            <DataCard v-for="event in pagedEvents" :key="event.id">
+                <template v-if="event.pid" #thumb>
+                    <img
+                        v-if="thumbnailFor(event.pid)"
+                        class="clickable"
+                        :class="{ channelLogo: channelLogos[event.pid] }"
+                        :src="thumbnailFor(event.pid)"
+                        @click="openInfo(event.pid)"
+                        @error="hideBrokenImage"
+                    />
+                    <div v-else class="thumbnail-placeholder clickable" @click="openInfo(event.pid)">
+                        <font-awesome-icon :icon="['fas', 'film']" />
+                    </div>
+                </template>
+                <template #title>
+                    <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">{{ titleFor(event.pid) }}</a>
+                    <template v-else>{{ event.message }}</template>
+                </template>
+                <template v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" #subtitle>
+                    {{ [channelLabel(detailsFor(event.pid)?.channel), seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
+                </template>
+                <template #chips>
+                    <span class="pill">{{ event.type }}</span>
+                    <span v-if="event.level != 'info'" :class="['pill', event.level]">{{ event.level }}</span>
+                </template>
+                <template v-if="event.pid && event.message">
+                    {{ event.message }}
+                </template>
+                <template #foot>
+                    <span>{{ formatDate(event.timestamp) }}</span>
+                </template>
+            </DataCard>
+            <div v-if="sortedEvents.length == 0" class="empty">No events recorded yet</div>
+        </div>
+        <table v-else class="dataTable eventLogTable">
             <colgroup>
                 <col style="width: 70px" />
                 <col style="width: 40ch" />
@@ -63,11 +101,11 @@
                             {{ titleFor(event.pid) }}
                         </a>
                         <div v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" class="subtle">
-                            {{ [detailsFor(event.pid)?.channel, seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
+                            {{ [channelLabel(detailsFor(event.pid)?.channel), seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td data-title="Type"><span class="pill">{{ event.type }}</span></td>
-                    <td data-title="Level"><span :class="['pill', event.level]">{{ event.level }}</span></td>
+                    <td :class="event.level == 'info' ? 'hide-mobile' : ''" data-title="Level"><span :class="['pill', event.level]">{{ event.level }}</span></td>
                     <td class="text">{{ event.message }}</td>
                     <td data-title="Time">{{ formatDate(event.timestamp) }}</td>
                 </tr>
@@ -84,20 +122,32 @@
 import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import DataCard from '@/components/common/DataCard.vue';
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import ViewToggle from '@/components/common/ViewToggle.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
+import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
+import { useViewMode } from '@/lib/useViewMode';
 import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const events = inject('videoEvents');
+
+// Cards on phones (the table is dense), table on wide screens; either can be chosen and is remembered.
+const { viewMode, setViewMode } = useViewMode('iplayarr.eventsViewMode', {
+    modes: ['table', 'cards'],
+    desktop: 'table',
+    mobile: 'cards',
+});
+const cardView = computed(() => viewMode.value === 'cards');
 
 
 function detailsFor(pid) {
@@ -190,7 +240,7 @@ function formatDate(value) {
 }
 
 const clearEvents = async () => {
-    if (await dialogService.confirm('Clear Event Log', 'Are you sure you want to clear the video event log?')) {
+    if (await dialogService.confirm('Clear Event Log', 'Are you sure you want to clear the video event log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/events', 'DELETE');
     }
 };
@@ -234,14 +284,6 @@ const clearEvents = async () => {
     .subtle {
         font-size: 12px;
         color: @subtle-text-color;
-    }
-
-    .pill.warn {
-        color: @warn-color;
-    }
-
-    .pill.error {
-        color: @error-color;
     }
 }
 </style>

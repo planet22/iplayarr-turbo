@@ -5,6 +5,7 @@ import { getProgrammeThumbnailUrl } from './utils';
 
 const BATCH_SIZE = 40; // BrowseRoute's MAX_DETAIL_PIDS
 const BATCH_DELAY_MS = 10;
+const PID_REGEX = /^[a-z0-9]{6,}$/i; // BrowseRoute's PID_REGEX; live channel ids (bbc_four) are not programme pids
 const PRELOAD_CONCURRENCY = 3;
 const PRELOAD_START_DELAY_MS = 500;
 
@@ -40,7 +41,7 @@ async function flush() {
 }
 
 export function loadDetails(pid) {
-    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
+    if (!pid || !PID_REGEX.test(pid) || Object.prototype.hasOwnProperty.call(details, pid)) {
         return;
     }
     details[pid] = null;
@@ -61,11 +62,13 @@ function preloadImage(url) {
 // Warms thumbnails for rows that are not on screen yet, a few at a time, after a short delay so
 // the visible rows get the bandwidth first. That fills the browser cache and, on a cold server
 // cache, makes the server pull each image from BBC now instead of when the user pages to it.
-export function prefetchThumbnails(pids) {
+// `limit` caps how many are warmed, for long lists where most rows will never be paged to.
+export function prefetchThumbnails(pids, limit = Infinity) {
     setTimeout(async () => {
         const urls = [...new Set(pids)]
             .map(getProgrammeThumbnailUrl)
-            .filter((url) => url && !preloaded.has(url));
+            .filter((url) => url && !preloaded.has(url))
+            .slice(0, limit);
         urls.forEach((url) => preloaded.add(url));
         const worker = async () => {
             while (urls.length) {

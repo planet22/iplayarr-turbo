@@ -1,16 +1,19 @@
 <template>
-    <div :class="['form-group', advanced ? 'advanced' : '']">
+    <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
         <label v-if="name">{{ name }}</label>
         <div :class="['inputBox', error ? 'error' : '']">
+            <div class="fieldRow">
             <select v-model="localValue">
                 <option v-for="option of options" :key="option.key" :value="option.key">
                     {{ option.value }}
                 </option>
             </select>
+            <InfoTip v-if="showInfo" :text="tooltip" />
+            </div>
             <div v-if="error" class="error">
                 {{ error }}
             </div>
-            <div class="tooltip">
+            <div v-if="!showInfo" class="tooltip">
                 {{ tooltip }}
             </div>
         </div>
@@ -18,7 +21,9 @@
 </template>
 
 <script setup>
-import { defineEmits, defineProps, ref, watch } from 'vue';
+import { computed, defineEmits, defineProps, inject, ref, watch } from 'vue';
+
+import InfoTip from '@/components/common/form/InfoTip.vue';
 
 const props = defineProps({
     name: {
@@ -32,6 +37,11 @@ const props = defineProps({
     tooltip: {
         type: String,
         required: true,
+    },
+    inlineTooltip: {
+        type: Boolean,
+        required: false,
+        default: false,
     },
     modelValue: {
         type: [String, Boolean, Number],
@@ -47,9 +57,22 @@ const props = defineProps({
         required: false,
         default: false,
     },
+    field: {
+        type: String,
+        required: false,
+        default: undefined,
+    },
 });
 
 const emit = defineEmits(['update:modelValue']);
+
+// Settings page shows the tooltip behind an (i) button; elsewhere (and when inlineTooltip is set) it stays as text below.
+const infoTips = inject('infoTips', false);
+const showInfo = computed(() => infoTips && !props.inlineTooltip);
+
+// Settings page lists the keys edited since the last save; those fields get a highlight.
+const changedKeys = inject('settingsChangedKeys', null);
+const changed = computed(() => !!props.field && !!changedKeys?.value?.has(props.field));
 
 const localValue = ref(props.modelValue);
 
@@ -85,16 +108,21 @@ watch(
         font-size: 14px;
         color: @table-text-color;
 
-        @media (max-width: @mobile-breakpoint) {
-            flex: 0 0 80px;
-        }
     }
 
     .inputBox {
         flex: 1 1 auto;
         box-sizing: border-box;
 
+        .fieldRow {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         select {
+            flex: 1 1 auto;
+            min-width: 0;
             box-sizing: border-box;
             padding: 6px 16px;
             width: 100%;
@@ -121,6 +149,11 @@ watch(
         color: @subtle-text-color;
     }
 
+    &.changed select {
+        border-color: @changed-color;
+        box-shadow: 0 0 0 2px @changed-soft-color;
+    }
+
     &.advanced {
         label {
             color: @warn-color;
@@ -128,6 +161,30 @@ watch(
 
         .tooltip {
             color: @warn-color;
+        }
+    }
+}
+
+// Phones: the label sits above its box (left-aligned, smaller) instead of in a narrow right-aligned column
+// that wraps long names onto four lines and leaves the box top-aligned beside them.
+.form-group {
+    @media (max-width: @mobile-breakpoint) {
+        flex-direction: column;
+        margin-bottom: 0.9rem;
+
+        label {
+            flex: none;
+            justify-content: flex-start;
+            margin: 0 0 4px;
+            padding-top: 0;
+            min-height: 0;
+            text-align: start;
+            font-size: 13px;
+        }
+
+        .tooltip,
+        .error {
+            font-size: 12px;
         }
     }
 }

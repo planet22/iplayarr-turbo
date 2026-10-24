@@ -6,6 +6,7 @@ import NativeSearchService from '../../../src/service/search/NativeSearchService
 import { IPlayerSearchResult, VideoType } from '../../../src/types/IPlayerSearchResult';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../../src/types/Synonym';
+import { withSearchTrace } from '../../../src/utils/searchTrace';
 import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
 
 jest.mock('axios');
@@ -63,7 +64,7 @@ describe('NativeSearchService', () => {
                 status: 200,
                 data: {
                     new_search: {
-                        results: [{ id: 'testId', title: 'Test' }],
+                        results: [{ id: 'testId', title: 'Test Term' }],
                     },
                 }
             });
@@ -80,6 +81,72 @@ describe('NativeSearchService', () => {
             expect(results[0]).toHaveProperty('title', 'Test Title');
             expect(results[0]).toHaveProperty('pid', 'testPid');
             expect(results[0]).toHaveProperty('nzbName', 'testNZBName');
+        });
+
+        it.each(['Him and Her', 'Him & Her', 'Him Her'])(
+            'matches a title made only of stop words (e.g. "Him & Her") for the query %s',
+            async (query) => {
+                (axios.get as jest.Mock).mockResolvedValueOnce({
+                    status: 200,
+                    data: { new_search: { results: [{ id: 'm000him1', title: 'Him & Her' }] } },
+                });
+                (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { type: 'episode' } });
+                (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+                (iplayerDetailsService.details as jest.Mock).mockResolvedValue([
+                    { title: 'Him & Her', pid: 'm000him1', type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 },
+                ]);
+
+                const results = await NativeSearchService.search(query);
+
+                expect(results.map(({ pid }) => pid)).toEqual(['m000him1']);
+            }
+        );
+
+        it('drops hits that only share some of the query words (e.g. Stickman vs Spider-Man)', async () => {
+            (axios.get as jest.Mock).mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    new_search: {
+                        results: [
+                            { id: 'p0stick1', title: 'Stickman' },
+                            { id: 'p0spide1', title: 'Spider-Man' },
+                            { id: 'p0moon01', title: 'Man on the Moon' },
+                        ],
+                    },
+                },
+            });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockImplementation(async ([pid]: string[]) => [
+                { title: pid, pid, type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 },
+            ]);
+
+            const results = await NativeSearchService.search('Stickman');
+
+            expect(results.map(({ pid }) => pid)).toEqual(['p0stick1']);
+        });
+
+        it('traces why each BBC hit was kept or dropped', async () => {
+            (axios.get as jest.Mock).mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    new_search: {
+                        results: [
+                            { id: 'p0doc001', title: 'Doctor Who' },
+                            { id: 'p0doc002', title: 'Doctor Strange' },
+                            { id: 'p0misc01', title: 'Gardeners World' },
+                        ],
+                    },
+                },
+            });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockResolvedValue([]);
+
+            const { trace } = await withSearchTrace(() => NativeSearchService.search('Doctor Who'));
+
+            const byTitle = Object.fromEntries(trace.candidates.map((c) => [c.title, c]));
+            expect(byTitle['Doctor Who']).toMatchObject({ kept: true });
+            expect(byTitle['Doctor Strange']).toMatchObject({ kept: false, reason: 'missing-word', detail: 'Missing the word "who"' });
+            expect(byTitle['Gardeners World']).toMatchObject({ kept: false, reason: 'no-match' });
         });
 
         it('should return an empty array when the response status is not 200', async () => {
@@ -195,7 +262,7 @@ describe('NativeSearchService', () => {
                 status: 200,
                 data: {
                     new_search: {
-                        results: [{ id: 'brandId', title: 'Test Brand' }],
+                        results: [{ id: 'brandId', title: 'Test Term Brand' }],
                     },
                 }
             });
@@ -229,7 +296,7 @@ describe('NativeSearchService', () => {
             }));
             (axios.get as jest.Mock).mockResolvedValueOnce({
                 status: 200,
-                data: { new_search: { results: [{ id: 'brandId', title: 'Test Brand' }] } }
+                data: { new_search: { results: [{ id: 'brandId', title: 'Test Term Brand' }] } }
             });
             (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue('testBrandPid');
             (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockResolvedValue(manyEpisodes);
@@ -258,7 +325,7 @@ describe('NativeSearchService', () => {
             const arrange = () => {
                 (axios.get as jest.Mock).mockResolvedValueOnce({
                     status: 200,
-                    data: { new_search: { results: [{ id: 'brandId', title: 'Test Brand' }] } }
+                    data: { new_search: { results: [{ id: 'brandId', title: 'Test Term Brand' }] } }
                 });
                 (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue('testBrandPid');
                 (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockImplementation(
@@ -318,8 +385,8 @@ describe('NativeSearchService', () => {
                 data: {
                     new_search: {
                         results: [
-                            { id: 'brand1', title: 'Test Brand 1' },
-                            { id: 'brand2', title: 'Test Brand 2' }
+                            { id: 'brand1', title: 'Test Term Brand 1' },
+                            { id: 'brand2', title: 'Test Term Brand 2' }
                         ],
                     },
                 }

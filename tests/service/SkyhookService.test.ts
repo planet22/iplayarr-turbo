@@ -5,7 +5,7 @@ import SkyhookService from '../../src/service/skyhook/SkyhookService';
 // src/service/skyhook/SkyhookService.test.ts
 
 jest.mock('axios');
-jest.mock('../../src/service/redis/redisCacheService');
+jest.mock('../../src/service/db/dbCacheService');
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
@@ -133,5 +133,66 @@ describe('SkyhookService URL construction', () => {
         const result = await SkyhookService.findEpisode(tvdbId, episodeName);
 
         expect(result).toBeUndefined();
+    });
+});
+
+describe('SkyhookService.getAliases', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        SkyhookService.skyhookSeriesCache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() } as any;
+    });
+
+    it('returns other titles of results that match the searched name', async () => {
+        mockedAxios.get.mockResolvedValue({
+            data: [
+                { title: 'Welsh Language on Tour', originalName: 'Iaith ar Daith', alternateTitles: [{ title: 'Iaith Ar Daith' }, 'Another'] },
+                { title: 'Unrelated', originalName: 'Something Else' },
+            ],
+        });
+        expect(await SkyhookService.getAliases('Welsh Language on Tour')).toEqual(['Iaith ar Daith', 'Another']);
+    });
+
+    it('is empty when nothing matches or the lookup fails', async () => {
+        mockedAxios.get.mockResolvedValue({ data: [{ title: 'Other', originalName: 'X' }] });
+        expect(await SkyhookService.getAliases('Welsh Language on Tour')).toEqual([]);
+        mockedAxios.get.mockRejectedValue(new Error('down'));
+        expect(await SkyhookService.getAliases('Welsh Language on Tour')).toEqual([]);
+        expect(await SkyhookService.getAliases('  ')).toEqual([]);
+    });
+});
+
+
+describe('SkyhookService.lookupByAirDate', () => {
+    const show = {
+        episodes: [
+            { title: 'Pilot', airDate: '2020-01-05', seasonNumber: 1, episodeNumber: 1 },
+            { title: 'Part A', airDate: '2020-01-12', seasonNumber: 1, episodeNumber: 2 },
+            { title: 'Part B', airDate: '2020-01-12', seasonNumber: 1, episodeNumber: 3 },
+        ],
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        SkyhookService.skyhookSeriesCache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() } as any;
+        SkyhookService.skyhookEpisodeCache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn() } as any;
+        mockedAxios.get.mockImplementation(async (url: string) =>
+            url.includes('/search/') ? { data: [{ tvdbId: '9', title: 'Other' }, { tvdbId: '7', title: 'Some Show' }] } : { data: show }
+        );
+    });
+
+    it('matches a single episode on the date, only within the correctly titled show', async () => {
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-05')).toEqual({ series: 1, episode: 1 });
+        expect(mockedAxios.get).toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/7');
+        expect(mockedAxios.get).not.toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/9');
+    });
+
+    it('uses the episode title to split a same-day double bill, else gives up', async () => {
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12', 'part b')).toEqual({ series: 1, episode: 3 });
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12', 'Unknown')).toBeUndefined();
+        expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-12')).toBeUndefined();
+    });
+
+    it('returns nothing for a date with no episode', async () => {
+        expect(await SkyhookService.lookupByAirDate('Some Show', '1999-01-01')).toBeUndefined();
     });
 });

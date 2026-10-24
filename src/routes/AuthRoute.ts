@@ -1,4 +1,3 @@
-import { RedisStore } from 'connect-redis';
 import crypto from 'crypto';
 import { Express, NextFunction, Request, RequestHandler, Response, Router } from 'express';
 import session from 'express-session';
@@ -7,10 +6,12 @@ import { v4 } from 'uuid';
 import { setGeneratedPassword } from '../service/auth/initialCredentialsService';
 import OIDCService from '../service/auth/OIDCService';
 import configService from '../service/configService';
-import { redis } from '../service/redis/redisService';
+import { dbReady, prisma } from '../service/db/prismaService';
+import { PrismaSessionStore } from '../service/db/prismaSessionStore';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import User from '../types/User';
+import { basePath } from '../utils/basePath';
 import { FailureLimiter } from '../utils/FailureLimiter';
 import { SECRET_MASK } from '../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../utils/Utils';
@@ -24,10 +25,7 @@ declare module 'express-session' {
     }
 }
 
-const redisStore = new RedisStore({
-    client: redis,
-    prefix: 'iplayarr:',
-});
+const sessionStore = new PrismaSessionStore();
 
 const isDebug = process.env.DEBUG == 'true';
 const router: Router = Router();
@@ -60,14 +58,16 @@ export const isAuthenticatedRequest = async (req: { session?: { user?: User } })
 const SESSION_SECRET_KEY = 'iplayarr:session_secret';
 
 // The cookie-signing secret. SESSION_SECRET wins if set; otherwise a random one is generated once
-// and kept in Redis, so there is never a publicly known fallback secret to forge cookies with.
+// and kept in the database, so there is never a publicly known fallback secret to forge cookies with.
 const getSessionSecret = async (): Promise<string> => {
     if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
-    const existing = await redis.get(SESSION_SECRET_KEY);
-    if (existing) return existing;
+    await dbReady();
+    const existing = await prisma.keyValue.findUnique({ where: { key: SESSION_SECRET_KEY } });
+    if (existing) return existing.value;
     const generated = crypto.randomBytes(32).toString('hex');
-    await redis.set(SESSION_SECRET_KEY, generated, 'NX');
-    return (await redis.get(SESSION_SECRET_KEY)) ?? generated;
+    // Insert-if-absent, so two racing starts converge on one secret.
+    await prisma.keyValue.createMany({ data: [{ key: SESSION_SECRET_KEY, value: generated }] }).catch(() => undefined);
+    return (await prisma.keyValue.findUnique({ where: { key: SESSION_SECRET_KEY } }))?.value ?? generated;
 };
 
 // Refuses requests a third-party site could be making on a logged-in user's behalf. Browsers label
@@ -124,7 +124,7 @@ export const addAuthMiddleware = (app: Express) => {
                 resave: false,
                 saveUninitialized: false,
                 cookie: sessionCookieSettings,
-                store: redisStore,
+                store: sessionStore,
             });
             realSession(req, res, next);
         } catch (err) {
@@ -258,7 +258,7 @@ router.get('/oidc/callback', async (req: Request, res: Response) => {
         }
         await startSession(req, { username: email });
         const host = process.env.DEBUG == 'true' ? `${req.protocol}://${req.headers.host?.split(':')[0]}:8080` : '';
-        res.redirect(`${host}/queue`);
+        res.redirect(`${host}${basePath()}/queue`);
     } catch {
         // A malformed state or a failed provider exchange is a bad request, never a crashed process.
         if (!res.headersSent) {

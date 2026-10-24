@@ -1,12 +1,32 @@
 <template>
-    <RouterLink class="programmeCard" :to="`/browse/programme/${item.seriesPid ?? item.pid}`">
-        <div class="thumb">
+    <!-- In selection mode the card is a plain block: a tap ticks it instead of opening the programme. -->
+    <component
+        :is="selectable ? 'div' : RouterLink" :class="['programmeCard', selectable ? 'selectable' : '', selected ? 'selected' : '']"
+        v-bind="selectable ? {} : { to: `/browse/programme/${item.seriesPid ?? item.pid}` }"
+        @click="onCardClick"
+    >
+        <div :class="['thumb', badgesOn ? 'badgesOn' : '']">
             <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" @error="hideBrokenImage" />
             <div v-else class="noThumb">
                 <font-awesome-icon :icon="['fas', 'tv']" size="2x" />
             </div>
-            <span v-if="item.kind !== 'episode'" class="kind">{{ item.kind === 'brand' ? 'Programme' : 'Series' }}</span>
-            <div v-if="item.kind === 'episode'" class="overlay">
+            <QualityBadges :item="item" class="thumbBadges" />
+            <span v-if="statusBadges.length && !selectable" class="statusBadges">
+                <span v-for="badge in statusBadges" :key="badge.key" class="statusBadge" role="img" :title="badge.label" :aria-label="badge.label">
+                    <font-awesome-icon :icon="['fas', badge.icon]" />
+                </span>
+            </span>
+            <!-- Compact mode: a tiny icon for what it is (TV, film, series) instead of the Programme / Series label. -->
+            <span v-if="iconBadges" class="kindIcons">
+                <span v-for="badge in kindBadges" :key="badge.label" class="kindIcon" role="img" :title="badge.label" :aria-label="badge.label">
+                    <font-awesome-icon :icon="['fas', badge.icon]" />
+                </span>
+            </span>
+            <span v-else-if="item.kind !== 'episode'" class="kind">{{ item.kind === 'brand' ? 'Programme' : 'Series' }}</span>
+            <span v-if="selectable" class="selectBadge" aria-hidden="true">
+                <font-awesome-icon v-if="selected" :icon="['fas', 'check']" />
+            </span>
+            <div v-if="item.kind === 'episode' && !selectable" class="overlay">
                 <button v-if="canPlay" class="clickable" title="Play Video" @click.prevent.stop="play(item)">
                     <font-awesome-icon :icon="['fas', 'play']" />
                 </button>
@@ -20,13 +40,17 @@
             <div v-if="item.subtitle" class="subtitle" :title="item.subtitle">{{ item.subtitle }}</div>
             <ChannelPill :channel="item.channel" />
         </div>
-    </RouterLink>
+    </component>
 </template>
 
 <script setup>
-import { computed, defineProps } from 'vue';
+import { computed, defineEmits, defineProps, inject } from 'vue';
+import { RouterLink } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
+import QualityBadges from '@/components/common/QualityBadges.vue';
+import { useQualityBadges } from '@/lib/qualityBadges';
+import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
@@ -35,10 +59,56 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    // Selection mode (the Search page's bulk download): a tick badge, and a tap toggles instead of navigating.
+    selectable: {
+        type: Boolean,
+        default: false,
+    },
+    // Show a small TV / film / series icon on the thumbnail instead of the Programme / Series label.
+    iconBadges: {
+        type: Boolean,
+        default: false,
+    },
+    selected: {
+        type: Boolean,
+        default: false,
+    },
 });
 
+const emit = defineEmits(['toggle']);
+const onCardClick = () => {
+    if (props.selectable) emit('toggle');
+};
+
 const { canPlay, play, download } = useBrowseActions();
+const { state: badgeState } = useQualityBadges();
+const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles);
+const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === 'MOVIE');
+// TV or film, plus whether the card is a whole programme, a series or a single episode.
+const kindBadges = computed(() => {
+    const badges = [isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
+    if (props.item.kind === 'brand') badges.push({ icon: 'clapperboard', label: 'Programme' });
+    else if (props.item.kind === 'series') badges.push({ icon: 'layer-group', label: 'Series' });
+    else badges.push({ icon: 'file-video', label: 'Episode' });
+    return badges;
+});
+
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
+
+// Already in the queue, already downloaded, or a show you subscribe to.
+const itemStatus = inject('itemStatus', null);
+const { findByPid } = useSubscriptions();
+const statusBadges = computed(() => {
+    const { pid, seriesPid } = props.item;
+    const badges = [];
+    if (itemStatus?.value.downloaded.has(pid)) badges.push({ key: 'downloaded', icon: 'circle-check', label: 'Downloaded' });
+    else if (itemStatus?.value.queued.has(pid)) badges.push({ key: 'queued', icon: 'clock', label: 'In the queue' });
+    // Only a show iPlayarr downloads is "subscribed"; one held in Sonarr/Radarr alone is just in there.
+    const entry = findByPid(seriesPid ?? pid) || findByPid(pid);
+    if (entry && !entry.arrOnly) badges.push({ key: 'subscribed', icon: 'bell', label: 'Subscribed' });
+    else if (entry) badges.push({ key: 'in-arr', icon: 'link', label: 'In Sonarr/Radarr' });
+    return badges;
+});
 </script>
 
 <style lang="less" scoped>
@@ -72,6 +142,71 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
         color: @subtle-text-color;
     }
 
+    // Bottom right, opposite the type icons: the subtitles icon in the corner, the version / quality badges beside it.
+    .thumbBadges {
+        position: absolute;
+        bottom: 6px;
+        right: 6px;
+    }
+
+    &.selectable {
+        cursor: pointer;
+        user-select: none;
+
+        // Top right, opposite the Programme / Series label: what you already have or follow.
+        .statusBadges {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            display: flex;
+            gap: 4px;
+
+            .statusBadge {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 22px;
+                height: 22px;
+                border-radius: 50%;
+                background-color: rgba(0, 0, 0, 0.7);
+                color: #fff;
+                font-size: 11px;
+            }
+        }
+
+        .selectBadge {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            background-color: rgba(0, 0, 0, 0.45);
+            color: #fff;
+            font-size: 12px;
+
+            svg {
+                display: block;
+            }
+        }
+
+        &.selected {
+            .thumb {
+                outline: 3px solid @brand-color;
+                outline-offset: -3px;
+            }
+
+            .selectBadge {
+                border-color: @brand-color;
+                background-color: @brand-color;
+            }
+        }
+    }
+
     .kind {
         position: absolute;
         top: 6px;
@@ -80,6 +215,33 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
         font-size: 11px;
         border-radius: 2px;
         background-color: rgba(0, 0, 0, 0.7);
+        color: #fff;
+    }
+
+    .kindIcons {
+        position: absolute;
+        bottom: 6px;
+        left: 6px;
+        display: flex;
+        gap: 4px;
+    }
+
+    .kindIcon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 3px;
+        background-color: rgba(0, 0, 0, 0.7);
+        // A faint rim so the chip still reads over a dark poster.
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+        color: #fff;
+        font-size: 11px;
+
+        svg {
+            display: block;
+        }
     }
 
     .overlay {
@@ -108,6 +270,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
             &:hover {
                 background-color: @brand-color;
                 border-color: @brand-color;
+                color: @on-brand-color;
             }
         }
     }
@@ -124,8 +287,12 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
         }
     }
 
-    // Touch devices have no hover, so keep the actions reachable.
+    // Touch devices have no hover, so keep the actions reachable (the badges move up out of their way).
     @media (hover: none) {
+        .thumb:has(.overlay) .thumbBadges {
+            bottom: 46px;
+        }
+
         .overlay {
             opacity: 1;
             align-items: flex-end;
@@ -138,6 +305,16 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true))
                 height: 34px;
                 opacity: 0.9;
             }
+        }
+
+        // With badges switched on they keep the bottom right and the buttons go top left.
+        .thumb.badgesOn:has(.overlay) .thumbBadges {
+            bottom: 6px;
+        }
+
+        .thumb.badgesOn .overlay {
+            align-items: flex-start;
+            justify-content: flex-start;
         }
     }
 

@@ -3,12 +3,14 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/BrowseRoute';
 import browseService from '../../../src/service/browseService';
+import liveChannelService from '../../../src/service/liveChannelService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 
 jest.mock('../../../src/service/browseService');
 const mocked = jest.mocked(browseService);
 
 const app = express();
+app.use(express.json());
 app.use('/', router);
 
 describe('BrowseRoute', () => {
@@ -24,7 +26,16 @@ describe('BrowseRoute', () => {
     it('GET /categories returns categories', async () => {
         mocked.categories.mockResolvedValue([{ id: 'comedy', title: 'Comedy' }]);
         const res = await request(app).get('/categories');
-        expect(res.body).toEqual([{ id: 'comedy', title: 'Comedy' }]);
+        expect(res.body).toEqual([{ id: 'comedy', title: 'Comedy', discover: false }]);
+    });
+
+    it('PUT /categories/:id/discover features a category, capped at 2', async () => {
+        await request(app).put('/categories/comedy/discover').send({ enabled: true });
+        const res = await request(app).put('/categories/drama/discover').send({ enabled: true });
+        expect(res.body).toEqual(['comedy', 'drama']);
+        const over = await request(app).put('/categories/news/discover').send({ enabled: true });
+        expect(over.status).toBe(400);
+        expect((await request(app).put('/categories/news/discover').send({})).status).toBe(400);
     });
 
     it('GET /category/:id passes paging through as numbers', async () => {
@@ -41,10 +52,19 @@ describe('BrowseRoute', () => {
         expect(mocked.category).not.toHaveBeenCalled();
     });
 
-    it('GET /channels is synchronous and returns the list', async () => {
-        mocked.channels.mockReturnValue([{ id: 'bbc_one_london', title: 'BBC One' }]);
+    it('GET /channels lists every live channel in the saved order, with its enabled state and vpid', async () => {
+        mocked.channels.mockReturnValue([
+            { id: 'bbc_one_london', title: 'BBC One', logo: 'one.svg', live: true },
+            { id: 'cbbc', title: 'CBBC', logo: 'cbbc.svg', live: true },
+        ]);
+        await liveChannelService.setOrder(['bbc_one_east', 'cbbc', 'bbc_one_london']);
+        await liveChannelService.setEnabled('cbbc', false);
         const res = await request(app).get('/channels');
-        expect(res.body).toEqual([{ id: 'bbc_one_london', title: 'BBC One' }]);
+        expect(res.body.slice(0, 3)).toEqual([
+            expect.objectContaining({ id: 'bbc_one_east', title: 'BBC One East', vpid: 'bbc_one_east', enabled: false, live: false, liveOnly: true }),
+            expect.objectContaining({ id: 'cbbc', vpid: 'cbbc_hd', enabled: false, live: false }),
+            expect.objectContaining({ id: 'bbc_one_london', vpid: 'bbc_one_hd', enabled: true, live: true }),
+        ]);
     });
 
     it('GET /channel/:id returns the channel page', async () => {
@@ -74,6 +94,10 @@ describe('BrowseRoute', () => {
         expect(mocked.details).toHaveBeenCalledWith(['b00abcde', 'b00fghij']);
         expect((await request(app).get('/details')).status).toBe(400);
         expect((await request(app).get('/details?pids=../x')).status).toBe(400);
+        // non-programme ids (live channels) are dropped, not fatal
+        mocked.details.mockClear();
+        expect((await request(app).get('/details?pids=bbc_four,b00abcde')).status).toBe(200);
+        expect(mocked.details).toHaveBeenCalledWith(['b00abcde']);
         const tooMany = Array.from({ length: 41 }, (_, i) => `b00abc${String(i).padStart(2, '0')}`).join(',');
         expect((await request(app).get(`/details?pids=${tooMany}`)).status).toBe(400);
     });

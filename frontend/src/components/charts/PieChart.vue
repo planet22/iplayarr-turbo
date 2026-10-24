@@ -1,9 +1,13 @@
 <template>
-    <apexchart type="donut" height="260" :options="options" :series="processedData.series"></apexchart>
+    <div role="img" :aria-label="summary">
+        <apexchart type="donut" height="260" :options="options" :series="processedData.series"></apexchart>
+    </div>
 </template>
 
 <script setup>
 import { computed, defineProps, ref, watch } from 'vue';
+
+import { chartTheme } from '@/lib/chartTheme';
 
 const props = defineProps({
     title: String,
@@ -13,6 +17,19 @@ const props = defineProps({
 });
 
 const MAX_ITEMS = 5;
+
+// Screen readers cannot see the chart, so give them its numbers as text.
+const summary = computed(() => {
+    const top = Object.entries(props.data ?? {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, MAX_ITEMS)
+        .map(([label, value]) => `${label} ${value}`);
+    return `${props.title || 'Chart'}: ${top.length ? top.join(', ') : 'no data'}`;
+});
+
+// Phones: a smaller, regular-weight title (the default is a big bold Arial), and the legend under the donut
+// instead of squeezed to its right, where it overlaps the ring.
+const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
 
 const buildData = (data) => {
     const entries = Object.entries(data)
@@ -41,24 +58,18 @@ watch(
 );
 
 const options = computed(() => {
+    const t = chartTheme();
     return {
         title: {
             text: props.title,
             style: {
                 fontSize: '20px',
-                color: '#ffffff' // Adjust for dark theme
+                color: t.text
             }
         },
-        colors: [
-            '#98003B',
-            '#C90A5F',
-            '#F12D7F',
-            '#c2687b',
-            '#ce8191',
-            '#A6A6A6'
-        ],
+        colors: t.series,
         theme: {
-            mode: 'dark' // Enables dark mode
+            mode: t.mode
         },
         labels: processedData.value.labels,
         dataLabels: {
@@ -72,7 +83,17 @@ const options = computed(() => {
             position: 'right',
             offsetY: 0,
             height: 200,
-        }
+        },
+        responsive: [
+            {
+                breakpoint: 600,
+                options: {
+                    chart: { height: 380 },
+                    title: { style: PHONE_TITLE },
+                    legend: { position: 'bottom', height: undefined, fontSize: '12px', offsetY: 0 },
+                },
+            },
+        ],
     };
 })
 </script>

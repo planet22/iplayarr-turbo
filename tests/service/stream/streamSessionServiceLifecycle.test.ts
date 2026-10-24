@@ -35,7 +35,10 @@ describe('streamSessionService lifecycle', () => {
     it('start registers an active session and emits', async () => {
         const id = await streamSessionService.start('p1', mode, client, '1.2.3.4', { a: 'b' });
         expect(find(id)).toMatchObject({ pid: 'p1', clientIp: '1.2.3.4', settings: { a: 'b' } });
-        expect(socketService.emit).toHaveBeenCalledWith('streams', expect.objectContaining({ history: [] }));
+        // a session starting only changes `active`, so it goes out on the light event, without history
+        expect(socketService.emit).toHaveBeenCalledWith('streamsActive', { active: [expect.objectContaining({ id })] });
+        expect(socketService.emit).not.toHaveBeenCalledWith('streams', expect.anything());
+        expect(mockGetItem).not.toHaveBeenCalled();
         expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_STARTED, expect.any(String), { pid: 'p1' });
     });
 
@@ -135,6 +138,111 @@ describe('streamSessionService lifecycle', () => {
     it('clearHistory empties storage', async () => {
         await streamSessionService.clearHistory();
         expect(mockSetItem).toHaveBeenCalledWith('streamHistory', []);
+    });
+
+    describe('throttled segment/byte emits', () => {
+        // A fresh module per test: the throttle timer is module state, and these need fake timers.
+        const load = async () => {
+            let svc: typeof streamSessionService = undefined as any;
+            let socket: typeof socketService = undefined as any;
+            await jest.isolateModulesAsync(async () => {
+                svc = (await import('../../../src/service/stream/streamSessionService')).default;
+                socket = (await import('../../../src/service/socketService')).default;
+            });
+            return { svc, socket };
+        };
+
+        beforeEach(() => jest.useFakeTimers());
+        afterEach(() => jest.useRealTimers());
+
+        // Only the emits that concern this test's own session. The 'socket' mock is not private to a
+        // test: a trailing throttle timer left running by an earlier test can fire into it late (seen
+        // under load as a stray `streamsActive {active: []}`), so counting every call is not stable.
+        const emitsFor = (socket: typeof socketService, id: string) =>
+            (socket.emit as jest.Mock).mock.calls.filter(([, payload]) => payload?.active?.some((s: any) => s.id === id));
+
+        it('emits the first event at once and folds a burst into one trailing emit', async () => {
+            const { svc, socket } = await load();
+            const id = await svc.start('p1', mode, client);
+            (socket.emit as jest.Mock).mockClear();
+
+            for (let i = 0; i < 50; i++) svc.recordSegmentDelivered(id, i, 10);
+            svc.addBytesTransferred(id, 5);
+            expect(emitsFor(socket, id)).toHaveLength(1);
+
+            await jest.advanceTimersByTimeAsync(800);
+            expect(emitsFor(socket, id)).toHaveLength(2);
+            const payload = emitsFor(socket, id)[1][1];
+            expect(payload.active[0]).toMatchObject({ currentSegmentIndex: 49, bytesTransferred: 505 });
+
+            await jest.advanceTimersByTimeAsync(5000);
+            expect(emitsFor(socket, id)).toHaveLength(2);
+        });
+
+        it('emits again straight away once the quiet interval has passed', async () => {
+            const { svc, socket } = await load();
+            const id = await svc.start('p1', mode, client);
+            (socket.emit as jest.Mock).mockClear();
+            svc.addBytesTransferred(id, 1);
+            await jest.advanceTimersByTimeAsync(800);
+            svc.addBytesTransferred(id, 1);
+            expect(emitsFor(socket, id)).toHaveLength(2);
+        });
+
+        it('sends only the active sessions - no history, and no database read', async () => {
+            const { svc, socket } = await load();
+            const done = await svc.start('done', mode, client);
+            await svc.end(done);
+            const id = await svc.start('p2', mode, client);
+            mockGetItem.mockClear();
+            (socket.emit as jest.Mock).mockClear();
+
+            svc.addBytesTransferred(id, 1);
+            expect(mockGetItem).not.toHaveBeenCalled();
+            expect(emitsFor(socket, id)).toHaveLength(1);
+            const [event, payload] = emitsFor(socket, id)[0];
+            expect(event).toBe('streamsActive');
+            expect(Object.keys(payload)).toEqual(['active']);
+            expect(payload.active.map((s: any) => s.id)).toEqual([id]);
+        });
+
+        it('sends the full state (with history) only when a session is archived or history changes', async () => {
+            let stored: any[] = [];
+            mockGetItem.mockImplementation(async () => stored);
+            mockSetItem.mockImplementation(async (_key: string, value: any[]) => {
+                stored = value;
+            });
+            const { svc, socket } = await load();
+            const id = await svc.start('p1', mode, client);
+            (socket.emit as jest.Mock).mockClear();
+
+            await svc.end(id);
+            expect(socket.emit).toHaveBeenCalledWith('streams', {
+                active: [],
+                history: [expect.objectContaining({ id, endedAt: expect.any(Date) })],
+            });
+            // every emit that carries this session in history is the full event, never the light one
+            const carryingIt = (socket.emit as jest.Mock).mock.calls.filter(([, p]) => p?.history?.some((h: any) => h.id === id));
+            expect(carryingIt.length).toBeGreaterThan(0);
+            expect(carryingIt.every(([event]) => event === 'streams')).toBe(true);
+
+            (socket.emit as jest.Mock).mockClear();
+            const other = await svc.start('p2', mode, client);
+            await svc.stop(other);
+            expect((socket.emit as jest.Mock).mock.calls.some((c) => c[0] === 'streams' && c[1].history.length === 2)).toBe(true);
+        });
+
+        it('still emits immediately for start, setResolution and setSegmentCount', async () => {
+            const { svc, socket } = await load();
+            const id = await svc.start('p1', mode, client);
+            svc.addBytesTransferred(id, 1); // arms the throttle
+            (socket.emit as jest.Mock).mockClear();
+            svc.setResolution(id, '720');
+            svc.setSegmentCount(id, 4);
+            await jest.advanceTimersByTimeAsync(0);
+            expect(emitsFor(socket, id)).toHaveLength(2);
+            expect(emitsFor(socket, id).every(([event]) => event === 'streamsActive')).toBe(true);
+        });
     });
 
     it('archives sessions idle past the timeout via the sweep timer', async () => {

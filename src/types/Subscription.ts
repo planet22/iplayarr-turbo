@@ -17,6 +17,10 @@ export interface Subscription {
     arr?: SubscriptionArrLink;
     // Added only to Sonarr/Radarr, which does the downloading: iPlayarr never checks or queues for it.
     arrOnly?: boolean;
+    // Extra versions (version profile ids: audio-described, signed) downloaded as well as the plain one.
+    versions?: string[];
+    // Per version, the episodes already dealt with (done, or too old to look for), so only new ones are fetched.
+    seenVersions?: Record<string, string[]>;
 }
 
 export interface SubscriptionArrLink {
@@ -35,6 +39,10 @@ export interface SubscribeOptions {
     downloadAll?: boolean;
     // Record the show without any iPlayarr checking or queuing (Sonarr/Radarr handles downloads).
     arrOnly?: boolean;
+    // Link to set straight away (a request: the show was just added to Sonarr/Radarr).
+    arr?: SubscriptionArrLink;
+    // Extra versions (audio-described, signed) to download as well as the plain one, for new episodes.
+    versions?: string[];
 }
 
 export interface SubscriptionCheckResult {

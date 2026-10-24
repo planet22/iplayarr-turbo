@@ -48,6 +48,8 @@ These only apply when `STREAM_CLIENT=NATIVE`:
 - **Native Quality** (`STREAM_NATIVE_ADAPTIVE`, default off/Fixed) — Fixed pins playback to your `VIDEO_QUALITY` setting (recommended). Adaptive instead hands your player the full bitrate ladder so it adjusts quality to your connection automatically.
 - **Native Quality Probe** (`STREAM_NATIVE_HQ_PROBE`, default off) — BBC doesn't always advertise a connection's real quality accurately. Enabling this checks the actual encoded quality of every candidate connection before picking one, which can find a genuinely higher-quality stream but adds a short delay before playback starts.
 - **Native FHD Upgrade** (`STREAM_NATIVE_EXPERIMENTAL_FHD`, default on) — Attempts to unlock real 1080p on titles that have it, above BBC's usual 720p cap for this kind of access (recommended). Falls back to normal quality automatically if it doesn't work on a given title.
+- **Native Subtitles** (`STREAM_SUBTITLES`, default off) — Offers the BBC's subtitles as a selectable track, for on-demand programmes and live channels. See [Subtitles](#subtitles).
+- **Live 1080p (Experimental)** (`STREAM_LIVE_DASH_1080`, default off) — BBC's live HLS stops at 720p, but it also offers each channel as a 1080p HEVC DASH feed. With this on, **Direct mode** presents that feed as HLS: BBC's DASH segments are fMP4, which HLS plays as they are, so iPlayarr only writes the playlists (a master plus video and audio playlists) and proxies BBC's segments through the usual segment proxy - no ffmpeg, no re-encoding, nothing on disk. **Progressive MKV mode** has ffmpeg read the feed directly. HEVC support depends on the player, and subtitles are not offered on these channels. If the channel has no DASH feed, or the manifest is not one iPlayarr can present, it plays as normal 720p HLS. **Jellyfin:** it caches a probe of each Live TV channel, so clear those cached probes after changing this setting (see [Jellyfin](media-servers/jellyfin.md)).
 
 ## Step 4 — choose a Stream Mode
 
@@ -60,6 +62,23 @@ These only apply when `STREAM_CLIENT=NATIVE`:
 
 `STREAM_CACHE_DIR` is where temporary files live while a stream is in flight. Leave it blank to use a system temp folder, or point it at a specific directory if you want more control over where that scratch data lands.
 
+## Subtitles
+
+The BBC's HLS streams carry no subtitles of their own; the captions are published separately. With **Native Subtitles** (`STREAM_SUBTITLES`) turned on in Settings → Streaming, iPlayarr fetches them, converts them to WebVTT and adds them to the stream as an **English** subtitle track. The track is **off by default** in the player, so nothing appears until you choose it.
+
+- **Off by default, and additive.** With the setting off, streams are served exactly as before. If a programme has no captions, or fetching or converting them fails, you simply get the stream without a subtitle track.
+- **Needs** `STREAM_CLIENT=NATIVE` and `STREAM_MODE=direct`. Progressive MKV output has no subtitle track.
+- **On-demand programmes:** one caption file per programme, when the BBC has published captions for it.
+- **Live channels:** the BBC publishes live captions as one small fragment per video segment; iPlayarr mirrors the video's own segment window, so the track follows the live edge. Captions lag the picture slightly, as live captions always do.
+- **Pinned quality (`STREAM_NATIVE_ADAPTIVE=false`):** the stream is a single quality, which has nowhere to attach a track, so it is served as a one-quality master playlist that carries the subtitles. Players treat it the same.
+- **Players:** anything that plays HLS and reads WebVTT subtitle tracks (the in-app player, hls.js based players). Caption times are written on the video's own timeline, so players that honour the playlist's timestamp map and ffmpeg-based software (which ignores it) both agree.
+- **Streaming page:** a **Subs** column records whether the setting was on when each stream started (On/Off). It is the setting at the time, not a confirmation that the programme had captions. Streams from before the column existed show it blank.
+
+### Jellyfin
+
+- **On-demand `.strm` items work.** Jellyfin sees an English WebVTT stream when it probes the item and extracts it for its own subtitle menu. Jellyfin only learns of the track when it probes an item, so items it already probed **before** you enabled the setting won't show the track until Jellyfin probes them again (for example by refreshing their metadata). The same applies in reverse: Jellyfin keeps what it learned and the subtitle it extracted, so turning the setting off later leaves a track on already-probed items until they are refreshed.
+- **Live TV does not offer the track.** Jellyfin's Live TV pipeline drops embedded subtitle streams from tuner channels (the stream it opens lists video and audio only, and its transcode runs with subtitles disabled), so live captions do not appear in Jellyfin's own Live TV, even though the stream carries them. Playback is unaffected. Live captions do work in the in-app player.
+
 ## Live channels
 
 Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC One, Two, Three, Four, News, Parliament, CBBC, CBeebies, BBC Alba, BBC Scotland and S4C.
@@ -69,7 +88,9 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 - iPlayarr only rewrites or deletes the live files it created, and rewrites them all at server start so a changed Stream Base URL or Key does not leave dead links.
 - The highest quality variant is listed first, so media servers probe and report 720p rather than the lowest listed.
 - The Streaming page shows live sessions with the channel name and logo and a **Live** badge.
+- With **Native Subtitles** on, live channels carry an English subtitle track too (see [Subtitles](#subtitles)).
 - The [STRM Watchdog](WATCHDOG.md) ignores live files.
+- **Optional channels:** besides the 11 above you can enable BBC Red Button, 19 BBC nations and English-region feeds and (with `LIVE_UHD_EVENT_FEEDS`) the UHD event feeds from the Channels page's Arrange mode (Settings → General → Show Channel Tools). Disabling a channel hides it, unsubscribes it and removes it from Jellyfin Live TV and the guide. Channel order from Arrange also sets the order of the guide and Jellyfin channel numbers. See [BROWSE.md](BROWSE.md#channels-page-tools).
 
 ### Jellyfin Live TV (tuner + guide)
 
@@ -98,6 +119,19 @@ Changing any of them (or the channel selection or offset) changes the guide URL'
 
 Playback uses the existing live resolver, so it needs a UK IP.
 
+### Customising channels and adding your own
+
+Every channel can be renamed, given a colour, text on its logo, an uploaded logo and a Jellyfin channel number, and you can add live channels of your own (the API is under `/json-api/live-channels`).
+
+- **Logos** live in `<config>/logos/`. Nothing is shipped in the image: on start-up the BBC logos that are missing are downloaded into `logos/defaults/` (never overwritten; offline starts retry next time). An upload (PNG, JPG, WebP or SVG, 200-2000px per side, no more than 3:1, 2MB) replaces the default; removing it goes back. The text is drawn black or white, whichever reads best on the colour.
+- **Your own channels** are live-only: a name, colour, stream URL, optional group (the M3U `group-title`, default `Custom`), stream type, request headers (for example `User-Agent` or `Referer`) and channel number. They can be added to the library (`.strm`) and Jellyfin Live TV like the BBC ones but have no guide data. HLS without headers goes through the normal segment proxy; DASH, plain streams and anything needing headers are read by ffmpeg and delivered as MKV whatever the Stream Mode.
+- **Test stream** reads the URL (never link-local addresses) and reports whether it is HLS, DASH or a plain stream, the quality ladder, audio and subtitle renditions and whether it is live. Every custom channel is re-tested once a day; failures are logged and shown as a badge.
+- **Import / export**: channels export as JSON, and a JSON export or an M3U playlist (`group-title` and `#EXTVLCOPT` user-agent/referrer are kept) can be imported.
+
+## Playing a version (audio described / signed)
+
+When a programme has an audio described or signed version, the Play button can ask which to play (or use the default) and the in-app player has a version switcher that resumes at the same position. A `.strm` link can carry `?version=`. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
+
 ## Checking links still work
 
 Programmes expire from iPlayer. The optional [STRM Watchdog](WATCHDOG.md) checks daily that your `.strm` links still resolve and can report or remove dead ones.
@@ -119,6 +153,7 @@ Every search result, Queue/History row, and video info modal (opened from Queue,
 | `STREAM_NATIVE_ADAPTIVE` | `false` | Native client only |
 | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only |
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only |
+| `STREAM_SUBTITLES` | `false` | Native client, Direct mode. Offers the BBC's captions as an English subtitle track, on-demand and live |
 | `LIVE_STRM_DIR` | _(unset)_ | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR` |
 | `STREAM_HISTORY_RETENTION_DAYS` | `30` | How long native streaming session history is kept before nightly cleanup |
 

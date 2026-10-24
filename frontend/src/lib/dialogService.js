@@ -1,6 +1,7 @@
 import { useModal } from 'vue-final-modal';
 
 import AlertDialog from '@/components/modals/AlertDialog.vue';
+import DownloadBatchConfirm from '@/components/modals/DownloadBatchConfirm.vue';
 
 const dialogService = {
     alert: (title, text, subtext) => {
@@ -18,7 +19,8 @@ const dialogService = {
         formModal.open();
     },
 
-    confirm: async (title, text, subtext) => {
+    // options: { danger, confirmLabel, cancelLabel } - a red, verb-labelled confirm button for destructive actions.
+    confirm: async (title, text, subtext, options = {}) => {
         return new Promise((resolve) => {
             const formModal = useModal({
                 component: AlertDialog,
@@ -27,6 +29,10 @@ const dialogService = {
                     text,
                     subtext,
                     showCancel: true,
+                    ...(options.note ? { note: options.note } : {}),
+                    ...(options.confirmLabel ? { confirmLabel: options.confirmLabel } : {}),
+                    ...(options.cancelLabel ? { cancelLabel: options.cancelLabel } : {}),
+                    danger: !!options.danger,
                     onConfirm: () => {
                         resolve(true);
                         formModal.close();
@@ -35,6 +41,36 @@ const dialogService = {
                         resolve(false);
                         formModal.close();
                     },
+                    // Escape or a click outside closes the modal without either button.
+                    onClosed: () => resolve(false),
+                },
+            });
+            formModal.open();
+        });
+    },
+
+    // Confirms a batch of downloads and resolves with { media: 'strm' | 'download', version } (see planDownloads in
+    // downloadVersions.js), or false if cancelled. `versions` lists the extra versions to offer a choice of.
+    confirmDownload: (text, { count, totalMb, versions = [], initialVersion = '' }) => {
+        return new Promise((resolve) => {
+            const formModal = useModal({
+                component: DownloadBatchConfirm,
+                attrs: {
+                    text,
+                    count,
+                    totalMb,
+                    versions,
+                    initialVersion,
+                    onConfirm: (choice) => {
+                        resolve(choice);
+                        formModal.close();
+                    },
+                    onCancel: () => {
+                        resolve(false);
+                        formModal.close();
+                    },
+                    // Escape or a click outside closes the modal without either button.
+                    onClosed: () => resolve(false),
                 },
             });
             formModal.open();
@@ -59,6 +95,8 @@ const dialogService = {
                         resolve(false);
                         formModal.close();
                     },
+                    // Escape or a click outside closes the modal without either button.
+                    onClosed: () => resolve(false),
                 },
             });
             formModal.open();

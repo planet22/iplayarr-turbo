@@ -6,6 +6,7 @@ import AbstractDownloadService from '../../service/download/AbstractDownloadServ
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { createStrmContent } from '../../utils/Utils';
 import configService from '../configService';
+import queueService from '../queueService';
 
 class StrmDownloadService implements AbstractDownloadService {
     // There's no real download to perform in STRM mode - the child process/stdout/close
@@ -15,9 +16,10 @@ class StrmDownloadService implements AbstractDownloadService {
         return spawn(process.execPath, ['-e', 'process.exit(0)']);
     }
 
-    async postProcess(pid: string, directory: string): Promise<void> {
+    async postProcess(pid: string, directory: string, _code?: any, jobId?: string): Promise<void> {
         const streamKey: string = (await configService.getParameter(IplayarrParameter.STREAM_KEY)) as string;
-        const content: string = await createStrmContent(pid, streamKey);
+        const library = queueService.getFromQueue(pid, jobId)?.library;
+        const content: string = await createStrmContent(pid, streamKey, library?.quality, library?.version);
         fs.writeFileSync(path.join(directory, 'stream.strm'), content, 'utf8');
     }
 }

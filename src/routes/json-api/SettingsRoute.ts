@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { version } from '../../config/version.json';
+import liveChannelFacade from '../../facade/liveChannelFacade';
 import configService, { ConfigMap } from '../../service/configService';
 import historyService from '../../service/historyService';
 import loggingService from '../../service/loggingService';
@@ -11,6 +12,7 @@ import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { QueueEntry } from '../../types/QueueEntry';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { versionProfiles } from '../../types/VersionProfiles';
 import { VideoEventType } from '../../types/VideoEvent';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
 import { maskConfig, restoreConfig } from '../../utils/secretMask';
@@ -67,7 +69,12 @@ router.put('/', async (req: Request, res: Response) => {
         return;
     }
     const validator: Validator = new ConfigFormValidator();
-    const validationResult: { [key: string]: string } = await validator.validate(req.body);
+    // The UI saves one tab at a time, so the body may hold only some keys: validate them against the stored
+    // config, and report only problems with the keys that were actually sent.
+    const validationAll: { [key: string]: string } = await validator.validate({ ...currentConfig, ...req.body });
+    const validationResult: { [key: string]: string } = Object.fromEntries(
+        Object.entries(validationAll).filter(([key]) => key in req.body)
+    );
     if (Object.keys(validationResult).length > 0) {
         const apiResponse: ApiResponse = {
             error: ApiError.INVALID_INPUT,
@@ -84,6 +91,8 @@ router.put('/', async (req: Request, res: Response) => {
     const oldStreamKey: string | undefined = streamKeyChanging
         ? await configService.getParameter(IplayarrParameter.STREAM_KEY)
         : undefined;
+
+    const uhdWasOn: boolean = currentConfig[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'true';
 
     for (const key of Object.keys(req.body)) {
         const val = req.body[key];
@@ -119,6 +128,11 @@ router.put('/', async (req: Request, res: Response) => {
     const newStreamKey: string | undefined = req.body[IplayarrParameter.STREAM_KEY];
     if (newStreamKey && oldStreamKey && newStreamKey !== oldStreamKey) {
         await rewriteStrmKeys('streamkey', oldStreamKey, newStreamKey, VideoEventType.STREAM_KEY_ROTATED, 'Stream key');
+    }
+
+    // Switching the UHD event feeds off takes them out of the library and Live TV (the UI warns first).
+    if (uhdWasOn && req.body[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'false') {
+        await liveChannelFacade.removeUhdFeeds();
     }
 
     res.json(req.body);
@@ -157,6 +171,10 @@ async function rewriteStrmKeys(
 
 router.get('/qualityProfiles', (_, res: Response) => {
     res.json(qualityProfiles);
+});
+
+router.get('/versionProfiles', (_, res: Response) => {
+    res.json(versionProfiles.map(({ id, name, tag }) => ({ id, name, tag })));
 });
 
 export default router;

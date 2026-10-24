@@ -37,6 +37,27 @@ describe('GetIplayerExecutableService', () => {
         jest.clearAllMocks();
     });
 
+    describe('getQualityFallbackChain', () => {
+        it('prefers the quality stored on the queue entry over VIDEO_QUALITY', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('hd');
+            queueService.getFromQueue = jest.fn().mockReturnValue({ library: { quality: 'sd' } });
+            expect(await service.getQualityFallbackChain('p0abc123')).toEqual(['sd', 'hd', 'web', 'mobile']);
+        });
+
+        it('reads the quality of the named job when the programme has several', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('hd');
+            queueService.getFromQueue = jest.fn().mockImplementation((_pid: string, jobId?: string) => (jobId === 'job-2' ? { library: { quality: 'web' } } : undefined));
+            expect((await service.getQualityFallbackChain('p0abc123', 'job-2'))[0]).toBe('web');
+            expect(queueService.getFromQueue).toHaveBeenCalledWith('p0abc123', 'job-2');
+        });
+
+        it('falls back to VIDEO_QUALITY with no queue entry', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('fhd');
+            queueService.getFromQueue = jest.fn().mockReturnValue(undefined);
+            expect((await service.getQualityFallbackChain('p0abc123'))[0]).toBe('fhd');
+        });
+    });
+
     describe('getIPlayerExec', () => {
         it('should return exec and args with profile-dir if cacheLocation exists', async () => {
             const mockCacheLocation = '/mock/cache';
@@ -114,6 +135,29 @@ describe('GetIplayerExecutableService', () => {
             expect(result.args).toContain('--output');
             expect(result.args).toContain(`${mockDownloadDir}/${mockPid}`);
             expect(result.args).toContain(`--pid=${mockPid}`);
+        });
+
+        describe('--versions', () => {
+            const versionArgs = async (library?: { version?: string }) => {
+                mockedConfigService.getParameter.mockImplementation((key: IplayarrParameter) =>
+                    Promise.resolve(key === IplayarrParameter.GET_IPLAYER_EXEC ? 'get_iplayer' : undefined)
+                );
+                (queueService.getFromQueue as jest.Mock).mockReturnValue(library ? { library } : undefined);
+                const { args } = await service.getAllDownloadParameters('p01abc', '/mock/dir', 'job-1');
+                return args.filter((arg) => arg.startsWith('--versions'));
+            };
+
+            it('asks get_iplayer for the audio described or signed version a queue entry is of', async () => {
+                expect(await versionArgs({ version: 'audio-described' })).toEqual(['--versions=audiodescribed']);
+                expect(await versionArgs({ version: 'signed' })).toEqual(['--versions=signed']);
+                expect(queueService.getFromQueue).toHaveBeenCalledWith('p01abc', 'job-1');
+            });
+
+            it('adds nothing for the standard version, an unknown one or no queue entry', async () => {
+                expect(await versionArgs({})).toEqual([]);
+                expect(await versionArgs({ version: 'bogus' })).toEqual([]);
+                expect(await versionArgs()).toEqual([]);
+            });
         });
     });
 

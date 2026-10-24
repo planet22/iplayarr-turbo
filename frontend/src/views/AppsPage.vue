@@ -4,11 +4,11 @@
             NZB clients need the category "iplayer" for NZB forwarding to work.
         </InfoBar>
         <PageHeader title="Apps" />
-        <p class="mb-0">Manage your integrations with Apps (including Arr and NZB Clients) here</p>
+        <InfoBar small>Manage the apps iPlayarr works with, including Arr and NZB clients.</InfoBar>
         <div class="block-reset" />
         <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm">
             <a class="appBox" @click="openForm(item)">
-                <span class="lastSeen" title="Last Seen">{{ formatRelativeTime(item.lastSeen, now) }}</span>
+                <span class="lastSeen" title="Last Seen">{{ formatRelativeTime(item.lastSeen, now, true) }}</span>
                 <div class="major">
                     <img class="appImg" :src="`/img/${item.type.toLowerCase()}.svg`" />
                     <span class="appName">
@@ -43,12 +43,49 @@
         <div class="block-reset" />
 
         <legend>User-Agent Lookup</legend>
-        <p class="mb-0">
-            Maps a caller's User-Agent to an App, for requests without an app ID (e.g. a manually added indexer).
-            Unrecognised ones appear automatically with a blank App - fill one in, or trim it, to match future
-            requests (partial match).
-        </p>
-        <table class="queueTable uaTable responsive-table">
+        <InfoBar small>
+            Maps a User-Agent to an App for requests with no app ID. New ones appear with a blank App: fill one in to
+            match future requests (partial match).
+        </InfoBar>
+        <div v-if="isMobile" class="cardList uaCards">
+            <DataCard v-for="mapping in userAgentMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
+                <template #title>
+                    <input
+                        v-model="mapping.userAgent"
+                        class="uaTextInput"
+                        type="text"
+                        placeholder="User-Agent"
+                        @change="saveMapping(mapping)"
+                    />
+                </template>
+                <input
+                    v-model="mapping.appName"
+                    class="uaTextInput"
+                    type="text"
+                    placeholder="Fill in App name"
+                    @change="saveMapping(mapping)"
+                />
+                <template #foot>
+                    <span>Last seen {{ formatRelativeTime(mapping.lastSeen, now, true) }}</span>
+                    <button class="clickable uaCardButton" title="Remove" @click="removeMapping(mapping)">
+                        <font-awesome-icon :icon="['fas', 'trash']" />
+                    </button>
+                </template>
+            </DataCard>
+            <DataCard>
+                <template #title>
+                    <input v-model="newMapping.userAgent" class="uaTextInput" type="text" placeholder="e.g. Sonarr" />
+                </template>
+                <input v-model="newMapping.appName" class="uaTextInput" type="text" placeholder="e.g. Iplayarr-sonarr" />
+                <template #foot>
+                    <span>New mapping</span>
+                    <button class="clickable uaCardButton" title="Add" :disabled="!canAddMapping" @click="addMapping">
+                        <font-awesome-icon :icon="['fas', 'plus']" />
+                    </button>
+                </template>
+            </DataCard>
+        </div>
+        <table v-else class="queueTable uaTable">
             <colgroup>
                 <col />
                 <col style="width: 240px" />
@@ -124,14 +161,17 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
+import DataCard from '@/components/common/DataCard.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { deepCopy, formatRelativeTime } from '@/lib/utils';
 
+const isMobile = useIsMobile();
 const apps = ref([]);
 const features = ref([]);
 const userAgentMappings = ref([]);
@@ -180,7 +220,8 @@ const deleteApp = async ({ id, name }) => {
         await dialogService.confirm(
             'Delete App',
             `Are you sure you want to delete ${name}`,
-            'Indexers and Download Clients in the target Arr, will NOT be deleted'
+            'Indexers and Download Clients in the target Arr, will NOT be deleted',
+            { danger: true, confirmLabel: 'Delete' }
         )
     ) {
         await ipFetch('json-api/apps', 'DELETE', { id });
@@ -223,7 +264,7 @@ const saveMapping = async (mapping) => {
 };
 
 const removeMapping = async ({ id, userAgent }) => {
-    if (await dialogService.confirm('Delete User-Agent Mapping', `Are you sure you want to delete "${userAgent}"`)) {
+    if (await dialogService.confirm('Delete User-Agent Mapping', `Are you sure you want to delete "${userAgent}"`, undefined, { danger: true, confirmLabel: 'Delete' })) {
         await ipFetch('json-api/apps/user-agents', 'DELETE', { id });
         await refreshUserAgentMappings();
     }
@@ -231,13 +272,15 @@ const removeMapping = async ({ id, userAgent }) => {
 </script>
 
 <style lang="less" scoped>
+// A block with no positioning of its own: the absolute last-seen label anchors to the card
+// (.listButton), not to this inline <a> inside a <button>, which Safari/Firefox lay out differently.
 .appBox {
-    position: relative;
+    display: block;
 
     .lastSeen {
         position: absolute;
-        top: 0;
-        right: 0;
+        top: 8px;
+        right: 12px;
         font-size: 12px;
         opacity: 0.7;
     }
@@ -259,6 +302,45 @@ const removeMapping = async ({ id, userAgent }) => {
     align-items: center;
     gap: 5px;
     margin-top: 6px;
+}
+
+.uaCards {
+    // Tablet portrait: two cards across.
+    @media (min-width: 520px) {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        align-items: start;
+    }
+
+    .uaTextInput {
+        box-sizing: border-box;
+        padding: 6px 10px;
+        width: 100%;
+        height: 36px;
+        // 16px stops iOS Safari zooming the page when an input is focused.
+        font-size: 16px;
+        border: 1px solid @input-border-color;
+        border-radius: 4px;
+        background-color: @input-background-color;
+        color: @input-text-color;
+    }
+
+    .unassigned .uaTextInput {
+        border-color: @warn-color;
+    }
+
+    .uaCardButton {
+        background: none;
+        border: none;
+        padding: 4px 8px;
+        color: @primary-text-color;
+        font-size: 16px;
+
+        &:disabled {
+            opacity: 0.35;
+        }
+    }
 }
 
 .uaTable {

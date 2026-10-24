@@ -32,6 +32,13 @@ On the Apps page, editing an App and clearing its Download Client or Indexer nam
 
 Also on the Apps page: a **User-Agent Lookup** table. Search/grab requests that arrive without an app ID — e.g. an indexer you added manually in Sonarr/Radarr rather than through the Apps auto-setup flow — can't normally be attributed to a specific app for stats/logging. iPlayarr automatically captures any unrecognized `User-Agent` header it sees with a blank app name; filling that in (partial/substring match against future requests) attributes that traffic to the named app going forward. Useful if you run multiple Sonarr/Radarr instances against one iPlayarr and want the NZB diagnostics page (see [USAGE_GUIDE.md](USAGE_GUIDE.md)) to tell them apart.
 
+## Quality and version variants
+
+- **Additional Qualities** (Settings → Media Management) lists the same programme at several qualities so Sonarr/Radarr can pick one.
+- **Additional Versions** adds audio described / signed releases tagged `AUDIO.DESCRIBED` / `SIGNED` in the name; create a Custom Format on that tag to prefer or avoid them. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
+- **Release Language** adds a language tag if Sonarr/Radarr shows Unknown language, and **Airdate Numbering** numbers by UK air date.
+- Native downloads (the default download client) complete quickly and report speed, ETA and size to the queue; the completed directory reported is the *arr Complete Directory when set.
+
 ## Troubleshooting a failed "Test"
 
 When Sonarr/Radarr's own "Test" button on the Indexer/Download Client fails:

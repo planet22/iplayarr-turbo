@@ -49,10 +49,24 @@ describe('Queue and History Routes', () => {
       (queueService.getQueue as jest.Mock).mockReturnValue(updatedQueue);
 
       const res = await request(app).delete(`/queue?pid=${pid}`);
-      expect(queueService.cancelItem).toHaveBeenCalledWith(pid);
+      expect(queueService.cancelItem).toHaveBeenCalledWith(pid, false, undefined);
       expect(socketService.emit).toHaveBeenCalledWith('queue', updatedQueue);
       expect(res.status).toBe(200);
       expect(res.body).toEqual(updatedQueue);
+    });
+  });
+
+  describe('with a job id', () => {
+    it('cancels and removes only the named download', async () => {
+      (queueService.getQueue as jest.Mock).mockReturnValue([]);
+      (historyService.removeHistory as jest.Mock).mockResolvedValue(undefined);
+      (historyService.getHistory as jest.Mock).mockResolvedValue([]);
+
+      await request(app).delete('/queue?pid=123&jobId=job-1');
+      expect(queueService.cancelItem).toHaveBeenCalledWith('123', false, 'job-1');
+
+      await request(app).delete('/history?pid=123&jobId=job-2');
+      expect(historyService.removeHistory).toHaveBeenCalledWith('123', false, 'job-2');
     });
   });
 
@@ -65,7 +79,7 @@ describe('Queue and History Routes', () => {
       (historyService.getHistory as jest.Mock).mockResolvedValue(updatedHistory);
 
       const res = await request(app).delete(`/history?pid=${pid}`);
-      expect(historyService.removeHistory).toHaveBeenCalledWith(pid);
+      expect(historyService.removeHistory).toHaveBeenCalledWith(pid, false, undefined);
       expect(socketService.emit).toHaveBeenCalledWith('history', updatedHistory);
       expect(res.status).toBe(200);
       expect(res.body).toEqual(updatedHistory);

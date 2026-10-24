@@ -1,11 +1,13 @@
 import { createHash } from 'crypto';
 
-import { BrowseChannels } from '../constants/BrowseChannels';
-import { isLiveChannel } from '../constants/LiveChannels';
+import { channelLook, customChannel, hasCustomLogo } from '../constants/CustomChannels';
+import { allLiveChannels } from '../constants/LiveChannels';
 import { BrowseSlot } from '../types/Browse';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import browseService from './browseService';
+import channelLogoService from './channelLogoService';
 import configService from './configService';
+import liveChannelService from './liveChannelService';
 import liveTvChannelService from './liveTvChannelService';
 
 // Jellyfin shows channel logos in square tiles and wide guide cards; landscape fills the wide ones.
@@ -108,16 +110,20 @@ class LiveTvService {
         return (await configService.getParameter(IplayarrParameter.LIVE_TV_ENABLED)) === 'true';
     }
 
-    // Every channel that can be played live, regardless of selection - channel numbers come from here so
-    // they stay put as channels are added and removed.
-    allChannels() {
-        return BrowseChannels.filter(({ id }) => isLiveChannel(id));
+    // Every channel that can be played live, regardless of selection or whether it is switched on, in the
+    // order set on the Channels page. Channel numbers come from here, so a channel keeps its number when it
+    // is switched off or taken out of Live TV; only rearranging changes them.
+    async allChannels() {
+        const order = await liveChannelService.order();
+        return allLiveChannels().sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
     }
 
     // Just the channels picked for Live TV.
     async channels() {
         const selected = await liveTvChannelService.list();
-        return this.allChannels().filter(({ id }) => selected.includes(id));
+        const picked = (await this.allChannels()).filter(({ id }) => selected.includes(id));
+        const enabled = await Promise.all(picked.map(({ id }) => liveChannelService.isEnabled(id)));
+        return picked.filter((_, index) => enabled[index]);
     }
 
     async epgOffsetMinutes(): Promise<number> {
@@ -176,19 +182,20 @@ class LiveTvService {
         const baseUrl = await this.#baseUrl();
         const lines: string[] = ['#EXTM3U'];
         const shape = await this.logoShape();
-        const numbers = this.allChannels().map(({ id }) => id);
+        const numbers = (await this.allChannels()).map(({ id }) => id);
         for (const channel of await this.channels()) {
             const attrs = [
                 `tvg-id="${m3uAttr(channel.id)}"`,
                 `tvg-name="${m3uAttr(channel.title)}"`,
-                `tvg-chno="${numbers.indexOf(channel.id) + 1}"`,
+                `tvg-chno="${channelLook(channel.id)?.channelNumber ?? numbers.indexOf(channel.id) + 1}"`,
             ];
-            if (channel.masterBrand) {
+            if (channel.masterBrand || hasCustomLogo(channel.id)) {
                 attrs.push(
                     `tvg-logo="${baseUrl}/api?mode=live_logo&channel=${encodeURIComponent(channel.id)}&v=png-${shape}&streamkey=${encodeURIComponent(streamKey)}"`
                 );
             }
-            attrs.push('group-title="BBC"');
+            const custom = customChannel(channel.id);
+            attrs.push(`group-title="${custom ? m3uAttr(custom.group ?? 'Custom') : 'BBC'}"`);
             lines.push(`#EXTINF:-1 ${attrs.join(' ')},${channel.title}`);
             // The .m3u8 path matters: Jellyfin only recognises an HLS manifest by the URL path's
             // extension, and without it marks the channel direct-playable - browsers then try to
@@ -200,17 +207,31 @@ class LiveTvService {
         return lines.join('\n') + '\n';
     }
 
+    #guideDays(): string[] {
+        const days: string[] = [];
+        for (let offset = -GUIDE_DAYS_BEFORE; offset <= GUIDE_DAYS_AFTER; offset++) {
+            days.push(ukDate(offset));
+        }
+        return days;
+    }
+
+    // Scheduled refresh of the day schedules behind the guide, so a Jellyfin guide fetch is always
+    // served from cache. One day at a time, like epg(), to keep the BBC connections happy.
+    async refreshGuide(): Promise<void> {
+        if (!(await this.isEnabled())) return;
+        for (const day of this.#guideDays()) {
+            await browseService.refreshSchedule(day);
+        }
+    }
+
     async epg(): Promise<string> {
         const { baseUrl, streamKey } = await this.#keyAndBase();
         const channels = await this.channels();
         const offset = await this.epgOffsetMinutes();
         const guide = await this.guideOptions();
-        const days: string[] = [];
-        for (let offset = -GUIDE_DAYS_BEFORE; offset <= GUIDE_DAYS_AFTER; offset++) {
-            days.push(ukDate(offset));
-        }
+        const days = this.#guideDays();
         // One day at a time: each day is already a request per channel, and firing a whole week at
-        // the BBC at once gets TLS connections dropped. Responses are Redis-cached either way.
+        // the BBC at once gets TLS connections dropped. Responses are cached either way.
         const schedules: Awaited<ReturnType<typeof browseService.schedule>> = [];
         for (const day of channels.length === 0 ? [] : days) {
             schedules.push(...(await browseService.schedule(day).catch(() => [])));
@@ -250,7 +271,11 @@ class LiveTvService {
     // Jellyfin would either not render or upscale to a blur, so it is rasterised here on the logo's own
     // background colour. sharp is loaded lazily so a missing native binary only costs the logos.
     async logo(channelId: string): Promise<Buffer | undefined> {
-        const masterBrand = this.allChannels().find(({ id }) => id === channelId)?.masterBrand;
+        if (hasCustomLogo(channelId)) {
+            const [customWidth, customHeight] = LOGO_SHAPES[await this.logoShape()];
+            return channelLogoService.render(channelId, customWidth, customHeight);
+        }
+        const masterBrand = (await this.allChannels()).find(({ id }) => id === channelId)?.masterBrand;
         const svg = masterBrand ? await browseService.channelLogo(masterBrand) : undefined;
         if (!svg) return undefined;
         const background = /fill="(#[0-9a-f]{3,8})"/i.exec(svg)?.[1] ?? '#000000';

@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import request from 'supertest';
 
+import liveChannelFacade from '../../../src/facade/liveChannelFacade';
 import SettingsRoute from '../../../src/routes/json-api/SettingsRoute';
 import configService from '../../../src/service/configService';
 import historyService from '../../../src/service/historyService';
@@ -13,6 +14,7 @@ import { VideoEventType } from '../../../src/types/VideoEvent';
 import * as Utils from '../../../src/utils/Utils';
 import { ConfigFormValidator } from '../../../src/validators/ConfigFormValidator';
 
+jest.mock('../../../src/facade/liveChannelFacade');
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/historyService');
 jest.mock('../../../src/service/videoEventService');
@@ -104,6 +106,29 @@ describe('SettingsRoute', () => {
             });
         });
 
+        describe('UHD event feeds', () => {
+            const put = (body: unknown) => request(app).put('/').send(body as object);
+
+            beforeEach(() => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                mockedConfigService.setParameter.mockResolvedValue();
+            });
+
+            it('removes the feeds from the library and Live TV when switched off', async () => {
+                mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'form', LIVE_UHD_EVENT_FEEDS: 'true' });
+                await put({ LIVE_UHD_EVENT_FEEDS: 'false' });
+                expect(liveChannelFacade.removeUhdFeeds).toHaveBeenCalled();
+            });
+
+            it('leaves them alone when switched on, or when they were already off', async () => {
+                mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'form', LIVE_UHD_EVENT_FEEDS: 'true' });
+                await put({ LIVE_UHD_EVENT_FEEDS: 'true' });
+                mockedConfigService.getAllConfig.mockResolvedValue({ AUTH_TYPE: 'form', LIVE_UHD_EVENT_FEEDS: 'false' });
+                await put({ LIVE_UHD_EVENT_FEEDS: 'false' });
+                expect(liveChannelFacade.removeUhdFeeds).not.toHaveBeenCalled();
+            });
+        });
+
         describe('settings guard', () => {
             const put = (body: unknown) => request(app).put('/').send(body as object);
 
@@ -169,7 +194,7 @@ describe('SettingsRoute', () => {
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual(body);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
-            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(body);
+            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.setParameter).toHaveBeenCalledTimes(2);
             expect(mockedConfigService.setParameter).toHaveBeenCalledWith('DOWNLOAD_DIR', '/dl');
             expect(mockedConfigService.setParameter).toHaveBeenCalledWith('COMPLETE_DIR', '/done');
@@ -186,7 +211,15 @@ describe('SettingsRoute', () => {
                 invalid_fields: validation_result,
             } as ApiResponse);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
-            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(body);
+            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
+            expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
+        });
+
+        it('validates a partial body against the stored config and only reports the keys it sent', async () => {
+            mockedConfigFormValidator.validate.mockResolvedValue({ DOWNLOAD_DIR: 'Must exist', COMPLETE_DIR: 'Must exist' });
+            const response = await request(app).put('/').send({ DOWNLOAD_DIR: 'x' });
+            expect(response.statusCode).toBe(400);
+            expect(response.body.invalid_fields).toEqual({ DOWNLOAD_DIR: 'Must exist' });
             expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
         });
 
@@ -204,7 +237,7 @@ describe('SettingsRoute', () => {
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual(body);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
-            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(body);
+            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.getParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.getParameter).toHaveBeenCalledWith('AUTH_PASSWORD');
             expect(Utils.hashPassword).toHaveBeenCalledWith('FOOBAR');
@@ -224,7 +257,7 @@ describe('SettingsRoute', () => {
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual(body);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
-            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(body);
+            expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.getParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.getParameter).toHaveBeenCalledWith('AUTH_PASSWORD');
             expect(mockedConfigService.setParameter).not.toHaveBeenCalled();

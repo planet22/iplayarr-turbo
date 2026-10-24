@@ -22,6 +22,7 @@ jest.mock('fs', () => ({
     writeFileSync: jest.fn(),
     readdirSync: jest.fn(),
     copyFileSync: jest.fn(),
+    statSync: jest.fn(),
     rmSync: jest.fn(),
     existsSync: jest.fn(),
     promises: { readdir: jest.fn(), stat: jest.fn(), rm: jest.fn() },
@@ -75,6 +76,44 @@ describe('DownloadFacade (extra)', () => {
         });
     });
 
+    describe('several downloads of one programme at once', () => {
+        beforeEach(() => config({ MEDIA_MODE: 'download', DOWNLOAD_CLIENT: DownloadClient.GET_IPLAYER }));
+
+        const start = async (jobId: string) => {
+            const child = { stdout: { on: jest.fn() }, stderr: { on: jest.fn() }, on: jest.fn() };
+            (GetIplayerDownloadService.download as jest.Mock).mockResolvedValueOnce(child);
+            await downloadFacade.download(pid, jobId);
+            return {
+                stdout: child.stdout.on.mock.calls.find(([e]: any) => e === 'data')![1],
+                close: child.on.mock.calls.find(([e]: any) => e === 'close')![1],
+            };
+        };
+
+        it('gives each download its own working directory and tells the service which job it is', async () => {
+            await start('job-a');
+            await start('job-b');
+
+            expect(fs.mkdirSync).toHaveBeenCalledWith('/downloads/job-a', { recursive: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith('/downloads/job-b', { recursive: true });
+            expect(GetIplayerDownloadService.download).toHaveBeenNthCalledWith(1, pid, '/downloads/job-a', 'job-a');
+            expect(GetIplayerDownloadService.download).toHaveBeenNthCalledWith(2, pid, '/downloads/job-b', 'job-b');
+        });
+
+        it('sends each download progress, events and removal to its own job', async () => {
+            const a = await start('job-a');
+            const b = await start('job-b');
+
+            b.stdout(Buffer.from(' 30.0% of ~ 100.00 MB @ 5.0 MB/s ETA: 00:10 (hvf video]\n'));
+            expect(queueService.updateQueue).toHaveBeenCalledWith(pid, expect.objectContaining({ progress: 30 }), 'job-b');
+
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(undefined);
+            await a.close(1);
+            expect(videoEventService.record).toHaveBeenCalledTimes(0);
+            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid, 'job-a');
+            expect(queueService.removeFromQueue).not.toHaveBeenCalledWith(pid, 'job-b');
+        });
+    });
+
     describe('process output', () => {
         beforeEach(() => config({ DOWNLOAD_CLIENT: DownloadClient.GET_IPLAYER }));
 
@@ -90,7 +129,8 @@ describe('DownloadFacade (extra)', () => {
             expect(socketService.emit).toHaveBeenCalledWith('log', expect.objectContaining({ id: pid }));
             expect(queueService.updateQueue).toHaveBeenCalledWith(
                 pid,
-                expect.objectContaining({ uuid: pid, progress: 50, sizeLeft: 50 })
+                expect.objectContaining({ uuid: pid, progress: 50, sizeLeft: 50 }),
+                undefined
             );
         });
 
@@ -118,7 +158,39 @@ describe('DownloadFacade (extra)', () => {
                 { pid, level: 'error' }
             );
             expect(historyService.addHistory).toHaveBeenCalledWith(expect.anything(), QueueEntryStatus.FAILED);
-            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid);
+            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid, undefined);
+        });
+
+        it('puts the resolution and the real saved size in the Downloaded event and on the entry', async () => {
+            const { close } = await startDownload(GetIplayerDownloadService);
+            const item: any = { ...queueItem(), nzbName: 'Show.S01E01.720p-BBC', details: {} };
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(item);
+            (fs.readdirSync as jest.Mock).mockReturnValue(['a.mp4']);
+            (fs.statSync as jest.Mock).mockReturnValue({ size: 5 * 1048576 });
+            await close(0);
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.DOWNLOAD_COMPLETE, 'Downloaded "Show.S01E01.720p-BBC" (720p, 5 MB)', { pid });
+            expect(item.details).toMatchObject({ size: 5, sizeLeft: 0 });
+        });
+
+        it('prefers the entry\'s own quality over the one in its name', async () => {
+            const { close } = await startDownload(GetIplayerDownloadService);
+            const item: any = { ...queueItem(), nzbName: 'Show.S01E01.720p-BBC', library: { quality: 'web' }, details: {} };
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(item);
+            (fs.readdirSync as jest.Mock).mockReturnValue(['a.mp4']);
+            (fs.statSync as jest.Mock).mockReturnValue({ size: 1048576 });
+            await close(0);
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.DOWNLOAD_COMPLETE, 'Downloaded "Show.S01E01.720p-BBC" (396p, 1 MB)', { pid });
+        });
+
+        it('leaves the size out of the event when the saved file cannot be measured', async () => {
+            const { close } = await startDownload(GetIplayerDownloadService);
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(queueItem());
+            (fs.readdirSync as jest.Mock).mockReturnValue(['a.mp4']);
+            (fs.statSync as jest.Mock).mockImplementation(() => {
+                throw new Error('gone');
+            });
+            await close(0);
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.DOWNLOAD_COMPLETE, 'Downloaded "Show"', { pid });
         });
 
         it('records a strm creation event', async () => {
@@ -135,7 +207,7 @@ describe('DownloadFacade (extra)', () => {
             (GetIplayerDownloadService.postProcess as jest.Mock).mockRejectedValue(new Error('pp'));
             await close(0);
             expect(loggingService.error).toHaveBeenCalledWith(expect.any(Error));
-            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid);
+            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid, undefined);
         });
 
         it('records a failed event for a non-zero exit code', async () => {
@@ -147,7 +219,32 @@ describe('DownloadFacade (extra)', () => {
                 expect.stringContaining('exited with code 1'),
                 { pid, level: 'error' }
             );
-            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid);
+            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid, undefined);
+        });
+
+        it('records a FAILED history entry with an actionable reason for a geo-blocked exit', async () => {
+            const { close, stderr } = await startDownload(GetIplayerDownloadService);
+            const item: any = queueItem();
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(item);
+            stderr(Buffer.from('ERROR: [bbc.co.uk] m002q8ks: bbc.co.uk returned error: geolocation'));
+            await close(1);
+            expect(historyService.addHistory).toHaveBeenCalledWith(item, QueueEntryStatus.FAILED);
+            expect(item.failMessage).toMatch(/outside the UK/);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('geolocation'));
+            expect(videoEventService.record).toHaveBeenCalledWith(
+                VideoEventType.DOWNLOAD_FAILED,
+                expect.stringContaining('outside the UK'),
+                { pid, level: 'error' }
+            );
+        });
+
+        it('falls back to the exit code when the output is not recognised', async () => {
+            const { close } = await startDownload(GetIplayerDownloadService);
+            const item: any = queueItem();
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(item);
+            await close(2);
+            expect(item.failMessage).toBe('Download exited with code 2');
+            expect(historyService.addHistory).toHaveBeenCalledWith(item, QueueEntryStatus.FAILED);
         });
 
         it('just clears the queue when the item is gone', async () => {

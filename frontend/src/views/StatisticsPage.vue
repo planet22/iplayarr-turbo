@@ -1,30 +1,35 @@
 <template>
-    <div class="inner-content">
+    <div class="inner-content statsPage">
         <PageHeader title="Statistics" />
         <SettingsPageToolbar
             :icons="['filter']" :filter-enabled="range != 'All'" :filter-options="availableRanges"
             :selected-filter="range" @select-filter="selectRange" />
         <legend>Server</legend>
-        <div class="statRow">
-            <div class="statCard">
-                <font-awesome-icon class="statIcon" :icon="['fas', 'clock']" />
-                <div class="statBody">
-                    <span class="statLabel">Uptime</span>
-                    <span class="statValue">{{ msToTime(uptime.uptime) }}</span>
+        <div class="statRow cacheRow">
+            <div class="statCard cacheCard">
+                <div class="cacheName">Uptime</div>
+                <div class="cacheFigures uptimeFigures">
+                    <div class="statBody">
+                        <span class="statLabel">Running for</span>
+                        <span class="statValue">{{ msToTime(uptime.uptime) }}</span>
+                    </div>
                 </div>
             </div>
-            <div class="statCard">
-                <font-awesome-icon class="statIcon" :icon="['fas', 'magnifying-glass']" />
-                <div class="statBody">
-                    <span class="statLabel">Search Cache Size</span>
-                    <span class="statValue">{{ cacheSizes.search }}MB</span>
-                </div>
-            </div>
-            <div class="statCard">
-                <font-awesome-icon class="statIcon" :icon="['fas', 'calendar-days']" />
-                <div class="statBody">
-                    <span class="statLabel">Schedule Cache Size</span>
-                    <span class="statValue">{{ cacheSizes.schedule }}MB</span>
+            <div v-for="cache in caches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
+                <div class="cacheName">{{ cache.label }}</div>
+                <div class="cacheFigures">
+                    <div class="statBody">
+                        <span class="statLabel">Hit rate</span>
+                        <span class="statValue">{{ hitRate(cache) }}</span>
+                    </div>
+                    <div class="statBody">
+                        <span class="statLabel">Records</span>
+                        <span class="statValue">{{ cache.count.toLocaleString() }}</span>
+                    </div>
+                    <div class="statBody">
+                        <span class="statLabel">Space</span>
+                        <span class="statValue">{{ formatSize(cache.sizeBytes) }}</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -54,7 +59,7 @@
                         <span class="statValue">{{ grabsToday }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="grabsTrend" color="#888888" />
+                <SparklineChart :data="grabsTrend" color="chart-6" />
             </div>
             <div class="statCard sparkline">
                 <div class="statCardHeader">
@@ -64,7 +69,7 @@
                         <span class="statValue">{{ failedGrabsToday }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="failedGrabsTrend" color="#f05050" />
+                <SparklineChart :data="failedGrabsTrend" color="danger-color" />
             </div>
         </div>
         <div class="chartRow">
@@ -72,8 +77,8 @@
                 <LineChart
                     title="Searches vs Grabs"
                     :series="[
-                        { name: 'Searches', data: searchOverTimeSeries, color: '#F12D7F' },
-                        { name: 'Grabs', data: grabOverTimeSeries, color: '#888888' },
+                        { name: 'Searches', data: searchOverTimeSeries, color: 'chart-1' },
+                        { name: 'Grabs', data: grabOverTimeSeries, color: 'chart-2' },
                     ]"
                 />
             </div>
@@ -127,7 +132,7 @@ import { ipFetch } from '@/lib/ipFetch';
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90, All: Infinity };
 
 const uptime = ref({ uptime: 0 });
-const cacheSizes = ref([]);
+const caches = ref([]);
 const searchHistory = ref([]);
 const grabHistory = ref([]);
 const failedGrabHistory = ref([]);
@@ -153,8 +158,12 @@ async function updateStats() {
     failedGrabHistory.value = (await ipFetch('json-api/stats/failedGrabHistory')).data;
     apps.value = (await ipFetch('json-api/apps')).data;
     uptime.value = (await ipFetch('json-api/stats/uptime')).data;
-    cacheSizes.value = (await ipFetch('json-api/stats/cacheSizes')).data;
+    const cacheList = await ipFetch('json-api/maintenance/caches');
+    if (cacheList.ok) caches.value = cacheList.data;
 }
+
+const hitRate = ({ hits, misses }) => (hits + misses ? `${Math.round((hits / (hits + misses)) * 100)}%` : 'n/a');
+const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
 
 const cutoffTime = computed(() => {
     const days = RANGE_DAYS[range.value];
@@ -412,6 +421,55 @@ const selectRange = (option) => {
     }
 }
 
+// A grid, so every tile is the same size and the columns line up row to row.
+.statRow.cacheRow {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0.5rem;
+
+    @media (max-width: 1200px) {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.statRow .statCard.cacheCard {
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 8px 12px;
+
+    .cacheName {
+        font-size: 13px;
+        font-weight: 600;
+        color: @primary-text-color;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    // Three equal columns, so the labels and numbers line up from tile to tile.
+    .cacheFigures {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+
+        // Uptime has the one figure, so it takes the whole tile.
+        &.uptimeFigures {
+            grid-template-columns: 1fr;
+        }
+
+        .statLabel {
+            font-size: 9px;
+        }
+
+        .statValue {
+            font-size: 14px;
+            font-weight: 400;
+        }
+    }
+}
+
 .chartRow {
     display: flex;
     flex-wrap: wrap;
@@ -437,6 +495,69 @@ const selectRange = (option) => {
             font-size: 16px;
             font-weight: 400;
             color: @primary-text-color;
+        }
+    }
+}
+
+// Phones: lighter cards and smaller figures, so the numbers do not dominate the screen. Scoped to this page
+// because the Watchdog page's own (global) .statRow rules would otherwise win on the shared class names.
+@media (max-width: @mobile-breakpoint) {
+    .statsPage {
+        .statRow {
+            gap: 0.6rem;
+            margin-bottom: 1.25rem;
+
+            &.cacheRow {
+                gap: 0.4rem;
+                grid-template-columns: repeat(2, 1fr);
+
+                .statCard.cacheCard {
+                    padding: 6px 10px;
+
+                    .statValue {
+                        font-size: 13px;
+                    }
+                }
+            }
+
+            .statCard {
+                flex-basis: 100%;
+                min-width: 0;
+                gap: 12px;
+                padding: 10px 14px;
+
+                &.sparkline {
+                    gap: 6px;
+
+                    .statCardHeader {
+                        gap: 12px;
+                    }
+                }
+
+                .statIcon {
+                    font-size: 20px;
+                    width: 24px;
+                }
+
+                .statLabel {
+                    font-size: 11px;
+                }
+
+                .statValue {
+                    font-size: 20px;
+                }
+            }
+        }
+
+        .chartRow {
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+
+            .chartCard {
+                flex-basis: 100%;
+                min-width: 0;
+                padding: 12px;
+            }
         }
     }
 }

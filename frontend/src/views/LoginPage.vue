@@ -3,7 +3,7 @@
         <div>
             <div class="panel">
                 <div class="panel-header">
-                    <img src="/iplayarr.png" alt="Image" class="logo" />
+                    <img :src="logoUrl" alt="Image" class="logo" />
                 </div>
                 <div v-if="!forgot" class="panel-body">
                     <div class="sign-in">SIGN IN TO CONTINUE</div>
@@ -56,6 +56,9 @@
 </template>
 
 <script setup>
+import { getBasePath } from '@/lib/utils';
+
+const logoUrl = `${getBasePath()}/iplayarr.png`;
 import { onMounted,ref } from 'vue';
 import { useRouter } from 'vue-router';
 
