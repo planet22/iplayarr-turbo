@@ -2,13 +2,14 @@ import Handlebars from 'handlebars';
 
 import nzbFacade from '../facade/nzbFacade';
 import { FilenameTemplateContext } from '../types/FilenameTemplateContext';
+import { NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { versionProfiles } from '../types/VersionProfiles';
 import { Validator } from './Validator';
 
 // Download Limit: how many downloads run at once. 10 is far past what the BBC's servers or a NAS will sustain.
-export const MAX_ACTIVE_LIMIT = 10;
+export const MAX_ACTIVE_LIMIT = NUMERIC_SETTING_LIMITS.ACTIVE_LIMIT.max;
 // Hours the RSS feed looks back (default 48): a month is already a very heavy listing.
-export const MAX_RSS_FEED_HOURS = 720;
+export const MAX_RSS_FEED_HOURS = NUMERIC_SETTING_LIMITS.RSS_FEED_HOURS.max;
 
 // A setting that must be a whole number from min to max. `required` ones must be given; the others may be blank
 // (the default applies) or left out of the request.

@@ -94,6 +94,10 @@ describe('BrowseRoute', () => {
         expect(mocked.details).toHaveBeenCalledWith(['b00abcde', 'b00fghij']);
         expect((await request(app).get('/details')).status).toBe(400);
         expect((await request(app).get('/details?pids=../x')).status).toBe(400);
+        // non-programme ids (live channels) are dropped, not fatal
+        mocked.details.mockClear();
+        expect((await request(app).get('/details?pids=bbc_four,b00abcde')).status).toBe(200);
+        expect(mocked.details).toHaveBeenCalledWith(['b00abcde']);
         const tooMany = Array.from({ length: 41 }, (_, i) => `b00abc${String(i).padStart(2, '0')}`).join(',');
         expect((await request(app).get(`/details?pids=${tooMany}`)).status).toBe(400);
     });

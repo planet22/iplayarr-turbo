@@ -97,3 +97,13 @@ export enum IplayarrParameter {
     PLAY_ASK_VERSION = 'PLAY_ASK_VERSION',
     PLAY_DEFAULT_VERSION = 'PLAY_DEFAULT_VERSION'
 }
+
+// Whole-number settings with a validated range. configService clamps a stored or environment value into the
+// range on read, so an out-of-range value left by an older version cannot make saving the settings fail.
+export const NUMERIC_SETTING_LIMITS: { [key: string]: { min: number; max: number } } = {
+    ACTIVE_LIMIT: { min: 1, max: 10 },
+    RSS_FEED_HOURS: { min: 1, max: 720 },
+    STRM_WATCHDOG_CONCURRENCY: { min: 1, max: 10 },
+    STRM_WATCHDOG_FAIL_THRESHOLD: { min: 1, max: 1000 },
+    STREAM_HISTORY_RETENTION_DAYS: { min: 1, max: 3650 },
+};

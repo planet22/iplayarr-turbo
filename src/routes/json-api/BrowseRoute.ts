@@ -216,10 +216,12 @@ router.get(
 router.get(
     '/details',
     handle(async (req, res) => {
-        const pids = String(req.query.pids ?? '')
+        const asked = String(req.query.pids ?? '')
             .split(',')
             .filter(Boolean);
-        if (pids.length === 0 || pids.length > MAX_DETAIL_PIDS || !pids.every((pid) => PID_REGEX.test(pid))) {
+        // Ids that are not programme pids (e.g. live channel ids) are dropped rather than failing the batch.
+        const pids = asked.filter((pid) => PID_REGEX.test(pid));
+        if (pids.length === 0 || asked.length > MAX_DETAIL_PIDS) {
             return invalid(res, `pids must be 1-${MAX_DETAIL_PIDS} comma-separated pids`);
         }
         res.json(await browseService.details(pids));

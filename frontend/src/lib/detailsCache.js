@@ -5,6 +5,7 @@ import { getProgrammeThumbnailUrl } from './utils';
 
 const BATCH_SIZE = 40; // BrowseRoute's MAX_DETAIL_PIDS
 const BATCH_DELAY_MS = 10;
+const PID_REGEX = /^[a-z0-9]{6,}$/i; // BrowseRoute's PID_REGEX; live channel ids (bbc_four) are not programme pids
 const PRELOAD_CONCURRENCY = 3;
 const PRELOAD_START_DELAY_MS = 500;
 
@@ -40,7 +41,7 @@ async function flush() {
 }
 
 export function loadDetails(pid) {
-    if (!pid || Object.prototype.hasOwnProperty.call(details, pid)) {
+    if (!pid || !PID_REGEX.test(pid) || Object.prototype.hasOwnProperty.call(details, pid)) {
         return;
     }
     details[pid] = null;

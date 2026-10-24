@@ -238,7 +238,8 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('strm download recorded complete in history', !!h && /complete|done|success/i.test(JSON.stringify(h.status)), JSON.stringify(h || {}).slice(0, 160));
             // SAB-visible too (what Sonarr sees)
             const sab = (await http(`/api?mode=history&apikey=${apikey}&output=json`)).json;
-            warn('sab history shows the download', (sab?.history?.slots || []).some((x) => x.nzb_name === h?.nzbName || x.name === h?.nzbName), 'not in SAB history');
+            // UI-initiated downloads are deliberately hidden from the SAB history (HistoryEndpoint only lists source NZB, i.e. what an *arr app sent)
+            ok('sab history hides UI-initiated download (arr only sees its own)', !(sab?.history?.slots || []).some((x) => x.nzb_name === `${h?.nzbName}.nzb`), 'UI download leaked into SAB history');
             await cleanHist(ep.pid);
             ok('history entry deleted', (await hist(ep.pid)).length === 0);
 

@@ -170,10 +170,12 @@
                         {{ formatDate(result.pubDate) }}
                     </td>
                     <td @click="immediateDownload(result)">
-                        <font-awesome-icon
-                            :class="['clickable', result.downloading ? 'downloading' : '']"
-                            :icon="['fas', 'cloud-download']"
-                        />
+                        <button type="button" class="rowIconButton" title="Download" aria-label="Download">
+                            <font-awesome-icon
+                                :class="['clickable', result.downloading ? 'downloading' : '']"
+                                :icon="['fas', 'cloud-download']"
+                            />
+                        </button>
                     </td>
                     <td>
                         <font-awesome-icon
@@ -634,6 +636,16 @@ watch(
 </script>
 
 <style lang="less" scoped>
+// A bare icon button: keeps the icon's look while giving the download action an accessible name.
+.rowIconButton {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
 .pageSearchBar {
     padding: 1rem 1rem 0.75rem;
 

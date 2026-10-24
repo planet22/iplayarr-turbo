@@ -30,8 +30,17 @@ const followlog = ref(true);
 
 watch(
     () => route.query.item,
-    async (newJson) => {
-        item.value = JSON.parse(newJson);
+    (newJson) => {
+        try {
+            const parsed = JSON.parse(newJson);
+            if (parsed && typeof parsed === 'object') {
+                item.value = parsed;
+                return;
+            }
+        } catch {
+            // missing or malformed item param: fall through to the queue
+        }
+        router.replace('/queue');
     },
     { immediate: true }
 );

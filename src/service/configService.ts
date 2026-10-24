@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 
 import searchFacade from '../facade/searchFacade';
-import { IplayarrParameter } from '../types/IplayarrParameters';
+import { IplayarrParameter, NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { decryptSettings, ENCRYPTED_SETTINGS, encryptSettings, isEncrypted } from '../utils/secretCrypto';
 import episodeDetailsCache from './episodeDetailsCache';
@@ -24,6 +24,14 @@ export async function encryptStoredSettings(): Promise<void> {
     if (Object.keys(raw).some((key) => ENCRYPTED_SETTINGS.includes(key) && raw[key] && !isEncrypted(raw[key]))) {
         await storage.setItem('config', encryptSettings(decryptSettings(raw)));
     }
+}
+
+// A whole-number setting outside its validated range is pulled back into it (non-numbers are left alone).
+function clampToLimits(key: string, value: string | undefined): string | undefined {
+    const limits = NUMERIC_SETTING_LIMITS[key];
+    const n = Number(value);
+    if (!limits || !value || isNaN(n)) return value;
+    return String(Math.min(limits.max, Math.max(limits.min, Math.round(n))));
 }
 
 const configService = {
@@ -112,11 +120,11 @@ const configService = {
 
     getParameter: async (parameter: IplayarrParameter): Promise<string | undefined> => {
         const configMap = await getConfigMap();
-        return (
+        const value =
             configMap[parameter.toString()] ||
             process.env[parameter.toString()] ||
-            configService.defaultConfigMap[parameter.toString()]
-        );
+            configService.defaultConfigMap[parameter.toString()];
+        return clampToLimits(parameter.toString(), value);
     },
 
     getParameters: async (...parameters: IplayarrParameter[]): Promise<(string | undefined)[]> => {

@@ -54,9 +54,12 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('header search shows results for "traitors"', !empty && (await cards.count()) > 0, empty ? 'UI says No results (API /json-api/search?q=traitors)' : page.url());
             warn('search lands on a results route', /search|browse/.test(page.url()), page.url());
             await shot(page, 'search-2-results', true);
+            // The row's Download button is the one-click download (it queues straight away); the row itself opens the dialog.
             const dl = page.locator('button[title*="ownload"], button[aria-label*="ownload"]').first();
-            if (await dl.count()) {
-                await dl.click();
+            rec(U, 'search result download button is accessible', (await dl.count()) > 0 ? 'PASS' : 'WARN', 'no button with a Download name');
+            const row = page.locator('tbody tr td.text').first();
+            if (await row.count()) {
+                await row.click();
                 await page.waitForTimeout(1500);
                 const d = dialog(page);
                 warn('download dialog opens from search', (await d.count()) > 0 && (await d.isVisible().catch(() => false)));
@@ -194,7 +197,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 await page.waitForTimeout(2000);
                 await shot(page, 'settings-saved');
                 await page.reload({ waitUntil: 'networkidle' });
-                const themeKey = await page.evaluate(() => JSON.stringify(Object.assign({}, localStorage)).slice(0, 300) + document.documentElement.outerHTML.slice(0, 200));
+                const themeKey = await page.evaluate(() => `data-theme=${document.documentElement.dataset.theme}`);
                 warn('theme persisted across reload (Ocean)', /ocean/i.test(themeKey), themeKey.slice(0, 120));
                 await shot(page, 'settings-ocean-reload');
                 // revert

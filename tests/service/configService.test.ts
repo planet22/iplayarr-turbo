@@ -51,6 +51,17 @@ describe('configService', () => {
     expect(result).toBe('3');
   });
 
+  it('clamps an out-of-range stored whole-number setting into its validated range', async () => {
+    mockStorage['config'] = { [IplayarrParameter.ACTIVE_LIMIT]: '17', [IplayarrParameter.RSS_FEED_HOURS]: '0' };
+    expect(await configService.getParameter(IplayarrParameter.ACTIVE_LIMIT)).toBe('10');
+    expect(await configService.getParameter(IplayarrParameter.RSS_FEED_HOURS)).toBe('1');
+  });
+
+  it('leaves a non-numeric whole-number setting alone for the validator to reject', async () => {
+    mockStorage['config'] = { [IplayarrParameter.ACTIVE_LIMIT]: 'abc' };
+    expect(await configService.getParameter(IplayarrParameter.ACTIVE_LIMIT)).toBe('abc');
+  });
+
   it('returns multiple parameters', async () => {
     const [debug, quality] = await configService.getParameters(IplayarrParameter.DEBUG, IplayarrParameter.VIDEO_QUALITY);
     expect(debug).toBe('false');
