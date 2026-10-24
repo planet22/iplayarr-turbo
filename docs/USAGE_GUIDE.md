@@ -4,6 +4,14 @@ A tour of the web UI once iPlayarr is installed and linked to Sonarr/Radarr (see
 
 New to iPlayarr? Start with [GETTING_STARTED_BBC.md](GETTING_STARTED_BBC.md).
 
+## Quick find
+
+Press `Ctrl+K` (`Cmd+K` on a Mac), or the lightning-bolt button in the top bar (Settings → General can hide it), to open a palette that jumps to any page or Settings tab, suggests programmes as you type and runs a plain search. The side menu's groups fold away (remembered per browser) and re-open for the page you visit; the iPlayarr, get_iplayer and yt-dlp versions are at the bottom of it, with an amber note when an update is available.
+
+## Notifications and feedback
+
+Routine results (settings saved, download queued, subscribed, connection tested) appear as non-blocking **toasts** that pause on hover. Destructive confirmations use a red button labelled with the action (Delete, Clear, Cancel download). Dates and times use one format everywhere (`21 Oct 2026, 4.00pm`), with milliseconds on logs, events and streams. Keyboard focus is clearly outlined, controls work with Enter/Space, and animations are off if your device asks for reduced motion.
+
 ## Discover, Channels, Schedule, Categories, A to Z (`/browse`)
 
 A browse-first way in: a hero banner and rows of programmes (Featured, Recently Added, Most Popular), channel tiles with their real coloured BBC logos, a channel page with a Now / Next strip, a multi-channel Schedule/TV-guide page, category pages with iPlayer's own curated rows, and an A-Z index. Every card has **Play** (the in-app player) and **Download**; a show page lists its series and episodes and can download a whole series or be subscribed to. Channel pills throughout the UI are coloured per-channel too, with a toggle to turn that off. See [BROWSE.md](BROWSE.md).
@@ -14,7 +22,11 @@ Shows you have subscribed to, whose new episodes are queued automatically (check
 
 ## Search (`/search`)
 
-Manual search against the same backend Sonarr/Radarr use (`NativeSearchService` or `get_iplayer --search`, depending on `NATIVE_SEARCH`) — useful for grabbing something one-off without waiting for Sonarr/Radarr's own scheduled search, or for content that isn't matched to a series Sonarr/Radarr is tracking. The search box also suggests titles as you type, the **Posters** toggle shows results as artwork cards, and a dropdown filters by channel (see [BROWSE.md](BROWSE.md#search)). Results can be downloaded directly from here; see [DownloadPage](#download-download) for how that request is handled.
+Manual search against the same backend Sonarr/Radarr use (`NativeSearchService` or `get_iplayer --search`, depending on `NATIVE_SEARCH`) — useful for grabbing something one-off without waiting for Sonarr/Radarr's own scheduled search, or for content that isn't matched to a series Sonarr/Radarr is tracking. The search box also suggests titles as you type, the **Posters** toggle shows results as artwork cards, and a dropdown filters by channel (see [BROWSE.md](BROWSE.md#search)). Results can be downloaded directly from here; see [DownloadPage](#download-download) for how that request is handled. Search settings here (engine, match-all-words) can differ from what Sonarr/Radarr use, and audio described / signed versions can be filtered; see [BROWSE.md](BROWSE.md#search).
+
+## Downloading by hand
+
+Download buttons open a confirmation where you can rename the file, choose **.strm link or Video file** (it starts from the Media Mode setting and applies to that download only), pick the **quality** and, when the item has them and Settings says to ask, the **version** (audio described / signed). The popup shows the total size when known. Selecting several episodes (programme page or Search) gives a batch confirmation with the same choices.
 
 ## Download (`/download`)
 
@@ -22,11 +34,11 @@ Where a manually-triggered download (as opposed to one Sonarr/Radarr queued via 
 
 ## Queue (`/queue`)
 
-The main day-to-day view: active downloads and completed history, combined (`QueueTable`). Works the same regardless of whether items were queued by Sonarr/Radarr or manually — this is iPlayarr's own view into exactly what it's reporting back over the SABnzbd protocol. Cancelling a queued item or removing a completed one here is also what `ARCHIVE_ENABLED` affects: with it on, cancelled/removed entries are kept as a record instead of discarded (Settings → Media Management → Archive Downloads?).
+The main day-to-day view: active downloads and completed history, combined (`QueueTable`). Each row shows the **Client** that fetched it (Native, get_iplayer, yt-dlp), the **Output** (file or STRM), speed in MB/s and any version / subtitle badges. A download that is waiting or has not reported progress shows an empty bar saying **Queued** or **Starting**, and a download made of several parts shows text such as `video 1/2`. Downloads are tracked per job, so the same programme can download at two resolutions at once. The info popup shows quality, size, client, library and download details, and only that download's log lines. Works the same regardless of whether items were queued by Sonarr/Radarr or manually — this is iPlayarr's own view into exactly what it's reporting back over the SABnzbd protocol. Cancelling a queued item or removing a completed one here is also what `ARCHIVE_ENABLED` affects: with it on, cancelled/removed entries are kept as a record instead of discarded (Settings → Media Management → Archive Downloads?).
 
 ## Streaming (`/streaming`)
 
-Only relevant when `MEDIA_MODE=strm`. Shows **Active Streams** currently being served, and **Stream History** — past sessions, retained per `STREAM_HISTORY_RETENTION_DAYS` (or cleared on demand with the Clear History button). The two tables share column widths/positions so they line up, even where one table has a column the other doesn't (e.g. Stream History's Started column, Active Streams' Action column) — those just render blank in the table that lacks them. See [STREAMING.md](STREAMING.md) for setup and [CONFIG.md](CONFIG.md) for the full field reference.
+Only relevant when `MEDIA_MODE=strm`. Shows throughput live and a **Subs** column (whether native subtitles were on for the stream), **Active Streams** currently being served, and **Stream History** — past sessions, retained per `STREAM_HISTORY_RETENTION_DAYS` (or cleared on demand with the Clear History button). The two tables share column widths/positions so they line up, even where one table has a column the other doesn't (e.g. Stream History's Started column, Active Streams' Action column) — those just render blank in the table that lacks them. See [STREAMING.md](STREAMING.md) for setup and [CONFIG.md](CONFIG.md) for the full field reference.
 
 ## Watchdog (`/watchdog`)
 
@@ -58,11 +70,11 @@ An audit/event log distinct from the general application log — tracks specific
 
 ## Statistics (`/stats`)
 
-Server info plus search/grab counters — a quick health-and-activity snapshot, separate from the per-request detail on the NZB page.
+Server info plus search/grab counters — a quick health-and-activity snapshot, separate from the per-request detail on the NZB page. The **Server** section shows uptime and one tile per cache with its **hit rate** (hits and misses are saved so they survive restarts), **records** and **space**. Below are search, grab and failed-grab trends, charts of sources and types (readable by screen readers) and a top-content list whose titles open the programme.
 
 ## Settings (`/settings`)
 
-Tabbed: General, Media Management, Download Client, Streaming, Live TV, Authentication, Maintenance. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
+Tabbed: General, Media Management, Download Client, Streaming, Live TV, Authentication, Maintenance (caches and editable scheduled tasks). Changes are staged and applied with the Save bar; a filter box finds a setting and `Ctrl+K` jumps to a tab. Full field-by-field reference in [CONFIG.md](CONFIG.md); feature walkthroughs in [STREAMING.md](STREAMING.md) and [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). An "Advanced" toggle in the page toolbar reveals additional fields (cron expressions, filename templates, cache directories) that most setups won't need to touch.
 
 ## About (`/about`)
 

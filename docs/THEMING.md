@@ -1,7 +1,9 @@
 # Theming
 
 The web UI has colour schemes (themes) and a colour mode (dark, light, or follow the device). Both are per-browser
-preferences, stored in `localStorage`, so each device can look different.
+preferences, stored in `localStorage`, so each device can look different. Other appearance choices (channel pill
+colours, channel tools, info notes and the badge options) are server settings (`UI_*`) shared by every browser; see
+[CONFIG.md](CONFIG.md#appearance).
 
 ## Where to change it
 

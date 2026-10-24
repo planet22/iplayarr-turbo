@@ -90,6 +90,7 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 - The Streaming page shows live sessions with the channel name and logo and a **Live** badge.
 - With **Native Subtitles** on, live channels carry an English subtitle track too (see [Subtitles](#subtitles)).
 - The [STRM Watchdog](WATCHDOG.md) ignores live files.
+- **Optional channels:** besides the 11 above you can enable BBC Red Button, 19 BBC nations and English-region feeds and (with `LIVE_UHD_EVENT_FEEDS`) the UHD event feeds from the Channels page's Arrange mode (Settings → General → Show Channel Tools). Disabling a channel hides it, unsubscribes it and removes it from Jellyfin Live TV and the guide. Channel order from Arrange also sets the order of the guide and Jellyfin channel numbers. See [BROWSE.md](BROWSE.md#channels-page-tools).
 
 ### Jellyfin Live TV (tuner + guide)
 
@@ -126,6 +127,10 @@ Every channel can be renamed, given a colour, text on its logo, an uploaded logo
 - **Your own channels** are live-only: a name, colour, stream URL, optional group (the M3U `group-title`, default `Custom`), stream type, request headers (for example `User-Agent` or `Referer`) and channel number. They can be added to the library (`.strm`) and Jellyfin Live TV like the BBC ones but have no guide data. HLS without headers goes through the normal segment proxy; DASH, plain streams and anything needing headers are read by ffmpeg and delivered as MKV whatever the Stream Mode.
 - **Test stream** reads the URL (never link-local addresses) and reports whether it is HLS, DASH or a plain stream, the quality ladder, audio and subtitle renditions and whether it is live. Every custom channel is re-tested once a day; failures are logged and shown as a badge.
 - **Import / export**: channels export as JSON, and a JSON export or an M3U playlist (`group-title` and `#EXTVLCOPT` user-agent/referrer are kept) can be imported.
+
+## Playing a version (audio described / signed)
+
+When a programme has an audio described or signed version, the Play button can ask which to play (or use the default) and the in-app player has a version switcher that resumes at the same position. A `.strm` link can carry `?version=`. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
 
 ## Checking links still work
 

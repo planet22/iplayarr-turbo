@@ -6,14 +6,14 @@ A read-only discovery UI for finding something to watch, without already knowing
 
 | Page | Route | What it shows |
 | --- | --- | --- |
-| Discover | `/browse` | A hero banner for the lead programme, then horizontal rails: **Featured**, **Recently Added**, **Most Popular**. Also has the **Colour channel pills by logo** toggle (see below). |
-| Channels | `/browse/channels` | A tile per channel, filled edge-to-edge with that channel's own coloured BBC logo. A channel without a usable logo falls back to its plain name on a plain tile. Live channels have a **Watch Live** button. Press **Edit** to reveal the per-channel bell (add to your media library as a `.strm` file, plus **Add all**) and TV (offer to Jellyfin Live TV, plus **Live TV all**) toggles; outside Edit mode only read-only status icons show for channels already added. See [STREAMING.md](STREAMING.md#live-channels). |
+| Discover | `/browse` | A swipeable hero carousel of five random artwork items (touch swipe, dots, prev/next arrows and Left/Right keys; autoplay pauses on hover, focus and interaction and is off with reduced motion), then horizontal rails: **Featured**, **Recently Added**, **Most Popular**, plus any channels or categories you chose to feature (see below). |
+| Channels | `/browse/channels` | A tile per channel, filled edge-to-edge with that channel's own coloured BBC logo. A channel without a usable logo falls back to its plain name on a plain tile. Live channels have a **Watch Live** button. With **Show Channel Tools** on (Settings → General → Appearance) the page offers **Arrange** and **Edit** (see [Channels page tools](#channels-page-tools)). Press **Edit** to reveal the per-channel bell (add to your media library as a `.strm` file, plus **Add all**) and TV (offer to Jellyfin Live TV, plus **Live TV all**) toggles; outside Edit mode only read-only status icons show for channels already added. See [STREAMING.md](STREAMING.md#live-channels). |
 | Channel | `/browse/channel/:id` | A **Now / Next** strip for what is on the channel (small thumbnails), read-only TV / bell status icons when the channel is in Live TV or your library (edit them from the Channels page), then **Featured** and **All Programmes** rails. |
 | Schedule | `/browse/schedule` | A multi-channel TV guide: every channel as a row, programmes laid out on a shared scrollable timeline sized by actual duration, a live "now" indicator, zoom in/out, day navigation (prev/next/Today), and a globe **UK / Local** toggle that switches the displayed times between UK time and your browser's timezone (days are still iPlayer's UK schedule days; the choice is remembered in your browser). It is a continuous 3-day strip in UK time (previous, selected and next day load together, adjacent days shaded) and the date label follows the timeline as you scroll. |
 | Categories | `/browse/categories` | Artwork tiles, one per category. |
 | Category | `/browse/category/:id` | iPlayer's own curated rails for the category (e.g. "Panel Show Palooza!"), then every programme in a grid with **Load more**, a title filter and a channel filter. |
 | A to Z | `/browse/atoz/:letter?` | Letter bar (`0-9`, `A`-`Z`) and a grid for the chosen letter. Opens on `0-9`. |
-| Programme | `/browse/programme/:pid` | Blurred backdrop and poster, series tabs (opening on the newest series, with Specials last), an episode list (the newest 30 load first and the rest follow in the background, with pagination above and below), **Download series**, and **Subscribe** (see [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md)). |
+| Programme | `/browse/programme/:pid` | Blurred backdrop and poster, number-only series tabs (S1, S2 ..., opening on the newest series, with Specials last), an episode list with large thumbnails (the newest 30 load first and the rest follow in the background, with pagination above and below), **Download series** beside a newest/oldest **sort toggle** (remembered per browser), and **Subscribe** (see [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md)). Each thumbnail carries Play and Download, badges, and opens the episode popup. If the BBC's programme pages are down, the page is built from the iPlayer API instead: fields it cannot supply show as greyed placeholders with a short note. |
 
 Opening an *episode* card takes you to its whole show, not just that one episode.
 
@@ -23,6 +23,22 @@ Opening an *episode* card takes you to its whole show, not just that one episode
 - **Streaming results:** results arrive in batches so the table appears with the first batch rather than after the full search. A brand's whole BBC episode list is searched (up to 1,500 episodes), not just its first page. Sonarr/Radarr (Newznab) searches are unchanged.
 - **Posters view:** the Search page has a Table / Posters toggle (remembered per browser; Table is the default). Posters shows the same results as cards with Play and Download on hover. Bulk-select checkboxes exist in Table view only.
 - **Channel filter:** a channel dropdown appears when results span more than one channel. It combines with the existing TV / Movie filter.
+
+- **Small icons:** a toggle beside Table/Posters (remembered per browser) shows a tiny TV, film or series icon on each poster instead of the Programme/Series label.
+- **Version filters:** filters for audio described and signed versions, and version badges on results, when the badge setting is on.
+- **Manual search settings** are independent of Sonarr/Radarr's; see [CONFIG.md](CONFIG.md#general-settings--general). Manual search also matches word prefixes and stems, like the type-ahead. A short status line below the results says which setup was used.
+
+### Channels page tools
+
+With **Show Channel Tools** on:
+
+- **Arrange:** drag channels into your order (the order is used by the Channels page, the guide, Jellyfin Live TV numbering and subscriptions), enable or disable them with the eye (a disabled channel keeps its place but is hidden, unsubscribed, removed from Jellyfin Live TV and from Discover and the guide), see each channel's name and vpid, and press the compass to **feature it on Discover** as a rail (up to 4; BBC Two, Three and Four are featured by default). The Categories page has a matching Discover mode to feature up to 2 categories; none chosen keeps the random pick.
+- **Optional channels** (off until enabled in Arrange): BBC Red Button, 19 BBC nations and English-region feeds (own schedules and programmes, with the parent channel as fallback) and, with `LIVE_UHD_EVENT_FEEDS`, the UHD event feeds. The guide and Jellyfin XMLTV list every enabled channel in your order; a channel with no schedule keeps an empty "No schedule available" row.
+- **Customise** a channel (name, colour, logo, number) or add your own: see [STREAMING.md](STREAMING.md#customising-channels-and-adding-your-own). Removing a live channel asks first.
+
+### Programme badges
+
+Cards and episodes can carry, depending on the Appearance settings: **Downloaded**, **In the queue** and **Subscribed** status badges; HDR / UHD; audio described / signed; and a subtitles icon. Badges sit bottom right (subtitles in the corner) on posters.
 
 ### Channel pills
 
@@ -41,6 +57,10 @@ The badge only reports what BBC lists: iPlayarr itself streams HD at most, so a 
 - **Play** appears only when a **Stream Key** is configured (Settings → Streaming), the same precondition the player itself enforces. On touch devices the buttons are always visible, since there is no hover.
 - **Download** opens the usual download confirmation, where you can edit the filename, then sends you to the Queue.
 - **Download series / Download all** on a Programme page queues every episode of the selected series one at a time, after a confirmation. Any the server refuses are listed afterwards.
+
+### Page behaviour
+
+Pages show skeleton loaders shaped like the real layout, a message with **Try again** when something fails, and a friendly empty state with a link to Browse. Back/forward restore your scroll position, and phones get edge-to-edge titles, card layouts and a one-row pager (tablets get the full pager).
 
 ## Where the data comes from
 
@@ -100,6 +120,7 @@ All under `/json-api/browse` (behind the same login as the rest of `/json-api`),
 | `GET /schedule?date=YYYY-MM-DD` | Every channel's full day of broadcasts (defaults to today, UK calendar date) - what the Schedule page renders |
 | `GET /atoz/:letter?page=&perPage=` | A page of programmes for `a`-`z` or `0` (digits) |
 | `GET /programme/:pid` | A show with its series and episodes |
+| `GET /versions?pids=a,b,c` | Which of the programmes have audio described / signed versions (cached; used for the episode badges) |
 | `GET /markers/:pid` | An episode's "Skip intro" / "Skip recap" spans as `[{type, start, end}]` (seconds). Many episodes have none (`[]`); nothing in the UI uses it yet |
 | `GET /details?pids=a,b,c` | Batch episode details (up to 40), used for Posters artwork |
 | `GET /suggest?q=` | Title suggestions for type-ahead |

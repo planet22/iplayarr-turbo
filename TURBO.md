@@ -23,6 +23,15 @@ This started as a ground-up modernization of the build/deploy tooling and depend
 - **STRM Watchdog** — daily check (04:15) that `.strm` links still resolve on BBC, from iPlayarr history/subscriptions or Sonarr/Radarr/Jellyfin libraries (new `JELLYFIN` app type), with two-strike and BBC-up safeguards, optional delete/webhook/Sonarr-Radarr unmonitor or search, and a `/watchdog` dashboard. See [docs/WATCHDOG.md](docs/WATCHDOG.md).
 - **Subscriptions linked to Sonarr/Radarr** — add or remove a subscribed show in a Sonarr/Radarr library (root folder and quality profile pickers), or subscribe in Sonarr/Radarr-only mode so iPlayarr never downloads it. See [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md).
 - **Faster, fuller search and browsing** — native search pages through a brand's full episode list, search results stream into the UI (`/json-api/search/stream`), the Programme page loads progressively, and the Schedule is a continuous 3-day UK-time strip.
+- **Native download client** — `DOWNLOAD_CLIENT=NATIVE` is now the default: iPlayarr resolves the stream itself and has ffmpeg copy it, with no `get_iplayer`/`yt-dlp` process. Downloads are tracked per job (not per pid), so one programme can download at two resolutions at once; the Queue shows Client and Output columns, Queued/Starting bars and per-job logs. See [docs/CONFIG.md](docs/CONFIG.md#download-client-settings--download-client).
+- **Audio described / signed versions** — offered as tagged Sonarr/Radarr releases (`EXTRA_VERSIONS`), chosen on manual downloads, subscriptions and the Play button, with optional badges and Search filters. See [docs/CONFIG.md](docs/CONFIG.md#versions-audio-described-and-signed).
+- **Manual search independent of Sonarr/Radarr** — the Search page can use its own engine and match settings (`MANUAL_*`), with stemmed/prefix matching.
+- **Download choices** — `.strm` link or video file per download, quality and version in the download popups, batch confirmation for series and multi-select.
+- **Customisable live channels** — arrange, enable/disable, feature on Discover, rename/recolour/re-logo, add your own channels, and optional Red Button, nations/regions and UHD event feeds. See [docs/STREAMING.md](docs/STREAMING.md#live-channels).
+- **Persistent BBC data caches and Maintenance** — IBL episode lists, search hits, episode details and stream lookups are cached in the database with editable lifetimes, a cache manager, a daily purge and per-cache hit rates on the Statistics page; every scheduled task has an editable cron schedule. See [docs/CONFIG.md](docs/CONFIG.md#maintenance-settings--maintenance).
+- **UI overhaul** — colour schemes and light/dark mode ([docs/THEMING.md](docs/THEMING.md)), staged Settings with a save bar and filter, quick find (`Ctrl+K`), toasts, skeleton/error/empty states, accessibility (focus ring, reduced motion, screen-reader chart text), tablet and phone layouts, a swipeable Discover carousel and one date/time format. UI options moved from the browser to server settings (`UI_*`).
+- **Resilience** — the programme page falls back to the iPlayer API when the BBC programme pages are down; out-of-range stored settings are clamped instead of blocking saves.
+- **Smoke tests** — a `smoke/` suite exercises the API, UI and real-life write flows against a running instance.
 - **Play Video (in-app preview player)** — a Play icon on Search results and Queue/History rows, and a "Play Video" button in the video info modal, plays any pid through the configured `STREAM_CLIENT`/`STREAM_MODE` right in the browser (hls.js, with real Picture-in-Picture when the browser supports it), independent of `MEDIA_MODE` — a quick way to confirm streaming settings actually work without downloading anything.
 
 **Build/tooling (original scope)**
@@ -102,6 +111,18 @@ Search's download confirmation (rename the file before downloading) is now a mod
 ### Thumbnail and stream history retention
 
 Episode thumbnails fetched from the BBC are cached locally at `THUMBNAIL_CACHE_DIR` and pruned nightly (3:35am, fixed schedule) for anything unused past `THUMBNAIL_RETENTION_DAYS` (default `30`). Native streaming sessions are likewise recorded and pruned nightly (3:40am) past `STREAM_HISTORY_RETENTION_DAYS` (default `30`) — both surface on the Streaming page while within their retention window.
+
+### Native download client
+
+`NativeDownloadService` resolves the stream through the same native resolver as streaming (programme versions, mediaselector, HLS master), picks the queue entry's quality (else `VIDEO_QUALITY`, falling back to lower qualities like `get_iplayer`, taking the highest bitrate at a height) and has ffmpeg copy it to a file; progress, speed, ETA and a smoothed projected size come from `ffmpeg -progress`. It does not embed subtitles or resume. Every queue entry has a `jobId` that keys working directories, progress, queue updates, cancel and removal, history, video events and log lines; a bare pid still means every download of that programme, which is all SABnzbd calls can name. Design notes: [docs/plans/native-download-client.md](docs/plans/native-download-client.md).
+
+### Versions
+
+`src/types/VersionProfiles.ts` defines the version profiles (audio described, signed). BBC serves audio described at 540p at most (396p on `iptv-all`), so versions are looked up on the `pc` mediaset first and capped. The version is carried through search results, the NZB, the queue entry, the `.strm` `?version=` parameter and the native and `get_iplayer` resolvers (`yt-dlp` refuses). Subscriptions store `versions` and `seenVersions` per show, re-check new episodes for 30 days and never back-fill. Endpoints: `/json-api/programme-versions`, `/json-api/browse/versions`, `PUT /json-api/subscriptions/:id/versions`.
+
+### Caches, tasks and settings
+
+`DbCacheService` lets concurrent misses share one fetch, treats cached falsy values as hits and registers labelled caches for stats, clearing and TTL overrides (stored in `KeyValue`). Hit and miss counts are saved to the database. `cronJobService` reschedules task overrides without a restart, validates expressions with a dry run and enforces a per-task minimum interval. `NUMERIC_SETTING_LIMITS` (`src/types/IplayarrParameters.ts`) is the single range table the form, the server validation and `configService` read-clamping share.
 
 ## Docker build
 

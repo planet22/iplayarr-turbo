@@ -48,7 +48,7 @@ Other things you will notice after upgrading (details in [docs/SECURITY.md](docs
 
 This README covers the basics. For more detail, see `docs/`:
 
-- [CONFIG.md](docs/CONFIG.md) / [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) — full settings reference
+- [CONFIG.md](docs/CONFIG.md) / [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) — full settings reference, audio described / signed versions, caches and scheduled tasks
 - [INSTALLATION.md](docs/INSTALLATION.md) — Docker deployment, volumes, PUID/PGID, updating
 - [AUTHENTICATION.md](docs/AUTHENTICATION.md) — auth types, initial password, upgrading, password reset, OIDC
 - [SECURITY.md](docs/SECURITY.md) — security review, what was hardened, credential encryption, residual risks
@@ -56,10 +56,11 @@ This README covers the basics. For more detail, see `docs/`:
 - [SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) — how the dual-protocol trick works, troubleshooting a failed Test
 - [STREAMING.md](docs/STREAMING.md) and [LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) — `.strm` mode and Jellyfin-style library layout
 - [GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md) — from a running container to watching and downloading BBC programmes
-- [BROWSE.md](docs/BROWSE.md) — Discover, Channels, Categories, A to Z, type-ahead search
+- [BROWSE.md](docs/BROWSE.md) — Discover, Channels (arrange, optional channels), Categories, A to Z, type-ahead search
 - [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show, link shows to Sonarr/Radarr, live channels
 - [WATCHDOG.md](docs/WATCHDOG.md) — daily check that `.strm` links still resolve on BBC
-- [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI
+- [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI, quick find (Ctrl+K)
+- [THEMING.md](docs/THEMING.md) — colour schemes and light/dark mode
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common issues
 - [DEVELOPMENT.md](docs/DEVELOPMENT.md) — contributor setup, testing, linting
 - [media-servers/](docs/media-servers/) — Jellyfin, Plex, Emby specifics
