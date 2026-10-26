@@ -50,7 +50,7 @@ const episodeCacheService = {
     getEpisodeCacheForUrl: async (url: string): Promise<IPlayerSearchResult[]> => {
         await episodeCacheService.buildIndex();
         const allStorage = await storage.values();
-        const episodeCache = allStorage.find((item) => item.url && item.url == url);
+        const episodeCache = allStorage.find((item) => item?.url && item.url == url);
         return episodeCache?.results || [];
     },
 
