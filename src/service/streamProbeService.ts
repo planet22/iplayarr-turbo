@@ -36,7 +36,16 @@ export class ProbeError extends Error {}
 // Link-local space (cloud metadata services live at 169.254.169.254) is never a stream.
 function isBlockedAddress(address: string): boolean {
     if (net.isIPv4(address)) return address.startsWith('169.254.') || address === '0.0.0.0';
-    return /^fe[89ab]/i.test(address) || address === '::';
+    // An IPv4 address written as IPv6 (::ffff:169.254.169.254, or ::ffff:a9fe:a9fe once the URL parser has
+    // normalised it) reaches the same host, so judge it as the IPv4 address it wraps.
+    const mapped = /^(?:0{0,4}:){2,5}ffff:(?:(\d+\.\d+\.\d+\.\d+)|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/i.exec(address);
+    if (mapped) {
+        if (mapped[1]) return isBlockedAddress(mapped[1]);
+        const high = parseInt(mapped[2], 16);
+        const low = parseInt(mapped[3], 16);
+        return isBlockedAddress(`${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`);
+    }
+    return /^fe[89ab]/i.test(address) || /^(?:0{0,4}:)+0{0,4}$/.test(address);
 }
 
 export async function assertProbeable(rawUrl: string): Promise<URL> {

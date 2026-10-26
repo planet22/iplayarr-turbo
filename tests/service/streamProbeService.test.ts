@@ -47,8 +47,19 @@ describe('streamProbeService', () => {
             await expect(assertProbeable('http://[fe80::1]/x')).rejects.toThrow(/not allowed/);
         });
 
+        it.each([
+            'http://[::ffff:169.254.169.254]/latest/meta-data',
+            'http://[::ffff:a9fe:a9fe]/latest/meta-data',
+            'http://[::ffff:0.0.0.0]/',
+            'http://[::]/',
+        ])('refuses %s, which reaches a blocked address through IPv6', async (url) => {
+            await expect(assertProbeable(url)).rejects.toThrow(/not allowed/);
+        });
+
         it('allows ordinary LAN addresses', async () => {
             await expect(assertProbeable('http://192.168.1.10:8080/live.m3u8')).resolves.toBeInstanceOf(URL);
+            await expect(assertProbeable('http://[::ffff:192.168.1.10]/live.m3u8')).resolves.toBeInstanceOf(URL);
+            await expect(assertProbeable('http://[::1]/live.m3u8')).resolves.toBeInstanceOf(URL);
         });
     });
 
