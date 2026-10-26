@@ -261,4 +261,34 @@ describe('streamSessionService lifecycle', () => {
             jest.useRealTimers();
         }
     });
+
+    describe('inactivity sweep', () => {
+        const sweepWith = async (adjust: (session: any) => void) => {
+            jest.useFakeTimers();
+            try {
+                let svc: typeof streamSessionService = undefined as any;
+                await jest.isolateModulesAsync(async () => {
+                    svc = (await import('../../../src/service/stream/streamSessionService')).default;
+                });
+                const id = await svc.start('p1', mode, client);
+                adjust(svc.getActive().find((s) => s.id === id)!);
+                await jest.advanceTimersByTimeAsync(21_000);
+                return svc.getActive().length;
+            } finally {
+                jest.useRealTimers();
+            }
+        };
+
+        it('leaves a recently active session alone', async () => {
+            expect(await sweepWith(() => undefined)).toBe(1);
+        });
+
+        it('judges a session that never recorded activity by when it started', async () => {
+            expect(await sweepWith((session) => {
+                session.lastActivityAt = undefined;
+                session.startedAt = new Date(Date.now() - 200_000);
+            })).toBe(0);
+        });
+    });
 });
+
