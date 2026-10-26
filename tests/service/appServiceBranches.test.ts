@@ -4,7 +4,7 @@ import appService, { encryptStoredApps } from '../../src/service/appService';
 import configService from '../../src/service/configService';
 import jellyfinService from '../../src/service/jellyfinService';
 import { App } from '../../src/types/App';
-import { AppType } from '../../src/types/AppType';
+import { AppFeature, appFeatures, AppType } from '../../src/types/AppType';
 import { isEncrypted } from '../../src/utils/secretCrypto';
 
 const mockStorageData: Record<string, any> = {};
@@ -168,5 +168,34 @@ describe('appService branches', () => {
                 await expect(appService.createUpdateIntegrations(sonarr({ download_client: undefined, indexer: { id: 6, name: '' } as any }))).rejects.toMatchObject({ type: 'indexer' });
             });
         });
+    });
+});
+
+describe('appService features without an integration', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        Object.keys(mockStorageData).forEach((k) => delete mockStorageData[k]);
+    });
+
+    it.each([AppType.SABNZBD, AppType.NZBGET])('passes a %s app through unchanged', async (type) => {
+        const form = sonarr({ type });
+        expect(await appService.createUpdateIntegrations(form)).toBe(form);
+        expect(arr.upsertIndexer).not.toHaveBeenCalled();
+    });
+
+    it('rolls back an indexer it just created when a later feature fails', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('the-api-key');
+        arr.upsertDownloadClient.mockResolvedValue(11 as any);
+        arr.upsertIndexer.mockResolvedValue(22 as any);
+        arr.deleteIndexer.mockRejectedValue(new Error('cannot delete'));
+        const original = appFeatures[AppType.SONARR];
+        appFeatures[AppType.SONARR] = [AppFeature.DOWNLOAD_CLIENT, AppFeature.INDEXER, 'unknown' as AppFeature];
+        try {
+            await expect(appService.createUpdateIntegrations(sonarr())).rejects.toBeDefined();
+        } finally {
+            appFeatures[AppType.SONARR] = original;
+        }
+        expect(arr.deleteIndexer).toHaveBeenCalledTimes(1);
+        expect(arr.deleteDownloadClient).toHaveBeenCalledTimes(1);
     });
 });
