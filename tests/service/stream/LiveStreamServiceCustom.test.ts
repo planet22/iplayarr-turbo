@@ -1,7 +1,13 @@
 import { setCustomRegistry } from '../../../src/constants/CustomChannels';
+import configService from '../../../src/service/configService';
 import service from '../../../src/service/stream/LiveStreamService';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
+import streamSessionService from '../../../src/service/stream/streamSessionService';
 
+jest.mock('../../../src/service/stream/bbcHttp', () => ({
+    ...jest.requireActual('../../../src/service/stream/bbcHttp'),
+    fetchText: jest.fn().mockRejectedValue(new Error('offline')),
+}));
 jest.mock('../../../src/service/stream/streamProxyUtils');
 jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { setResolution: jest.fn() } }));
 
@@ -49,5 +55,25 @@ describe('LiveStreamService with a custom channel', () => {
         setCustomRegistry([channel({})], {});
         expect(await service.getSubtitlePlaylist('custom-a-1234', '')).toBeUndefined();
         expect(await service.getDashPlaylist('custom-a-1234', 'video', '')).toBeUndefined();
+    });
+
+    it('progressive MKV remuxes the best variant of plain HLS, falling back to the stored URL when it cannot be read', async () => {
+        setCustomRegistry([channel({})], {});
+        await service.streamProgressiveMkv('custom-a-1234', res);
+        expect(remuxToMkv).toHaveBeenCalledWith('https://example.com/live.m3u8', 'custom-a-1234', res, undefined, undefined);
+    });
+
+    it('does not record a resolution without a session', async () => {
+        setCustomRegistry([channel({ streamType: 'dash', streamUrl: 'https://example.com/s.mpd' })], {});
+        await service.streamProgressiveMkv('custom-a-1234', res);
+        expect(streamSessionService.setResolution).not.toHaveBeenCalled();
+    });
+
+    it('has no captions for a custom channel even when subtitles are switched on', async () => {
+        jest.spyOn(configService, 'getParameter').mockImplementation(async (p: any) => (p === 'STREAM_SUBTITLES' ? 'true' : undefined));
+        setCustomRegistry([channel({ streamUrl: 'https://example.com/live.m3u8' })], {});
+        expect(await service.getSubtitlePlaylist('custom-a-1234', '')).toBeUndefined();
+        expect(await service.getSubtitleSegment('custom-a-1234', '1')).toBeUndefined();
+        jest.restoreAllMocks();
     });
 });

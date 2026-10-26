@@ -346,6 +346,13 @@ describe('LiveStreamService subtitles', () => {
         expect(await service.getSubtitleSegment('bbc_one_london', '7')).toBeUndefined();
     });
 
+    it('uses an empty stream key in the subtitle playlist uri when the request carries no query', async () => {
+        const noQuery: any = { headers: {} };
+        await service.streamDirect('bbc_one_london', noQuery, res, 'sess');
+        expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', noQuery, res, 5, 'sess', true, expect.stringContaining('&streamkey='));
+        expect((proxyUrl as jest.Mock).mock.calls[0][6]).toMatch(/streamkey=$/);
+    });
+
     it('is the plain proxy call for a channel without captions', async () => {
         route = (url, method) => (url.includes('mediaselector') ? { body: liveXml } : defaultLiveRoute(url, method));
         await service.streamDirect('bbc_one_london', subReq, res, 'sess');
@@ -369,5 +376,153 @@ describe('LiveStreamService subtitles', () => {
         const vtt = await service.getSubtitleSegment('bbc_one_london', '99');
         expect(vtt).toContain('X-TIMESTAMP-MAP=MPEGTS:');
         expect(vtt).not.toContain('-->');
+    });
+});
+
+describe('LiveStreamService connection choice and fallbacks', () => {
+    const reply = (): any => ({ status: jest.fn().mockReturnThis(), setHeader: jest.fn(), send: jest.fn() });
+    const withSelection = (xml: string) => {
+        route = (url, method) => (url.includes('mediaselector') ? { body: xml } : defaultLiveRoute(url, method));
+    };
+    const media = (kind: string, ...conns: string[]) => `<media kind="${kind}">${conns.join('')}</media>`;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        clearResolveCache();
+        clearRememberedMediaSelectorPairs();
+        requested.length = 0;
+        installNetwork();
+        route = defaultLiveRoute;
+    });
+
+    describe('HLS', () => {
+        it('ignores non-video media and takes the video connection', async () => {
+            withSelection(
+                `<mediaSelection>${media('audio', conn('transferFormat="hls" protocol="https" supplier="a" href="https://audio/x"'))}${media(
+                    'video',
+                    conn('transferFormat="hls" protocol="https" supplier="a" href="https://cdn/live"')
+                )}</mediaSelection>`
+            );
+            await service.streamDirect('bbc_one_london', req, res, 'sess');
+            expect(requested).toContain('https://cdn/live');
+            expect(requested).not.toContain('https://audio/x');
+        });
+
+        it('accepts plain http when no connection is https', async () => {
+            withSelection(`<mediaSelection>${media('video', conn('transferFormat="hls" protocol="http" supplier="a" href="http://cdn/live"'))}</mediaSelection>`);
+            route = (url, method) => (url.includes('mediaselector') ? { body: `<mediaSelection>${media('video', conn('transferFormat="hls" protocol="http" supplier="a" href="http://cdn/live"'))}</mediaSelection>` } : { ...defaultLiveRoute(url, method) });
+            await service.streamDirect('bbc_one_london', req, res, 'sess');
+            expect(requested).toContain('http://cdn/live');
+        });
+
+        it('accepts a connection that names no supplier, and skips one with no href', async () => {
+            withSelection(
+                `<mediaSelection>${media('video', conn('transferFormat="hls" protocol="https"'), conn('transferFormat="hls" protocol="https" href="https://cdn/live"'))}</mediaSelection>`
+            );
+            await service.streamDirect('bbc_one_london', req, res, 'sess');
+            expect(requested).toContain('https://cdn/live');
+        });
+
+        it('fails clearly when only non-video media is offered', async () => {
+            withSelection(`<mediaSelection>${media('audio', conn('transferFormat="hls" protocol="https" supplier="a" href="https://audio/x"'))}</mediaSelection>`);
+            await expect(service.streamDirect('bbc_one_london', req, res, 'sess')).rejects.toThrow();
+        });
+    });
+
+    describe('1080p DASH', () => {
+        const dashRoute = (xml: string) => {
+            route = (url, method) => (url.includes('/mediaset/iptv-mse/') ? { body: xml } : url.includes('mediaselector') ? { body: liveXml } : defaultLiveRoute(url, method));
+        };
+
+        beforeEach(() => configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'true'));
+
+        it('ignores non-video media and a connection with no supplier', async () => {
+            dashRoute(
+                `<mediaSelection>${media('audio', conn('transferFormat="dash" protocol="https" supplier="a" href="https://audio/x.mpd"'))}${media(
+                    'video',
+                    conn('transferFormat="dash" protocol="https" href="https://dash/x.mpd"')
+                )}</mediaSelection>`
+            );
+            await service.streamProgressiveMkv('bbc_two_england', res, 'sess');
+            expect(remuxToMkv).toHaveBeenCalledWith('https://dash/x.mpd', 'bbc_two_england', res, 'sess');
+        });
+
+        it('falls back to HLS when the selection offers no DASH at all', async () => {
+            dashRoute(`<mediaSelection>${media('video', conn('transferFormat="hls" protocol="https" supplier="a" href="https://cdn/live"'))}</mediaSelection>`);
+            const out = reply();
+            await service.streamDirect('bbc_two_england', req, out, 'sess');
+            expect(proxyUrl).toHaveBeenCalled();
+            expect(out.send).not.toHaveBeenCalled();
+        });
+
+        it('has no playlist to serve when the DASH manifest is unavailable', async () => {
+            dashRoute('<mediaSelection></mediaSelection>');
+            expect(await service.getDashPlaylist('bbc_two_england', 'video', 'k')).toBeUndefined();
+        });
+
+        describe('with a manifest it can present', () => {
+            const mpd = `<MPD type="dynamic" availabilityStartTime="1970-01-01T00:00:12Z"><Period>
+                <AdaptationSet contentType="video"><Representation id="v1" bandwidth="6500000" width="1920" height="1080">
+                    <SegmentTemplate initialization="v/init" media="v/$Number$.m4s" timescale="200" duration="768"/></Representation></AdaptationSet>
+            </Period></MPD>`;
+            const dashXml = `<mediaSelection>${media('video', conn('transferFormat="dash" protocol="https" supplier="akamai" href="https://dash/x.mpd"'))}</mediaSelection>`;
+
+            beforeEach(() => {
+                route = (url, method) =>
+                    url.startsWith('https://dash/') ? { body: mpd } : url.includes('/mediaset/iptv-mse/') ? { body: dashXml } : url.includes('mediaselector') ? { body: liveXml } : defaultLiveRoute(url, method);
+            });
+
+            it('builds playlists without a session or request query', async () => {
+                const out = reply();
+                await service.streamDirect('bbc_two_england', { headers: {} } as any, out);
+                const master: string = out.send.mock.calls[0][0];
+                expect(master).toContain('&streamkey=\n');
+                expect(master).not.toContain('&session=');
+                expect(streamSessionService.setResolution).not.toHaveBeenCalled();
+
+                const playlist = (await service.getDashPlaylist('bbc_two_england', 'video', 'k')) as string;
+                expect(playlist).toMatch(/token=[\w-]+&streamkey=k\n/);
+                expect(playlist).not.toContain('&session=');
+            });
+
+            it('has no audio playlist when the manifest has no audio', async () => {
+                expect(await service.getDashPlaylist('bbc_two_england', 'audio', 'k')).toBeUndefined();
+            });
+        });
+
+        it('labels a UHD event feed in progressive mode', async () => {
+            await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'false');
+            await service.streamProgressiveMkv('uk_bbc_stream_041', res, 'sess');
+            expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Live UHD');
+            expect(remuxToMkv).toHaveBeenCalled();
+        });
+
+        it('does not record a resolution for a UHD event feed without a session', async () => {
+            await service.streamProgressiveMkv('uk_bbc_stream_041', res);
+            expect(streamSessionService.setResolution).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('picking the top variant for the remux', () => {
+        const master = (...lines: string[]) => ['#EXTM3U', ...lines, ''].join(String.fromCharCode(10));
+
+        it('takes the highest bandwidth and treats a variant without BANDWIDTH as zero', async () => {
+            route = (url, method) =>
+                url.includes('mediaselector')
+                    ? { body: liveXml }
+                    : url.startsWith('https://cdn/live') && method === 'HEAD'
+                      ? { status: 302, headers: { location: '/master.m3u8' } }
+                      : url.endsWith('/master.m3u8')
+                        ? { body: master('#EXT-X-STREAM-INF:RESOLUTION=640x360', 'unknown.m3u8', '#EXT-X-STREAM-INF:BANDWIDTH=900', 'low.m3u8', '#EXT-X-STREAM-INF:BANDWIDTH=5000', '', '# a comment', 'high.m3u8') }
+                        : { body: '' };
+            await service.streamProgressiveMkv('bbc_two_england', res);
+            expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/high.m3u8', 'bbc_two_england', res, undefined);
+        });
+
+        it('uses the master itself when it lists no variants', async () => {
+            route = (url, method) => (url.endsWith('/master.m3u8') ? { body: master('#EXT-X-VERSION:3') } : url.includes('mediaselector') ? { body: liveXml } : defaultLiveRoute(url, method));
+            await service.streamProgressiveMkv('bbc_two_england', res);
+            expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/master.m3u8', 'bbc_two_england', res, undefined);
+        });
     });
 });
