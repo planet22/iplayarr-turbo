@@ -24,10 +24,13 @@ import taskService from './service/taskService';
 import { IplayarrParameter } from './types/IplayarrParameters';
 import { basePath, rewriteIndexHtml, stripBasePath } from './utils/basePath';
 import { redactBody, redactHeaders, redactUrl } from './utils/logRedaction';
+import { parseTrustProxy } from './utils/trustProxy';
 
 
 const app: Express = express();
 app.disable('x-powered-by');
+// TRUST_PROXY=1 (hops) when behind a reverse proxy, so per-client limits see real client addresses.
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
 
 // BASE_PATH (e.g. /iplayarr) serves everything under that prefix, for reverse proxies that keep it.
 const BASE_PATH = basePath();
