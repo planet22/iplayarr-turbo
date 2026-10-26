@@ -1,4 +1,10 @@
-import { extractCaptionsHref } from '../../../../src/service/stream/subtitles/captionsSource';
+import { fetchText } from '../../../../src/service/stream/bbcHttp';
+import { extractCaptionsHref, loadSubtitleTrack } from '../../../../src/service/stream/subtitles/captionsSource';
+
+jest.mock('../../../../src/service/stream/bbcHttp', () => ({
+    ...jest.requireActual('../../../../src/service/stream/bbcHttp'),
+    fetchText: jest.fn(),
+}));
 
 const xml = (media: string) => `<?xml version="1.0"?><mediaSelection>${media}</mediaSelection>`;
 
@@ -25,5 +31,19 @@ describe('extractCaptionsHref', () => {
             )
         ).toBeUndefined();
         expect(extractCaptionsHref('<error id="notukerror"/>')).toBeUndefined();
+    });
+});
+
+describe('loadSubtitleTrack', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('gives up and reports it when the lookup takes too long', async () => {
+        jest.useFakeTimers();
+        (fetchText as jest.Mock).mockReturnValue(new Promise(() => undefined));
+        const onError = jest.fn();
+        const pending = loadSubtitleTrack('vpid-slow', onError);
+        await jest.advanceTimersByTimeAsync(5_001);
+        expect(await pending).toBeUndefined();
+        expect(onError).toHaveBeenCalledWith(expect.stringContaining('timed out'));
     });
 });
