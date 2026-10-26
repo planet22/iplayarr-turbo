@@ -146,4 +146,60 @@ describe('NativeScheduleService', () => {
             expect(logSpy).toHaveBeenCalled();
         });
     });
+
+    describe('branches', () => {
+        it('leaves a cached result without a broadcast date undefined', async () => {
+            NativeScheduleService.cacheTime.get = jest.fn().mockResolvedValue(Date.now());
+            NativeScheduleService.scheduleCache.get = jest.fn().mockResolvedValue([{ title: 'Undated' }]);
+
+            const [result] = await NativeScheduleService.getFeed();
+
+            expect(result.pubDate).toBeUndefined();
+        });
+
+        it('skips schedule entries that are unlabelled or have an unparseable date', async () => {
+            const html = `
+              <div class="programme__titles"><a href="/programmes/nolabel"></a></div>
+              <div class="programme__titles"><a href="/programmes/baddate" aria-label="99 Zzz: Show"></a></div>
+              <div class="programme__titles"><a href="/programmes/future" aria-label="1 Jan 00:00: Show"></a></div>
+              <div class="programme__titles"><a aria-label="2 Jan 00:00: No link"></a></div>
+              <div class="programme__titles"><a href="/programmes/past" aria-label="2 Jan 00:00: Show"></a></div>`;
+            (axios.get as jest.Mock).mockResolvedValue({ data: html });
+            jest.useFakeTimers().setSystemTime(new Date('2026-06-15T12:00:00Z'));
+            try {
+                const pids = await NativeScheduleService.getPidsFromSchedulePage('https://mocked-url');
+                // "1 Jan 00:00 2026" is in the past too, so only the unlabelled and unparseable entries drop out;
+                // the entry with no href yields an empty pid.
+                expect(pids).toEqual(['future', '', 'past']);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
+        it('collects the pids of each day, forcing a fresh fetch for every day on a full refresh', async () => {
+            jest.spyOn(NativeScheduleService, 'getPidsFromSchedulePage').mockResolvedValue(['p1']);
+            const setSpy = jest.fn();
+            NativeScheduleService.schedulePageCache.set = setSpy;
+
+            const pids = await NativeScheduleService.getChannelPids({ id: 'bbcone', name: 'BBC One' } as any, '24', true);
+
+            expect(pids).toEqual(['p1']);
+            expect(setSpy.mock.calls.length).toBeGreaterThan(1);
+            jest.restoreAllMocks();
+        });
+
+        it('serves earlier days from the per-day cache by default', async () => {
+            jest.spyOn(NativeScheduleService, 'getPidsFromSchedulePage').mockResolvedValue(['today']);
+            const setSpy = jest.fn();
+            NativeScheduleService.schedulePageCache.set = setSpy;
+            NativeScheduleService.schedulePageCache.getOr = jest.fn().mockResolvedValue(['cached']);
+
+            const pids = await NativeScheduleService.getChannelPids({ id: 'bbcone', name: 'BBC One' } as any, '24');
+
+            expect(pids.sort()).toEqual(['cached', 'today']);
+            expect(setSpy).toHaveBeenCalledTimes(1);
+            jest.restoreAllMocks();
+        });
+    });
 });
+
