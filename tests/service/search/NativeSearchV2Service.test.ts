@@ -1,4 +1,5 @@
 import axios from 'axios';
+import lunr from 'lunr';
 
 import { searchResultLimit } from '../../../src/constants/iPlayarrConstants';
 import configService from '../../../src/service/configService';
@@ -349,5 +350,92 @@ describe('NativeSearchV2Service', () => {
         expect(await NativeSearchV2Service.processCompletedSearch(results, term, synonym)).toEqual(
             await NativeSearchService.processCompletedSearch(results, term, synonym)
         );
+    });
+
+    describe('branches', () => {
+        it('reports a search failure that is not an Error by its value', async () => {
+            (axios.get as jest.Mock).mockRejectedValue('network down');
+            expect(await NativeSearchV2Service.search(term)).toEqual([]);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('network down'));
+        });
+
+        it('reports a failed lookup that is not an Error by its value', async () => {
+            searchHits({ id: 'bad1', title: 'Test Brand' });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockRejectedValue('timeout');
+            expect(await NativeSearchV2Service.search(term)).toEqual([]);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('lookup failed for bad1: timeout'));
+        });
+
+        it('searches a series or brand programme itself when it has no parent brand', async () => {
+            searchHits({ id: 'seriesHit', title: 'Test Brand' });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { type: 'series' } });
+            serveEpisodes({ seriesHit: episodes('s', 3) });
+            const results = await NativeSearchV2Service.search(term);
+            expect(results.map(({ pid }) => pid)).toEqual(['s0', 's1', 's2']);
+        });
+
+        it('lists an episode once however many hits lead to it', async () => {
+            searchHits({ id: 'lone1', title: 'Test Brand' }, { id: 'lone2', title: 'Test Brand Again' });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockImplementation(() => Promise.resolve([{ title: 'Same', pid: 'samePid', type: 'episode', runtime: 30 }]));
+            const results = await NativeSearchV2Service.search(term);
+            expect(results.map(({ pid }) => pid)).toEqual(['samePid']);
+        });
+
+        it('returns nothing for a term that is only punctuation, without asking the BBC for episodes', async () => {
+            searchHits({ id: 'hit1', title: 'Test Brand' });
+            expect(await NativeSearchV2Service.search('+++ ---')).toEqual([]);
+            expect(iplayerDetailsService.findBrandForPid).not.toHaveBeenCalled();
+        });
+
+        it('keeps a hit missing a search word when matching all words is switched off, and drops it otherwise', async () => {
+            searchHits({ id: 'hit1', title: 'Test Show' });
+            serveEpisodes({ brandPid: episodes('a', 2) });
+            const { trace } = await withSearchTrace(() => NativeSearchV2Service.search(term));
+            expect(trace.candidates.some(({ reason }) => reason === 'missing-word')).toBe(true);
+
+            jest.spyOn(configService, 'getParameter').mockImplementation(async (key: any) => (key === 'SEARCH_MATCH_ALL_WORDS' ? 'false' : undefined));
+            const loose = await NativeSearchV2Service.search('Test Brand');
+            jest.restoreAllMocks();
+            expect(loose.length).toBeGreaterThan(0);
+        });
+
+        describe('when lunr cannot run the query', () => {
+            afterEach(() => jest.restoreAllMocks());
+
+            it('treats an unparseable query as no results and logs it', async () => {
+                searchHits({ id: 'hit1', title: 'Test Brand' });
+                jest.spyOn(lunr.Index.prototype, 'search').mockImplementation(() => {
+                    throw Object.assign(new Error('bad query'), { name: 'QueryParseError' });
+                });
+                expect(await NativeSearchV2Service.search(term)).toEqual([]);
+                expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Lunr QueryParseError'));
+            });
+
+            it.each([
+                ['an error of another kind', new Error('index corrupt')],
+                ['a thrown value that is not an object', undefined],
+            ])('lets %s through', async (_label, error) => {
+                searchHits({ id: 'hit1', title: 'Test Brand' });
+                jest.spyOn(lunr.Index.prototype, 'search').mockImplementation(() => {
+                    throw error;
+                });
+                await expect(NativeSearchV2Service.search(term)).rejects.toBe(error);
+            });
+        });
+
+        it('ignores a nested container with no series number when a season is requested', async () => {
+            searchHits({ id: 'hit1', title: 'Test Brand' });
+            serveEpisodes({
+                brandPid: [{ type: 'series', id: 'specials', title: 'Specials' }, { type: 'series', id: 'seriesTwo', title: 'Series 2' }],
+                specials: episodes('sp', 1),
+                seriesTwo: episodes('two', 2),
+            });
+            jest.spyOn(configService, 'getParameter').mockImplementation(async (key: any) => (key === 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY' ? 'true' : undefined));
+            const results = await runWithSeasonHint(2, () => NativeSearchV2Service.search(term));
+            jest.restoreAllMocks();
+            expect(results.map(({ pid }) => pid)).toEqual(['two0', 'two1']);
+        });
     });
 });
