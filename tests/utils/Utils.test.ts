@@ -704,8 +704,6 @@ describe('Utils', () => {
         // configurable object that Object.defineProperty can't touch.
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const fs = require('fs');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const streamModule = require('stream');
 
         afterEach(() => {
             jest.restoreAllMocks();
@@ -729,43 +727,91 @@ describe('Utils', () => {
             expect(streamSpy).not.toHaveBeenCalled();
         });
 
-        it('falls back to a read/write stream pipeline on EPERM (CIFS)', () => {
-            jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {
-                throw Object.assign(new Error('not permitted'), { code: 'EPERM' });
+        describe('when copyFileSync is refused with EPERM (CIFS)', () => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const os = require('os');
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const path = require('path');
+            let dir: string;
+
+            beforeEach(() => {
+                dir = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-'));
+                jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {
+                    throw Object.assign(new Error('not permitted'), { code: 'EPERM' });
+                });
             });
-            // pipeline() (from 'stream', not readStream.pipe()) synchronously
-            // validates that its arguments are real Readable/Writable streams -
-            // plain fake objects fail that check immediately. Mocking pipeline
-            // itself sidesteps needing to fake a real stream, and only spies on
-            // (doesn't fully replace) the 'stream' module, so it's restored by
-            // the afterEach above rather than leaking into other tests.
-            const pipelineSpy = jest.spyOn(streamModule, 'pipeline').mockImplementation(() => undefined as any);
-            const readStream = {};
-            const writeStream = {};
-            const readSpy = jest.spyOn(fs, 'createReadStream').mockReturnValue(readStream as any);
-            const writeSpy = jest.spyOn(fs, 'createWriteStream').mockReturnValue(writeStream as any);
 
-            Utils.copyWithFallback('/src/file.mp4', '/dst/file.mp4');
+            afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-            expect(pipelineSpy).toHaveBeenCalledWith(readStream, writeStream);
-
-            expect(readSpy).toHaveBeenCalledWith('/src/file.mp4');
-            expect(writeSpy).toHaveBeenCalledWith('/dst/file.mp4');
-        });
-
-        it('cleans up the partial destination file and rethrows if the fallback pipeline itself fails', () => {
-            jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {
-                throw Object.assign(new Error('not permitted'), { code: 'EPERM' });
+            it('copies the whole file, so the caller can safely delete the source', () => {
+                const src = path.join(dir, 'in.mp4');
+                const dst = path.join(dir, 'out.mp4');
+                fs.writeFileSync(src, 'video bytes');
+                Utils.copyWithFallback(src, dst);
+                expect(fs.readFileSync(dst, 'utf8')).toBe('video bytes');
+                expect(fs.readFileSync(src, 'utf8')).toBe('video bytes');
             });
-            jest.spyOn(streamModule, 'pipeline').mockImplementation(() => {
-                throw new Error('pipeline setup failed');
-            });
-            jest.spyOn(fs, 'createReadStream').mockReturnValue({} as any);
-            jest.spyOn(fs, 'createWriteStream').mockReturnValue({} as any);
-            const unlinkSpy = jest.spyOn(fs, 'unlinkSync').mockImplementation(() => undefined);
 
-            expect(() => Utils.copyWithFallback('/src/file.mp4', '/dst/file.mp4')).toThrow('pipeline setup failed');
-            expect(unlinkSpy).toHaveBeenCalledWith('/dst/file.mp4');
+            it('copies a file larger than one chunk byte for byte', () => {
+                const src = path.join(dir, 'big.bin');
+                const dst = path.join(dir, 'big-copy.bin');
+                const data = Buffer.alloc(2 * 1024 * 1024 + 123, 7);
+                data[1024 * 1024] = 1; // a byte on a chunk boundary
+                fs.writeFileSync(src, data);
+                Utils.copyWithFallback(src, dst);
+                expect(fs.readFileSync(dst).equals(data)).toBe(true);
+            });
+
+            it('copies an empty file', () => {
+                const src = path.join(dir, 'empty');
+                const dst = path.join(dir, 'empty-copy');
+                fs.writeFileSync(src, '');
+                Utils.copyWithFallback(src, dst);
+                expect(fs.statSync(dst).size).toBe(0);
+            });
+
+            it('completes a write that the filesystem only partly accepts', () => {
+                const src = path.join(dir, 'in.bin');
+                const dst = path.join(dir, 'out.bin');
+                fs.writeFileSync(src, 'abcdefghij');
+                const realWrite = fs.writeSync;
+                let first = true;
+                jest.spyOn(fs, 'writeSync').mockImplementation(((fd: number, buffer: Buffer, offset: number, length: number) => {
+                    const part = first ? Math.min(3, length) : length;
+                    first = false;
+                    return realWrite(fd, buffer, offset, part);
+                }) as any);
+                Utils.copyWithFallback(src, dst);
+                expect(fs.readFileSync(dst, 'utf8')).toBe('abcdefghij');
+            });
+
+            it('rethrows the real error when the source cannot be read, leaving no destination behind', () => {
+                const dst = path.join(dir, 'out.mp4');
+                expect(() => Utils.copyWithFallback(path.join(dir, 'missing.mp4'), dst)).toThrow(/ENOENT/);
+                expect(fs.existsSync(dst)).toBe(false);
+            });
+
+            it('removes a partly written destination and rethrows if writing fails part-way', () => {
+                const src = path.join(dir, 'in.mp4');
+                const dst = path.join(dir, 'out.mp4');
+                fs.writeFileSync(src, 'video bytes');
+                jest.spyOn(fs, 'writeSync').mockImplementation(() => {
+                    throw Object.assign(new Error('disk full'), { code: 'ENOSPC' });
+                });
+                expect(() => Utils.copyWithFallback(src, dst)).toThrow('disk full');
+                expect(fs.existsSync(dst)).toBe(false);
+            });
+
+            it('closes both files even when the copy fails', () => {
+                const src = path.join(dir, 'in.mp4');
+                fs.writeFileSync(src, 'x');
+                const close = jest.spyOn(fs, 'closeSync');
+                jest.spyOn(fs, 'writeSync').mockImplementation(() => {
+                    throw new Error('boom');
+                });
+                expect(() => Utils.copyWithFallback(src, path.join(dir, 'out.mp4'))).toThrow('boom');
+                expect(close).toHaveBeenCalledTimes(2);
+            });
         });
     });
 

@@ -6,7 +6,6 @@ import Handlebars from 'handlebars';
 import os from 'os';
 import path from 'path';
 import { deromanize } from 'romans';
-import { pipeline } from 'stream';
 
 import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, nativeSeriesRegex } from '../constants/iPlayarrConstants';
 import appService from '../service/appService';
@@ -187,7 +186,7 @@ export async function getThumbnailCacheDir(): Promise<string> {
 export async function getQualityProfile(): Promise<QualityProfile> {
     const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
     const profile = qualityProfiles.find(({ id }) => id == videoQuality) as QualityProfile;
-    return profile ? profile : (qualityProfiles.find(({ quality }) => quality === 'hd') as QualityProfile);
+    return profile ? profile : (qualityProfiles.find(({ id }) => id === 'hd') as QualityProfile);
 }
 
 export function removeAllQueryParams(str: string): string {
@@ -379,13 +378,33 @@ export function copyWithFallback(src: string, dst: string) {
     }
 
     try {
-        pipeline(
-            fs.createReadStream(src),
-            fs.createWriteStream(dst)
-        );
+        copyInChunks(src, dst);
     } catch (err) {
-        fs.unlinkSync(dst);
+        fs.rmSync(dst, { force: true });
         throw err;
+    }
+}
+
+// Plain read/write loop. The callers need the file to be complete when this returns (they go on to delete
+// the source), so it is synchronous, and it moves one chunk at a time so a large video is never held in memory.
+function copyInChunks(src: string, dst: string): void {
+    const input = fs.openSync(src, 'r');
+    try {
+        const output = fs.openSync(dst, 'w');
+        try {
+            const chunk = Buffer.allocUnsafe(1024 * 1024);
+            let read: number;
+            while ((read = fs.readSync(input, chunk, 0, chunk.length, null)) > 0) {
+                let written = 0;
+                while (written < read) {
+                    written += fs.writeSync(output, chunk, written, read - written);
+                }
+            }
+        } finally {
+            fs.closeSync(output);
+        }
+    } finally {
+        fs.closeSync(input);
     }
 }
 
