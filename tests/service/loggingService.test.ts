@@ -1,11 +1,13 @@
 import activeJobs from '../../src/service/activeJobs';
 import configService from '../../src/service/configService';
+import { dbReady, prisma } from '../../src/service/db/prismaService';
 import loggingService from '../../src/service/loggingService';
 import socketService from '../../src/service/socketService';
 import { LogLineLevel } from '../../src/types/LogLine';
 
 jest.mock('../../src/service/socketService', () => ({
     emit: jest.fn(),
+    publish: jest.fn(),
 }));
 
 jest.mock('../../src/service/configService', () => ({
@@ -203,3 +205,58 @@ describe('loggingService', () => {
     });
 });
 
+describe('loggingService persistence and file format', () => {
+    afterEach(() => {
+        jest.restoreAllMocks();
+        jest.dontMock('winston');
+        jest.dontMock('winston-daily-rotate-file');
+    });
+
+    it('carries on when a log line cannot be saved', async () => {
+        await dbReady();
+        jest.spyOn(prisma.queueItem, 'create').mockRejectedValue(new Error('db locked'));
+        expect(() => loggingService.publish({ id: 'x', level: LogLineLevel.INFO, message: 'hi', timestamp: new Date() })).not.toThrow();
+        await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    it('replays the saved log lines to a newly connected client', async () => {
+        await dbReady();
+        await prisma.queueItem.createMany({
+            data: [
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'a', message: 'first' }) },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'b', message: 'second' }) },
+            ],
+        });
+        await loggingService.pushInitialLogs('sock-1');
+        expect(socketService.publish).toHaveBeenCalledWith('sock-1', 'log', expect.objectContaining({ message: 'first' }));
+        expect(socketService.publish).toHaveBeenCalledWith('sock-1', 'log', expect.objectContaining({ message: 'second' }));
+    });
+
+    it('writes log files as "[time] [LEVEL] message" outside tests', () => {
+        const savedEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+        let formatLine: ((info: any) => string) | undefined;
+        jest.doMock('winston-daily-rotate-file', () => ({ __esModule: true, default: class {} }));
+        jest.doMock('winston', () => {
+            const real = jest.requireActual('winston');
+            return {
+                ...real,
+                format: new Proxy(real.format, {
+                    get: (target, key) =>
+                        key === 'printf' ? (fn: (info: any) => string) => ((formatLine = fn), target.printf(fn)) : target[key as keyof typeof target],
+                }),
+                createLogger: () => ({ info: jest.fn(), error: jest.fn(), debug: jest.fn() }),
+                transports: { ...real.transports, DailyRotateFile: class {} },
+            };
+        });
+        try {
+            jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                require('../../src/service/loggingService');
+            });
+        } finally {
+            process.env.NODE_ENV = savedEnv;
+        }
+        expect(formatLine?.({ timestamp: '2026-01-01', level: 'info', message: 'hello' })).toBe('[2026-01-01] [INFO] hello');
+    });
+});

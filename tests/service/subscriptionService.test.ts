@@ -486,6 +486,35 @@ describe('subscriptionService', () => {
             });
         });
 
+        describe('failures along the way', () => {
+            it('refuses to subscribe when the show cannot be looked up', async () => {
+                details.findBrandForPid.mockRejectedValue(new Error('BBC down'));
+                await expect(subscriptionService.subscribe('m00episode')).rejects.toBeInstanceOf(SubscriptionError);
+            });
+
+            it('logs a first check that fails after downloading everything was asked for', async () => {
+                jest.spyOn(subscriptionService, 'check').mockRejectedValue(new Error('check broke'));
+                await subscriptionService.subscribe('m00episode', { downloadAll: true });
+                await new Promise((resolve) => setImmediate(resolve));
+                expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('first check failed'));
+            });
+
+            it('logs, and still subscribes, when the latest episode cannot be queued', async () => {
+                queue.addToQueue.mockImplementation(() => {
+                    throw new Error('queue full');
+                });
+                const sub = await subscriptionService.subscribe('m00episode', { downloadLatest: true });
+                expect(sub.pid).toBe('b00brand1');
+                expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('could not queue latest episode'));
+            });
+
+            it('does not queue a version when its availability cannot be looked up', async () => {
+                versionTypes.mockRejectedValue(new Error('BBC down'));
+                await subscriptionService.subscribe('m00episode', { downloadLatest: true, versions: ['audio-described'] });
+                expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+            });
+        });
+
         describe('setVersions', () => {
             it('clears the versions of an arrOnly show whatever is asked for', async () => {
                 const sub = await subscriptionService.subscribe('m00episode', { arrOnly: true });
