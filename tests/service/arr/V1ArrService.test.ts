@@ -76,4 +76,13 @@ describe('V1ArrService', () => {
             expect(additionalParamsField?.value).toBe('&app=iplayer-app');
         });
     });
+
+    describe('createIndexerRequestObject defaults', () => {
+        it('defaults the priority to 25 and the api path to /api', () => {
+            const form = { name: 'BBC', url: 'http://indexer.local', apiKey: 'k', urlBase: '', appId: 'a', priority: 0, categories: [], tags: [], downloadClientId: 1 } as unknown as CreateIndexerForm;
+            const result = V1ArrService.createIndexerRequestObject(form) as CreateProwlarrIndexerRequest;
+            expect(result.priority).toBe(25);
+            expect(result.fields.find((f) => f.name === 'apiPath')?.value).toBe('/api');
+        });
+    });
 });

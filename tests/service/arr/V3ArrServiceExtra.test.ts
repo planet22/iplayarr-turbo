@@ -181,4 +181,17 @@ describe('V3ArrService (extra)', () => {
             expect(req.fields.find((f: any) => f.name === 'apiPath')!.value).toBe('/api');
         });
     });
+
+    describe('search and getIndexer branches', () => {
+        it('searches the movie library of a Radarr app, and lists everything without a term', async () => {
+            mockedAxios.get.mockResolvedValue({ data: [] });
+            await V3ArrService.search({ ...app, type: AppType.RADARR } as App);
+            expect(mockedAxios.get).toHaveBeenCalledWith('http://sonarr/api/v3/movie', expect.anything());
+        });
+
+        it('returns nothing when the indexer lookup is answered with a non-200 status', async () => {
+            mockedAxios.get.mockResolvedValue({ status: 204, data: {} });
+            expect(await V3ArrService.getIndexer(app)).toBeUndefined();
+        });
+    });
 });
