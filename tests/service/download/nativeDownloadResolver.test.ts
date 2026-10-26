@@ -166,4 +166,75 @@ describe('resolveDownloadUrl with a version', () => {
         await resolveDownloadUrl('pplain-remember');
         expect(orderedMediaSelectorPairs('native')[0].mediaSet).toBe('pc');
     });
+
+    describe('branches', () => {
+        const conn = (attrs: string) => `<connection ${attrs}/>`;
+        beforeEach(() => {
+            (fetchTextWithStatus as jest.Mock).mockResolvedValue({
+                statusCode: 200,
+                body: JSON.stringify({ allAvailableVersions: [{ pid: 'plain', types: ['Original'] }] }),
+            });
+        });
+
+        const route = (xml: string, playlist = master) =>
+            (fetchText as jest.Mock).mockImplementation(async (u: string) => (u.includes('mediaselector') ? xml : playlist));
+
+        it('treats a playlist.json with no version list as having no versions', async () => {
+            (fetchTextWithStatus as jest.Mock).mockResolvedValue({ statusCode: 200, body: '{}' });
+            await expect(resolveDownloadUrl('pnolist')).rejects.toThrow('No available versions found for pnolist');
+        });
+
+        it('prefers a version with fewer type tags, copes with a version that has none, and takes the first when all are special', async () => {
+            (fetchTextWithStatus as jest.Mock).mockResolvedValue({
+                statusCode: 200,
+                body: JSON.stringify({ allAvailableVersions: [{ pid: 'signed-two', types: ['Signed', 'Extra'] }, { pid: 'signed-one', types: ['Signed'] }] }),
+            });
+            await resolveDownloadUrl('pall-special');
+            expect((fetchText as jest.Mock).mock.calls[0][0]).toContain('/vpid/signed-one/');
+
+            jest.clearAllMocks();
+            (fetchTextWithStatus as jest.Mock).mockResolvedValue({ statusCode: 200, body: JSON.stringify({ allAvailableVersions: [{ pid: 'signed', types: ['Signed'] }, { pid: 'untyped' }] }) });
+            (fetchText as jest.Mock).mockImplementation(async (u: string) => (u.includes('mediaselector') ? selector : master));
+            (resolveRedirect as jest.Mock).mockImplementation(async (u: string) => u);
+            (configService.getParameter as jest.Mock).mockResolvedValue('hd');
+            await resolveDownloadUrl('puntyped');
+            expect((fetchText as jest.Mock).mock.calls[0][0]).toContain('/vpid/untyped/');
+        });
+
+        it('orders versions whichever of them lacks a type list', async () => {
+            (fetchTextWithStatus as jest.Mock).mockResolvedValue({
+                statusCode: 200,
+                body: JSON.stringify({ allAvailableVersions: [{ pid: 'u1' }, { pid: 'signed', types: ['Signed'] }, { pid: 'u2' }, { pid: 'u3' }] }),
+            });
+            await resolveDownloadUrl('pmanyuntyped');
+            expect((fetchText as jest.Mock).mock.calls[0][0]).toMatch(/\/vpid\/u\d\//);
+        });
+
+        it('accepts a plain-http connection when none is https, and one that names no supplier', async () => {
+            route(`<mediaSelection><media kind="video">${conn('href="http://cdn/master.m3u8" protocol="http" transferFormat="hls"')}</media></mediaSelection>`);
+            await resolveDownloadUrl('phttp');
+            expect(resolveRedirect).toHaveBeenCalledWith('http://cdn/master.m3u8');
+        });
+
+        it('skips a connection with no href or another transfer format, preferring https when it is offered', async () => {
+            route(
+                `<mediaSelection><media kind="video">${conn('protocol="https" transferFormat="hls"')}${conn('href="https://cdn/dash.mpd" protocol="https" transferFormat="dash"')}${conn('href="http://cdn/plain.m3u8" protocol="http" transferFormat="hls"')}${conn('href="https://cdn/master.m3u8" protocol="https" transferFormat="hls" supplier="akamai"')}</media></mediaSelection>`
+            );
+            await resolveDownloadUrl('pmixed');
+            expect(resolveRedirect).toHaveBeenCalledWith('https://cdn/master.m3u8');
+        });
+
+        it('says nothing about BBC\'s reason when the answer carries none', async () => {
+            route('<mediaSelection><media kind="video"></media></mediaSelection>');
+            await expect(resolveDownloadUrl('pnone-reason')).rejects.toThrow(/^No HLS stream connection found for vpid plain$/);
+        });
+
+        it('names a quality without a bitrate when the playlist gives none', async () => {
+            route(selector, '#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1280x720\nv720.m3u8\n#EXT-X-STREAM-INF:RESOLUTION=640x360\nv360.m3u8\n');
+            const steps: string[] = [];
+            await expect(resolveDownloadUrl('pnobw', (message) => steps.push(message))).resolves.toBe('https://cdn/v720.m3u8');
+            expect(steps.join('\n')).toContain('picked 720p');
+            expect(steps.join('\n')).not.toContain('Mbit/s');
+        });
+    });
 });
