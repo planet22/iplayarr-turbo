@@ -240,3 +240,19 @@ describe('DbCacheService', () => {
         expect((await prisma.cache.findMany()).map((r) => r.key)).toEqual(['new']);
     });
 });
+
+describe('DbCacheService lookup flush timer', () => {
+    afterEach(() => {
+        jest.useRealTimers();
+        jest.restoreAllMocks();
+    });
+
+    it('saves the tallied lookups on its own shortly after the first one', async () => {
+        jest.useFakeTimers();
+        (DbCacheService as any).flushTimer = undefined;
+        const flush = jest.spyOn(DbCacheService, 'flushLookups').mockResolvedValue(undefined);
+        DbCacheService.tally('timer-test', true);
+        await jest.advanceTimersByTimeAsync(31_000);
+        expect(flush).toHaveBeenCalledTimes(1);
+    });
+});

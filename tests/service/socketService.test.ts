@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 
 import historyService from '../../src/service/historyService';
+import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
 import socketService from '../../src/service/socketService';
 
@@ -81,5 +82,22 @@ describe('socketService', () => {
                 expect(() => fresh.emit('event', {})).not.toThrow();
             });
         });
+    });
+});
+
+describe('socketService connection handler', () => {
+    it('registers each new socket and sends it the log history', async () => {
+        const on = jest.fn();
+        socketService.registerIo({ on, emit: jest.fn() } as any);
+        const handler = on.mock.calls.find(([event]) => event === 'connection')![1];
+        const registerSocket = jest.spyOn(socketService, 'registerSocket').mockResolvedValue(undefined);
+        const pushInitialLogs = jest.spyOn(loggingService, 'pushInitialLogs').mockResolvedValue(undefined);
+
+        handler({ id: 'sock-1' });
+
+        expect(registerSocket).toHaveBeenCalledWith({ id: 'sock-1' });
+        expect(pushInitialLogs).toHaveBeenCalledWith('sock-1');
+        registerSocket.mockRestore();
+        pushInitialLogs.mockRestore();
     });
 });
