@@ -121,4 +121,17 @@ describe('ConfigFormValidator (extra)', () => {
         expect(errors.TV_FILENAME_TEMPLATE).toBe('Template does not compile');
         expect(errors.MOVIE_FILENAME_TEMPLATE).toBe('Template does not compile');
     });
+
+    describe('LIVE_TV_EPG_OFFSET', () => {
+        const offsetError = async (value: unknown) => (await validator.validate({ ...validInput(), LIVE_TV_EPG_OFFSET: value })).LIVE_TV_EPG_OFFSET;
+
+        it.each(['', undefined, '0', '60', '-30', '1440', '-1440', 90])('accepts %p', async (value) => {
+            expect(await offsetError(value)).toBeUndefined();
+        });
+
+        it.each(['abc', '1.5', '1441', '-1441', ' '])('rejects %p', async (value) => {
+            expect(await offsetError(value)).toBe('Please provide a whole number of minutes between -1440 and 1440');
+        });
+    });
 });
+
