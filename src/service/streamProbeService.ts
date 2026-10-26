@@ -1,4 +1,6 @@
 import dns from 'dns';
+import http from 'http';
+import https from 'https';
 import net from 'net';
 
 import { CustomStreamType } from '../constants/CustomChannels';
@@ -63,37 +65,62 @@ export async function assertProbeable(rawUrl: string): Promise<URL> {
     return url;
 }
 
+// Resolves the host for the connection itself and refuses blocked addresses, so a name that answers differently
+// to assertProbeable's lookup and to the connection (DNS rebinding) still cannot reach one.
+export function guardedLookup(hostname: string, options: dns.LookupOptions, callback: (...args: any[]) => void): void {
+    dns.lookup(hostname, { ...options, all: true }, (error, addresses) => {
+        if (error) return callback(error);
+        const list = addresses as dns.LookupAddress[];
+        if (list.length === 0 || list.some((a) => isBlockedAddress(a.address))) {
+            return callback(new ProbeError('That address is not allowed'));
+        }
+        if (options.all) return callback(null, list);
+        callback(null, list[0].address, list[0].family);
+    });
+}
+
+function request(current: string, headers: Record<string, string>): Promise<{ status: number; contentType: string; location?: string; body: Buffer }> {
+    return new Promise((resolve, reject) => {
+        const url = new URL(current);
+        const req = (url.protocol === 'https:' ? https : http).request(
+            url,
+            { method: 'GET', headers: { 'User-Agent': USER_AGENT, ...headers }, lookup: guardedLookup as any, timeout: TIMEOUT_MS },
+            (response) => {
+                const status = response.statusCode ?? 0;
+                const contentType = String(response.headers['content-type'] ?? '');
+                const location = response.headers.location;
+                const chunks: Buffer[] = [];
+                let size = 0;
+                const finish = () => {
+                    response.destroy();
+                    resolve({ status, contentType, location, body: Buffer.concat(chunks) });
+                };
+                if (location && [301, 302, 303, 307, 308].includes(status)) return finish();
+                response.on('data', (chunk: Buffer) => {
+                    chunks.push(chunk);
+                    size += chunk.length;
+                    if (size >= MAX_BYTES) finish();
+                });
+                response.on('end', finish);
+                response.on('error', () => finish());
+            }
+        );
+        req.on('timeout', () => req.destroy(Object.assign(new Error('The server did not answer in time'), { name: 'AbortError' })));
+        req.on('error', reject);
+        req.end();
+    });
+}
+
 async function readHead(startUrl: string, headers: Record<string, string>): Promise<{ status: number; contentType: string; body: Buffer; url: string }> {
     let current = startUrl;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
         await assertProbeable(current);
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-        try {
-            const response = await fetch(current, {
-                headers: { 'User-Agent': USER_AGENT, ...headers },
-                redirect: 'manual',
-                signal: controller.signal,
-            });
-            if ([301, 302, 303, 307, 308].includes(response.status) && response.headers.get('location')) {
-                current = new URL(response.headers.get('location') as string, current).toString();
-                await response.body?.cancel();
-                continue;
-            }
-            const chunks: Buffer[] = [];
-            let size = 0;
-            const reader = response.body?.getReader();
-            while (reader && size < MAX_BYTES) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                chunks.push(Buffer.from(value));
-                size += value.length;
-            }
-            await reader?.cancel().catch(() => undefined);
-            return { status: response.status, contentType: response.headers.get('content-type') ?? '', body: Buffer.concat(chunks), url: current };
-        } finally {
-            clearTimeout(timer);
+        const response = await request(current, headers);
+        if (response.location && [301, 302, 303, 307, 308].includes(response.status)) {
+            current = new URL(response.location, current).toString();
+            continue;
         }
+        return { status: response.status, contentType: response.contentType, body: response.body, url: current };
     }
     throw new ProbeError('Too many redirects');
 }
