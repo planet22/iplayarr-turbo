@@ -422,4 +422,56 @@ describe('GetIplayerExecutableService', () => {
             expect(synonymService.getSynonym).toHaveBeenCalledWith('Test Title');
         });
     });
+
+    describe('branches', () => {
+        it('moves an .mkv download as well as an .mp4', async () => {
+            queueService.getFromQueue = jest.fn().mockReturnValue({ nzbName: 'mock_nzb' });
+            (configService.getParameters as jest.Mock).mockImplementation(() => ['/mock/download', '/mock/complete']);
+            fs.readdirSync = jest.fn().mockReturnValue(['notes.txt', 'clip.mkv']);
+            fs.copyFileSync = jest.fn();
+            fs.rmSync = jest.fn();
+
+            await service.processCompletedDownload('12345', 0);
+
+            expect(fs.copyFileSync).toHaveBeenCalledTimes(1);
+            expect(historyService.addHistory).toHaveBeenCalled();
+        });
+
+        it('does nothing to the files when the download did not succeed', async () => {
+            (configService.getParameters as jest.Mock).mockImplementation(() => ['/mock/download', '/mock/complete']);
+            fs.copyFileSync = jest.fn();
+            fs.rmSync = jest.fn();
+
+            await service.processCompletedDownload('12345', 1);
+
+            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(fs.rmSync).not.toHaveBeenCalled();
+            expect(queueService.removeFromQueue).toHaveBeenCalledWith('12345');
+        });
+
+        it('uses the configured quality when there is no programme to look up', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('fhd');
+            expect(await service.getQualityFallbackChain()).toEqual(['fhd', 'hd', 'sd', 'web', 'mobile']);
+        });
+
+        it('parses a result with no duration, date or episode details', async () => {
+            const line = 'RESULT|:|12345|:|Plain title|:||:||:|1|:|BBC|:||:||:|';
+            const [result] = await service.parseResults('plain', line, 1);
+            expect(result).toMatchObject({ pid: '12345', title: 'Plain title', size: undefined, pubDate: undefined, runtimeSeconds: undefined });
+        });
+
+        it('treats a duration that is not a number as unknown', async () => {
+            const line = 'RESULT|:|12345|:|Plain title|:||:||:|1|:|BBC|:|soon|:||:|';
+            const [result] = await service.parseResults('plain', line, 1);
+            expect(result.size).toBeUndefined();
+            expect(result.runtimeSeconds).toBeUndefined();
+        });
+
+        it('scales a duration by the size factor and reads the air date', async () => {
+            const line = 'RESULT|:|12345|:|Plain title|:||:||:|1|:|BBC|:|600|:|2021-01-01T10:00:00Z|:||:|';
+            const [result] = await service.parseResults('plain', line, 0.5);
+            expect(result).toMatchObject({ size: 300, runtimeSeconds: 600 });
+            expect(result.pubDate).toEqual(new Date('2021-01-01T10:00:00Z'));
+        });
+    });
 });

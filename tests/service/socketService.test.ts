@@ -68,4 +68,18 @@ describe('socketService', () => {
             expect(mockIo.emit).toHaveBeenCalledWith('testEvent', { msg: 'hello' });
         });
     });
+
+    describe('publish and emit without a target', () => {
+        it('ignores a publish to a socket that is not connected', () => {
+            expect(() => socketService.publish('nobody', 'event', {})).not.toThrow();
+        });
+
+        it('does nothing when emitting before a server is registered', () => {
+            jest.isolateModules(() => {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const fresh = require('../../src/service/socketService').default;
+                expect(() => fresh.emit('event', {})).not.toThrow();
+            });
+        });
+    });
 });

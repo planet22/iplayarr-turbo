@@ -75,4 +75,23 @@ describe('SubscriptionArrRoute', () => {
         mocked.unlink.mockRejectedValueOnce(new SubscriptionArrError('not linked'));
         expect((await request(app).delete('/s1')).status).toBe(400);
     });
+
+    describe('fallbacks', () => {
+        const noBodyApp = express();
+        noBodyApp.use('/', router);
+
+        it('answers a failure with no message using a default one', async () => {
+            mocked.options.mockRejectedValue({});
+            const res = await request(app).get('/apps/a1/options');
+            expect(res.status).toBe(500);
+            expect(res.body.message).toBe('Unable to load root folders and quality profiles');
+        });
+
+        it('treats a link request with no body as one with nothing in it', async () => {
+            const res = await request(noBodyApp).post('/sub1');
+            expect(res.status).toBe(400);
+            expect(mocked.link).not.toHaveBeenCalled();
+        });
+    });
+
 });

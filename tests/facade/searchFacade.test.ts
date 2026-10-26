@@ -1,5 +1,6 @@
 // tests/facade/searchFacade.test.ts
 
+import scheduleFacade from '../../src/facade/scheduleFacade';
 import searchFacade from '../../src/facade/searchFacade';
 import configService from '../../src/service/configService';
 import DbCacheService from '../../src/service/db/dbCacheService';
@@ -319,4 +320,48 @@ describe('SearchFacade', () => {
       }
     });
   });
+
+  describe('remaining branches', () => {
+    beforeEach(() => {
+      (configService.getParameter as jest.Mock).mockResolvedValue('true');
+      (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+      (DbCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+      (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
+    });
+    afterEach(() => jest.restoreAllMocks());
+
+    it('returns an empty schedule feed without calling the batch callback', async () => {
+      jest.spyOn(scheduleFacade, 'getFeed').mockResolvedValue([]);
+      const onBatch = jest.fn();
+      expect(await searchFacade.searchStreaming('*', onBatch)).toEqual([]);
+      expect(onBatch).not.toHaveBeenCalled();
+    });
+
+    it('returns the schedule feed for a wildcard search', async () => {
+      const feed = [{ pid: 'f1', title: 'Feed' }] as IPlayerSearchResult[];
+      jest.spyOn(scheduleFacade, 'getFeed').mockResolvedValue(feed);
+      const onBatch = jest.fn();
+      expect(await searchFacade.searchStreaming('*', onBatch)).toEqual(feed);
+      expect(onBatch).toHaveBeenCalledWith(feed);
+    });
+
+    it('revives cached results that have no broadcast date', async () => {
+      (DbCacheService.prototype.get as jest.Mock).mockResolvedValue([{ pid: 'c1', title: 'Undated' }]);
+      const [result] = await searchFacade.search('Undated');
+      expect(result.pubDate).toBeUndefined();
+    });
+
+    it('says "unknown" in the trace when a rejected result has no series or episode number', async () => {
+      (nativeSearchService.search as jest.Mock).mockResolvedValue([
+        { pid: 'n1', title: 'A', pubDate: new Date('2020-01-01') },
+        { pid: 'n2', title: 'B', series: 1, pubDate: new Date('2020-01-01') },
+      ]);
+      const { trace } = await withSearchTrace(() => searchFacade.search('Show', 1, 2));
+      const details = trace.candidates.map(({ detail }) => detail);
+      expect(details).toContain('Series unknown, wanted 1');
+      expect(details).toContain('Episode unknown, wanted 2');
+    });
+  });
 });
+

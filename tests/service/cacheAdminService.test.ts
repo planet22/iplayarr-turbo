@@ -66,4 +66,16 @@ describe('cacheAdminService', () => {
         expect(await cacheAdminService.clearAll()).toBe(12);
         expect(thumbs.clearAll).toHaveBeenCalled();
     });
+
+    it('falls back to 30 days when the retention setting is unusable', async () => {
+        config.getParameter.mockResolvedValue('');
+        expect(await thumbnailRow()).toMatchObject({ ttl: 30 * 86400, overridden: false });
+    });
+
+    it('hands a database cache lifetime to DbCacheService', async () => {
+        const setTtl = jest.spyOn(DbCacheService, 'setTtl').mockResolvedValue(true);
+        expect(await cacheAdminService.setTtl('search_cache', 600)).toBe(true);
+        expect(setTtl).toHaveBeenCalledWith('search_cache', 600);
+        expect(config.setParameter).not.toHaveBeenCalled();
+    });
 });

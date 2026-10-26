@@ -104,21 +104,24 @@ const loggingService = {
 
 
 
-function joinOrReturn(input: string | any[]): string {
-    if (Array.isArray(input)) {
-        return input
-            .map((item: any) => {
-                if (typeof item === 'string') {
-                    return item;
-                } else {
-                    return JSON.stringify(item, null, 2);
-                }
-            })
-            .join(' ');
-    } else if (typeof input === 'string') {
-        return input;
+// One argument as text. JSON.stringify turns an Error into "{}" (its fields are not enumerable) and throws on
+// an object that refers to itself, so both are handled here: a log call must never lose or break the line.
+function describe(item: unknown): string {
+    if (typeof item === 'string') {
+        return item;
     }
-    return '';
+    if (item instanceof Error) {
+        return item.stack ?? `${item.name}: ${item.message}`;
+    }
+    try {
+        return JSON.stringify(item, null, 2) ?? String(item);
+    } catch {
+        return String(item);
+    }
+}
+
+function joinOrReturn(input: any[]): string {
+    return input.map(describe).join(' ');
 }
 
 export default loggingService;

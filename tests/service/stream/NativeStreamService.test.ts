@@ -361,6 +361,19 @@ describe('NativeStreamService', () => {
             await expect(service.streamDirect('p1', req, res)).rejects.toThrow('(BBC says: geolocation)');
         });
 
+        it('leaves "BBC says" out when mediaselector gave no reason', async () => {
+            route = (url, m) => (url.includes('mediaselector') ? { body: '<mediaSelection/>' } : defaultRoute(url, m));
+            const error = await service.streamDirect('p1', req, res).catch((e) => e);
+            expect(error.message).toBe('No HLS stream connection found for vpid plain');
+        });
+
+        it('takes the first version when none declares any types', async () => {
+            route = (url, m) => (url.includes('/playlist.json') ? { body: JSON.stringify({ allAvailableVersions: [{ pid: 'first' }, { pid: 'second' }] }) } : defaultRoute(url, m));
+            await service.streamDirect('p-untyped', req, res);
+            const vpids = (https.get as jest.Mock).mock.calls.map((c) => /\/vpid\/([^/]+)\//.exec(c[0] as string)?.[1]).filter(Boolean);
+            expect(vpids[0]).toBe('first');
+        });
+
         it('ignores non-video media and keeps walking pairs until one has connections', async () => {
             let calls = 0;
             route = (url, m) => {
@@ -533,6 +546,21 @@ describe('NativeStreamService', () => {
             const track = await service.getSubtitles('p1');
             expect(track?.vtt).toContain('00:00:11.000 --> 00:00:12.000');
             expect(track?.durationSeconds).toBe(2);
+        });
+
+        it('uses an empty stream key when the request carries none', async () => {
+            setConfig({ STREAM_SUBTITLES: 'true' });
+            route = withCaptions();
+            await service.streamDirect('p1', {} as any, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith(
+                'https://cdn/master.m3u8',
+                {},
+                res,
+                5,
+                'sess',
+                false,
+                '/api/subs.m3u8?mode=stream&pid=p1&subs=playlist&streamkey='
+            );
         });
 
         it('falls back to the plain proxy call when the programme has no captions', async () => {

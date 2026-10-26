@@ -210,4 +210,25 @@ describe('CustomChannelsRoute handlers', () => {
             expect(facade.removeLogo).toHaveBeenCalledWith('c1');
         });
     });
+
+    describe('requests with no body', () => {
+        const noBodyApp = express();
+        noBodyApp.use('/', router);
+
+        it('is treated as an empty one', async () => {
+            facade.create.mockResolvedValue([] as any);
+            facade.update.mockResolvedValue([] as any);
+            facade.customise.mockResolvedValue([] as any);
+            facade.importChannels.mockResolvedValue({ added: 0 } as any);
+            await request(noBodyApp).post('/custom');
+            await request(noBodyApp).put('/custom/c1');
+            await request(noBodyApp).put('/bbc_one/customise');
+            await request(noBodyApp).post('/custom-import');
+            expect(facade.create).toHaveBeenCalledWith({});
+            expect(facade.update).toHaveBeenCalledWith('c1', {});
+            expect(facade.customise).toHaveBeenCalledWith('bbc_one', {});
+            expect(facade.importChannels).toHaveBeenCalledWith({});
+        });
+    });
+
 });

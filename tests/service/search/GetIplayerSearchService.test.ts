@@ -142,4 +142,34 @@ describe('GetIplayerSearchService', () => {
             episodeOne,
         ]);
     });
+
+    describe('cached episodes filtered by season and episode', () => {
+        const cached = (pid: string, series: number, episode: number, pubDate?: any): IPlayerSearchResult =>
+            ({ number: 1, title: pid, channel: 'c', pid, request: { term: 't', line: 'l' }, series, episode, type: VideoType.TV, pubDate }) as IPlayerSearchResult;
+
+        it('only adds cached episodes matching the wanted season and episode, reviving their dates', async () => {
+            mockSearchEpisodeCache.mockResolvedValue([
+                cached('s1e1', 1, 1, '2020-01-01T00:00:00Z'),
+                cached('s1e2', 1, 2),
+                cached('s2e1', 2, 1),
+            ]);
+
+            const results = await getIplayerSearchService.processCompletedSearch([], 'term', undefined, 1, 1);
+
+            expect(results.map(({ pid }) => pid)).toEqual(['s1e1']);
+            expect(results[0].pubDate).toEqual(new Date('2020-01-01T00:00:00Z'));
+        });
+
+        it('adds an undated cached episode without inventing a date', async () => {
+            mockSearchEpisodeCache.mockResolvedValue([cached('s1e2', 1, 2)]);
+            const [result] = await getIplayerSearchService.processCompletedSearch([], 'term', undefined, 1, 2);
+            expect(result.pubDate).toBeUndefined();
+        });
+
+        it('ignores empty entries in the episode cache', async () => {
+            mockSearchEpisodeCache.mockResolvedValue([undefined]);
+            expect(await getIplayerSearchService.processCompletedSearch([], 'term')).toEqual([]);
+        });
+    });
 });
+

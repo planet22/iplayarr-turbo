@@ -104,4 +104,26 @@ describe('AppFormValidator', () => {
             priority: 'Priority must be a positive number'
         });
     });
+
+    describe('indexer and download client priorities', () => {
+        beforeEach(() => (appService.testAppConnection as jest.Mock).mockResolvedValue(true));
+
+        it('requires a download client for an indexer that only has a priority', async () => {
+            const result = await validator.validate({ indexer: { priority: 5 } });
+            expect(result).toEqual({
+                indexer_name: 'Cannot create Indexer without Download Client',
+                indexer_priority: 'Cannot create Indexer without Download Client',
+            });
+        });
+
+        it.each([0.5, 51])('rejects a download client priority of %s', async (priority) => {
+            const result = await validator.validate({ download_client: { name: 'DC', priority } });
+            expect(result).toEqual({ download_client_priority: 'Priority must be between 1 and 50' });
+        });
+
+        it.each([1, 25, 50])('accepts a download client priority of %s', async (priority) => {
+            expect(await validator.validate({ download_client: { name: 'DC', priority } })).toEqual({});
+        });
+    });
 });
+

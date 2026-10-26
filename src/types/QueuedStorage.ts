@@ -16,10 +16,18 @@ export class QueuedStorage {
         return result;
     }
 
+    // The table is shared with rows this class didn't write (the session secret is a bare hex string), so
+    // a row that is empty or not JSON is skipped rather than failing the whole read.
     async values(): Promise<any[]> {
         return this.enqueue(async () => {
             const rows = await prisma.keyValue.findMany();
-            return rows.map((row) => (row.value ? JSON.parse(row.value) : undefined));
+            return rows.flatMap((row) => {
+                try {
+                    return row.value ? [JSON.parse(row.value)] : [];
+                } catch {
+                    return [];
+                }
+            });
         });
     }
 

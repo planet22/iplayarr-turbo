@@ -92,4 +92,118 @@ describe('secretCrypto', () => {
         expect(err).toHaveBeenCalled();
         err.mockRestore();
     });
+
+    describe('key sources', () => {
+        const setEnv = (vars: Record<string, string | undefined>) => {
+            for (const [k, v] of Object.entries(vars)) {
+                if (v === undefined) delete process.env[k];
+                else process.env[k] = v;
+            }
+        };
+        const withEnv = (vars: Record<string, string | undefined>, fn: () => void) => {
+            const saved: Record<string, string | undefined> = {};
+            for (const k of Object.keys(vars)) saved[k] = process.env[k];
+            try {
+                setEnv(vars);
+                resetKeyCache();
+                fn();
+            } finally {
+                setEnv(saved);
+                resetKeyCache();
+            }
+        };
+
+        it('puts the default key file under CACHE_LOCATION when no file is named', () => {
+            const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-cache-'));
+            const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+            withEnv({ SECRETS_KEY: undefined, SECRETS_KEY_FILE: undefined, CACHE_LOCATION: dir }, () => {
+                encryptSecret('x');
+                expect(fs.existsSync(path.join(dir, 'secrets.key'))).toBe(true);
+            });
+            log.mockRestore();
+        });
+
+        it('falls back to ./cache when neither a file nor CACHE_LOCATION is set', () => {
+            const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-cwd-'));
+            const spy = jest.spyOn(process, 'cwd').mockReturnValue(cwd);
+            const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+            withEnv({ SECRETS_KEY: undefined, SECRETS_KEY_FILE: undefined, CACHE_LOCATION: undefined }, () => {
+                encryptSecret('x');
+                expect(fs.existsSync(path.join(cwd, 'cache', 'secrets.key'))).toBe(true);
+            });
+            spy.mockRestore();
+            log.mockRestore();
+        });
+
+        it('refuses a key file that is not a 32-byte hex key, and stores values unencrypted', () => {
+            const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sk-bad-')), 'secrets.key');
+            fs.writeFileSync(file, 'abcd');
+            const err = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            withEnv({ SECRETS_KEY: undefined, SECRETS_KEY_FILE: file }, () => {
+                expect(encryptSecret('x')).toBe('x');
+                expect(err).toHaveBeenCalledWith(expect.stringContaining('does not contain a 32-byte hex key'));
+            });
+            err.mockRestore();
+        });
+
+        it('reports a non-Error failure by its value', () => {
+            const err = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            const spy = jest.spyOn(fs, 'existsSync').mockImplementation(() => {
+                throw 'disk gone';
+            });
+            withEnv({ SECRETS_KEY: undefined, SECRETS_KEY_FILE: '/x/secrets.key' }, () => {
+                encryptSecret('x');
+                expect(err).toHaveBeenCalledWith(expect.stringContaining('Credential encryption is OFF: disk gone.'));
+            });
+            spy.mockRestore();
+            err.mockRestore();
+        });
+
+        it('cannot decrypt anything when no key is available, instead of passing ciphertext on', () => {
+            const enc = encryptSecret('secret') as string;
+            const err = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            withEnv({ SECRETS_KEY: undefined, SECRETS_KEY_FILE: path.join(os.tmpdir(), 'no-such-dir-' + Date.now(), '\0bad') }, () => {
+                expect(decryptSecret(enc)).toBeUndefined();
+            });
+            err.mockRestore();
+        });
+    });
+
+    describe('partial apps and settings', () => {
+        it('leaves absent credential fields absent and keeps empty strings', () => {
+            const bare = { id: '1', name: 'n' } as unknown as App;
+            expect(encryptApp(bare)).toEqual(bare);
+            expect(encryptApp({ ...bare, api_key: '' } as App)).toEqual({ ...bare, api_key: '' });
+            expect(Object.keys(encryptApp({ ...bare, password: 'p' } as App))).toContain('password');
+            expect(Object.keys(encryptApp(bare))).not.toContain('api_key');
+        });
+
+        it('leaves absent nested credentials absent', () => {
+            const app = { id: '1', name: 'n', download_client: { id: 1 }, indexer: { id: 2, priority: 1 } } as unknown as App;
+            const out = encryptApp(app);
+            expect(out.download_client).toEqual({ id: 1 });
+            expect(out.indexer).toEqual({ id: 2, priority: 1 });
+        });
+
+        it('finds a plain secret in a nested credential only', () => {
+            expect(hasPlainSecret({ id: '1', download_client: { api_key: 'plain' } } as unknown as App)).toBe(true);
+            expect(hasPlainSecret({ id: '1', indexer: { api_key: 'plain' } } as unknown as App)).toBe(true);
+            expect(hasPlainSecret({ id: '1' } as unknown as App)).toBe(false);
+        });
+
+        it('drops a setting that cannot be decrypted instead of leaving ciphertext in it', () => {
+            const cfg = { API_KEY: encryptSecret('a') as string, STREAM_KEY: 's' };
+            const err = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            process.env.SECRETS_KEY = 'a-different-key';
+            resetKeyCache();
+            const out = decryptSettings(cfg);
+            expect(out).not.toHaveProperty('API_KEY');
+            expect(out.STREAM_KEY).toBe('s');
+            err.mockRestore();
+        });
+
+        it('ignores credential settings that are blank or absent', () => {
+            expect(encryptSettings({ API_KEY: '', DOWNLOAD_DIR: '/d' })).toEqual({ API_KEY: '', DOWNLOAD_DIR: '/d' });
+        });
+    });
 });

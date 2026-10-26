@@ -183,7 +183,9 @@ class StreamProbeService {
                     if (first) {
                         try {
                             const variant = await readHead(new URL(first, head.url).toString(), headers);
-                            hls.live = !variant.body.toString('utf8').includes('#EXT-X-ENDLIST');
+                            if (variant.status >= 200 && variant.status < 300) {
+                                hls.live = !variant.body.toString('utf8').includes('#EXT-X-ENDLIST');
+                            }
                         } catch {
                             // leave live unknown
                         }

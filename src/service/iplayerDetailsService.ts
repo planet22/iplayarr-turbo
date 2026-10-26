@@ -138,7 +138,7 @@ class IPlayerDetailsService {
             const response: AxiosResponse<IPlayerEpisodesResponse> = await withRetry(() => axios.get(
                 `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`
             ));
-            const elements = response.data.programme_episodes.elements;
+            const elements = response.data.programme_episodes.elements ?? [];
             await this.episodesCache.set(cacheKey, elements).catch(() => undefined);
             return elements;
         } catch {

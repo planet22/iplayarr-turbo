@@ -1,7 +1,10 @@
 import axios from 'axios';
+import lunr from 'lunr';
 
 import { searchResultLimit } from '../../../src/constants/iPlayarrConstants';
+import configService from '../../../src/service/configService';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
+import loggingService from '../../../src/service/loggingService';
 import NativeSearchService from '../../../src/service/search/NativeSearchService';
 import { IPlayerSearchResult, VideoType } from '../../../src/types/IPlayerSearchResult';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
@@ -575,6 +578,71 @@ describe('NativeSearchService', () => {
             const results = await NativeSearchService.processCompletedSearch(mockResults, mockTerm, mockSynonym);
 
             expect(results).toEqual([mockResults[0]]); // Should return the first entry, which doesn't match exclusion terms
+        });
+    });
+
+    describe('branches', () => {
+        const hits = (...results: { id: string; title: string }[]) =>
+            (axios.get as jest.Mock).mockResolvedValue({ status: 200, data: { new_search: { results } } });
+
+        it('reports a failed BBC request that is not an Error by its value', async () => {
+            (axios.get as jest.Mock).mockRejectedValue('network down');
+            expect(await NativeSearchService.search('Test Term')).toEqual([]);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('network down'));
+        });
+
+        it('lists an episode once however many hits lead to it', async () => {
+            hits({ id: 'lone1', title: 'Test Term' }, { id: 'lone2', title: 'Test Term Again' });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockResolvedValue([mockEpisodeDetails('samePid', 'Same')]);
+            const results = await NativeSearchService.search('Test Term');
+            expect(results.map(({ pid }) => pid)).toEqual(['samePid']);
+        });
+
+        it('returns nothing for a term that is only punctuation', async () => {
+            hits({ id: 'hit1', title: 'Test Term' });
+            expect(await NativeSearchService.search('+++ ---')).toEqual([]);
+            expect(iplayerDetailsService.findBrandForPid).not.toHaveBeenCalled();
+        });
+
+        it('drops a hit that is missing a search word, and says why', async () => {
+            hits({ id: 'hit1', title: 'Test Show' });
+            const { trace } = await withSearchTrace(() => NativeSearchService.search('Test Term'));
+            expect(trace.candidates).toEqual(expect.arrayContaining([expect.objectContaining({ reason: 'missing-word', kept: false })]));
+        });
+
+        it('keeps a hit that is missing a search word when matching all words is switched off', async () => {
+            hits({ id: 'hit1', title: 'Test Show' });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockResolvedValue([mockEpisodeDetails('loose1', 'Loose')]);
+            const config = jest.spyOn(configService, 'getParameter').mockImplementation(async (key: any) => (key === 'SEARCH_MATCH_ALL_WORDS' ? 'false' : undefined));
+            const results = await NativeSearchService.search('Test Term');
+            config.mockRestore();
+            expect(results.map(({ pid }) => pid)).toEqual(['loose1']);
+        });
+
+        describe('when lunr cannot run the query', () => {
+            afterEach(() => jest.restoreAllMocks());
+
+            it('treats an unparseable query as no results and logs it', async () => {
+                hits({ id: 'hit1', title: 'Test Term' });
+                jest.spyOn(lunr.Index.prototype, 'search').mockImplementation(() => {
+                    throw Object.assign(new Error('bad query'), { name: 'QueryParseError' });
+                });
+                expect(await NativeSearchService.search('Test Term')).toEqual([]);
+                expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Lunr QueryParseError'));
+            });
+
+            it.each([
+                ['an error of another kind', new Error('index corrupt')],
+                ['a thrown value that is not an object', undefined],
+            ])('lets %s through', async (_label, error) => {
+                hits({ id: 'hit1', title: 'Test Term' });
+                jest.spyOn(lunr.Index.prototype, 'search').mockImplementation(() => {
+                    throw error;
+                });
+                await expect(NativeSearchService.search('Test Term')).rejects.toBe(error);
+            });
         });
     });
 });

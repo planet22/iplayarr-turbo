@@ -41,4 +41,9 @@ describe('PrismaSessionStore', () => {
         expect(await call((cb) => store.get('sid1', cb))).not.toBeNull();
         spy.mockRestore();
     });
+
+    it('gives a session with no cookie settings the default day-long lifetime', async () => {
+        await call((cb) => store.set('nocookie', { user: { username: 'admin' } } as any, cb));
+        expect(((await call((cb) => store.get('nocookie', cb))) as any).user.username).toBe('admin');
+    });
 });

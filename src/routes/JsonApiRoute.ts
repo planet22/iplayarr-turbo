@@ -230,13 +230,8 @@ router.get('/download', async (req: Request, res: Response) => {
                 return;
             }
             if (!type) {
-                if (metadata.programme.categories) {
-                    const formatCategory = metadata.programme.categories.find(({ type }) => type == 'format');
-                    if (formatCategory && formatCategory.key == 'films') {
-                        type = VideoType.MOVIE;
-                    }
-                }
-                type = VideoType.TV;
+                const formatCategory = metadata.programme.categories?.find(({ type }) => type == 'format');
+                type = formatCategory?.key == 'films' ? VideoType.MOVIE : VideoType.TV;
             }
             if (!nzbName) {
                 const { title: displayTitle, subtitle } = metadata.programme.display_title!;

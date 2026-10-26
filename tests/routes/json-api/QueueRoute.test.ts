@@ -85,4 +85,17 @@ describe('Queue and History Routes', () => {
       expect(res.body).toEqual(updatedHistory);
     });
   });
+
+  describe('when the services have nothing to give', () => {
+    it('answers an empty list rather than nothing', async () => {
+      (queueService.getQueue as jest.Mock).mockReturnValue(undefined);
+      (historyService.getHistory as jest.Mock).mockResolvedValue(undefined);
+
+      expect((await request(app).get('/queue')).body).toEqual([]);
+      expect((await request(app).get('/history')).body).toEqual([]);
+      expect((await request(app).delete('/history').query({ pid: 'p1' })).body).toEqual([]);
+      expect((await request(app).delete('/queue').query({ pid: 'p1' })).body).toEqual([]);
+    });
+  });
+
 });

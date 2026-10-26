@@ -6,6 +6,7 @@ import historyService from '../../src/service/historyService';
 import queueService from '../../src/service/queueService';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import videoEventService from '../../src/service/videoEventService';
+import { MediaMode } from '../../src/types/enums/MediaMode';
 import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
@@ -234,4 +235,37 @@ describe('queueService', () => {
             expect(queueService.getFromQueue('321')).toEqual(expect.objectContaining({ pid: '321' }));
         });
     });
+
+    describe('input and settings edge cases', () => {
+        it('refuses a programme id that is not safe to use in paths and URLs', () => {
+            expect(() => queueService.addToQueue('../etc', 'Name', VideoType.TV)).toThrow('Invalid programme id');
+            expect(queueService.getQueue()).toHaveLength(0);
+        });
+
+        it('falls back to the programme id when the name has nothing usable left', () => {
+            queueService.addToQueue('abc123', '../..', VideoType.TV);
+            expect(queueService.getFromQueue('abc123')?.nzbName).toBe('abc123');
+        });
+
+        it('records a media mode override on the entry only when one is given', () => {
+            queueService.addToQueue('mm1', 'With', VideoType.TV, undefined, undefined, QueueEntrySource.MANUAL, MediaMode.STRM);
+            queueService.addToQueue('mm2', 'Without', VideoType.TV);
+            expect(queueService.getFromQueue('mm1')?.mediaMode).toBe(MediaMode.STRM);
+            expect(queueService.getFromQueue('mm2')).not.toHaveProperty('mediaMode');
+        });
+
+        it('runs three downloads at once when the active limit is not a number', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('lots');
+            (downloadFacade.download as jest.Mock).mockResolvedValue({ pid: 1 });
+            for (const pid of ['l1', 'l2', 'l3', 'l4']) queueService.addToQueue(pid, pid, VideoType.TV);
+            await new Promise((r) => setTimeout(r, 20));
+            expect(queueService.getQueue().filter(({ status }) => status === QueueEntryStatus.DOWNLOADING)).toHaveLength(3);
+        });
+
+        it('names the programme id when cancelling something that is not queued', () => {
+            queueService.cancelItem('ghost');
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.CANCELLED, 'Cancelled "ghost"', { pid: 'ghost', jobId: undefined });
+        });
+    });
 });
+

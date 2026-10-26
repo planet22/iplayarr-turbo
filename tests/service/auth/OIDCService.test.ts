@@ -67,6 +67,16 @@ describe('OIDCService', () => {
             );
         });
 
+        it('keeps the credentials of a connection being tested in the session, not in the url', async () => {
+            mockedClient.discovery.mockResolvedValue({} as any);
+            mockedClient.calculatePKCECodeChallenge.mockResolvedValue('c');
+            mockedClient.buildAuthorizationUrl.mockReturnValue(new URL('https://idp/a'));
+            const req: any = { session: {} };
+            const url = await oidcService.oidcConnection(req, 'https://idp/x', 'cid', 'secret', 'https://me', 'test');
+            expect(req.session.oidcTest).toEqual({ configUrl: 'https://idp/x', clientId: 'cid', clientSecret: 'secret' });
+            expect(url).not.toContain('secret');
+        });
+
         it('defaults the mode to login', async () => {
             mockedClient.discovery.mockResolvedValue({} as any);
             mockedClient.calculatePKCECodeChallenge.mockResolvedValue('c');
@@ -100,6 +110,14 @@ describe('OIDCService', () => {
             expect(mockedClient.fetchProtectedResource).toHaveBeenCalledWith(expect.anything(), 'tok', new URL('https://idp/userinfo'), 'GET');
         });
 
+        it('does not trust an address the provider says is unverified', async () => {
+            const config: any = { serverMetadata: () => ({ userinfo_endpoint: 'https://idp/userinfo' }) };
+            mockedClient.discovery.mockResolvedValue(config);
+            mockedClient.authorizationCodeGrant.mockResolvedValue({ access_token: 'tok' } as any);
+            mockedClient.fetchProtectedResource.mockResolvedValue({ json: async () => ({ email: 'a@b.c', email_verified: false }) } as any);
+            expect(await oidcService.getUserEmail(makeReq(), 'https://idp/x', 'cid', 'sec')).toBeUndefined();
+        });
+
         it('returns undefined on failure', async () => {
             mockedClient.discovery.mockRejectedValue(new Error('down'));
             expect(await oidcService.getUserEmail(makeReq(), 'https://idp/x', 'c', 's')).toBeUndefined();
@@ -113,6 +131,15 @@ describe('OIDCService', () => {
             mockLogin('u@x.y');
             expect(await oidcService.validateUser(makeReq())).toBe('u@x.y');
             expect(mockedClient.discovery).toHaveBeenCalledWith(new URL('https://idp/x'), 'cid', 'sec');
+        });
+
+        it('does not trust an address the provider says is unverified', async () => {
+            (configService.getParameters as jest.Mock).mockResolvedValue(['https://idp/x', 'cid', 'sec']);
+            const config: any = { serverMetadata: () => ({ userinfo_endpoint: 'https://idp/userinfo' }) };
+            mockedClient.discovery.mockResolvedValue(config);
+            mockedClient.authorizationCodeGrant.mockResolvedValue({ access_token: 'tok' } as any);
+            mockedClient.fetchProtectedResource.mockResolvedValue({ json: async () => ({ email: 'a@b.c', email_verified: false }) } as any);
+            expect(await oidcService.validateUser(makeReq())).toBeUndefined();
         });
 
         it('returns undefined on failure', async () => {
