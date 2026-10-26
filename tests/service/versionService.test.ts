@@ -269,4 +269,84 @@ describe('versionService', () => {
             expect(result.message).toContain('permission denied');
         });
     });
+
+    describe('branches', () => {
+        it('reports a failed check that wrote nothing to stderr by its exit code', async () => {
+            mockSpawn({ '--update-to': { code: 3 } });
+            expect(await versionService.updateYtDlp()).toEqual({ success: false, message: 'yt-dlp exited with code 3' });
+        });
+
+        it('says "update failed" when the failure carries no message', async () => {
+            mockSpawn({ '--update-to': { error: {} as Error } });
+            expect(await versionService.updateYtDlp()).toEqual({ success: false, message: 'yt-dlp update failed' });
+        });
+
+        it('copes with no executable being configured', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+            mockSpawn({});
+            const info = await versionService.getVersionInfo();
+            expect(info.getIplayer.current).toBeNull();
+            expect(info.ytdlp.current).toBeNull();
+        });
+
+        describe('comparing versions', () => {
+            const compare = async (current: string, latest: string) => {
+                mockSpawn({ '-V': { stdout: 'get_iplayer 3.00' }, '--version': { stdout: `${current}\n` } });
+                mockGithub({
+                    '/repos/get-iplayer/get_iplayer/releases/latest': ok('3.00'),
+                    '/repos/yt-dlp/yt-dlp/releases/latest': ok(latest),
+                });
+                return (await versionService.getVersionInfo()).ytdlp.updateAvailable;
+            };
+
+            it('sees a version with and without a leading v as the same', async () => {
+                expect(await compare('2024.02.01', 'v2024.02.01')).toBe(false);
+            });
+
+            it('reads a part that is not a number as zero', async () => {
+                expect(await compare('2024.xx.01', '2024.01.01')).toBe(true);
+                expect(await compare('2024.02.01', '2024.xx.01')).toBe(false);
+            });
+        });
+
+        describe('updating get_iplayer', () => {
+            const releasePath = '/repos/get-iplayer/get_iplayer/releases/latest';
+            let dir: string;
+
+            beforeEach(() => {
+                dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vs-branch-'));
+                (configService.getParameter as jest.Mock).mockResolvedValue(`${dir}/get_iplayer`);
+                mockGithub({ [releasePath]: ok('3.40') });
+            });
+            afterEach(() => {
+                jest.restoreAllMocks();
+                fs.rmSync(dir, { recursive: true, force: true });
+            });
+
+            const download = (res: { statusCode?: number; headers?: Record<string, string> }) => {
+                jest.spyOn(fs, 'createWriteStream').mockReturnValue({} as any);
+                (https.get as jest.Mock).mockImplementation((_url: string, cb: any) => {
+                    setImmediate(() => cb({ headers: {}, resume: jest.fn(), ...res }));
+                    return new EventEmitter();
+                });
+            };
+
+            it('says "update failed" when the failure carries no message', async () => {
+                download({ statusCode: 200 });
+                (tar.extract as unknown as jest.Mock).mockRejectedValue({});
+                expect(await versionService.updateGetIplayer()).toEqual({ success: false, message: 'get_iplayer update failed' });
+            });
+
+            it('treats a redirect with nowhere to go as a failed download', async () => {
+                download({ statusCode: 302 });
+                expect(await versionService.updateGetIplayer()).toEqual({ success: false, message: 'Download failed with status 302' });
+            });
+
+            it('treats a response with no status as a failed download', async () => {
+                download({});
+                expect(await versionService.updateGetIplayer()).toEqual({ success: false, message: 'Download failed with status undefined' });
+            });
+        });
+    });
 });
+
