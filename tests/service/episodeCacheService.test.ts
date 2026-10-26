@@ -179,3 +179,18 @@ describe('episodeCacheService', () => {
     });
 });
 
+describe('episodeCacheService with several series in a brand', () => {
+    it('lists the episodes of each series', async () => {
+        (iplayerDetailsService.findBrandForUrl as jest.Mock).mockResolvedValue('b0brand');
+        (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockImplementation(async (pid: string) =>
+            pid === 'b0brand'
+                ? [{ id: 's1', type: 'series' }, { id: 's2', type: 'series' }]
+                : [{ id: `${pid}-ep`, type: 'episode', release_date_time: '2020-01-01' }]
+        );
+        (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockResolvedValue([{ title: 'Multi Show', pid: 'x', runtime: 30 }]);
+
+        expect(await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/b0brand')).toBe(true);
+        expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledWith('s1');
+        expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledWith('s2');
+    });
+});

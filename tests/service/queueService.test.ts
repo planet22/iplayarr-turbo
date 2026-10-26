@@ -262,6 +262,17 @@ describe('queueService', () => {
             expect(queueService.getQueue().filter(({ status }) => status === QueueEntryStatus.DOWNLOADING)).toHaveLength(3);
         });
 
+        it('drops a download that fails to start and moves on', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('1');
+            (downloadFacade.download as jest.Mock).mockRejectedValueOnce(new Error('no disk')).mockResolvedValue({ pid: 7 });
+            queueService.addToQueue('bad1', 'Bad', VideoType.TV);
+            queueService.addToQueue('good1', 'Good', VideoType.TV);
+            await new Promise((r) => setTimeout(r, 20));
+            expect(queueService.getFromQueue('bad1')).toBeUndefined();
+            expect(queueService.getFromQueue('good1')?.status).toBe(QueueEntryStatus.DOWNLOADING);
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.DOWNLOAD_FAILED, expect.stringContaining('no disk'), expect.anything());
+        });
+
         it('names the programme id when cancelling something that is not queued', () => {
             queueService.cancelItem('ghost');
             expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.CANCELLED, 'Cancelled "ghost"', { pid: 'ghost', jobId: undefined });

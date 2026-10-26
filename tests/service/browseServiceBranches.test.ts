@@ -494,3 +494,48 @@ describe('programme page', () => {
         });
     });
 });
+
+describe('function coverage extras', () => {
+    it('orders a channel\'s schedule by start time', async () => {
+        const broadcast = (id: string, start: string) => ({ episode: episode(id), scheduled_start: start, scheduled_end: '2024-05-01T23:00:00Z' });
+        mockedAxios.get.mockResolvedValue({
+            data: { schedule: { elements: [broadcast('late', '2024-05-01T20:00:00Z'), broadcast('early', '2024-05-01T08:00:00Z')] } },
+        });
+        const [row] = await browseService.schedule('2024-05-01');
+        expect(row.slots.map(({ start }) => start)).toEqual(['2024-05-01T08:00:00Z', '2024-05-01T20:00:00Z']);
+    });
+
+    it('reads each channel\'s brand colours off the iPlayer page', async () => {
+        const items = [{ id: 'channels', subItems: [{ id: 'bbc_one', icon: 'bbcone' }] }];
+        mockedAxios.get.mockResolvedValue({ data: stateHtml({ navigation: { items } }, icon('bbcone')) });
+        const colours = await browseService.channelColors();
+        expect(Object.values(colours)).toContainEqual(expect.objectContaining({ bg: '#111111', fg: '#ffffff' }));
+    });
+
+    describe('programme when lookups fail', () => {
+        it('reports the original error when the listing cannot help either', async () => {
+            mockedDetails.getMetadata.mockRejectedValue(new Error('BBC down'));
+            mockedAxios.get.mockRejectedValue(new Error('offline'));
+            await expect(browseService.programme('p09gone')).rejects.toThrow('BBC down');
+        });
+
+        it('stays on the episode when its show cannot be worked out', async () => {
+            mockedDetails.getMetadata.mockResolvedValue({ programme: { type: 'episode', pid: 'p09ep', title: 'Ep' } } as any);
+            mockedDetails.findBrandForPid.mockRejectedValue(new Error('BBC down'));
+            mockedDetails.details.mockResolvedValue([{ pid: 'p09ep', title: 'Ep', type: VideoType.TV, series: 1, episode: 1 } as any]);
+            const result = await browseService.programme('p09ep');
+            expect(result.pid).toBe('p09ep');
+        });
+
+        it('shows the lone episode when its show cannot be fetched from the listing', async () => {
+            mockedDetails.getMetadata.mockRejectedValue(new Error('BBC down'));
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url.endsWith('programmes/p09ep')) return { data: { programmes: [] } };
+                if (url.endsWith('episodes/p09ep')) return { data: { episodes: [{ id: 'p09ep', title: 'Lone', tleo_id: 'p09show', tleo_type: 'series' }] } };
+                throw new Error(`unrouted ${url}`);
+            });
+            const result = await browseService.programme('p09ep');
+            expect(result.title).toBe('Lone');
+        });
+    });
+});
