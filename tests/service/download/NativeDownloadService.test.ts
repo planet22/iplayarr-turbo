@@ -213,5 +213,30 @@ describe('NativeDownloadService', () => {
             expect(translate('ress=end\n')).toHaveLength(1);
             expect(createProgressTranslator(undefined)('out_time_us=1\nprogress=continue\n')).toEqual([]);
         });
+
+        it('smooths the projected size over later blocks', () => {
+            let t = 0;
+            let bytes = 0;
+            const translate = createProgressTranslator(100, () => bytes, () => t);
+            const sizes: string[] = [];
+            for (const [at, mb, done] of [[1000, 10, 20], [2000, 40, 40]]) {
+                t = at;
+                bytes = mb * 1_048_576;
+                sizes.push(progressRegex.exec(translate(block(done * 1_000_000))[0])![2]);
+            }
+            // 10MB at 20% projects 50MB; 40MB at 40% projects 100MB, which only moves the figure a tenth of the way
+            expect(sizes).toEqual(['50.0MB', '55.0MB']);
+        });
+
+        it('ignores lines that are not key=value and falls back to out_time_ms', () => {
+            const translate = createProgressTranslator(100, () => 0, () => 5000);
+            const lines = translate('ffmpeg banner without an equals sign\nout_time_ms=50000000\nprogress=continue\n');
+            expect(lines).toHaveLength(1);
+            expect(lines[0]).toMatch(/^50\.0% of ~N\/A/);
+        });
+
+        it('emits nothing for a block that reports no time', () => {
+            expect(createProgressTranslator(100)('speed=1x\nprogress=continue\n')).toEqual([]);
+        });
     });
 });
