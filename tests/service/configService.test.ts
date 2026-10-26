@@ -1,6 +1,7 @@
 
 import searchFacade from '../../src/facade/searchFacade';
-import configService from '../../src/service/configService';
+import configService, { encryptStoredSettings } from '../../src/service/configService';
+import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 
 jest.mock('../../src/facade/searchFacade', () => ({
@@ -112,5 +113,23 @@ describe('configService', () => {
     const config = await configService.getAllConfig();
     expect(config.DEBUG).toBe('true');
     expect(config.REFRESH_SCHEDULE).toBe('0 * * * *');
+  });
+
+  describe('AIRDATE_NUMBERING changes', () => {
+    it('clears the computed details and search cache only when the value really changes', async () => {
+      const clear = jest.spyOn(episodeDetailsCache, 'clear').mockResolvedValue(undefined as any);
+      await configService.setParameter(IplayarrParameter.AIRDATE_NUMBERING, 'true');
+      expect(clear).toHaveBeenCalledTimes(1);
+      expect(searchFacade.clearSearchCache).toHaveBeenCalledTimes(1);
+
+      await configService.setParameter(IplayarrParameter.AIRDATE_NUMBERING, 'true');
+      expect(clear).toHaveBeenCalledTimes(1);
+      clear.mockRestore();
+    });
+  });
+
+  it('leaves nothing to encrypt when no settings are stored', async () => {
+    await encryptStoredSettings();
+    expect(mockStorage['config']).toBeUndefined();
   });
 });
