@@ -247,4 +247,73 @@ describe('AddFileEndpoint', () => {
         // highPriority (priority 1) sorts before lowPriority (priority 5)
         expect((nzbFacade.addFile as jest.Mock).mock.calls[0][0]).toBe(highPriority);
     });
+
+    describe('branches', () => {
+        const nzb = (head: string) => `<?xml version="1.0"?><nzb><head>${head}</head></nzb>`;
+        const withTitle = (pid: string, extra = '') => nzb(`<title>${pid}</title><meta type="nzbName" _="Name"/><meta type="type" _="TV"/>${extra}`);
+
+        it.each([['../../etc/passwd'], ['bad pid'], ['x'.repeat(65)], ['m001$(id)']])('refuses a programme id of %j, queuing nothing', async (pid) => {
+            req.files = [toFile(withTitle(pid))] as any;
+            await handler(req as Request, res as Response);
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.json).toHaveBeenCalledWith({ status: false, error: 'Invalid programme id in NZB' });
+            expect(queueService.addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('refuses the whole upload if any file has a bad id, even after queuing an earlier one', async () => {
+            req.files = [toFile(withTitle('m0012345')), toFile(withTitle('../bad'))] as any;
+            await handler(req as Request, res as Response);
+            expect(res.status).toHaveBeenLastCalledWith(400);
+        });
+
+        it('queues several valid files and returns every pid', async () => {
+            req.files = [toFile(withTitle('m0012345')), toFile(withTitle('m0067890'))] as any;
+            await handler(req as Request, res as Response);
+            expect(res.json).toHaveBeenCalledWith({ status: true, nzo_ids: ['m0012345', 'm0067890'] });
+            expect(queueService.addToQueue).toHaveBeenCalledTimes(2);
+        });
+
+        it('reads the optional library details, leaving out those that are absent', async () => {
+            req.files = [toFile(withTitle('m0012345', '<meta type="title" _="Show"/><meta type="runtime" _="1800"/><meta type="quality" _="hd"/>'))] as any;
+            await handler(req as Request, res as Response);
+            expect((queueService.addToQueue as jest.Mock).mock.calls[0][4]).toEqual({
+                title: 'Show',
+                series: undefined,
+                episode: undefined,
+                episodeTitle: undefined,
+                channel: undefined,
+                pubDate: undefined,
+                runtimeSeconds: 1800,
+                quality: 'hd',
+                version: undefined,
+            });
+        });
+
+        it('drops a quality it does not know', async () => {
+            req.files = [toFile(withTitle('m0012345', '<meta type="title" _="Show"/><meta type="quality" _="ultra"/>'))] as any;
+            await handler(req as Request, res as Response);
+            expect((queueService.addToQueue as jest.Mock).mock.calls[0][4].quality).toBeUndefined();
+        });
+
+        describe('a file that cannot be queued', () => {
+            beforeEach(() => {
+                (appService.getAllApps as jest.Mock).mockResolvedValue([]);
+                (appService.findAppByUserAgent as jest.Mock).mockResolvedValue(undefined);
+            });
+
+            it('reports a generic error for an upload with no files at all', async () => {
+                req.files = undefined;
+                await handler(req as Request, res as Response);
+                expect(res.status).toHaveBeenCalledWith(500);
+                expect(res.json).toHaveBeenCalledWith({ status: false, error: 'Unable to add NZB, Unknown Error' });
+                expect(statisticsService.addFailedGrab).toHaveBeenCalledWith(expect.objectContaining({ error: 'Unable to add NZB, Unknown Error' }));
+            });
+
+            it('records a file with no name meta as having no name', async () => {
+                req.files = [toFile('<nzb><head><meta type="other">x</meta></head></nzb>')] as any;
+                await handler(req as Request, res as Response);
+                expect(statisticsService.addFailedGrab).toHaveBeenCalledWith(expect.objectContaining({ nzbName: undefined }));
+            });
+        });
+    });
 });

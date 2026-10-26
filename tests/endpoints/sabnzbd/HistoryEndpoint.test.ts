@@ -216,4 +216,31 @@ describe('sabnzbdActionEndpoint', () => {
             });
         });
     });
+
+    describe('failed downloads', () => {
+        const entry = (over: Partial<QueueEntry>): QueueEntry =>
+            ({ pid: 'id1', nzbName: 'showfile', details: { size: 1 }, type: VideoType.TV, source: QueueEntrySource.NZB, ...over }) as QueueEntry;
+        const slotsFor = async (...entries: QueueEntry[]) => {
+            (historyService.getHistory as jest.Mock).mockResolvedValue(entries);
+            (configService.getParameter as jest.Mock).mockResolvedValueOnce('/complete').mockResolvedValueOnce('mp4');
+            await handler(req as Request, res as Response, next);
+            return (res.json as jest.Mock).mock.calls[0][0].history.slots;
+        };
+
+        it('tells Sonarr/Radarr a failed download failed, with the reason that was recorded', async () => {
+            const [slot] = await slotsFor(entry({ status: QueueEntryStatus.FAILED, failMessage: 'Programme withdrawn' }));
+            expect(slot).toMatchObject({ status: 'Failed', fail_message: 'Programme withdrawn' });
+        });
+
+        it('gives a failure with no recorded reason a default one', async () => {
+            const [slot] = await slotsFor(entry({ status: QueueEntryStatus.FAILED }));
+            expect(slot).toMatchObject({ status: 'Failed', fail_message: 'get_iplayer produced no video file' });
+        });
+
+        it('reports a completed download as completed with no failure message', async () => {
+            const [slot] = await slotsFor(entry({ status: QueueEntryStatus.COMPLETE }));
+            expect(slot).toMatchObject({ status: 'Completed', fail_message: '' });
+        });
+    });
+
 });
