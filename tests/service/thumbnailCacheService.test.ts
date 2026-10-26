@@ -227,3 +227,24 @@ describe('thumbnailCacheService', () => {
         });
     });
 });
+
+describe('thumbnailCacheService when the viewed time cannot be refreshed', () => {
+    it('still serves the cached copy', async () => {
+        jest.resetAllMocks();
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'thumb-test-'));
+        (Utils.getThumbnailCacheDir as jest.Mock).mockResolvedValue(dir);
+        const file = path.join(dir, 'old.jpg');
+        fs.writeFileSync(file, 'x');
+        const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+        fs.utimesSync(file, twoDaysAgo, twoDaysAgo);
+        const utimes = jest.spyOn(fs.promises, 'utimes').mockRejectedValue(new Error('read-only'));
+        try {
+            expect(await thumbnailCacheService.getOrFetch('old')).toBe(file);
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(utimes).toHaveBeenCalled();
+        } finally {
+            utimes.mockRestore();
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});

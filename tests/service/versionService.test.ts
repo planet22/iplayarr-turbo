@@ -271,6 +271,20 @@ describe('versionService', () => {
     });
 
     describe('branches', () => {
+        it('gives up on a GitHub request that never answers', async () => {
+            (https.request as jest.Mock).mockImplementation(() => {
+                const req: any = new EventEmitter();
+                let onTimeout: () => void = () => undefined;
+                req.setTimeout = jest.fn((_ms: number, cb: () => void) => (onTimeout = cb));
+                req.destroy = jest.fn();
+                req.end = () => setImmediate(() => onTimeout());
+                return req;
+            });
+            mockSpawn({});
+            const info = await versionService.getVersionInfo();
+            expect(info.ytdlp.latest).toBeNull();
+        });
+
         it('reports a failed check that wrote nothing to stderr by its exit code', async () => {
             mockSpawn({ '--update-to': { code: 3 } });
             expect(await versionService.updateYtDlp()).toEqual({ success: false, message: 'yt-dlp exited with code 3' });
