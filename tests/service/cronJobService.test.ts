@@ -128,4 +128,20 @@ describe('cronJobService', () => {
             expect(get('job').cron).toBe('0 4 * * *');
         });
     });
+
+    it('lists a task with no upcoming run as having a null next run', async () => {
+        (cron.schedule as jest.Mock).mockReturnValueOnce({ stop: jest.fn(), getNextRun: jest.fn(() => null) });
+        await cronJobService.defineTask({ id: 'idle', label: 'Idle', description: 'd', cron: '* * * * *' }, jest.fn());
+        expect(get('idle').nextRun).toBeNull();
+    });
+
+    it('ignores a run for a task that is not defined', async () => {
+        await expect((cronJobService as any).runTask('ghost', 'manual')).resolves.toBeUndefined();
+    });
+
+    it('records a failure that is not an Error by its value', async () => {
+        await cronJobService.defineTask({ id: 'str', label: 'S', description: 'd', cron: '* * * * *' }, jest.fn().mockRejectedValue('plain failure'));
+        await (cronJobService as any).runTask('str', 'scheduled');
+        expect(get('str')).toMatchObject({ lastStatus: 'error', lastError: 'plain failure' });
+    });
 });
