@@ -145,3 +145,23 @@ describe('cronJobService', () => {
         expect(get('str')).toMatchObject({ lastStatus: 'error', lastError: 'plain failure' });
     });
 });
+
+describe('cronJobService scheduled runs', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (cronJobService as any).tasks = new Map();
+    });
+
+    it('runs the task when its schedule fires, also after the schedule is changed', async () => {
+        const run = jest.fn().mockResolvedValue(undefined);
+        await cronJobService.defineTask({ id: 'sched', label: 'S', description: 'd', cron: '0 * * * *' }, run);
+        const fire = (call: number) => (cron.schedule as jest.Mock).mock.calls[call][1]();
+
+        await fire(0);
+        expect(get('sched')).toMatchObject({ lastTrigger: 'scheduled', lastStatus: 'ok' });
+
+        await cronJobService.setSchedule('sched', '30 * * * *');
+        await fire(1);
+        expect(run).toHaveBeenCalledTimes(2);
+    });
+});

@@ -178,3 +178,14 @@ describe('statisticsService', () => {
         expect(result).toBe(0);
     });
 });
+
+describe('statisticsService failed grab history', () => {
+    it('clears the failed grab history and tells clients', async () => {
+        const clear = jest.spyOn(statisticsService.failedGrabHistory, 'clear').mockResolvedValue(undefined as any);
+        const get = jest.spyOn(statisticsService, 'getFailedGrabHistory').mockResolvedValue([]);
+        await statisticsService.clearFailedGrabHistory();
+        expect(clear).toHaveBeenCalled();
+        expect(get).toHaveBeenCalled();
+        jest.restoreAllMocks();
+    });
+});

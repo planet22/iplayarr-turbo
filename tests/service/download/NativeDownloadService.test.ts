@@ -145,6 +145,25 @@ describe('NativeDownloadService', () => {
             expect((spawn as jest.Mock).mock.calls[0][1]).toContain('https://cdn/video.m3u8');
         });
 
+        it('kills an ffprobe that takes too long and carries on without a length', async () => {
+            jest.useFakeTimers();
+            try {
+                (queueService.getFromQueue as jest.Mock).mockReturnValueOnce(undefined);
+                const probe: any = new EventEmitter();
+                probe.stdout = new EventEmitter();
+                probe.kill = jest.fn(() => probe.emit('close', null));
+                (spawn as jest.Mock).mockImplementation((command: string) => (command === 'ffprobe' ? probe : fakeFfmpeg()));
+
+                const pending = nativeDownloadService.download('p1', '/dl/p1');
+                await jest.advanceTimersByTimeAsync(31_000);
+
+                await expect(pending).resolves.toBeDefined();
+                expect(probe.kill).toHaveBeenCalledWith('SIGKILL');
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
         it.each([
             ['an unreadable answer', 'N/A\n'],
             ['a zero length', '0\n'],

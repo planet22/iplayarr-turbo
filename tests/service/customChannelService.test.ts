@@ -141,3 +141,12 @@ describe('customChannelService', () => {
         expect(customChannels()[0].lastTest).toMatchObject({ ok: false, message: 'The server answered 404' });
     });
 });
+
+describe('customChannelService.list', () => {
+    afterEach(() => setCustomRegistry([], {}));
+
+    it('lists the channels that have been created', async () => {
+        const channel = await service.create(input);
+        expect(service.list().map(({ id }) => id)).toContain(channel.id);
+    });
+});

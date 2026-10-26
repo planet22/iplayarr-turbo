@@ -29,4 +29,12 @@ describe('detectPathMapping', () => {
     it('returns undefined when the files are not found anywhere', () => {
         expect(detectPathMapping(['/data/other/thing/missing.strm'], [root])).toBeUndefined();
     });
+
+    it('picks the prefix that explains the most files when they disagree', () => {
+        const mapping = detectPathMapping(
+            ['/data/media/tv/Show/ep1.strm', '/volume1/data/media/tv/Show/ep1.strm', '/volume1/data/media/tv/Show/ep2.strm'],
+            [root]
+        );
+        expect(mapping).toEqual({ from: '/volume1/data', to: root, matched: 2, tested: 3 });
+    });
 });

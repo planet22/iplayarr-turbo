@@ -3,6 +3,7 @@ import configService from '../../src/service/configService';
 import jellyfinService from '../../src/service/jellyfinService';
 import liveTvService from '../../src/service/liveTvService';
 import liveTvSyncService, { REFRESH_DEBOUNCE_MS } from '../../src/service/liveTvSyncService';
+import loggingService from '../../src/service/loggingService';
 
 jest.mock('../../src/service/configService');
 jest.mock('../../src/service/appService', () => ({ __esModule: true, default: { getApp: jest.fn() } }));
@@ -92,5 +93,17 @@ describe('liveTvSyncService', () => {
             liveTvSyncService.notifyChanged();
             await expect(jest.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS)).resolves.not.toThrow();
         });
+    });
+});
+
+describe('liveTvSyncService debounced refresh failures', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('logs a refresh that fails after the debounce instead of throwing', async () => {
+        jest.useFakeTimers();
+        jest.spyOn(liveTvSyncService, 'refreshNow').mockRejectedValue(new Error('jellyfin down'));
+        liveTvSyncService.notifyChanged();
+        await jest.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 10);
+        expect(loggingService.error).toHaveBeenCalledWith('Unable to refresh Jellyfin Live TV: jellyfin down');
     });
 });

@@ -387,3 +387,14 @@ describe('SettingsRoute', () => {
         });
     });
 });
+
+describe('GET /versionProfiles', () => {
+    it('lists the version profiles with just their id, name and tag', async () => {
+        const app = express();
+        app.use('/', SettingsRoute);
+        const response = await request(app).get('/versionProfiles');
+        expect(response.status).toBe(200);
+        expect(response.body.length).toBeGreaterThan(0);
+        expect(Object.keys(response.body[0]).sort()).toEqual(['id', 'name', 'tag']);
+    });
+});

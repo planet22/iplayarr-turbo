@@ -2,8 +2,10 @@ import downloadFacade from '../../src/facade/downloadFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import configService from '../../src/service/configService';
 import cronJobService from '../../src/service/cronJobService';
+import DbCacheService from '../../src/service/db/dbCacheService';
 import episodeCacheService from '../../src/service/episodeCacheService';
 import libraryCleanupService from '../../src/service/libraryCleanupService';
+import liveTvService from '../../src/service/liveTvService';
 import streamSessionService from '../../src/service/stream/streamSessionService';
 import strmWatchdogService from '../../src/service/strmWatchdogService';
 import subscriptionService from '../../src/service/subscriptionService';
@@ -47,6 +49,8 @@ jest.mock('../../src/service/stream/streamSessionService', () => ({
 jest.mock('../../src/service/libraryCleanupService', () => ({
     cleanup: jest.fn(),
 }));
+
+jest.mock('../../src/service/liveTvService', () => ({ refreshGuide: jest.fn() }));
 
 const definedTasks = () => {
     const tasks: Record<string, { definition: any; run: () => Promise<unknown> }> = {};
@@ -119,5 +123,23 @@ describe('TaskService', () => {
 
         await tasks['strm-watchdog'].run();
         expect(strmWatchdogService.run).toHaveBeenCalled();
+    });
+});
+
+describe('TaskService maintenance task bodies', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('refreshes the Live TV guide and purges expired cache entries when those tasks run', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('*/5 * * * *');
+        const purge = jest.spyOn(DbCacheService, 'purgeExpired').mockResolvedValue(0 as any);
+
+        await TaskService.init();
+        const tasks = definedTasks();
+        await tasks['guide-refresh'].run();
+        await tasks['cache-purge'].run();
+
+        expect(liveTvService.refreshGuide).toHaveBeenCalled();
+        expect(purge).toHaveBeenCalled();
+        purge.mockRestore();
     });
 });

@@ -365,3 +365,42 @@ describe('SearchFacade', () => {
   });
 });
 
+describe('SearchFacade cache housekeeping and trace cache failures', () => {
+  const mockResults = [{ pid: 'p1', title: 'Test Show', pubDate: new Date('2020-01-01') }] as IPlayerSearchResult[];
+  const traceCache = () => (searchFacade as any).traceCache;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (configService.getParameter as jest.Mock).mockResolvedValue('true');
+    (synonymService.getSynonym as jest.Mock).mockResolvedValue(undefined);
+    (DbCacheService.prototype.get as jest.Mock).mockResolvedValue(undefined);
+    (DbCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
+    (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
+    (nativeSearchService.search as jest.Mock).mockResolvedValue(mockResults);
+  });
+
+  it('removes a term from both caches', () => {
+    searchFacade.removeFromSearchCache('show');
+    expect(DbCacheService.prototype.delWithVariants).toHaveBeenCalledTimes(2);
+    expect(DbCacheService.prototype.delWithVariants).toHaveBeenCalledWith('show');
+  });
+
+  it('clears both caches', () => {
+    searchFacade.clearSearchCache();
+    expect(DbCacheService.prototype.clear).toHaveBeenCalledTimes(2);
+  });
+
+  it('carries on when storing the trace fails', async () => {
+    (DbCacheService.prototype.set as jest.Mock).mockImplementation(function (this: unknown) {
+      return this === traceCache() ? Promise.reject(new Error('disk full')) : Promise.resolve(undefined);
+    });
+    await expect(searchFacade.search('Test Show')).resolves.toBeDefined();
+  });
+
+  it('carries on when reading the cached trace fails', async () => {
+    (DbCacheService.prototype.get as jest.Mock).mockImplementation(function (this: unknown) {
+      return this === traceCache() ? Promise.reject(new Error('unreadable')) : Promise.resolve(mockResults);
+    });
+    await expect(searchFacade.search('Test Show')).resolves.toBeDefined();
+  });
+});

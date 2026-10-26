@@ -113,3 +113,20 @@ describe('WatchdogRoute', () => {
         });
     });
 });
+
+describe('WatchdogRoute DELETE /items', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('clears the table', async () => {
+        (strmWatchdogService.clearItems as jest.Mock).mockResolvedValue(true);
+        const res = await request(app).delete('/items');
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ status: true });
+    });
+
+    it('409s while a run is in progress', async () => {
+        (strmWatchdogService.clearItems as jest.Mock).mockResolvedValue(false);
+        const res = await request(app).delete('/items');
+        expect(res.status).toBe(409);
+    });
+});

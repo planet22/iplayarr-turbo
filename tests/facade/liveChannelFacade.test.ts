@@ -63,3 +63,19 @@ describe('liveChannelFacade.removeUhdFeeds', () => {
         expect(liveTvSyncService.notifyChanged).toHaveBeenCalled();
     });
 });
+
+describe('liveChannelFacade list and discover', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (liveChannelService.list as jest.Mock).mockResolvedValue([{ id: 'c1' }]);
+    });
+
+    it('lists the channel settings', async () => {
+        expect(await liveChannelFacade.list()).toEqual([{ id: 'c1' }]);
+    });
+
+    it('sets whether a channel is discoverable and returns the updated list', async () => {
+        expect(await liveChannelFacade.setDiscover('c1', true)).toEqual([{ id: 'c1' }]);
+        expect(liveChannelService.setDiscover).toHaveBeenCalledWith('c1', true);
+    });
+});

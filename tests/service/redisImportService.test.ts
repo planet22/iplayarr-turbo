@@ -112,6 +112,18 @@ describe('importFromRedisIfNeeded', () => {
         });
     });
 
+    it('ignores connection errors raised by the client itself', async () => {
+        await importFromRedisIfNeeded(log);
+        const onError = mockRedis.on.mock.calls.find(([event]) => event === 'error')![1];
+        expect(() => onError(new Error('ECONNRESET'))).not.toThrow();
+    });
+
+    it('still finishes the import when asking Redis to shut down fails', async () => {
+        process.env.REDIS_IMPORT_SHUTDOWN = 'true';
+        mockRedis.shutdown.mockRejectedValue(new Error('NOPERM'));
+        expect(await importFromRedisIfNeeded(log)).toMatchObject({ imported: true });
+    });
+
     it('logs to the console by default', async () => {
         const spy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
         await importFromRedisIfNeeded();
