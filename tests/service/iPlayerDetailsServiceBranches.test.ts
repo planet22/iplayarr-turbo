@@ -109,3 +109,33 @@ describe('iplayerDetailsService branches', () => {
         });
     });
 });
+
+describe('iplayerDetailsService when the caches cannot be written', () => {
+    const page = (elements: unknown) => ({ data: { programme_episodes: { elements } } });
+
+    beforeEach(() => {
+        jest.restoreAllMocks();
+        jest.clearAllMocks();
+        (Utils.calculateSeasonAndEpisode as jest.Mock).mockResolvedValue(['TV', 1, 'Ep', 1]);
+    });
+
+    it('still returns episode details', async () => {
+        jest.spyOn(episodeDetailsCache, 'set').mockRejectedValue(new Error('disk full'));
+        respondWith(programme());
+        expect(await iplayerDetailsService.episodeDetails('b0nowrite')).toMatchObject({ title: 'Plain Title' });
+    });
+
+    it('still returns metadata that replaces a bad cached entry', async () => {
+        await iplayerDetailsService.metadataCache.set('b0badcache', '<html>' as any);
+        jest.spyOn(iplayerDetailsService.metadataCache, 'set').mockRejectedValue(new Error('disk full'));
+        mockedAxios.get.mockResolvedValue({ data: { programme: { pid: 'b0badcache' } } });
+        expect((await iplayerDetailsService.getMetadata('b0badcache')).programme.pid).toBe('b0badcache');
+    });
+
+    it('still returns series episodes', async () => {
+        jest.spyOn(iplayerDetailsService.episodesCache, 'set').mockRejectedValue(new Error('disk full'));
+        mockedAxios.get.mockResolvedValue(page([{ id: 'e1' }]));
+        expect(await iplayerDetailsService.getSeriesEpisodes('b0nowrite1')).toEqual([{ id: 'e1' }]);
+        expect(await iplayerDetailsService.getSeriesEpisodesChecked('b0nowrite2')).toEqual({ elements: [{ id: 'e1' }], failed: false });
+    });
+});

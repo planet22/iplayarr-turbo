@@ -9,6 +9,7 @@ import { attemptFhdUpgrade } from '../../../src/service/stream/experimental/bbcF
 import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 import service from '../../../src/service/stream/NativeStreamService';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
+import { hqProbeCache } from '../../../src/service/stream/streamProbeCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import { runWithVersion } from '../../../src/utils/versionContext';
@@ -304,6 +305,36 @@ describe('NativeStreamService', () => {
             await service.streamDirect('p1', req, res);
 
             expect(selectorCalls).toBe(1 + 4);
+            expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, undefined);
+        });
+
+        it('still streams when the winning connection cannot be remembered', async () => {
+            const spy = jest.spyOn(hqProbeCache, 'set').mockRejectedValue(new Error('disk full'));
+            route = (url, m) => {
+                if (url.includes('mediaselector')) return { body: twoConnections };
+                if (url.startsWith('https://hq/master.m3u8')) return { body: master(1080) };
+                return defaultRoute(url, m);
+            };
+            await service.streamDirect('p1', req, res);
+            spy.mockRestore();
+            expect(proxyUrl).toHaveBeenCalledWith('https://hq/master.m3u8', req, res, 5, undefined);
+        });
+
+        it('still re-probes when a gone connection cannot be forgotten', async () => {
+            const spy = jest.spyOn(hqProbeCache, 'del').mockRejectedValue(new Error('disk full'));
+            let remembered = true;
+            route = (url, m) => {
+                if (url.includes('mediaselector')) {
+                    return { body: remembered ? twoConnections : mediaXml([conn('transferFormat="hls" protocol="https" supplier="a" href="https://cdn/redirect?only"')]) };
+                }
+                if (url.startsWith('https://hq/master.m3u8')) return { body: master(1080) };
+                return defaultRoute(url, m);
+            };
+            await service.streamDirect('p1', req, res);
+            clearResolveCache();
+            remembered = false;
+            await service.streamDirect('p1', req, res);
+            spy.mockRestore();
             expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, undefined);
         });
 

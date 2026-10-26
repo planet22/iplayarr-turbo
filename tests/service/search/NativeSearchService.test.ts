@@ -6,6 +6,7 @@ import configService from '../../../src/service/configService';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import loggingService from '../../../src/service/loggingService';
 import NativeSearchService from '../../../src/service/search/NativeSearchService';
+import newSearchCache from '../../../src/service/search/newSearchCache';
 import { IPlayerSearchResult, VideoType } from '../../../src/types/IPlayerSearchResult';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../../src/types/Synonym';
@@ -644,5 +645,17 @@ describe('NativeSearchService', () => {
                 await expect(NativeSearchService.search('Test Term')).rejects.toBe(error);
             });
         });
+    });
+});
+
+describe('NativeSearchService when the search cache cannot be written', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('still returns the results', async () => {
+        jest.spyOn(newSearchCache, 'get').mockResolvedValue(undefined);
+        const set = jest.spyOn(newSearchCache, 'set').mockRejectedValue(new Error('disk full'));
+        (axios.get as jest.Mock).mockResolvedValueOnce({ status: 200, data: { new_search: { results: [] } } });
+        await expect(NativeSearchService.search('Test Term')).resolves.toEqual([]);
+        expect(set).toHaveBeenCalled();
     });
 });

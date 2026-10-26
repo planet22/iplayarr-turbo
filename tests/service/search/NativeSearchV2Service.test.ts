@@ -7,6 +7,7 @@ import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import loggingService from '../../../src/service/loggingService';
 import NativeSearchService from '../../../src/service/search/NativeSearchService';
 import NativeSearchV2Service from '../../../src/service/search/NativeSearchV2Service';
+import newSearchCache from '../../../src/service/search/newSearchCache';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
 import { withSearchTrace } from '../../../src/utils/searchTrace';
 import { runWithSeasonHint } from '../../../src/utils/seasonHint';
@@ -437,5 +438,17 @@ describe('NativeSearchV2Service', () => {
             jest.restoreAllMocks();
             expect(results.map(({ pid }) => pid)).toEqual(['two0', 'two1']);
         });
+    });
+});
+
+describe('NativeSearchV2Service when the search cache cannot be written', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('still returns the results', async () => {
+        jest.spyOn(newSearchCache, 'get').mockResolvedValue(undefined);
+        const set = jest.spyOn(newSearchCache, 'set').mockRejectedValue(new Error('disk full'));
+        (axios.get as jest.Mock).mockResolvedValue({ status: 200, data: { new_search: { results: [] } } });
+        await expect(NativeSearchV2Service.search('Test Brand')).resolves.toEqual([]);
+        expect(set).toHaveBeenCalled();
     });
 });
