@@ -475,3 +475,13 @@ describe('GetIplayerExecutableService', () => {
         });
     });
 });
+
+describe('getAllStreamInfoParameters', () => {
+    it('asks get_iplayer for the stream info of one programme', async () => {
+        const service = new GetIplayerExecutableService();
+        mockedConfigService.getParameter.mockImplementation(async (key: IplayarrParameter) => (key === IplayarrParameter.GET_IPLAYER_EXEC ? 'gip --foo' : undefined));
+        const result = await service.getAllStreamInfoParameters('p0abc123');
+        expect(result.exec).toBe('gip');
+        expect(result.args).toEqual(expect.arrayContaining(['--foo', '--streaminfo', '--pid=p0abc123']));
+    });
+});

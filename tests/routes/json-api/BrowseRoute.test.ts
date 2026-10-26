@@ -139,3 +139,11 @@ describe('BrowseRoute', () => {
         expect(res.body).toEqual({ error: ApiError.INTERNAL_ERROR, message: 'BBC down' });
     });
 });
+
+describe('BrowseRoute channel colours', () => {
+    it('GET /channel-colors returns the colour map', async () => {
+        mocked.channelColors.mockResolvedValue({ bbcone: { bg: '#000', fg: '#fff', name: 'BBC One' } });
+        const res = await request(app).get('/channel-colors');
+        expect(res.body).toEqual({ bbcone: { bg: '#000', fg: '#fff', name: 'BBC One' } });
+    });
+});

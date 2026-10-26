@@ -169,3 +169,22 @@ describe('subscriptionArrService', () => {
         });
     });
 });
+
+describe('subscriptionArrService tags and monitor options', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        apps.getApp.mockResolvedValue(app);
+        library.supports.mockReturnValue(true);
+    });
+
+    it('lists the tags of the app', async () => {
+        library.getTags.mockResolvedValue([{ id: 1, label: 'bbc' }] as any);
+        expect(await subscriptionArrService.tags('a1')).toEqual([{ id: 1, label: 'bbc' }]);
+        expect(library.getTags).toHaveBeenCalledWith(app);
+    });
+
+    it('lists the monitor options of the app', async () => {
+        library.monitorOptions.mockReturnValue(['all', 'future']);
+        expect(await subscriptionArrService.monitorOptions('a1')).toEqual(['all', 'future']);
+    });
+});

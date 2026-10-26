@@ -91,3 +91,14 @@ describe('ArrFacade', () => {
         expect(mockService.search).toHaveBeenCalledWith(mockApp, 'query');
     });
 });
+
+describe('ArrFacade deletes', () => {
+    it('delegates deleteDownloadClient and deleteIndexer to the app\'s service', async () => {
+        const del = { deleteDownloadClient: jest.fn().mockResolvedValue(undefined), deleteIndexer: jest.fn().mockResolvedValue(undefined) };
+        (ArrServiceDirectory as any)[mockApp.type] = del;
+        await ArrFacade.deleteDownloadClient(mockApp);
+        await ArrFacade.deleteIndexer(mockApp);
+        expect(del.deleteDownloadClient).toHaveBeenCalledWith(mockApp);
+        expect(del.deleteIndexer).toHaveBeenCalledWith(mockApp);
+    });
+});
