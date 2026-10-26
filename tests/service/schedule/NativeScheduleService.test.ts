@@ -176,6 +176,19 @@ describe('NativeScheduleService', () => {
             }
         });
 
+        it('keeps only programmes whose broadcast time (not just date) has passed', async () => {
+            const html = `
+              <div class="programme__titles"><a href="/programmes/earlier" aria-label="15 Jun 09:30: Show"></a></div>
+              <div class="programme__titles"><a href="/programmes/later" aria-label="15 Jun 18:45: Show"></a></div>`;
+            (axios.get as jest.Mock).mockResolvedValue({ data: html });
+            jest.useFakeTimers().setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
+            try {
+                expect(await NativeScheduleService.getPidsFromSchedulePage('https://mocked-url')).toEqual(['earlier']);
+            } finally {
+                jest.useRealTimers();
+            }
+        });
+
         it('collects the pids of each day, forcing a fresh fetch for every day on a full refresh', async () => {
             jest.spyOn(NativeScheduleService, 'getPidsFromSchedulePage').mockResolvedValue(['p1']);
             const setSpy = jest.fn();
