@@ -286,6 +286,21 @@ describe('StrmWatchdogService', () => {
             await strmWatchdogService.run();
             expect(recorded('strm_restored')[0][2]).toMatchObject({ pid: BAD });
         });
+
+        it('still finishes the run when recording that a link is available again fails', async () => {
+            await strmWatchdogService.run();
+            await strmWatchdogService.run(); // BAD is now invalid
+            (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async () => undefined);
+            (videoEventService.record as jest.Mock).mockRejectedValueOnce(new Error('db locked'));
+            await expect(strmWatchdogService.run()).resolves.toBeDefined();
+        });
+
+        it('treats any answer below a server error as BBC being reachable', async () => {
+            await strmWatchdogService.run();
+            const options = (axios.get as jest.Mock).mock.calls.find(([url]) => url === 'https://www.bbc.co.uk/iplayer')![1];
+            expect(options.validateStatus(404)).toBe(true);
+            expect(options.validateStatus(503)).toBe(false);
+        });
     });
 
     describe('parallel checks, saved access result, refresh counts', () => {
