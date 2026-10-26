@@ -1,3 +1,5 @@
+import Redis from 'ioredis';
+
 import { dbReady, prisma } from '../../src/service/db/prismaService';
 import { importFromRedisIfNeeded } from '../../src/service/db/redisImportService';
 
@@ -77,4 +79,59 @@ describe('importFromRedisIfNeeded', () => {
         await importFromRedisIfNeeded(log);
         expect(mockRedis.shutdown).toHaveBeenCalledWith('NOSAVE');
     });
+
+    describe('connecting', () => {
+        const savedEnv = { ...process.env };
+        const redisOptions = () => (Redis as unknown as jest.Mock).mock.calls.at(-1)[0];
+        afterEach(() => {
+            for (const key of ['REDIS_PORT', 'REDIS_PASSWORD', 'REDIS_SSL', 'REDIS_IMPORT_HOST']) {
+                if (savedEnv[key] === undefined) delete process.env[key];
+                else process.env[key] = savedEnv[key];
+            }
+        });
+
+        it('uses the default port, no password and no TLS unless configured', async () => {
+            await importFromRedisIfNeeded(log);
+            expect(redisOptions()).toMatchObject({ host: 'redis.local', port: 6379, password: undefined, tls: undefined });
+        });
+
+        it('uses the configured port, password and TLS, and prefers REDIS_IMPORT_HOST', async () => {
+            process.env.REDIS_PORT = '6380';
+            process.env.REDIS_PASSWORD = 'secret';
+            process.env.REDIS_SSL = 'true';
+            process.env.REDIS_IMPORT_HOST = 'old-redis.local';
+            await importFromRedisIfNeeded(log);
+            expect(redisOptions()).toMatchObject({ host: 'old-redis.local', port: 6380, password: 'secret', tls: {} });
+        });
+
+        it('retries a connection up to ten times, half a second apart', async () => {
+            await importFromRedisIfNeeded(log);
+            expect(redisOptions().retryStrategy(1)).toBe(500);
+            expect(redisOptions().retryStrategy(10)).toBe(500);
+            expect(redisOptions().retryStrategy(11)).toBeNull();
+        });
+    });
+
+    it('logs to the console by default', async () => {
+        const spy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+        await importFromRedisIfNeeded();
+        expect(spy).toHaveBeenCalledWith(expect.stringContaining('Imported'));
+        spy.mockRestore();
+    });
+
+    it('leaves out keys that are not plain strings', async () => {
+        mockRedis.keys.mockResolvedValue(['config', 'a-hash', 'a-set']);
+        mockRedis.type.mockImplementation(async (k: string) => (k === 'config' ? 'string' : k === 'a-hash' ? 'hash' : 'set'));
+        const result = await importFromRedisIfNeeded(log);
+        expect(result).toMatchObject({ imported: true, keys: 1 });
+        expect((await prisma.keyValue.findMany()).map((r) => r.key).sort()).toEqual(['config', 'iplayarr_redis_import_done']);
+    });
+
+    it('reports a failure that is not an Error by its value', async () => {
+        mockRedis.connect.mockRejectedValue('connection refused');
+        const result = await importFromRedisIfNeeded(log);
+        expect(result).toMatchObject({ imported: false, reason: 'redis unreachable' });
+        expect(log).toHaveBeenCalledWith(expect.stringContaining('connection refused'));
+    });
 });
+
