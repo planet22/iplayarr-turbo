@@ -22,6 +22,7 @@ import searchSettingsService from '../../src/service/searchSettingsService';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import { ApiError } from '../../src/types/responses/ApiResponse';
 import { searchContext } from '../../src/utils/searchContext';
+import { traceCandidate } from '../../src/utils/searchTrace';
 
 const app = express();
 app.use(bodyParser.json());
@@ -105,6 +106,21 @@ describe('JsonApiRoute', () => {
             }));
             expect((statisticsService.addSearch as jest.Mock).mock.calls[0][0].appId).toBeUndefined();
             expect(statisticsService.addSearch).toHaveBeenNthCalledWith(2, expect.objectContaining({ term: 'bake', results: 0 }));
+        });
+
+        it('records only the dropped candidates, and a failure to record never fails the search', async () => {
+            (searchFacade.search as jest.Mock).mockImplementation(async () => {
+                traceCandidate({ title: 'dropped', stage: 'episode', kept: false, reason: 'wrong-season' });
+                traceCandidate({ title: 'kept', stage: 'episode', kept: true });
+                return [];
+            });
+            (statisticsService.addSearch as jest.Mock).mockResolvedValueOnce(undefined);
+            await request(app).get('/search').query({ q: 'trace' }).expect(200);
+            await new Promise((resolve) => setImmediate(resolve));
+            expect((statisticsService.addSearch as jest.Mock).mock.calls.at(-1)[0].trace.candidates.map(({ title }: any) => title)).toEqual(['dropped']);
+
+            (statisticsService.addSearch as jest.Mock).mockRejectedValueOnce(new Error('db locked'));
+            await request(app).get('/search').query({ q: 'trace again' }).expect(200);
         });
 
         it('GET /search/settings describes the manual setup', async () => {

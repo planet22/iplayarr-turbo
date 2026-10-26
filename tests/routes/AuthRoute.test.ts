@@ -231,6 +231,19 @@ describe('AuthRoute', () => {
             expect(configService.setParameter).not.toHaveBeenCalled();
         });
 
+        it('forgets the token once its five minutes are up', async () => {
+            const timers: Array<() => void> = [];
+            jest.spyOn(global, 'setTimeout').mockImplementation(((fn: () => void) => {
+                timers.push(fn);
+                return 0 as unknown as NodeJS.Timeout;
+            }) as unknown as typeof setTimeout);
+            await request(app).get('/generateToken');
+            (global.setTimeout as unknown as jest.SpyInstance).mockRestore();
+            timers.forEach((fn) => fn());
+            await request(app).post('/resetPassword').send({ key: 'mock-token' });
+            expect(configService.setParameter).not.toHaveBeenCalled();
+        });
+
         it('does not throw on a non-string key', async () => {
             await request(app).get('/generateToken');
             const res = await request(app).post('/resetPassword').send({ key: ['mock-token'] });

@@ -9,6 +9,7 @@ import statisticsService from '../../../src/service/stats/StatisticsService';
 import * as versionVpid from '../../../src/service/stream/versionVpid';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { VideoType } from '../../../src/types/IPlayerSearchResult';
+import { traceCandidate } from '../../../src/utils/searchTrace';
 import * as Utils from '../../../src/utils/Utils';
 
 jest.mock('../../../src/facade/searchFacade');
@@ -177,6 +178,19 @@ describe('SearchEndpoint', () => {
             expect(entry.term).toBe('show');
             expect(entry.trace).toBeDefined();
             expect(entry.trace.candidates.every(({ kept }: any) => !kept)).toBe(true);
+        });
+
+        it('keeps only the dropped candidates in the recorded trace', async () => {
+            (searchFacade.search as jest.Mock).mockImplementation(async () => {
+                traceCandidate({ title: 'dropped', stage: 'episode', kept: false, reason: 'wrong-season' });
+                traceCandidate({ title: 'kept', stage: 'episode', kept: true });
+                return [item()];
+            });
+            (statisticsService.addSearch as jest.Mock).mockImplementation(() => { });
+            (appService.findAppByUserAgent as jest.Mock).mockResolvedValue(undefined);
+            await SearchEndpoint({ query: { apikey: 'k', q: 'show' }, headers: {} } as unknown as Request, res as Response);
+            const entry = (statisticsService.addSearch as jest.Mock).mock.calls.at(-1)[0];
+            expect(entry.trace.candidates.map(({ title }: any) => title)).toEqual(['dropped']);
         });
 
         it('names a history item by its title when it has no release name', async () => {

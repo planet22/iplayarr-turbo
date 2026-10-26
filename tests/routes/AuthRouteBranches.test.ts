@@ -93,6 +93,16 @@ describe('AuthRoute branches', () => {
         });
     });
 
+    describe('session secret races', () => {
+        it('carries on when another start already stored the secret', async () => {
+            await dbReady();
+            delete process.env.SESSION_SECRET;
+            jest.spyOn(prisma.keyValue, 'createMany').mockRejectedValue(new Error('UNIQUE constraint failed'));
+            const res = await request(realApp()).get('/auth/me');
+            expect(res.status).toBe(401);
+        });
+    });
+
     describe('login when the database fails', () => {
         it('answers 500 instead of leaving the request hanging if the session cannot be saved', async () => {
             await dbReady();
