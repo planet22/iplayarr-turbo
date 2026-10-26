@@ -99,4 +99,27 @@ describe('LiveChannelsRoute', () => {
             expect(broken.body.error).toBe(ApiError.INTERNAL_ERROR);
         });
     });
+
+    describe('fallbacks', () => {
+        const noBodyApp = express();
+        noBodyApp.use('/', router);
+
+        it.each([
+            ['PUT /order', (a: any) => request(a).put('/order').send({ ids: [] }), () => mocked.setOrder, 'Unable to save the channel order'],
+            ['PUT /:channelId/discover', (a: any) => request(a).put('/x/discover').send({ enabled: true }), () => mocked.setDiscover, 'Unable to update Discover'],
+            ['PUT /:channelId', (a: any) => request(a).put('/x').send({ enabled: true }), () => mocked.setEnabled, 'Unable to update live channel'],
+        ])('%s answers a failure that has no message with a default one', async (_label, call, fn, message) => {
+            (fn() as jest.Mock).mockRejectedValue({});
+            const res = await call(app);
+            expect(res.status).toBe(500);
+            expect(res.body.message).toBe(message);
+        });
+
+        it.each([['/x'], ['/x/discover']])('PUT %s answers 400 when the request has no body', async (url) => {
+            const res = await request(noBodyApp).put(url);
+            expect(res.status).toBe(400);
+            expect(res.body.message).toBe('enabled must be true or false');
+        });
+    });
+
 });

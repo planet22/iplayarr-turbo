@@ -370,4 +370,20 @@ describe('SettingsRoute', () => {
             expect(response.body).toEqual(qualityProfiles);
         });
     });
+
+    describe('when the stored configuration is missing', () => {
+        it('reports an empty value for an executable setting that has no value in effect', async () => {
+            mockedConfigService.removeParameter.mockResolvedValue();
+            mockedConfigService.getParameter.mockResolvedValue(undefined);
+            const res = await request(app).delete('/executableOverride/GET_IPLAYER_EXEC');
+            expect(res.body).toEqual({ status: true, value: '' });
+        });
+
+        it('still checks an update against an empty configuration', async () => {
+            mockedConfigService.getAllConfig.mockResolvedValue(undefined as any);
+            const res = await request(app).put('/').send({ NOT_A_SETTING: 'x' });
+            expect(res.status).toBe(400);
+            expect(res.body.invalid_fields).toHaveProperty('NOT_A_SETTING', 'Unknown setting');
+        });
+    });
 });

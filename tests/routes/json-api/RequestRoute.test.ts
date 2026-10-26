@@ -66,4 +66,36 @@ describe('RequestRoute', () => {
         expect((await request(app).get('/apps/a1/tags')).body).toEqual([{ id: 1, label: 'x' }]);
         expect((await request(app).get('/apps/a1/monitor-options')).body).toEqual(['all']);
     });
+
+    describe('fallbacks', () => {
+        const noBodyApp = express();
+        noBodyApp.use('/', router);
+
+        it('answers a failure with no message using a default one', async () => {
+            mocked.tags.mockRejectedValue({});
+            const res = await request(app).get('/apps/a1/tags');
+            expect(res.status).toBe(500);
+            expect(res.body.message).toBe('Unable to load tags');
+        });
+
+        it('treats a request with no body as one with nothing in it', async () => {
+            const res = await request(noBodyApp).post('/');
+            expect(res.status).toBe(400);
+            expect(mocked.request).not.toHaveBeenCalled();
+        });
+
+        it('limits clients by address, and one with no known address as "unknown"', async () => {
+            const anonymous = express();
+            anonymous.use((req, _res, next) => {
+                Object.defineProperty(req, 'ip', { value: undefined });
+                next();
+            });
+            anonymous.use(express.json());
+            anonymous.use('/', router);
+            mocked.request.mockResolvedValue({ arrId: 1, created: true, tracked: false });
+            expect((await request(anonymous).post('/').send(body)).status).toBe(200);
+            requestLimiter.reset('unknown');
+        });
+    });
+
 });
