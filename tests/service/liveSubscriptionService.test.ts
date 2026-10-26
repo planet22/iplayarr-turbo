@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { setCustomRegistry } from '../../src/constants/CustomChannels';
 import browseService from '../../src/service/browseService';
 import configService from '../../src/service/configService';
 import liveChannelService from '../../src/service/liveChannelService';
@@ -21,6 +22,7 @@ jest.mock('../../src/types/QueuedStorage', () => {
     return { QueuedStorage: jest.fn(() => instance), __esModule: true };
 });
 jest.mock('../../src/service/configService');
+jest.mock('../../src/service/channelLogoService', () => ({ __esModule: true, default: { render: jest.fn().mockResolvedValue(Buffer.from('jpg')), remove: jest.fn() } }));
 jest.mock('../../src/service/browseService', () => ({ __esModule: true, default: { channelLogo: jest.fn() } }));
 const mockToBuffer = jest.fn();
 const mockSharp = jest.fn();
@@ -186,5 +188,47 @@ describe('liveSubscriptionService', () => {
         await service.subscribe('bbc_one_london');
         await service.subscribe('cbbc');
         expect((await service.list()).map((s) => s.channelId)).toEqual(['cbbc', 'bbc_one_london']);
+    });
+
+    describe('branches', () => {
+        const customChannel = (over: object = {}) => ({ id: 'custom-a-1234', title: 'Alpha', streamUrl: 'https://x.test/a.m3u8', streamType: 'auto' as const, color: '#112233', ...over });
+        afterEach(() => setCustomRegistry([], {}));
+
+        it('shows a custom channel\'s own logo, and no logo for a channel that has since gone', async () => {
+            setCustomRegistry([customChannel()], {});
+            mockStorageData.liveSubscriptions = [
+                { channelId: 'custom-a-1234', title: 'Alpha', file: 'Alpha.strm', createdAt: 'x' },
+                { channelId: 'long_gone', title: 'Gone', file: 'Gone.strm', createdAt: 'x' },
+            ];
+            const [alpha, gone] = await service.list();
+            const logos = Object.fromEntries([alpha, gone].map((entry) => [entry.channelId, entry.logo]));
+            expect(logos['custom-a-1234']).toMatch(/^json-api\/live-channels\/logo\/custom-a-1234\?v=/);
+            expect(logos.long_gone).toBeUndefined();
+        });
+
+        it('refuses to subscribe when neither directory is configured', async () => {
+            (configService.getParameter as jest.Mock).mockImplementation(async (p: IplayarrParameter) => (p === IplayarrParameter.STREAM_BASE_URL ? baseUrl : undefined));
+            await expect(service.subscribe('bbc_one_london')).rejects.toBeInstanceOf(LiveSubscriptionError);
+            await expect(service.subscribe('bbc_one_london')).rejects.toThrow('Neither Live Channels Directory nor Complete Directory is configured');
+        });
+
+        it('refuses a channel that is switched off', async () => {
+            await liveChannelService.setEnabled('cbbc', false);
+            await expect(service.subscribe('cbbc')).rejects.toThrow('CBBC is disabled in Settings > Live Channels');
+            expect(await service.list()).toEqual([]);
+        });
+
+        it('falls back to "channel" as the file name when the title is nothing but unsafe characters', async () => {
+            setCustomRegistry([customChannel({ title: '...' })], {});
+            const sub = await service.subscribe('custom-a-1234');
+            expect(sub.file).toBe('channel.strm');
+            expect(fs.existsSync(path.join(dir, 'channel.strm'))).toBe(true);
+        });
+
+        it('does nothing at start-up when there are no subscriptions, even with no directory configured', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+            await expect(service.resync()).resolves.toBeUndefined();
+            expect(loggingService.error).not.toHaveBeenCalled();
+        });
     });
 });
