@@ -9,6 +9,7 @@ import * as Utils from '../../src/utils/Utils';
 
 jest.mock('axios');
 jest.mock('../../src/service/configService');
+jest.mock('../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn() } }));
 jest.mock('../../src/utils/Utils', () => ({ getThumbnailCacheDir: jest.fn() }));
 
 describe('thumbnailCacheService', () => {
@@ -123,6 +124,106 @@ describe('thumbnailCacheService', () => {
         it('skips files that vanish between readdir and stat', async () => {
             jest.spyOn(fs.promises, 'readdir').mockResolvedValue(['gone.jpg'] as any);
             expect(await thumbnailCacheService.cleanup()).toBe(0);
+        });
+    });
+
+    describe('branches', () => {
+        const notFound = () => ({ isAxiosError: true, response: { status: 404 } });
+        const bytes = { data: new Uint8Array([1, 2, 3]) };
+
+        beforeEach(() => {
+            (axios.isAxiosError as unknown as jest.Mock).mockImplementation((e: any) => !!e?.isAxiosError);
+        });
+
+        it('defaults to the full-size copy when asked for a path or a fetch directly', async () => {
+            expect(await thumbnailCacheService.localPath('abc')).toBe(path.join(dir, 'abc.jpg'));
+            (axios.get as jest.Mock).mockResolvedValue(bytes);
+            expect(await thumbnailCacheService.fetchAndStore('abc')).toBe(path.join(dir, 'abc.jpg'));
+        });
+
+        it('keeps small and full copies of one image apart', async () => {
+            (axios.get as jest.Mock).mockResolvedValue(bytes);
+            const small = await thumbnailCacheService.getOrFetch('abc', true);
+            const full = await thumbnailCacheService.getOrFetch('abc');
+            expect(small).toBe(path.join(dir, 'abc.small.jpg'));
+            expect(full).toBe(path.join(dir, 'abc.jpg'));
+            expect((axios.get as jest.Mock).mock.calls.map(([url]) => url)).toEqual([
+                'https://ichef.bbci.co.uk/images/ic/320x180/abc.jpg',
+                'https://ichef.bbci.co.uk/images/ic/960x540/abc.jpg',
+            ]);
+        });
+
+        it('refreshes the last-viewed time of a copy not viewed for over a day, and leaves a recent one alone', async () => {
+            const stale = path.join(dir, 'stale.jpg');
+            const recent = path.join(dir, 'recent.jpg');
+            fs.writeFileSync(stale, 'x');
+            fs.writeFileSync(recent, 'x');
+            const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+            fs.utimesSync(stale, twoDaysAgo, twoDaysAgo);
+            const recentBefore = fs.statSync(recent).mtimeMs;
+            await thumbnailCacheService.getOrFetch('stale');
+            await thumbnailCacheService.getOrFetch('recent');
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            expect(Date.now() - fs.statSync(stale).mtimeMs).toBeLessThan(60_000);
+            expect(fs.statSync(recent).mtimeMs).toBe(recentBefore);
+        });
+
+        describe('by programme', () => {
+            const iplayerDetailsService = jest.requireMock('../../src/service/iplayerDetailsService').default;
+
+            beforeEach(() => {
+                iplayerDetailsService.getMetadata = jest.fn();
+                thumbnailCacheService.imagePids.clear();
+            });
+
+            it('looks the image up once, then serves the programme from the remembered pid', async () => {
+                iplayerDetailsService.getMetadata.mockResolvedValue({ programme: { image: { pid: 'p0img' } } });
+                (axios.get as jest.Mock).mockResolvedValue(bytes);
+                expect(await thumbnailCacheService.getOrFetchForProgramme('b0prog', true)).toBe(path.join(dir, 'p0img.small.jpg'));
+                expect(await thumbnailCacheService.getOrFetchForProgramme('b0prog')).toBe(path.join(dir, 'p0img.jpg'));
+                expect(iplayerDetailsService.getMetadata).toHaveBeenCalledTimes(1);
+            });
+
+            it.each([
+                ['has no image', { programme: {} }],
+                ['has no programme', {}],
+            ])('has no thumbnail for a programme that %s, and asks again next time', async (_label, metadata) => {
+                iplayerDetailsService.getMetadata.mockResolvedValue(metadata);
+                expect(await thumbnailCacheService.getOrFetchForProgramme('b0none')).toBeUndefined();
+                expect(await thumbnailCacheService.getOrFetchForProgramme('b0none')).toBeUndefined();
+                expect(iplayerDetailsService.getMetadata).toHaveBeenCalledTimes(2);
+            });
+
+            it('has no thumbnail when the metadata cannot be read', async () => {
+                iplayerDetailsService.getMetadata.mockRejectedValue(new Error('BBC down'));
+                expect(await thumbnailCacheService.getOrFetchForProgramme('b0down')).toBeUndefined();
+            });
+        });
+
+        describe('falling back through image sizes', () => {
+            it('tries the next size after a 404 for the small copy too', async () => {
+                (axios.get as jest.Mock).mockRejectedValueOnce(notFound()).mockResolvedValueOnce(bytes);
+                expect(await thumbnailCacheService.getOrFetch('abc', true)).toBe(path.join(dir, 'abc.small.jpg'));
+                expect(axios.get).toHaveBeenCalledTimes(2);
+            });
+
+            it('stops at once on an error that is not a 404', async () => {
+                (axios.get as jest.Mock).mockRejectedValue({ isAxiosError: true, response: { status: 500 } });
+                expect(await thumbnailCacheService.getOrFetch('abc')).toBeUndefined();
+                expect(axios.get).toHaveBeenCalledTimes(1);
+            });
+
+            it('stops at once on an error that is not an HTTP one', async () => {
+                (axios.get as jest.Mock).mockRejectedValue(new Error('socket hang up'));
+                expect(await thumbnailCacheService.getOrFetch('abc')).toBeUndefined();
+                expect(axios.get).toHaveBeenCalledTimes(1);
+            });
+
+            it('gives up after every size 404s', async () => {
+                (axios.get as jest.Mock).mockRejectedValue(notFound());
+                expect(await thumbnailCacheService.getOrFetch('abc')).toBeUndefined();
+                expect(axios.get).toHaveBeenCalledTimes(4);
+            });
         });
     });
 });
