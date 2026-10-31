@@ -39,6 +39,10 @@ interface DetailsRejection {
 
 export default async (req: Request, res: Response) => {
     const { files } = req as any as AddFileRequest;
+    if (!Array.isArray(files) || files.length === 0) {
+        res.status(400).json({ status: false, error: 'No NZB file was sent' });
+        return;
+    }
     try {
         const pids: string[] = [];
         for (const file of files) {

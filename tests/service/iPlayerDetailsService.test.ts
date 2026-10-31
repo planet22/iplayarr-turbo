@@ -3,6 +3,7 @@ import axios from 'axios';
 import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { IPlayerEpisodeMetadata } from '../../src/types/responses/IPlayerMetadataResponse';
+import { ProgrammeNotFoundError } from '../../src/utils/upstreamError';
 import * as Utils from '../../src/utils/Utils';
 
 jest.mock('axios');
@@ -105,6 +106,8 @@ describe('iplayerDetailsService', () => {
 
         await expect(iplayerDetailsService.getMetadata('bbc_two_england')).rejects.toBeDefined();
         await expect(iplayerDetailsService.getMetadata('bbc_two_england')).rejects.toThrow('cached 404');
+        // still a "not found" for the routes (404), not a plain Error (500)
+        await expect(iplayerDetailsService.getMetadata('bbc_two_england')).rejects.toBeInstanceOf(ProgrammeNotFoundError);
 
         expect(mockedAxios.get).toHaveBeenCalledTimes(1);
         iplayerDetailsService.notFound.clear();

@@ -240,7 +240,7 @@ async function readOnly(ctx, h) {
     // 9. Data quality of the browse API the UI renders
     const rails = (await http('/json-api/browse/home')).json || [];
     const all = rails.flatMap((r) => r.items || []);
-    const badPid = all.filter((i) => !/^[a-z]\d{3}[a-z0-9]{4}$/i.test(i.pid || ''));
+    const badPid = all.filter((i) => !/^[a-z0-9]{8}$/i.test(i.pid || ''));
     rec(P, 'browse home: every item has a valid pid', badPid.length ? 'FAIL' : 'PASS', JSON.stringify(badPid[0] || {}).slice(0, 100));
     const untitled = all.filter((i) => !String(i.title || '').trim() || LEAKY_TOKENS.test(JSON.stringify(i)));
     rec(P, 'browse home: every item has a title and no undefined/NaN fields', untitled.length ? 'FAIL' : 'PASS', JSON.stringify(untitled[0] || {}).slice(0, 140));

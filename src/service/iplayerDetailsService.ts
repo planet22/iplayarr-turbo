@@ -4,6 +4,7 @@ import { pidRegex, searchResultLimit } from '../constants/iPlayarrConstants';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { withRetry } from '../utils/retry';
+import { ProgrammeNotFoundError } from '../utils/upstreamError';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
 import DbCacheService from './db/dbCacheService';
 import episodeDetailsCache from './episodeDetailsCache';
@@ -86,7 +87,7 @@ class IPlayerDetailsService {
     async getMetadata(pid: string, axiosInstance: Axios = axios): Promise<IPlayerMetadataResponse> {
         const retryAt = this.notFound.get(pid);
         if (retryAt !== undefined) {
-            if (retryAt > Date.now()) throw new Error(`No programme metadata for PID ${pid} (cached 404)`);
+            if (retryAt > Date.now()) throw new ProgrammeNotFoundError(`No programme metadata for PID ${pid} (cached 404)`);
             this.notFound.delete(pid);
         }
         // When the BBC's programme pages are down they redirect to an HTML "Service Temporarily Unavailable" page,

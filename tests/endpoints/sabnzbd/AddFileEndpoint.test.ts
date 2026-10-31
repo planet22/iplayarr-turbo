@@ -85,6 +85,14 @@ describe('AddFileEndpoint', () => {
         };
     });
 
+    it.each([['no files field', undefined], ['an empty file list', []]])('answers 400 for %s instead of an "Unknown Error" 500', async (_label, files) => {
+        req.files = files as any;
+        await handler(req as Request, res as Response);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ status: false, error: 'No NZB file was sent' });
+        expect(queueService.addToQueue).not.toHaveBeenCalled();
+    });
+
     it('queues a valid NZB file and responds with its pid', async () => {
         req.files = [toFile(VALID_NZB_XML)] as any;
 
@@ -301,12 +309,12 @@ describe('AddFileEndpoint', () => {
                 (appService.findAppByUserAgent as jest.Mock).mockResolvedValue(undefined);
             });
 
-            it('reports a generic error for an upload with no files at all', async () => {
+            it('refuses an upload with no files at all as a bad request, not a failed grab', async () => {
                 req.files = undefined;
                 await handler(req as Request, res as Response);
-                expect(res.status).toHaveBeenCalledWith(500);
-                expect(res.json).toHaveBeenCalledWith({ status: false, error: 'Unable to add NZB, Unknown Error' });
-                expect(statisticsService.addFailedGrab).toHaveBeenCalledWith(expect.objectContaining({ error: 'Unable to add NZB, Unknown Error' }));
+                expect(res.status).toHaveBeenCalledWith(400);
+                expect(res.json).toHaveBeenCalledWith({ status: false, error: 'No NZB file was sent' });
+                expect(statisticsService.addFailedGrab).not.toHaveBeenCalled();
             });
 
             it('records a file with no name meta as having no name', async () => {
