@@ -1,4 +1,33 @@
 <template>
+    <SettingsPageToolbar
+        :icons="toolbarIcons"
+        :view-mode="viewMode" :view-modes="['table', 'posters']" @update:view-mode="setViewMode"
+        @download="multipleImmediateDownload"
+    >
+        <template #actions>
+            <button
+                v-if="viewMode === 'posters'"
+                type="button"
+                :class="{ enabled: smallIcons }"
+                :aria-pressed="smallIcons"
+                :title="smallIcons ? 'Showing small TV / film / series icons on posters' : 'Show small TV / film / series icons on posters'"
+                aria-label="Small icons on posters"
+                @click="toggleSmallIcons"
+            >
+                <font-awesome-icon :icon="['fas', 'icons']" />
+            </button>
+            <button
+                v-if="viewMode === 'posters' && searchResults.length"
+                type="button"
+                :class="{ enabled: selectMode }"
+                :title="selectMode ? 'Done selecting' : 'Select results to download'"
+                :aria-label="selectMode ? 'Done selecting' : 'Select results to download'"
+                @click="toggleSelectMode"
+            >
+                <font-awesome-icon :icon="['fas', selectMode ? 'square-check' : 'list-check']" />
+            </button>
+        </template>
+    </SettingsPageToolbar>
     <div class="pageSearchBar">
         <div class="searchPanel">
             <font-awesome-icon class="searchIcon" :icon="['fas', 'search']" />
@@ -23,35 +52,6 @@
             </ul>
         </div>
     </div>
-    <SettingsPageToolbar
-        :icons="toolbarIcons"
-        :view-mode="viewMode" :view-modes="searchResults.length ? ['table', 'posters'] : []" @update:view-mode="setViewMode"
-        @download="multipleImmediateDownload"
-    >
-        <template #actions>
-            <button
-                v-if="viewMode === 'posters' && searchResults.length"
-                type="button"
-                :class="{ enabled: smallIcons }"
-                :aria-pressed="smallIcons"
-                :title="smallIcons ? 'Showing small TV / film / series icons on posters' : 'Show small TV / film / series icons on posters'"
-                aria-label="Small icons on posters"
-                @click="toggleSmallIcons"
-            >
-                <font-awesome-icon :icon="['fas', 'icons']" />
-            </button>
-            <button
-                v-if="viewMode === 'posters' && searchResults.length"
-                type="button"
-                :class="{ enabled: selectMode }"
-                :title="selectMode ? 'Done selecting' : 'Select results to download'"
-                :aria-label="selectMode ? 'Done selecting' : 'Select results to download'"
-                @click="toggleSelectMode"
-            >
-                <font-awesome-icon :icon="['fas', selectMode ? 'square-check' : 'list-check']" />
-            </button>
-        </template>
-    </SettingsPageToolbar>
     <div v-if="!loading" class="inner-content scroll-x">
         <div v-if="searchResults.length" class="resultsToolbar">
             <span class="resultCount">
