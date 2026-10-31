@@ -472,7 +472,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const r = await put({ [key]: good });
             ok(`${key} valid template saved and read back`, r.status === 200 && (await get())[key] === good, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
             let titles = await nzbTitles(searchType, freshTerm());
-            if (searchType === 'movie') titles = titles.filter((t) => !/S\d\dE\d\d/.test(t));
+            if (searchType === 'movie') titles = titles.filter((t) => !/S\d+E\d+/.test(t));
             if (titles.length) {
                 const hit = titles.some((t) => t.includes('.SMOKE.'));
                 rec(W, `${key} takes effect: ${searchType} release names use it`, hit ? 'PASS' : 'FAIL', hit ? '' : titles.slice(0, 2).join(' | '));
