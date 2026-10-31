@@ -1,11 +1,11 @@
 <template>
     <div class="inner-content scroll-x streamingPage">
         <!-- Carries the Back button above the first section (it goes in the page's first toolbar). -->
-        <SettingsPageToolbar class="flushToolbar" :icons="[]" />
+        <SettingsPageToolbar
+            class="flushToolbar" :icons="[]"
+            :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
+        />
         <PageHeader title="Active Streams" />
-        <div class="viewToggleRow">
-            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
-        </div>
         <div v-if="cardView" class="cardList streamCards">
             <StreamCard
                 v-for="session in streams.active"
@@ -269,7 +269,6 @@ import { useModal } from 'vue-final-modal';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
-import ViewToggle from '@/components/common/ViewToggle.vue';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';

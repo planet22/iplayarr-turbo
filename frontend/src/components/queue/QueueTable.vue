@@ -1,7 +1,4 @@
 <template>
-    <div class="queueViewToggle">
-        <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
-    </div>
     <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force>
         <!-- Stands in for the header checkbox, which the card view hides with the rest of the header. -->
         <template v-if="cardView && sortedHistory.length" #leading>
@@ -83,7 +80,6 @@ import { useViewMode } from '@/lib/useViewMode';
 import CheckInput from '../common/form/CheckInput.vue';
 import SortIcon from '../common/SortIcon.vue';
 import TablePagination from '../common/TablePagination.vue';
-import ViewToggle from '../common/ViewToggle.vue';
 import QueueTableRow from './QueueTableRow.vue';
 
 const props = defineProps({
@@ -206,6 +202,8 @@ defineExpose({
     filtersActive,
     selectedHistory,
     selectedQueue,
+    viewMode,
+    setViewMode,
 });
 
 watch(
@@ -223,18 +221,6 @@ watch(
 </script>
 
 <style lang="less">
-.queueViewToggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-
-    // Keeps the view toggle on the right when there is no select-all beside it.
-    .viewToggle:only-child {
-        margin-left: auto;
-    }
-}
-
 // Select-all checkbox in the card view's pagination row, lined up with the cards' own checkboxes.
 .CheckInput-container.selectAll {
     flex: 0 0 auto;

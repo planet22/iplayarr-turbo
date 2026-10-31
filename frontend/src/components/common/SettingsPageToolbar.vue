@@ -100,6 +100,12 @@
             </button>
         </div>
         <div>
+            <ViewToggle
+                v-if="viewModes.length"
+                :model-value="viewMode"
+                :modes="viewModes"
+                @update:model-value="emit('update:viewMode', $event)"
+            />
             <slot name="actions" />
             <button
                 v-if="icons.some((i) => i == 'delete')"
@@ -158,6 +164,8 @@ import { defineEmits, defineProps, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { toolbarCount, useBackNav } from '@/lib/useBackNav';
 
+import ViewToggle from './ViewToggle.vue';
+
 const emit = defineEmits([
     'save',
     'toggleAdvanced',
@@ -171,6 +179,7 @@ const emit = defineEmits([
     'stop',
     'refresh',
     'clear',
+    'update:viewMode',
 ]);
 const { canGoBack, goBack } = useBackNav();
 // A page can have several toolbars (one per section); only the first carries the Back button.
@@ -186,6 +195,17 @@ const showFilterDropdown = ref(false);
 const dropdownDiv = ref(null);
 
 defineProps({
+    // The page's table / list / card choice, shown as a toggle at the right of the bar; no modes, no toggle.
+    viewMode: {
+        type: String,
+        required: false,
+        default: '',
+    },
+    viewModes: {
+        type: Array,
+        required: false,
+        default: () => [],
+    },
     // The 'advanced' button's state: the advanced settings are showing.
     advancedOn: {
         type: Boolean,
@@ -373,6 +393,50 @@ const handleClickOutside = (event) => {
         border-radius: 50%;
         background-color: @brand-color;
         color: @on-brand-color;
+    }
+}
+
+// The view toggle takes the toolbar buttons' look, with the chosen view in the brand colour.
+.SettingsPageToolbar > div .viewToggle {
+    align-items: stretch;
+    gap: 0;
+    margin: 6px 3px;
+
+    button {
+        width: 38px;
+        height: auto;
+        min-height: 32px;
+        margin: 0;
+        padding: 0;
+        justify-content: center;
+        border-radius: 0;
+        background-color: transparent;
+
+        &:first-child {
+            border-radius: 4px 0 0 4px;
+        }
+
+        &:last-child {
+            border-radius: 0 4px 4px 0;
+        }
+
+        &:not(:first-child) {
+            border-left-width: 0;
+        }
+
+        svg {
+            height: 16px;
+        }
+
+        &.active {
+            background-color: @brand-color;
+            border-color: @brand-color;
+
+            svg,
+            &:hover svg {
+                color: @on-brand-color;
+            }
+        }
     }
 }
 

@@ -1,10 +1,8 @@
 <template>
     <div class="inner-content scroll-x">
         <PageHeader title="Recent Searches" />
-        <div class="viewToggleRow">
-            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
-        </div>
         <SettingsPageToolbar
+            :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
             :icons="['delete', 'filterToggle']" delete-label="Clear searches"
             :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
             @delete-queue-item="clearSearches" @toggle-filters="searchShowFilters = !searchShowFilters"
@@ -273,7 +271,6 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
-import ViewToggle from '@/components/common/ViewToggle.vue';
 import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import { channelLabel } from '@/lib/channelPillColors';

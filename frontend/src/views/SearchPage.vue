@@ -23,7 +23,11 @@
             </ul>
         </div>
     </div>
-    <SettingsPageToolbar :icons="toolbarIcons" @download="multipleImmediateDownload">
+    <SettingsPageToolbar
+        :icons="toolbarIcons"
+        :view-mode="viewMode" :view-modes="searchResults.length ? ['table', 'posters'] : []" @update:view-mode="setViewMode"
+        @download="multipleImmediateDownload"
+    >
         <template #actions>
             <button
                 v-if="viewMode === 'posters' && searchResults.length"
@@ -57,7 +61,6 @@
                     <font-awesome-icon :icon="['fas', 'circle-notch']" spin /> more arriving
                 </span>
             </span>
-            <ViewToggle :model-value="viewMode" :modes="['table', 'posters']" @update:model-value="setViewMode" />
         </div>
         <div v-if="typeOptions.length > 2 || channelOptions.length > 2 || versionOptions.length > 1" class="channelChips" role="group" aria-label="Filter results">
             <template v-if="typeOptions.length > 2">
@@ -233,7 +236,6 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
-import ViewToggle from '@/components/common/ViewToggle.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';

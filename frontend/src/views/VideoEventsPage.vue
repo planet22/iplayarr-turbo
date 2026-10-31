@@ -2,6 +2,7 @@
     <div class="inner-content scroll-x">
         <PageHeader title="Video Events" />
         <SettingsPageToolbar
+            :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
             :icons="['delete', 'filterToggle']" delete-label="Clear video events"
             :filters-shown="showFilters" :filters-active="filtersActive"
             @delete-queue-item="clearEvents" @toggle-filters="showFilters = !showFilters"
@@ -11,9 +12,6 @@
                 <DateRangeFilter v-model="dateFrom" v-model:model-value-to="dateTo" />
             </template>
         </SettingsPageToolbar>
-        <div class="viewToggleRow">
-            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
-        </div>
         <TablePagination v-model="eventsPage" v-model:page-size="eventsPageSize" :total="sortedEvents.length" />
         <div v-if="cardView" class="cardList">
             <DataCard v-for="event in pagedEvents" :key="event.id">
@@ -128,7 +126,6 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
-import ViewToggle from '@/components/common/ViewToggle.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';

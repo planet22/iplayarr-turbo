@@ -192,14 +192,12 @@
 
         <PageHeader title="Links" />
         <SettingsPageToolbar
+            :view-mode="viewMode" :view-modes="sortedItems.length ? ['table', 'cards'] : []" @update:view-mode="setViewMode"
             :icons="['delete']" delete-label="Clear links" :delete-disabled="live.running || !sortedItems.length"
             @delete-queue-item="clearItems"
         />
         <p v-if="!sortedItems.length" class="empty">No links have been checked yet.</p>
         <template v-else>
-        <div class="viewToggleRow">
-            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
-        </div>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
         <div v-if="cardView" class="cardList">
             <DataCard v-for="item in pagedItems" :key="item.pid">
@@ -282,7 +280,6 @@ import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import Pagination from '@/components/common/TablePagination.vue';
-import ViewToggle from '@/components/common/ViewToggle.vue';
 import TypeCounts from '@/components/watchdog/TypeCounts.vue';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
