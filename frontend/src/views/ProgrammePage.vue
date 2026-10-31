@@ -164,8 +164,8 @@
                         <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
                         <div :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '']">
                             <img
-                                v-if="episode.thumbnail" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
-                                loading="lazy" role="button" tabindex="0" @error="hideBrokenImage" @click="download(episode)" @keydown.enter="download(episode)"
+                                v-if="episode.thumbnail && !brokenThumbs[episode.pid]" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
+                                loading="lazy" role="button" tabindex="0" @error="brokenThumbs[episode.pid] = true" @click="download(episode)" @keydown.enter="download(episode)"
                             />
                             <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="download(episode)" @keydown.enter="download(episode)">
                                 <font-awesome-icon :icon="['fas', 'tv']" />
@@ -350,6 +350,8 @@ const seasonDownloadLabel = computed(
 const isMobile = useIsMobile('(max-width: 600px)');
 
 // Episode descriptions are clamped to three lines; a "... more" link (or a tap on the text) opens the rest.
+// Episodes whose thumbnail failed to load show the placeholder instead (a hidden image can't be clicked).
+const brokenThumbs = reactive({});
 const openDescriptions = reactive({});
 const clampedDescriptions = reactive({});
 const toggleDescription = (pid) => {
