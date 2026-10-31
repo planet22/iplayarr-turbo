@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content">
-        <PageHeader title="Off Schedule" icon="calendar" />
+        <PageHeader title="Off Schedule" icon="calendar-plus" />
         <SettingsPageToolbar :icons="[]" />
         <InfoBar small>
             By default, only media broadcast in the last 30 days is returned, to extend this, you need to index specific

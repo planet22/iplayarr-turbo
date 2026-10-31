@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content scroll-x">
-        <PageHeader title="NZB" icon="satellite-dish" />
+        <PageHeader title="NZB" icon="newspaper" />
         <SettingsPageToolbar
             :icons="[]"
             :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"

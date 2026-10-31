@@ -28,7 +28,7 @@
             <LeftHandNavLink label="Queue" icon="tasks" path="/queue" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Video Events" icon="film" path="/events" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Video Events" icon="clapperboard" path="/events" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" @option-clicked="closeLHN" />
             </template>
 
@@ -40,11 +40,11 @@
                 <font-awesome-icon class="groupChevron" :icon="['fas', isOpen('integrations') ? 'chevron-down' : 'chevron-right']" />
             </li>
             <template v-if="isOpen('integrations')">
-            <LeftHandNavLink label="Apps" icon="laptop-code" path="/apps" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="NZB" icon="satellite-dish" path="/nzb" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Apps" icon="puzzle-piece" path="/apps" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="NZB" icon="newspaper" path="/nzb" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Synonyms" icon="book" path="/synonyms" @option-clicked="closeLHN" />
             <template v-if="globalSettings.NATIVE_SEARCH == 'false'">
-                <LeftHandNavLink label="Off Schedule" icon="calendar" path="/offSchedule" @option-clicked="closeLHN" />
+                <LeftHandNavLink label="Off Schedule" icon="calendar-plus" path="/offSchedule" @option-clicked="closeLHN" />
                 <LeftHandNavLink
 label="Refresh Index" icon="address-book" :no-link="true"
                     @option-clicked="refreshCache" />
