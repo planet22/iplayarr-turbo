@@ -266,7 +266,13 @@ describe('Utils', () => {
                 Promise.resolve(overrides[parameter] ?? configService.defaultConfigMap[parameter])
             );
 
-        it('is off by default', async () => {
+        it('is English by default', async () => {
+            withConfig({});
+            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.ENGLISH.WEBDL.1080p-BBC');
+        });
+
+        it('can be switched off', async () => {
+            withConfig({ RELEASE_LANGUAGE: 'none' });
             await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.WEBDL.1080p-BBC');
         });
 
@@ -408,7 +414,7 @@ describe('Utils', () => {
             it('quality', async () => {
                 mockedConfigService.getParameter.mockImplementation((parameter: IplayarrParameter) =>
                     Promise.resolve(
-                        parameter == IplayarrParameter.VIDEO_QUALITY ? 'fhd' : configService.defaultConfigMap[parameter]
+                        parameter == IplayarrParameter.VIDEO_QUALITY ? 'fhd' : parameter == IplayarrParameter.RELEASE_LANGUAGE ? 'none' : configService.defaultConfigMap[parameter]
                     )
                 );
                 await expect(
@@ -511,7 +517,7 @@ describe('Utils', () => {
             it('quality', async () => {
                 mockedConfigService.getParameter.mockImplementation((parameter: IplayarrParameter) =>
                     Promise.resolve(
-                        parameter == IplayarrParameter.VIDEO_QUALITY ? 'fhd' : configService.defaultConfigMap[parameter]
+                        parameter == IplayarrParameter.VIDEO_QUALITY ? 'fhd' : parameter == IplayarrParameter.RELEASE_LANGUAGE ? 'none' : configService.defaultConfigMap[parameter]
                     )
                 );
                 await expect(
@@ -971,7 +977,8 @@ describe('Utils', () => {
     beforeEach(() => {
         mockedSkyhookService.lookupSeriesDetails.mockClear();
         mockedConfigService.getParameter.mockImplementation((parameter: IplayarrParameter) =>
-            Promise.resolve(configService.defaultConfigMap[parameter])
+            // These tests are about the file name template, not the language tag (covered above).
+            Promise.resolve(parameter === IplayarrParameter.RELEASE_LANGUAGE ? 'none' : configService.defaultConfigMap[parameter])
         );
         mockedAppService.getApp.mockClear();
     });

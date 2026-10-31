@@ -49,7 +49,23 @@ describe('configService', () => {
 
   it('returns parameter from default config', async () => {
     const result = await configService.getParameter(IplayarrParameter.ACTIVE_LIMIT);
-    expect(result).toBe('3');
+    expect(result).toBe('4');
+  });
+
+  it('ships the chosen out-of-the-box defaults', () => {
+    expect(configService.defaultConfigMap).toMatchObject({
+      ACTIVE_LIMIT: '4',
+      RELEASE_LANGUAGE: 'english',
+      NATIVE_SEARCH_ENGINE: 'V2',
+      STREAM_SUBTITLES: 'true',
+      STREAM_LIVE_DASH_1080: 'true',
+      LIVE_TV_ENABLED: 'true',
+      STRM_WATCHDOG_ENABLED: 'true',
+      UI_CHANNEL_TOOLS: 'true',
+      UI_QUALITY_BADGES: 'true',
+      UI_VERSION_BADGES: 'true',
+      UI_SUBTITLE_BADGES: 'true',
+    });
   });
 
   it('clamps an out-of-range stored whole-number setting into its validated range', async () => {

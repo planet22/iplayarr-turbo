@@ -81,8 +81,11 @@ describe('LiveChannels', () => {
 });
 
 describe('LiveStreamService', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         jest.clearAllMocks();
+        // Both are on by default; these tests exercise the plain HLS path, and the DASH block below turns DASH on itself.
+        await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'false');
+        await configService.setParameter('STREAM_SUBTITLES' as any, 'false');
         clearResolveCache();
         clearRememberedMediaSelectorPairs();
         requested.length = 0;
@@ -386,8 +389,10 @@ describe('LiveStreamService connection choice and fallbacks', () => {
     };
     const media = (kind: string, ...conns: string[]) => `<media kind="${kind}">${conns.join('')}</media>`;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         jest.clearAllMocks();
+        await configService.setParameter('STREAM_LIVE_DASH_1080' as any, 'false');
+        await configService.setParameter('STREAM_SUBTITLES' as any, 'false');
         clearResolveCache();
         clearRememberedMediaSelectorPairs();
         requested.length = 0;

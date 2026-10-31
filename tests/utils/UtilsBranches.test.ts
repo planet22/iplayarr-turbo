@@ -37,7 +37,7 @@ const withConfig = (overrides: Record<string, string | undefined>) =>
     );
 
 describe('createNZBName season handling', () => {
-    beforeEach(() => withConfig({}));
+    beforeEach(() => withConfig({ RELEASE_LANGUAGE: 'none' }));
     const tvNoNumbers = { title: 'Show', pid: '', type: VideoType.TV } as any;
     const synonym = (seasonOffset: number | undefined) => ({ id: 's', from: 'Show', target: 'Show', seasonOffset }) as any;
 
@@ -109,7 +109,7 @@ describe('getQualityProfile fallback', () => {
     });
 
     it('lets a release be named even when the quality setting is invalid', async () => {
-        withConfig({ VIDEO_QUALITY: 'bogus' });
+        withConfig({ VIDEO_QUALITY: 'bogus', RELEASE_LANGUAGE: 'none' });
         await expect(createNZBName({ title: 'Show', pid: '', type: VideoType.TV, series: 1, episode: 1 } as any)).resolves.toBe('Show.S01E01.WEBDL.720p-BBC');
     });
 });
