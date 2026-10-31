@@ -12,6 +12,10 @@ export class FixedFIFOQueue<T> implements AbstractFIFOQueue<T> {
         this.queue = [];
     }
 
+    async removeWhere(predicate: (item: T) => boolean): Promise<void> {
+        this.queue = this.queue.filter((item) => !predicate(item));
+    }
+
     async enqueue(item: T): Promise<void> {
         if (this.queue.length >= this.maxSize) {
             this.queue.shift(); // Remove the oldest item

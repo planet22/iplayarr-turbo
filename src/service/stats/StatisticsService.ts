@@ -35,6 +35,13 @@ class StatisticsService {
         socketService.emit('searchHistory', summariseSearchHistory(await this.getSearchHistory()));
     }
 
+    // Drops every search typed in the UI for this term; Sonarr/Radarr searches (appId) stay.
+    async removeSearchTerm(term: string): Promise<void> {
+        const wanted = term.trim().toLowerCase();
+        await this.searchHistory.removeWhere((entry) => !entry.appId && entry.term?.trim().toLowerCase() === wanted);
+        socketService.emit('searchHistory', summariseSearchHistory(await this.getSearchHistory()));
+    }
+
     async addGrab(entry: GrabHistoryEntry): Promise<void> {
         await this.grabHistory.enqueue(entry);
         socketService.emit('grabHistory', await this.getGrabHistory());

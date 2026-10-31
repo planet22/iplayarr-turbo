@@ -29,6 +29,16 @@ router.delete('/searchHistory', async (_: Request, res: Response) => {
     res.json({ status: true });
 });
 
+router.delete('/searchHistory/term', async (req: Request, res: Response) => {
+    const { term } = req.query as { term?: string };
+    if (!term?.trim()) {
+        res.status(400).json({ error: 'term is required' });
+        return;
+    }
+    await statisticsService.removeSearchTerm(term);
+    res.json({ status: true });
+});
+
 router.get('/grabHistory', async (req: Request, res: Response) => {
     const { limit } = req.query as any as { limit?: number };
     const grabHistory = await statisticsService.getGrabHistory();

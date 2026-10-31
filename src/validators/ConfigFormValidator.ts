@@ -1,8 +1,14 @@
 import Handlebars from 'handlebars';
 
 import nzbFacade from '../facade/nzbFacade';
+import { DownloadClient } from '../types/enums/DownloadClient';
+import { MediaMode } from '../types/enums/MediaMode';
+import { NfoWriteMode } from '../types/enums/NfoWriteMode';
+import { StreamClient } from '../types/enums/StreamClient';
+import { StreamMode } from '../types/enums/StreamMode';
 import { FilenameTemplateContext } from '../types/FilenameTemplateContext';
 import { NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
+import { qualityProfiles } from '../types/QualityProfiles';
 import { versionProfiles } from '../types/VersionProfiles';
 import { checkSchedule } from '../utils/cronSchedule';
 import { Validator } from './Validator';
@@ -14,6 +20,43 @@ export const MAX_RSS_FEED_HOURS = NUMERIC_SETTING_LIMITS.RSS_FEED_HOURS.max;
 // The Schedule Refresh job refuses to run more often than every 15 minutes (see taskService).
 export const REFRESH_SCHEDULE_MIN_MINUTES = 15;
 const OUTPUT_FORMATS = ['mp4', 'mkv'];
+
+// Settings the server reads as one of a fixed set of words. Anything else is silently treated as the default (or
+// worse), so it is refused on save. A blank value means "use the default" and is always accepted.
+const TRUE_FALSE = ['true', 'false'];
+const INHERIT = ['inherit'];
+const ENUM_SETTINGS: { [key: string]: string[] } = {
+    AUTH_TYPE: ['form', 'oidc', 'none'],
+    DOWNLOAD_CLIENT: Object.values(DownloadClient),
+    STREAM_CLIENT: Object.values(StreamClient),
+    STREAM_MODE: Object.values(StreamMode),
+    MEDIA_MODE: Object.values(MediaMode),
+    VIDEO_QUALITY: qualityProfiles.map(({ id }) => id),
+    NATIVE_SEARCH_ENGINE: ['V1', 'V2'],
+    MANUAL_NATIVE_SEARCH_ENGINE: [...INHERIT, 'V1', 'V2'],
+    MANUAL_NATIVE_SEARCH: [...INHERIT, ...TRUE_FALSE],
+    MANUAL_SEARCH_MATCH_ALL_WORDS: [...INHERIT, ...TRUE_FALSE],
+    // Older versions stored true/false here, which still reads as all/none.
+    WRITE_NFO_STRM: [...Object.values(NfoWriteMode), ...TRUE_FALSE],
+    RELEASE_LANGUAGE: ['none', 'english'],
+    LIVE_TV_LOGO_SHAPE: ['landscape', 'square'],
+    STRM_WATCHDOG_ACTION: ['notify', 'delete'],
+    STRM_WATCHDOG_ARR_ACTION: ['none', 'unmonitor', 'search'],
+};
+const TRUE_FALSE_SETTINGS = [
+    'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'AIRDATE_NUMBERING',
+    'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'STREAM_NATIVE_ADAPTIVE',
+    'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS',
+    'LIVE_TV_ENABLED', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED',
+];
+
+// A comma-separated list in which every entry must be a known id (blank entries are ignored, as the readers do).
+function unknownIds(value: unknown, known: string[]): string[] {
+    return String(value)
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id && !known.includes(id));
+}
 
 // A setting that must be a whole number from min to max. `required` ones must be given; the others may be blank
 // (the default applies) or left out of the request.
@@ -46,6 +89,29 @@ export class ConfigFormValidator extends Validator {
         checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_CONCURRENCY', 'Parallel checks', 1, 10, false);
         checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', 1, 1000, false);
         checkWholeNumber(validatorError, input, 'STREAM_HISTORY_RETENTION_DAYS', 'Stream history retention', 1, 3650, false);
+
+        for (const [key, allowed] of Object.entries(ENUM_SETTINGS)) {
+            if (input[key] !== undefined && input[key] !== '' && !allowed.includes(input[key])) {
+                validatorError[key] = `Must be one of: ${allowed.join(', ')}`;
+            }
+        }
+        for (const key of TRUE_FALSE_SETTINGS) {
+            if (input[key] !== undefined && input[key] !== '' && !TRUE_FALSE.includes(input[key])) {
+                validatorError[key] = 'Must be true or false';
+            }
+        }
+        for (const [key, known] of [
+            ['EXTRA_VIDEO_QUALITIES', qualityProfiles.map(({ id }) => id)],
+            ['EXTRA_VERSIONS', versionProfiles.map(({ id }) => id)],
+        ] as [string, string[]][]) {
+            if (input[key] !== undefined && input[key] !== '') {
+                const unknown = typeof input[key] === 'string' ? unknownIds(input[key], known) : [String(input[key])];
+                if (unknown.length) {
+                    validatorError[key] = `Unknown: ${unknown.join(', ')}. Use any of: ${known.join(', ')}`;
+                }
+            }
+        }
+        checkWholeNumber(validatorError, input, 'THUMBNAIL_RETENTION_DAYS', 'Thumbnail retention', 1, 3650, false);
 
         // Read by node-cron when the server starts: text that does not parse stops every scheduled job being set up.
         if (input.REFRESH_SCHEDULE !== undefined && input.REFRESH_SCHEDULE !== '') {

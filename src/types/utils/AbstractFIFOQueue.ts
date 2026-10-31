@@ -6,4 +6,5 @@ export interface AbstractFIFOQueue<T> {
     isEmpty(): Promise<boolean>;
     getItems(): Promise<T[]>;
     clear(): Promise<void>;
+    removeWhere(predicate: (item: T) => boolean): Promise<void>;
 }

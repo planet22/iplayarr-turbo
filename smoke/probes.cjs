@@ -344,15 +344,15 @@ async function write(ctx, h) {
         // 3. Free-text settings that the server uses as a file extension, a quality, a mode or a schedule must be checked
         const enums = [
             ['OUTPUT_FORMAT', 'exe', 'FAIL'], ['OUTPUT_FORMAT', '/../../x', 'FAIL'], ['OUTPUT_FORMAT', 'mp4 && calc', 'FAIL'],
-            ['STREAM_MODE', 'bogus', 'WARN'], ['STREAM_CLIENT', 'bogus', 'WARN'], ['DOWNLOAD_CLIENT', 'bogus', 'WARN'], ['MEDIA_MODE', 'bogus', 'WARN'],
-            ['VIDEO_QUALITY', 'bogus', 'WARN'], ['EXTRA_VIDEO_QUALITIES', 'bogus,,;', 'WARN'], ['EXTRA_VERSIONS', 'bogus', 'WARN'],
-            ['NATIVE_SEARCH_ENGINE', 'V9', 'WARN'], ['MANUAL_NATIVE_SEARCH_ENGINE', 'V9', 'WARN'], ['NATIVE_SEARCH', 'maybe', 'WARN'], ['LIVE_TV_LOGO_SHAPE', 'triangle', 'WARN'],
-            ['WRITE_NFO_STRM', 'sometimes', 'WARN'], ['STRM_WATCHDOG_ACTION', 'explode', 'WARN'], ['STRM_WATCHDOG_ARR_ACTION', 'explode', 'WARN'], ['STRM_WATCHDOG_SOURCES', 'nowhere', 'WARN'],
-            ['RELEASE_LANGUAGE', 'klingon', 'WARN'],
+            ['STREAM_MODE', 'bogus', 'FAIL'], ['STREAM_CLIENT', 'bogus', 'FAIL'], ['DOWNLOAD_CLIENT', 'bogus', 'FAIL'], ['MEDIA_MODE', 'bogus', 'FAIL'],
+            ['VIDEO_QUALITY', 'bogus', 'FAIL'], ['EXTRA_VIDEO_QUALITIES', 'bogus,,;', 'FAIL'], ['EXTRA_VERSIONS', 'bogus', 'FAIL'],
+            ['NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['MANUAL_NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['NATIVE_SEARCH', 'maybe', 'FAIL'], ['LIVE_TV_LOGO_SHAPE', 'triangle', 'FAIL'],
+            ['WRITE_NFO_STRM', 'sometimes', 'FAIL'], ['STRM_WATCHDOG_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_ARR_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_SOURCES', 'nowhere', 'WARN'],
+            ['RELEASE_LANGUAGE', 'klingon', 'FAIL'],
             ['REFRESH_SCHEDULE', 'not a cron', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * * *', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * *', 'FAIL'],
             ['STRM_WATCHDOG_WEBHOOK_URL', 'file:///etc/passwd', 'FAIL'], ['STRM_WATCHDOG_WEBHOOK_URL', 'http://169.254.169.254/latest/meta-data/', 'PASS-IF-ACCEPTED'],
             ['STREAM_BASE_URL', 'javascript:alert(1)', 'FAIL'], ['STREAM_BASE_URL', 'ftp://example.invalid/', 'FAIL'], ['STREAM_BASE_URL', 'http://', 'FAIL'],
-            ['THUMBNAIL_RETENTION_DAYS', '-5', 'WARN'], ['THUMBNAIL_RETENTION_DAYS', 'abc', 'WARN'], ['LIVE_TV_EPG_OFFSET', '1e3', 'WARN'],
+            ['THUMBNAIL_RETENTION_DAYS', '-5', 'FAIL'], ['THUMBNAIL_RETENTION_DAYS', 'abc', 'FAIL'], ['LIVE_TV_EPG_OFFSET', '1e3', 'FAIL'],
         ];
         for (const [key, value, level] of enums) {
             later(() => put({ [key]: before[key] ?? '' }));
