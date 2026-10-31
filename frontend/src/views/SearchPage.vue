@@ -1,33 +1,36 @@
 <template>
-    <SettingsPageToolbar
-        :icons="toolbarIcons"
-        :view-mode="viewMode" :view-modes="['table', 'posters']" @update:view-mode="setViewMode"
-        @download="multipleImmediateDownload"
-    >
-        <template #actions>
-            <button
-                v-if="viewMode === 'posters'"
-                type="button"
-                :class="{ enabled: smallIcons }"
-                :aria-pressed="smallIcons"
-                :title="smallIcons ? 'Showing small TV / film / series icons on posters' : 'Show small TV / film / series icons on posters'"
-                aria-label="Small icons on posters"
-                @click="toggleSmallIcons"
-            >
-                <font-awesome-icon :icon="['fas', 'icons']" />
-            </button>
-            <button
-                v-if="viewMode === 'posters' && searchResults.length"
-                type="button"
-                :class="{ enabled: selectMode }"
-                :title="selectMode ? 'Done selecting' : 'Select results to download'"
-                :aria-label="selectMode ? 'Done selecting' : 'Select results to download'"
-                @click="toggleSelectMode"
-            >
-                <font-awesome-icon :icon="['fas', selectMode ? 'square-check' : 'list-check']" />
-            </button>
-        </template>
-    </SettingsPageToolbar>
+    <div class="inner-content searchTop">
+        <PageHeader title="Search" />
+        <SettingsPageToolbar
+            :icons="toolbarIcons"
+            :view-mode="viewMode" :view-modes="['table', 'posters']" @update:view-mode="setViewMode"
+            @download="multipleImmediateDownload"
+        >
+            <template #actions>
+                <button
+                    v-if="viewMode === 'posters'"
+                    type="button"
+                    :class="{ enabled: smallIcons }"
+                    :aria-pressed="smallIcons"
+                    :title="smallIcons ? 'Showing small TV / film / series icons on posters' : 'Show small TV / film / series icons on posters'"
+                    aria-label="Small icons on posters"
+                    @click="toggleSmallIcons"
+                >
+                    <font-awesome-icon :icon="['fas', 'icons']" />
+                </button>
+                <button
+                    v-if="viewMode === 'posters' && searchResults.length"
+                    type="button"
+                    :class="{ enabled: selectMode }"
+                    :title="selectMode ? 'Done selecting' : 'Select results to download'"
+                    :aria-label="selectMode ? 'Done selecting' : 'Select results to download'"
+                    @click="toggleSelectMode"
+                >
+                    <font-awesome-icon :icon="['fas', selectMode ? 'square-check' : 'list-check']" />
+                </button>
+            </template>
+        </SettingsPageToolbar>
+    </div>
     <div class="pageSearchBar">
         <div class="searchPanel">
             <font-awesome-icon class="searchIcon" :icon="['fas', 'search']" />
@@ -234,6 +237,7 @@ import ChannelPill from '@/components/common/ChannelPill.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
@@ -671,6 +675,11 @@ watch(
     color: inherit;
     font: inherit;
     cursor: pointer;
+}
+
+// The title and toolbar open the page like every other; the search box follows with its own spacing.
+.searchTop {
+    padding-bottom: 0;
 }
 
 .pageSearchBar {

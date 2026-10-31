@@ -1,6 +1,7 @@
 <template>
     <div class="inner-content about-content">
-        <SettingsPageToolbar class="flushToolbar" :icons="[]" />
+        <PageHeader title="About" />
+        <SettingsPageToolbar :icons="[]" />
         <img :src="logoUrl" alt="Logo" class="logo" />
         <h3>iPlayarr Turbo</h3>
         <p>Version {{ hiddenSettings.VERSION }}</p>
@@ -42,6 +43,7 @@
 </template>
 
 <script setup>
+import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { getBasePath } from '@/lib/utils';
 
@@ -58,6 +60,11 @@ const isAppleDevice = computed(() => {
 <style lang="less">
 .about-content {
     text-align: center;
+
+    // The title bar reads like every other page's, not centred with the text.
+    .PageHeader {
+        text-align: left;
+    }
 }
 
 .logo {

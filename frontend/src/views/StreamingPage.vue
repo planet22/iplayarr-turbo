@@ -1,11 +1,11 @@
 <template>
     <div class="inner-content scroll-x streamingPage">
         <!-- Carries the Back button above the first section (it goes in the page's first toolbar). -->
+        <PageHeader title="Active Streams" />
         <SettingsPageToolbar
-            class="flushToolbar" :icons="[]"
+            :icons="[]"
             :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
         />
-        <PageHeader title="Active Streams" />
         <div v-if="cardView" class="cardList streamCards">
             <StreamCard
                 v-for="session in streams.active"
