@@ -2,6 +2,7 @@ import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
+import socketService from '../../src/service/socketService';
 import { versionTypesFor } from '../../src/service/stream/versionVpid';
 import subscriptionService, { SubscriptionError } from '../../src/service/subscriptionService';
 import synonymService from '../../src/service/synonymService';
@@ -26,6 +27,7 @@ jest.mock('../../src/service/synonymService');
 jest.mock('../../src/service/stream/versionVpid');
 jest.mock('../../src/service/videoEventService');
 jest.mock('../../src/service/loggingService');
+jest.mock('../../src/service/socketService', () => ({ __esModule: true, default: { emit: jest.fn() } }));
 jest.mock('../../src/utils/Utils', () => ({
     ...jest.requireActual('../../src/utils/Utils'),
     createNZBName: jest.fn(),
@@ -176,6 +178,21 @@ describe('subscriptionService', () => {
             // A second pass finds nothing new and queues nothing more.
             expect((await subscriptionService.check(saved)).queued).toEqual([]);
             expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+        });
+
+        it('reports progress over the socket, ending with done', async () => {
+            const sub = await subscribed();
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3'), ep('e4')] as any);
+            const emit = jest.mocked(socketService.emit);
+            emit.mockClear();
+            await subscriptionService.check(sub);
+            const phases = emit.mock.calls.map(([subject, p]) => [subject, p.phase, p.done, p.total]);
+            expect(phases).toEqual([
+                ['subscriptionProgress', 'listing', undefined, undefined],
+                ['subscriptionProgress', 'queueing', 0, 2],
+                ['subscriptionProgress', 'queueing', 1, 2],
+                ['subscriptionProgress', 'done', undefined, undefined],
+            ]);
         });
 
         it('queues several new episodes oldest first', async () => {

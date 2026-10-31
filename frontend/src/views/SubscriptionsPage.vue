@@ -15,11 +15,12 @@
         </EmptyState>
         <TablePagination v-if="loaded && subscriptions.length" v-model="page" v-model:page-size="pageSize" :total="subscriptions.length" />
         <div v-if="isMobile && loaded && subscriptions.length" class="cardList">
-            <DataCard v-for="subscription in pagedItems" :key="subscription.id">
+            <DataCard v-for="subscription in pagedItems" :key="subscription.id" style="--dc-thumb-width: 120px">
                 <template #thumb>
-                    <RouterLink :to="`/browse/programme/${subscription.pid}`">
+                    <RouterLink :to="`/browse/programme/${subscription.pid}`" class="thumbLink">
                         <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
                         <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                        <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
                     </RouterLink>
                 </template>
                 <template #title>
@@ -37,6 +38,7 @@
                 </template>
                 <div class="cardInfoRow">
                     <div class="cardLines">
+                        <div v-if="progress[subscription.id]" class="cardLine">{{ progressLabel(progress[subscription.id]) }}</div>
                         <div class="cardLine" title="Last checked">
                             <font-awesome-icon :icon="['fas', 'clock']" />{{ subscription.arrOnly ? 'n/a' : checkedLabel(subscription, true) }}
                         </div>
@@ -86,11 +88,13 @@
                 <RouterLink :to="`/browse/programme/${subscription.pid}`" class="thumbLink">
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
                     <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
                 </RouterLink>
                 <div class="info">
                     <RouterLink :to="`/browse/programme/${subscription.pid}`" class="title">{{ subscription.title }}</RouterLink>
                     <div class="details">
                         <ChannelPill :channel="subscription.channel" />
+                        <span v-if="progress[subscription.id]">{{ progressLabel(progress[subscription.id]) }}</span>
                         <span v-if="!subscription.arrOnly">Checked {{ checkedLabel(subscription) }}</span>
                         <span v-if="subscription.lastQueuedAt">
                             Last download {{ formatRelativeTime(Date.parse(subscription.lastQueuedAt)) }}
@@ -201,7 +205,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import DataCard from '@/components/common/DataCard.vue';
@@ -211,6 +215,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import ProgressRing, { progressLabel } from '@/components/subscriptions/ProgressRing.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
@@ -238,10 +243,48 @@ const {
     unsubscribe: unsubscribeLive,
 } = useLiveSubscriptions();
 
+// Per-show progress of a running check, pushed by the backend; absent when nothing is running for that show.
+const progress = reactive({});
+const socket = inject('socket');
+
+// A quiet check finishes in a blink, so each show's ring stays up at least this long to be seen.
+const MIN_RING_MS = 1000;
+const shownAt = {};
+const clearTimers = {};
+
+const onProgress = ({ id, phase, done, total }) => {
+    clearTimeout(clearTimers[id]);
+    if (phase !== 'done') {
+        shownAt[id] ??= Date.now();
+        progress[id] = { phase, done, total };
+        return;
+    }
+    const remaining = MIN_RING_MS - (Date.now() - (shownAt[id] ?? 0));
+    const clear = () => {
+        delete progress[id];
+        delete shownAt[id];
+    };
+    if (remaining > 0 && progress[id]) clearTimers[id] = setTimeout(clear, remaining);
+    else clear();
+};
+
+let boundSocket;
+const bindSocket = (s) => {
+    boundSocket?.off('subscriptionProgress', onProgress);
+    boundSocket = s;
+    boundSocket?.on('subscriptionProgress', onProgress);
+};
+
 onMounted(() => {
     load();
     loadLive();
     loadAppNames();
+    bindSocket(socket?.value);
+});
+watch(() => socket?.value, bindSocket);
+onBeforeUnmount(() => {
+    boundSocket?.off('subscriptionProgress', onProgress);
+    Object.values(clearTimers).forEach(clearTimeout);
 });
 
 const arrPillTitle = ({ arr, arrOnly }) => {
@@ -343,12 +386,18 @@ const removeLive = async (live) => {
     padding: 10px 0;
     border-bottom: 1px solid @toolbar-background-color;
 
+    .thumbLink {
+        position: relative;
+        display: block;
+        border-radius: 4px;
+    }
+
     .thumbLink img,
     .thumbLink .noThumb {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 128px;
+        width: 160px;
         aspect-ratio: 16 / 9;
         object-fit: cover;
         border-radius: 4px;
@@ -356,7 +405,7 @@ const removeLive = async (live) => {
         color: @subtle-text-color;
 
         @media (max-width: @mobile-breakpoint) {
-            width: 88px;
+            width: 112px;
         }
     }
 
@@ -454,6 +503,12 @@ const removeLive = async (live) => {
     + .cardLine {
         margin-top: 4px;
     }
+}
+
+.cardList .thumbLink {
+    position: relative;
+    display: block;
+    border-radius: 3px;
 }
 
 .cardTitle {

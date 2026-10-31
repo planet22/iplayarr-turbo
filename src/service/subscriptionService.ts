@@ -4,7 +4,7 @@ import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { QueueEntry } from '../types/QueueEntry';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
-import { SubscribeOptions, Subscription, SubscriptionArrLink, SubscriptionCheckResult } from '../types/Subscription';
+import { SubscribeOptions, Subscription, SubscriptionArrLink, SubscriptionCheckResult, SubscriptionProgress } from '../types/Subscription';
 import { VersionProfile } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
 import { createNZBName, getQualityProfile } from '../utils/Utils';
@@ -13,6 +13,7 @@ import historyService from './historyService';
 import iplayerDetailsService from './iplayerDetailsService';
 import loggingService from './loggingService';
 import queueService from './queueService';
+import socketService from './socketService';
 import { versionTypesFor } from './stream/versionVpid';
 import synonymService from './synonymService';
 import videoEventService from './videoEventService';
@@ -40,6 +41,10 @@ class SubscriptionService {
         while (this.#background.size) {
             await Promise.allSettled([...this.#background]);
         }
+    }
+
+    #progress(id: string, phase: SubscriptionProgress['phase'], done?: number, total?: number): void {
+        socketService.emit('subscriptionProgress', { id, phase, done, total } as SubscriptionProgress);
     }
 
     async list(): Promise<Subscription[]> {
@@ -265,6 +270,7 @@ class SubscriptionService {
         if (subscription.arrOnly || this.#inFlight.has(subscription.id)) return result;
         this.#inFlight.add(subscription.id);
         try {
+            this.#progress(subscription.id, 'listing');
             const episodes = await this.listEpisodes(subscription.pid);
             // Empty means the lookup failed (or the show has nothing available) - nothing to do.
             const seen = new Set(subscription.seen);
@@ -273,7 +279,8 @@ class SubscriptionService {
                 .filter(({ id }) => !seen.has(id))
                 .sort((a, b) => Date.parse(a.release_date_time as string) - Date.parse(b.release_date_time as string));
             const handled: string[] = [];
-            for (const { id } of fresh) {
+            for (const [index, { id }] of fresh.entries()) {
+                this.#progress(subscription.id, 'queueing', index, fresh.length);
                 if (await this.#alreadyHandled(id)) {
                     handled.push(id);
                     continue;
@@ -287,6 +294,7 @@ class SubscriptionService {
                     loggingService.error(`Subscription "${subscription.title}": could not queue ${id}: ${error}`);
                 }
             }
+            if (subscription.versions?.length) this.#progress(subscription.id, 'versions');
             const doneVersions = await this.#checkVersions(subscription, episodes, result);
             const now = new Date().toISOString();
             await this.#update(subscription.id, (s) => ({
@@ -313,6 +321,7 @@ class SubscriptionService {
             }));
         } finally {
             this.#inFlight.delete(subscription.id);
+            this.#progress(subscription.id, 'done');
         }
         return result;
     }
@@ -323,7 +332,9 @@ class SubscriptionService {
         this.checking = true;
         try {
             const results: SubscriptionCheckResult[] = [];
-            for (const subscription of await this.list()) {
+            const all = await this.list();
+            for (const { id, arrOnly } of all) if (!arrOnly) this.#progress(id, 'waiting');
+            for (const subscription of all) {
                 results.push(await this.check(subscription));
             }
             const queued = results.reduce((n, r) => n + r.queued.length, 0);

@@ -45,6 +45,14 @@ export interface SubscribeOptions {
     versions?: string[];
 }
 
+// Pushed over the socket while a check runs, so the Subscriptions page can show each show's progress.
+export interface SubscriptionProgress {
+    id: string;
+    phase: 'waiting' | 'listing' | 'queueing' | 'versions' | 'done';
+    done?: number;
+    total?: number;
+}
+
 export interface SubscriptionCheckResult {
     id: string;
     title: string;

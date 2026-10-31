@@ -59,10 +59,15 @@
     padding-right: 48px;
 }
 
+// A page can enlarge its posters with --dc-thumb-width on the card.
+.dcThumb {
+    position: relative;
+}
+
 .dcThumb :deep(img),
 .dcThumb :deep(.thumbnail-placeholder) {
-    width: 96px;
-    height: 54px;
+    width: var(--dc-thumb-width, 96px);
+    aspect-ratio: 16 / 9;
     object-fit: cover;
     border-radius: 3px;
     display: block;
