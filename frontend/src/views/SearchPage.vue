@@ -206,9 +206,14 @@
             <section v-if="recent.length">
                 <h3>Recent searches</h3>
                 <div class="chipRow">
-                    <button v-for="term in recent" :key="term" type="button" class="chip" @click="searchFor(term)">
-                        <font-awesome-icon :icon="['fas', 'clock-rotate-left']" /><span class="termText" :title="term">{{ term }}</span>
-                    </button>
+                    <span v-for="term in recent" :key="term" class="chip chipWrap">
+                        <button type="button" class="chipMain" @click="searchFor(term)">
+                            <font-awesome-icon :icon="['fas', 'clock-rotate-left']" /><span class="termText" :title="term">{{ term }}</span>
+                        </button>
+                        <button type="button" class="chipRemove" :aria-label="`Remove ${term} from recent searches`" :title="`Remove ${term}`" @click="removeRecent(term)">
+                            <font-awesome-icon :icon="['fas', 'circle-xmark']" />
+                        </button>
+                    </span>
                 </div>
             </section>
         </div>
@@ -238,6 +243,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
 import { streamSearch } from '@/lib/searchStream';
+import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
 import { useViewMode } from '@/lib/useViewMode';
 import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
@@ -380,6 +386,10 @@ const pickChannel = (option) => {
 const recent = ref([]);
 const showHome = computed(() => !loading.value && (!searchTerm.value || (searchResults.value.length === 0 && !loadingMore.value)));
 
+// Up to 8 distinct terms are shown; the rest of the fetched history backfills a removed chip.
+const RECENT_SHOWN = 8;
+const recentPool = ref([]);
+
 onMounted(async () => {
     if (!searchInput.value) searchEl.value?.focus();
     try {
@@ -387,17 +397,31 @@ onMounted(async () => {
         if (ok && Array.isArray(data)) {
             const seen = new Set();
             // Searches typed here have no app behind them (Sonarr/Radarr ones do); newest first, each term once.
-            recent.value = data
+            recentPool.value = data
                 .filter(({ term, appId }) => term && term !== '*' && !appId)
                 .sort((a, b) => (b.time ?? 0) - (a.time ?? 0))
                 .map(({ term }) => term.trim())
-                .filter((term) => term && !seen.has(term.toLowerCase()) && seen.add(term.toLowerCase()))
-                .slice(0, 8);
+                .filter((term) => term && !seen.has(term.toLowerCase()) && seen.add(term.toLowerCase()));
+            recent.value = recentPool.value.slice(0, RECENT_SHOWN);
         }
     } catch {
         // Recent searches are a nicety.
     }
 });
+
+const removeRecent = async (term) => {
+    const before = recentPool.value;
+    recentPool.value = before.filter((t) => t !== term);
+    recent.value = recentPool.value.slice(0, RECENT_SHOWN);
+    try {
+        const { ok } = await ipFetch(`json-api/stats/searchHistory/term?term=${encodeURIComponent(term)}`, 'DELETE');
+        if (!ok) throw new Error('delete failed');
+    } catch {
+        recentPool.value = before;
+        recent.value = before.slice(0, RECENT_SHOWN);
+        toastService.error('Unable to remove that search');
+    }
+};
 
 const runSearch = () => {
     closeSuggestions();
@@ -807,6 +831,43 @@ watch(
     &.active {
         border-color: @brand-color;
         color: @brand-color;
+    }
+}
+
+// A recent-search chip: the search button plus a small remove button at the right-hand end.
+.chipWrap {
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+
+    .chipMain,
+    .chipRemove {
+        display: inline-flex;
+        align-items: center;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+    }
+
+    .chipMain {
+        gap: 6px;
+        padding: 6px 4px 6px 12px;
+        min-width: 0;
+    }
+
+    .chipRemove {
+        padding: 6px 10px 6px 4px;
+
+        svg {
+            color: @subtle-text-color;
+        }
+
+        &:hover svg,
+        &:focus-visible svg {
+            color: @primary-text-color;
+        }
     }
 }
 
