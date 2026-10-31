@@ -1,4 +1,3 @@
-import { App } from '../../types/App';
 import { AbstractCreateIndexerRequest } from '../../types/requests/arr/AbstractCreateIndexerRequest';
 import { ArrCreateDownloadClientRequest } from '../../types/requests/arr/CreateDownloadClientRequest';
 import { createIndexRequestFieldsSkeleton } from '../../types/requests/arr/CreateIndexerRequest';
@@ -8,13 +7,7 @@ import { CreateIndexerForm } from '../../types/requests/form/CreateIndexerForm';
 import { V3ArrService } from './V3ArrService';
 
 class V1ArrService extends V3ArrService {
-    constructor() {
-        super();
-    }
-
-    getApiUrl(app: App): string {
-        return `${app.url}/api/v1`;
-    }
+    readonly apiVersion: string = 'v1';
 
     createDownloadClientRequestObject(form: CreateDownloadClientForm, tags: number[]): ArrCreateDownloadClientRequest {
         const createDownloadClientRequest: ArrCreateDownloadClientRequest = super.createDownloadClientRequestObject(form, tags);

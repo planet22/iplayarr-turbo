@@ -11,6 +11,9 @@ export interface ArrTag {
 }
 
 export default interface AbstractArrService {
+    // Base URL of the app's versioned API, e.g. http://sonarr:8989/api/v3
+    getApiUrl(app: App): string;
+
     upsertDownloadClient(form: CreateDownloadClientForm, app: App, allowCreate: boolean): Promise<number>;
     getDownloadClient(app: App): Promise<DownloadClientResponse | undefined>;
     deleteDownloadClient(app: App): Promise<void>;

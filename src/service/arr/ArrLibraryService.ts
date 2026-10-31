@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+import { ArrServiceDirectory } from '../../constants/ArrServiceDirectory';
 import { App } from '../../types/App';
 import { AppType } from '../../types/AppType';
 import { extractArrErrorMessage } from './V3ArrService';
@@ -67,7 +68,12 @@ class ArrLibraryService {
 
     #headers = (app: App) => ({ headers: { 'X-Api-Key': app.api_key } });
 
-    #url = (app: App, path: string): string => `${app.url}/api/v3/${path}`;
+    // The API version comes from the app type's service, so it never differs from the one used for indexers/clients.
+    #url = (app: App, path: string): string => {
+        const service = ArrServiceDirectory[app.type];
+        if (!service) throw new Error(`No Sonarr/Radarr API service for ${app.type}`);
+        return `${service.getApiUrl(app)}/${path}`;
+    };
 
     #resource = (app: App): string => (this.#isSonarr(app) ? 'series' : 'movie');
 
