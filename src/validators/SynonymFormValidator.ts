@@ -8,10 +8,11 @@ export class SynonymFormValidator extends Validator {
     async validate(input: Synonym): Promise<{ [key: string]: string }> {
         const validatorError: { [key: string]: string } = {};
 
-        if (!input.from?.trim()) {
+        // Anything but text (an array or object from a hand-made request) counts as missing.
+        if (typeof input?.from !== 'string' || !input.from.trim()) {
             validatorError['from'] = 'From is required';
         }
-        if (!input.target?.trim()) {
+        if (typeof input?.target !== 'string' || !input.target.trim()) {
             validatorError['target'] = 'To is required';
         }
 

@@ -8,6 +8,7 @@ import statisticsService from '../../service/stats/StatisticsService';
 import { SearchHistoryEntry, SearchHistoryResultItem } from '../../types/data/SearchHistoryEntry';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { IPlayerSearchResult, VideoType } from '../../types/IPlayerSearchResult';
+import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { NewzNabAttr, NewzNabSearchResponse } from '../../types/responses/newznab/NewzNabSearchResponse';
 import { withSearchTrace } from '../../utils/searchTrace';
 import { createNZBDownloadLink, getQualityProfile } from '../../utils/Utils';
@@ -24,6 +25,11 @@ interface SearchRequest {
 
 export default async (req: Request, res: Response) => {
     const { q, season, ep, cat: catList, app: queryApp } = req.query as any as SearchRequest;
+    // A repeated or nested parameter (q=a&q=b, q[x]=1) arrives as an array/object.
+    if ((q !== undefined && typeof q !== 'string') || (catList !== undefined && typeof catList !== 'string') || (queryApp !== undefined && typeof queryApp !== 'string')) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Search parameters must be text' } as ApiResponse);
+        return;
+    }
     if (queryApp) {
         await appService.touchApp(queryApp);
     }

@@ -150,6 +150,11 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('custom channel needs a name', noName.status === 400, `HTTP ${noName.status}`);
             const probe = await http('/json-api/live-channels/probe', { method: 'POST', body: { streamUrl: url }, timeout: 60000 });
             warn('custom channel probe', probe.status === 200, `HTTP ${probe.status} ${probe.text.slice(0, 120)}`);
+            // The probe must refuse cloud-metadata/link-local targets, including the IPv4-mapped IPv6 spelling
+            for (const target of ['http://169.254.169.254/latest/meta-data/', 'http://[::ffff:169.254.169.254]/latest/meta-data/']) {
+                const blocked = await http('/json-api/live-channels/probe', { method: 'POST', body: { streamUrl: target }, timeout: 30000 });
+                ok(`custom channel probe refuses ${target}`, blocked.status >= 400 || blocked.json?.ok === false, `HTTP ${blocked.status} ${blocked.text.slice(0, 100)}`);
+            }
             const add = await http('/json-api/live-channels/custom', { method: 'POST', body: { name: 'SMOKE-TEMP chan', streamUrl: url, color: '#123456', logoText: 'SMK', group: 'SMOKE' } });
             ok('custom channel create', add.status === 200, `HTTP ${add.status} ${add.text.slice(0, 160)}`);
             const list = (await http('/json-api/live-channels/custom')).json || [];
@@ -243,6 +248,20 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             await cleanHist(ep.pid);
             ok('history entry deleted', (await hist(ep.pid)).length === 0);
 
+            // A film downloaded without a type is queued as a movie, not TV (regression: type was always overwritten with TV)
+            const movieRss = (await http(`/api?t=movie&q=paddington&apikey=${apikey}`, { timeout: 60000 })).text;
+            const filmPid = ((movieRss.match(/<enclosure url="([^"]+)"/) || [])[1] || '').replace(/&amp;/g, '&').match(/[?&]pid=([a-z0-9]+)/i)?.[1];
+            if (filmPid) {
+                later('clean film download history', () => cleanHist(filmPid));
+                await cleanHist(filmPid);
+                const film = await http(`/json-api/download?pid=${filmPid}&media=strm`, { timeout: 60000 });
+                ok('film download without a type accepted', film.status === 200, `HTTP ${film.status} ${film.text.slice(0, 100)}`);
+                await waitDone(filmPid, 120000);
+                const fh = (await hist(filmPid))[0];
+                warn('film downloaded without a type is filed as a movie', !!fh && /movie/i.test(String(fh.type)), JSON.stringify(fh || {}).slice(0, 160) + ' (WARN if the BBC does not class it as a film)');
+                await cleanHist(filmPid);
+            } else rec(W, 'film download without a type', 'SKIP', 'movie search returned no item');
+
             // Queue then cancel (real download so it stays queued long enough)
             const pid2 = eps.find((e) => e.pid && e.pid !== ep.pid)?.pid;
             if (pid2) {
@@ -264,7 +283,11 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             const rss = (await http(`/api?t=tvsearch&q=news&apikey=${apikey}`, { timeout: 60000 })).text;
             const link = (rss.match(/<enclosure url="([^"]+)"/) || [])[1];
             if (link) {
-                const nzbRes = await fetch(link.replace(/&amp;/g, '&'));
+                // An *arr app that only grabs (never searches) must still show as seen on the Apps page
+                const seenApp = ((await http('/json-api/apps')).json || [])[0];
+                const seenBefore = seenApp?.lastSeen ?? 0;
+                const nzbLink = link.replace(/&amp;/g, '&') + (seenApp ? `&app=${encodeURIComponent(seenApp.id)}` : '');
+                const nzbRes = await fetch(nzbLink);
                 const nzbText = await nzbRes.text();
                 const pidInNzb = (nzbText.match(/name="pid">([a-z0-9]+)</i) || nzbText.match(/pid[^>]*>([a-z0-9]{8})</i) || [])[1];
                 const form = new FormData();
@@ -272,6 +295,10 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 const add = await fetch(`${BASE}/api?mode=addfile&apikey=${apikey}&output=json`, { method: 'POST', body: form });
                 const addText = await add.text();
                 ok('SAB addfile accepts NZB (Sonarr hand-off)', add.status === 200 && /true|nzo|ids/i.test(addText), `HTTP ${add.status} ${addText.slice(0, 120)}`);
+                if (seenApp) {
+                    const seenNow = (((await http('/json-api/apps')).json || []).find((a) => a.id === seenApp.id) || {}).lastSeen ?? 0;
+                    ok('NZB download/grab updates the app\'s last seen', seenNow > 0 && seenNow >= seenBefore, `before ${seenBefore}, now ${seenNow}`);
+                } else rec(W, 'NZB download/grab updates the app\'s last seen', 'SKIP', 'no app configured');
                 if (pidInNzb) {
                     later('clean arr-path queue/history', async () => {
                         await http(`/json-api/queue/queue?pid=${pidInNzb}`, { method: 'DELETE' });

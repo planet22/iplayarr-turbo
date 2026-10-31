@@ -3,10 +3,11 @@ import { Request, Response, Router } from 'express';
 import episodeCacheService from '../../service/episodeCacheService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { EpisodeCacheDefinition } from '../../types/responses/EpisodeCacheTypes';
+import { asyncRouter } from '../../utils/asyncRouter';
 import { OffScheduleFormValidator } from '../../validators/OffScheduleFormValidator';
 import { Validator } from '../../validators/Validator';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/', async (_, res: Response) => {
     const cachedSeries: EpisodeCacheDefinition[] = await episodeCacheService.getCachedSeries();

@@ -62,6 +62,14 @@ describe('JsonApiRoute', () => {
     });
 
     describe('GET /search', () => {
+        it('answers 400 for a repeated or nested q instead of failing inside the search', async () => {
+            const repeated = await request(app).get('/search?q=a&q=b');
+            const nested = await request(app).get('/search?q[x]=1');
+            expect(repeated.status).toBe(400);
+            expect(nested.status).toBe(400);
+            expect(searchFacade.search).not.toHaveBeenCalled();
+        });
+
         it('should return search results', async () => {
             const mockResults = [{ title: 'Episode 1', pid: 'b012345' }];
             (searchFacade.search as jest.Mock).mockResolvedValue(mockResults);

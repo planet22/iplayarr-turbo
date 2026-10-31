@@ -4,8 +4,9 @@ import cacheAdminService from '../../service/cacheAdminService';
 import cronJobService from '../../service/cronJobService';
 import { MAX_CACHE_TTL, MIN_CACHE_TTL } from '../../service/db/dbCacheService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/tasks', async (_, res: Response) => {
     res.json(cronJobService.getTasks());

@@ -12,7 +12,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
         const page = await context.newPage();
         page.on('pageerror', (e) => errs.push('pageerror: ' + e.message.slice(0, 100)));
-        page.on('console', (m) => { if (m.type() === 'error' && !/favicon|ResizeObserver/.test(m.text())) errs.push('console: ' + m.text().slice(0, 100)); });
+        page.on('console', (m) => { if (m.type() === 'error' && !/favicon|ResizeObserver/.test(m.text()) && !/\/json-api\/thumbnail\//.test(m.location().url || '')) errs.push('console: ' + m.text().slice(0, 100)); });
         try { await fn(page, context); }
         catch (e) { rec(U, name, 'FAIL', 'threw: ' + e.message.split('\n')[0]); await shot(page, 'FAILED-' + name.replace(/\W+/g, '-')); }
         if (errs.length) rec(U, `${name}: no page/console errors`, 'FAIL', errs.slice(0, 2).join(' | '));

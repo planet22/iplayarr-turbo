@@ -6,10 +6,11 @@ import { App } from '../../types/App';
 import { appFeatures } from '../../types/AppType';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { UserAgentMapping } from '../../types/UserAgentMapping';
+import { asyncRouter } from '../../utils/asyncRouter';
 import { maskApp, restoreApp } from '../../utils/secretMask';
 import { AppFormValidator } from '../../validators/AppFormValidator';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/', async (_, res: Response) => {
     const allApps: App[] = await appService.getAllApps();

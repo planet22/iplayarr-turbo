@@ -2,8 +2,9 @@ import { Request, Response, Router } from 'express';
 
 import subscriptionArrService, { SubscriptionArrError } from '../../service/subscriptionArrService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 const fail = (res: Response, error: any, fallback: string) => {
     const known = error instanceof SubscriptionArrError;

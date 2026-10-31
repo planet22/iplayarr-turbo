@@ -3,8 +3,9 @@ import { Request, Response, Router } from 'express';
 import liveChannelFacade from '../../facade/liveChannelFacade';
 import { LiveChannelError } from '../../service/liveChannelService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/', async (_, res: Response) => {
     res.json(await liveChannelFacade.list());

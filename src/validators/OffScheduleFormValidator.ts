@@ -4,7 +4,8 @@ import { Validator } from './Validator';
 export class OffScheduleFormValidator extends Validator {
     async validate({ url }: any): Promise<{ [key: string]: string }> {
         const validatorError: { [key: string]: string } = {};
-        const brandPid: string | undefined = await iplayerDetailsService.findBrandForUrl(url);
+        const brandPid: string | undefined =
+            typeof url === 'string' ? await iplayerDetailsService.findBrandForUrl(url) : undefined;
         if (!brandPid) {
             validatorError.url = 'Invalid URL';
         }

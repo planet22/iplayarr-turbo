@@ -191,6 +191,12 @@ async function apiLayer(ctx) {
         rec(A, `app "${a.name}" (${a.type}) reachable`, t.status === 200 ? 'PASS' : 'WARN', `HTTP ${t.status} ${t.text.slice(0, 80)}`);
     }
 
+    // A failing login handler must answer (500 at worst), never hang the request
+    const login = await http('/auth/login', { method: 'POST', body: { username: 'smoke-temp', password: 'smoke-temp' }, timeout: 15000 });
+    rec(A, 'auth login answers instead of hanging', login.status > 0 ? 'PASS' : 'FAIL', login.error || `HTTP ${login.status}`);
+
+    await require('./probes.cjs').readOnly(ctx, { http, rec, BASE });
+
     // CSRF/cross-site guard sanity: a state-changing call from a foreign origin must not succeed
     const csrf = await http('/json-api/synonym', { method: 'POST', body: { from: 'x', target: 'y' }, headers: { origin: 'http://evil.example', 'sec-fetch-site': 'cross-site' } });
     rec(A, 'cross-site POST blocked', csrf.status === 403 || csrf.status === 401 ? 'PASS' : 'WARN', `HTTP ${csrf.status} (AUTH none may bypass)`);
@@ -277,8 +283,9 @@ async function uiLayer(ctx) {
                 const page = await context.newPage();
                 const problems = [];
                 page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
-                page.on('console', (m) => { if (m.type() === 'error' && !/favicon|ResizeObserver/.test(m.text())) problems.push('console: ' + m.text().slice(0, 120)); });
-                page.on('response', (r) => { const u = r.url(); if (r.status() >= 400 && u.startsWith(BASE) && !/favicon/.test(u)) problems.push(`${r.status()} ${u.replace(BASE, '')}`); });
+                page.on('console', (m) => { if (m.type() === 'error' && !/favicon|ResizeObserver/.test(m.text()) && !/\/json-api\/thumbnail\//.test(m.location().url || '')) problems.push('console: ' + m.text().slice(0, 120)); });
+                // A BBC image that is missing upstream 404s through the thumbnail route; the UI hides it (hideBrokenImage).
+                page.on('response', (r) => { const u = r.url(); if (r.status() >= 400 && u.startsWith(BASE) && !/favicon|\/json-api\/thumbnail\//.test(u)) problems.push(`${r.status()} ${u.replace(BASE, '')}`); });
                 try {
                     await page.goto(BASE + route, { waitUntil: 'networkidle', timeout: 45000 });
                     await page.waitForTimeout(600);
@@ -351,6 +358,8 @@ async function uiInteractions(browser, ctx) {
     if (WRITE && ONLY.includes('api')) {
         ctx.preLiveBbcFour = ((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four');
         await require('./reallife.cjs')(ctx, { http, rec, BASE, check });
+        await require('./settings.cjs')(ctx, { http, rec, BASE });
+        await require('./probes.cjs').write(ctx, { http, rec, BASE });
     }
     if (ONLY.includes('fs')) fsLayer(ctx);
     if (ONLY.includes('ui')) await uiLayer(ctx);

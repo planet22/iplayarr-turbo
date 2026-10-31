@@ -14,6 +14,7 @@ import { QueueEntry } from '../../types/QueueEntry';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { versionProfiles } from '../../types/VersionProfiles';
 import { VideoEventType } from '../../types/VideoEvent';
+import { asyncRouter } from '../../utils/asyncRouter';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
 import { maskConfig, restoreConfig } from '../../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../../utils/Utils';
@@ -21,7 +22,7 @@ import { ConfigFormValidator } from '../../validators/ConfigFormValidator';
 import { checkSettingsUpdate, EXECUTABLE_SETTINGS } from '../../validators/SettingsGuard';
 import { Validator } from '../../validators/Validator';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/hiddenSettings', (_, res: Response) => {
     res.json({

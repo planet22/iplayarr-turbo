@@ -6,11 +6,12 @@ import channelLogoService, { LOGO_MAX_BYTES, LogoError } from '../../service/cha
 import { CustomChannelError } from '../../service/customChannelService';
 import { ProbeError } from '../../service/streamProbeService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 import { isValidPid } from '../../utils/pathSafety';
 
 // The user's own live channels and the look (name, colour, logo, number) of any channel. Mounted beside
 // LiveChannelsRoute under /live-channels.
-const router = Router();
+const router: Router = asyncRouter();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: LOGO_MAX_BYTES, files: 1, fields: 5 } });
 
 const handle =

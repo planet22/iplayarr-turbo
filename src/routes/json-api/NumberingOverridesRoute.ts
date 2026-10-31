@@ -2,8 +2,9 @@ import { Request, Response, Router } from 'express';
 
 import numberingOverrideService from '../../service/numberingOverrideService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 

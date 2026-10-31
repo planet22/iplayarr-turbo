@@ -29,3 +29,19 @@ describe('OffScheduleFormValidator', () => {
         expect(result).toHaveProperty('url', 'Invalid URL');
     });
 });
+
+describe('OffScheduleFormValidator with a url that is not text', () => {
+    const validator = new OffScheduleFormValidator();
+
+    it.each([
+        ['missing', undefined],
+        ['an array', []],
+        ['an object', {}],
+        ['a number', 5],
+    ])('rejects %s without calling the lookup', async (_label, url) => {
+        (iplayerDetailsService.findBrandForUrl as jest.Mock).mockClear();
+        const result = await validator.validate({ url });
+        expect(result).toHaveProperty('url', 'Invalid URL');
+        expect(iplayerDetailsService.findBrandForUrl).not.toHaveBeenCalled();
+    });
+});

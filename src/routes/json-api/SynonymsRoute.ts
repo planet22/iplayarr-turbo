@@ -7,9 +7,10 @@ import { App } from '../../types/App';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { ArrLookupResponse } from '../../types/responses/arr/ArrLookupResponse';
 import { Synonym } from '../../types/Synonym';
+import { asyncRouter } from '../../utils/asyncRouter';
 import { SynonymFormValidator } from '../../validators/SynonymFormValidator';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/', async (_, res: Response) => {
     const synonyms = await synonymService.getAllSynonyms();

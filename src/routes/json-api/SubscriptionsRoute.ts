@@ -2,8 +2,9 @@ import { Request, Response, Router } from 'express';
 
 import subscriptionService, { SubscriptionError } from '../../service/subscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
 

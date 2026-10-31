@@ -1,0 +1,35 @@
+import { NextFunction, Request, RequestHandler, Response, Router, RouterOptions } from 'express';
+
+// Express 4 ignores the promise an async handler returns, so a handler that throws (or awaits something
+// that rejects) leaves the request hanging until the client gives up. This wraps a handler so a rejection,
+// or a synchronous throw, reaches the error handler like it would for a plain middleware.
+export function forwardErrors(handler: RequestHandler): RequestHandler {
+    return (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const result: unknown = handler(req, res, next);
+            if (result && typeof (result as Promise<unknown>).catch === 'function') {
+                (result as Promise<unknown>).catch(next);
+            }
+        } catch (err) {
+            next(err);
+        }
+    };
+}
+
+// Error handlers (four arguments) and nested routers must reach Express untouched.
+const wrap = (arg: unknown): unknown =>
+    typeof arg === 'function' && arg.length !== 4 && !('handle' in arg) ? forwardErrors(arg as RequestHandler) : arg;
+
+const wrapAll = (arg: unknown): unknown => (Array.isArray(arg) ? arg.map(wrap) : wrap(arg));
+
+const METHODS = ['all', 'get', 'post', 'put', 'delete', 'patch', 'head', 'options', 'use'] as const;
+
+// A Router whose handlers can be async functions without hanging the request when they fail.
+export function asyncRouter(options?: RouterOptions): Router {
+    const router = Router(options) as any;
+    for (const method of METHODS) {
+        const original = router[method].bind(router);
+        router[method] = (...args: unknown[]) => original(...args.map(wrapAll));
+    }
+    return router as Router;
+}

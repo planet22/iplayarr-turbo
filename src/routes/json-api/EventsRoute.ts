@@ -2,8 +2,9 @@ import { Request, Response, Router } from 'express';
 
 import videoEventService from '../../service/videoEventService';
 import { VideoEvent } from '../../types/VideoEvent';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/', async (req: Request, res: Response) => {
     const { pid, jobId, type, level } = req.query as { pid?: string; jobId?: string; type?: string; level?: string };

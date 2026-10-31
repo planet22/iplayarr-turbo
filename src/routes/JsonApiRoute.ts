@@ -18,6 +18,7 @@ import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { versionProfiles } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
+import { asyncRouter } from '../utils/asyncRouter';
 import { isValidPid } from '../utils/pathSafety';
 import { runInSearchContext } from '../utils/searchContext';
 import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
@@ -44,7 +45,7 @@ import SynonymsRoute from './json-api/SynonymsRoute';
 import VersionRoute from './json-api/VersionRoute';
 import WatchdogRoute from './json-api/WatchdogRoute';
 
-const router: Router = Router();
+const router: Router = asyncRouter();
 
 router.use('/config', SettingsRoute);
 router.use('/synonym', SynonymsRoute);
@@ -109,6 +110,10 @@ const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace:
 
 router.get('/search', async (req: Request, res: Response) => {
     const { q } = req.query as any;
+    if (q !== undefined && typeof q !== 'string') {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'The search term must be text' } as ApiResponse);
+        return;
+    }
     try {
         const { result, trace } = await withSearchTrace(() =>
             runInSearchContext('manual', () => searchFacade.search(q))

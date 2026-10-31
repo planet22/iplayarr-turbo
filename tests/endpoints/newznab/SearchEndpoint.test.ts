@@ -44,6 +44,21 @@ describe('SearchEndpoint', () => {
         };
     });
 
+    it.each([
+        ['q', ['a', 'b']],
+        ['q', { x: '1' }],
+        ['cat', ['5000', '2000']],
+        ['app', ['a', 'b']],
+    ])('answers 400 for a non-text %s without searching', async (key, value) => {
+        const status = jest.fn().mockReturnThis();
+        const json = jest.fn();
+        (searchFacade.search as jest.Mock).mockClear();
+        req.query = { ...req.query, [key]: value } as any;
+        await SearchEndpoint(req as Request, { ...res, status, json } as unknown as Response);
+        expect(status).toHaveBeenCalledWith(400);
+        expect(searchFacade.search).not.toHaveBeenCalled();
+    });
+
     it('responds with valid XML and logs search history', async () => {
         const fakeResults = [
             {

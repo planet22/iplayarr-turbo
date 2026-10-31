@@ -5,9 +5,10 @@ import browseService from '../../service/browseService';
 import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
 import liveChannelService from '../../service/liveChannelService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 import { addAvailableVersions } from '../../utils/videoVersion';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 const ID_REGEX = /^[a-z0-9_-]+$/i;
 const PID_REGEX = /^[a-z0-9]{6,}$/i;

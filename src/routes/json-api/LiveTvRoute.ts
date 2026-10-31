@@ -7,8 +7,9 @@ import liveTvService from '../../service/liveTvService';
 import liveTvSyncService from '../../service/liveTvSyncService';
 import { App } from '../../types/App';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 const fail = (res: Response, error: any, fallback: string) => {
     const known = error instanceof LiveTvChannelError;

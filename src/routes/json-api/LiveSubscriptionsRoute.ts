@@ -2,8 +2,9 @@ import { Request, Response, Router } from 'express';
 
 import liveSubscriptionService, { LiveSubscriptionError } from '../../service/liveSubscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 const fail = (res: Response, error: any, fallback: string) => {
     const known = error instanceof LiveSubscriptionError;

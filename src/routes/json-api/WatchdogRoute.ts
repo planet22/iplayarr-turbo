@@ -5,8 +5,9 @@ import cronJobService from '../../service/cronJobService';
 import strmWatchdogService from '../../service/strmWatchdogService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/', async (_: Request, res: Response) => {
     res.json(await strmWatchdogService.getStatus());

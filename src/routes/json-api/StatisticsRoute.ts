@@ -1,9 +1,10 @@
 import { Request, Response, Router } from 'express';
 
 import statisticsService from '../../service/stats/StatisticsService';
+import { asyncRouter } from '../../utils/asyncRouter';
 import { summariseSearchHistory } from '../../utils/searchHistorySummary';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/searchHistory', async (req: Request, res: Response) => {
     const { limit, filterRss, summary } = req.query as any as { limit?: number, filterRss?: boolean, summary?: string };
