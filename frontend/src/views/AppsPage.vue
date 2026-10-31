@@ -1,10 +1,10 @@
 <template>
     <div class="inner-content">
-        <SettingsPageToolbar class="flushToolbar" :icons="[]" />
+        <PageHeader title="Apps" />
+        <SettingsPageToolbar :icons="[]" />
         <InfoBar clazz="warning small">
             NZB clients need the category "iplayer" for NZB forwarding to work.
         </InfoBar>
-        <PageHeader title="Apps" />
         <InfoBar small>Manage the apps iPlayarr works with, including Arr and NZB clients.</InfoBar>
         <div class="block-reset" />
         <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm">
