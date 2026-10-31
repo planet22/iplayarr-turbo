@@ -1,4 +1,4 @@
-import { getHost } from './utils.js';
+import { getHost, noteServerTime } from './utils.js';
 
 // Sends a file (multipart) - ipFetch only speaks JSON.
 export const ipUpload = async (endpoint, field, file, method = 'POST') => {
@@ -21,6 +21,7 @@ export const ipFetch = async (endpoint, method = 'GET', body) => {
         options.body = JSON.stringify(body);
     }
     const response = await fetch(`${getHost()}/${endpoint}`, options);
+    noteServerTime(response.headers?.get('Date'));
     return {
         data: await response.json(),
         ok: response.ok,
