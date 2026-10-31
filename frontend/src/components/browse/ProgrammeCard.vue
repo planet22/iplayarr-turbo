@@ -2,7 +2,7 @@
     <!-- In selection mode the card is a plain block: a tap ticks it instead of opening the programme. -->
     <component
         :is="selectable ? 'div' : RouterLink" :class="['programmeCard', selectable ? 'selectable' : '', selected ? 'selected' : '']"
-        v-bind="selectable ? {} : { to: `/browse/programme/${item.seriesPid ?? item.pid}` }"
+        v-bind="selectable ? {} : { to: { path: `/browse/programme/${item.seriesPid ?? item.pid}`, query: item.seriesPid && item.seriesPid !== item.pid ? { episode: item.pid } : {} } }"
         @click="onCardClick"
     >
         <div :class="['thumb', badgesOn ? 'badgesOn' : '']">

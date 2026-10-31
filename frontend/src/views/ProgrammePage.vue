@@ -542,7 +542,7 @@ const reloadKey = ref(0);
 const reload = () => reloadKey.value++;
 
 watch(
-    () => [route.params.pid, reloadKey.value],
+    () => [route.params.pid, reloadKey.value, route.query.episode],
     async ([pid]) => {
         if (!pid) return;
         loading.value = true;
@@ -552,7 +552,7 @@ watch(
         focusedPid.value = null;
         highlightPid.value = null;
         focusFollow = false;
-        focusPending = pid;
+        focusPending = route.query.episode || pid;
         try {
             const first = await browseFetch(`programme/${encodeURIComponent(pid)}`);
             if (route.params.pid !== pid) return;
