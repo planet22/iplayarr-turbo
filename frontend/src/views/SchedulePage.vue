@@ -1,6 +1,6 @@
 <template>
     <div class="browsePage schedulePage">
-        <PageHeader :title="`Guide - ${dateLabel}`" />
+        <PageHeader :title="`Guide - ${dateLabel}`" icon="calendar-days" />
         <SettingsPageToolbar>
             <template #nav>
                 <button type="button" title="Previous day" aria-label="Previous day" @click="shiftDay(-1)">

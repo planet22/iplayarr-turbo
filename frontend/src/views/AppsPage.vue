@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content">
-        <PageHeader title="Apps" />
+        <PageHeader title="Apps" icon="laptop-code" />
         <SettingsPageToolbar :icons="[]" />
         <InfoBar clazz="warning small">
             NZB clients need the category "iplayer" for NZB forwarding to work.

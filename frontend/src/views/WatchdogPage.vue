@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content">
-        <PageHeader title="STRM Watchdog" />
+        <PageHeader title="Watchdog" icon="shield-halved" />
         <SettingsPageToolbar
             :icons="['run', 'refresh']"
             :running="live.running" :run-disabled="live.running ? stopping : !canRun"

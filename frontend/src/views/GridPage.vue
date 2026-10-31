@@ -1,6 +1,6 @@
 <template>
     <div class="browsePage">
-        <PageHeader :title="heading" />
+        <PageHeader :title="heading" :icon="isAtoZ ? 'arrow-down-a-z' : ''" />
         <SettingsPageToolbar inline-filters>
             <template v-if="items.length" #filters>
                 <span v-if="rails.length" class="gridFiltersTitle">All programmes</span>

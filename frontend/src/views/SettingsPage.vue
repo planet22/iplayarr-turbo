@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content">
-        <PageHeader title="Settings" />
+        <PageHeader title="Settings" icon="gears" />
         <SettingsPageToolbar
             inline-filters
             filters-last

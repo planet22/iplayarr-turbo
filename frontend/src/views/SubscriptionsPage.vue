@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content">
-        <PageHeader title="Subscriptions" />
+        <PageHeader title="Subscriptions" icon="bell" />
         <SettingsPageToolbar
             :icons="['refresh']" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
             refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"

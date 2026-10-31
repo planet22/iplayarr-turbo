@@ -1,8 +1,12 @@
 <template>
     <div class="inner-content scroll-x">
+        <PageHeader title="NZB" icon="satellite-dish" />
+        <SettingsPageToolbar
+            :icons="[]"
+            :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
+        />
         <PageHeader title="Recent Searches" />
         <SettingsPageToolbar
-            :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
             :icons="['delete', 'filterToggle']" delete-label="Clear searches"
             :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
             @delete-queue-item="clearSearches" @toggle-filters="searchShowFilters = !searchShowFilters"

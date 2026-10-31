@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content scroll-x">
-        <PageHeader title="Video Events" />
+        <PageHeader title="Video Events" icon="film" />
         <SettingsPageToolbar
             :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
             :icons="['delete', 'filterToggle']" delete-label="Clear video events"

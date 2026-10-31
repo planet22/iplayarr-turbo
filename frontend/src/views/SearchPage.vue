@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content searchTop">
-        <PageHeader title="Search" />
+        <PageHeader title="Search" icon="search" />
         <SettingsPageToolbar
             :icons="toolbarIcons"
             :view-mode="viewMode" :view-modes="['table', 'posters']" @update:view-mode="setViewMode"

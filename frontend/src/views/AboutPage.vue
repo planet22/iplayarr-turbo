@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content about-content">
-        <PageHeader title="About" />
+        <PageHeader title="About" icon="circle-info" />
         <SettingsPageToolbar :icons="[]" />
         <img :src="logoUrl" alt="Logo" class="logo" />
         <h3>iPlayarr Turbo</h3>
