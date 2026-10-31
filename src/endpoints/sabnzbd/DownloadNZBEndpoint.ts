@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Builder } from 'xml2js';
 
+import appService from '../../service/appService';
 import configService from '../../service/configService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { VideoType } from '../../types/IPlayerSearchResult';
@@ -25,6 +26,10 @@ interface DownloadNZBRequest {
 export default async (req: Request, res: Response) => {
     const { pid, nzbName, type, app, title, series, episode, episodeTitle, channel, pubDate, runtime, quality, version } =
         req.query as any as DownloadNZBRequest;
+
+    if (app) {
+        await appService.touchApp(app);
+    }
 
     const date: Date = new Date();
     date.setMinutes(date.getMinutes() - 720);
