@@ -37,7 +37,7 @@ Sections: Access, NZB Search, Manual Search, Appearance and (advanced) Schedule.
 | --- | --- | --- | --- |
 | Api Key | `API_KEY` | _(auto-generated)_ | Secures the Newznab/SABnzbd API surface (`?apikey=`). Regenerate from the field's button; Settings will offer to push the new key out to configured Apps. |
 | Native Search | `NATIVE_SEARCH` | `true` | Queries BBC's own search API + local Lunr re-ranking (`NativeSearchService`) instead of shelling out to `get_iplayer --search`. Toggling it clears the search cache. |
-| Native Search Engine _(advanced)_ | `NATIVE_SEARCH_ENGINE` | `V1` | Only shown when Native Search is on. `V1` ("1.0") is the stable engine. `V2` ("2.0", experimental) looks hits up concurrently, fetches episode details several at a time, retries failed episode-list pages and pages nested series; results should be identical, so switch back if anything looks wrong. |
+| Native Search Engine _(advanced)_ | `NATIVE_SEARCH_ENGINE` | `V2` | Only shown when Native Search is on. `V1` ("1.0") is the original engine. `V2` ("2.0", the default) looks hits up concurrently, fetches episode details several at a time, retries failed episode-list pages and pages nested series; results should be identical, so switch to `V1` if anything looks wrong. |
 | Requested Series Only _(advanced)_ | `NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY` | `false` | Engine 2.0 only. Fetch just the season Sonarr/Radarr asks for, which is faster for long shows. Not used with synonyms or Airdate Numbering. Never applies to manual search. |
 | Match All Words _(advanced)_ | `SEARCH_MATCH_ALL_WORDS` | `true` | Only list results containing every word searched for. Turn off for looser matching. |
 | Manual Search overrides | `MANUAL_NATIVE_SEARCH`, `MANUAL_NATIVE_SEARCH_ENGINE`, `MANUAL_SEARCH_MATCH_ALL_WORDS` | `inherit` | The Native Search, engine and Match All Words settings above are the NZB search settings (used by Sonarr/Radarr). These twins apply to manual search on the Search page only; `inherit` ("Same as NZB search") follows the setting above, so you can try a different engine by hand without changing what Sonarr/Radarr get. Manual results are cached separately when the settings differ. The Search page shows the active manual setup below its results, with a link to Settings. |
@@ -58,10 +58,10 @@ Settings named `UI_*` are stored with the rest of the configuration and apply to
 | Show Quick Find Button | _(per browser)_ | on | The lightning-bolt button in the top bar. `Ctrl+K` / `Cmd+K` works either way. |
 | Show Info Messages | `UI_INFO_MESSAGES` | `true` | The blue explanatory notes at the top of pages. Warnings and errors always show. |
 | Colour Channel Pills | `UI_PILL_COLORS` | `true` | Colour channel labels to match each BBC logo. |
-| Show Channel Tools | `UI_CHANNEL_TOOLS` | `false` | The arrange, library, Live TV and customise buttons on the Channels page. Off keeps the page simple. |
-| Show HDR / UHD Badge _(advanced)_ | `UI_QUALITY_BADGES` | `false` | A badge where iPlayer lists HDR or Ultra HD. It is only a label: iPlayarr streams HD at most. |
-| Show Audio Described / Signed Badge _(advanced)_ | `UI_VERSION_BADGES` | `false` | Marks programmes and episodes that have an audio described or signed version. Also reveals the Versions settings. |
-| Show Subtitle Badge _(advanced)_ | `UI_SUBTITLE_BADGES` | `false` | A subtitles icon on episodes. Not checked per programme: the BBC gives most of them subtitles. |
+| Show Channel Tools | `UI_CHANNEL_TOOLS` | `true` | The arrange, library, Live TV and customise buttons on the Channels page. Turn off to keep the page simple. |
+| Show HDR / UHD Badge _(advanced)_ | `UI_QUALITY_BADGES` | `true` | A badge where iPlayer lists HDR or Ultra HD. It is only a label: iPlayarr streams HD at most. |
+| Show Audio Described / Signed Badge _(advanced)_ | `UI_VERSION_BADGES` | `true` | Marks programmes and episodes that have an audio described or signed version. Also reveals the Versions settings. |
+| Show Subtitle Badge _(advanced)_ | `UI_SUBTITLE_BADGES` | `true` | A subtitles icon on episodes. Not checked per programme: the BBC gives most of them subtitles. |
 
 Debug logging is controlled by the `DEBUG` env var (default `false`) — not exposed in the Settings UI, since it also flips permissive CORS for local frontend-dev-server use (`src/server.ts`). Set it in the container/process environment, not via Settings.
 
@@ -86,7 +86,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
-| Download Limit | `ACTIVE_LIMIT` | `3` | Max simultaneous downloads, 1-10. The queue never runs fewer than one at a time. |
+| Download Limit | `ACTIVE_LIMIT` | `4` | Max simultaneous downloads, 1-10. The queue never runs fewer than one at a time. |
 | Download Client? | `DOWNLOAD_CLIENT` | `NATIVE` | `NATIVE`, `GET_IPLAYER` or `YTDLP` (experimental) — which tool actually performs full downloads (`AbstractDownloadService` implementations). `NATIVE` (the default and the fastest) resolves the BBC stream itself and has ffmpeg copy it to a file, so no get_iplayer/yt-dlp is spawned; it doesn't embed subtitles or resume an interrupted download yet, so pick `GET_IPLAYER` if you need those. `YTDLP` in a non-root container needs `cap_add: [NET_BIND_SERVICE]` - see the note under [Stream Client](#streaming-settings--streaming) below. |
 | Additional Download Parameters _(advanced)_ | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | Extra CLI parameters appended to the `get_iplayer` download invocation. |
 | Ask Which Version _(advanced)_ | `DOWNLOAD_ASK_VERSION` | `true` | Shown once the Audio Described / Signed badge setting is on. When an item has an audio described or signed version, ask which to download or subscribe to. Off uses the Default Version wherever the item has it. See [Versions](#versions-audio-described-and-signed). |
@@ -107,7 +107,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Video Quality | `VIDEO_QUALITY` | `fhd` | See above. |
 | Additional Qualities | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | Offer these qualities as extra search results too, so Sonarr/Radarr can choose between them. Empty offers only the Video Quality. |
 | Additional Versions | `EXTRA_VERSIONS` | _(empty)_ | Also list these programme versions (audio described, signed) as separate releases tagged in the name (`...AUDIO.DESCRIBED.WEBDL...`). Only programmes that have the version get a variant. Match the tag with a Sonarr/Radarr Custom Format. See [Versions](#versions-audio-described-and-signed). |
-| Release Language _(advanced)_ | `RELEASE_LANGUAGE` | `none` | Adds a language tag such as `ENGLISH` to release names. Use it if Sonarr/Radarr shows an Unknown language and will not grab. |
+| Release Language _(advanced)_ | `RELEASE_LANGUAGE` | `english` | Adds a language tag such as `ENGLISH` to release names. Use it if Sonarr/Radarr shows an Unknown language and will not grab. |
 | Airdate Numbering _(advanced)_ | `AIRDATE_NUMBERING` | `false` | Number episodes by UK air date (TheTVDB) instead of iPlayer's numbers; falls back to iPlayer's if nothing matches. Changing it clears the episode-details and search caches. |
 | Output Format? | `OUTPUT_FORMAT` | `mp4` | `mp4` or `mkv`. |
 | Archive Downloads? | `ARCHIVE_ENABLED` | `false` | Keep cancelled/removed queue and history items instead of discarding them. See `src/facade/downloadFacade.ts` and `historyService.addArchive`. |
@@ -132,9 +132,9 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Native Quality | `STREAM_NATIVE_ADAPTIVE` | `false` | Native client only. |
 | Native Quality Probe | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only. |
 | Native FHD Upgrade | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only. |
-| Native Subtitles | `STREAM_SUBTITLES` | `false` | Native client, Direct mode. Adds the BBC's captions as an English subtitle track, for on-demand and live. See [STREAMING.md](STREAMING.md#subtitles). |
+| Native Subtitles | `STREAM_SUBTITLES` | `true` | Native client, Direct mode. Adds the BBC's captions as an English subtitle track, for on-demand and live. See [STREAMING.md](STREAMING.md#subtitles). |
 | UHD Event Feeds | `LIVE_UHD_EVENT_FEEDS` | `false` | Native client. Lists BBC's UHD event feeds (`uk bbc stream 031`, `041`-`044`: up to 2160p HEVC, DASH only) among the live channels. They only carry video while a big event is on; between events they are listed but do not play. Needs a UK IP and a player (or Jellyfin transcoder) that handles 4K HEVC. Turning it off removes any subscribed feeds from the library (their `.strm` files are deleted) and from Jellyfin Live TV; the UI asks first. |
-| Live 1080p (Experimental) | `STREAM_LIVE_DASH_1080` | `false` | Native client. Live channels as 1080p HEVC (BBC's DASH feed, mediaset `iptv-mse`) instead of 720p HLS, in both Direct and Progressive MKV modes. Direct mode presents the feed as HLS playlists and proxies BBC's segments untouched (no ffmpeg); Progressive MKV mode needs ffmpeg. Needs a player that decodes HEVC; subtitles are not offered on these channels. Falls back to 720p HLS if BBC offers no DASH for the channel. |
+| Live 1080p (Experimental) | `STREAM_LIVE_DASH_1080` | `true` | Native client. Live channels as 1080p HEVC (BBC's DASH feed, mediaset `iptv-mse`) instead of 720p HLS, in both Direct and Progressive MKV modes. Direct mode presents the feed as HLS playlists and proxies BBC's segments untouched (no ffmpeg); Progressive MKV mode needs ffmpeg. Needs a player that decodes HEVC; subtitles are not offered on these channels. Falls back to 720p HLS if BBC offers no DASH for the channel. |
 | Ask Which Version to Play _(advanced)_ | `PLAY_ASK_VERSION` | `true` | Native client, once the Audio Described / Signed badge setting is on. The Play button asks which version to play when there is more than one. Off plays the default below. The player can switch version either way. |
 | Default Version to Play _(advanced)_ | `PLAY_DEFAULT_VERSION` | _(standard)_ | Used when Ask is off and pre-selected when it is on. |
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
@@ -147,7 +147,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
-| Live TV | `LIVE_TV_ENABLED` | `false` | Enables the tuner and guide endpoints and shows the tuner/guide URLs. |
+| Live TV | `LIVE_TV_ENABLED` | `true` | Enables the tuner and guide endpoints and shows the tuner/guide URLs. |
 | EPG Time Offset | `LIVE_TV_EPG_OFFSET` | `0` | Minutes to shift the guide (whole number, -1440 to 1440). Guide times are already in the server's timezone. |
 | Channel Logo Shape | `LIVE_TV_LOGO_SHAPE` | `landscape` | `landscape` (16:9, suits guide cards) or `square` (suits channel tiles). Save and Update the tuner after changing. |
 | Guide Categories | `LIVE_TV_GUIDE_CATEGORIES` | `true` | Tag programmes with their BBC category (plus Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
@@ -157,7 +157,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 
 ## STRM Watchdog (Settings → Streaming)
 
-Daily check that `.strm` links still resolve on BBC. Off by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_WEBHOOK_URL`.
+Daily check that `.strm` links still resolve on BBC. On by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_WEBHOOK_URL`.
 
 ## Versions (audio described and signed)
 

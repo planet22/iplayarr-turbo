@@ -8,7 +8,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `DOWNLOAD_DIR` | _(none)_ | **Yes** | In-progress download directory. |
 | `COMPLETE_DIR` | _(none)_ | **Yes** | Completed download directory. |
 | `ARR_COMPLETE_DIR` | _(unset)_ | No | Override of `COMPLETE_DIR` for TV downloads Sonarr/Radarr themselves queued only - not manual UI downloads or subscriptions, even for TV. |
-| `ACTIVE_LIMIT` | `3` | No | Max simultaneous downloads (1-10). |
+| `ACTIVE_LIMIT` | `4` | No | Max simultaneous downloads (1-10). |
 | `DOWNLOAD_CLIENT` | `NATIVE` | No | `NATIVE`, `GET_IPLAYER` or `YTDLP`. |
 | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (Docker image) | No | Path to the `get_iplayer` binary. |
 | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (Docker image) | No | Path to the `yt-dlp` binary. |
@@ -18,7 +18,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `OUTPUT_FORMAT` | `mp4` | No | `mp4` or `mkv`. |
 | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | No | Comma-separated extra qualities offered as additional search results. |
 | `EXTRA_VERSIONS` | _(empty)_ | No | Comma-separated programme versions (`audio-described`, `signed`) listed as separate tagged releases. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed). |
-| `RELEASE_LANGUAGE` | `none` | No | Language tag added to release names (for Sonarr/Radarr's parser). |
+| `RELEASE_LANGUAGE` | `english` | No | Language tag added to release names (for Sonarr/Radarr's parser). |
 | `AIRDATE_NUMBERING` | `false` | No | Number episodes by UK air date instead of iPlayer's numbers. |
 | `DOWNLOAD_ASK_VERSION` | `true` | No | Ask which version (audio described / signed) to download or subscribe to. |
 | `DOWNLOAD_DEFAULT_VERSION` | _(standard)_ | No | Version used when not asking: empty, `audio-described` or `signed`. |
@@ -34,7 +34,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `SCHEDULE_FULL_REFRESH` | `false` | No | Re-fetch every day in the window instead of caching passed days. |
 | `RSS_FEED_HOURS` | `48` | No | Lookback window for the RSS feed endpoint (1-720). |
 | `NATIVE_SEARCH` | `true` | No | Use BBC's native search API instead of `get_iplayer --search`. |
-| `NATIVE_SEARCH_ENGINE` | `V1` | No | `V1` (stable) or `V2` (experimental: concurrent lookups, retries); only used when `NATIVE_SEARCH` is on. |
+| `NATIVE_SEARCH_ENGINE` | `V2` | No | `V1` (original) or `V2` (concurrent lookups, retries); only used when `NATIVE_SEARCH` is on. |
 | `NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY` | `false` | No | Engine V2: fetch only the requested season. Never applies to manual search. |
 | `SEARCH_MATCH_ALL_WORDS` | `true` | No | Only list results containing every searched word. |
 | `MANUAL_NATIVE_SEARCH` | `inherit` | No | Search-page override of `NATIVE_SEARCH` (`inherit`, `true`, `false`). |
@@ -58,18 +58,18 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `STREAM_NATIVE_ADAPTIVE` | `false` | No | Adaptive bitrate for native streaming. |
 | `STREAM_NATIVE_HQ_PROBE` | `false` | No | Verify real connection quality before playing. |
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | No | 1080p unlock trick for native streaming. |
-| `STREAM_SUBTITLES` | `false` | No | Offer the BBC's captions as an English subtitle track on native streams (on-demand and live). See [STREAMING.md](STREAMING.md#subtitles). |
+| `STREAM_SUBTITLES` | `true` | No | Offer the BBC's captions as an English subtitle track on native streams (on-demand and live). See [STREAMING.md](STREAMING.md#subtitles). |
 | `LIVE_UHD_EVENT_FEEDS` | `false` | No | List BBC's UHD event feeds (`uk bbc stream 031`, `041`-`044`) among the live channels. DASH only, 2160p HEVC; they only carry video while an event is on. |
-| `STREAM_LIVE_DASH_1080` | `false` | No | Experimental: serve live channels as 1080p HEVC (BBC's DASH feed) in Direct mode (as HLS playlists, no ffmpeg) and Progressive MKV mode (ffmpeg). Falls back to 720p HLS. |
+| `STREAM_LIVE_DASH_1080` | `true` | No | Experimental: serve live channels as 1080p HEVC (BBC's DASH feed) in Direct mode (as HLS playlists, no ffmpeg) and Progressive MKV mode (ffmpeg). Falls back to 720p HLS. |
 | `LIVE_STRM_DIR` | _(unset)_ | No | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR`. |
-| `LIVE_TV_ENABLED` | `false` | No | Serve the live channels as an M3U tuner + XMLTV guide for Jellyfin Live TV. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
+| `LIVE_TV_ENABLED` | `true` | No | Serve the live channels as an M3U tuner + XMLTV guide for Jellyfin Live TV. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
 | `LIVE_TV_EPG_OFFSET` | `0` | No | Minutes to shift the Live TV guide, on top of the server-timezone times. See [STREAMING.md](STREAMING.md#jellyfin-live-tv-tuner--guide). |
 | `LIVE_TV_LOGO_SHAPE` | `landscape` | No | Live TV channel logo shape: `landscape` (16:9) or `square`. |
 | `LIVE_TV_GUIDE_CATEGORIES` | `true` | No | Tag Live TV guide programmes with BBC categories (Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
 | `LIVE_TV_GUIDE_FLAGS` | `true` | No | Tag Live TV guide programmes as live / new / repeat. |
 | `LIVE_TV_GUIDE_HD` | `true` | No | Mark Live TV guide programmes as HD. |
 | `LIVE_TV_JELLYFIN_APPS` | _(unset)_ | No | Comma-separated Jellyfin app ids (from the Apps page) asked to refresh their guide when the Live TV channel list changes. Normally set by ticking servers in Settings. |
-| `STRM_WATCHDOG_ENABLED` | `false` | No | Daily check that `.strm` links still resolve. See [WATCHDOG.md](WATCHDOG.md). |
+| `STRM_WATCHDOG_ENABLED` | `true` | No | Daily check that `.strm` links still resolve. See [WATCHDOG.md](WATCHDOG.md). |
 | `STRM_WATCHDOG_SOURCES` | `history` | No | Comma-separated: `subscribed`, `history`, `app:<id>`. |
 | `STRM_WATCHDOG_ACTION` | `notify` | No | `notify` or `delete` for an expired link. |
 | `STRM_WATCHDOG_PATH_MAP` | _(unset)_ | No | Sonarr/Jellyfin path to in-container path, e.g. `/tv=/library/tv` (`;` separated). |
@@ -81,11 +81,11 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `THUMBNAIL_RETENTION_DAYS` | `30` | No | Thumbnail cache cleanup window. |
 | `STREAM_HISTORY_RETENTION_DAYS` | `30` | No | Native stream history cleanup window. |
 | `UI_PILL_COLORS` | `true` | No | Colour channel pills by logo (all browsers). |
-| `UI_CHANNEL_TOOLS` | `false` | No | Show the arrange / library / Live TV / customise buttons on the Channels page. |
+| `UI_CHANNEL_TOOLS` | `true` | No | Show the arrange / library / Live TV / customise buttons on the Channels page. |
 | `UI_INFO_MESSAGES` | `true` | No | Show the blue explanatory notes at the top of pages. |
-| `UI_QUALITY_BADGES` | `false` | No | HDR / UHD badges on cards. |
-| `UI_VERSION_BADGES` | `false` | No | Audio described / signed badges (also reveals the version settings). |
-| `UI_SUBTITLE_BADGES` | `false` | No | Subtitles icon on episodes. |
+| `UI_QUALITY_BADGES` | `true` | No | HDR / UHD badges on cards. |
+| `UI_VERSION_BADGES` | `true` | No | Audio described / signed badges (also reveals the version settings). |
+| `UI_SUBTITLE_BADGES` | `true` | No | Subtitles icon on episodes. |
 | `HIDE_DONATE` | _(unset)_ | No | Hides the Ko-fi donate links in the UI. |
 | `PUID` | `1000` | No | Host user ID the container runs as (`docker_entry.sh`). |
 | `PGID` | `1000` | No | Host group ID the container runs as. |

@@ -38,7 +38,7 @@ Actions are taken once per link.
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
-| STRM Watchdog | `STRM_WATCHDOG_ENABLED` | `false` | Master switch. |
+| STRM Watchdog | `STRM_WATCHDOG_ENABLED` | `true` | Master switch. |
 | Watchdog Sources | `STRM_WATCHDOG_SOURCES` | `history` | Comma-separated: `subscribed`, `history`, `app:<id>`. |
 | Watchdog Action | `STRM_WATCHDOG_ACTION` | `notify` | `notify` / `delete`. |
 | Watchdog Path Mapping | `STRM_WATCHDOG_PATH_MAP` | _(unset)_ | Sonarr/Jellyfin path to the same folder inside this container, e.g. `/tv=/library/tv`; separate several with `;`. Shown when a Sonarr/Radarr/Jellyfin source is selected. |
