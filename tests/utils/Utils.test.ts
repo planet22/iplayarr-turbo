@@ -276,6 +276,13 @@ describe('Utils', () => {
             await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.WEBDL.1080p-BBC');
         });
 
+        it('never leaves a path separator in a release name, whatever the template puts there', async () => {
+            withConfig({ RELEASE_LANGUAGE: 'none', TV_FILENAME_TEMPLATE: '{{title}}\\x/{{title}}.S{{season}}E{{episode}}' });
+            const name = await Utils.createNZBName(tv);
+            expect(name).toBe('Show.x.Show.S01E02');
+            expect(name).not.toMatch(/[\\/]/);
+        });
+
         it('tags TV and movie releases when English is selected', async () => {
             withConfig({ RELEASE_LANGUAGE: 'english' });
             await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.ENGLISH.WEBDL.1080p-BBC');

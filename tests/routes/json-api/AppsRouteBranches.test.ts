@@ -61,13 +61,13 @@ describe('AppsRoute branches', () => {
         it('tests with the stored secret when the form still holds the mask', async () => {
             (appService.getApp as jest.Mock).mockResolvedValue({ id: 'a', api_key: 'stored-key' });
             (appService.testAppConnection as jest.Mock).mockResolvedValue(true);
-            await request(app).post('/test').send({ id: 'a', api_key: SECRET_MASK }).expect(200);
+            await request(app).post('/test').send({ id: 'a', type: 'SONARR', api_key: SECRET_MASK }).expect(200);
             expect(appService.testAppConnection).toHaveBeenCalledWith(expect.objectContaining({ api_key: 'stored-key' }));
         });
 
         it('tests a new app without looking anything up', async () => {
             (appService.testAppConnection as jest.Mock).mockResolvedValue(true);
-            await request(app).post('/test').send({ api_key: 'typed' }).expect(200);
+            await request(app).post('/test').send({ type: 'SONARR', api_key: 'typed' }).expect(200);
             expect(appService.getApp).not.toHaveBeenCalled();
         });
     });

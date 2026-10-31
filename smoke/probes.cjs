@@ -157,6 +157,14 @@ async function readOnly(ctx, h) {
     rec(P, 'X-Content-Type-Options: nosniff on the app shell', /nosniff/i.test(home.headers.get('x-content-type-options') || '') ? 'PASS' : 'WARN', home.headers.get('x-content-type-options'));
     rec(P, 'the app shell cannot be framed (X-Frame-Options or CSP frame-ancestors)', home.headers.get('x-frame-options') || /frame-ancestors/i.test(home.headers.get('content-security-policy') || '') ? 'PASS' : 'WARN', 'neither header present');
 
+    // 5b. Bad input and unknown ids get a 4xx, not a 500 with a library message
+    const badApp = await raw('/json-api/apps/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    rec(P, 'apps/test with no app answers 400, not a 500 "connection failed"', badApp.status === 400 ? 'PASS' : 'FAIL', `HTTP ${badApp.status} ${badApp.text.slice(0, 80)}`);
+    const noProg = await raw('/json-api/browse/programme/m0000000');
+    rec(P, 'an unknown programme id answers 404 without the library message', noProg.status === 404 && !/status code/.test(noProg.text) ? 'PASS' : 'FAIL', `HTTP ${noProg.status} ${noProg.text.slice(0, 100)}`);
+    const noDl = await raw('/json-api/download?pid=m0000000');
+    rec(P, 'downloading an unknown programme id answers 404', noDl.status === 404 ? 'PASS' : 'FAIL', `HTTP ${noDl.status} ${noDl.text.slice(0, 100)}`);
+
     // 6. NZB output must stay valid XML whatever it is asked to name
     const nzb = await raw(`/api?mode=nzb-download&pid=${pid}&nzbName=${encodeURIComponent('</nzb><injected attr="1"/>&x"\'')}&type=TV&apikey=${apikey}&title=${encodeURIComponent('<b>&')}`);
     rec(P, 'nzb-download escapes a hostile name (no injected element, no bare &)', nzb.status === 200 && !/<injected/.test(nzb.text) && !BAD_XML_AMP.test(nzb.text) ? 'PASS' : 'FAIL', `HTTP ${nzb.status} ${nzb.text.slice(0, 160)}`);
@@ -341,8 +349,8 @@ async function write(ctx, h) {
             ['NATIVE_SEARCH_ENGINE', 'V9', 'WARN'], ['MANUAL_NATIVE_SEARCH_ENGINE', 'V9', 'WARN'], ['NATIVE_SEARCH', 'maybe', 'WARN'], ['LIVE_TV_LOGO_SHAPE', 'triangle', 'WARN'],
             ['WRITE_NFO_STRM', 'sometimes', 'WARN'], ['STRM_WATCHDOG_ACTION', 'explode', 'WARN'], ['STRM_WATCHDOG_ARR_ACTION', 'explode', 'WARN'], ['STRM_WATCHDOG_SOURCES', 'nowhere', 'WARN'],
             ['RELEASE_LANGUAGE', 'klingon', 'WARN'],
-            ['REFRESH_SCHEDULE', 'not a cron', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * * *', 'WARN'], ['REFRESH_SCHEDULE', '* * * * *', 'WARN'],
-            ['STRM_WATCHDOG_WEBHOOK_URL', 'file:///etc/passwd', 'FAIL'], ['STRM_WATCHDOG_WEBHOOK_URL', 'http://169.254.169.254/latest/meta-data/', 'WARN'],
+            ['REFRESH_SCHEDULE', 'not a cron', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * * *', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * *', 'FAIL'],
+            ['STRM_WATCHDOG_WEBHOOK_URL', 'file:///etc/passwd', 'FAIL'], ['STRM_WATCHDOG_WEBHOOK_URL', 'http://169.254.169.254/latest/meta-data/', 'PASS-IF-ACCEPTED'],
             ['STREAM_BASE_URL', 'javascript:alert(1)', 'FAIL'], ['STREAM_BASE_URL', 'ftp://example.invalid/', 'FAIL'], ['STREAM_BASE_URL', 'http://', 'FAIL'],
             ['THUMBNAIL_RETENTION_DAYS', '-5', 'WARN'], ['THUMBNAIL_RETENTION_DAYS', 'abc', 'WARN'], ['LIVE_TV_EPG_OFFSET', '1e3', 'WARN'],
         ];
@@ -350,7 +358,9 @@ async function write(ctx, h) {
             later(() => put({ [key]: before[key] ?? '' }));
             const r = await put({ [key]: value });
             const accepted = r.status === 200;
-            rec(P, `${key} = ${JSON.stringify(value)} is refused`, accepted ? level : 'PASS', accepted ? 'accepted and stored; the server will use it as-is or silently fall back' : '');
+            // 'PASS-IF-ACCEPTED' marks a value the server may legitimately accept (a webhook URL pointing at an internal host is the operator's choice).
+            if (level === 'PASS-IF-ACCEPTED') rec(P, `${key} = ${JSON.stringify(value)} is accepted (an internal webhook is the operator's choice)`, 'PASS');
+            else rec(P, `${key} = ${JSON.stringify(value)} is refused`, accepted ? level : 'PASS', accepted ? 'accepted and stored; the server will use it as-is or silently fall back' : '');
             if (accepted) await put({ [key]: before[key] ?? '' });
             if (r.status >= 500) rec(P, `${key} = ${JSON.stringify(value)} did not crash the handler`, 'FAIL', `HTTP ${r.status}`);
         }

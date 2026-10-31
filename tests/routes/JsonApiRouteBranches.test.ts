@@ -91,14 +91,30 @@ describe('JsonApiRoute branches', () => {
             expect(mockedAdd.mock.calls[0].slice(1, 3)).toEqual(['mine.nzb', 'TV']);
         });
 
-        it('500s when BBC has no details for the programme, or the lookup fails', async () => {
+        it('404s when BBC has no details for the programme', async () => {
             getMetadata.mockResolvedValue({ programme: { pid: 'p01xyz' } });
             const none = await request(app).get('/download').query({ pid: 'p01xyz' });
-            expect(none.status).toBe(500);
-            expect(none.body).toEqual({ error: ApiError.INTERNAL_ERROR, message: 'Unable to find episode details' });
+            expect(none.status).toBe(404);
+            expect(none.body).toEqual({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' });
+            expect(mockedAdd).not.toHaveBeenCalled();
+        });
+
+        it('404s when the BBC says it does not know the programme', async () => {
+            getMetadata.mockRejectedValue({ isAxiosError: true, response: { status: 404 }, message: 'Request failed with status code 404' });
+            const res = await request(app).get('/download').query({ pid: 'p01xyz' });
+            expect(res.status).toBe(404);
+            expect(res.body.message).not.toContain('status code');
+            expect(mockedAdd).not.toHaveBeenCalled();
+        });
+
+        it('502s when the BBC itself misbehaves, and 500s for any other failure', async () => {
+            getMetadata.mockRejectedValue({ isAxiosError: true, response: { status: 503 }, message: 'Request failed with status code 503' });
+            expect((await request(app).get('/download').query({ pid: 'p01xyz' })).status).toBe(502);
 
             getMetadata.mockRejectedValue(new Error('down'));
-            expect((await request(app).get('/download').query({ pid: 'p01xyz' })).status).toBe(500);
+            const other = await request(app).get('/download').query({ pid: 'p01xyz' });
+            expect(other.status).toBe(500);
+            expect(other.body.message).toBe('Unable to find episode details');
             expect(mockedAdd).not.toHaveBeenCalled();
         });
 

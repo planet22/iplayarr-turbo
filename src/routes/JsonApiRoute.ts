@@ -22,6 +22,7 @@ import { asyncRouter } from '../utils/asyncRouter';
 import { isValidPid } from '../utils/pathSafety';
 import { runInSearchContext } from '../utils/searchContext';
 import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
+import { failureResponse } from '../utils/upstreamError';
 import { calculateSeasonAndEpisode, getQualityProfile, parseSeasonEpisodeFromFilename } from '../utils/Utils';
 import { addAvailableVersions, applyVersionToRelease } from '../utils/videoVersion';
 import AppsRoute from './json-api/AppsRoute';
@@ -231,7 +232,7 @@ router.get('/download', async (req: Request, res: Response) => {
         try {
             metadata = await iplayerDetailsService.getMetadata(pid);
             if (!metadata?.programme.display_title) {
-                res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: 'Unable to find episode details' } as ApiResponse);
+                res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' } as ApiResponse);
                 return;
             }
             if (!type) {
@@ -244,8 +245,9 @@ router.get('/download', async (req: Request, res: Response) => {
                 nzbName = nzbName.replaceAll('.', '_')
                 nzbName = nzbName.replaceAll(' ', '.');
             }
-        } catch {
-            res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: 'Unable to find episode details' } as ApiResponse);
+        } catch (err: any) {
+            const { status, body } = failureResponse(err, 'Unable to find episode details');
+            res.status(status).json(status === 500 ? { ...body, message: 'Unable to find episode details' } : body);
             return;
         }
     }

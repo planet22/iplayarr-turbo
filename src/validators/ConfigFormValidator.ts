@@ -4,12 +4,16 @@ import nzbFacade from '../facade/nzbFacade';
 import { FilenameTemplateContext } from '../types/FilenameTemplateContext';
 import { NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { versionProfiles } from '../types/VersionProfiles';
+import { checkSchedule } from '../utils/cronSchedule';
 import { Validator } from './Validator';
 
 // Download Limit: how many downloads run at once. 10 is far past what the BBC's servers or a NAS will sustain.
 export const MAX_ACTIVE_LIMIT = NUMERIC_SETTING_LIMITS.ACTIVE_LIMIT.max;
 // Hours the RSS feed looks back (default 48): a month is already a very heavy listing.
 export const MAX_RSS_FEED_HOURS = NUMERIC_SETTING_LIMITS.RSS_FEED_HOURS.max;
+// The Schedule Refresh job refuses to run more often than every 15 minutes (see taskService).
+export const REFRESH_SCHEDULE_MIN_MINUTES = 15;
+const OUTPUT_FORMATS = ['mp4', 'mkv'];
 
 // A setting that must be a whole number from min to max. `required` ones must be given; the others may be blank
 // (the default applies) or left out of the request.
@@ -43,6 +47,20 @@ export class ConfigFormValidator extends Validator {
         checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', 1, 1000, false);
         checkWholeNumber(validatorError, input, 'STREAM_HISTORY_RETENTION_DAYS', 'Stream history retention', 1, 3650, false);
 
+        // Read by node-cron when the server starts: text that does not parse stops every scheduled job being set up.
+        if (input.REFRESH_SCHEDULE !== undefined && input.REFRESH_SCHEDULE !== '') {
+            const problem = checkSchedule(input.REFRESH_SCHEDULE, REFRESH_SCHEDULE_MIN_MINUTES);
+            if (problem) {
+                validatorError['REFRESH_SCHEDULE'] = problem;
+            }
+        }
+        if (input.OUTPUT_FORMAT !== undefined && input.OUTPUT_FORMAT !== '' && !OUTPUT_FORMATS.includes(input.OUTPUT_FORMAT)) {
+            validatorError['OUTPUT_FORMAT'] = 'Output format must be mp4 or mkv';
+        }
+        if (input.STRM_WATCHDOG_WEBHOOK_URL && !this.isHttpUrl(input.STRM_WATCHDOG_WEBHOOK_URL)) {
+            validatorError['STRM_WATCHDOG_WEBHOOK_URL'] = 'Please provide an http:// or https:// address';
+        }
+
         if (!input.AUTH_USERNAME) {
             validatorError['AUTH_USERNAME'] = 'Please provide a Username';
         }
@@ -70,11 +88,8 @@ export class ConfigFormValidator extends Validator {
                 validatorError['NZB_PASSWORD'] = response as string;
             }
         }
-        if (
-            (input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true') &&
-            !this.isValidUrl(input.STREAM_BASE_URL)
-        ) {
-            validatorError['STREAM_BASE_URL'] = 'Please provide a valid base URL (e.g. http://jellyfin-host:4404)';
+        if ((input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true') && !this.isHttpUrl(input.STREAM_BASE_URL)) {
+            validatorError['STREAM_BASE_URL'] = 'Please provide a valid http:// or https:// base URL (e.g. http://jellyfin-host:4404)';
         }
         if (
             input.LIVE_TV_EPG_OFFSET !== undefined &&

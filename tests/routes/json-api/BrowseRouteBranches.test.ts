@@ -44,6 +44,20 @@ describe('BrowseRoute branches', () => {
             expect(res.body).toEqual({ error: ApiError.INTERNAL_ERROR, message: 'Browse request failed' });
         });
 
+        it('answers 404, not 500, when the BBC does not know the programme', async () => {
+            browse.home.mockRejectedValue({ isAxiosError: true, response: { status: 404 }, message: 'Request failed with status code 404' });
+            const res = await request(app).get('/home');
+            expect(res.status).toBe(404);
+            expect(res.body).toEqual({ error: ApiError.API_NOT_FOUND, message: 'Programme not found' });
+        });
+
+        it('answers 502 when the BBC itself fails', async () => {
+            browse.home.mockRejectedValue({ isAxiosError: true, response: { status: 503 }, message: 'Request failed with status code 503' });
+            const res = await request(app).get('/home');
+            expect(res.status).toBe(502);
+            expect(res.body.message).toBe('The BBC did not answer as expected');
+        });
+
         it('rethrows a failure that is not a discover error, as a 500', async () => {
             (categoryDiscoverService.set as jest.Mock).mockRejectedValue(new Error('db down'));
             const res = await request(app).put('/categories/comedy/discover').send({ enabled: true });

@@ -3,7 +3,7 @@ import { Request, Response, Router } from 'express';
 import appService from '../../service/appService';
 import userAgentMappingService from '../../service/userAgentMappingService';
 import { App } from '../../types/App';
-import { appFeatures } from '../../types/AppType';
+import { appFeatures, AppType } from '../../types/AppType';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { UserAgentMapping } from '../../types/UserAgentMapping';
 import { asyncRouter } from '../../utils/asyncRouter';
@@ -82,13 +82,18 @@ router.get('/types', async (_, res: Response) => {
 
 router.post('/test', async (req: Request, res: Response) => {
     const body = req.body as App;
+    // Nothing to test without an app of a known type: that is a bad request, not a failed connection.
+    if (!body || typeof body !== 'object' || !Object.values(AppType).includes(body.type)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'An app with a valid type is required' } as ApiResponse);
+        return;
+    }
     const result = await appService.testAppConnection(
         restoreApp(body, body?.id ? await appService.getApp(body.id) : undefined)
     );
     if (result == true) {
         res.json({ status: true });
     } else {
-        res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: result } as ApiResponse);
+        res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: typeof result === 'string' ? result : 'Connection test failed' } as ApiResponse);
     }
     return;
 });

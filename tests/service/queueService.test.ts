@@ -64,6 +64,41 @@ describe('queueService', () => {
         }
     });
 
+    describe('addToQueue duplicates', () => {
+        const entries = (pid: string) => queueService.getQueue().filter((e) => e.pid === pid);
+
+        beforeEach(() => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('1');
+            (downloadFacade.download as jest.Mock).mockReturnValue(new Promise(() => undefined));
+        });
+
+        it('ignores the same release queued twice, as a double-clicked Download would', () => {
+            queueService.addToQueue('dupe1', 'Dupe NZB', VideoType.TV);
+            queueService.addToQueue('dupe1', 'Dupe NZB', VideoType.TV);
+            expect(entries('dupe1')).toHaveLength(1);
+            queueService.cancelItem('dupe1');
+        });
+
+        it('keeps releases that differ by name (an extra quality or version), by source, or by programme', () => {
+            queueService.addToQueue('dupe2', 'Dupe.1080p', VideoType.TV);
+            queueService.addToQueue('dupe2', 'Dupe.720p', VideoType.TV);
+            queueService.addToQueue('dupe2', 'Dupe.1080p', VideoType.TV, undefined, undefined, QueueEntrySource.NZB);
+            queueService.addToQueue('dupe3', 'Dupe.1080p', VideoType.TV);
+            expect(entries('dupe2')).toHaveLength(3);
+            expect(entries('dupe3')).toHaveLength(1);
+            queueService.cancelItem('dupe2');
+            queueService.cancelItem('dupe3');
+        });
+
+        it('does not record a grab for the ignored duplicate', () => {
+            (statisticsService.addGrab as jest.Mock).mockClear();
+            queueService.addToQueue('dupe4', 'Dupe NZB', VideoType.TV, undefined, undefined, QueueEntrySource.NZB);
+            queueService.addToQueue('dupe4', 'Dupe NZB', VideoType.TV, undefined, undefined, QueueEntrySource.NZB);
+            expect(statisticsService.addGrab).toHaveBeenCalledTimes(1);
+            queueService.cancelItem('dupe4');
+        });
+    });
+
     describe('addToQueue', () => {
         it('kills a download that was cancelled while it was still starting', async () => {
             (configService.getParameter as jest.Mock).mockResolvedValue('1');

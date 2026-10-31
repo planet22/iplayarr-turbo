@@ -67,13 +67,13 @@ describe('TaskService', () => {
 
     it('registers the schedule-refresh task with the configured cron and refreshes/cleans up when run', async () => {
         (configService.getParameter as jest.Mock)
-            .mockResolvedValueOnce('*/5 * * * *') // REFRESH_SCHEDULE
+            .mockResolvedValueOnce('*/30 * * * *') // REFRESH_SCHEDULE
             .mockResolvedValueOnce('false'); // NATIVE_SEARCH
 
         await TaskService.init();
 
         const { 'schedule-refresh': task } = definedTasks();
-        expect(task.definition.cron).toBe('*/5 * * * *');
+        expect(task.definition.cron).toBe('*/30 * * * *');
 
         await task.run();
 
@@ -82,9 +82,26 @@ describe('TaskService', () => {
         expect(episodeCacheService.recacheAllSeries).toHaveBeenCalled();
     });
 
+    it.each([['not a cron'], ['* * * * *'], [''], [undefined]])(
+        'falls back to the default schedule for %j and still defines every other job',
+        async (configured) => {
+            (configService.getParameter as jest.Mock)
+                .mockResolvedValueOnce(configured) // REFRESH_SCHEDULE
+                .mockResolvedValueOnce('true'); // NATIVE_SEARCH
+
+            await TaskService.init();
+
+            const tasks = definedTasks();
+            expect(tasks['schedule-refresh'].definition.cron).toBe('0 * * * *');
+            expect(Object.keys(tasks)).toEqual(
+                expect.arrayContaining(['guide-refresh', 'subscriptions-check', 'thumbnail-cleanup', 'strm-watchdog'])
+            );
+        }
+    );
+
     it('skips recaching if native search is enabled', async () => {
         (configService.getParameter as jest.Mock)
-            .mockResolvedValueOnce('*/5 * * * *') // REFRESH_SCHEDULE
+            .mockResolvedValueOnce('*/30 * * * *') // REFRESH_SCHEDULE
             .mockResolvedValueOnce('true'); // NATIVE_SEARCH
 
         await TaskService.init();

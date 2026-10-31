@@ -79,7 +79,7 @@ describe('ConfigFormValidator (extra)', () => {
 
     it('requires a valid stream base URL in strm mode only', async () => {
         const strm = await validator.validate({ ...validInput(), MEDIA_MODE: 'strm', STREAM_BASE_URL: 'nope' });
-        expect(strm.STREAM_BASE_URL).toContain('valid base URL');
+        expect(strm.STREAM_BASE_URL).toContain('base URL');
         expect(await validator.validate({ ...validInput(), MEDIA_MODE: 'strm', STREAM_BASE_URL: 'http://h:4404' })).toEqual({});
         expect(await validator.validate({ ...validInput(), MEDIA_MODE: 'download', STREAM_BASE_URL: 'nope' })).toEqual({});
     });

@@ -8,6 +8,13 @@ const router: Router = asyncRouter();
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+// 2020-02-30 has the right shape but is not a day, so it could never match a broadcast.
+const isRealDate = (value: string): boolean => {
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return year >= 1 && date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
+
 router.get('/', async (_: Request, res: Response) => {
     res.json(await numberingOverrideService.getAll());
 });
@@ -21,6 +28,7 @@ router.post('/', async (req: Request, res: Response) => {
         show.length > 200 ||
         typeof airDate !== 'string' ||
         !DATE_REGEX.test(airDate) ||
+        !isRealDate(airDate) ||
         !Number.isInteger(series) ||
         series < 0 ||
         !Number.isInteger(episode) ||

@@ -63,7 +63,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
         quality: qualityProfile.quality,
         language,
     } as FilenameTemplateContext)
-        .replaceAll(/[\s/]|[\s\\-_]{2,}/g, '.')
+        .replaceAll(/[\s/\\]|[\s\\-_]{2,}/g, '.')
         .replaceAll(/\.{2,}/g, '.');
 
     // Sonarr/Radarr read a release's language from its title, so tag it explicitly - unless the

@@ -104,6 +104,16 @@ describe('StreamEndpoint branches', () => {
         });
     });
 
+    describe('an unknown programme', () => {
+        it('answers 404, not 500, when the BBC has no such programme', async () => {
+            const { ProgrammeNotFoundError } = jest.requireActual('../../../src/utils/upstreamError');
+            (NativeStreamService.streamDirect as jest.Mock).mockRejectedValue(new ProgrammeNotFoundError('No programme found for pid x (status 404)'));
+            const res = await run({ pid: 'm0032yps' });
+            expect(res.status).toHaveBeenCalledWith(404);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Programme not found' }));
+        });
+    });
+
     describe('errors without a message', () => {
         it('say "Streaming failed" for a stream service', async () => {
             (NativeStreamService.streamDirect as jest.Mock).mockRejectedValue({});

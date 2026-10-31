@@ -14,6 +14,15 @@ jest.mock('xml2js', () => {
     };
 });
 
+describe('DownloadNZBEndpoint input', () => {
+    it.each([['../../x'], [''], [undefined], [['a', 'b']]])('answers 400 for a programme id of %j without building an NZB', async (pid) => {
+        const res: any = { set: jest.fn(), send: jest.fn(), status: jest.fn().mockReturnThis(), json: jest.fn() };
+        await DownloadNZBEndpoint({ query: { pid, nzbName: 'x', type: VideoType.TV } } as unknown as Request, res as Response);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.send).not.toHaveBeenCalled();
+    });
+});
+
 describe('DownloadNZBEndpoint', () => {
     it('responds with the correct NZB file', async () => {
         const sendMock = jest.fn();

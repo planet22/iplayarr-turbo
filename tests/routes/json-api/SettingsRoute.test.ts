@@ -29,6 +29,7 @@ const mockedConfigFormValidator: jest.Mocked<ConfigFormValidator> = {
     isNumber: jest.fn(),
     matchesRegex: jest.fn(),
     isValidUrl: jest.fn(),
+    isHttpUrl: jest.fn(),
 };
 jest.mock('../../../src/validators/ConfigFormValidator', () => ({
     ConfigFormValidator: jest.fn(() => mockedConfigFormValidator),
@@ -138,6 +139,16 @@ describe('SettingsRoute', () => {
                 expect(response.statusCode).toBe(400);
                 expect(response.body.invalid_fields).toEqual({ EVIL: 'Unknown setting' });
                 expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
+            });
+
+            it('stores JSON booleans and numbers as text, and null as empty', async () => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                const response = await put({ DEBUG: true, ACTIVE_LIMIT: 5, UI_PILL_COLORS: false, SUB_DIR: null });
+                expect(response.statusCode).toBe(200);
+                expect(mockedConfigService.setParameter).toHaveBeenCalledWith('DEBUG', 'true');
+                expect(mockedConfigService.setParameter).toHaveBeenCalledWith('ACTIVE_LIMIT', '5');
+                expect(mockedConfigService.setParameter).toHaveBeenCalledWith('UI_PILL_COLORS', 'false');
+                expect(mockedConfigService.setParameter).toHaveBeenCalledWith('SUB_DIR', '');
             });
 
             it('rejects object values', async () => {

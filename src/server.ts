@@ -154,7 +154,7 @@ const startServer = () => {
     });
 
     //Cron
-    taskService.init();
+    taskService.init().catch((err) => loggingService.error('Scheduled jobs failed to start', err?.message ?? err));
 
     liveSubscriptionService.resync();
 };

@@ -21,6 +21,7 @@ import { qualityProfiles } from '../../types/QualityProfiles';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { isValidPid } from '../../utils/pathSafety';
 import { requestedQuality, runWithQuality } from '../../utils/qualityContext';
+import { failureResponse } from '../../utils/upstreamError';
 import { requestedVersion, runWithVersion } from '../../utils/versionContext';
 
 // Media-server library scans (ffprobe) hit .strm URLs on every scan. Probing doesn't need a
@@ -152,7 +153,8 @@ async function handleStream(req: Request, res: Response): Promise<void> {
         } catch (err: any) {
             loggingService.error(err);
             if (!res.headersSent) {
-                res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: err?.message ?? 'Streaming failed' } as ApiResponse);
+                const { status, body } = failureResponse(err, 'Streaming failed');
+                res.status(status).json(body);
             }
         }
         return;
@@ -178,7 +180,8 @@ async function handleStream(req: Request, res: Response): Promise<void> {
         } catch (err: any) {
             loggingService.error(err);
             if (!res.headersSent) {
-                res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: err?.message ?? 'Streaming failed' } as ApiResponse);
+                const { status, body } = failureResponse(err, 'Streaming failed');
+                res.status(status).json(body);
             }
         }
         return;
@@ -246,7 +249,8 @@ async function handleStream(req: Request, res: Response): Promise<void> {
     } catch (err: any) {
         loggingService.error(err);
         if (!res.headersSent) {
-            res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: err?.message ?? 'Streaming failed' } as ApiResponse);
+            const { status, body } = failureResponse(err, 'Streaming failed');
+                res.status(status).json(body);
         }
     }
 }

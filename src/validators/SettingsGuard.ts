@@ -17,6 +17,18 @@ const ALLOWED_PROGRAMS = /^(get_iplayer(\.pl|\.cmd|\.exe)?|yt-dlp(_linux|\.exe)?
 // get_iplayer options that run an arbitrary command.
 const FORBIDDEN_OPTIONS = /^--?(command|exec)(=|$)/i;
 
+// Every reader compares settings with text ('true', '5'), so a JSON boolean or number is stored as its text and null
+// as empty. Objects and arrays are left for checkSettingsUpdate to refuse.
+export function normaliseSettingValues(body: unknown): unknown {
+    if (body === null || typeof body !== 'object' || Array.isArray(body)) return body;
+    return Object.fromEntries(
+        Object.entries(body as Record<string, unknown>).map(([key, value]) => [
+            key,
+            value === null ? '' : typeof value === 'boolean' || typeof value === 'number' ? String(value) : value,
+        ])
+    );
+}
+
 export const isKnownSetting = (key: string): boolean => (Object.values(IplayarrParameter) as string[]).includes(key);
 
 // Checks a settings update before any of it is applied. `current` is the config in effect now and

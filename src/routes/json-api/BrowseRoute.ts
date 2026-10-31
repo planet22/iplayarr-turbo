@@ -6,6 +6,7 @@ import categoryDiscoverService, { CategoryDiscoverError } from '../../service/ca
 import liveChannelService from '../../service/liveChannelService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
+import { failureResponse } from '../../utils/upstreamError';
 import { addAvailableVersions } from '../../utils/videoVersion';
 
 const router: Router = asyncRouter();
@@ -30,10 +31,8 @@ const handle =
         try {
             await fn(req, res);
         } catch (error: any) {
-            res.status(500).json({
-                error: ApiError.INTERNAL_ERROR,
-                message: error?.message || 'Browse request failed',
-            } as ApiResponse);
+            const { status, body } = failureResponse(error, 'Browse request failed');
+            res.status(status).json(body);
         }
     };
 

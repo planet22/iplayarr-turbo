@@ -130,7 +130,7 @@ describe('App Router', () => {
         it('returns status true if test succeeds', async () => {
             (appService.testAppConnection as jest.Mock).mockResolvedValue(true);
 
-            const res = await request(app).post('/test').send({ config: true });
+            const res = await request(app).post('/test').send({ type: 'SONARR' });
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ status: true });
         });
@@ -138,12 +138,33 @@ describe('App Router', () => {
         it('returns error if test fails', async () => {
             (appService.testAppConnection as jest.Mock).mockResolvedValue('Connection error');
 
-            const res = await request(app).post('/test').send({});
+            const res = await request(app).post('/test').send({ type: 'SONARR' });
             expect(res.status).toBe(500);
             expect(res.body).toEqual({
                 error: ApiError.INTERNAL_ERROR,
                 message: 'Connection error',
             });
+        });
+
+        it('says "Connection test failed" when the test fails without a message', async () => {
+            (appService.testAppConnection as jest.Mock).mockResolvedValue(false);
+
+            const res = await request(app).post('/test').send({ type: 'SONARR' });
+            expect(res.status).toBe(500);
+            expect(res.body.message).toBe('Connection test failed');
+        });
+
+        it.each([
+            ['an empty body', {}],
+            ['an unknown type', { type: 'BANANA' }],
+            ['a type that is not text', { type: ['SONARR'] }],
+        ])('answers 400 for %s instead of testing a connection', async (_label, body) => {
+            (appService.testAppConnection as jest.Mock).mockClear();
+
+            const res = await request(app).post('/test').send(body);
+            expect(res.status).toBe(400);
+            expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+            expect(appService.testAppConnection).not.toHaveBeenCalled();
         });
     });
 
