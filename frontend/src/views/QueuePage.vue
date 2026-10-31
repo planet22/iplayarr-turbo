@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content scroll-x">
-        <PageHeader title="Queue" icon="tasks" />
+        <PageHeader title="Queue" icon="clipboard-list" />
         <SettingsPageToolbar
             :view-mode="queueTable?.viewMode" :view-modes="queueTable ? ['table', 'cards'] : []"
             :icons="['delete', 'filterToggle']" delete-label="Remove selected"

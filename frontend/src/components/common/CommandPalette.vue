@@ -62,7 +62,7 @@ const PAGES = [
     { label: 'Channels', path: '/browse/channels', icon: 'tower-broadcast', words: 'live' },
     { label: 'Categories', path: '/browse/categories', icon: 'layer-group', words: 'genres' },
     { label: 'A to Z', path: '/browse/atoz', icon: 'arrow-down-a-z', words: 'alphabetical' },
-    { label: 'Queue', path: '/queue', icon: 'tasks', words: 'downloads history' },
+    { label: 'Queue', path: '/queue', icon: 'clipboard-list', words: 'downloads history' },
     { label: 'Subscriptions', path: '/subscriptions', icon: 'bell', words: 'follow' },
     { label: 'Streaming', path: '/streaming', icon: 'play', words: 'sessions' },
     { label: 'Video Events', path: '/events', icon: 'clapperboard', words: 'playback' },

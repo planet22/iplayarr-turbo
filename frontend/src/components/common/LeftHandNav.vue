@@ -25,7 +25,7 @@
                 <font-awesome-icon class="groupChevron" :icon="['fas', isOpen('activity') ? 'chevron-down' : 'chevron-right']" />
             </li>
             <template v-if="isOpen('activity')">
-            <LeftHandNavLink label="Queue" icon="tasks" path="/queue" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Queue" icon="clipboard-list" path="/queue" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Video Events" icon="clapperboard" path="/events" @option-clicked="closeLHN" />
