@@ -1,6 +1,6 @@
 # Library organization and NFO metadata
 
-By default, iPlayarr drops every completed download into one flat folder under `COMPLETE_DIR`, named after the generated NZB name (e.g. `Show.Name.S01E02.Episode.Title.WEBDL.1080p-BBC.mp4`). That works fine for Sonarr/Radarr, but it's not how media servers like Jellyfin, Plex, or Emby expect a library to be laid out, and it carries no metadata beyond what's in the filename.
+By default, iPlayarr drops every completed download into one flat folder under `COMPLETE_DIR`, named after the generated NZB name (e.g. `Show.Name.S01E02.Episode.Title.WEBDL.1080p-BBCiPlayarrTurbo.mp4`). That works fine for Sonarr/Radarr, but it's not how media servers like Jellyfin, Plex, or Emby expect a library to be laid out, and it carries no metadata beyond what's in the filename.
 
 Two settings fix that without changing anything about how Sonarr/Radarr see the download.
 
@@ -62,7 +62,7 @@ With `LIBRARY_FOLDER_STRUCTURE` on, once Sonarr/Radarr imports (moves) a file ou
 | `ARR_COMPLETE_DIR` | unset | Overrides `COMPLETE_DIR` for Sonarr/Radarr-queued TV downloads only |
 | `WRITE_NFO_STRM` | `manual` | `none`/`all`/`nzb`/`manual` — writes `.nfo` metadata; independent of `MEDIA_MODE` |
 | `WRITE_STRMTOOL_JSON` | `false` | Writes a `.strmtool.json` sidecar for `.strm` files; requires `WRITE_NFO_STRM` on |
-| `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC` | Advanced setting — only affects the flat (non-folder-structure) filename |
-| `MOVIE_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC` | Advanced setting — same caveat |
+| `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBCiPlayarrTurbo` | Advanced setting — only affects the flat (non-folder-structure) filename |
+| `MOVIE_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBCiPlayarrTurbo` | Advanced setting — same caveat |
 
 See [TURBO.md](../TURBO.md#jellyfin-style-library-organization) for implementation details, and the main [README.md](../README.md) for the full settings list.

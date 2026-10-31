@@ -251,9 +251,9 @@ describe('DownloadFacade', () => {
 
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 path.join(pidDir, 'episode.mkv'),
-                path.join('/complete', 'Show.S01E01.mkv')
+                path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv')
             );
-            expect(queueItem.libraryPath).toBe('Show.S01E01.mkv');
+            expect(queueItem.libraryPath).toBe('Show.S01E01-BBCiPlayarrTurbo.mkv');
             expect(historyService.addHistory).toHaveBeenCalled();
         });
 
@@ -282,7 +282,7 @@ describe('DownloadFacade', () => {
 
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 path.join(pidDir, 'Bing_Songs_original.mp4'),
-                path.join('/complete', 'Bing.S03E06.mp4')
+                path.join('/complete', 'Bing.S03E06-BBCiPlayarrTurbo.mp4')
             );
             expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
         });
@@ -305,13 +305,13 @@ describe('DownloadFacade', () => {
                 '/complete',
                 'Show Name',
                 'Season 01',
-                'Show Name - S01E01 - The Episode.mkv'
+                'Show Name - S01E01 - The Episode-BBCiPlayarrTurbo.mkv'
             );
             expect(fs.mkdirSync).toHaveBeenCalledWith(path.join('/complete', 'Show Name', 'Season 01'), {
                 recursive: true,
             });
             expect(fs.copyFileSync).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), expectedPath);
-            expect(queueItem.libraryPath).toBe('Show Name/Season 01/Show Name - S01E01 - The Episode.mkv');
+            expect(queueItem.libraryPath).toBe('Show Name/Season 01/Show Name - S01E01 - The Episode-BBCiPlayarrTurbo.mkv');
         });
 
         it('writes .nfo + tvshow.nfo (but no extra .strm) for a real download when WRITE_NFO_STRM is on', async () => {
@@ -333,7 +333,7 @@ describe('DownloadFacade', () => {
             const showDir = path.join('/complete', 'Show Name');
 
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join(seasonDir, 'Show Name - S01E01 - The Episode.nfo'),
+                path.join(seasonDir, 'Show Name - S01E01 - The Episode-BBCiPlayarrTurbo.nfo'),
                 expect.stringContaining('<episodedetails>'),
                 'utf8'
             );
@@ -364,7 +364,7 @@ describe('DownloadFacade', () => {
             await runDownloadToCompletion(queueItem);
 
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/complete', 'Show.S01E01.nfo'),
+                path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.nfo'),
                 expect.stringContaining('<episodedetails>'),
                 'utf8'
             );
@@ -397,7 +397,7 @@ describe('DownloadFacade', () => {
             const [[writtenPath, writtenContent]] = (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) =>
                 String(filePath).endsWith('.strmtool.json')
             );
-            expect(writtenPath).toBe(path.join('/complete', 'Show.S01E01.strmtool.json'));
+            expect(writtenPath).toBe(path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.strmtool.json'));
             expect(JSON.parse(writtenContent as string)).toMatchObject({ isValid: true, container: 'mkv' });
         });
 
@@ -438,7 +438,7 @@ describe('DownloadFacade', () => {
 
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 path.join(pidDir, 'episode.mkv'),
-                path.join('/arr-complete', 'Show.S01E01.mkv')
+                path.join('/arr-complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv')
             );
         });
 
@@ -458,7 +458,7 @@ describe('DownloadFacade', () => {
 
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 path.join(pidDir, 'movie.mkv'),
-                path.join('/arr-complete', 'Some.Movie.mkv')
+                path.join('/arr-complete', 'Some.Movie-BBCiPlayarrTurbo.mkv')
             );
         });
 
@@ -478,7 +478,7 @@ describe('DownloadFacade', () => {
 
             expect(fs.copyFileSync).toHaveBeenCalledWith(
                 path.join(pidDir, 'episode.mkv'),
-                path.join('/complete', 'Show.S01E01.mkv')
+                path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv')
             );
         });
 

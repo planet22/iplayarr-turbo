@@ -4,6 +4,7 @@ import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
 import { resolveInside, sanitizeFileName } from './pathSafety';
+import { applyGroupToName, RELEASE_GROUP } from './releaseGroup';
 
 // The directory reported as complete_dir by get_config, and where everything Sonarr/Radarr/
 // Prowlarr queued lands: ARR_COMPLETE_DIR when set, otherwise COMPLETE_DIR. The apps only
@@ -32,6 +33,10 @@ function sanitizeSegment(segment: string): string {
     // Leading dots would let a title of ".." name the parent directory.
     return segment.replace(illegalCharsRegex, '').replace(/^[.s]+/, '').trim() || 'Unknown';
 }
+
+// Release group stamped on every file name, so Sonarr/Radarr record it and a scan can tell our
+// video files (not just .strm links) from anything else in the library.
+const releaseGroupSuffix = `-${RELEASE_GROUP}`;
 
 export interface LibraryFilePath {
     // Absolute directory the file should be written into.
@@ -73,7 +78,7 @@ function buildUncheckedLibraryFilePath(
     extension: string,
     useFolderStructure: boolean
 ): LibraryFilePath {
-    const flatFileName = `${sanitizeFileName(item.nzbName)}.${extension}`;
+    const flatFileName = `${sanitizeFileName(applyGroupToName(item.nzbName))}.${extension}`;
     if (!useFolderStructure || !item.library?.title) {
         return {
             directory: completeDir,
@@ -87,7 +92,7 @@ function buildUncheckedLibraryFilePath(
     const showTitle = sanitizeSegment(title);
 
     if (item.type === VideoType.MOVIE) {
-        const fileName = `${showTitle}.${extension}`;
+        const fileName = `${showTitle}${releaseGroupSuffix}.${extension}`;
         const directory = path.join(completeDir, showTitle);
         return {
             directory,
@@ -108,7 +113,7 @@ function buildUncheckedLibraryFilePath(
     const fileNameBase = episodeTitle
         ? `${showTitle} - ${episodeCode} - ${sanitizeSegment(episodeTitle)}`
         : `${showTitle} - ${episodeCode}`;
-    const fileName = `${fileNameBase}.${extension}`;
+    const fileName = `${fileNameBase}${releaseGroupSuffix}.${extension}`;
 
     const showDirectory = path.join(completeDir, showTitle);
     const directory = path.join(showDirectory, seasonFolderName);

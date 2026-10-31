@@ -23,9 +23,9 @@ describe('buildLibraryFilePath', () => {
         const item = baseItem({ library: { title: 'Show Name', series: 1, episode: 2 } });
         const result = buildLibraryFilePath(completeDir, item, 'mkv', false);
 
-        expect(result.fileName).toBe('Show.Name.S01E02.WEBDL.720p-BBC.mkv');
-        expect(result.fullPath).toBe(path.join(completeDir, 'Show.Name.S01E02.WEBDL.720p-BBC.mkv'));
-        expect(result.relativePath).toBe('Show.Name.S01E02.WEBDL.720p-BBC.mkv');
+        expect(result.fileName).toBe('Show.Name.S01E02.WEBDL.720p-BBCiPlayarrTurbo.mkv');
+        expect(result.fullPath).toBe(path.join(completeDir, 'Show.Name.S01E02.WEBDL.720p-BBCiPlayarrTurbo.mkv'));
+        expect(result.relativePath).toBe('Show.Name.S01E02.WEBDL.720p-BBCiPlayarrTurbo.mkv');
         expect(result.showDirectory).toBeUndefined();
     });
 
@@ -33,7 +33,7 @@ describe('buildLibraryFilePath', () => {
         const item = baseItem();
         const result = buildLibraryFilePath(completeDir, item, 'mkv', true);
 
-        expect(result.relativePath).toBe('Show.Name.S01E02.WEBDL.720p-BBC.mkv');
+        expect(result.relativePath).toBe('Show.Name.S01E02.WEBDL.720p-BBCiPlayarrTurbo.mkv');
     });
 
     it('builds a Show/Season NN/Show - SxxExx - Title.ext layout for TV', () => {
@@ -42,8 +42,8 @@ describe('buildLibraryFilePath', () => {
         });
         const result = buildLibraryFilePath(completeDir, item, 'mkv', true);
 
-        expect(result.fileName).toBe('Show Name - S01E02 - The Episode.mkv');
-        expect(result.relativePath).toBe('Show Name/Season 01/Show Name - S01E02 - The Episode.mkv');
+        expect(result.fileName).toBe('Show Name - S01E02 - The Episode-BBCiPlayarrTurbo.mkv');
+        expect(result.relativePath).toBe('Show Name/Season 01/Show Name - S01E02 - The Episode-BBCiPlayarrTurbo.mkv');
         expect(result.directory).toBe(path.join(completeDir, 'Show Name', 'Season 01'));
         expect(result.showDirectory).toBe(path.join(completeDir, 'Show Name'));
     });
@@ -52,15 +52,15 @@ describe('buildLibraryFilePath', () => {
         const item = baseItem({ library: { title: 'Show Name', series: 1, episode: 2 } });
         const result = buildLibraryFilePath(completeDir, item, 'mkv', true);
 
-        expect(result.fileName).toBe('Show Name - S01E02.mkv');
+        expect(result.fileName).toBe('Show Name - S01E02-BBCiPlayarrTurbo.mkv');
     });
 
     it('builds a Movie Title/Movie Title.ext layout for movies', () => {
         const item = baseItem({ type: VideoType.MOVIE, nzbName: 'Movie.Name.WEBDL', library: { title: 'Movie Name' } });
         const result = buildLibraryFilePath(completeDir, item, 'mp4', true);
 
-        expect(result.fileName).toBe('Movie Name.mp4');
-        expect(result.relativePath).toBe('Movie Name/Movie Name.mp4');
+        expect(result.fileName).toBe('Movie Name-BBCiPlayarrTurbo.mp4');
+        expect(result.relativePath).toBe('Movie Name/Movie Name-BBCiPlayarrTurbo.mp4');
         expect(result.showDirectory).toBe(path.join(completeDir, 'Movie Name'));
     });
 
@@ -70,7 +70,7 @@ describe('buildLibraryFilePath', () => {
         });
         const result = buildLibraryFilePath(completeDir, item, 'mkv', true);
 
-        expect(result.fileName).toBe('Show Name - S01E02 - WhoWhat.mkv');
+        expect(result.fileName).toBe('Show Name - S01E02 - WhoWhat-BBCiPlayarrTurbo.mkv');
     });
 });
 

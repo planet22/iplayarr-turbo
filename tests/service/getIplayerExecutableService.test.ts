@@ -366,8 +366,8 @@ describe('GetIplayerExecutableService', () => {
 
             const results = await service.processCompletedSearch(mockResults, mockSynonym);
 
-            expect(results[0]).toHaveProperty('nzbName', 'TV-Test.Title-test.nzb-720p');
-            expect(results[1]).toHaveProperty('nzbName', 'TV-Different.Title--720p');
+            expect(results[0]).toHaveProperty('nzbName', 'TV-Test.Title-test.nzb-720p-BBCiPlayarrTurbo');
+            expect(results[1]).toHaveProperty('nzbName', 'TV-Different.Title--720p-BBCiPlayarrTurbo');
             expect(mockedSynonymService.getSynonym).not.toHaveBeenCalled();
         });
 
@@ -417,8 +417,8 @@ describe('GetIplayerExecutableService', () => {
 
             const results = await service.processCompletedSearch(mockResults, undefined);
 
-            expect(results[0]).toHaveProperty('nzbName', 'TV-Test.Title-test.nzb-720p');
-            expect(results[1]).toHaveProperty('nzbName', 'TV-Different.Title--720p');
+            expect(results[0]).toHaveProperty('nzbName', 'TV-Test.Title-test.nzb-720p-BBCiPlayarrTurbo');
+            expect(results[1]).toHaveProperty('nzbName', 'TV-Different.Title--720p-BBCiPlayarrTurbo');
             expect(synonymService.getSynonym).toHaveBeenCalledWith('Test Title');
         });
     });

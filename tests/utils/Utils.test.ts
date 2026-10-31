@@ -268,30 +268,30 @@ describe('Utils', () => {
 
         it('is English by default', async () => {
             withConfig({});
-            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.ENGLISH.WEBDL.1080p-BBC');
+            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.ENGLISH.WEBDL.1080p-BBCiPlayarrTurbo');
         });
 
         it('can be switched off', async () => {
             withConfig({ RELEASE_LANGUAGE: 'none' });
-            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.WEBDL.1080p-BBC');
+            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');
         });
 
         it('never leaves a path separator in a release name, whatever the template puts there', async () => {
             withConfig({ RELEASE_LANGUAGE: 'none', TV_FILENAME_TEMPLATE: '{{title}}\\x/{{title}}.S{{season}}E{{episode}}' });
             const name = await Utils.createNZBName(tv);
-            expect(name).toBe('Show.x.Show.S01E02');
+            expect(name).toBe('Show.x.Show.S01E02-BBCiPlayarrTurbo');
             expect(name).not.toMatch(/[\\/]/);
         });
 
         it('tags TV and movie releases when English is selected', async () => {
             withConfig({ RELEASE_LANGUAGE: 'english' });
-            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.ENGLISH.WEBDL.1080p-BBC');
-            await expect(Utils.createNZBName(movie)).resolves.toBe('Film.ENGLISH.WEBDL.1080p-BBC');
+            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.S01E02.ENGLISH.WEBDL.1080p-BBCiPlayarrTurbo');
+            await expect(Utils.createNZBName(movie)).resolves.toBe('Film.ENGLISH.WEBDL.1080p-BBCiPlayarrTurbo');
         });
 
         it('respects a template that places {{language}} itself', async () => {
             withConfig({ RELEASE_LANGUAGE: 'english', TV_FILENAME_TEMPLATE: '{{title}}.{{language}}.S{{season}}E{{episode}}.{{quality}}' });
-            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.ENGLISH.S01E02.1080p');
+            await expect(Utils.createNZBName(tv)).resolves.toBe('Show.ENGLISH.S01E02.1080p-BBCiPlayarrTurbo');
         });
     });
 
@@ -306,7 +306,7 @@ describe('Utils', () => {
                         series: 1,
                         episode: 2,
                     })
-                ).resolves.toBe('Thats.a.Title.S01E02.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('synonym replaces title when title matches target', async () => {
@@ -321,7 +321,7 @@ describe('Utils', () => {
                         },
                         synonym
                     )
-                ).resolves.toBe('Syno-Nym.Bus.S01E02.WEBDL.1080p-BBC');
+                ).resolves.toBe('Syno-Nym.Bus.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('synonym does not replace title when title does not match target', async () => {
@@ -336,7 +336,7 @@ describe('Utils', () => {
                         },
                         synonym
                     )
-                ).resolves.toBe('Different.Title.S01E02.WEBDL.1080p-BBC');
+                ).resolves.toBe('Different.Title.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('synonym override replaces title when title matches target', async () => {
@@ -351,7 +351,7 @@ describe('Utils', () => {
                         },
                         synonymWithOverride
                     )
-                ).resolves.toBe('O.Ver_Ride.2.S01E02.WEBDL.1080p-BBC');
+                ).resolves.toBe('O.Ver_Ride.2.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('synonym override does not replace title when title does not match target', async () => {
@@ -366,7 +366,7 @@ describe('Utils', () => {
                         },
                         synonymWithOverride
                     )
-                ).resolves.toBe('Different.Title.S01E02.WEBDL.1080p-BBC');
+                ).resolves.toBe('Different.Title.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('double digits', async () => {
@@ -378,7 +378,7 @@ describe('Utils', () => {
                         series: 12,
                         episode: 34,
                     })
-                ).resolves.toBe('Thats.a.Title.S12E34.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.S12E34.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('yearly', async () => {
@@ -390,7 +390,7 @@ describe('Utils', () => {
                         series: 2025,
                         episode: 365,
                     })
-                ).resolves.toBe('Thats.a.Title.S2025E365.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.S2025E365.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('specials', async () => {
@@ -402,7 +402,7 @@ describe('Utils', () => {
                         series: 0,
                         episode: 0,
                     })
-                ).resolves.toBe('Thats.a.Title.S00E00.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.S00E00.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('episode title', async () => {
@@ -415,7 +415,7 @@ describe('Utils', () => {
                         episode: 2,
                         episodeTitle: '14/04/2025: We Call That... an Episode.',
                     })
-                ).resolves.toBe('Thats.a.Title.S01E02.14.04.2025.We.Call.That.an.Episode.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.S01E02.14.04.2025.We.Call.That.an.Episode.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('quality', async () => {
@@ -432,7 +432,7 @@ describe('Utils', () => {
                         series: 1,
                         episode: 2,
                     })
-                ).resolves.toBe('Thats.a.Title.S01E02.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.S01E02.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('missing series', async () => {
@@ -443,7 +443,7 @@ describe('Utils', () => {
                         type: VideoType.TV,
                         episode: 2,
                     })
-                ).resolves.toBe('Thats.a.Title.S00E00.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.S00E00.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('missing episode', async () => {
@@ -454,7 +454,7 @@ describe('Utils', () => {
                         type: VideoType.TV,
                         series: 1,
                     })
-                ).resolves.toBe('Thats.a.Title.S00E00.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.S00E00.WEBDL.1080p-BBCiPlayarrTurbo');
             });
         });
 
@@ -466,7 +466,7 @@ describe('Utils', () => {
                         pid: '',
                         type: VideoType.MOVIE,
                     })
-                ).resolves.toBe('Thats.a.Title.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('synonym replaces title when title matches target', async () => {
@@ -479,7 +479,7 @@ describe('Utils', () => {
                         },
                         synonym
                     )
-                ).resolves.toBe('Syno-Nym.Bus.WEBDL.1080p-BBC');
+                ).resolves.toBe('Syno-Nym.Bus.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('synonym does not replace title when title does not match target', async () => {
@@ -492,7 +492,7 @@ describe('Utils', () => {
                         },
                         synonym
                     )
-                ).resolves.toBe('Different.Title.WEBDL.1080p-BBC');
+                ).resolves.toBe('Different.Title.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('synonym override replaces title when title matches target', async () => {
@@ -505,7 +505,7 @@ describe('Utils', () => {
                         },
                         synonymWithOverride
                     )
-                ).resolves.toBe('O.Ver_Ride.2.WEBDL.1080p-BBC');
+                ).resolves.toBe('O.Ver_Ride.2.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('synonym override does not replace title when title does not match target', async () => {
@@ -518,7 +518,7 @@ describe('Utils', () => {
                         },
                         synonymWithOverride
                     )
-                ).resolves.toBe('Different.Title.WEBDL.1080p-BBC');
+                ).resolves.toBe('Different.Title.WEBDL.1080p-BBCiPlayarrTurbo');
             });
 
             it('quality', async () => {
@@ -533,7 +533,7 @@ describe('Utils', () => {
                         pid: '',
                         type: VideoType.MOVIE,
                     })
-                ).resolves.toBe('Thats.a.Title.WEBDL.1080p-BBC');
+                ).resolves.toBe('Thats.a.Title.WEBDL.1080p-BBCiPlayarrTurbo');
             });
         });
 

@@ -42,19 +42,19 @@ describe('createNZBName season handling', () => {
     const synonym = (seasonOffset: number | undefined) => ({ id: 's', from: 'Show', target: 'Show', seasonOffset }) as any;
 
     it('uses a positive season offset as the season when the episode has no numbering', async () => {
-        await expect(createNZBName(tvNoNumbers, synonym(2))).resolves.toBe('Show.S02E00.WEBDL.1080p-BBC');
+        await expect(createNZBName(tvNoNumbers, synonym(2))).resolves.toBe('Show.S02E00.WEBDL.1080p-BBCiPlayarrTurbo');
     });
 
     it.each([[undefined], [0], [-1]])('falls back to season 00 for an offset of %s', async (offset) => {
-        await expect(createNZBName(tvNoNumbers, synonym(offset))).resolves.toBe('Show.S00E00.WEBDL.1080p-BBC');
+        await expect(createNZBName(tvNoNumbers, synonym(offset))).resolves.toBe('Show.S00E00.WEBDL.1080p-BBCiPlayarrTurbo');
     });
 
     it('ignores the offset for a movie', async () => {
-        await expect(createNZBName({ title: 'Film', pid: '', type: VideoType.MOVIE } as any, synonym(3))).resolves.toBe('Film.WEBDL.1080p-BBC');
+        await expect(createNZBName({ title: 'Film', pid: '', type: VideoType.MOVIE } as any, synonym(3))).resolves.toBe('Film.WEBDL.1080p-BBCiPlayarrTurbo');
     });
 
     it('adds the offset to a numbered episode', async () => {
-        await expect(createNZBName({ ...tvNoNumbers, series: 1, episode: 4 }, synonym(2))).resolves.toBe('Show.S03E04.WEBDL.1080p-BBC');
+        await expect(createNZBName({ ...tvNoNumbers, series: 1, episode: 4 }, synonym(2))).resolves.toBe('Show.S03E04.WEBDL.1080p-BBCiPlayarrTurbo');
     });
 });
 
@@ -110,7 +110,7 @@ describe('getQualityProfile fallback', () => {
 
     it('lets a release be named even when the quality setting is invalid', async () => {
         withConfig({ VIDEO_QUALITY: 'bogus', RELEASE_LANGUAGE: 'none' });
-        await expect(createNZBName({ title: 'Show', pid: '', type: VideoType.TV, series: 1, episode: 1 } as any)).resolves.toBe('Show.S01E01.WEBDL.720p-BBC');
+        await expect(createNZBName({ title: 'Show', pid: '', type: VideoType.TV, series: 1, episode: 1 } as any)).resolves.toBe('Show.S01E01.WEBDL.720p-BBCiPlayarrTurbo');
     });
 });
 

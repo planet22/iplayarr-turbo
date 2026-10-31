@@ -22,6 +22,7 @@ import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
 import { londonDate } from './airDate';
+import { applyGroupToTemplate } from './releaseGroup';
 
 const removeUnsafeCharsRegex = /[^a-zA-Z0-9\s\\/._-]/g;
 
@@ -30,7 +31,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
         result.type == VideoType.MOVIE
             ? IplayarrParameter.MOVIE_FILENAME_TEMPLATE
             : IplayarrParameter.TV_FILENAME_TEMPLATE;
-    const template = (await configService.getParameter(templateKey)) as string;
+    const template = applyGroupToTemplate((await configService.getParameter(templateKey)) as string);
     const qualityProfile = await getQualityProfile();
     const language = releaseLanguageTag((await configService.getParameter(IplayarrParameter.RELEASE_LANGUAGE)) as string);
     const title = result.title.trim();

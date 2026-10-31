@@ -11,6 +11,7 @@ import { NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { qualityProfiles } from '../types/QualityProfiles';
 import { versionProfiles } from '../types/VersionProfiles';
 import { checkSchedule } from '../utils/cronSchedule';
+import { templateGroupProblem } from '../utils/releaseGroup';
 import { Validator } from './Validator';
 
 // Download Limit: how many downloads run at once. 10 is far past what the BBC's servers or a NAS will sustain.
@@ -147,9 +148,13 @@ export class ConfigFormValidator extends Validator {
         }
         if (!this.compilesSuccessfully(input.TV_FILENAME_TEMPLATE)) {
             validatorError['TV_FILENAME_TEMPLATE'] = 'Template does not compile';
+        } else if (input.TV_FILENAME_TEMPLATE && templateGroupProblem(input.TV_FILENAME_TEMPLATE)) {
+            validatorError['TV_FILENAME_TEMPLATE'] = templateGroupProblem(input.TV_FILENAME_TEMPLATE) as string;
         }
         if (!this.compilesSuccessfully(input.MOVIE_FILENAME_TEMPLATE)) {
             validatorError['MOVIE_FILENAME_TEMPLATE'] = 'Template does not compile';
+        } else if (input.MOVIE_FILENAME_TEMPLATE && templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE)) {
+            validatorError['MOVIE_FILENAME_TEMPLATE'] = templateGroupProblem(input.MOVIE_FILENAME_TEMPLATE) as string;
         }
         if (input.NZB_URL || input.NZB_API_KEY || input.NZB_TYPE || input.NZB_USERNAME || input.NZB_PASSWORD) {
             const response: string | boolean = await nzbFacade.testConnection(
