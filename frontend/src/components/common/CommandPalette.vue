@@ -69,7 +69,7 @@ const PAGES = [
     { label: 'Watchdog', path: '/watchdog', icon: 'shield-halved', words: 'strm links broken' },
     { label: 'Apps', path: '/apps', icon: 'laptop-code', words: 'sonarr radarr jellyfin' },
     { label: 'NZB', path: '/nzb', icon: 'satellite-dish', words: 'grabs searches' },
-    { label: 'Synonyms', path: '/synonyms', icon: 'arrows-rotate', words: 'rename' },
+    { label: 'Synonyms', path: '/synonyms', icon: 'book', words: 'rename' },
     { label: 'Statistics', path: '/stats', icon: 'chart-bar', words: 'charts' },
     { label: 'Logs', path: '/logs', icon: 'history', words: 'errors' },
     { label: 'Settings', path: '/settings', icon: 'gears', words: 'config options' },

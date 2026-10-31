@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content">
-        <PageHeader title="Synonyms" icon="arrows-rotate" />
+        <PageHeader title="Synonyms" icon="book" />
         <SettingsPageToolbar :icons="['arrImport']" @arr-import="openImportWizard" />
         <InfoBar small>iPlayer don't save their videos in an *arr friendly way. You can use synonyms to help you bridge the gap</InfoBar>
         <ListEditor v-slot="{ item }" :items="synonyms" :actions="[['trash', removeSynonym]]" @create="openForm">
