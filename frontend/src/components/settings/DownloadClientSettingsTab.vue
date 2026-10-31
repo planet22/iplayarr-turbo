@@ -61,7 +61,7 @@
         Looking for NZB Passthrough? Check the <RouterLink to="/apps"> Apps </RouterLink> section
     </InfoBar>
 
-    <SettingsSubheading text="Tool versions" />
+    <SettingsSubheading id="toolVersions" text="Tool versions" />
     <div class="toolVersionRow">
         <div class="toolVersionInfo">
             <strong>get_iplayer</strong>

@@ -159,7 +159,7 @@
                 <div class="episodeList">
                     <div
                         v-for="episode in pagedEpisodes" :key="episode.pid" :id="`ep-${episode.pid}`"
-                        :class="['episodeRow', episode.pid === focusedPid ? 'focused' : '']"
+                        :class="['episodeRow', episode.pid === highlightPid ? 'focused' : '']" @click="highlightPid = null"
                     >
                         <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
                         <div :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '']">
@@ -371,6 +371,9 @@ const selectSeason = (index) => {
 // Arriving with an episode's pid (e.g. from the Schedule) opens its series on the right page, scrolled to
 // and highlighted. Episodes can arrive on later pages, so it is retried until it is found.
 const focusedPid = ref(null);
+// The outline: only when there is a list to pick from, and it fades after a few seconds or on a click.
+const highlightPid = ref(null);
+let highlightTimer = null;
 let focusPending = null;
 // Later batches can re-sort the list and move the episode to another page, so it is re-placed after each
 // one until the user pages or picks a series themselves.
@@ -384,6 +387,9 @@ const focusEpisode = () => {
     selected.value = index;
     episodePage.value = Math.floor(episodes.value.findIndex((e) => e.pid === pid) / episodePageSize.value) + 1;
     focusedPid.value = pid;
+    clearTimeout(highlightTimer);
+    highlightPid.value = episodes.value.length > 1 ? pid : null;
+    highlightTimer = setTimeout(() => (highlightPid.value = null), 6000);
     nextTick(() => document.getElementById(`ep-${pid}`)?.scrollIntoView({ block: 'center' }));
 };
 
@@ -544,6 +550,7 @@ watch(
         error.value = null;
         selected.value = 0;
         focusedPid.value = null;
+        highlightPid.value = null;
         focusFollow = false;
         focusPending = pid;
         try {

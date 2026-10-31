@@ -76,7 +76,12 @@ label="Refresh Index" icon="address-book" :no-link="true"
                 <span>Native Search</span>
             </div>
             <div class="versionInfo" :title="versionTooltip">
-                <div v-for="line in versionLines" :key="line.text" :class="{ updateAvailable: line.update }">{{ line.text }}</div>
+                <div v-for="line in versionLines" :key="line.text" :class="{ updateAvailable: line.update }">
+                    <RouterLink v-if="line.update" class="updateLink" :to="{ path: '/settings', hash: '#downloadClient' }" title="Update available - open Tool versions" @click="scrollToToolVersions">
+                        {{ line.text }}
+                    </RouterLink>
+                    <template v-else>{{ line.text }}</template>
+                </div>
                 <a class="mobileOnly" href="https://github.com/planet22/iplayarr-turbo" aria-label="GitHub" target="_blank">
                     <font-awesome-icon :icon="['fab', 'github']" fixed-width />
                     <span>GitHub</span>
@@ -96,6 +101,18 @@ import toastService from '@/lib/toastService';
 import LeftHandNavLink from './NavLink.vue';
 
 const router = useRouter();
+
+// The settings tab mounts after the route change, so wait for the Tool versions heading to exist.
+const scrollToToolVersions = () => {
+    let tries = 0;
+    const timer = setInterval(() => {
+        const el = document.getElementById('toolVersions');
+        if (el || ++tries > 30) {
+            clearInterval(timer);
+            el?.scrollIntoView({ block: 'center' });
+        }
+    }, 100);
+};
 const route = useRoute();
 
 // Each group of links can be folded away; which ones are folded is remembered per browser. The group
@@ -247,6 +264,12 @@ const handleClickOutside = (event) => {
 
         .updateAvailable {
             color: @warn-color;
+
+            .updateLink {
+                margin-top: 0;
+                color: inherit;
+                text-decoration: underline;
+            }
         }
 
         a {
