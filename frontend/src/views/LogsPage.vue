@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content">
-        <PageHeader title="Logs" icon="history" />
+        <PageHeader title="Logs" icon="file-lines" />
         <SettingsPageToolbar
             :icons="['follow', 'filter']"
             :follow-status="followlog"

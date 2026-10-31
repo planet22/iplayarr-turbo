@@ -71,7 +71,7 @@ const PAGES = [
     { label: 'NZB', path: '/nzb', icon: 'newspaper', words: 'grabs searches' },
     { label: 'Synonyms', path: '/synonyms', icon: 'book', words: 'rename' },
     { label: 'Statistics', path: '/stats', icon: 'chart-bar', words: 'charts' },
-    { label: 'Logs', path: '/logs', icon: 'history', words: 'errors' },
+    { label: 'Logs', path: '/logs', icon: 'file-lines', words: 'errors' },
     { label: 'Settings', path: '/settings', icon: 'gears', words: 'config options' },
     { label: 'Settings: General', path: '/settings#general', icon: 'sliders', words: 'api key appearance theme' },
     { label: 'Settings: Media Management', path: '/settings#mediaManagement', icon: 'folder-open', words: 'folders naming quality' },
