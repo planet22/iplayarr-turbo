@@ -17,7 +17,9 @@
         <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
         <div v-if="cardView" class="cardList">
             <DataCard v-for="(entry, index) in pagedSearches" :key="index">
-                <template #title>{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</template>
+                <template #title>
+                    <span class="termText" :title="entry.term">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</span>
+                </template>
                 <template v-if="entry.series != null || entry.episode != null" #subtitle>
                     {{ [entry.series != null ? `Season ${entry.series}` : '', entry.episode != null ? `Episode ${entry.episode}` : ''].filter(Boolean).join(' · ') }}
                 </template>
@@ -71,7 +73,7 @@
             </thead>
             <tbody>
                 <tr v-for="(entry, index) in pagedSearches" :key="index">
-                    <td class="text">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</td>
+                    <td class="text"><span class="termText" :title="entry.term">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</span></td>
                     <td data-title="Season">{{ entry.series ?? '' }}</td>
                     <td data-title="Episode">{{ entry.episode ?? '' }}</td>
                     <td data-title="Results">

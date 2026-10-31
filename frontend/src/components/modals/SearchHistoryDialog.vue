@@ -2,7 +2,7 @@
     <IPlayarrModal title="Search History" :show-close="true" close-label="Cancel">
         <div v-if="isMobile" class="cardList">
             <DataCard v-for="history of searchHistory" :key="history.term">
-                <template #title>{{ history.term }}</template>
+                <template #title><span class="termText" :title="history.term">{{ history.term }}</span></template>
                 <template #subtitle>
                     <span v-if="history.series">Series {{ history.series }}</span>
                     <span v-if="history.series && history.episode"> · </span>
@@ -36,7 +36,7 @@
             </thead>
             <tbody>
                 <tr v-for="history of searchHistory" :key="history.term">
-                    <td class="text">{{ history.term }}</td>
+                    <td class="text"><span class="termText" :title="history.term">{{ history.term }}</span></td>
                     <td data-title="Series">{{ history.series }}</td>
                     <td data-title="Episode">{{ history.episode }}</td>
                     <td data-title="Results">{{ history.results }}</td>

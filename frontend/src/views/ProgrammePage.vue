@@ -157,7 +157,10 @@
                     </template>
                 </TablePagination>
                 <div class="episodeList">
-                    <div v-for="episode in pagedEpisodes" :key="episode.pid" class="episodeRow">
+                    <div
+                        v-for="episode in pagedEpisodes" :key="episode.pid" :id="`ep-${episode.pid}`"
+                        :class="['episodeRow', episode.pid === focusedPid ? 'focused' : '']"
+                    >
                         <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
                         <div :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '']">
                             <img
@@ -211,7 +214,7 @@
 </template>
 
 <script setup>
-import { computed, inject, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
@@ -331,6 +334,7 @@ const {
 
 const sortTitle = computed(() => (oldestFirst.value ? 'Oldest first - click for newest first' : 'Newest first - click for oldest first'));
 const toggleSort = () => {
+    focusFollow = false;
     oldestFirst.value = !oldestFirst.value;
     episodePage.value = 1;
     try {
@@ -359,8 +363,28 @@ const measureDescription = (el, pid) => {
 };
 
 const selectSeason = (index) => {
+    focusFollow = false;
     selected.value = index;
     episodePage.value = 1;
+};
+
+// Arriving with an episode's pid (e.g. from the Schedule) opens its series on the right page, scrolled to
+// and highlighted. Episodes can arrive on later pages, so it is retried until it is found.
+const focusedPid = ref(null);
+let focusPending = null;
+// Later batches can re-sort the list and move the episode to another page, so it is re-placed after each
+// one until the user pages or picks a series themselves.
+let focusFollow = false;
+const focusEpisode = () => {
+    const pid = focusPending ?? (focusFollow ? focusedPid.value : null);
+    const index = programme.value?.seasons.findIndex((season) => season.episodes.some((e) => e.pid === pid));
+    if (!pid || index == null || index < 0) return;
+    focusPending = null;
+    focusFollow = true;
+    selected.value = index;
+    episodePage.value = Math.floor(episodes.value.findIndex((e) => e.pid === pid) / episodePageSize.value) + 1;
+    focusedPid.value = pid;
+    nextTick(() => document.getElementById(`ep-${pid}`)?.scrollIntoView({ block: 'center' }));
 };
 
 const loadingMore = ref(false);
@@ -463,6 +487,7 @@ const loadRemainingPages = async (pid, first) => {
         const seasons = mergeSeasons(programme.value.seasons, next.seasons);
         programme.value = { ...programme.value, seasons };
         selected.value = Math.max(0, seasons.findIndex(({ series }) => series === selectedSeries));
+        focusEpisode();
         ({ page, hasMore } = next);
     }
 };
@@ -518,6 +543,9 @@ watch(
         loadingMore.value = false;
         error.value = null;
         selected.value = 0;
+        focusedPid.value = null;
+        focusFollow = false;
+        focusPending = pid;
         try {
             const first = await browseFetch(`programme/${encodeURIComponent(pid)}`);
             if (route.params.pid !== pid) return;
@@ -526,6 +554,7 @@ watch(
             const { seasons } = first;
             const latest = seasons.reduce((best, { series }, i) => (series > (seasons[best].series ?? -1) ? i : best), 0);
             selected.value = latest;
+            focusEpisode();
             loading.value = false;
             await loadRemainingPages(pid, first);
         } catch (e) {
@@ -564,6 +593,12 @@ const duplicatesBannerDownload = computed(
             margin-right: 0;
         }
     }
+}
+
+.episodeRow.focused {
+    outline: 2px solid @brand-color;
+    outline-offset: 4px;
+    border-radius: 4px;
 }
 
 .programmeBanner {

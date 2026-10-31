@@ -425,6 +425,33 @@ select:focus-visible {
     }
 }
 
+// Every nav bar control reads as a button: a visible outline, not just an icon.
+.NavBar .navIconButton {
+    border: 1px solid @settings-button-border-color;
+}
+
+.NavBar .right > a[aria-label='GitHub'] {
+    border: 1px solid @settings-button-border-color;
+    border-radius: 6px;
+    color: @primary-text-color;
+
+    &:hover {
+        background-color: @settings-button-hover-background-color;
+        color: @brand-color;
+    }
+}
+
+// A search term as typed: a pasted URL or a run of characters is cut short with "...", full text on hover.
+.termText {
+    display: inline-block;
+    // Not a percentage: inside an auto-layout table cell that is circular and lets a long term stretch the column.
+    max-width: min(36ch, 70vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
 // Browse screens (Discover / Channels / Categories / A-Z)
 .browsePage {
     padding: 0.5rem 1rem 1rem;

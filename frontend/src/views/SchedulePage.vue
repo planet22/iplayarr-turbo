@@ -18,7 +18,8 @@
                     type="button" :title="zoneTooltip"
                     :aria-label="zoneTooltip" @click="toggleZone"
                 >
-                    <font-awesome-icon :icon="['fas', useLocalTime ? 'location-dot' : 'crown']" />
+                    <font-awesome-icon v-if="useLocalTime" :icon="['fas', 'location-dot']" />
+                    <span v-else class="zoneLabel">UK</span>
                 </button>
                 <button type="button" aria-label="Zoom out" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
@@ -94,7 +95,7 @@ const ZOOM_STEP = 0.5;
 const ZOOM_MIN = 1;
 // High enough that a 10-minute kids' show (CBBC/CBeebies) still gets a readable block width
 // before MIN_BLOCK_WIDTH's floor takes over.
-const ZOOM_MAX = 8;
+const ZOOM_MAX = 16;
 const MIN_BLOCK_WIDTH = 60;
 
 const pxPerMinute = ref(2.5);
@@ -377,6 +378,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="less" scoped>
+.zoneLabel {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+}
+
 .schedulePage {
     display: flex;
     flex-direction: column;

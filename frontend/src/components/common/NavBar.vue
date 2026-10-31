@@ -33,7 +33,7 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
                             <font-awesome-icon :icon="['fas', 'tv']" />
                             <span>{{ suggestion.title }}</span>
                         </li>
-                        <li class="seeAll" @mousedown.prevent="search">See all results for "{{ searchTerm }}"</li>
+                        <li class="seeAll" @mousedown.prevent="search">See all results for "<span class="termText">{{ searchTerm }}</span>"</li>
                     </ul>
                 </div>
             </div>
@@ -406,11 +406,12 @@ defineExpose({ clearSearch });
             }
 
             a {
-                width: 30px;
-                height: var(--navbar-height, 60px);
+                width: 36px;
+                height: 36px;
                 text-align: center;
                 display: flex;
                 align-items: center;
+                justify-content: center;
             }
         }
     }

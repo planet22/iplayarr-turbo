@@ -52,7 +52,7 @@
         <div v-if="searchResults.length" class="resultsToolbar">
             <span class="resultCount">
                 {{ filteredResults.length }} result{{ filteredResults.length === 1 ? '' : 's' }}
-                <template v-if="searchTerm">for &ldquo;{{ searchTerm }}&rdquo;</template>
+                <template v-if="searchTerm">for &ldquo;<span class="termText" :title="searchTerm">{{ searchTerm }}</span>&rdquo;</template>
                 <span v-if="loadingMore" class="loadingMoreNote">
                     <font-awesome-icon :icon="['fas', 'circle-notch']" spin /> more arriving
                 </span>
@@ -192,7 +192,8 @@
         <div v-if="filteredResults.length == 0 && !loadingMore && searchTerm" class="emptyState">
             <font-awesome-icon class="emptyIcon" :icon="['fas', 'magnifying-glass']" />
             <div class="emptyTitle">
-                {{ searchResults.length ? 'Nothing matches that filter' : `No results for “${searchTerm}”` }}
+                <template v-if="searchResults.length">Nothing matches that filter</template>
+                <template v-else>No results for “<span class="termText" :title="searchTerm">{{ searchTerm }}</span>”</template>
             </div>
             <div v-if="!searchResults.length" class="emptyHint">Try fewer words, or one of your recent searches below.</div>
         </div>
@@ -206,7 +207,7 @@
                 <h3>Recent searches</h3>
                 <div class="chipRow">
                     <button v-for="term in recent" :key="term" type="button" class="chip" @click="searchFor(term)">
-                        <font-awesome-icon :icon="['fas', 'clock-rotate-left']" />{{ term }}
+                        <font-awesome-icon :icon="['fas', 'clock-rotate-left']" /><span class="termText" :title="term">{{ term }}</span>
                     </button>
                 </div>
             </section>
