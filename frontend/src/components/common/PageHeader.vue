@@ -1,6 +1,7 @@
 <template>
     <div class="PageHeader">
         <legend class="PageHeader-title">
+            <font-awesome-icon v-if="icon" class="PageHeader-icon" :icon="['fas', icon]" />
             {{ title }}
         </legend>
         <div v-if="$slots.center" class="PageHeader-center">
@@ -20,6 +21,12 @@ defineProps({
     title: {
         type: String,
         required: true,
+    },
+    // A Font Awesome icon name shown before the title (the page's left-nav icon).
+    icon: {
+        type: String,
+        required: false,
+        default: '',
     },
 });
 </script>
@@ -45,6 +52,11 @@ defineProps({
         border-bottom: 0;
         margin-bottom: 0;
         flex: 1 1 auto;
+    }
+
+    .PageHeader-icon {
+        margin-right: 8px;
+        font-size: 0.85em;
     }
 
     .PageHeader-actions {
