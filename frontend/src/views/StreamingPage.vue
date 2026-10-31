@@ -1,7 +1,7 @@
 <template>
     <div class="inner-content scroll-x streamingPage">
         <!-- Carries the Back button above the first section (it goes in the page's first toolbar). -->
-        <SettingsPageToolbar :icons="[]" />
+        <SettingsPageToolbar class="flushToolbar" :icons="[]" />
         <PageHeader title="Active Streams" />
         <div class="viewToggleRow">
             <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />

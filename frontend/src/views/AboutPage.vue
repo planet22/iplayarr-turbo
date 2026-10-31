@@ -1,5 +1,6 @@
 <template>
     <div class="inner-content about-content">
+        <SettingsPageToolbar class="flushToolbar" :icons="[]" />
         <img :src="logoUrl" alt="Logo" class="logo" />
         <h3>iPlayarr Turbo</h3>
         <p>Version {{ hiddenSettings.VERSION }}</p>
@@ -41,6 +42,7 @@
 </template>
 
 <script setup>
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { getBasePath } from '@/lib/utils';
 
 const logoUrl = `${getBasePath()}/iplayarr.png`;

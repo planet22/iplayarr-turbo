@@ -1,5 +1,6 @@
 <template>
     <div class="inner-content">
+        <SettingsPageToolbar class="flushToolbar" :icons="[]" />
         <InfoBar clazz="warning small">
             NZB clients need the category "iplayer" for NZB forwarding to work.
         </InfoBar>
@@ -165,6 +166,7 @@ import DataCard from '@/components/common/DataCard.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
