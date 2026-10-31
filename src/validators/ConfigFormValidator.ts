@@ -111,6 +111,18 @@ export class ConfigFormValidator extends Validator {
                 }
             }
         }
+        // Sources are 'history', 'subscribed', the older 'arr' / 'jellyfin' (every app of that kind), or 'app:<id>'.
+        if (input.STRM_WATCHDOG_SOURCES !== undefined && input.STRM_WATCHDOG_SOURCES !== '') {
+            const unknown =
+                typeof input.STRM_WATCHDOG_SOURCES === 'string'
+                    ? input.STRM_WATCHDOG_SOURCES.split(',')
+                          .map((token: string) => token.trim())
+                          .filter((token: string) => token && !/^(history|subscribed|arr|jellyfin|app:[A-Za-z0-9-]+)$/.test(token))
+                    : [String(input.STRM_WATCHDOG_SOURCES)];
+            if (unknown.length) {
+                validatorError['STRM_WATCHDOG_SOURCES'] = `Unknown source: ${unknown.join(', ')}`;
+            }
+        }
         checkWholeNumber(validatorError, input, 'THUMBNAIL_RETENTION_DAYS', 'Thumbnail retention', 1, 3650, false);
 
         // Read by node-cron when the server starts: text that does not parse stops every scheduled job being set up.

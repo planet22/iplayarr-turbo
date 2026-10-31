@@ -93,6 +93,14 @@ describe('AddFileEndpoint', () => {
         expect(queueService.addToQueue).not.toHaveBeenCalled();
     });
 
+    it('refuses an NZB whose type is not TV, MOVIE or UNKNOWN', async () => {
+        req.files = [toFile(VALID_NZB_XML.replace(`_="${VideoType.TV}"`, '_="BANANA"'))] as any;
+        await handler(req as Request, res as Response);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ status: false, error: 'Invalid type in NZB' });
+        expect(queueService.addToQueue).not.toHaveBeenCalled();
+    });
+
     it('queues a valid NZB file and responds with its pid', async () => {
         req.files = [toFile(VALID_NZB_XML)] as any;
 

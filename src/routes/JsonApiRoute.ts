@@ -334,4 +334,9 @@ router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Re
     res.sendFile(filePath, { maxAge: '7d', immutable: true, headers: { 'Cache-Control': 'private, max-age=604800, immutable' } });
 });
 
+// Anything under /json-api that no route above answered. Without this the app's catch-all serves the web page (with a 200).
+router.use((_req: Request, res: Response) => {
+    res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such endpoint' } as ApiResponse);
+});
+
 export default router;

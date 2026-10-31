@@ -5,6 +5,7 @@ import path from 'path';
 import { version } from '../../config/version.json';
 import liveChannelFacade from '../../facade/liveChannelFacade';
 import configService, { ConfigMap } from '../../service/configService';
+import cronJobService from '../../service/cronJobService';
 import historyService from '../../service/historyService';
 import loggingService from '../../service/loggingService';
 import videoEventService from '../../service/videoEventService';
@@ -129,6 +130,12 @@ router.put('/', async (req: Request, res: Response) => {
     const newStreamKey: string | undefined = req.body[IplayarrParameter.STREAM_KEY];
     if (newStreamKey && oldStreamKey && newStreamKey !== oldStreamKey) {
         await rewriteStrmKeys('streamkey', oldStreamKey, newStreamKey, VideoEventType.STREAM_KEY_ROTATED, 'Stream key');
+    }
+
+    // The schedule refresh job is set up at start-up from this setting, so a change has to reach it now.
+    if (IplayarrParameter.REFRESH_SCHEDULE in req.body) {
+        const schedule = await configService.getParameter(IplayarrParameter.REFRESH_SCHEDULE);
+        if (schedule) cronJobService.setDefaultSchedule('schedule-refresh', schedule);
     }
 
     // Switching the UHD event feeds off takes them out of the library and Live TV (the UI warns first).

@@ -104,3 +104,24 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         });
     });
 });
+
+describe('ConfigFormValidator STRM_WATCHDOG_SOURCES', () => {
+    const validator = new ConfigFormValidator();
+    validator.directoryExists = jest.fn((dir) => dir === '/ok');
+    const check = async (value: unknown) => (await validator.validate({ ...validInput(), MEDIA_MODE: 'download', STRM_WATCHDOG_SOURCES: value })).STRM_WATCHDOG_SOURCES;
+
+    it.each([
+        ['history'],
+        ['subscribed'],
+        ['history,subscribed'],
+        ['history, app:3f2a-91'],
+        ['arr,jellyfin'],
+        [''],
+    ])('accepts %j', async (value) => {
+        expect(await check(value)).toBeUndefined();
+    });
+
+    it.each([['nowhere'], ['history,nowhere'], ['app:'], ['app:bad id'], ['App:1'], [['history']], [7]])('refuses %j and names the unknown source', async (value) => {
+        expect(await check(value)).toContain('Unknown source');
+    });
+});

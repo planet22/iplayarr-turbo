@@ -52,6 +52,10 @@ export default async (req: Request, res: Response) => {
                 res.status(400).json({ status: false, error: 'Invalid programme id in NZB' });
                 return;
             }
+            if (type !== undefined && !Object.values(VideoType).includes(type)) {
+                res.status(400).json({ status: false, error: 'Invalid type in NZB' });
+                return;
+            }
             if (appId) {
                 await appService.touchApp(appId);
             }

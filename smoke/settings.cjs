@@ -11,7 +11,6 @@ const path = require('path');
 const CHANGE = {
     DEBUG: ['true', 'false'],
     DOWNLOAD_CLIENT: ['GET_IPLAYER', 'YTDLP', 'NATIVE'],
-    SUB_DIR: ['SMOKE-TEMP'],
     VIDEO_QUALITY: ['hd', 'sd', 'fhd'],
     EXTRA_VIDEO_QUALITIES: ['sd,hd', 'sd'],
     EXTRA_VERSIONS: ['audio-described', 'signed'],
@@ -26,7 +25,6 @@ const CHANGE = {
     WRITE_NFO_STRM: ['all', 'nzb', 'none', 'manual'],
     WRITE_STRMTOOL_JSON: ['true', 'false'],
     REFRESH_SCHEDULE: ['*/30 * * * *', '0 * * * *'],
-    FALLBACK_FILENAME_SUFFIX: ['SMOKE-TEMP'],
     SCHEDULE_FULL_REFRESH: ['true', 'false'],
     NATIVE_SEARCH: ['false', 'true'], // clears the search cache
     NATIVE_SEARCH_ENGINE: ['V2', 'V1'], // clears the search cache
@@ -104,8 +102,6 @@ const OTHER = {
 const NO_EFFECT = {
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
     DOWNLOAD_CLIENT: 'picks the downloader for the next real download; visible only inside that download',
-    SUB_DIR: 'DEAD: nothing in src/ reads it (docs/CONFIG.md says it is passed to the downloader)',
-    FALLBACK_FILENAME_SUFFIX: 'DEAD: nothing in src/ reads it (docs/CONFIG.md says it is the fallback name suffix)',
     AIRDATE_NUMBERING: 'changes season/episode numbers through Skyhook lookups; no deterministic probe',
     NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'only narrows Sonarr/Radarr searches that ask for a season (manual search always lists the whole show)',
     SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',
@@ -232,8 +228,14 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         },
         EXTRA_VERSIONS: async ({ next }) => {
             const tag = next === 'signed' ? 'SIGNED' : 'AUDIO.DESCRIBED';
-            const titles = await nzbTitles('search', freshTerm());
-            return { what: `${tag} releases are offered (when the programmes have that version)`, pass: titles.some((t) => t.includes(tag)), detail: `${titles.length} releases, none tagged`, level: 'WARN' };
+            // Only programmes that have the version get a release for it, so try a few searches before deciding.
+            let seen = 0;
+            for (let attempt = 0; attempt < 4; attempt++) {
+                const titles = await nzbTitles('search', freshTerm());
+                seen += titles.length;
+                if (titles.some((t) => t.includes(tag))) return { what: `${tag} releases are offered`, pass: true, detail: '' };
+            }
+            return `none of the ${seen} releases searched has a ${tag} version, so there is nothing to tag`;
         },
         RELEASE_LANGUAGE: async ({ next }) => {
             const titles = await nzbTitles('search', freshTerm());
@@ -289,7 +291,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         },
         REFRESH_SCHEDULE: async ({ next }) => {
             const t = ((await http('/json-api/maintenance/tasks')).json || []).find((x) => x.id === 'schedule-refresh');
-            return { what: `the Schedule Refresh task runs on "${next}"`, pass: (t?.cron ?? t?.schedule) === next, detail: `task shows "${t?.cron ?? t?.schedule}": the setting is only read at start-up`, level: 'WARN' };
+            return { what: `the Schedule Refresh task runs on "${next}"`, pass: (t?.cron ?? t?.schedule) === next, detail: `task shows "${t?.cron ?? t?.schedule}"` };
         },
         LIVE_TV_ENABLED: async () => {
             const b = await playlist();
@@ -470,10 +472,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const r = await put({ [key]: good });
             ok(`${key} valid template saved and read back`, r.status === 200 && (await get())[key] === good, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
             let titles = await nzbTitles(searchType, freshTerm());
-            if (searchType === 'movie') titles = titles.filter((t) => !/SddEdd/.test(t));
+            if (searchType === 'movie') titles = titles.filter((t) => !/S\d\dE\d\d/.test(t));
             if (titles.length) {
                 const hit = titles.some((t) => t.includes('.SMOKE.'));
-                rec(W, `${key} takes effect: ${searchType} release names use it`, hit ? 'PASS' : searchType === 'movie' ? 'WARN' : 'FAIL', hit ? '' : titles.slice(0, 2).join(' | '));
+                rec(W, `${key} takes effect: ${searchType} release names use it`, hit ? 'PASS' : 'FAIL', hit ? '' : titles.slice(0, 2).join(' | '));
             } else rec(W, `${key} effect`, 'SKIP', `${searchType} returned no releases`);
             await put({ [key]: cur });
         }

@@ -34,6 +34,11 @@ export default async (req: Request, res: Response) => {
         return;
     }
 
+    if (type !== undefined && !Object.values(VideoType).includes(type)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid type' });
+        return;
+    }
+
     if (app) {
         await appService.touchApp(app);
     }

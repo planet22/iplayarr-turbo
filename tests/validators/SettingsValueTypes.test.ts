@@ -11,16 +11,16 @@ describe('normaliseSettingValues', () => {
     });
 
     it('turns null into empty text and leaves text alone', () => {
-        expect(normaliseSettingValues({ SUB_DIR: null, OUTPUT_FORMAT: 'mkv', API_KEY: '' })).toEqual({ SUB_DIR: '', OUTPUT_FORMAT: 'mkv', API_KEY: '' });
+        expect(normaliseSettingValues({ LIVE_STRM_DIR: null, OUTPUT_FORMAT: 'mkv', API_KEY: '' })).toEqual({ LIVE_STRM_DIR: '', OUTPUT_FORMAT: 'mkv', API_KEY: '' });
     });
 
     it('leaves objects and arrays for the settings guard to refuse', () => {
-        const body = { DEBUG: { a: 1 }, SUB_DIR: ['x'] };
+        const body = { DEBUG: { a: 1 }, LIVE_STRM_DIR: ['x'] };
         const out = normaliseSettingValues(body) as Record<string, unknown>;
         expect(out).toEqual(body);
         expect(checkSettingsUpdate(out, {}, 'form')).toEqual({
             DEBUG: 'Setting values must be plain values',
-            SUB_DIR: 'Setting values must be plain values',
+            LIVE_STRM_DIR: 'Setting values must be plain values',
         });
     });
 

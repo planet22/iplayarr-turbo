@@ -114,6 +114,27 @@ describe('cronJobService', () => {
             expect(get('job')).toMatchObject({ cron: '0 4 * * *', overridden: false });
         });
 
+        it('setDefaultSchedule reschedules a task that has no override, now', () => {
+            expect(cronJobService.setDefaultSchedule('job', '30 6 * * *')).toBe(true);
+            expect(get('job')).toMatchObject({ cron: '30 6 * * *', defaultCron: '30 6 * * *', overridden: false });
+            expect(cron.schedule).toHaveBeenLastCalledWith('30 6 * * *', expect.any(Function));
+        });
+
+        it('setDefaultSchedule leaves a schedule set on the Maintenance tab running, but remembers the new default', async () => {
+            await cronJobService.setSchedule('job', '30 5 * * *');
+            (cron.schedule as jest.Mock).mockClear();
+            expect(cronJobService.setDefaultSchedule('job', '30 6 * * *')).toBe(true);
+            expect(get('job')).toMatchObject({ cron: '30 5 * * *', defaultCron: '30 6 * * *', overridden: true });
+            expect(cron.schedule).not.toHaveBeenCalled();
+        });
+
+        it('setDefaultSchedule refuses an unusable schedule and an unknown task, changing nothing', () => {
+            expect(cronJobService.setDefaultSchedule('job', 'nope')).toBe(false);
+            expect(cronJobService.setDefaultSchedule('job', '*/5 * * * *')).toBe(false);
+            expect(cronJobService.setDefaultSchedule('missing', '0 1 * * *')).toBe(false);
+            expect(get('job')).toMatchObject({ cron: '0 4 * * *', defaultCron: '0 4 * * *' });
+        });
+
         it('refuses too-frequent, invalid and unknown schedules', async () => {
             expect(await cronJobService.setSchedule('job', '*/5 * * * *')).toMatchObject({ ok: false, reason: 'invalid' });
             expect(await cronJobService.setSchedule('job', 'nope')).toMatchObject({ ok: false, reason: 'invalid' });

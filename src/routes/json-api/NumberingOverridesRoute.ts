@@ -6,6 +6,8 @@ import { asyncRouter } from '../../utils/asyncRouter';
 
 const router: Router = asyncRouter();
 
+// Seasons can be years (S2025E365), so the limit is generous but finite.
+const MAX_NUMBER = 9999;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 // 2020-02-30 has the right shape but is not a day, so it could never match a broadcast.
@@ -31,12 +33,14 @@ router.post('/', async (req: Request, res: Response) => {
         !isRealDate(airDate) ||
         !Number.isInteger(series) ||
         series < 0 ||
+        series > MAX_NUMBER ||
         !Number.isInteger(episode) ||
-        episode < 0
+        episode < 0 ||
+        episode > MAX_NUMBER
     ) {
         res.status(400).json({
             error: ApiError.INVALID_INPUT,
-            message: 'show, airDate (YYYY-MM-DD), series and episode (whole numbers) are required',
+            message: 'show, airDate (YYYY-MM-DD), series and episode (whole numbers up to 9999) are required',
         } as ApiResponse);
         return;
     }

@@ -20,15 +20,15 @@ describe('SettingsGuard', () => {
 
         it('accepts an empty body and ordinary settings', () => {
             expect(check({})).toEqual({});
-            expect(check({ DOWNLOAD_DIR: '/new', ACTIVE_LIMIT: 3, DEBUG: false, SUB_DIR: null })).toEqual({});
+            expect(check({ DOWNLOAD_DIR: '/new', ACTIVE_LIMIT: 3, DEBUG: false, LIVE_STRM_DIR: null })).toEqual({});
         });
 
         it('rejects unknown settings and object values', () => {
-            const errors = check({ NOPE: '1', DOWNLOAD_DIR: { a: 1 }, SUB_DIR: ['x'] });
+            const errors = check({ NOPE: '1', DOWNLOAD_DIR: { a: 1 }, LIVE_STRM_DIR: ['x'] });
             expect(errors).toEqual({
                 NOPE: 'Unknown setting',
                 DOWNLOAD_DIR: 'Setting values must be plain values',
-                SUB_DIR: 'Setting values must be plain values',
+                LIVE_STRM_DIR: 'Setting values must be plain values',
             });
         });
 

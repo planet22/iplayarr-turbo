@@ -61,6 +61,14 @@ describe('JsonApiRoute', () => {
         });
     });
 
+    describe('unknown endpoints', () => {
+        it.each([['GET', '/no-such-endpoint'], ['POST', '/synonym/nope/deeper'], ['DELETE', '/nothing']])('%s %s answers a JSON 404, not the web page', async (method, path) => {
+            const res = await (request(app) as any)[method.toLowerCase()](path);
+            expect(res.status).toBe(404);
+            expect(res.body).toEqual({ error: ApiError.API_NOT_FOUND, message: 'No such endpoint' });
+        });
+    });
+
     describe('GET /search', () => {
         it('answers 400 for a repeated or nested q instead of failing inside the search', async () => {
             const repeated = await request(app).get('/search?q=a&q=b');

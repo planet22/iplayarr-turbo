@@ -146,7 +146,7 @@ async function readOnly(ctx, h) {
     rec(P, 'an 8 MB body is rejected (413/400), not processed', big.status === 413 || big.status === 400 ? 'PASS' : big.status === 0 ? 'WARN' : 'FAIL', `HTTP ${big.status} ${big.error || ''}`);
     for (const m of ['PUT', 'DELETE', 'PATCH']) survives(P, `${m} /api is handled`, await raw(`/api?mode=queue&apikey=${apikey}`, { method: m }));
     const unknown = await raw('/json-api/does-not-exist');
-    rec(P, 'unknown /json-api path answers JSON 404 without internals', unknown.status === 404 && !STACK.test(unknown.text) && !/<pre>|<html/i.test(unknown.text) ? 'PASS' : 'WARN', `HTTP ${unknown.status} ${unknown.text.slice(0, 80)}`);
+    rec(P, 'unknown /json-api path answers JSON 404 without internals', unknown.status === 404 && !STACK.test(unknown.text) && !/<pre>|<html/i.test(unknown.text) ? 'PASS' : 'FAIL', `HTTP ${unknown.status} ${unknown.text.slice(0, 80)}`);
     const cors = await raw('/json-api/config', { headers: { origin: 'http://evil.example' } });
     const acao = cors.headers.get('access-control-allow-origin');
     rec(P, 'the config API does not allow cross-origin reads (no CORS for a foreign Origin)', !acao || (acao !== '*' && acao !== 'http://evil.example') ? 'PASS' : 'FAIL', `access-control-allow-origin: ${acao}`);
@@ -171,7 +171,7 @@ async function readOnly(ctx, h) {
     const nzbBad = await raw(`/api?mode=nzb-download&pid=${encodeURIComponent('../../x')}&nzbName=x&type=TV&apikey=${apikey}`);
     rec(P, 'nzb-download refuses a path-like programme id', nzbBad.status >= 400 ? 'PASS' : 'FAIL', `HTTP ${nzbBad.status} ${nzbBad.text.slice(0, 100)}`);
     const nzbType = await raw(`/api?mode=nzb-download&pid=${pid}&nzbName=x&type=BANANA&apikey=${apikey}`);
-    rec(P, 'nzb-download refuses or normalises an unknown type', nzbType.status >= 400 || !/BANANA/.test(nzbType.text) ? 'PASS' : 'WARN', `HTTP ${nzbType.status}: the unknown type is passed on to the queue`);
+    rec(P, 'nzb-download refuses or normalises an unknown type', nzbType.status >= 400 || !/BANANA/.test(nzbType.text) ? 'PASS' : 'FAIL', `HTTP ${nzbType.status}: the unknown type is passed on to the queue`);
 
     // 7. SAB responses: shape, no leaks
     const sab = {};
@@ -347,7 +347,7 @@ async function write(ctx, h) {
             ['STREAM_MODE', 'bogus', 'FAIL'], ['STREAM_CLIENT', 'bogus', 'FAIL'], ['DOWNLOAD_CLIENT', 'bogus', 'FAIL'], ['MEDIA_MODE', 'bogus', 'FAIL'],
             ['VIDEO_QUALITY', 'bogus', 'FAIL'], ['EXTRA_VIDEO_QUALITIES', 'bogus,,;', 'FAIL'], ['EXTRA_VERSIONS', 'bogus', 'FAIL'],
             ['NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['MANUAL_NATIVE_SEARCH_ENGINE', 'V9', 'FAIL'], ['NATIVE_SEARCH', 'maybe', 'FAIL'], ['LIVE_TV_LOGO_SHAPE', 'triangle', 'FAIL'],
-            ['WRITE_NFO_STRM', 'sometimes', 'FAIL'], ['STRM_WATCHDOG_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_ARR_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_SOURCES', 'nowhere', 'WARN'],
+            ['WRITE_NFO_STRM', 'sometimes', 'FAIL'], ['STRM_WATCHDOG_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_ARR_ACTION', 'explode', 'FAIL'], ['STRM_WATCHDOG_SOURCES', 'nowhere', 'FAIL'],
             ['RELEASE_LANGUAGE', 'klingon', 'FAIL'],
             ['REFRESH_SCHEDULE', 'not a cron', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * * *', 'FAIL'], ['REFRESH_SCHEDULE', '* * * * *', 'FAIL'],
             ['STRM_WATCHDOG_WEBHOOK_URL', 'file:///etc/passwd', 'FAIL'], ['STRM_WATCHDOG_WEBHOOK_URL', 'http://169.254.169.254/latest/meta-data/', 'PASS-IF-ACCEPTED'],
@@ -407,7 +407,7 @@ async function write(ctx, h) {
         for (const bad of [{ series: 0, episode: 1 }, { series: -1, episode: 1 }, { series: 1.5, episode: 1 }, { series: 'x', episode: 1 }, { series: 1e9, episode: 1 }, { series: 1, episode: 0 }, { series: 1, episode: -4 }, { series: null, episode: null }]) {
             const r = await J('POST', '/json-api/numbering-overrides', { show: `${tag} nums`, airDate: '2021-03-04', ...bad });
             survives(P, `numbering override ${JSON.stringify(bad)} does not crash`, r);
-            if (r.status === 200 && (bad.series < 0 || bad.episode < 0 || bad.series === 1.5 || typeof bad.series === 'string' || bad.series === 1e9 || bad.series == null)) rec(P, `numbering override ${JSON.stringify(bad)} is refused`, 'WARN', 'accepted: Sonarr would be told an impossible season/episode');
+            if (r.status === 200 && (bad.series < 0 || bad.episode < 0 || bad.series === 1.5 || typeof bad.series === 'string' || bad.series === 1e9 || bad.series == null)) rec(P, `numbering override ${JSON.stringify(bad)} is refused`, 'FAIL', 'accepted: Sonarr would be told an impossible season/episode');
             for (const m of (await lists.numbering()).filter((x) => String(x.show).includes('SMOKE-TEMP'))) await raw('/json-api/numbering-overrides/' + m.id, { method: 'DELETE' });
         }
         for (const d of ['2020-02-30', '2020-13-01', '2020-1-2', '', '9999-12-31', '0000-00-00', '2020-02-29T00:00:00Z', '1/2/2020']) {
@@ -425,7 +425,7 @@ async function write(ctx, h) {
         for (const url of ['http://169.254.169.254/latest/meta-data/', 'file:///etc/passwd', 'ftp://www.bbc.co.uk/programmes/m002csng', 'javascript:alert(1)', 'http://localhost:4404/ping', 'http://127.0.0.1/', 'https://www.bbc.co.uk.evil.example/programmes/m002csng', 'https://evil.example/www.bbc.co.uk/programmes/m002csng', 'http://[::1]/']) {
             const r = await J('POST', '/json-api/offSchedule', { name: `${tag} off`, url });
             survives(P, `off-schedule ${url.slice(0, 40)} does not crash`, r);
-            rec(P, `off-schedule refuses non-BBC address ${url.slice(0, 50)}`, r.status === 200 ? 'WARN' : 'PASS', 'accepted: only the programme id in it is used, but a lookalike host is not rejected');
+            rec(P, `off-schedule refuses non-BBC address ${url.slice(0, 50)}`, r.status === 200 ? 'FAIL' : 'PASS', 'accepted: only the programme id in it is used, but a lookalike or non-http address is not rejected');
             for (const m of (await lists.offSchedule()).filter((x) => String(x.name).includes('SMOKE-TEMP'))) await J('DELETE', '/json-api/offSchedule', { id: m.id });
         }
 

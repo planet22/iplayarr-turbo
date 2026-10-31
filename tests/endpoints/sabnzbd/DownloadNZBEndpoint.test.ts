@@ -23,6 +23,22 @@ describe('DownloadNZBEndpoint input', () => {
     });
 });
 
+describe('DownloadNZBEndpoint type', () => {
+    it.each([['BANANA'], [''], [['TV', 'MOVIE']]])('answers 400 for a type of %j without building an NZB', async (type) => {
+        const res: any = { set: jest.fn(), send: jest.fn(), status: jest.fn().mockReturnThis(), json: jest.fn() };
+        await DownloadNZBEndpoint({ query: { pid: 'm0012345', nzbName: 'x', type } } as unknown as Request, res as Response);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.send).not.toHaveBeenCalled();
+    });
+
+    it.each([[VideoType.TV], [VideoType.MOVIE], [VideoType.UNKNOWN]])('builds an NZB for the type %s', async (type) => {
+        const res: any = { set: jest.fn(), send: jest.fn(), status: jest.fn().mockReturnThis(), json: jest.fn() };
+        await DownloadNZBEndpoint({ query: { pid: 'm0012345', nzbName: 'x', type } } as unknown as Request, res as Response);
+        expect(res.send).toHaveBeenCalled();
+        expect(res.status).not.toHaveBeenCalledWith(400);
+    });
+});
+
 describe('DownloadNZBEndpoint', () => {
     it('responds with the correct NZB file', async () => {
         const sendMock = jest.fn();

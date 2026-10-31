@@ -13,7 +13,6 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (Docker image) | No | Path to the `get_iplayer` binary. |
 | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (Docker image) | No | Path to the `yt-dlp` binary. |
 | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | No | Extra CLI params passed to `get_iplayer` downloads. |
-| `SUB_DIR` | _(unset)_ | No | Optional subtitle output directory. |
 | `VIDEO_QUALITY` | `fhd` | No | Max requested video quality. |
 | `OUTPUT_FORMAT` | `mp4` | No | `mp4` or `mkv`. |
 | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | No | Comma-separated extra qualities offered as additional search results. |
@@ -29,7 +28,6 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `WRITE_STRMTOOL_JSON` | `false` | No | Also writes a `.strmtool.json` sidecar for `.strm` files (StrmTool Jellyfin plugin). Requires `WRITE_NFO_STRM` to be enabled. |
 | `TV_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat TV filenames. |
 | `MOVIE_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat movie filenames. |
-| `FALLBACK_FILENAME_SUFFIX` | `WEB.H264-BBC` | No | Suffix used when template metadata is unavailable. |
 | `REFRESH_SCHEDULE` | `0 * * * *` | No | Cron expression for schedule refresh (edit it on Settings → Maintenance, with the other scheduled tasks). |
 | `SCHEDULE_FULL_REFRESH` | `false` | No | Re-fetch every day in the window instead of caching passed days. |
 | `RSS_FEED_HOURS` | `48` | No | Lookback window for the RSS feed endpoint (1-720). |

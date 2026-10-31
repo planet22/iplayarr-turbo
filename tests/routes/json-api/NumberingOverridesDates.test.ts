@@ -44,3 +44,22 @@ describe('NumberingOverridesRoute air dates', () => {
         expect(mocked.save).not.toHaveBeenCalled();
     });
 });
+
+describe('NumberingOverridesRoute season and episode limits', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        mocked.save.mockResolvedValue({ id: 'x' } as any);
+    });
+
+    const send = (series: unknown, episode: unknown) => request(app).post('/').send({ show: 'Show', airDate: '2024-07-02', series, episode });
+
+    it.each([[0, 0], [1, 1], [2025, 365], [9999, 9999]])('accepts season %i episode %i (a season can be a year)', async (series, episode) => {
+        expect((await send(series, episode)).status).toBe(200);
+    });
+
+    it.each([[10000, 1], [1, 10000], [1000000000, 1], [1, 1000000000]])('refuses season %i episode %i as impossible', async (series, episode) => {
+        const res = await send(series, episode);
+        expect(res.status).toBe(400);
+        expect(mocked.save).not.toHaveBeenCalled();
+    });
+});

@@ -93,7 +93,6 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Default Version _(advanced)_ | `DOWNLOAD_DEFAULT_VERSION` | _(standard)_ | Used when Ask is off and pre-selected when it is on. Items without that version download as the standard one. |
 | — | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (baked into the Docker image) | Path to the `get_iplayer` binary. Env-only; not in the Settings UI. |
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |
-| — | `SUB_DIR` | _(unset)_ | Optional subtitle download directory passed through to the downloader. Env-only. |
 | — | `VIDEO_QUALITY` | `fhd` | Maximum quality requested from `get_iplayer`/`yt-dlp`/native streaming. Set via Settings → Media Management's "Video Quality" dropdown (populated from `json-api/config/qualityProfiles`), not a raw env var most users would hand-type. |
 | — | `OUTPUT_FORMAT` | `mp4` | Output container (`mp4` or `mkv`) passed to `get_iplayer`. Settings → Media Management. |
 
@@ -117,7 +116,6 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Write .strmtool.json Files? | `WRITE_STRMTOOL_JSON` | `false` | Also writes a `.strmtool.json` sidecar next to each `.strm` file, for the StrmTool Jellyfin plugin's probe-skip cache. Only takes effect when `WRITE_NFO_STRM` is enabled and the completed item is a `.strm` (Media Mode = Streaming). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
 | TV Filename Template _(advanced)_ | `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC` | Handlebars template; only affects the flat (non-folder-structure) filename. Must compile against `{title, season, episode, episodeTitle, synonym, quality}`. |
 | Movie Filename Template _(advanced)_ | `MOVIE_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC` | Same caveat as above. |
-| — | `FALLBACK_FILENAME_SUFFIX` | `WEB.H264-BBC` | Env-only; suffix used when the structured metadata needed for the normal template isn't available. |
 
 ## Streaming (Settings → Streaming)
 

@@ -52,7 +52,6 @@ const configService = {
         REFRESH_SCHEDULE: '0 * * * *',
         AUTH_USERNAME: 'admin',
         // No default password: initialCredentialsService generates a random one on first boot.
-        FALLBACK_FILENAME_SUFFIX: 'WEB.H264-BBC',
         MOVIE_FILENAME_TEMPLATE: '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC',
         TV_FILENAME_TEMPLATE:
             '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC',
