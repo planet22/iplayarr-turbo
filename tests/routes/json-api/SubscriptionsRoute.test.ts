@@ -44,6 +44,16 @@ describe('SubscriptionsRoute', () => {
         ]);
     });
 
+    it('GET / looks each show up by its pid and answers an empty list without asking the BBC', async () => {
+        mocked.list.mockResolvedValue([]);
+        expect((await request(app).get('/')).body).toEqual([]);
+        expect(mockedDetails.getMetadata).not.toHaveBeenCalled();
+        mocked.list.mockResolvedValue([{ id: 'a', pid: 'b006mkw3' } as any]);
+        mockedDetails.getMetadata.mockResolvedValue({ programme: { medium_synopsis: 'x' } } as any);
+        await request(app).get('/').expect(200);
+        expect(mockedDetails.getMetadata).toHaveBeenCalledWith('b006mkw3');
+    });
+
     it('POST / subscribes, passing downloadLatest only when strictly true', async () => {
         mocked.subscribe.mockResolvedValue({ id: 'a' } as any);
         await request(app).post('/').send({ pid: 'b006mkw3', downloadLatest: true }).expect(200);

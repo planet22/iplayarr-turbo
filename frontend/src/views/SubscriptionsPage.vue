@@ -289,6 +289,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
+import { countBadge, countsAria, countsTitle, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
 import { subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
 import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -526,27 +527,8 @@ const arrPillTitle = ({ arr, arrOnly }) => {
     return arrOnly ? `${where} - downloads are handled there, not by iPlayarr` : where;
 };
 
-// Of the episodes Sonarr has files for: those that are iPlayarr .strm links, and those from any other source.
-const sourceLabel = ({ have, linked }) => `${linked} iPlayarr, ${Math.max(have - linked, 0)} other`;
-const sourceTitle = ({ have, linked }) => `${linked} .strm or release group, ${Math.max(have - linked, 0)} other`;
-
 const missingTitle = ({ arr, arrMissing }) =>
     `Gone from ${arrAppName(arr.appId)} since ${formatRelativeTime(Date.parse(arrMissing))}. Stop tracking it or add it back.`;
-
-const otherCount = ({ have, linked }) => Math.max(have - linked, 0);
-const countsAria = ({ arrCounts }) => sourceLabel(arrCounts);
-const countsTitle = ({ arrCounts }) => `${arrCounts.linked} from iPlayarr, ${otherCount(arrCounts)} from elsewhere`;
-
-// The number on a show's picture: episodes in the last download over all episodes seen (downloaded, or already
-// available when subscribed). A Sonarr/Radarr-only show has no downloads of ours, so it shows the episodes it holds.
-const countBadge = ({ arrOnly, arrCounts, arrMissing, seen, lastQueuedAt, lastQueuedCount }) => {
-    if (arrOnly) {
-        return arrCounts && !arrMissing ? { text: `${arrCounts.have}`, title: `${arrCounts.have} episodes` } : null;
-    }
-    const total = seen?.length ?? 0;
-    if (!lastQueuedAt) return { text: `${total}`, title: `${total} seen` };
-    return { text: `${lastQueuedCount}/${total}`, title: `${lastQueuedCount} last download, ${total} seen` };
-};
 
 const addedLabel = ({ createdAt }, short = false) => (createdAt ? formatRelativeTime(Date.parse(createdAt), undefined, short) : 'n/a');
 

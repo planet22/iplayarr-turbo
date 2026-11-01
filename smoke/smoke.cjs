@@ -249,6 +249,12 @@ async function apiLayer(ctx) {
     await check(A, 'live channels (settings)', '/json-api/live-channels', isArr);
     await check(A, 'live channels custom list', '/json-api/live-channels/custom', isJson);
     await check(A, 'subscriptions', '/json-api/subscriptions', isArr);
+    // Each subscription carries its seen list (the badge's total) and, when the BBC metadata has one, a text synopsis.
+    await check(A, 'subscriptions carry a seen list and a text synopsis when they have one', '/json-api/subscriptions', (r) => {
+        if (!Array.isArray(r.json)) return 'expected JSON array';
+        const bad = r.json.filter((s) => (!s.arrOnly && !Array.isArray(s.seen)) || (s.synopsis !== undefined && (typeof s.synopsis !== 'string' || !s.synopsis.trim())));
+        return bad.length === 0 || `malformed: ${bad.map((s) => s.title).join(', ')}`;
+    });
     await check(A, 'live subscriptions', '/json-api/subscriptions/live', isArr);
     await check(A, 'subscription arr apps', '/json-api/subscriptions/arr/apps', isArr);
     await arrSyncChecks(A, ctx);
@@ -467,6 +473,7 @@ async function uiInteractions(browser, ctx) {
         await page.screenshot({ path: path.join(SHOTS, 'flow-settings.png'), fullPage: true });
     } catch (e) { rec(U, 'settings tabs', 'FAIL', e.message.split('\n')[0]); }
     await subscriptionsToolbar(page, ctx, U);
+    await subscriptionsCards(browser, page, U);
     await watchdogLinks(page, ctx, U);
     // Programme page: play/download controls exist
     if (ctx.pid) {
@@ -593,6 +600,107 @@ async function subscriptionsToolbar(page, ctx, U) {
         rec(U, 'subscriptions: filter back to All shows everything again', (await visible()).length === Math.min(16, subs.length) ? 'PASS' : 'FAIL');
         await page.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-toolbar.png') });
     } catch (e) { rec(U, 'subscriptions toolbar', 'FAIL', e.message.split('\n')[0]); }
+}
+
+// Subscriptions: the picture badge (last download / episodes seen), the Added date, the synopsis, and the table / cards
+// switch with its several-across card grid. Checks what the page shows against the API it reads; on a phone there is
+// no switch and the cards are used.
+async function subscriptionsCards(browser, page, U) {
+    const KEY = 'iplayarr.subscriptionsViewMode';
+    const toggle = (title) => page.locator(`.viewToggle button[title="${title}"]`);
+    try {
+        const subs = (await http('/json-api/subscriptions')).json || [];
+        if (!subs.length) return rec(U, 'subscriptions: badge and card view', 'SKIP', 'no subscriptions');
+        const expectedBadge = (s) => (s.arrOnly ? (s.arrCounts && !s.arrMissing ? `${s.arrCounts.have}` : null) : s.lastQueuedAt ? `${s.lastQueuedCount}/${(s.seen || []).length}` : `${(s.seen || []).length}`);
+        const badgeOf = async (scope, title) => {
+            const row = scope.filter({ has: page.locator(`a:text-is("${title}")`) }).first();
+            return (await row.locator('.thumbBadge').count()) ? (await row.locator('.thumbBadge').first().textContent()).trim() : null;
+        };
+
+        // Table (the desktop default): a badge per show matching the API, an Added date and the synopsis on one line.
+        await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
+        await page.evaluate((k) => localStorage.removeItem(k), KEY);
+        await page.reload({ waitUntil: 'networkidle' });
+        const titles = (await page.locator('.subscriptionRow .info a.title').allTextContents()).map((t) => t.trim());
+        const shown = titles.length;
+        const onPage = subs.filter((x) => titles.includes(x.title));
+        rec(U, 'subscriptions: wide screens start in the table view', shown > 0 && (await toggle('Table view').getAttribute('aria-pressed')) === 'true' ? 'PASS' : 'FAIL', `${shown} rows`);
+        const rows = page.locator('.subscriptionRow');
+        const wrong = [];
+        for (const s of onPage) {
+            const got = await badgeOf(rows, s.title);
+            if (got !== expectedBadge(s)) wrong.push(`${s.title}: ${got} != ${expectedBadge(s)}`);
+        }
+        rec(U, 'subscriptions: each picture badge is last download / episodes seen (or episodes held for Sonarr/Radarr)', wrong.length === 0 ? 'PASS' : 'FAIL', wrong.slice(0, 3).join(' | '));
+        const addedRows = await page.locator('.subscriptionRow .details span', { hasText: /^Added / }).count();
+        rec(U, 'subscriptions: every table row says when the show was added', addedRows === shown ? 'PASS' : 'FAIL', `${addedRows} rows`);
+        const withSynopsis = onPage.filter((s) => s.synopsis);
+        const synopsisRows = await page.locator('.subscriptionRow .synopsis').count();
+        rec(U, 'subscriptions: the table shows a synopsis line for every show that has one', synopsisRows === withSynopsis.length ? 'PASS' : 'FAIL', `${synopsisRows} shown, ${withSynopsis.length} expected`);
+        if (withSynopsis.length) {
+            const style = await page.locator('.subscriptionRow .synopsis').first().evaluate((el) => ({ overflow: getComputedStyle(el).overflow, wrap: getComputedStyle(el).whiteSpace }));
+            rec(U, 'subscriptions: a table synopsis stays on one line', style.wrap === 'nowrap' && style.overflow === 'hidden' ? 'PASS' : 'FAIL', JSON.stringify(style));
+        }
+        const arrShows = onPage.filter((s) => s.arr || s.arrMissing);
+        const arrLines = await page.locator('.subscriptionRow .info > .details:nth-of-type(2)').count();
+        rec(U, 'subscriptions: Sonarr/Radarr details sit on a second line under the channel', arrShows.length ? (arrLines >= arrShows.length ? 'PASS' : 'FAIL') : 'SKIP', `${arrLines} second lines, ${arrShows.length} linked`);
+        await page.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-table.png'), fullPage: true });
+
+        // Cards: several across, the badge on the picture, the dates in a 2x2 grid, a synopsis of up to three lines.
+        await toggle('Card view').click();
+        await page.waitForSelector('.cardList.cardGrid .subCard', { timeout: 10000 });
+        const cards = page.locator('.subCard');
+        rec(U, 'subscriptions: the card view lists every show', (await cards.count()) === shown ? 'PASS' : 'FAIL', `${await cards.count()} of ${shown}`);
+        const xs = new Set();
+        for (let i = 0; i < Math.min(await cards.count(), 8); i++) xs.add(Math.round((await cards.nth(i).boundingBox()).x));
+        rec(U, 'subscriptions: wide screens put several cards across', shown < 2 ? 'SKIP' : xs.size >= 2 ? 'PASS' : 'FAIL', `${xs.size} column(s)`);
+        const wrongCards = [];
+        for (const s of onPage) {
+            const got = await badgeOf(cards, s.title);
+            if (got !== expectedBadge(s)) wrongCards.push(`${s.title}: ${got} != ${expectedBadge(s)}`);
+        }
+        rec(U, 'subscriptions: the card badge sits on the picture and matches the table', wrongCards.length === 0 ? 'PASS' : 'FAIL', wrongCards.slice(0, 3).join(' | '));
+        const first = cards.first();
+        const [thumb, badge] = [await first.locator('.thumbLink').boundingBox(), await first.locator('.thumbBadge').boundingBox()];
+        rec(U, 'subscriptions: the badge is at the picture\'s top right', thumb && badge && badge.x + badge.width <= thumb.x + thumb.width + 1 && badge.y >= thumb.y - 1 && badge.y + badge.height < thumb.y + thumb.height / 2 && badge.x > thumb.x + thumb.width / 2 ? 'PASS' : 'FAIL', JSON.stringify({ thumb, badge }));
+        const order = await first.evaluate((el) => {
+            const y = (sel) => el.querySelector(sel)?.getBoundingClientRect().top ?? null;
+            return { chips: y('.subChips'), title: y('.cardTitle'), synopsis: y('.subSynopsis') };
+        });
+        rec(U, 'subscriptions: a card reads channel, then title, then synopsis', order.chips !== null && order.title > order.chips && (order.synopsis === null || order.synopsis > order.title) ? 'PASS' : 'FAIL', JSON.stringify(order));
+        const cells = await first.locator('.subDates .cardLine').evaluateAll((els) => els.map((el) => ({ x: Math.round(el.getBoundingClientRect().x), y: Math.round(el.getBoundingClientRect().y), title: el.title })));
+        rec(U, 'subscriptions: the dates form a 2x2 grid of Added, Checked and Downloaded', cells.length >= 3 && cells[0].title === 'Added' && cells[1].title === 'Last checked' && Math.abs(cells[0].y - cells[1].y) < 8 && cells[2].y > cells[0].y + 8 && cells[2].x === cells[0].x ? 'PASS' : 'FAIL', JSON.stringify(cells));
+        const synopsisLines = await page.locator('.subSynopsis').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height / (parseFloat(getComputedStyle(el).lineHeight) || parseFloat(getComputedStyle(el).fontSize) * 1.2))));
+        rec(U, 'subscriptions: a card synopsis never runs past three lines', synopsisLines.every((n) => n <= 3) ? 'PASS' : 'FAIL', synopsisLines.join(','));
+        rec(U, 'subscriptions: every card has its action buttons', (await cards.locator('.rowActions').count()) === shown ? 'PASS' : 'FAIL');
+        await page.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-cards.png'), fullPage: true });
+
+        // The choice is remembered, and switches back.
+        await page.reload({ waitUntil: 'networkidle' });
+        rec(U, 'subscriptions: the card choice is remembered after a reload', (await page.locator('.subCard').count()) === shown ? 'PASS' : 'FAIL');
+        await toggle('Table view').click();
+        await page.waitForSelector('.subscriptionRow', { timeout: 10000 });
+        rec(U, 'subscriptions: switching back shows the table again', (await page.locator('.subCard').count()) === 0 ? 'PASS' : 'FAIL');
+        await page.evaluate((k) => localStorage.removeItem(k), KEY);
+
+        // Phone: no switch, cards whatever was stored.
+        const phone = await browser.newContext({ viewport: VIEWPORTS[1][1] });
+        try {
+            const p = await phone.newPage();
+            await p.addInitScript((k) => localStorage.setItem(k, 'table'), KEY);
+            await p.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
+            await p.waitForSelector('.subCard', { timeout: 10000 });
+            rec(U, 'subscriptions: a phone always gets cards, with no table / cards switch', (await p.locator('.subCard').count()) > 0 && !(await p.locator('.viewToggle').first().isVisible().catch(() => false)) ? 'PASS' : 'FAIL');
+            rec(U, 'subscriptions: phone cards are one per line, with no sideways scroll', (await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) && !(await p.locator('.cardGrid').count()) ? 'PASS' : 'FAIL');
+            const badgeFits = await p.locator('.subCard').first().evaluate((el) => {
+                const card = el.getBoundingClientRect();
+                const badge = el.querySelector('.thumbBadge')?.getBoundingClientRect();
+                return !badge || (badge.right <= card.right && badge.left >= card.left);
+            });
+            rec(U, 'subscriptions: the badge stays inside a phone card', badgeFits ? 'PASS' : 'FAIL');
+            await p.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-phone.png') });
+        } finally { await phone.close(); }
+    } catch (e) { rec(U, 'subscriptions cards', 'FAIL', e.message.split('\n')[0]); }
 }
 
 // ---------------------------------------------------------------- main
