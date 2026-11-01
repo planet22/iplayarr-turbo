@@ -392,6 +392,7 @@ async function uiInteractions(browser, ctx) {
         await page.screenshot({ path: path.join(SHOTS, 'flow-settings.png'), fullPage: true });
     } catch (e) { rec(U, 'settings tabs', 'FAIL', e.message.split('\n')[0]); }
     await subscriptionsToolbar(page, ctx, U);
+    await watchdogLinks(page, ctx, U);
     // Programme page: play/download controls exist
     if (ctx.pid) {
         try {
@@ -405,6 +406,32 @@ async function uiInteractions(browser, ctx) {
     rec(U, 'socket.io handshake', sock.status === 200 && /sid/.test(sock.text) ? 'PASS' : 'FAIL', `HTTP ${sock.status}`);
     rec(U, 'no uncaught page errors during flows', bad.length ? 'FAIL' : 'PASS', bad.slice(0, 2).join(' | '));
     await context.close();
+}
+
+// Watchdog links: table and card views both show the library file's name (season/episode) under a link,
+// and cards show the file/detail line for valid links too. Read-only; compares against /json-api/watchdog.
+async function watchdogLinks(page, ctx, U) {
+    try {
+        const items = ((await http('/json-api/watchdog')).json?.items || []).filter((i) => (i.files || []).length);
+        if (!items.length) return rec(U, 'watchdog links show library names', 'SKIP', 'no checked links with files');
+        const label = (i) => i.files[0].split(/[\\/]/).pop().replace(/\.strm$/i, '').replace(/\s*\[[^\]]*\]\s*$/, '');
+        const view = async (mode) => {
+            await page.goto(BASE + '/watchdog', { waitUntil: 'networkidle' });
+            await page.evaluate((m) => localStorage.setItem('iplayarr.watchdogViewMode', m), mode);
+            await page.reload({ waitUntil: 'networkidle' });
+            await page.waitForTimeout(800);
+            return page.locator('body').innerText();
+        };
+        const sample = items.slice(0, 5);
+        const table = await view('table');
+        rec(U, 'watchdog table lists the library name under each link', sample.some((i) => table.includes(label(i))) ? 'PASS' : 'FAIL', label(sample[0]));
+        const cards = await view('cards');
+        rec(U, 'watchdog cards show the same library name', sample.some((i) => cards.includes(label(i))) ? 'PASS' : 'FAIL', label(sample[0]));
+        const valid = sample.find((i) => i.status === 'ok');
+        if (valid) rec(U, 'watchdog cards show the file for a valid link', cards.includes(valid.files[0].split(/[\\/]/).pop()) ? 'PASS' : 'FAIL', valid.files[0]);
+        await page.screenshot({ path: path.join(SHOTS, 'flow-watchdog-cards.png'), fullPage: true });
+        await page.evaluate(() => localStorage.removeItem('iplayarr.watchdogViewMode'));
+    } catch (e) { rec(U, 'watchdog links', 'FAIL', e.message.split('\n')[0]); }
 }
 
 // Subscriptions toolbar: the Sync dialog (opened and cancelled, never run), sort and filter. Reads the same API the

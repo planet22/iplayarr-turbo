@@ -197,7 +197,7 @@
             :max="1000"
             :step="1"
             name="Minimum Valid Before Action"
-            tooltip="Failures only count after this many links pass first (BBC is up). This many failures in a row stops the check."
+            tooltip="Failures only count after this many links pass first (BBC is up). This many network failures in a row (BBC unreachable) stops the check."
             :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
         />
         <TextInput

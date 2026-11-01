@@ -546,7 +546,8 @@ class StrmWatchdogService {
                 for (const [index, [pid, target]] of batch.entries()) {
                     const { result, message } = probed[index];
                     this.#live.checked++;
-                    consecutiveFailures = result === 'ok' ? 0 : consecutiveFailures + 1;
+                    // Only network failures suggest an outage: BBC answering "no version available" proves it is up.
+                    consecutiveFailures = result === 'network' ? consecutiveFailures + 1 : 0;
 
                     if (result === 'ok') {
                         this.#evaluate(state, pid, target, false);
@@ -560,10 +561,10 @@ class StrmWatchdogService {
                         this.#evaluate(state, pid, target, true, message);
                     }
 
-                    // Too many failures in a row: BBC (or our network) is down, not that many programmes
-                    // expiring together. Abandon the run; nothing counted from it is kept.
+                    // Too many network failures in a row: BBC (or our network) is down. Abandon the run;
+                    // nothing counted from it is kept.
                     if (consecutiveFailures >= threshold) {
-                        this.#live.notice = `Run abandoned: ${threshold} links in a row failed, so BBC is assumed unavailable. No links were flagged and no actions were taken`;
+                        this.#live.notice = `Run abandoned: ${threshold} links in a row could not reach BBC, so it is assumed unavailable. No links were flagged and no actions were taken`;
                         loggingService.error(`[STRM Watchdog] ${this.#live.notice}`);
                         break batches;
                     }

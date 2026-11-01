@@ -214,8 +214,12 @@
                 <template #title>
                     <router-link :to="`/browse/programme/${item.pid}`">{{ details[item.pid]?.title ?? item.pid }}</router-link>
                 </template>
-                <template v-if="details[item.pid]?.title || getSeriesEpisodeLabel(details[item.pid])" #subtitle>
-                    {{ [details[item.pid]?.title ? item.pid : '', getSeriesEpisodeLabel(details[item.pid])].filter(Boolean).join(' · ') }}
+                <template v-if="details[item.pid]?.title || getSeriesEpisodeLabel(details[item.pid]) || libraryLabel(item)" #subtitle>
+                    {{
+                        [details[item.pid]?.title ? item.pid : '', getSeriesEpisodeLabel(details[item.pid]) || libraryLabel(item)]
+                            .filter(Boolean)
+                            .join(' · ')
+                    }}
                 </template>
                 <template #chips>
                     <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
@@ -230,7 +234,7 @@
                     </span>
                     <span v-if="(item.actions || []).length" class="linkMeta">{{ item.actions.join(', ') }}</span>
                 </template>
-                <template v-if="item.status == 'invalid' && (item.message || (item.files || []).length)">
+                <template v-if="item.message || (item.files || []).length">
                     {{ item.message || (item.files || []).join(', ') }}
                 </template>
             </DataCard>
@@ -248,7 +252,10 @@
             </thead>
             <tbody>
                 <tr v-for="item in pagedItems" :key="item.pid">
-                    <td class="text"><router-link :to="`/browse/programme/${item.pid}`">{{ item.pid }}</router-link></td>
+                    <td class="text">
+                        <router-link :to="`/browse/programme/${item.pid}`">{{ item.pid }}</router-link>
+                        <div v-if="libraryLabel(item)" class="linkMeta">{{ libraryLabel(item) }}</div>
+                    </td>
                     <td data-title="Status">
                         <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
                             {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
@@ -287,6 +294,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useViewMode } from '@/lib/useViewMode';
 import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
+import { libraryLabel } from '@/lib/watchdog';
 
 const socket = inject('socket');
 const router = useRouter();

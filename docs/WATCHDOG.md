@@ -20,7 +20,7 @@ Sonarr/Radarr/Jellyfin sources are the apps you added on the **Apps** page (Jell
 ## When a link counts as dead
 
 - **Two strikes:** a link must fail two checks in a row before it is invalid; one failure is as likely a BBC blip.
-- **BBC must be confirmed up:** failures are only counted and acted on once enough links have validated OK in the same run (**Minimum Valid Before Action**, `STRM_WATCHDOG_FAIL_THRESHOLD`, default `10`, or half your links if you have fewer). That same number of failures *in a row* abandons the run as a BBC/network outage, so an outage never wipes your library.
+- **BBC must be confirmed up:** failures are only counted and acted on once enough links have validated OK in the same run (**Minimum Valid Before Action**, `STRM_WATCHDOG_FAIL_THRESHOLD`, default `10`, or half your links if you have fewer). That same number of *network* failures in a row (BBC unreachable, as opposed to BBC saying a programme has no version available) abandons the run as a BBC/network outage, so an outage never wipes your library.
 - A pre-flight check runs first, and our own network errors (DNS, timeouts, resets) never count against a programme.
 
 ## Actions
@@ -52,7 +52,7 @@ Actions are taken once per link.
 - **Run** a check now, **Stop** a running one, or **Refresh counts** (re-list links from the sources without checking them against BBC). Live progress is shown per source while links are being collected and checked.
 - Stat cards and charts: tracked, valid and invalid links, a per-type breakdown (iPlayarr, Sonarr, Radarr, Jellyfin) and checked-vs-failed.
 - **Library Access:** tests whether each Sonarr/Radarr/Jellyfin source's files are visible inside the container, and suggests a path mapping when they are not.
-- **Links:** a table of every tracked link with status, source, when it was last checked, and the action taken. A button clears the table.
+- **Links:** a table of every tracked link with status, source, when it was last checked, and the action taken. Each row shows the library file's own name (for example `Pointless (2009) - S34E05 - Episode 5`) under the pid, and any message or file list, not just for invalid links. A button clears the table.
 
 ## Schedule
 

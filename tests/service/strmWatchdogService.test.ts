@@ -94,7 +94,8 @@ describe('StrmWatchdogService', () => {
             { pid: GOOD, extension: 'strm', nzbName: 'good', type: 'tv', libraryPath: 'good.strm' },
         ]);
         (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async (pid: string) => {
-            if (bbcDown || pid === BAD) throw new Error('No programme found');
+            if (bbcDown) throw Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+            if (pid === BAD) throw new Error('No programme found');
         });
         (axios.get as jest.Mock).mockResolvedValue({ status: 200 });
     });
@@ -160,6 +161,39 @@ describe('StrmWatchdogService', () => {
         await strmWatchdogService.run();
         expect((await strmWatchdogService.getStatus()).live.notice).toMatch(/not reachable/);
         expect(NativeStreamService.checkAvailable).not.toHaveBeenCalled();
+    });
+
+    it('does not abandon the run when links in a row are simply unavailable on BBC', async () => {
+        const ids = ['m00aaaa1', 'm00aaaa2', 'm00aaaa3', 'm00aaaa4'];
+        ids.forEach((pid) => fs.writeFileSync(path.join(tmpDir, `${pid}.strm`), strm(pid)));
+        (historyService.getHistory as jest.Mock).mockResolvedValue([
+            { pid: GOOD, extension: 'strm', nzbName: 'good', type: 'tv', libraryPath: 'good.strm' },
+            ...ids.map((pid) => ({ pid, extension: 'strm', nzbName: pid, type: 'tv', libraryPath: `${pid}.strm` })),
+        ]);
+        (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async (pid: string) => {
+            if (pid !== GOOD) throw new Error('No available versions found');
+        });
+        extra = { STRM_WATCHDOG_FAIL_THRESHOLD: '1' };
+        expect(await strmWatchdogService.run()).toEqual({ checked: 5, invalid: 0 });
+        expect((await strmWatchdogService.getStatus()).live.notice).toBeUndefined();
+        expect((await strmWatchdogService.run()).invalid).toBe(4);
+    });
+
+    it('does not abandon when network failures are broken up by an answer from BBC', async () => {
+        // Two good links confirm BBC up, then: network, "no version", network - never two network failures in a row.
+        const ids = ['m00good2', 'm00aaaa1', 'm00aaaa2', 'm00aaaa3'];
+        ids.forEach((pid) => fs.writeFileSync(path.join(tmpDir, `${pid}.strm`), strm(pid)));
+        (historyService.getHistory as jest.Mock).mockResolvedValue([
+            { pid: GOOD, extension: 'strm', nzbName: 'good', type: 'tv', libraryPath: 'good.strm' },
+            ...ids.map((pid) => ({ pid, extension: 'strm', nzbName: pid, type: 'tv', libraryPath: `${pid}.strm` })),
+        ]);
+        (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async (pid: string) => {
+            if (pid === 'm00aaaa2') throw new Error('No available versions found');
+            if (pid.startsWith('m00aaaa')) throw Object.assign(new Error('reset'), { code: 'ECONNRESET' });
+        });
+        extra = { STRM_WATCHDOG_FAIL_THRESHOLD: '2', STRM_WATCHDOG_CONCURRENCY: '1' };
+        await strmWatchdogService.run();
+        expect((await strmWatchdogService.getStatus()).live.notice).toBeUndefined();
     });
 
     it('abandons the run and flags nothing when too many links in a row fail', async () => {
