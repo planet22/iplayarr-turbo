@@ -143,6 +143,12 @@ async function apiLayer(ctx) {
     ctx.channel = (chans.json || [])[0]?.id;
     const cats = await check(A, 'browse categories', '/json-api/browse/categories', isJson);
     ctx.category = (Array.isArray(cats.json) ? cats.json : cats.json?.categories || [])[0]?.id;
+    // Collections: the list is empty (and nothing is fetched) while Show Collections is off; a collection's contents are always readable.
+    const collections = await check(A, 'browse collections', '/json-api/browse/collections', (r) => (r.json && typeof r.json.enabled === 'boolean' && Array.isArray(r.json.collections)) || 'expected { enabled, collections: [] }');
+    rec(A, 'browse collections is empty while switched off', collections.json?.enabled === false ? (collections.json.collections.length === 0 ? 'PASS' : 'FAIL') : 'SKIP', collections.json?.enabled ? 'Show Collections is on' : 'listed collections while off');
+    const firstCollection = (collections.json?.collections || [])[0];
+    if (firstCollection) await check(A, 'browse collection contents', `/json-api/browse/collections/${firstCollection.id}?perPage=5`, (r) => (r.json && Array.isArray(r.json.items)) || 'no items array');
+    await check(A, 'browse collection contents (unknown id is an empty page or an error, not a crash)', '/json-api/browse/collections/p000zzzz', (r) => r.status < 500 || `HTTP ${r.status}`, { warnOnly: true });
     await check(A, 'browse suggest', '/json-api/browse/suggest?q=doc', isJson);
     await check(A, 'browse schedule', '/json-api/browse/schedule', isJson);
     await check(A, 'browse channel-colors', '/json-api/browse/channel-colors', isJson);

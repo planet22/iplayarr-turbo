@@ -263,6 +263,144 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             }
         });
 
+        // ---- Settings tabs: each setting sits on the tab it belongs to (read-only: nothing is changed or saved)
+        await flow('settings tabs hold the right settings', async (page) => {
+            const labels = async () => (await page.locator('.settingsBody label').allTextContents()).map((t) => t.trim());
+            const tab = async (key) => { await page.goto(`${BASE}/settings#${key}`, { waitUntil: 'networkidle' }); await page.waitForSelector('.settingsBody', { timeout: 15000 }); await page.waitForTimeout(400); };
+            await tab('general');
+            const names = await page.locator('.settingsTab').allTextContents();
+            ok('the tab bar lists General, Search and Appearance', ['General', 'Search', 'Appearance'].every((t) => names.some((n) => n.includes(t))), names.join());
+            const general = await labels();
+            ok('General holds the API key only', general.some((l) => /Api Key/i.test(l)) && !general.some((l) => /Native Search|Colour Scheme|Hours in RSS Feed/i.test(l)), general.join(' | '));
+
+            await tab('search');
+            const search = await labels();
+            ok('Search holds the NZB and manual search options', search.some((l) => /^Native Search/i.test(l)) && search.filter((l) => /^Native Search/i.test(l)).length >= 2, search.join(' | '));
+            ok('Search has no appearance or API key settings', !search.some((l) => /Colour Scheme|Api Key|Show Collections/i.test(l)), search.join(' | '));
+            await page.locator('button[title*="dvanced"], button[aria-label*="dvanced"]').first().click().catch(() => {});
+            await page.waitForTimeout(400);
+            const engine = (await http('/json-api/config')).json?.NATIVE_SEARCH_ENGINE;
+            if (engine === 'V2' || (await page.locator('.settingsBody').innerText()).includes('Collections')) {
+                const adv = (await labels()).join(' | ');
+                ok('Search (advanced, engine 2.0) offers both collection options, NZB and manual', (adv.match(/Expand BBC Collections/g) || []).length === 2 && (adv.match(/Find BBC Collections by Name/g) || []).length === 2, adv);
+            }
+            await shot(page, 'settings-tab-search-advanced', true);
+
+            await tab('appearance');
+            const looks = await labels();
+            ok('Appearance holds the colour scheme, badges and Show Collections', ['Colour Scheme', 'Show Info Messages', 'Show Collections'].every((l) => looks.some((x) => x.includes(l))), looks.join(' | '));
+            ok('Appearance has no search settings', !looks.some((l) => /Native Search|Match All/i.test(l)), looks.join(' | '));
+
+            await tab('maintenance');
+            const maint = (await page.locator('.settingsBody').innerText());
+            ok('Maintenance lists the scheduled tasks', /Scheduled tasks/i.test(maint));
+            ok('Hours in RSS Feed and Full Schedule Refresh sit with the scheduled tasks (advanced)', !/Hours in RSS Feed/.test(maint) || maint.indexOf('Hours in RSS Feed') > maint.indexOf('Scheduled tasks'), 'RSS setting is above the Scheduled tasks heading');
+
+            // Old links: #general still opens General, and an unknown hash opens the first tab rather than a blank page.
+            await page.goto(`${BASE}/settings#nonsense`, { waitUntil: 'networkidle' });
+            ok('an unknown tab in the link opens General', (await page.locator('.settingsTab.active').first().innerText()).includes('General'));
+        });
+
+        // ---- Settings: an Appearance edit flags only its own tab and Discard puts it back (nothing saved)
+        await flow('appearance tab edits flag only that tab', async (page) => {
+            await page.goto(`${BASE}/settings#appearance`, { waitUntil: 'networkidle' });
+            await page.waitForSelector('.settingsBody select', { timeout: 15000 });
+            const quick = page.locator('.form-group', { hasText: 'Show Quick Find Button' }).locator('select');
+            const before = await quick.inputValue();
+            await quick.selectOption(before === 'true' ? 'false' : 'true');
+            await page.waitForTimeout(300);
+            const dirty = await page.locator('.settingsTab.dirty').allTextContents();
+            ok('only the Appearance tab is flagged as changed', dirty.length === 1 && dirty[0].includes('Appearance'), dirty.join('|'));
+            await page.getByRole('button', { name: /^Discard$/ }).click();
+            await page.waitForTimeout(300);
+            ok('Discard clears the flag and restores the value', (await page.locator('.settingsTab.dirty').count()) === 0 && (await quick.inputValue()) === before);
+            // The same for a server setting on Search, which must not flag Appearance.
+            await page.goto(`${BASE}/settings#search`, { waitUntil: 'networkidle' });
+            const native = page.locator('.form-group', { hasText: 'Native Search' }).locator('select').first();
+            const n0 = await native.inputValue();
+            await native.selectOption(n0 === 'true' ? 'false' : 'true');
+            await page.waitForTimeout(300);
+            const d2 = await page.locator('.settingsTab.dirty').allTextContents();
+            ok('a Search edit flags only the Search tab', d2.length === 1 && d2[0].includes('Search'), d2.join('|'));
+            await page.getByRole('button', { name: /^Discard$/ }).click();
+            ok('nothing was saved', (await http('/json-api/config')).json?.NATIVE_SEARCH === n0);
+        });
+
+        // ---- Collections: menu item, page, Discover row and the Search footer follow Show Collections (restored afterwards)
+        await flow('collections menu, page and Discover row', async (page) => {
+            const cfg0 = (await http('/json-api/config')).json || {};
+            const was = cfg0.BROWSE_SHOW_COLLECTIONS;
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: { BROWSE_SHOW_COLLECTIONS: was } }); });
+            const put = (v) => http('/json-api/config', { method: 'PUT', body: { BROWSE_SHOW_COLLECTIONS: v } });
+            const nav = () => page.locator('.LeftHandNav a', { hasText: /^\s*Collections\s*$/ });
+
+            await put('false');
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            ok('no Collections menu item while it is off', (await nav().count()) === 0);
+            ok('no Collections row on Discover while it is off', (await page.locator('.collectionsRail').count()) === 0);
+            await page.goto(BASE + '/browse/collections', { waitUntil: 'networkidle' });
+            await page.waitForTimeout(800);
+            ok('the Collections page says it is switched off and links to Settings', /switched off/i.test(await page.locator('body').innerText()) && (await page.locator('a[href*="settings"][href*="appearance"]').count()) > 0);
+
+            await put('true');
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            ok('a Collections menu item appears when it is on', (await nav().count()) === 1);
+            const listed = ((await http('/json-api/browse/collections', { timeout: 120000 })).json?.collections) || [];
+            if (!listed.length) return rec(U, 'collections page tiles', 'SKIP', 'iPlayer lists no collections right now');
+            await page.waitForSelector('.collectionsRail .collectionCard', { timeout: 30000 }).catch(() => {});
+            ok('Discover shows the Collections row with a tile per collection', (await page.locator('.collectionsRail .collectionCard').count()) === listed.length, `${listed.length} expected`);
+            ok('each tile carries the group icon and a title count', (await page.locator('.collectionsRail .collectionCard .groupIcon').count()) === listed.length && /\d+ titles?/.test(await page.locator('.collectionsRail .collectionCard .count').first().innerText()));
+            await page.locator('.collectionsRail .collectionCard').first().click();
+            await page.waitForSelector('.programmeRail .programmeCard', { timeout: 30000 }).catch(() => {});
+            ok('clicking a Discover tile opens its titles under the row', (await page.locator('.programmeRail', { hasText: listed[0].title }).count()) >= 1);
+            await page.locator('.collectionsRail .collectionCard').first().click();
+            await page.waitForTimeout(300);
+            ok('clicking it again closes it', (await page.locator('.collectionsRail .collectionCard.selected').count()) === 0);
+
+            await nav().first().click();
+            await page.waitForSelector('.collectionGrid .collectionCard', { timeout: 30000 });
+            ok('the menu item opens the Collections page', /\/browse\/collections/.test(page.url()));
+            ok('the page lists the same collections', (await page.locator('.collectionGrid .collectionCard').count()) === listed.length);
+            await shot(page, 'collections-page');
+            await page.locator('.collectionGrid .collectionCard').first().click();
+            await page.waitForSelector('.openCollection .programmeCard', { timeout: 30000 }).catch(() => {});
+            ok('opening a collection shows its titles and puts it in the URL', (await page.locator('.openCollection .programmeCard').count()) > 0 && /[?&]c=/.test(page.url()), page.url());
+            await shot(page, 'collections-open', true);
+            await page.goBack();
+            await page.waitForTimeout(500);
+            ok('Back closes the open collection', (await page.locator('.openCollection').count()) === 0);
+            // A link straight to an open collection works.
+            await page.goto(`${BASE}/browse/collections?c=${listed[0].id}`, { waitUntil: 'networkidle' });
+            await page.waitForSelector('.openCollection .programmeCard', { timeout: 30000 }).catch(() => {});
+            ok('a link with ?c= opens that collection on load', (await page.locator('.openCollection h2', { hasText: listed[0].title }).count()) === 1);
+            // The quick-find palette knows the page.
+            await page.keyboard.press('Control+k');
+            await page.keyboard.type('collections');
+            await page.waitForTimeout(500);
+            ok('quick find offers Collections', (await page.getByText('Collections', { exact: true }).count()) > 0);
+        });
+
+        // ---- Search page footer reflects the collection options (read-only: settings are restored)
+        await flow('search footer reports the collection options', async (page) => {
+            const cfg0 = (await http('/json-api/config')).json || {};
+            const keys = ['NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'MANUAL_NATIVE_SEARCH', 'MANUAL_NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES'];
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: Object.fromEntries(keys.map((k) => [k, cfg0[k]])) }); });
+            const footer = async () => { await page.goto(BASE + '/search?searchTerm=zzqqxxy', { waitUntil: 'networkidle' }); await page.waitForSelector('.searchSettingsNote', { timeout: 20000 }); return (await page.locator('.searchSettingsNote').innerText()); };
+            await http('/json-api/config', { method: 'PUT', body: { NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V2', MANUAL_NATIVE_SEARCH: 'inherit', MANUAL_NATIVE_SEARCH_ENGINE: 'inherit', NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false', NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false', MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'inherit', MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'inherit' } });
+            const off = await footer();
+            ok('the footer names no collection option while they are off', !/collections/i.test(off), off);
+            await http('/json-api/config', { method: 'PUT', body: { NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'true', NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' } });
+            const on = await footer();
+            ok('the footer reports both options when on for search (manual inherits)', /collections by pid or link/.test(on) && /collections by name/.test(on), on);
+            await http('/json-api/config', { method: 'PUT', body: { MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false', MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false' } });
+            const over = await footer();
+            ok('a manual override of off hides them from the footer', !/collections/i.test(over), over);
+            await shot(page, 'search-footer-collections');
+            await page.getByRole('link', { name: /Change in Settings/ }).click();
+            await page.waitForTimeout(800);
+            ok('the footer link opens the Search settings tab', /#search/.test(page.url()) && (await page.locator('.settingsTab.active').first().innerText()).includes('Search'), page.url());
+        });
+
         // ---- Light/dark mode toggle
         await flow('light/dark mode', async (page) => {
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });

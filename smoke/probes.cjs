@@ -99,7 +99,8 @@ async function readOnly(ctx, h) {
         `/api?t=search&q=a&cat=abc,,&limit=-1&offset=zzz&apikey=${apikey}`, `/api?t=tvsearch&apikey=${apikey}`, `/api?t=&apikey=${apikey}`, `/api?mode=&apikey=${apikey}`,
         `/api?t=search&q=${encodeURIComponent('%')}&apikey=${apikey}`, `/api?t=search&q=%FF%FE&apikey=${apikey}`,
         '/json-api/search?q=a&q=b', '/json-api/search?q[x]=1', '/json-api/search/stream?q=a&q=b', '/json-api/browse/suggest?q=a&q=b', '/json-api/browse/suggest?q[x]=1',
-        '/json-api/browse/details?pids=a&pids=b', '/json-api/browse/details?pids[]=a', '/json-api/browse/versions?pids=', '/json-api/browse/atoz/%00', '/json-api/browse/atoz/ab',
+        '/json-api/browse/details?pids=a&pids=b', '/json-api/browse/details?pids[]=a', '/json-api/browse/versions?pids=', '/json-api/browse/atoz/%00', '/json-api/browse/atoz/ab', '/json-api/browse/collections/p096h09x?page=-1&perPage=abc', '/json-api/browse/collections/p096h09x?perPage=99999999999999999999',
+        '/json-api/search?q=p096h09x', '/json-api/search?q=' + encodeURIComponent('https://www.bbc.co.uk/programmes/p096h09x') + '&x=1', '/json-api/search?q=' + encodeURIComponent('https://www.bbc.co.uk/' + 'a/'.repeat(500)),
         '/json-api/queue/queue?pid=a&pid=b', '/json-api/download?pid=a&pid=b', '/json-api/download?pid[x]=1',
     ];
     for (const p of odd) survives(P, `odd input handled: ${p.replace(/apikey=[^&]+/, 'apikey=***').slice(0, 90)}`, await raw(p, { timeout: 60000 }));
@@ -108,7 +109,7 @@ async function readOnly(ctx, h) {
     const nasty = ['../../etc/passwd', '..%2f..%2fetc%2fpasswd', '%00', 'a'.repeat(5000), '<script>alert(1)</script>', "' OR 1=1 --", '%E2%98%83', 'm0030pxt/../../x', 'CON', '..\\..\\windows\\win.ini'];
     const targets = [
         (x) => `/json-api/browse/programme/${x}`, (x) => `/json-api/browse/markers/${x}`, (x) => `/json-api/thumbnail/pid/${x}`, (x) => `/json-api/browse/channel/${x}`,
-        (x) => `/json-api/browse/category/${x}`, (x) => `/json-api/browse/category/${x}/rails`, (x) => `/json-api/live-channels/logo/${x}`, (x) => `/json-api/browse/channel-logo/${x}.svg`,
+        (x) => `/json-api/browse/category/${x}`, (x) => `/json-api/browse/category/${x}/rails`, (x) => `/json-api/browse/collections/${x}`, (x) => `/json-api/live-channels/logo/${x}`, (x) => `/json-api/browse/channel-logo/${x}.svg`,
         (x) => `/api?mode=stream&pid=${x}&streamkey=${streamkey}`, (x) => `/api?mode=live_logo&channel=${x}&streamkey=${streamkey}`, (x) => `/api?mode=live_thumb&pid=${x}&streamkey=${streamkey}`,
         (x) => `/json-api/download?pid=${x}`, (x) => `/api/${x}?mode=stream&pid=m0030pxt&streamkey=${streamkey}`,
     ];
