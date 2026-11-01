@@ -65,6 +65,7 @@ const configService = {
         MANUAL_NATIVE_SEARCH_ENGINE: 'inherit',
         MANUAL_SEARCH_MATCH_ALL_WORDS: 'inherit',
         NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'false',
+        NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false',
         RSS_FEED_HOURS: '48',
         // 'false' re-fetches/re-parses only today's BBC schedule page per channel each refresh,
         // reusing a cached result for any day that's already fully passed (it can't change once
@@ -136,7 +137,12 @@ const configService = {
         const oldValue = configMap[parameter];
         configMap[parameter] = value;
         await storage.setItem('config', encryptSettings(configMap));
-        if ((parameter == IplayarrParameter.NATIVE_SEARCH || parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE) && oldValue != value) {
+        if (
+            (parameter == IplayarrParameter.NATIVE_SEARCH ||
+                parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE ||
+                parameter == IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS) &&
+            oldValue != value
+        ) {
             searchFacade.clearSearchCache();
         }
         if (parameter == IplayarrParameter.AIRDATE_NUMBERING && oldValue != value) {

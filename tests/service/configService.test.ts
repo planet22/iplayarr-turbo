@@ -114,6 +114,18 @@ describe('configService', () => {
     expect(searchFacade.clearSearchCache).toHaveBeenCalled();
   });
 
+  it('clears search cache when NATIVE_SEARCH_V2_EXPAND_COLLECTIONS changes', async () => {
+    mockStorage['config'] = {
+      [IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS]: 'false',
+    };
+    await configService.setParameter(IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS, 'true');
+    expect(searchFacade.clearSearchCache).toHaveBeenCalled();
+  });
+
+  it('defaults NATIVE_SEARCH_V2_EXPAND_COLLECTIONS to off', () => {
+    expect(configService.defaultConfigMap.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS).toBe('false');
+  });
+
   it('does not clear search cache when NATIVE_SEARCH is unchanged', async () => {
     mockStorage['config'] = {
       [IplayarrParameter.NATIVE_SEARCH]: 'true',

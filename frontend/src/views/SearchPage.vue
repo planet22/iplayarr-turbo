@@ -284,6 +284,7 @@ const searchSettingsLine = computed(() => {
     const parts = [settings.native ? `Native ${settings.engine === 'V2' ? '2.0' : '1.0'}` : 'get_iplayer search'];
     if (settings.native) {
         parts.push(settings.matchAllWords ? 'all words' : 'any word');
+        if (settings.expandCollections) parts.push('collections by pid or link');
     }
     return `Search: ${parts.join(' · ')}`;
 });

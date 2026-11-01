@@ -41,6 +41,16 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="showAdvanced && config.NATIVE_SEARCH == 'true' && config.NATIVE_SEARCH_ENGINE == 'V2'"
+        v-model="config.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
+        field="NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
+        :advanced="true"
+        name="Expand BBC Collections (2.0)"
+        tooltip="Search for the pid or bbc.co.uk link of an iPlayer collection (e.g. a themed film list) to list everything in it."
+        :error="validationErrors.config?.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
+        :options="trueOrFalse"
+    />
+    <SelectInput
         v-if="showAdvanced && config.NATIVE_SEARCH == 'true'"
         v-model="config.SEARCH_MATCH_ALL_WORDS"
         field="SEARCH_MATCH_ALL_WORDS"

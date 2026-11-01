@@ -10,6 +10,7 @@ import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
 import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/responses/iplayer/IPlayerNewSearchResponse';
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
+import { extractPid } from '../../utils/extractPid';
 import { lunrSearchQuery } from '../../utils/lunrQuery';
 import { traceCandidate, traceNote } from '../../utils/searchTrace';
 import { seasonHint } from '../../utils/seasonHint';
@@ -64,6 +65,27 @@ class NativeSearchV2Service implements AbstractSearchService {
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
         const matchAllWords = (await searchSettingsService.get(IplayarrParameter.SEARCH_MATCH_ALL_WORDS)) !== 'false';
+
+        // A collection's pid or link lists what is in it; anything else (or an empty group) is a normal search.
+        const collectionPid = (await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS)) === 'true' ? extractPid(term) : undefined;
+        if (collectionPid) {
+            const members = await this.#listGroup(collectionPid);
+            if (members.length) {
+                const found: IPlayerSearchResult[] = [];
+                const infoPids: Set<string> = new Set();
+                await this.#collectEpisodes(members, async (details) => {
+                    const batch: IPlayerSearchResult[] = [];
+                    for (const info of details) {
+                        if (infoPids.has(info.pid)) continue;
+                        infoPids.add(info.pid);
+                        batch.push(await nativeSearchService.createSearchResult(info.title, info, sizeFactor, synonym));
+                    }
+                    found.push(...batch);
+                    if (batch.length) onBatch?.(batch);
+                });
+                return found;
+            }
+        }
 
         // Nothing matched every word: retry with the trailing words dropped ("Show Name Episode Title"
         // -> "Show Name"), keeping the all-words rule against the shorter term.
@@ -196,6 +218,17 @@ class NativeSearchV2Service implements AbstractSearchService {
                 await collect(details);
             }
         }
+    }
+
+    // The released episodes/films of a collection, at most one search's worth.
+    async #listGroup(groupPid: string): Promise<IPlayerEpisodeMetadata[]> {
+        const all: IPlayerEpisodeMetadata[] = [];
+        for (let page = 1; page <= maxEpisodePages && all.length < searchResultLimit; page++) {
+            const elements = await iplayerDetailsService.getGroupEpisodes(groupPid, page);
+            all.push(...elements.filter(({ type, release_date_time }) => type == 'episode' && release_date_time != null));
+            if (elements.length < searchResultLimit) break;
+        }
+        return all.slice(0, searchResultLimit);
     }
 
     async #listContainer(containerPid: string): Promise<IPlayerEpisodeMetadata[]> {

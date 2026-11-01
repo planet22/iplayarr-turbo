@@ -21,6 +21,7 @@ const CHANGE = {
     MANUAL_NATIVE_SEARCH_ENGINE: ['V2', 'V1', 'inherit'],
     MANUAL_SEARCH_MATCH_ALL_WORDS: ['false', 'true', 'inherit'],
     NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: ['true', 'false'],
+    NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: ['true', 'false'],
     LIBRARY_FOLDER_STRUCTURE: ['false', 'true'],
     WRITE_NFO_STRM: ['all', 'nzb', 'none', 'manual'],
     WRITE_STRMTOOL_JSON: ['true', 'false'],
@@ -274,6 +275,18 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const r = await http(`/json-api/search?q=${encodeURIComponent(`${freshTerm()} zzqqxxy`)}`, { timeout: 90000 });
             const n = Array.isArray(r.json) ? r.json.length : -1;
             return { ...base, pass: base.pass && (want ? n === 0 : n > 0), detail: `${base.detail}; manual search for a non-matching extra word gave ${n} results` };
+        },
+        NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: async ({ next }) => {
+            const s = await manualSettings();
+            if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
+            const on = next === 'true';
+            const base = { what: `the Search page footer reports collections ${on ? 'on' : 'off'}`, pass: !!s.expandCollections === on, detail: JSON.stringify(s) };
+            // A real BBC collection (Fright Night); if the BBC has retired it there is nothing to expand.
+            const group = await fetch('https://ibl.api.bbci.co.uk/ibl/v1/groups/p096h09x/episodes?rights=web&per_page=1').then((r) => r.json()).catch(() => undefined);
+            if (!group?.group_episodes?.count) return base.pass ? { ...base, detail: `${base.detail}; the BBC collection used for the search probe is gone` } : base;
+            const r = await http('/json-api/search?q=p096h09x', { timeout: 90000 });
+            const n = Array.isArray(r.json) ? r.json.length : -1;
+            return { ...base, pass: base.pass && (on ? n > 0 : n === 0), detail: `${base.detail}; a manual search for the collection pid gave ${n} results` };
         },
         NATIVE_SEARCH: async ({ next }) => {
             if ((effective(await get(), 'MANUAL_NATIVE_SEARCH') || 'inherit') !== 'inherit') return 'manual search has its own native-search override';

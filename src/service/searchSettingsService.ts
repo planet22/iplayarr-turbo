@@ -13,13 +13,18 @@ const MANUAL_TWIN = {
 } as const;
 
 // Requested-series-only has no manual twin: a manual search always lists the whole show.
-type SearchSettingKey = keyof typeof MANUAL_TWIN | IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY;
+// Expand-collections has none either, but applies to both: a collection pid is typed into the manual search.
+type SearchSettingKey =
+    | keyof typeof MANUAL_TWIN
+    | IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY
+    | IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS;
 
 export interface EffectiveSearchSettings {
     native: boolean;
     engine?: 'V1' | 'V2';
     matchAllWords?: boolean;
     requestedSeriesOnly?: boolean;
+    expandCollections?: boolean;
     // Which settings are not overridden for this context and follow the NZB search ones.
     inherited: string[];
 }
@@ -29,18 +34,20 @@ class SearchSettingsService {
     async get(key: SearchSettingKey, context: SearchContext = searchContext()): Promise<string | undefined> {
         if (context === 'manual') {
             if (key === IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY) return 'false';
-            const override = await configService.getParameter(MANUAL_TWIN[key]);
+            const twin = (MANUAL_TWIN as Partial<Record<SearchSettingKey, IplayarrParameter>>)[key];
+            const override = twin && (await configService.getParameter(twin));
             if (override && override !== INHERIT) return override;
         }
         return configService.getParameter(key);
     }
 
     async effective(context: SearchContext): Promise<EffectiveSearchSettings> {
-        const [native, engine, series, words] = await Promise.all([
+        const [native, engine, series, words, collections] = await Promise.all([
             this.get(IplayarrParameter.NATIVE_SEARCH, context),
             this.get(IplayarrParameter.NATIVE_SEARCH_ENGINE, context),
             this.get(IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY, context),
             this.get(IplayarrParameter.SEARCH_MATCH_ALL_WORDS, context),
+            this.get(IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS, context),
         ]);
         const inherited: string[] = [];
         if (context === 'manual') {
@@ -56,6 +63,7 @@ class SearchSettingsService {
             engine: v2 ? 'V2' : 'V1',
             matchAllWords: words !== 'false',
             ...(v2 && series === 'true' ? { requestedSeriesOnly: true } : {}),
+            ...(v2 && collections === 'true' ? { expandCollections: true } : {}),
             inherited,
         };
     }

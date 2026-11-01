@@ -52,6 +52,22 @@ describe('searchSettingsService', () => {
             );
         });
 
+        it('reports expandCollections for native 2.0 in both contexts, and never manual-overridden', async () => {
+            setConfig({ ...base, NATIVE_SEARCH_ENGINE: 'V2', NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'true' });
+            expect((await searchSettingsService.effective('manual')).expandCollections).toBe(true);
+            expect((await searchSettingsService.effective('nzb')).expandCollections).toBe(true);
+            await runInSearchContext('manual', async () =>
+                expect(await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS)).toBe('true')
+            );
+        });
+
+        it('leaves expandCollections out when it is off or the engine is not 2.0', async () => {
+            setConfig({ ...base, NATIVE_SEARCH_ENGINE: 'V2', NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false' });
+            expect(await searchSettingsService.effective('manual')).not.toHaveProperty('expandCollections');
+            setConfig({ ...base, NATIVE_SEARCH_ENGINE: 'V1', NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'true' });
+            expect(await searchSettingsService.effective('manual')).not.toHaveProperty('expandCollections');
+        });
+
         it('reports only native: false when native search is off', async () => {
             setConfig({ ...base, MANUAL_NATIVE_SEARCH: 'false' });
             expect(await searchSettingsService.effective('manual')).toEqual({

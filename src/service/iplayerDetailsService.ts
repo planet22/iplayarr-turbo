@@ -147,6 +147,24 @@ class IPlayerDetailsService {
         }
     }
 
+    // The episodes/films in an iPlayer curated group ("collection"), a page at a time. Empty when the pid is
+    // not a group (IBL answers 404) or the page failed.
+    async getGroupEpisodes(pid: string, page: number = 1, perPage: number = searchResultLimit): Promise<IPlayerEpisodeMetadata[]> {
+        const cacheKey = `group_${pid}_${perPage}_${page}`;
+        const cached = await this.episodesCache.get(cacheKey);
+        if (cached) return cached;
+        try {
+            const response = await withRetry(() =>
+                axios.get(`https://ibl.api.bbci.co.uk/ibl/v1/groups/${encodeURIComponent(pid)}/episodes?rights=web&per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`)
+            );
+            const elements: IPlayerEpisodeMetadata[] = response.data?.group_episodes?.elements ?? [];
+            await this.episodesCache.set(cacheKey, elements).catch(() => undefined);
+            return elements;
+        } catch {
+            return [];
+        }
+    }
+
     // Like getSeriesEpisodes, but retries (with backoff) and says whether the page actually loaded, so a caller
     // can tell a failed page from a genuinely short (final) one. Used by Native Search V2.
     async getSeriesEpisodesChecked(pid: string, page: number = 1, perPage: number = searchResultLimit): Promise<{ elements: IPlayerEpisodeMetadata[]; failed: boolean }> {

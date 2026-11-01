@@ -439,6 +439,101 @@ describe('NativeSearchV2Service', () => {
             expect(results.map(({ pid }) => pid)).toEqual(['two0', 'two1']);
         });
     });
+
+    describe('collections', () => {
+        const member = (id: string, extra: Partial<IPlayerEpisodeMetadata> = {}): IPlayerEpisodeMetadata => ({ type: 'episode', id, title: `Film ${id}`, release_date_time: '2025-01-01', ...extra });
+        const setConfig = (values: Record<string, string>) =>
+            jest.spyOn(configService, 'getParameter').mockImplementation(async (key: any) => values[key]);
+        const on = { NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'true' };
+
+        afterEach(() => jest.restoreAllMocks());
+
+        it('lists the members of a collection searched by pid, reporting them to onBatch', async () => {
+            setConfig(on);
+            (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([member('m1'), member('m2')]);
+            const batched: string[] = [];
+
+            const results = await NativeSearchV2Service.search('p096h09x', undefined, (batch) => batched.push(...batch.map(({ pid }) => pid)));
+
+            expect(iplayerDetailsService.getGroupEpisodes).toHaveBeenCalledWith('p096h09x', 1);
+            expect(results.map(({ pid }) => pid)).toEqual(['m1', 'm2']);
+            expect(batched).toEqual(['m1', 'm2']);
+            expect(axios.get).not.toHaveBeenCalled();
+        });
+
+        it('accepts a bbc.co.uk link', async () => {
+            setConfig(on);
+            (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([member('m1')]);
+            const results = await NativeSearchV2Service.search('https://www.bbc.co.uk/programmes/p096h09x');
+            expect(iplayerDetailsService.getGroupEpisodes).toHaveBeenCalledWith('p096h09x', 1);
+            expect(results).toHaveLength(1);
+        });
+
+        it('skips members that are not released episodes, and repeated members', async () => {
+            setConfig(on);
+            (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([
+                member('m1'),
+                member('series1', { type: 'series' }),
+                member('undated', { release_date_time: undefined }),
+                member('m1'),
+            ]);
+            const results = await NativeSearchV2Service.search('p096h09x');
+            expect(results.map(({ pid }) => pid)).toEqual(['m1']);
+        });
+
+        it('drops a duplicate pid that the details lookup returns twice', async () => {
+            setConfig(on);
+            (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([member('m1'), member('m2')]);
+            (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockResolvedValue([
+                { title: 'A', pid: 'dup', type: 'episode', runtime: 30 },
+                { title: 'A', pid: 'dup', type: 'episode', runtime: 30 },
+            ]);
+            expect((await NativeSearchV2Service.search('p096h09x')).map(({ pid }) => pid)).toEqual(['dup']);
+        });
+
+        it('pages through a large collection up to the result limit', async () => {
+            setConfig(on);
+            const full = Array.from({ length: searchResultLimit }, (_, i) => member(`a${i}`));
+            (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockImplementation(async (_pid: string, page: number) => (page === 1 ? full : [member('b0')]));
+            const results = await NativeSearchV2Service.search('p096h09x');
+            expect(iplayerDetailsService.getGroupEpisodes).toHaveBeenCalledTimes(1);
+            expect(results).toHaveLength(searchResultLimit);
+        });
+
+        it('reads the next page when the first is full but under the limit of members', async () => {
+            setConfig(on);
+            const page1 = Array.from({ length: searchResultLimit }, (_, i) => member(`a${i}`, i === 0 ? {} : { type: 'series' }));
+            (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockImplementation(async (_pid: string, page: number) => (page === 1 ? page1 : [member('b0')]));
+            const results = await NativeSearchV2Service.search('p096h09x');
+            expect(iplayerDetailsService.getGroupEpisodes).toHaveBeenCalledTimes(2);
+            expect(results.map(({ pid }) => pid)).toEqual(['a0', 'b0']);
+        });
+
+        it('falls through to a normal search when the pid is not a collection', async () => {
+            setConfig(on);
+            (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([]);
+            searchHits({ id: 'hit1', title: 'p096h09x' });
+            serveEpisodes({ brandPid: episodes('a', 2) });
+            const results = await NativeSearchV2Service.search('p096h09x');
+            expect(axios.get).toHaveBeenCalled();
+            expect(results).toHaveLength(2);
+        });
+
+        it('does not look at pids or links when the option is off', async () => {
+            setConfig({ NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false' });
+            searchHits();
+            expect(await NativeSearchV2Service.search('p096h09x')).toEqual([]);
+            expect(iplayerDetailsService.getGroupEpisodes).not.toHaveBeenCalled();
+        });
+
+        it('does not take an ordinary title for a pid', async () => {
+            setConfig(on);
+            searchHits({ id: 'hit1', title: 'Carnival' });
+            serveEpisodes({ brandPid: episodes('a', 1) });
+            await NativeSearchV2Service.search('Carnival');
+            expect(iplayerDetailsService.getGroupEpisodes).not.toHaveBeenCalled();
+        });
+    });
 });
 
 describe('NativeSearchV2Service when the search cache cannot be written', () => {
