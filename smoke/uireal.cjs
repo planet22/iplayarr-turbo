@@ -297,7 +297,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Hours in RSS Feed and Full Schedule Refresh sit with the scheduled tasks (advanced)', !/Hours in RSS Feed/.test(maint) || maint.indexOf('Hours in RSS Feed') > maint.indexOf('Scheduled tasks'), 'RSS setting is above the Scheduled tasks heading');
 
             // Old links: #general still opens General, and an unknown hash opens the first tab rather than a blank page.
-            await page.goto(`${BASE}/settings#nonsense`, { waitUntil: 'networkidle' }); await page.waitForTimeout(1000);
+            await page.goto('about:blank'); await page.goto(`${BASE}/settings#nonsense`, { waitUntil: 'networkidle' }); await page.waitForTimeout(1000);
             ok('an unknown tab in the link opens General', (await page.locator('.settingsTab.active').first().innerText()).includes('General'));
         });
 
@@ -353,6 +353,17 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the menu item opens the Collections page', /\/browse\/collections/.test(page.url()));
             ok('the page lists the same collections', (await page.locator('.collectionGrid .collectionCard').count()) === listed.length);
             ok('each tile carries the group icon and a title count', (await page.locator('.collectionGrid .collectionCard .groupIcon').count()) === listed.length && /\d+ titles?/.test(await page.locator('.collectionGrid .collectionCard .count').first().innerText()));
+            if (listed.length > 12) {
+                const filter = page.locator('input.collectionFilter');
+                ok('a long list has a title filter', (await filter.count()) === 1);
+                await filter.fill(listed[0].title.split(' ')[0]);
+                const narrowed = await page.locator('.collectionGrid .collectionCard').count();
+                ok('typing narrows the tiles and keeps the matching collection', narrowed >= 1 && narrowed < listed.length, `${narrowed} of ${listed.length}`);
+                await filter.fill('zzqqxxy');
+                ok('a word that matches nothing shows none and says so', (await page.locator('.collectionGrid .collectionCard').count()) === 0 && /No collection matches/.test(await page.locator('body').innerText()));
+                await filter.fill('');
+                ok('clearing the filter brings every collection back', (await page.locator('.collectionGrid .collectionCard').count()) === listed.length);
+            }
             await shot(page, 'collections-page');
             await page.locator('.collectionGrid .collectionCard').first().click();
             await page.waitForSelector('.openCollection .programmeCard', { timeout: 30000 }).catch(() => {});

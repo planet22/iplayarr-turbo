@@ -70,6 +70,7 @@ const configService = {
         MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'inherit',
         MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'inherit',
         BROWSE_SHOW_COLLECTIONS: 'false',
+        BROWSE_COLLECTION_SOURCES: 'all',
         RSS_FEED_HOURS: '48',
         // 'false' re-fetches/re-parses only today's BBC schedule page per channel each refresh,
         // reusing a cached result for any day that's already fully passed (it can't change once

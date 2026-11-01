@@ -62,6 +62,7 @@ Settings named `UI_*` are stored with the rest of the configuration and apply to
 | Top Bar | _(per browser)_ | Slim | Slim keeps the bar on screen while scrolling; Hide on scroll shows it again when you scroll up. |
 | Show Quick Find Button | _(per browser)_ | on | The lightning-bolt button in the top bar. `Ctrl+K` / `Cmd+K` works either way. |
 | Show Collections | `BROWSE_SHOW_COLLECTIONS` | `false` | Adds a **Collections** page to the Browse menu: each collection is a tile with a group icon, and clicking it opens what is in it. See [BROWSE.md](BROWSE.md#collections). |
+| Where to Look for Collections _(advanced)_ | `BROWSE_COLLECTION_SOURCES` | `all` | iPlayer has no collection list, so they are collected from its pages. `all` reads the home page and every category page (over a hundred collections, about twenty page reads each time the list refreshes, every 6 hours); `home` reads only the home page (about thirty, lightest). The list feeds the Collections page, finding collections by name in search, and Download collection; each source keeps its own list. Generic shelves ("Featured Films", "Live and Latest News") are left out. |
 | Show Info Messages | `UI_INFO_MESSAGES` | `true` | The blue explanatory notes at the top of pages. Warnings and errors always show. |
 | Colour Channel Pills | `UI_PILL_COLORS` | `true` | Colour channel labels to match each BBC logo. |
 | Show Channel Tools | `UI_CHANNEL_TOOLS` | `true` | The arrange, library, Live TV and customise buttons on the Channels page. Turn off to keep the page simple. |

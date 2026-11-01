@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 import collectionService from '../../src/service/collectionService';
+import configService from '../../src/service/configService';
 import loggingService from '../../src/service/loggingService';
 
 jest.mock('axios');
@@ -103,6 +104,102 @@ describe('collectionService', () => {
                 'groups/p096h09x/': () => Promise.reject(new Error('500')),
             });
             expect(await collectionService.list()).toEqual([{ id: 'm001', title: 'Must-Watch Movies', synopsis: undefined, thumbnail: undefined, count: 3 }]);
+        });
+    });
+
+    describe('where to look (BROWSE_COLLECTION_SOURCES)', () => {
+        // The newer category page format: a JSON string of JSON naming each collection by pid only.
+        const newFormat = (...pids: string[]) =>
+            `<html><script>window.__INITIAL_DATA__=${JSON.stringify(JSON.stringify({ data: Object.fromEntries(pids.map((p) => [`simple-promo-collection?urn=${p}&useCarousel=true`, {}])) }))};</script></html>`;
+        const setSource = (value?: string) => jest.spyOn(configService, 'getParameter').mockImplementation(async (key: any) => (key === 'BROWSE_COLLECTION_SOURCES' ? value : undefined));
+        afterEach(() => jest.restoreAllMocks());
+
+        const serveNew = () =>
+            serve({
+                '/categories/comedy/featured': () => ({ data: newFormat('m0new001', 'm0shelf1', 'p096h09x') }),
+                'groups/m0new001/': () => groupRecord('Panel Show Palooza!', 13),
+                'groups/m0shelf1/': () => groupRecord('Featured Comedy Programmes', 24),
+            });
+
+        it('reads the newer category pages too, taking each title from the collection itself', async () => {
+            setSource('all');
+            serveNew();
+            const titles = (await collectionService.list()).map(({ title }) => title);
+            expect(titles).toEqual(['Fright Night', 'Must-Watch Movies', 'Panel Show Palooza!']);
+        });
+
+        it('drops the generic editor shelves every category opens with', async () => {
+            setSource('all');
+            serveNew();
+            const titles = (await collectionService.list()).map(({ title }) => title);
+            expect(titles.some((t) => /^featured/i.test(t))).toBe(false);
+        });
+
+        it.each(['Featured', 'featured films', 'Live and Latest News'])('treats "%s" as a generic shelf', async (title) => {
+            setSource('all');
+            serve({ '/categories/comedy/featured': () => ({ data: newFormat('m0shelf1') }), 'groups/m0shelf1/': () => groupRecord(title, 9) });
+            expect((await collectionService.list()).map((c) => c.title)).not.toContain(title);
+        });
+
+        it('keeps a themed collection that merely contains the word featured', async () => {
+            setSource('all');
+            serve({ '/categories/comedy/featured': () => ({ data: newFormat('m0keep01') }), 'groups/m0keep01/': () => groupRecord('The Most Featured Faces', 9) });
+            expect((await collectionService.list()).map((c) => c.title)).toContain('The Most Featured Faces');
+        });
+
+        it('defaults to the home page and categories when the setting is empty or unknown', async () => {
+            for (const value of [undefined, '', 'banana']) {
+                setSource(value);
+                serveNew();
+                expect(await collectionService.source()).toBe('all');
+                expect((await collectionService.list()).length).toBe(3);
+            }
+        });
+
+        it('reads only the home page when asked to, and does not fetch the categories at all', async () => {
+            setSource('home');
+            serveNew();
+            const ids = (await collectionService.list()).map(({ id }) => id);
+            expect(ids).toEqual(['p096h09x', 'm001']);
+            const urls = mockedGet.mock.calls.map(([url]) => url as string);
+            expect(urls.some((url) => url.includes('/categories'))).toBe(false);
+            expect(urls).toContain('https://www.bbc.co.uk/iplayer');
+            expect(await collectionService.source()).toBe('home');
+        });
+
+        it('keeps a separate list per source', async () => {
+            const keys: string[] = [];
+            const spy = jest.spyOn(collectionService.cache, 'getOr').mockImplementation(async (key: string, fn: any) => {
+                keys.push(key);
+                return fn(key);
+            });
+            serveNew();
+            setSource('home');
+            await collectionService.list();
+            setSource('all');
+            await collectionService.list();
+            expect(keys).toEqual(['all:home', 'all:all']);
+            spy.mockRestore();
+        });
+
+        it('searches the collections of the chosen source', async () => {
+            setSource('all');
+            serveNew();
+            expect((await collectionService.search('panel show')).map(({ id }) => id)).toEqual(['m0new001']);
+            setSource('home');
+            expect(await collectionService.search('panel show')).toEqual([]);
+        });
+
+        it('copes with a category page that has both formats, and one with neither', async () => {
+            setSource('all');
+            serve({
+                '/categories/comedy/featured': () => ({ data: `${stateHtml([group('m003', 'Comedy Hall of Fame')])}${newFormat('m0new001')}` }),
+                'groups/m0new001/': () => groupRecord('Panel Show Palooza!', 13),
+                'groups/m003/': () => groupRecord('Comedy Hall of Fame', 5),
+                '/categories/drama-and-soaps/featured': () => ({ data: '<html>nothing</html>' }),
+            });
+            const titles = (await collectionService.list()).map(({ title }) => title);
+            expect(titles).toEqual(expect.arrayContaining(['Comedy Hall of Fame', 'Panel Show Palooza!']));
         });
     });
 

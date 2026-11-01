@@ -26,6 +26,7 @@ const CHANGE = {
     NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: ['true', 'false'],
     NATIVE_SEARCH_V2_COLLECTION_NAMES: ['true', 'false'],
     BROWSE_SHOW_COLLECTIONS: ['true', 'false'],
+    BROWSE_COLLECTION_SOURCES: ['home', 'all'],
     LIBRARY_FOLDER_STRUCTURE: ['false', 'true'],
     WRITE_NFO_STRM: ['all', 'nzb', 'none', 'manual'],
     WRITE_STRMTOOL_JSON: ['true', 'false'],
@@ -329,6 +330,15 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const first = (list.collections || [])[0];
             const members = first ? (await http(`/json-api/browse/collections/${first.id}?perPage=5`)).json : undefined;
             return { what: 'the Collections page lists collections and one opens to its titles', pass: r.status === 200 && list.enabled === true && count > 0 && (members?.items || []).length > 0, detail: `${count} collections; "${first?.title}" opened ${(members?.items || []).length} titles` };
+        },
+        BROWSE_COLLECTION_SOURCES: async ({ next }) => {
+            if (effective(await get(), 'BROWSE_SHOW_COLLECTIONS') !== 'true') return 'Show Collections is off, so the list is not served';
+            const r = await http('/json-api/browse/collections', { timeout: 180000 });
+            const list = r.json?.collections || [];
+            const generic = list.filter((c) => /^(featured\b|live and latest\b)/i.test(c.title));
+            // The home page holds roughly thirty; the category pages add well over a hundred more.
+            const sized = next === 'all' ? list.length > 45 : list.length > 0 && list.length < 45;
+            return { what: `the Collections list is built from ${next === 'all' ? 'the home page and every category' : 'the home page only'}`, pass: r.status === 200 && sized && generic.length === 0, detail: `${list.length} collections, ${generic.length} generic shelves` };
         },
         NATIVE_SEARCH: async ({ next }) => {
             if ((effective(await get(), 'MANUAL_NATIVE_SEARCH') || 'inherit') !== 'inherit') return 'manual search has its own native-search override';

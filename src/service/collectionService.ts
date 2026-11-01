@@ -2,8 +2,10 @@ import axios from 'axios';
 import pLimit from 'p-limit';
 
 import { BrowseCollection } from '../types/Browse';
-import { parseIplayerState } from '../utils/iplayerState';
+import { IplayarrParameter } from '../types/IplayarrParameters';
+import { parseInitialDataCollections, parseIplayerState } from '../utils/iplayerState';
 import { queryTerms, titleMatchesAllTerms } from '../utils/titleMatch';
+import configService from './configService';
 import DbCacheService from './db/dbCacheService';
 import loggingService from './loggingService';
 
@@ -11,6 +13,7 @@ const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
 const IPLAYER = 'https://www.bbc.co.uk/iplayer';
 const IMAGE_PID_REGEX = /\/([a-z0-9]{6,})\.(?:jpg|jpeg|png)(?:$|\?)/i;
 const ID_REGEX = /^[a-z0-9_-]+$/i;
+const GENERIC_SHELF = /^(featured\b|live and latest\b)/i;
 const pageConcurrency = 4;
 const infoConcurrency = 6;
 
@@ -29,8 +32,15 @@ class CollectionService {
         description: 'The BBC iPlayer collections found on its home and category pages (Browse, and the search by collection name).',
     });
 
+    // Where to look, from the Collections Source setting: just iPlayer's home page, or also every category page.
+    async source(): Promise<'home' | 'all'> {
+        return (await configService.getParameter(IplayarrParameter.BROWSE_COLLECTION_SOURCES)) === 'home' ? 'home' : 'all';
+    }
+
+    // Cached per source, so changing the setting shows its list at once without clearing anything.
     async list(): Promise<BrowseCollection[]> {
-        return this.cache.getOr('all', () => this.#build());
+        const source = await this.source();
+        return this.cache.getOr(`all:${source}`, () => this.#build(source));
     }
 
     // The collections whose title has every word of the term; none for a term with no usable words.
@@ -54,15 +64,19 @@ class CollectionService {
         }
     }
 
-    // The collection tiles of one iPlayer page; a ranked list ("Most Popular Today") is not a collection.
+    // The collection tiles of one iPlayer page, in either of its page formats (the home page's state with titled
+    // bundles, or the newer category pages that only name each collection's pid; its title then comes from its own
+    // record). A ranked list ("Most Popular Today") is not a collection.
     async #pageGroups(url: string): Promise<GroupRef[]> {
         try {
-            const page = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-            const state = parseIplayerState(String(page.data));
+            const html = String((await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })).data);
+            const state = parseIplayerState(html);
             const bundles: any[] = Array.isArray(state?.bundles) ? state.bundles : [];
-            return bundles
+            const titled = bundles
                 .filter((b) => b?.journey?.type === 'group' && b.type !== 'ranked' && ID_REGEX.test(String(b.journey.id)) && String(b.title?.default ?? '').trim())
                 .map((b) => ({ id: String(b.journey.id), title: String(b.title.default).trim() }));
+            const named = parseInitialDataCollections(html).map((id) => ({ id, title: id }));
+            return [...titled, ...named];
         } catch {
             return [];
         }
@@ -98,15 +112,17 @@ class CollectionService {
         }
     }
 
-    async #build(): Promise<BrowseCollection[]> {
-        const urls = [IPLAYER, ...(await this.#categoryIds()).map((id) => `${IPLAYER}/categories/${encodeURIComponent(id)}/featured`)];
+    async #build(source: 'home' | 'all'): Promise<BrowseCollection[]> {
+        const categories = source === 'all' ? await this.#categoryIds() : [];
+        const urls = [IPLAYER, ...categories.map((id) => `${IPLAYER}/categories/${encodeURIComponent(id)}/featured`)];
         const pages = pLimit(pageConcurrency);
         const found = await Promise.all(urls.map((url) => pages(() => this.#pageGroups(url))));
         const groups = new Map<string, GroupRef>();
         for (const group of found.flat()) if (!groups.has(group.id)) groups.set(group.id, group);
         const info = pLimit(infoConcurrency);
         const described = await Promise.all([...groups.values()].map((group) => info(() => this.describe(group))));
-        const collections = described.filter((c): c is BrowseCollection => c !== undefined);
+        // Every category page opens with its own editor shelf ("Featured Films", "Live and Latest News"): not themed lists.
+        const collections = described.filter((c): c is BrowseCollection => c !== undefined && !GENERIC_SHELF.test(c.title));
         loggingService.log(`Collections: found ${collections.length} on ${urls.length} iPlayer pages`);
         return collections;
     }

@@ -15,9 +15,14 @@
         />
         <template v-else>
             <InfoBar>Themed lists from iPlayer's home and category pages. Click one to see what is in it.</InfoBar>
+            <input
+                v-if="collections.length > FILTER_FROM" v-model="textFilter" type="search" class="tableFilter collectionFilter"
+                placeholder="Filter collections by title" aria-label="Filter collections by title" @keydown.esc="textFilter = ''"
+            />
+            <p v-if="textFilter.trim() && shownCollections.length === 0" class="noMatch">No collection matches "{{ textFilter.trim() }}".</p>
             <div class="collectionGrid">
                 <CollectionCard
-                    v-for="collection in collections"
+                    v-for="collection in shownCollections"
                     :key="collection.id"
                     :collection="collection"
                     :selected="collection.id === openId"
@@ -72,6 +77,13 @@ const globalSettings = inject('globalSettings', ref({}));
 
 const enabled = ref(true);
 const collections = ref([]);
+// With a long list (Home page and categories finds well over a hundred) a title filter appears.
+const FILTER_FROM = 12;
+const textFilter = ref('');
+const shownCollections = computed(() => {
+    const words = textFilter.value.toLowerCase().split(/\s+/).filter(Boolean);
+    return words.length ? collections.value.filter(({ title }) => words.every((word) => title.toLowerCase().includes(word))) : collections.value;
+});
 const loading = ref(true);
 const error = ref(null);
 
@@ -173,6 +185,17 @@ onMounted(load);
 </script>
 
 <style lang="less" scoped>
+.collectionFilter {
+    display: block;
+    width: 100%;
+    max-width: 360px;
+    margin: 0 0 12px;
+}
+
+.noMatch {
+    color: @subtle-text-color;
+}
+
 .collectionGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));

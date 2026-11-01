@@ -30,6 +30,7 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         ['MEDIA_MODE', ['strm', 'download']],
         ['VIDEO_QUALITY', ['mobile', 'web', 'sd', 'hd', 'fhd']],
         ['NATIVE_SEARCH_ENGINE', ['V1', 'V2']],
+        ['BROWSE_COLLECTION_SOURCES', ['home', 'all']],
         ['MANUAL_NATIVE_SEARCH_ENGINE', ['inherit', 'V1', 'V2']],
         ['MANUAL_NATIVE_SEARCH', ['inherit', 'true', 'false']],
         ['MANUAL_SEARCH_MATCH_ALL_WORDS', ['inherit', 'true', 'false']],

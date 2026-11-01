@@ -35,6 +35,7 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     MEDIA_MODE: Object.values(MediaMode),
     VIDEO_QUALITY: qualityProfiles.map(({ id }) => id),
     NATIVE_SEARCH_ENGINE: ['V1', 'V2'],
+    BROWSE_COLLECTION_SOURCES: ['home', 'all'],
     MANUAL_NATIVE_SEARCH_ENGINE: [...INHERIT, 'V1', 'V2'],
     MANUAL_NATIVE_SEARCH: [...INHERIT, ...TRUE_FALSE],
     MANUAL_SEARCH_MATCH_ALL_WORDS: [...INHERIT, ...TRUE_FALSE],

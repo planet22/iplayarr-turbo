@@ -58,6 +58,16 @@
     />
     <SelectInput
         v-if="showAdvanced"
+        v-model="config.BROWSE_COLLECTION_SOURCES"
+        field="BROWSE_COLLECTION_SOURCES"
+        :advanced="true"
+        name="Where to Look for Collections"
+        tooltip="iPlayer has no list of its collections, so they are collected from its pages. Home and categories finds far more (over a hundred) but reads about twenty pages when the list refreshes (every 6 hours). Home page only is lighter. Also used by finding collections by name in search."
+        :error="validationErrors.config?.BROWSE_COLLECTION_SOURCES"
+        :options="collectionSources"
+    />
+    <SelectInput
+        v-if="showAdvanced"
         v-model="config.UI_QUALITY_BADGES"
         :advanced="true"
         field="UI_QUALITY_BADGES"
@@ -113,6 +123,11 @@ defineProps({
         required: true,
     },
 });
+
+const collectionSources = [
+    { key: 'all', value: 'Home page and categories (most)' },
+    { key: 'home', value: 'Home page only (lightest)' },
+];
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
