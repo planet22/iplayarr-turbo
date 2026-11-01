@@ -104,31 +104,34 @@ This README covers the basics. For more detail, see `docs/`:
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/discover.png" alt="Discover" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/search.png" alt="Search results" width="49%">
+  <img src="readme-media/discover.png" alt="Discover" width="49%">
+  <img src="readme-media/search.png" alt="Search results" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/download.png" alt="Download dialog" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/queue.png" alt="Queue" width="49%">
+  <img src="readme-media/download.png" alt="Download dialog" width="49%">
+  <img src="readme-media/queue.png" alt="Queue" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/collection.png" alt="Collection" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/subscribe.png" alt="Subscribe to a show" width="49%">
+  <img src="readme-media/collection.png" alt="Collection" width="49%">
+  <img src="readme-media/subscribe.png" alt="Subscribe to a show" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/subscriptions.png" alt="Subscriptions" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/channels.png" alt="Channels" width="49%">
+  <img src="readme-media/subscriptions.png" alt="Subscriptions" width="49%">
+  <img src="readme-media/channels.png" alt="Channels" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/guide.png" alt="Guide" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/watchdog.png" alt="Watchdog" width="49%">
+  <img src="readme-media/guide.png" alt="Guide" width="49%">
+  <img src="readme-media/watchdog.png" alt="Watchdog" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/light.png" alt="Light mode and colour schemes" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/jellyfin.png" alt="Jellyfin playback" width="49%">
+  <img src="readme-media/light.png" alt="Light mode and colour schemes" width="49%">
+  <img src="readme-media/jellyfin.png" alt="Jellyfin playback" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/mobile.png" alt="Mobile view" width="24%">
+  <img src="readme-media/mobile.png" alt="Mobile: Discover" width="24%">
+  <img src="readme-media/mobile-programme.png" alt="Mobile: Programme and episodes" width="24%">
+  <img src="readme-media/mobile-categories.png" alt="Mobile: Categories" width="24%">
+  <img src="readme-media/mobile-a-z.png" alt="Mobile: A to Z" width="24%">
 </p>
 
 ## Getting Started
