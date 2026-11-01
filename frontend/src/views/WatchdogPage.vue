@@ -126,15 +126,7 @@
         </div>
         <div class="chartRow">
             <div class="chartCard">
-                <LineChart
-                    title="Checked vs Failed"
-                    :local-time="true"
-                    :window-minutes="live.running ? 2 : 0"
-                    :series="[
-                        { name: 'Checked', data: checkedSeries, color: 'chart-1' },
-                        { name: 'Failed', data: failedSeries, color: 'danger-color' },
-                    ]"
-                />
+                <RunsChart title="Results per run" :rows="runChartRows" />
             </div>
         </div>
 
@@ -290,7 +282,7 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import LineChart from '@/components/charts/LineChart.vue';
+import RunsChart from '@/components/charts/RunsChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import DataCard from '@/components/common/DataCard.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
@@ -304,7 +296,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useViewMode } from '@/lib/useViewMode';
 import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
-import { libraryLabel } from '@/lib/watchdog';
+import { libraryLabel, runChartData } from '@/lib/watchdog';
 
 const socket = inject('socket');
 const router = useRouter();
@@ -405,16 +397,8 @@ const lastRunLabel = computed(() => (lastRun.value ? formatRelativeTime(Date.par
 
 // Percentage to two decimal places (a handful of failures in hundreds of links is well under 1%).
 const failureRate = (run) => (run && run.checked ? Math.round((run.invalid / run.checked) * 10000) / 100 : 0);
-// Past runs (one point each, when they finished) followed by the current run's progress, sampled by the
-// server every few seconds, so the chart moves while a run is going. Once it finishes its saved point
-// replaces the ramp (which starts at 0 and would otherwise show as a dip at the end of the line).
-const seriesOf = (field) =>
-    Object.fromEntries([
-        ...status.value.runs.map((run) => [run.finishedAt, run[field]]),
-        ...(live.value.running ? live.value.samples ?? [] : []).map((sample) => [new Date(sample.t).toISOString(), sample[field]]),
-    ]);
-const checkedSeries = computed(() => seriesOf('checked'));
-const failedSeries = computed(() => seriesOf('invalid'));
+// Finished runs only; the progress bar above shows the one in flight.
+const runChartRows = computed(() => runChartData(status.value.runs));
 
 const onStatus = (data) => {
     status.value = data;

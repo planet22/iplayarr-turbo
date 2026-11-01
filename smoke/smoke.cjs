@@ -429,6 +429,16 @@ async function watchdogLinks(page, ctx, U) {
         rec(U, 'watchdog cards show the same library name', sample.some((i) => cards.includes(label(i))) ? 'PASS' : 'FAIL', label(sample[0]));
         const valid = sample.find((i) => i.status === 'ok');
         if (valid) rec(U, 'watchdog cards show the file for a valid link', cards.includes(valid.files[0].split(/[\\/]/).pop()) ? 'PASS' : 'FAIL', valid.files[0]);
+        // The per-run results chart replaced the live Checked-vs-Failed line chart.
+        const runs = (await http('/json-api/watchdog')).json?.runs || [];
+        const chart = page.locator('.chartCard');
+        if (runs.length) {
+            await chart.locator('svg').first().waitFor({ timeout: 10000 }).catch(() => {});
+            const chartText = await chart.innerText();
+            rec(U, 'watchdog shows the per-run results chart', /Results per run/.test(chartText) && /Valid/.test(chartText) && /Invalid/.test(chartText) ? 'PASS' : 'FAIL', chartText.slice(0, 80));
+            rec(U, 'watchdog no longer shows the live line chart', /Checked vs Failed/.test(cards) ? 'FAIL' : 'PASS');
+            rec(U, 'watchdog results chart has one bar per recent run', (await chart.locator('.apexcharts-bar-area').count()) > 0 ? 'PASS' : 'FAIL');
+        } else rec(U, 'watchdog per-run results chart', 'SKIP', 'no finished runs');
         await page.screenshot({ path: path.join(SHOTS, 'flow-watchdog-cards.png'), fullPage: true });
         await page.evaluate(() => localStorage.removeItem('iplayarr.watchdogViewMode'));
     } catch (e) { rec(U, 'watchdog links', 'FAIL', e.message.split('\n')[0]); }
