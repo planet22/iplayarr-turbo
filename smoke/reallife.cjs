@@ -9,6 +9,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
     const cleanups = [];
     const later = (name, fn) => cleanups.push({ name, fn });
     const step = async (name, fn) => {
+        if (ctx.want && !ctx.want(name)) return; // --filter on the command line
         try { await fn(); } catch (e) { rec(W, name, 'FAIL', 'threw: ' + e.message); }
     };
     const ok = (name, cond, detail = '') => rec(W, name, cond ? 'PASS' : 'FAIL', cond ? '' : detail);

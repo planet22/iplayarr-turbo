@@ -2,6 +2,7 @@ import { Request, Response, Router } from 'express';
 
 import subscriptionArrService, { SubscriptionArrError } from '../../service/subscriptionArrService';
 import subscriptionDetectService from '../../service/subscriptionDetectService';
+import { SubscriptionError } from '../../service/subscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 
@@ -10,7 +11,7 @@ const router: Router = asyncRouter();
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
 
 const fail = (res: Response, error: any, fallback: string) => {
-    const known = error instanceof SubscriptionArrError;
+    const known = error instanceof SubscriptionArrError || error instanceof SubscriptionError;
     res.status(known ? 400 : 500).json({
         error: known ? ApiError.INVALID_INPUT : ApiError.INTERNAL_ERROR,
         message: error?.message || fallback,

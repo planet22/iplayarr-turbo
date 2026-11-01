@@ -1,10 +1,20 @@
 #!/usr/bin/env node
 /* iPlayarr smoke test: API layer, UI layer (Playwright), filesystem layer.
  *
- *   node smoke/smoke.cjs [--base URL] [--only api,ui,fs] [--write] [--phone-only] [--shots DIR]
+ *   node smoke/smoke.cjs [--base URL] [--only GROUPS] [--filter REGEX] [--list] [--write] [--phone-only] [--shots DIR]
  *
  * Default is READ-ONLY against the running instance. --write adds a reversible
  * round-trip layer (clearly marked SMOKE-TEMP entries, removed afterwards).
+ *
+ * Running part of the suite:
+ *   --only GROUPS   comma-separated: api, ui, fs (read-only) and, with --write, real (API real-life steps), settings
+ *                   (every-setting sweep), probes (hostile-input probes), uireal (real UI flows); `write` = all four.
+ *                   With --write, api also runs real+settings+probes and ui also runs uireal (the full run).
+ *   --filter REGEX  inside the groups chosen, run only the steps/flows/routes whose name matches (case-insensitive),
+ *                   e.g. --write --only uireal --filter "collections|subscriptions sync". Steps can depend on an earlier
+ *                   step's state, so widen the pattern if one fails for a missing precondition.
+ *   --list          print every group and the step/flow names --filter can match, then exit.
+ *   Write groups always need --write. Let a run finish: stopping it midway skips the cleanup that restores settings.
  * Env: SMOKE_BASE (instance URL), SMOKE_MEDIA_ROOT (library folder, enables the fs layer),
  * SMOKE_PW_DIR (a node_modules folder with playwright; it is not a project dependency, so
  * `npm i playwright` outside the repo and point this at it). Exit code 1 if any check FAILs.
@@ -17,15 +27,44 @@ const { createRequire } = require('module');
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : (args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true); };
 const BASE = String(opt('base', process.env.SMOKE_BASE || 'http://localhost:4404')).replace(/\/$/, '');
-const ONLY = String(opt('only', 'api,ui,fs')).split(',');
 const WRITE = !!opt('write', false);
+const READ_GROUPS = ['api', 'ui', 'fs'];
+const WRITE_GROUPS = ['real', 'settings', 'probes', 'uireal'];
+const ONLY = String(opt('only', 'api,ui,fs')).split(',').map((g) => g.trim()).filter(Boolean).flatMap((g) => (g === 'write' ? WRITE_GROUPS : [g]));
+const unknownGroups = ONLY.filter((g) => ![...READ_GROUPS, ...WRITE_GROUPS].includes(g));
+const needWrite = ONLY.filter((g) => WRITE_GROUPS.includes(g));
+if (unknownGroups.length || (needWrite.length && !WRITE)) {
+    console.error(unknownGroups.length ? `Unknown group(s): ${unknownGroups.join(', ')}. Groups: ${[...READ_GROUPS, ...WRITE_GROUPS].join(', ')} (or write)` : `Group(s) ${needWrite.join(', ')} change data and need --write`);
+    process.exit(2);
+}
+// The full --write run: the API layer brings its write layers, the UI layer its real flows.
+if (WRITE && ONLY.includes('api')) ONLY.push('real', 'settings', 'probes');
+if (WRITE && ONLY.includes('ui')) ONLY.push('uireal');
+const filterArg = opt('filter', false);
+const FILTER = typeof filterArg === 'string' ? new RegExp(filterArg, 'i') : null;
+const want = (name) => !FILTER || FILTER.test(name);
+const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'watchdog links', 'programme page', 'socket.io'];
+
+if (opt('list', false)) {
+    const names = (file, fn) => [...fs.readFileSync(path.join(__dirname, file), 'utf8').matchAll(new RegExp(`await ${fn}\\('([^']+)'`, 'g'))].map((m) => m[1]);
+    const show = (title, list) => console.log(`${title}\n${list.map((n) => '  ' + n).join('\n') || '  (the whole group runs as one)'}\n`);
+    console.log('Groups: api, ui, fs (read-only); real, settings, probes, uireal (need --write); write = all four\n');
+    show('ui (route sweep + interactions, --filter matches the page label or:)', INTERACTIONS);
+    show('real  (--write --only real --filter ...)', names('reallife.cjs', 'step'));
+    show('uireal  (--write --only uireal --filter ...)', names('uireal.cjs', 'flow'));
+    show('settings', []);
+    show('probes', []);
+    process.exit(0);
+}
 const PHONE_ONLY = !!opt('phone-only', false);
 const SHOTS = String(opt('shots', path.resolve(__dirname, '..', '.claude', 'shots', 'smoke')));
 const MEDIA_ROOT = process.env.SMOKE_MEDIA_ROOT || ''; // library folder holding .strm files; unset skips the fs layer
 const PW_DIR = process.env.SMOKE_PW_DIR || ''; // node_modules folder with playwright, when it is not installed locally
 
 const results = [];
+let muted = false; // set while the API layer only runs to discover pids/config for the write groups
 const rec = (area, name, status, detail = '') => {
+    if (muted) return;
     results.push({ area, name, status, detail: String(detail).slice(0, 300) });
     const tag = { PASS: '  ok ', FAIL: 'FAIL ', WARN: 'warn ', SKIP: 'skip ' }[status];
     console.log(`${tag}[${area}] ${name}${detail ? ' - ' + String(detail).slice(0, 160) : ''}`);
@@ -136,7 +175,13 @@ async function apiLayer(ctx) {
 
     // Browse
     const home = await check(A, 'browse home rails', '/json-api/browse/home', isArr);
-    const firstItem = (home.json || []).flatMap((r) => r.items || [])[0];
+    // Prefer an item that belongs to a brand: the subscription flows need one, and the first rail item can be a one-off.
+    const homeItems = (home.json || []).flatMap((r) => r.items || []);
+    let firstItem = homeItems[0];
+    for (const candidate of homeItems.slice(0, 10)) {
+        if (!candidate?.pid) continue;
+        if ((await http(`/json-api/browse/programme/${candidate.pid}`, { timeout: 60000 })).json?.kind === 'brand') { firstItem = candidate; break; }
+    }
     ctx.pid = firstItem?.pid;
     rec(A, 'browse home has items', ctx.pid ? 'PASS' : 'FAIL', ctx.pid ? 'pid ' + ctx.pid : 'empty');
     const chans = await check(A, 'browse channels', '/json-api/browse/channels', isArr);
@@ -411,10 +456,12 @@ async function uiLayer(ctx) {
     fs.mkdirSync(SHOTS, { recursive: true });
     const browser = await chromium.launch();
     try {
-        for (const [vpName, vp] of VIEWPORTS) {
+        const sweep = ONLY.includes('ui'); // false when only the real UI flows were asked for
+        for (const [vpName, vp] of (sweep ? VIEWPORTS : [])) {
             if (PHONE_ONLY && vpName !== 'phone') continue;
             const context = await browser.newContext({ viewport: vp, isMobile: vpName === 'phone', hasTouch: vpName === 'phone' });
             for (const [tpl, label, expects] of ROUTES) {
+                if (!want(label)) continue;
                 const route = tpl.replace('{channel}', ctx.channel || 'bbc_one_london').replace('{category}', ctx.category || 'comedy').replace('{pid}', ctx.pid || '').replace('{item}', encodeURIComponent(JSON.stringify({ pid: ctx.pid || 'm000smoke', title: 'SMOKE item' })));
                 if (route.endsWith('/') || route.includes('//')) { rec(U, `${label} @${vpName}`, 'SKIP', 'no id discovered'); continue; }
                 const page = await context.newPage();
@@ -439,8 +486,8 @@ async function uiLayer(ctx) {
             }
             await context.close();
         }
-        await uiInteractions(browser, ctx);
-        if (WRITE) await require('./uireal.cjs')(browser, ctx, { http, rec, BASE, SHOTS });
+        if (sweep) await uiInteractions(browser, ctx);
+        if (WRITE && ONLY.includes('uireal')) await require('./uireal.cjs')(browser, ctx, { http, rec, BASE, SHOTS });
     } finally { await browser.close(); }
 }
 
@@ -451,7 +498,7 @@ async function uiInteractions(browser, ctx) {
     const bad = [];
     page.on('pageerror', (e) => bad.push(e.message));
     // Search flow: type, results render, no error
-    try {
+    if (want('search results')) try {
         await page.goto(BASE + '/search', { waitUntil: 'networkidle' });
         await page.locator('.searchBox').first().fill('doctor');
         await page.keyboard.press('Enter');
@@ -462,7 +509,7 @@ async function uiInteractions(browser, ctx) {
         await page.screenshot({ path: path.join(SHOTS, 'flow-search-results.png') });
     } catch (e) { rec(U, 'search flow', 'FAIL', e.message.split('\n')[0]); }
     // Settings: every tab loads without page errors; Save bar stays disabled until edited
-    try {
+    if (want('settings tabs')) try {
         await page.goto(BASE + '/settings', { waitUntil: 'networkidle' });
         const tabs = page.locator('.settingsTab');
         const count = await tabs.count();
@@ -472,11 +519,11 @@ async function uiInteractions(browser, ctx) {
         rec(U, 'settings save bar clean (not dirty) after only navigating', (await page.locator('.settingsTab.dirty').count()) === 0 ? 'PASS' : 'FAIL');
         await page.screenshot({ path: path.join(SHOTS, 'flow-settings.png'), fullPage: true });
     } catch (e) { rec(U, 'settings tabs', 'FAIL', e.message.split('\n')[0]); }
-    await subscriptionsToolbar(page, ctx, U);
-    await subscriptionsCards(browser, page, U);
-    await watchdogLinks(page, ctx, U);
+    if (want('subscriptions toolbar')) await subscriptionsToolbar(page, ctx, U);
+    if (want('subscriptions cards')) await subscriptionsCards(browser, page, U);
+    if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     // Programme page: play/download controls exist
-    if (ctx.pid) {
+    if (ctx.pid && want('programme page')) {
         try {
             await page.goto(`${BASE}/browse/programme/${ctx.pid}`, { waitUntil: 'networkidle' });
             const btns = await page.locator('button').count();
@@ -484,8 +531,10 @@ async function uiInteractions(browser, ctx) {
         } catch (e) { rec(U, 'programme page', 'FAIL', e.message.split('\n')[0]); }
     }
     // Realtime: socket.io handshake succeeds
-    const sock = await http('/socket.io/?EIO=4&transport=polling');
-    rec(U, 'socket.io handshake', sock.status === 200 && /sid/.test(sock.text) ? 'PASS' : 'FAIL', `HTTP ${sock.status}`);
+    if (want('socket.io')) {
+        const sock = await http('/socket.io/?EIO=4&transport=polling');
+        rec(U, 'socket.io handshake', sock.status === 200 && /sid/.test(sock.text) ? 'PASS' : 'FAIL', `HTTP ${sock.status}`);
+    }
     rec(U, 'no uncaught page errors during flows', bad.length ? 'FAIL' : 'PASS', bad.slice(0, 2).join(' | '));
     await context.close();
 }
@@ -504,15 +553,16 @@ async function watchdogLinks(page, ctx, U) {
             await page.waitForTimeout(800);
             return page.locator('body').innerText();
         };
-        const sample = items.slice(0, 5);
+        // The page is paged, so any link may be on page 1: look for any of them, not just the first few.
+        const sample = items;
         const table = await view('table');
         rec(U, 'watchdog table lists the library name under each link', sample.some((i) => table.includes(label(i))) ? 'PASS' : 'FAIL', label(sample[0]));
         const strikes = (await http('/json-api/watchdog')).json?.strikes;
         rec(U, 'watchdog table has a Strikes column showing n/limit', table.includes('Strikes') && table.includes(`0/${strikes}`) ? 'PASS' : 'FAIL', `limit ${strikes}`);
         const cards = await view('cards');
         rec(U, 'watchdog cards show the same library name', sample.some((i) => cards.includes(label(i))) ? 'PASS' : 'FAIL', label(sample[0]));
-        const valid = sample.find((i) => i.status === 'ok');
-        if (valid) rec(U, 'watchdog cards show the file for a valid link', cards.includes(valid.files[0].split(/[\\/]/).pop()) ? 'PASS' : 'FAIL', valid.files[0]);
+        const valid = sample.filter((i) => i.status === 'ok');
+        if (valid.length) rec(U, 'watchdog cards show the file for a valid link', valid.some((i) => cards.includes(i.files[0].split(/[\\/]/).pop())) ? 'PASS' : 'FAIL', valid[0].files[0]);
         // The per-run results chart replaced the live Checked-vs-Failed line chart.
         const runs = (await http('/json-api/watchdog')).json?.runs || [];
         const chart = page.locator('.chartCard');
@@ -705,17 +755,23 @@ async function subscriptionsCards(browser, page, U) {
 
 // ---------------------------------------------------------------- main
 (async () => {
-    console.log(`iPlayarr smoke: ${BASE}  layers=${ONLY.join(',')}  write=${WRITE}\n`);
-    const ctx = {};
-    if (ONLY.includes('api') || ONLY.includes('ui')) await apiLayer(ctx);
-    if (WRITE && ONLY.includes('api')) {
+    console.log(`iPlayarr smoke: ${BASE}  groups=${[...new Set(ONLY)].join(',')}  write=${WRITE}${FILTER ? `  filter=${FILTER}` : ''}\n`);
+    const ctx = { want };
+    // The read-only API layer also discovers the pids, channels and config every other group uses. When only write
+    // groups were asked for, run it silently for that.
+    if (['api', 'ui', ...WRITE_GROUPS].some((g) => ONLY.includes(g))) {
+        muted = !ONLY.includes('api') && !ONLY.includes('ui');
+        await apiLayer(ctx);
+        muted = false;
+    }
+    if (['real', 'settings', 'probes'].some((g) => ONLY.includes(g))) {
         ctx.preLiveBbcFour = ((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four');
-        await require('./reallife.cjs')(ctx, { http, rec, BASE, check });
-        await require('./settings.cjs')(ctx, { http, rec, BASE });
-        await require('./probes.cjs').write(ctx, { http, rec, BASE });
+        if (ONLY.includes('real')) await require('./reallife.cjs')(ctx, { http, rec, BASE, check });
+        if (ONLY.includes('settings')) await require('./settings.cjs')(ctx, { http, rec, BASE });
+        if (ONLY.includes('probes')) await require('./probes.cjs').write(ctx, { http, rec, BASE });
     }
     if (ONLY.includes('fs')) fsLayer(ctx);
-    if (ONLY.includes('ui')) await uiLayer(ctx);
+    if (ONLY.includes('ui') || ONLY.includes('uireal')) await uiLayer(ctx);
     const c = (s) => results.filter((r) => r.status === s).length;
     console.log(`\n==== ${c('PASS')} pass, ${c('FAIL')} fail, ${c('WARN')} warn, ${c('SKIP')} skip ====`);
     for (const r of results.filter((r) => r.status === 'FAIL')) console.log(`FAIL [${r.area}] ${r.name}: ${r.detail}`);

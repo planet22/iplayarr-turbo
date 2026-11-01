@@ -8,6 +8,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
     const shot = async (page, name, full = false) => page.screenshot({ path: path.join(SHOTS, `real-${name}.png`), fullPage: full }).catch(() => {});
     const cleanups = [];
     const flow = async (name, fn) => {
+        if (ctx.want && !ctx.want(name)) return; // --filter on the command line
         const errs = [];
         const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
         const page = await context.newPage();
@@ -351,8 +352,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await nav().first().click();
             await page.waitForSelector('.collectionGrid .collectionCard', { timeout: 30000 });
             ok('the menu item opens the Collections page', /\/browse\/collections/.test(page.url()));
-            ok('the page lists the same collections', (await page.locator('.collectionGrid .collectionCard').count()) === listed.length);
-            ok('each tile carries the group icon and a title count', (await page.locator('.collectionGrid .collectionCard .groupIcon').count()) === listed.length && /\d+ titles?/.test(await page.locator('.collectionGrid .collectionCard .count').first().innerText()));
+            // The grid is paged (16 a page by default), so page 1 holds at most 16 of the list.
+            const tiles = await page.locator('.collectionGrid .collectionCard').count();
+            ok('the page lists the same collections', tiles > 0 && tiles <= listed.length && (listed.length <= 16 || tiles === 16), `${tiles} of ${listed.length}`);
+            ok('each tile carries the group icon and a title count', (await page.locator('.collectionGrid .collectionCard .groupIcon').count()) === tiles && /\d+ titles?/.test(await page.locator('.collectionGrid .collectionCard .count').first().innerText()));
             if (listed.length > 12) {
                 const filter = page.locator('.SettingsPageToolbar input.tableFilter[aria-label="Filter collections by title"]');
                 ok('a long list has a title filter in the standard toolbar', (await filter.count()) === 1);
@@ -391,7 +394,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.waitForTimeout(1200);
             const headerTop = await page.locator('.openCollection .PageHeader').evaluate((el) => el.getBoundingClientRect().top).catch(() => 9999);
             ok('opening a collection scrolls its header into view', (await page.evaluate(() => window.scrollY)) > 0 && headerTop >= -2 && headerTop < 300, `scrollY ${await page.evaluate(() => window.scrollY)}, header top ${headerTop}`);
-            ok('the open collection has a normal page header with the icon and its name', /^Collection: /.test(await page.locator('.openCollection .PageHeader').innerText()) && (await page.locator('.openCollection .PageHeader svg').count()) === 1);
+            ok('the open collection has a normal page header with the icon and its name', /^Collection: /.test((await page.locator('.openCollection .PageHeader').innerText()).trim()) && (await page.locator('.openCollection .PageHeader svg').count()) === 1);
             const upButton = page.locator('.openCollection .SettingsPageToolbar button[aria-label="Back to top"]');
             ok('its toolbar has a Back to top button at the left', (await upButton.count()) === 1);
             const openItems = await page.locator('.openCollection .programmeCard').count();
@@ -678,7 +681,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('only the ticked app is scanned', (await page.locator('.syncRun').count()) === 1);
             await page.waitForSelector('.syncSteps li', { timeout: 15000 });
             const stepText = (await page.locator('.syncSteps').first().innerText()).replace(/\s+/g, ' ');
-            ok('progress lists the library, episode files and BBC match steps', /Library/.test(stepText) && /Episode files/.test(stepText) && /BBC match/.test(stepText), stepText);
+            ok('progress lists the library, episode files and BBC match steps', /Library/.test(stepText) && /(Episode|Movie) files/.test(stepText) && /BBC match/.test(stepText), stepText);
             ok('grab history is not run unless ticked', !/Grab history/.test(stepText), stepText);
             await shot(page, 'sync-dialog-running');
             await page.waitForSelector('.syncSummary', { timeout: 240000 });
@@ -790,8 +793,11 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const imp = await http('/json-api/subscriptions/arr/detected/import', { method: 'POST', timeout: 120000, body: { appId: app.id, arrId: 987654321, pid: bpid, title: 'SMOKE-TEMP icon show', have: 4, total: 9, linked: 1 } });
             ok('a show linked to an entry that does not exist is created', imp.status === 200, `HTTP ${imp.status} ${imp.text.slice(0, 100)}`);
             await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
-            const counts = await page.locator('.subscriptionRow', { hasText: brand.title }).first().innerText();
-            ok('before a scan it shows its counts', /4 of 9 episodes/.test(counts), counts.replace(/\s+/g, ' ').slice(0, 160));
+            // The row shows the episodes it holds as a badge on the picture (title "N episodes") and the iPlayarr/other split as a pill.
+            const countRow = page.locator('.subscriptionRow', { hasText: brand.title }).first();
+            const badge = await countRow.locator('.thumbBadge').first().getAttribute('title').catch(() => '');
+            const split = await countRow.locator('.splitPill').first().getAttribute('title').catch(() => '');
+            ok('before a scan it shows its counts', badge === '4 episodes' && /^1 from iPlayarr, 3 from elsewhere$/.test(split || ''), `badge "${badge}", pill "${split}"`);
             await http(`/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, { timeout: 180000 });
             await page.reload({ waitUntil: 'networkidle' });
             const row = page.locator('.subscriptionRow', { hasText: brand.title }).first();
