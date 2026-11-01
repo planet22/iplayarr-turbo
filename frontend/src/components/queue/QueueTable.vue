@@ -154,7 +154,7 @@ const filteredQueue = computed(() => {
 
 const {
     page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
-} = usePagination(sortedHistory);
+} = usePagination(sortedHistory, { ignoreMinimum: true });
 
 
 

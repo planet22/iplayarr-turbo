@@ -203,7 +203,7 @@
             </div>
             <div v-if="!searchResults.length" class="emptyHint">Try fewer words, or one of your recent searches below.</div>
         </div>
-        <p v-if="searchTerm && searchSettingsLine" class="searchSettingsNote">
+        <p v-if="searchSettingsLine && (searchTerm || showHome)" class="searchSettingsNote">
             <font-awesome-icon :icon="['fas', 'sliders']" />
             <span>{{ searchSettingsLine }}</span>
             <router-link :to="{ path: '/settings', hash: '#search' }">Change in Settings</router-link>
@@ -375,6 +375,7 @@ const toggleSelectMode = () => {
 
 const clearInput = () => {
     searchInput.value = '';
+    rememberSearch('');
     closeSuggestions();
     searchEl.value?.focus();
 };
@@ -400,6 +401,8 @@ const recentPool = ref([]);
 
 onMounted(async () => {
     if (!searchInput.value) searchEl.value?.focus();
+    // The blank page shows how searching is set up, above the recent searches.
+    loadManualSettings();
     try {
         const { ok, data } = await ipFetch('json-api/stats/searchHistory?limit=80&filterRss=true');
         if (ok && Array.isArray(data)) {
@@ -436,6 +439,7 @@ const runSearch = () => {
     filter.value = 'All';
     channelFilter.value = 'All';
     versionFilter.value = 'All';
+    if (!searchInput.value.trim()) rememberSearch('');
     router.push({ name: 'search', query: { searchTerm: searchInput.value } });
 };
 
@@ -489,6 +493,7 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.searchViewMode', {
 
 // Search results only carry pids, so artwork for the posters is fetched per visible page
 // (server-side metadata is cached) and merged in as it arrives.
+const DETAILS_CHUNK = 40; // BrowseRoute's MAX_DETAIL_PIDS
 const thumbnails = ref({});
 const requestedThumbnails = new Set();
 watch(
@@ -498,17 +503,25 @@ watch(
         const missing = results.map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
         if (missing.length === 0) return;
         missing.forEach((pid) => requestedThumbnails.add(pid));
-        try {
-            const details = await browseFetch(`details?pids=${missing.join(',')}`);
-            const found = {};
-            details.forEach(({ pid, thumbnail }) => {
-                if (thumbnail) found[pid] = thumbnail;
-            });
-            thumbnails.value = { ...thumbnails.value, ...found };
-        } catch {
-            // Posters just fall back to the placeholder tile.
-            missing.forEach((pid) => requestedThumbnails.delete(pid));
-        }
+        // The server takes at most 40 pids per lookup, and with a big page (Items Before Paging) or a page restored
+        // on Back they all arrive at once, so ask in chunks.
+        const chunks = [];
+        for (let i = 0; i < missing.length; i += DETAILS_CHUNK) chunks.push(missing.slice(i, i + DETAILS_CHUNK));
+        await Promise.all(
+            chunks.map(async (chunk) => {
+                try {
+                    const details = await browseFetch(`details?pids=${chunk.join(',')}`);
+                    const found = {};
+                    details.forEach(({ pid, thumbnail }) => {
+                        if (thumbnail) found[pid] = thumbnail;
+                    });
+                    thumbnails.value = { ...thumbnails.value, ...found };
+                } catch {
+                    // Posters just fall back to the placeholder tile (and are asked for again next time).
+                    chunk.forEach((pid) => requestedThumbnails.delete(pid));
+                }
+            })
+        );
     },
     { immediate: true }
 );
@@ -555,6 +568,28 @@ const posterItems = computed(() =>
 // Results stream in: the table appears with the first batch while the rest keep arriving behind it.
 // A new search aborts the previous stream so its late batches can't land in the new results.
 let searchAbort = null;
+
+// Coming back to Search from another menu item (no term in the URL) reopens the last search of this tab; clearing the
+// box forgets it. Per tab (sessionStorage), and storage may be unavailable.
+const LAST_SEARCH_KEY = 'iplayarr.lastSearchTerm';
+const rememberSearch = (term) => {
+    try {
+        if (term) sessionStorage.setItem(LAST_SEARCH_KEY, term);
+        else sessionStorage.removeItem(LAST_SEARCH_KEY);
+    } catch {
+        // Not remembered.
+    }
+};
+if (!route.query.searchTerm) {
+    let last = null;
+    try {
+        last = sessionStorage.getItem(LAST_SEARCH_KEY);
+    } catch {
+        // Nothing to restore.
+    }
+    if (last) router.replace({ name: 'search', query: { searchTerm: last } });
+}
+
 watch(
     () => route.query.searchTerm,
     async (newSearchTerm) => {
@@ -570,6 +605,7 @@ watch(
             searchResults.value = [];
             searchTerm.value = newSearchTerm;
             searchInput.value = newSearchTerm;
+            rememberSearch(newSearchTerm);
             loadManualSettings();
             try {
                 await streamSearch(

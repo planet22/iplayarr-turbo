@@ -79,16 +79,6 @@
     />
     <SelectInput
         v-if="showAdvanced && manualNative"
-        v-model="config.MANUAL_SEARCH_MATCH_ALL_WORDS"
-        field="MANUAL_SEARCH_MATCH_ALL_WORDS"
-        :advanced="true"
-        name="Match All Search Words"
-        tooltip="Applies to the Search page only."
-        :error="validationErrors.config?.MANUAL_SEARCH_MATCH_ALL_WORDS"
-        :options="withInherit(trueOrFalse)"
-    />
-    <SelectInput
-        v-if="showAdvanced && manualNative"
         v-model="config.MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
         field="MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
         :advanced="true"
@@ -105,6 +95,16 @@
         name="Find BBC Collections by Name (2.0)"
         tooltip="Applies to the Search page only, and only with Native Search Engine 2.0."
         :error="validationErrors.config?.MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES"
+        :options="withInherit(trueOrFalse)"
+    />
+    <SelectInput
+        v-if="showAdvanced && manualNative"
+        v-model="config.MANUAL_SEARCH_MATCH_ALL_WORDS"
+        field="MANUAL_SEARCH_MATCH_ALL_WORDS"
+        :advanced="true"
+        name="Match All Search Words"
+        tooltip="Applies to the Search page only."
+        :error="validationErrors.config?.MANUAL_SEARCH_MATCH_ALL_WORDS"
         :options="withInherit(trueOrFalse)"
     />
 </template>

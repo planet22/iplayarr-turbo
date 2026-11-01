@@ -5,6 +5,33 @@
                 <font-awesome-icon :icon="['fas', 'arrow-left']" />
             </button>
             <slot name="nav" />
+            <div v-if="filterFirst && icons.some((i) => i == 'filter')" class="filterWrap filterWrapFirst">
+                <button
+                    :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
+                    title="Filter"
+                    aria-label="Filter"
+                    @click="toggleFilter"
+                >
+                    <font-awesome-icon :icon="['fas', 'filter']" />
+                </button>
+                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown">
+                    <ul>
+                        <li
+                            v-for="option in filterOptions"
+                            :key="option"
+                            :class="['clickable', selectedFilter == option ? 'selected' : '']"
+                            @click="selectFilter(option)"
+                        >
+                            <div>
+                                {{ option }}
+                            </div>
+                            <div>
+                                <font-awesome-icon v-if="selectedFilter == option" :icon="['fas', 'check']" />
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
             <button
                 v-if="icons.some((i) => i == 'filterToggle')"
                 :class="['SettingsPageToolbar-button clickable', filtersActive ? 'enabled' : '']"
@@ -129,7 +156,7 @@
                 <font-awesome-icon :icon="['fas', 'trash-can']" />
                 <div v-if="!iconOnly" class="SettingsPageToolbar-label">{{ clearLabel }}</div>
             </button>
-            <div v-if="icons.some((i) => i == 'filter')" class="filterWrap">
+            <div v-if="!filterFirst && icons.some((i) => i == 'filter')" class="filterWrap">
                 <button
                     :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
                     title="Filter"
@@ -222,6 +249,12 @@ defineProps({
     },
     // Phones: keep the filter boxes on the same row as the buttons instead of dropping them onto their own row.
     inlineFilters: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    // Put the 'filter' dropdown button on the left, straight after the Back button, instead of at the right of the bar.
+    filterFirst: {
         type: Boolean,
         required: false,
         default: false,
@@ -565,6 +598,11 @@ const handleClickOutside = (event) => {
         .filterWrap {
             position: relative;
             display: inline-flex;
+        }
+
+        .filterWrapFirst .filterDropdown {
+            right: auto;
+            left: 0;
         }
 
         .filterDropdown {

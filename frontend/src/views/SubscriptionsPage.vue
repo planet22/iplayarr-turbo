@@ -2,24 +2,13 @@
     <div class="inner-content">
         <PageHeader title="Subscriptions" icon="bell" />
         <SettingsPageToolbar
-            :icons="toolbarIcons" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
+            filter-first :icons="toolbarIcons" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
             refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" :filter-options="filterOptions"
             :selected-filter="activeFilter" :filter-enabled="activeFilter !== 'All'" :view-mode="viewMode" :view-modes="['table', 'cards']"
             @refresh="checkAll" @select-filter="selectFilter" @update:view-mode="setViewMode"
         >
             <template #actions>
-                <div v-if="subscriptions.length > 1" class="sortControl">
-                    <select v-model="sortChoice" class="sortSelect" title="Sort by" aria-label="Sort by">
-                        <option v-for="option in SORTS" :key="option.key" :value="option.key">{{ option.label }}</option>
-                    </select>
-                    <button
-                        class="SettingsPageToolbar-button clickable"
-                        :title="sortOrder === 'asc' ? 'Ascending' : 'Descending'" :aria-label="sortOrder === 'asc' ? 'Ascending' : 'Descending'"
-                        @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'"
-                    >
-                        <font-awesome-icon :icon="['fas', sortOrder === 'asc' ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
-                    </button>
-                </div>
+                <SortControl v-if="subscriptions.length > 1" v-model:sort-by="sortChoice" v-model:order="sortOrder" :options="SORTS" />
             </template>
             <!-- Next to "Check all now": the two-way arrows are what marks Sonarr/Radarr on this page. -->
             <template #refresh-after>
@@ -292,6 +281,7 @@ import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SortControl from '@/components/common/SortControl.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import SubscriptionSyncDialog from '@/components/modals/SubscriptionSyncDialog.vue';
 import ProgressRing, { progressLabel } from '@/components/subscriptions/ProgressRing.vue';
@@ -645,22 +635,6 @@ const removeLive = async (live) => {
     margin: 12px 0;
     font-size: 14px;
     color: @subtle-text-color;
-}
-
-.sortControl {
-    display: flex;
-    align-items: stretch;
-
-    .sortSelect {
-        box-sizing: border-box;
-        height: 32px;
-        margin: 6px 3px;
-        padding: 0 8px;
-        border: 1px solid @input-border-color;
-        border-radius: 4px;
-        background-color: @input-background-color;
-        color: @input-text-color;
-    }
 }
 
 // A linked show that has gone from Sonarr/Radarr: a warning icon with the explanation as its tooltip.

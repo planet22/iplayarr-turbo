@@ -15,37 +15,64 @@
         />
         <template v-else>
             <InfoBar>Themed lists from iPlayer's home and category pages. Click one to see what is in it.</InfoBar>
-            <input
-                v-if="collections.length > FILTER_FROM" v-model="textFilter" type="search" class="tableFilter collectionFilter"
-                placeholder="Filter collections by title" aria-label="Filter collections by title" @keydown.esc="textFilter = ''"
-            />
+            <SettingsPageToolbar inline-filters>
+                <template v-if="collections.length > FILTER_FROM" #filters>
+                    <input
+                        v-model="textFilter" type="search" class="tableFilter" placeholder="Filter collections by title"
+                        aria-label="Filter collections by title" @keydown.esc="textFilter = ''"
+                    />
+                </template>
+                <template v-if="collections.length > FILTER_FROM" #actions>
+                    <SortControl v-model:sort-by="collectionSort" v-model:order="collectionOrder" :options="COLLECTION_SORTS" />
+                </template>
+            </SettingsPageToolbar>
             <p v-if="textFilter.trim() && shownCollections.length === 0" class="noMatch">No collection matches "{{ textFilter.trim() }}".</p>
+            <TablePagination v-model="collectionPage" v-model:page-size="collectionPageSize" :total="shownCollections.length" />
             <div class="collectionGrid">
                 <CollectionCard
-                    v-for="collection in shownCollections"
+                    v-for="collection in pagedCollections"
                     :key="collection.id"
                     :collection="collection"
                     :selected="collection.id === openId"
                     @click="toggle(collection)"
                 />
             </div>
+            <TablePagination v-model="collectionPage" v-model:page-size="collectionPageSize" :total="shownCollections.length" />
             <section v-if="open" ref="openSection" class="openCollection">
-                <div class="openHeader">
-                    <h2>{{ open.title }}</h2>
-                    <button
-                        type="button" class="downloadCollection" :disabled="downloading" title="Queue every title in this collection"
-                        @click="downloadCollection"
-                    >
-                        <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-download']" :spin="downloading" />
-                        <span>Download collection<template v-if="downloadable"> ({{ downloadable }})</template></span>
-                    </button>
-                </div>
+                <SettingsPageToolbar inline-filters>
+                    <template #filters>
+                        <span class="openTitle">{{ open.title }}</span>
+                        <input
+                            v-if="items.length" v-model="itemFilter" type="text" class="tableFilter" placeholder="Filter by title"
+                            aria-label="Filter by title" @keydown.esc="itemFilter = ''"
+                        />
+                        <select v-if="channelOptions.length > 2" v-model="channelFilter" class="gridFilter" aria-label="Channel">
+                            <option v-for="option in channelOptions" :key="option" :value="option">
+                                {{ option === 'All' ? 'All channels' : option }}
+                            </option>
+                        </select>
+                    </template>
+                    <template #actions>
+                        <SortControl v-if="items.length" v-model:sort-by="itemSort" v-model:order="itemOrder" :options="SORT_OPTIONS" />
+                        <button
+                            type="button" class="SettingsPageToolbar-button clickable" :disabled="downloading"
+                            :title="downloadTitle" :aria-label="downloadTitle" @click="downloadCollection"
+                        >
+                            <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-download']" :spin="downloading" />
+                        </button>
+                    </template>
+                </SettingsPageToolbar>
                 <p v-if="open.synopsis" class="synopsis">{{ open.synopsis }}</p>
                 <SkeletonLoader v-if="itemsLoading" pagination :count="12" />
                 <ErrorState v-else-if="itemsError" :message="itemsError" @retry="loadItems" />
-                <div v-else-if="items.length" class="browseGrid">
-                    <ProgrammeCard v-for="item in items" :key="item.pid" :item="item" />
-                </div>
+                <template v-else-if="items.length">
+                    <TablePagination v-model="itemPage" v-model:page-size="itemPageSize" :total="filteredItems.length" />
+                    <div v-if="pagedItems.length" class="browseGrid">
+                        <ProgrammeCard v-for="item in pagedItems" :key="item.pid" :item="item" />
+                    </div>
+                    <p v-else>Nothing matches that filter.</p>
+                    <TablePagination v-model="itemPage" v-model:page-size="itemPageSize" :total="filteredItems.length" />
+                </template>
                 <p v-else>Nothing in this collection is available right now.</p>
             </section>
         </template>
@@ -62,12 +89,17 @@ import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import SortControl from '@/components/common/SortControl.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch } from '@/lib/browse';
+import { SORT_OPTIONS, sortList } from '@/lib/browseSort';
 import dialogService from '@/lib/dialogService';
 import { defaultMediaMode } from '@/lib/downloadSummary';
 import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
+import { usePagination } from '@/lib/usePagination';
 
 const PER_PAGE = 150; // the server's max perPage
 
@@ -80,9 +112,18 @@ const collections = ref([]);
 // With a long list (Home page and categories finds well over a hundred) a title filter appears.
 const FILTER_FROM = 12;
 const textFilter = ref('');
+const COLLECTION_SORTS = [...SORT_OPTIONS, { key: 'size', label: 'Size', order: 'desc' }];
+const COLLECTION_ACCESSORS = { name: ({ title }) => title, size: ({ count }) => count };
+const collectionSort = ref('default');
+const collectionOrder = ref('asc');
 const shownCollections = computed(() => {
     const words = textFilter.value.toLowerCase().split(/\s+/).filter(Boolean);
-    return words.length ? collections.value.filter(({ title }) => words.every((word) => title.toLowerCase().includes(word))) : collections.value;
+    const matching = words.length ? collections.value.filter(({ title }) => words.every((word) => title.toLowerCase().includes(word))) : collections.value;
+    return sortList(matching, collectionSort.value, collectionOrder.value, COLLECTION_ACCESSORS);
+});
+const { page: collectionPage, pageSize: collectionPageSize, pagedItems: pagedCollections } = usePagination(shownCollections);
+watch([textFilter, collectionSort, collectionOrder], () => {
+    collectionPage.value = 1;
 });
 const loading = ref(true);
 const error = ref(null);
@@ -92,6 +133,28 @@ const openId = computed(() => (typeof route.query.c === 'string' ? route.query.c
 const open = computed(() => collections.value.find((collection) => collection.id === openId.value));
 const items = ref([]);
 const downloadable = ref(undefined);
+const itemFilter = ref('');
+const channelFilter = ref('All');
+const itemSort = ref('default');
+const itemOrder = ref('asc');
+const channelOptions = computed(() => ['All', ...[...new Set(items.value.map(({ channel }) => channel).filter(Boolean))].sort()]);
+const filteredItems = computed(() => {
+    const text = itemFilter.value.trim().toLowerCase();
+    return sortList(
+        items.value.filter(
+            ({ title, subtitle, channel }) =>
+                (!text || `${title} ${subtitle ?? ''}`.toLowerCase().includes(text)) &&
+                (channelFilter.value === 'All' || channel === channelFilter.value)
+        ),
+        itemSort.value,
+        itemOrder.value
+    );
+});
+const { page: itemPage, pageSize: itemPageSize, pagedItems } = usePagination(filteredItems);
+watch([itemFilter, channelFilter, itemSort, itemOrder], () => {
+    itemPage.value = 1;
+});
+const downloadTitle = computed(() => `Download collection${downloadable.value ? ` (${downloadable.value})` : ''}`);
 const itemsLoading = ref(false);
 const itemsError = ref(null);
 const openSection = ref(null);
@@ -113,6 +176,11 @@ const load = async () => {
 const loadItems = async () => {
     const id = openId.value;
     items.value = [];
+    itemFilter.value = '';
+    channelFilter.value = 'All';
+    itemSort.value = 'default';
+    itemOrder.value = 'asc';
+    itemPage.value = 1;
     itemsError.value = null;
     downloadable.value = undefined;
     if (!id || !open.value) return;
@@ -124,8 +192,22 @@ const loadItems = async () => {
         })
         .catch(() => undefined);
     try {
-        const page = await browseFetch(`collections/${encodeURIComponent(id)}?perPage=${PER_PAGE}`);
-        if (openId.value === id) items.value = page.items;
+        // Every page, so filtering and pagination cover the whole collection.
+        const found = [];
+        let pageNumber = 1;
+        let lastPageSize = PER_PAGE;
+        let total;
+        while (openId.value === id && (total == null || found.length < total) && lastPageSize >= PER_PAGE) {
+            const page = await browseFetch(`collections/${encodeURIComponent(id)}?page=${pageNumber}&perPage=${PER_PAGE}`);
+            if (openId.value !== id) return;
+            const known = new Set(found.map(({ pid }) => pid));
+            found.push(...page.items.filter(({ pid }) => !known.has(pid)));
+            total = page.total;
+            lastPageSize = page.items.length;
+            items.value = [...found];
+            itemsLoading.value = false;
+            pageNumber += 1;
+        }
     } catch (e) {
         if (openId.value === id) itemsError.value = e.message;
     } finally {
@@ -185,11 +267,43 @@ onMounted(load);
 </script>
 
 <style lang="less" scoped>
-.collectionFilter {
-    display: block;
-    width: 100%;
-    max-width: 360px;
-    margin: 0 0 12px;
+.browsePage :deep(.SettingsPageToolbar) {
+    margin-bottom: 1rem;
+}
+
+.gridFiltersTitle {
+    margin-right: 6px;
+    font-size: 14px;
+    color: @primary-text-color;
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .gridFiltersTitle {
+        display: none;
+    }
+}
+
+.openTitle {
+    margin-right: 6px;
+    font-size: 14px;
+    color: @primary-text-color;
+}
+
+.gridFilter {
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 4px;
+    border: 1px solid @settings-button-border-color;
+    background-color: @settings-button-background-color;
+    color: @primary-text-color;
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .gridFilter {
+        flex: 1 1 0;
+        min-width: 0;
+        width: auto;
+    }
 }
 
 .noMatch {
@@ -208,45 +322,6 @@ onMounted(load);
 }
 
 .openCollection {
-    .openHeader {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 4px;
-    }
-
-    h2 {
-        margin: 0;
-        font-size: 20px;
-        font-weight: 400;
-    }
-
-    .downloadCollection {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        flex: none;
-        padding: 6px 12px;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-        font: inherit;
-        cursor: pointer;
-
-        &:hover:not(:disabled) {
-            background-color: @brand-color;
-            border-color: @brand-color;
-            color: @on-brand-color;
-        }
-
-        &:disabled {
-            opacity: 0.6;
-            cursor: default;
-        }
-    }
-
     .synopsis {
         margin: 0 0 12px;
         color: @subtle-text-color;
