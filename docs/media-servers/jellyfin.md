@@ -30,7 +30,8 @@ Fright Night [boxset]/
 - **TV episodes in a collection keep their normal `Show/Season NN/` folders**: a boxset folder inside a TV library would break it. Whole series or programmes listed in a collection are not expanded (they can be hundreds of episodes); download those from their own page.
 - This is a library, not a playlist: items play with seeking, subtitles and watched state like any other `.strm`. An M3U playlist would show them as Live TV channels in Jellyfin with none of that, so none is produced.
 - The `.strm` requirements and link signing below apply as usual.
-- Checked against a throwaway Movies library: all 34 films of Fright Night landed in one "Fright Night" BoxSet. A collection that mixes films with programmes (World Cinema Classics: 6 films, 9 documentary episodes) groups only the films into the BoxSet; the rest are filed as TV and a Movies library ignores them, so use a Mixed library or a TV library alongside. A first scan can take a few minutes. Deleting a library does not delete the BoxSet it made in Jellyfin; remove that separately.
+- Checked against a throwaway Movies library: all 34 films of Fright Night landed in one "Fright Night" BoxSet. A collection that mixes films with programmes (World Cinema Classics: 6 films, 9 documentary episodes) groups only the films into the BoxSet; the rest are filed as TV and a Movies library ignores them, so use a Mixed library or a TV library alongside. A first scan can take a few minutes. Deleting a library does not delete the BoxSet it made in Jellyfin, and **deleting a BoxSet in Jellyfin deletes its `[boxset]` folder (and the `.strm` files in it) from disk**, so only do that when you mean to.
+- A plain **Movies** library is enough, no Mixed library needed: the 34 films were `Movie` items and `PlaybackInfo` on one returned an HLS source with 3 streams and a ~100 minute runtime. A library with no content type (Mixed) behaved the same.
 
 ## `.strm` playback
 
