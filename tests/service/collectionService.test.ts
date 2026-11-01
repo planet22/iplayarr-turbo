@@ -186,7 +186,7 @@ describe('collectionService', () => {
             await collectionService.list();
             setSource('all');
             await collectionService.list();
-            expect(keys).toEqual(['v2:all:home', 'v2:all:all']);
+            expect(keys).toEqual(['v3:all:home', 'v3:all:all']);
             spy.mockRestore();
         });
 

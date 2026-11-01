@@ -42,8 +42,8 @@ class CollectionService {
     // Cached per source, so changing the setting shows its list at once without clearing anything.
     async list(): Promise<BrowseCollection[]> {
         const source = await this.source();
-        // v2: lists built before collections borrowed a programme's artwork when their own picture was not an image.
-        return this.cache.getOr(`v2:all:${source}`, () => this.#build(source));
+        // v3: lists built before each picture was checked through the thumbnail cache.
+        return this.cache.getOr(`v3:all:${source}`, () => this.#build(source));
     }
 
     // The collections whose title has every word of the term; none for a term with no usable words.
