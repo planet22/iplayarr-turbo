@@ -349,6 +349,43 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('cancelling saved nothing', JSON.stringify(((await http('/json-api/apps')).json || []).map((a) => a.detectSubscriptions)) === JSON.stringify(all.map((a) => a.detectSubscriptions)));
         });
 
+        // ---- Apps: the card shows a detection pill, opens its form from anywhere on it, and has a real delete button
+        // (nothing is saved or deleted: the form is cancelled and the delete confirmation is declined)
+        await flow('apps card pills and click target', async (page) => {
+            const all = (await http('/json-api/apps')).json || [];
+            if (!all.length) return rec(U, 'apps card pills and click target', 'SKIP', 'no apps configured');
+            await page.goto(BASE + '/apps', { waitUntil: 'networkidle' });
+            for (const a of all) {
+                const card = page.locator('button.listButton', { hasText: a.name }).first();
+                const pill = card.locator('.pill', { hasText: 'Subscription Detection' });
+                ok(`${a.name}: detection pill ${a.detectSubscriptions ? 'shown' : 'hidden'} to match the setting`, (await pill.count()) === (a.detectSubscriptions ? 1 : 0));
+                if (a.detectSubscriptions) {
+                    const pills = await card.locator('.featureList .pill').allTextContents();
+                    ok(`${a.name}: the detection pill sits on its own row below the others`, pills[pills.length - 1].trim() === 'Subscription Detection' && (await card.locator('.featureList').count()) >= 2);
+                }
+            }
+            const target = all.find((a) => a.detectSubscriptions) || all[0];
+            const card = page.locator('button.listButton', { hasText: target.name }).first();
+            const cancelForm = async () => { await page.waitForSelector('.modal-inner', { timeout: 10000 }); await page.locator('.button-container button', { hasText: /^Cancel$/ }).click(); await page.waitForSelector('.modal-inner', { state: 'detached', timeout: 10000 }); };
+            const box = await card.boundingBox();
+            await card.locator('.featureList .pill').first().click();
+            await cancelForm();
+            ok('clicking a pill opens the form', true);
+            await card.click({ position: { x: box.width - 12, y: box.height / 2 } });
+            await cancelForm();
+            ok('clicking blank space in the card opens the form', true);
+            const trash = card.locator('.actionContainer button').first();
+            const style = await trash.evaluate((el) => { const s = getComputedStyle(el); return { border: s.borderTopWidth, radius: s.borderTopLeftRadius, bg: s.backgroundColor }; });
+            ok('the trash icon is drawn as a button (border, radius, background)', style.border !== '0px' && style.radius !== '0px' && style.bg !== 'rgba(0, 0, 0, 0)', JSON.stringify(style));
+            await shot(page, 'apps-card-buttons');
+            await trash.click();
+            await page.waitForTimeout(500);
+            const cancelBtn = page.getByRole('button', { name: /^Cancel$/ }).last();
+            ok('clicking trash asks to confirm and does not open the form', (await page.locator('legend.sub, .modal-inner select').count()) === 0 && (await cancelBtn.count()) === 1);
+            await cancelBtn.click();
+            ok('declining the delete removed nothing', ((await http('/json-api/apps')).json || []).length === all.length);
+        });
+
         // ---- Subscriptions: a show deleted from its app gets a warning icon with an explanation, and its counts go
         await flow('subscriptions deleted-from-app icon', async (page) => {
             const app = ((await http('/json-api/subscriptions/arr/apps')).json || [])[0];
