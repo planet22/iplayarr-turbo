@@ -254,7 +254,7 @@
                 <tr v-for="item in pagedItems" :key="item.pid">
                     <td class="text">
                         <router-link :to="`/browse/programme/${item.pid}`">{{ item.pid }}</router-link>
-                        <div v-if="libraryLabel(item)" class="linkMeta">{{ libraryLabel(item) }}</div>
+                        <span v-if="libraryLabel(item)" class="linkMeta libraryLabel">{{ libraryLabel(item) }}</span>
                     </td>
                     <td data-title="Status">
                         <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
@@ -493,6 +493,11 @@ onBeforeUnmount(() => {
     gap: 4px;
     font-size: 12px;
     color: @subtle-text-color;
+}
+
+// Sits beside the pid in the table's Programme column.
+.libraryLabel {
+    margin-left: 10px;
 }
 
 .legendRow {
