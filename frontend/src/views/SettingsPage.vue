@@ -24,11 +24,9 @@
     </div>
     <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
     <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody">
-        <GeneralSettingsTab
-            v-if="activeTab == 'general'"
-            :true-or-false="trueOrFalse"
-            @generate-api-key="generateApiKey"
-        />
+        <GeneralSettingsTab v-if="activeTab == 'general'" @generate-api-key="generateApiKey" />
+        <SearchSettingsTab v-if="activeTab == 'search'" :true-or-false="trueOrFalse" />
+        <AppearanceSettingsTab v-if="activeTab == 'appearance'" :true-or-false="trueOrFalse" />
         <MediaManagementSettingsTab
             v-if="activeTab == 'mediaManagement'"
             :quality-profiles="qualityProfiles"
@@ -53,7 +51,7 @@
             :oidc-callback-tooltip="oidcCallbackTooltip"
             @test-oidc="testOIDC"
         />
-        <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" />
+        <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" :true-or-false="trueOrFalse" />
         <div v-if="filterText.trim() && !filterMatches" class="settingsFilterEmpty">
             No settings on this tab match "{{ filterText.trim() }}".
         </div>
@@ -72,12 +70,14 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import UpdateAppDialog from '@/components/modals/UpdateAppDialog.vue';
+import AppearanceSettingsTab from '@/components/settings/AppearanceSettingsTab.vue';
 import AuthenticationSettingsTab from '@/components/settings/AuthenticationSettingsTab.vue';
 import DownloadClientSettingsTab from '@/components/settings/DownloadClientSettingsTab.vue';
 import GeneralSettingsTab from '@/components/settings/GeneralSettingsTab.vue';
 import LiveTvSettingsTab from '@/components/settings/LiveTvSettingsTab.vue';
 import MaintenanceSettingsTab from '@/components/settings/MaintenanceSettingsTab.vue';
 import MediaManagementSettingsTab from '@/components/settings/MediaManagementSettingsTab.vue';
+import SearchSettingsTab from '@/components/settings/SearchSettingsTab.vue';
 import SettingsSaveBar from '@/components/settings/SettingsSaveBar.vue';
 import SettingsTabs from '@/components/settings/SettingsTabs.vue';
 import StreamingSettingsTab from '@/components/settings/StreamingSettingsTab.vue';
@@ -109,6 +109,8 @@ const refreshGlobalSettings = inject('refreshGlobalSettings');
 
 const tabs = [
     { key: 'general', label: 'General', icon: 'sliders' },
+    { key: 'search', label: 'Search', icon: 'magnifying-glass' },
+    { key: 'appearance', label: 'Appearance', icon: 'palette' },
     { key: 'mediaManagement', label: 'Media Management', icon: 'folder-open' },
     { key: 'downloadClient', label: 'Download Client', icon: 'download' },
     { key: 'streaming', label: 'Streaming', icon: 'tower-broadcast' },
@@ -126,12 +128,14 @@ const activeTab = ref(initialTab ?? 'general');
 // the tabs whose keys differ from what was last loaded or saved. STREAM_BASE_URL and STREAM_KEY are
 // shared by Streaming and Live TV.
 const TAB_KEYS = {
-    general: [
-        'API_KEY', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS',
-        'SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH', 'MANUAL_NATIVE_SEARCH_ENGINE',
-        'MANUAL_SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH',
-        'UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES',
+    general: ['API_KEY'],
+    search: [
+        'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS',
+        'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH',
+        'MANUAL_NATIVE_SEARCH_ENGINE', 'MANUAL_SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS',
+        'MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES',
     ],
+    appearance: ['BROWSE_SHOW_COLLECTIONS', 'UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES'],
     mediaManagement: [
         'DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'LIVE_STRM_DIR', 'VIDEO_QUALITY', 'EXTRA_VIDEO_QUALITIES',
         'EXTRA_VERSIONS', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'OUTPUT_FORMAT',
@@ -152,7 +156,7 @@ const TAB_KEYS = {
         'AUTH_TYPE', 'AUTH_USERNAME', 'AUTH_PASSWORD', 'OIDC_CONFIG_URL', 'OIDC_CALLBACK_HOST', 'OIDC_CLIENT_ID',
         'OIDC_CLIENT_SECRET', 'OIDC_ALLOWED_EMAILS',
     ],
-    maintenance: ['STREAM_HISTORY_RETENTION_DAYS'],
+    maintenance: ['STREAM_HISTORY_RETENTION_DAYS', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH'],
 };
 
 // What each key held when the config was loaded or last saved.
@@ -178,7 +182,7 @@ const changedSchedules = computed(() => Object.keys(schedules.value).filter((id)
 const cacheTtls = ref({});
 const cachesReload = ref(0);
 const changedCacheTtls = computed(() => Object.keys(cacheTtls.value).filter((prefix) => ttlEntryChanged(cacheTtls.value[prefix])));
-// General tab per-browser preferences: applied by Save, not as they are edited.
+// Appearance tab per-browser preferences: applied by Save, not as they are edited.
 const { draft: appearance, changed: changedAppearance, apply: applyAppearance, reset: resetAppearance } = useAppearanceDraft();
 const dirtyTabs = computed(() =>
     tabs
@@ -186,7 +190,7 @@ const dirtyTabs = computed(() =>
             (tab) =>
                 tabHas(tab.key, (key) => changedKeys.value.has(key)) ||
                 (tab.key == 'maintenance' && (changedSchedules.value.length || changedCacheTtls.value.length)) ||
-                (tab.key == 'general' && changedAppearance.value.length)
+                (tab.key == 'appearance' && changedAppearance.value.length)
         )
         .map((tab) => tab.key)
 );
@@ -294,7 +298,7 @@ const tabChangeCount = computed(() => {
     const tab = activeTab.value;
     let count = TAB_KEYS[tab].filter((key) => changedKeys.value.has(key)).length;
     if (tab == 'maintenance') count += changedSchedules.value.length + changedCacheTtls.value.length;
-    if (tab == 'general') count += changedAppearance.value.length;
+    if (tab == 'appearance') count += changedAppearance.value.length;
     return count;
 });
 
@@ -310,7 +314,7 @@ const discardChanges = () => {
             Object.assign(cacheTtls.value[prefix], splitTtl(cacheTtls.value[prefix].savedTtl), { resetPending: false });
         }
     }
-    if (tab == 'general') resetAppearance();
+    if (tab == 'appearance') resetAppearance();
     validationErrors.value.config = {};
     toastService.info('Changes discarded');
 };
@@ -499,7 +503,7 @@ const saveConfig = async () => {
         } else {
             for (const key of keys) original.value[key] = clone(config.value[key]);
             refreshGlobalSettings();
-            if (tab == 'general') applyAppearance();
+            if (tab == 'appearance') applyAppearance();
             const scheduleErrors = tab == 'maintenance' ? await saveSchedules() : 0;
             const cacheErrors = tab == 'maintenance' ? await saveCacheTtls() : 0;
             if (scheduleErrors) {

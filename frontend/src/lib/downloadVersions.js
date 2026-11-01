@@ -3,7 +3,7 @@ import { useDownloadVersionPrefs } from '@/lib/downloadVersionPrefs';
 import { useQualityBadges } from '@/lib/qualityBadges';
 import { subscriptionVersions } from '@/lib/subscriptions';
 
-// Audio described / signed handling is only on while the AD / Signed badge setting is (Settings > General > Appearance);
+// Audio described / signed handling is only on while the AD / Signed badge setting is (Settings > Appearance);
 // without it everything downloads as the standard version, as before.
 export const versionsActive = () => useQualityBadges().state.versions;
 export const askAboutVersions = () => versionsActive() && useDownloadVersionPrefs().state.ask;

@@ -90,7 +90,7 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 - The Streaming page shows live sessions with the channel name and logo and a **Live** badge.
 - With **Native Subtitles** on, live channels carry an English subtitle track too (see [Subtitles](#subtitles)).
 - The [STRM Watchdog](WATCHDOG.md) ignores live files.
-- **Optional channels:** besides the 11 above you can enable BBC Red Button, 19 BBC nations and English-region feeds and (with `LIVE_UHD_EVENT_FEEDS`) the UHD event feeds from the Channels page's Arrange mode (Settings → General → Show Channel Tools). Disabling a channel hides it, unsubscribes it and removes it from Jellyfin Live TV and the guide. Channel order from Arrange also sets the order of the guide and Jellyfin channel numbers. See [BROWSE.md](BROWSE.md#channels-page-tools).
+- **Optional channels:** besides the 11 above you can enable BBC Red Button, 19 BBC nations and English-region feeds and (with `LIVE_UHD_EVENT_FEEDS`) the UHD event feeds from the Channels page's Arrange mode (Settings → Appearance → Show Channel Tools). Disabling a channel hides it, unsubscribes it and removes it from Jellyfin Live TV and the guide. Channel order from Arrange also sets the order of the guide and Jellyfin channel numbers. See [BROWSE.md](BROWSE.md#channels-page-tools).
 
 ### Jellyfin Live TV (tuner + guide)
 

@@ -120,7 +120,7 @@ const showAdvanced = inject('settingsShowAdvanced');
 const toolVersions = inject('toolVersions');
 const refreshToolVersions = inject('refreshToolVersions');
 
-// Only offered while the AD / Signed badges are on (Settings > General > Appearance).
+// Only offered while the AD / Signed badges are on (Settings > Appearance).
 const askOptions = [
     { key: 'true', value: 'Yes' },
     { key: 'false', value: 'No, use the default' },

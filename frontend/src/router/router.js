@@ -5,6 +5,7 @@ import { getBasePath, getHost } from '@/lib/utils';
 import AboutPage from '@/views/AboutPage.vue';
 import AppsPage from '@/views/AppsPage.vue';
 import ChannelPage from '@/views/ChannelPage.vue';
+import CollectionsPage from '@/views/CollectionsPage.vue';
 import DiscoverPage from '@/views/DiscoverPage.vue';
 import GridPage from '@/views/GridPage.vue';
 import LoginPage from '@/views/LoginPage.vue';
@@ -48,6 +49,7 @@ const routes = [
     { path: '/browse/channel/:id', component: ChannelPage },
     { path: '/browse/schedule', component: SchedulePage },
     { path: '/browse/categories', component: TilesPage, meta: { tiles: 'categories' } },
+    { path: '/browse/collections', component: CollectionsPage },
     { path: '/browse/category/:id', component: GridPage, meta: { grid: 'category' } },
     { path: '/browse/atoz/:letter?', component: GridPage, meta: { grid: 'atoz' } },
     { path: '/browse/programme/:pid', component: ProgrammePage },

@@ -256,7 +256,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 }
             } else rec(U, 'streaming tab select', 'WARN', 'none found');
             // visit every tab for a visual record
-            for (const t of ['General', 'Media Management', 'Download Client', 'Streaming', 'Live TV', 'Authentication', 'Maintenance']) {
+            for (const t of ['General', 'Search', 'Appearance', 'Media Management', 'Download Client', 'Streaming', 'Live TV', 'Authentication', 'Maintenance']) {
                 await page.locator(`.settingsTab:has-text("${t}")`).first().click().catch(() => {});
                 await page.waitForTimeout(500);
                 await shot(page, `settings-tab-${t.toLowerCase().replace(/\W+/g, '-')}`, true);

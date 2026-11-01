@@ -14,7 +14,7 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 
 ## Using the Settings page
 
-- **Tabs:** General, Media Management, Download Client, Streaming, Live TV, Authentication and Maintenance. The open tab is kept in the URL (`/settings#streaming`), so it can be bookmarked or linked, and Back/forward switch tabs.
+- **Tabs:** General, Search, Appearance, Media Management, Download Client, Streaming, Live TV, Authentication and Maintenance. The open tab is kept in the URL (`/settings#streaming`), so it can be bookmarked or linked, and Back/forward switch tabs.
 - **Save bar:** nothing applies until you save. A sticky bar shows "N unsaved changes" with **Discard** and **Save**. Edited fields, the tab that holds them and the Save button are highlighted in amber. Save applies the open tab; switching away from a tab with edits, leaving the page, or closing/reloading the browser asks first. The bar also covers edits to scheduled-task times, cache lifetimes and the per-browser Appearance choices.
 - **Filter box:** the box in the toolbar hides settings on the open tab that do not match what you type (and any section heading left empty).
 - **(i) buttons:** field descriptions are behind an (i) button beside each field (hover, focus or tap).
@@ -34,26 +34,25 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 
 ## General (Settings → General)
 
-Sections: Access, NZB Search, Manual Search, Appearance and (advanced) Schedule.
-
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
 | Api Key | `API_KEY` | _(auto-generated)_ | Secures the Newznab/SABnzbd API surface (`?apikey=`). Regenerate from the field's button; Settings will offer to push the new key out to configured Apps. |
+
+## Search (Settings → Search)
+
+Sections: NZB Search and Manual Search. The two collection options are explained in [BROWSE.md](BROWSE.md#collections).
+
+| Setting | Env var | Default | Notes |
+| --- | --- | --- | --- |
 | Native Search | `NATIVE_SEARCH` | `true` | Queries BBC's own search API + local Lunr re-ranking (`NativeSearchService`) instead of shelling out to `get_iplayer --search`. Toggling it clears the search cache. |
 | Native Search Engine _(advanced)_ | `NATIVE_SEARCH_ENGINE` | `V2` | Only shown when Native Search is on. `V1` ("1.0") is the original engine. `V2` ("2.0", the default) looks hits up concurrently, fetches episode details several at a time, retries failed episode-list pages and pages nested series; results should be identical, so switch to `V1` if anything looks wrong. |
 | Requested Series Only _(advanced)_ | `NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY` | `false` | Engine 2.0 only. Fetch just the season Sonarr/Radarr asks for, which is faster for long shows. Not used with synonyms or Airdate Numbering. Never applies to manual search. |
 | Expand BBC Collections _(advanced)_ | `NATIVE_SEARCH_V2_EXPAND_COLLECTIONS` | `false` | Engine 2.0 only. Searching for the pid or bbc.co.uk link of an iPlayer collection (a curated list such as "Fright Night") lists the episodes and films in it. Applies to manual and Sonarr/Radarr search. |
 | Find BBC Collections by Name _(advanced)_ | `NATIVE_SEARCH_V2_COLLECTION_NAMES` | `false` | Engine 2.0 only. A search also lists the episodes/films of up to three iPlayer collections whose title has every search word ("fright night"), ahead of the normal results. The BBC has no collection search, so only collections currently on iPlayer's home and category pages are found (the list is cached for 6 hours; see Maintenance > Caches). |
-| Show Collections on Discover _(advanced)_ | `BROWSE_SHOW_COLLECTIONS` | `false` | Adds a Collections row to Discover: each collection is a tile with a group icon, and clicking it opens what is in it. Uses the same collection list as the option above. |
 | Match All Words _(advanced)_ | `SEARCH_MATCH_ALL_WORDS` | `true` | Only list results containing every word searched for. Turn off for looser matching. |
 | Manual Search overrides | `MANUAL_NATIVE_SEARCH`, `MANUAL_NATIVE_SEARCH_ENGINE`, `MANUAL_SEARCH_MATCH_ALL_WORDS`, `MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS`, `MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES` | `inherit` | The Native Search, engine, Match All Words and collection settings above (all but Requested Series Only, which manual search never uses) are the NZB search settings (used by Sonarr/Radarr). These twins apply to manual search on the Search page only; `inherit` ("Same as NZB search") follows the setting above, so you can try a different engine by hand without changing what Sonarr/Radarr get. Manual results are cached separately when the settings differ. The Search page shows the active manual setup below its results, with a link to Settings. |
-| Items Before Paging _(advanced, per browser)_ | _(browser only)_ | `4` | A list shows page controls only when it has more items than this (0-1000); `0` always shows them. |
-| Hours in RSS Feed _(advanced)_ | `RSS_FEED_HOURS` | `48` | How far back the RSS feed endpoint looks (1-720). |
-| Full Schedule Refresh _(advanced)_ | `SCHEDULE_FULL_REFRESH` | `false` | `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh. |
 
-`REFRESH_SCHEDULE` (the cron expression for the proactive BBC schedule refresh) now lives on the Maintenance tab with the other [scheduled tasks](#maintenance-settings--maintenance).
-
-### Appearance
+## Appearance (Settings → Appearance)
 
 Settings named `UI_*` are stored with the rest of the configuration and apply to **every browser** that opens this iPlayarr. The others are per browser (`localStorage`). All of them only apply on Save. See [THEMING.md](THEMING.md).
 
@@ -62,12 +61,14 @@ Settings named `UI_*` are stored with the rest of the configuration and apply to
 | Colour Scheme / Colour Mode | _(per browser)_ | iPlayarr / Match system | Six schemes, each with a dark and a light version. The sun/monitor/moon switch in the top bar changes the mode at once. |
 | Top Bar | _(per browser)_ | Slim | Slim keeps the bar on screen while scrolling; Hide on scroll shows it again when you scroll up. |
 | Show Quick Find Button | _(per browser)_ | on | The lightning-bolt button in the top bar. `Ctrl+K` / `Cmd+K` works either way. |
+| Show Collections | `BROWSE_SHOW_COLLECTIONS` | `false` | Adds a **Collections** page to the Browse menu and a Collections row to Discover: each collection is a tile with a group icon, and clicking it opens what is in it. See [BROWSE.md](BROWSE.md#collections). |
 | Show Info Messages | `UI_INFO_MESSAGES` | `true` | The blue explanatory notes at the top of pages. Warnings and errors always show. |
 | Colour Channel Pills | `UI_PILL_COLORS` | `true` | Colour channel labels to match each BBC logo. |
 | Show Channel Tools | `UI_CHANNEL_TOOLS` | `true` | The arrange, library, Live TV and customise buttons on the Channels page. Turn off to keep the page simple. |
 | Show HDR / UHD Badge _(advanced)_ | `UI_QUALITY_BADGES` | `true` | A badge where iPlayer lists HDR or Ultra HD. It is only a label: iPlayarr streams HD at most. |
 | Show Audio Described / Signed Badge _(advanced)_ | `UI_VERSION_BADGES` | `true` | Marks programmes and episodes that have an audio described or signed version. Also reveals the Versions settings. |
 | Show Subtitle Badge _(advanced)_ | `UI_SUBTITLE_BADGES` | `true` | A subtitles icon on episodes. Not checked per programme: the BBC gives most of them subtitles. |
+| Items Before Paging _(advanced, per browser)_ | _(browser only)_ | `4` | A list shows page controls only when it has more items than this (0-1000); `0` always shows them. |
 
 Debug logging is controlled by the `DEBUG` env var (default `false`) — not exposed in the Settings UI, since it also flips permissive CORS for local frontend-dev-server use (`src/server.ts`). Set it in the container/process environment, not via Settings.
 
@@ -171,12 +172,13 @@ Some programmes have an **audio described** or **signed** version alongside the 
 - **Manual download:** the Search page has version filters, results carry version badges, and the download dialog shows version and quality. Batch downloads (programme page, Search multi-select), quick downloads and download-by-URL ask which version, or use the default.
 - **Subscriptions:** can also download the audio described / signed version of new episodes. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#versions).
 - **Play:** the Play button asks for, or defaults to, a version and the in-app player has a version switcher that resumes at the same position.
-- **Badges:** Settings → General → Appearance. Programme-page answers are cached and the rest are fetched in the background, and only when the badge setting is on.
+- **Badges:** Settings → Appearance. Programme-page answers are cached and the rest are fetched in the background, and only when the badge setting is on.
 
 ## Maintenance (Settings → Maintenance)
 
 - **Rebuild Logos:** redraws every live channel logo, rewrites library posters and asks Jellyfin to refresh.
 - **Caches:** BBC data is cached in the database so repeat searches and page loads are fast. Each cache row shows its item count and size, an editable **Keep for** lifetime (minutes to months, with Reset to default), and a **Clear** button; the toolbar has **Refresh** and **Clear All** (with confirmation). Caches are ordered by what they hold: browse, BBC programme data, search and schedule feeds, Skyhook, then streaming. A new lifetime applies to entries stored from then on; existing entries keep their old expiry until cleared. Thumbnails and **Stream History** (`STREAM_HISTORY_RETENTION_DAYS`) are managed here too. Hit rates are on the [Statistics](USAGE_GUIDE.md#statistics-stats) page.
+- **Hours in RSS Feed** (`RSS_FEED_HOURS`, advanced, default `48`, 1-720) and **Full Schedule Refresh** (`SCHEDULE_FULL_REFRESH`, advanced, default `false`) sit above the task list, since they shape the schedule refresh and the RSS feed it feeds. `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh.
 - **Scheduled tasks:** every cron job is listed in run order with its next run time, a **Run now** button and an editable cron expression (**Validate** checks it, **Reset to default** restores the built-in one). Edits are drafts applied by Save and take effect without a restart. Some tasks enforce a minimum interval so they cannot be set to hammer the BBC.
 
 | Task | Default schedule | Minimum interval | What it does |

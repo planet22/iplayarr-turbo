@@ -206,7 +206,7 @@
         <p v-if="searchTerm && searchSettingsLine" class="searchSettingsNote">
             <font-awesome-icon :icon="['fas', 'sliders']" />
             <span>{{ searchSettingsLine }}</span>
-            <router-link :to="{ path: '/settings', hash: '#general' }">Change in Settings</router-link>
+            <router-link :to="{ path: '/settings', hash: '#search' }">Change in Settings</router-link>
         </p>
         <div v-if="showHome" class="searchHome">
             <section v-if="recent.length">

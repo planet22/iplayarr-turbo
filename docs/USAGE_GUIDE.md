@@ -6,7 +6,7 @@ New to iPlayarr? Start with [GETTING_STARTED_BBC.md](GETTING_STARTED_BBC.md).
 
 ## Quick find
 
-Press `Ctrl+K` (`Cmd+K` on a Mac), or the lightning-bolt button in the top bar (Settings → General can hide it), to open a palette that jumps to any page or Settings tab, suggests programmes as you type and runs a plain search. The side menu's groups fold away (remembered per browser) and re-open for the page you visit; the iPlayarr, get_iplayer and yt-dlp versions are at the bottom of it, with an amber note when an update is available.
+Press `Ctrl+K` (`Cmd+K` on a Mac), or the lightning-bolt button in the top bar (Settings → Appearance can hide it), to open a palette that jumps to any page or Settings tab, suggests programmes as you type and runs a plain search. The side menu's groups fold away (remembered per browser) and re-open for the page you visit; the iPlayarr, get_iplayer and yt-dlp versions are at the bottom of it, with an amber note when an update is available.
 
 ## Page layout
 
