@@ -141,6 +141,8 @@ describe('configService', () => {
       NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false',
       NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false',
       BROWSE_SHOW_COLLECTIONS: 'false',
+      MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'inherit',
+      MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'inherit',
     });
   });
 

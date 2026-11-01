@@ -109,6 +109,26 @@
         :error="validationErrors.config?.MANUAL_SEARCH_MATCH_ALL_WORDS"
         :options="withInherit(trueOrFalse)"
     />
+    <SelectInput
+        v-if="showAdvanced && manualNative"
+        v-model="config.MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
+        field="MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
+        :advanced="true"
+        name="Expand BBC Collections (2.0)"
+        tooltip="Applies to the Search page only, and only with Native Search Engine 2.0."
+        :error="validationErrors.config?.MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS"
+        :options="withInherit(trueOrFalse)"
+    />
+    <SelectInput
+        v-if="showAdvanced && manualNative"
+        v-model="config.MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES"
+        field="MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES"
+        :advanced="true"
+        name="Find BBC Collections by Name (2.0)"
+        tooltip="Applies to the Search page only, and only with Native Search Engine 2.0."
+        :error="validationErrors.config?.MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES"
+        :options="withInherit(trueOrFalse)"
+    />
     <SettingsSubheading text="Appearance" />
     <ThemePicker
         v-model="appearance.theme"

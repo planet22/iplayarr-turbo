@@ -20,6 +20,8 @@ const CHANGE = {
     MANUAL_NATIVE_SEARCH: ['true', 'false', 'inherit'],
     MANUAL_NATIVE_SEARCH_ENGINE: ['V2', 'V1', 'inherit'],
     MANUAL_SEARCH_MATCH_ALL_WORDS: ['false', 'true', 'inherit'],
+    MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: ['true', 'false', 'inherit'],
+    MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: ['true', 'false', 'inherit'],
     NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: ['true', 'false'],
     NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: ['true', 'false'],
     NATIVE_SEARCH_V2_COLLECTION_NAMES: ['true', 'false'],
@@ -278,7 +280,20 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const n = Array.isArray(r.json) ? r.json.length : -1;
             return { ...base, pass: base.pass && (want ? n === 0 : n > 0), detail: `${base.detail}; manual search for a non-matching extra word gave ${n} results` };
         },
+        MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: async ({ next }) => {
+            const s = await manualSettings();
+            if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
+            const want = next === 'inherit' ? effective(await get(), 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS') === 'true' : next === 'true';
+            return { what: `the Search page footer reports collections by pid ${want ? 'on' : 'off'}`, pass: !!s.expandCollections === want, detail: JSON.stringify(s) };
+        },
+        MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: async ({ next }) => {
+            const s = await manualSettings();
+            if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
+            const want = next === 'inherit' ? effective(await get(), 'NATIVE_SEARCH_V2_COLLECTION_NAMES') === 'true' : next === 'true';
+            return { what: `the Search page footer reports collections by name ${want ? 'on' : 'off'}`, pass: !!s.collectionNames === want, detail: JSON.stringify(s) };
+        },
         NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: async ({ next }) => {
+            if ((effective(await get(), 'MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS') || 'inherit') !== 'inherit') return 'manual search has its own override of this option';
             const s = await manualSettings();
             if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
             const on = next === 'true';
@@ -291,6 +306,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             return { ...base, pass: base.pass && (on ? n > 0 : n === 0), detail: `${base.detail}; a manual search for the collection pid gave ${n} results` };
         },
         NATIVE_SEARCH_V2_COLLECTION_NAMES: async ({ next }) => {
+            if ((effective(await get(), 'MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES') || 'inherit') !== 'inherit') return 'manual search has its own override of this option';
             const s = await manualSettings();
             if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
             const on = next === 'true';

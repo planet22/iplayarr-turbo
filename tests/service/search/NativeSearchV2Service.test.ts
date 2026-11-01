@@ -10,6 +10,7 @@ import NativeSearchService from '../../../src/service/search/NativeSearchService
 import NativeSearchV2Service from '../../../src/service/search/NativeSearchV2Service';
 import newSearchCache from '../../../src/service/search/newSearchCache';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
+import { runInSearchContext } from '../../../src/utils/searchContext';
 import { withSearchTrace } from '../../../src/utils/searchTrace';
 import { runWithSeasonHint } from '../../../src/utils/seasonHint';
 import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
@@ -571,6 +572,27 @@ describe('NativeSearchV2Service', () => {
                 serveEpisodes({ brandPid: episodes('a', 2) });
                 expect((await NativeSearchV2Service.search(term)).map(({ pid }) => pid)).toEqual(['a0', 'a1']);
                 expect(iplayerDetailsService.getGroupEpisodes).not.toHaveBeenCalled();
+            });
+
+            it('honours the manual search override, either way', async () => {
+                found('g1');
+                (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([member('m1')]);
+                searchHits();
+                setConfig({ NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false', MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' });
+                expect((await runInSearchContext('manual', () => NativeSearchV2Service.search(term))).map(({ pid }) => pid)).toEqual(['m1']);
+                expect(await NativeSearchV2Service.search(term)).toEqual([]);
+
+                setConfig({ NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true', MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false' });
+                expect(await runInSearchContext('manual', () => NativeSearchV2Service.search(term))).toEqual([]);
+                expect((await NativeSearchV2Service.search(term)).map(({ pid }) => pid)).toEqual(['m1']);
+            });
+
+            it('honours the manual override for pid expansion', async () => {
+                (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([member('m1')]);
+                searchHits();
+                setConfig({ NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false', MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'true' });
+                expect((await runInSearchContext('manual', () => NativeSearchV2Service.search('p096h09x'))).map(({ pid }) => pid)).toEqual(['m1']);
+                expect(await NativeSearchV2Service.search('p096h09x')).toEqual([]);
             });
 
             it('does not look for collections when the option is off', async () => {

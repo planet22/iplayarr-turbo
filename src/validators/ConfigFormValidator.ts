@@ -38,6 +38,8 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     MANUAL_NATIVE_SEARCH_ENGINE: [...INHERIT, 'V1', 'V2'],
     MANUAL_NATIVE_SEARCH: [...INHERIT, ...TRUE_FALSE],
     MANUAL_SEARCH_MATCH_ALL_WORDS: [...INHERIT, ...TRUE_FALSE],
+    MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: [...INHERIT, ...TRUE_FALSE],
+    MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: [...INHERIT, ...TRUE_FALSE],
     // Older versions stored true/false here, which still reads as all/none.
     WRITE_NFO_STRM: [...Object.values(NfoWriteMode), ...TRUE_FALSE],
     RELEASE_LANGUAGE: ['none', 'english'],

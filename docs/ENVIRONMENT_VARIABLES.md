@@ -41,6 +41,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `MANUAL_NATIVE_SEARCH` | `inherit` | No | Search-page override of `NATIVE_SEARCH` (`inherit`, `true`, `false`). |
 | `MANUAL_NATIVE_SEARCH_ENGINE` | `inherit` | No | Search-page override of `NATIVE_SEARCH_ENGINE`. |
 | `MANUAL_SEARCH_MATCH_ALL_WORDS` | `inherit` | No | Search-page override of `SEARCH_MATCH_ALL_WORDS`. |
+| `MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS` | `inherit` | No | Search-page override of `NATIVE_SEARCH_V2_EXPAND_COLLECTIONS`. |
+| `MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES` | `inherit` | No | Search-page override of `NATIVE_SEARCH_V2_COLLECTION_NAMES`. |
 | `ARCHIVE_ENABLED` | `false` | No | Keep cancelled/removed queue+history items as archive records. |
 | `AUTH_TYPE` | `form` | No | `form` / `oidc` / `none`. |
 | `AUTH_USERNAME` | `admin` | No | Login username (`form` auth). |

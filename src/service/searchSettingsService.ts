@@ -10,15 +10,13 @@ const MANUAL_TWIN = {
     [IplayarrParameter.NATIVE_SEARCH]: IplayarrParameter.MANUAL_NATIVE_SEARCH,
     [IplayarrParameter.NATIVE_SEARCH_ENGINE]: IplayarrParameter.MANUAL_NATIVE_SEARCH_ENGINE,
     [IplayarrParameter.SEARCH_MATCH_ALL_WORDS]: IplayarrParameter.MANUAL_SEARCH_MATCH_ALL_WORDS,
+    [IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS]: IplayarrParameter.MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS,
+    [IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES]: IplayarrParameter.MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES,
 } as const;
 
-// Requested-series-only has no manual twin: a manual search always lists the whole show.
-// Expand-collections has none either, but applies to both: a collection pid is typed into the manual search.
-type SearchSettingKey =
-    | keyof typeof MANUAL_TWIN
-    | IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY
-    | IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS
-    | IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES;
+// Requested-series-only has no manual twin: it narrows a search to the season Sonarr/Radarr asks for, and a
+// manual search never asks for one, so it always lists the whole show.
+type SearchSettingKey = keyof typeof MANUAL_TWIN | IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY;
 
 export interface EffectiveSearchSettings {
     native: boolean;
@@ -76,8 +74,10 @@ class SearchSettingsService {
     // own entries (per setting combination; "prefix" versions the key so entries from before prefix matching are never reused) and are never served to Sonarr/Radarr, or the other way round.
     async cacheSuffix(): Promise<string> {
         if (searchContext() !== 'manual') return '';
-        const { native, engine, matchAllWords } = await this.effective('manual');
-        return `|manual-prefix:${native ? `${engine}|${matchAllWords}` : 'get_iplayer'}`;
+        const { native, engine, matchAllWords, expandCollections, collectionNames } = await this.effective('manual');
+        // The collection options only show up in the key when on, so entries made without them stay valid.
+        const collections = `${expandCollections ? '|pid' : ''}${collectionNames ? '|names' : ''}`;
+        return `|manual-prefix:${native ? `${engine}|${matchAllWords}${collections}` : 'get_iplayer'}`;
     }
 }
 

@@ -33,6 +33,8 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         ['MANUAL_NATIVE_SEARCH_ENGINE', ['inherit', 'V1', 'V2']],
         ['MANUAL_NATIVE_SEARCH', ['inherit', 'true', 'false']],
         ['MANUAL_SEARCH_MATCH_ALL_WORDS', ['inherit', 'true', 'false']],
+        ['MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', ['inherit', 'true', 'false']],
+        ['MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES', ['inherit', 'true', 'false']],
         ['WRITE_NFO_STRM', ['all', 'none', 'nzb', 'manual', 'true', 'false']],
         ['RELEASE_LANGUAGE', ['none', 'english']],
         ['LIVE_TV_LOGO_SHAPE', ['landscape', 'square']],
