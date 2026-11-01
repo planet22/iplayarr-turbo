@@ -45,7 +45,7 @@ Tests live under `tests/`, mirroring the `src/` directory structure (e.g. `src/f
 
 ## Smoke tests
 
-`smoke/` holds Playwright/HTTP scripts run against a live instance: `smoke.cjs` (read-only: API, Newznab/SABnzbd, browse, UI at desktop and phone widths), `smoke.cjs --write` (adds `reallife.cjs` and `uireal.cjs`: subscribes, queues, streams, changes and reverts settings), `settings.cjs` (every setting changed, read back and restored; fails if a setting has no entry) and `probes.cjs` (data quality, hostile input, SSRF guards, config races). `smoke/SMOKE_PROMPT.md` is a repeatable prompt for running the lot.
+`smoke/` holds Playwright/HTTP scripts run against a live instance: `smoke.cjs` (read-only: API, Newznab/SABnzbd, browse, UI at desktop and phone widths), `smoke.cjs --write` (adds `reallife.cjs` and `uireal.cjs`: subscribes, queues, streams, changes and reverts settings), `settings.cjs` (every setting changed, read back and restored; fails if a setting has no entry) and `probes.cjs` (data quality, hostile input, SSRF guards, config races). `smoke/SMOKE_PROMPT.md` is a repeatable prompt for running the lot. `jellyfin.cjs` is an optional extra for dev instances with a Jellyfin server: it downloads a film collection as `.strm` links into a scratch folder, checks Jellyfin gathers them into a BoxSet and can probe a film, then removes what it made. It reads its settings (instance and Jellyfin URLs, Jellyfin API key, scratch folder as the apps and as this machine see it) from the environment or a `.env`, or asks when run in a terminal, and skips with exit code 2 without them; the logic is unit tested against a fake server in `tests/smoke/`.
 
 ## Conventions worth knowing
 

@@ -55,14 +55,14 @@ async function gather() {
     return cfg;
 }
 
-const results = [];
-const rec = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : ' - ' + detail}`); };
-
-(async () => {
-    const cfg = await gather();
+// Runs the whole test for a gathered config and returns the exit code (0 pass, 1 fail, 2 skipped).
+// `wait` is injectable so tests do not really sleep.
+async function run(cfg, { wait = sleep } = {}) {
+    const results = [];
+    const rec = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok || !detail ? '' : ' - ' + detail}`); };
     const missing = ['base', 'jf', 'key', 'container', 'host'].filter((k) => !cfg[k]);
-    if (missing.length) { console.log('SKIP  Jellyfin smoke test: missing ' + missing.join(', ')); process.exit(2); }
-    if (cfg.container === '/' || cfg.container.split('/').filter(Boolean).length < 2) { console.log('SKIP  scratch folder looks too shallow to be safe: ' + cfg.container); process.exit(2); }
+    if (missing.length) { console.log('SKIP  Jellyfin smoke test: missing ' + missing.join(', ')); return 2; }
+    if (cfg.container === '/' || cfg.container.split('/').filter(Boolean).length < 2) { console.log('SKIP  scratch folder looks too shallow to be safe: ' + cfg.container); return 2; }
 
     const call = (base, headers) => async (p, o = {}) => {
         const r = await fetch(base + p, { method: o.method || 'GET', headers: { ...headers, ...(o.body ? { 'content-type': 'application/json' } : {}) }, body: o.body ? JSON.stringify(o.body) : undefined });
@@ -73,21 +73,21 @@ const rec = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? '
     const ip = call(cfg.base, {});
     const jf = call(cfg.jf, { Authorization: `MediaBrowser Token="${cfg.key}"` });
 
-    if ((await jf('/System/Info')).status !== 200) { rec('Jellyfin accepts the API key', false, 'HTTP not 200'); process.exit(1); }
+    if ((await jf('/System/Info')).status !== 200) { rec('Jellyfin accepts the API key', false, 'HTTP not 200'); return 1; }
     rec('Jellyfin accepts the API key', true);
-    if (fs.existsSync(cfg.host) && fs.readdirSync(cfg.host).length) { console.log('SKIP  scratch folder is not empty, refusing to use it: ' + cfg.host); process.exit(2); }
+    if (fs.existsSync(cfg.host) && fs.readdirSync(cfg.host).length) { console.log('SKIP  scratch folder is not empty, refusing to use it: ' + cfg.host); return 2; }
 
     const strmCount = (d) => { let n = 0; try { for (const e of fs.readdirSync(d, { withFileTypes: true })) n += e.isDirectory() ? strmCount(path.join(d, e.name)) : e.name.endsWith('.strm') ? 1 : 0; } catch { /* missing */ } return n; };
     const cols = (await ip('/json-api/browse/collections')).json?.collections;
-    if (!Array.isArray(cols)) { console.log('SKIP  collections are not available (is BROWSE_SHOW_COLLECTIONS on?)'); process.exit(2); }
+    if (!Array.isArray(cols)) { console.log('SKIP  collections are not available (is BROWSE_SHOW_COLLECTIONS on?)'); return 2; }
 
     // Pick a collection that is mostly films: the dry run says how many items; a "[boxset]" folder appears only for films.
     const pick = cols.find((x) => (cfg.collection ? x.id === cfg.collection : x.count >= 3 && x.count <= 40 && /film|cinema|movie|fright|horror/i.test(x.title)));
-    if (!pick) { console.log('SKIP  no film collection found; set SMOKE_JF_COLLECTION'); process.exit(2); }
+    if (!pick) { console.log('SKIP  no film collection found; set SMOKE_JF_COLLECTION'); return 2; }
     console.log(`Using collection "${pick.title}" (${pick.count} items)`);
 
     const origDir = (await ip('/json-api/config')).json?.COMPLETE_DIR;
-    if (!origDir) { console.log('SKIP  cannot read COMPLETE_DIR'); process.exit(2); }
+    if (!origDir) { console.log('SKIP  cannot read COMPLETE_DIR'); return 2; }
     let libraryMade = false;
     try {
         fs.mkdirSync(cfg.host, { recursive: true });
@@ -96,9 +96,9 @@ const rec = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? '
             const q = (await ip(`/json-api/browse/collections/${pick.id}/download`, { method: 'POST', body: { media: 'strm', boxset: true } })).json;
             rec('collection queued', !!q && q.queued > 0 && q.queued >= q.total - (q.skipped || 0), JSON.stringify(q));
             const want = q?.queued || 0;
-            for (let i = 0; i < 150 && strmCount(cfg.host) < want; i++) await sleep(2000);
+            for (let i = 0; i < 150 && strmCount(cfg.host) < want; i++) await wait(2000);
             rec(`all ${want} .strm files reached the scratch folder`, strmCount(cfg.host) >= want, `${strmCount(cfg.host)}/${want}`);
-            for (let i = 0; i < 60 && (((await ip('/json-api/queue/queue')).json) || []).length; i++) await sleep(2000);
+            for (let i = 0; i < 60 && (((await ip('/json-api/queue/queue')).json) || []).length; i++) await wait(2000);
         } finally {
             // Anything still queued would be filed under the restored COMPLETE_DIR (the real library), so cancel it first.
             // (A backend restart mid-run, e.g. nodemon in dev, can leave jobs queued and cause exactly this.)
@@ -115,7 +115,7 @@ const rec = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? '
         // The first scan can take a few minutes while Jellyfin fetches metadata.
         let box = null, kids = [];
         for (let i = 0; libraryMade && i < 80 && !(box && kids.length >= strmCount(cfg.host)); i++) {
-            await sleep(5000);
+            await wait(5000);
             const boxes = (await jf('/Items?Recursive=true&IncludeItemTypes=BoxSet&Fields=Path')).json?.Items || [];
             box = boxes.find((b) => (b.Path || '').startsWith(cfg.container)) || null;
             if (box) kids = ((await jf(`/Items?ParentId=${box.Id}&Fields=Path&CollapseBoxSetItems=false`)).json?.Items || []).filter((k) => (k.Path || '').startsWith(cfg.container));
@@ -149,5 +149,11 @@ const rec = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? '
     }
     const failed = results.filter((r) => !r).length;
     console.log(`${results.length - failed} passed, ${failed} failed`);
-    process.exit(failed ? 1 : 0);
-})().catch((e) => { console.log('ERR ' + e.message); process.exit(1); });
+    return failed ? 1 : 0;
+}
+
+module.exports = { readDotEnv, gather, run };
+
+if (require.main === module) {
+    gather().then(run).then((code) => process.exit(code)).catch((e) => { console.log('ERR ' + e.message); process.exit(1); });
+}
