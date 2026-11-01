@@ -3,7 +3,10 @@ import { Request, Response, Router } from 'express';
 import { isUhdEventFeed, OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
 import browseService from '../../service/browseService';
 import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
+import collectionService from '../../service/collectionService';
+import configService from '../../service/configService';
 import liveChannelService from '../../service/liveChannelService';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { failureResponse } from '../../utils/upstreamError';
@@ -72,6 +75,24 @@ router.get(
         if (pids.length === 0 || pids.length > MAX_DETAIL_PIDS || !pids.every((pid) => PID_REGEX.test(pid))) return invalid(res, 'pids must be a list of programme ids');
         const found = await addAvailableVersions<{ pid: string; versions?: string[] }>(pids.map((pid) => ({ pid })));
         res.json(Object.fromEntries(found.map(({ pid, versions }) => [pid, versions ?? []])));
+    })
+);
+
+// The iPlayer collections for the Discover page. Off by default (BROWSE_SHOW_COLLECTIONS): then nothing is fetched.
+router.get(
+    '/collections',
+    handle(async (_, res) => {
+        const enabled = (await configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS)) === 'true';
+        res.json({ enabled, collections: enabled ? await collectionService.list() : [] });
+    })
+);
+
+router.get(
+    '/collections/:id',
+    handle(async (req, res) => {
+        const id = req.params.id as string;
+        if (!ID_REGEX.test(id)) return invalid(res, 'Invalid collection id');
+        res.json(await browseService.collection(id, toInt(req.query.page), toInt(req.query.perPage)));
     })
 );
 

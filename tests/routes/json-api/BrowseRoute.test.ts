@@ -3,10 +3,13 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/BrowseRoute';
 import browseService from '../../../src/service/browseService';
+import collectionService from '../../../src/service/collectionService';
+import configService from '../../../src/service/configService';
 import liveChannelService from '../../../src/service/liveChannelService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 
 jest.mock('../../../src/service/browseService');
+jest.mock('../../../src/service/collectionService');
 const mocked = jest.mocked(browseService);
 
 const app = express();
@@ -21,6 +24,46 @@ describe('BrowseRoute', () => {
         const res = await request(app).get('/home');
         expect(res.status).toBe(200);
         expect(res.body).toEqual([{ id: 'x', title: 'X', items: [] }]);
+    });
+
+    describe('collections', () => {
+        const setting = (value: string) => jest.spyOn(configService, 'getParameter').mockResolvedValue(value);
+        afterEach(() => jest.restoreAllMocks());
+
+        it('GET /collections lists them when Show Collections is on', async () => {
+            setting('true');
+            jest.mocked(collectionService.list).mockResolvedValue([{ id: 'p096h09x', title: 'Fright Night', count: 34 }]);
+            const res = await request(app).get('/collections');
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ enabled: true, collections: [{ id: 'p096h09x', title: 'Fright Night', count: 34 }] });
+        });
+
+        it('GET /collections lists nothing, and fetches nothing, when it is off', async () => {
+            setting('false');
+            const res = await request(app).get('/collections');
+            expect(res.body).toEqual({ enabled: false, collections: [] });
+            expect(collectionService.list).not.toHaveBeenCalled();
+        });
+
+        it('GET /collections turns a failure into the standard error response', async () => {
+            setting('true');
+            jest.mocked(collectionService.list).mockRejectedValue(new Error('boom'));
+            expect((await request(app).get('/collections')).status).toBeGreaterThanOrEqual(500);
+        });
+
+        it('GET /collections/:id passes paging through as numbers', async () => {
+            mocked.collection.mockResolvedValue({ items: [], page: 2, perPage: 10 });
+            const res = await request(app).get('/collections/p096h09x?page=2&perPage=10');
+            expect(res.status).toBe(200);
+            expect(mocked.collection).toHaveBeenCalledWith('p096h09x', 2, 10);
+        });
+
+        it('GET /collections/:id rejects an invalid id', async () => {
+            const res = await request(app).get('/collections/bad%20id!');
+            expect(res.status).toBe(400);
+            expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+            expect(mocked.collection).not.toHaveBeenCalled();
+        });
     });
 
     it('GET /categories returns categories', async () => {

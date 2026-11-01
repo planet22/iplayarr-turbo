@@ -455,6 +455,14 @@ describe('browseService', () => {
         expect(rails).toEqual([{ id: 'b1', title: 'Panel Shows', items: [expect.objectContaining({ pid: 'r1' })] }]);
     });
 
+    it('collection lists a collection\'s titles from the groups endpoint, a page at a time', async () => {
+        mockedAxios.get.mockResolvedValue({ data: { group_episodes: { count: 2, elements: [element('f1'), element('f2')] } } });
+        const page = await browseService.collection('p096h09x', 2, 20);
+        expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('groups/p096h09x/episodes?page=2&per_page=20'));
+        expect(page).toMatchObject({ page: 2, perPage: 20, total: 2 });
+        expect(page.items.map(({ pid }) => pid)).toEqual(['f1', 'f2']);
+    });
+
     it('nowNext finds the live slot in yesterday\'s schedule during the small hours', async () => {
         mockedAxios.get.mockImplementation(async (url: string) => {
             if (url.endsWith('/schedule/2026-10-04')) {

@@ -285,6 +285,7 @@ const searchSettingsLine = computed(() => {
     if (settings.native) {
         parts.push(settings.matchAllWords ? 'all words' : 'any word');
         if (settings.expandCollections) parts.push('collections by pid or link');
+        if (settings.collectionNames) parts.push('collections by name');
     }
     return `Search: ${parts.join(' · ')}`;
 });

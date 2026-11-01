@@ -17,7 +17,8 @@ const MANUAL_TWIN = {
 type SearchSettingKey =
     | keyof typeof MANUAL_TWIN
     | IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY
-    | IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS;
+    | IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS
+    | IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES;
 
 export interface EffectiveSearchSettings {
     native: boolean;
@@ -25,6 +26,7 @@ export interface EffectiveSearchSettings {
     matchAllWords?: boolean;
     requestedSeriesOnly?: boolean;
     expandCollections?: boolean;
+    collectionNames?: boolean;
     // Which settings are not overridden for this context and follow the NZB search ones.
     inherited: string[];
 }
@@ -42,12 +44,13 @@ class SearchSettingsService {
     }
 
     async effective(context: SearchContext): Promise<EffectiveSearchSettings> {
-        const [native, engine, series, words, collections] = await Promise.all([
+        const [native, engine, series, words, collections, names] = await Promise.all([
             this.get(IplayarrParameter.NATIVE_SEARCH, context),
             this.get(IplayarrParameter.NATIVE_SEARCH_ENGINE, context),
             this.get(IplayarrParameter.NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY, context),
             this.get(IplayarrParameter.SEARCH_MATCH_ALL_WORDS, context),
             this.get(IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS, context),
+            this.get(IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES, context),
         ]);
         const inherited: string[] = [];
         if (context === 'manual') {
@@ -64,6 +67,7 @@ class SearchSettingsService {
             matchAllWords: words !== 'false',
             ...(v2 && series === 'true' ? { requestedSeriesOnly: true } : {}),
             ...(v2 && collections === 'true' ? { expandCollections: true } : {}),
+            ...(v2 && names === 'true' ? { collectionNames: true } : {}),
             inherited,
         };
     }

@@ -22,6 +22,8 @@ const CHANGE = {
     MANUAL_SEARCH_MATCH_ALL_WORDS: ['false', 'true', 'inherit'],
     NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: ['true', 'false'],
     NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: ['true', 'false'],
+    NATIVE_SEARCH_V2_COLLECTION_NAMES: ['true', 'false'],
+    BROWSE_SHOW_COLLECTIONS: ['true', 'false'],
     LIBRARY_FOLDER_STRUCTURE: ['false', 'true'],
     WRITE_NFO_STRM: ['all', 'nzb', 'none', 'manual'],
     WRITE_STRMTOOL_JSON: ['true', 'false'],
@@ -287,6 +289,30 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const r = await http('/json-api/search?q=p096h09x', { timeout: 90000 });
             const n = Array.isArray(r.json) ? r.json.length : -1;
             return { ...base, pass: base.pass && (on ? n > 0 : n === 0), detail: `${base.detail}; a manual search for the collection pid gave ${n} results` };
+        },
+        NATIVE_SEARCH_V2_COLLECTION_NAMES: async ({ next }) => {
+            const s = await manualSettings();
+            if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
+            const on = next === 'true';
+            const base = { what: `the Search page footer reports collections by name ${on ? 'on' : 'off'}`, pass: !!s.collectionNames === on, detail: JSON.stringify(s) };
+            // Search for a collection that is on iPlayer right now; a title no programme shares, so any hit is a collection member.
+            const list = (await http('/json-api/browse/collections')).json;
+            const collection = on || list?.enabled ? (list?.collections || [])[0] : undefined;
+            if (!collection) return base.pass ? { ...base, detail: `${base.detail}; no collection is available to search for (turn on Show Collections on Discover to probe)` } : base;
+            const r = await http(`/json-api/search?q=${encodeURIComponent(collection.title)}`, { timeout: 120000 });
+            const n = Array.isArray(r.json) ? r.json.length : -1;
+            return { ...base, pass: base.pass && (!on || n > 0), detail: `${base.detail}; a manual search for "${collection.title}" gave ${n} results` };
+        },
+        BROWSE_SHOW_COLLECTIONS: async ({ next }) => {
+            const on = next === 'true';
+            const r = await http('/json-api/browse/collections', { timeout: 120000 });
+            const list = r.json || {};
+            const count = (list.collections || []).length;
+            if (!on) return { what: 'the Discover collections list is off and empty', pass: r.status === 200 && list.enabled === false && count === 0, detail: JSON.stringify(list).slice(0, 100) };
+            if (r.status === 200 && list.enabled === true && count === 0) return 'the BBC pages listed no collections to show right now';
+            const first = (list.collections || [])[0];
+            const members = first ? (await http(`/json-api/browse/collections/${first.id}?perPage=5`)).json : undefined;
+            return { what: 'Discover lists collections and a collection opens to its titles', pass: r.status === 200 && list.enabled === true && count > 0 && (members?.items || []).length > 0, detail: `${count} collections; "${first?.title}" opened ${(members?.items || []).length} titles` };
         },
         NATIVE_SEARCH: async ({ next }) => {
             if ((effective(await get(), 'MANUAL_NATIVE_SEARCH') || 'inherit') !== 'inherit') return 'manual search has its own native-search override';

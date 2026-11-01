@@ -51,6 +51,26 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="showAdvanced && config.NATIVE_SEARCH == 'true' && config.NATIVE_SEARCH_ENGINE == 'V2'"
+        v-model="config.NATIVE_SEARCH_V2_COLLECTION_NAMES"
+        field="NATIVE_SEARCH_V2_COLLECTION_NAMES"
+        :advanced="true"
+        name="Find BBC Collections by Name (2.0)"
+        tooltip="Also list the films and episodes of any iPlayer collection whose title contains your search words (e.g. 'fright night'). Only collections currently on iPlayer's home and category pages are found."
+        :error="validationErrors.config?.NATIVE_SEARCH_V2_COLLECTION_NAMES"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="config.BROWSE_SHOW_COLLECTIONS"
+        field="BROWSE_SHOW_COLLECTIONS"
+        :advanced="true"
+        name="Show Collections on Discover"
+        tooltip="Show iPlayer's themed collections (e.g. Fright Night) on the Discover page; click one to open what is in it."
+        :error="validationErrors.config?.BROWSE_SHOW_COLLECTIONS"
+        :options="trueOrFalse"
+    />
+    <SelectInput
         v-if="showAdvanced && config.NATIVE_SEARCH == 'true'"
         v-model="config.SEARCH_MATCH_ALL_WORDS"
         field="SEARCH_MATCH_ALL_WORDS"

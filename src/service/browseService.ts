@@ -24,6 +24,7 @@ import { IPlayerDetails } from '../types/IPlayerDetails';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { versionProfiles } from '../types/VersionProfiles';
+import { parseIplayerState } from '../utils/iplayerState';
 import { splitArrayIntoChunks } from '../utils/Utils';
 import { cachedVersionIds } from '../utils/videoVersion';
 import categoryDiscoverService from './categoryDiscoverService';
@@ -50,16 +51,7 @@ export function extractElements(data: any): any[] {
     return [];
 }
 
-// The JSON blob iPlayer's pages embed as window.__IPLAYER_REDUX_STATE__.
-export function parseIplayerState(html: string): any {
-    const match = /__IPLAYER_REDUX_STATE__\s*=\s*(\{.*?\});\s*<\/script>/s.exec(html);
-    if (!match) return undefined;
-    try {
-        return JSON.parse(match[1]);
-    } catch {
-        return undefined;
-    }
-}
+export { parseIplayerState };
 
 // iPlayer flags every version of an episode `hd` / `hdr` / `uhd`. An episode carries `versions` itself;
 // a programme/series/brand list item carries its latest episode as `initial_children[0]`, so for those
@@ -611,6 +603,11 @@ class BrowseService {
                 .filter((r): r is PromiseFulfilledResult<BrowseRail> => r.status === 'fulfilled' && r.value.items.length > 0)
                 .map((r) => r.value);
         });
+    }
+
+    // What is in an iPlayer collection (curated group), a page at a time.
+    collection(id: string, page?: number, perPage?: number): Promise<BrowsePage> {
+        return this.#listing(`groups/${encodeURIComponent(id)}/episodes`, page, perPage);
     }
 
     category(id: string, page?: number, perPage?: number): Promise<BrowsePage> {

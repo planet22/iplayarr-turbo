@@ -66,6 +66,8 @@ const configService = {
         MANUAL_SEARCH_MATCH_ALL_WORDS: 'inherit',
         NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'false',
         NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false',
+        NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false',
+        BROWSE_SHOW_COLLECTIONS: 'false',
         RSS_FEED_HOURS: '48',
         // 'false' re-fetches/re-parses only today's BBC schedule page per channel each refresh,
         // reusing a cached result for any day that's already fully passed (it can't change once
@@ -140,7 +142,8 @@ const configService = {
         if (
             (parameter == IplayarrParameter.NATIVE_SEARCH ||
                 parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE ||
-                parameter == IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS) &&
+                parameter == IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS ||
+                parameter == IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES) &&
             oldValue != value
         ) {
             searchFacade.clearSearchCache();

@@ -61,6 +61,16 @@ describe('searchSettingsService', () => {
             );
         });
 
+        it('reports collectionNames for native 2.0 only, in both contexts', async () => {
+            setConfig({ ...base, NATIVE_SEARCH_ENGINE: 'V2', NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' });
+            expect((await searchSettingsService.effective('manual')).collectionNames).toBe(true);
+            expect((await searchSettingsService.effective('nzb')).collectionNames).toBe(true);
+            setConfig({ ...base, NATIVE_SEARCH_ENGINE: 'V2', NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false' });
+            expect(await searchSettingsService.effective('manual')).not.toHaveProperty('collectionNames');
+            setConfig({ ...base, NATIVE_SEARCH_ENGINE: 'V1', NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' });
+            expect(await searchSettingsService.effective('manual')).not.toHaveProperty('collectionNames');
+        });
+
         it('leaves expandCollections out when it is off or the engine is not 2.0', async () => {
             setConfig({ ...base, NATIVE_SEARCH_ENGINE: 'V2', NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false' });
             expect(await searchSettingsService.effective('manual')).not.toHaveProperty('expandCollections');

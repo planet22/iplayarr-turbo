@@ -122,8 +122,26 @@ describe('configService', () => {
     expect(searchFacade.clearSearchCache).toHaveBeenCalled();
   });
 
-  it('defaults NATIVE_SEARCH_V2_EXPAND_COLLECTIONS to off', () => {
-    expect(configService.defaultConfigMap.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS).toBe('false');
+  it('clears search cache when NATIVE_SEARCH_V2_COLLECTION_NAMES changes', async () => {
+    mockStorage['config'] = {
+      [IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES]: 'false',
+    };
+    await configService.setParameter(IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES, 'true');
+    expect(searchFacade.clearSearchCache).toHaveBeenCalled();
+  });
+
+  it('does not clear search cache for BROWSE_SHOW_COLLECTIONS', async () => {
+    mockStorage['config'] = {};
+    await configService.setParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS, 'true');
+    expect(searchFacade.clearSearchCache).not.toHaveBeenCalled();
+  });
+
+  it('defaults the collection settings to off', () => {
+    expect(configService.defaultConfigMap).toMatchObject({
+      NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false',
+      NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false',
+      BROWSE_SHOW_COLLECTIONS: 'false',
+    });
   });
 
   it('does not clear search cache when NATIVE_SEARCH is unchanged', async () => {

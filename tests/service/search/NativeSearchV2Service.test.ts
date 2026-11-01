@@ -2,6 +2,7 @@ import axios from 'axios';
 import lunr from 'lunr';
 
 import { searchResultLimit } from '../../../src/constants/iPlayarrConstants';
+import collectionService from '../../../src/service/collectionService';
 import configService from '../../../src/service/configService';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import loggingService from '../../../src/service/loggingService';
@@ -14,6 +15,7 @@ import { runWithSeasonHint } from '../../../src/utils/seasonHint';
 import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
 
 jest.mock('axios');
+jest.mock('../../../src/service/collectionService');
 jest.mock('../../../src/service/episodeCacheService');
 jest.mock('../../../src/service/iplayerDetailsService');
 jest.mock('../../../src/service/loggingService');
@@ -524,6 +526,59 @@ describe('NativeSearchV2Service', () => {
             searchHits();
             expect(await NativeSearchV2Service.search('p096h09x')).toEqual([]);
             expect(iplayerDetailsService.getGroupEpisodes).not.toHaveBeenCalled();
+        });
+
+        describe('by name', () => {
+            const names = { NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' };
+            const found = (...ids: string[]) => (collectionService.search as jest.Mock).mockResolvedValue(ids.map((id) => ({ id, title: id, count: 1 })));
+
+            it('lists the matching collections ahead of the normal results, without repeats', async () => {
+                setConfig(names);
+                found('g1');
+                (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([member('m1'), member('a0')]);
+                searchHits({ id: 'hit1', title: 'Test Brand' });
+                serveEpisodes({ brandPid: episodes('a', 2) });
+                const batched: string[] = [];
+
+                const results = await NativeSearchV2Service.search(term, undefined, (batch) => batched.push(...batch.map(({ pid }) => pid)));
+
+                expect(collectionService.search).toHaveBeenCalledWith(term);
+                expect(results.map(({ pid }) => pid)).toEqual(['m1', 'a0', 'a1']);
+                expect(batched).toEqual(['m1', 'a0', 'a1']);
+            });
+
+            it('expands at most three collections', async () => {
+                setConfig(names);
+                found('g1', 'g2', 'g3', 'g4');
+                (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([member('m1')]);
+                searchHits();
+                await NativeSearchV2Service.search(term);
+                expect((iplayerDetailsService.getGroupEpisodes as jest.Mock).mock.calls.map(([pid]) => pid)).toEqual(['g1', 'g2', 'g3']);
+            });
+
+            it('keeps the collection results when the BBC search itself fails', async () => {
+                setConfig(names);
+                found('g1');
+                (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([member('m1')]);
+                (axios.get as jest.Mock).mockRejectedValue(new Error('400'));
+                expect((await NativeSearchV2Service.search(term)).map(({ pid }) => pid)).toEqual(['m1']);
+            });
+
+            it('carries on with the normal search when no collection matches', async () => {
+                setConfig(names);
+                found();
+                searchHits({ id: 'hit1', title: 'Test Brand' });
+                serveEpisodes({ brandPid: episodes('a', 2) });
+                expect((await NativeSearchV2Service.search(term)).map(({ pid }) => pid)).toEqual(['a0', 'a1']);
+                expect(iplayerDetailsService.getGroupEpisodes).not.toHaveBeenCalled();
+            });
+
+            it('does not look for collections when the option is off', async () => {
+                setConfig({ NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false' });
+                searchHits();
+                await NativeSearchV2Service.search(term);
+                expect(collectionService.search).not.toHaveBeenCalled();
+            });
         });
 
         it('does not take an ordinary title for a pid', async () => {

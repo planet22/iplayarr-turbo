@@ -35,6 +35,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `NATIVE_SEARCH_ENGINE` | `V2` | No | `V1` (original) or `V2` (concurrent lookups, retries); only used when `NATIVE_SEARCH` is on. |
 | `NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY` | `false` | No | Engine V2: fetch only the requested season. Never applies to manual search. |
 | `NATIVE_SEARCH_V2_EXPAND_COLLECTIONS` | `false` | No | Engine V2: a search for an iPlayer collection's pid or link lists its episodes/films. |
+| `NATIVE_SEARCH_V2_COLLECTION_NAMES` | `false` | No | Engine V2: a search also lists the contents of iPlayer collections whose title matches. |
+| `BROWSE_SHOW_COLLECTIONS` | `false` | No | Show iPlayer collections on the Discover page. |
 | `SEARCH_MATCH_ALL_WORDS` | `true` | No | Only list results containing every searched word. |
 | `MANUAL_NATIVE_SEARCH` | `inherit` | No | Search-page override of `NATIVE_SEARCH` (`inherit`, `true`, `false`). |
 | `MANUAL_NATIVE_SEARCH_ENGINE` | `inherit` | No | Search-page override of `NATIVE_SEARCH_ENGINE`. |

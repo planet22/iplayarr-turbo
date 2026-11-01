@@ -1,0 +1,107 @@
+import axios from 'axios';
+import pLimit from 'p-limit';
+
+import { BrowseCollection } from '../types/Browse';
+import { parseIplayerState } from '../utils/iplayerState';
+import { queryTerms, titleMatchesAllTerms } from '../utils/titleMatch';
+import DbCacheService from './db/dbCacheService';
+import loggingService from './loggingService';
+
+const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
+const IPLAYER = 'https://www.bbc.co.uk/iplayer';
+const IMAGE_PID_REGEX = /\/([a-z0-9]{6,})\.(?:jpg|jpeg|png)(?:$|\?)/i;
+const ID_REGEX = /^[a-z0-9_-]+$/i;
+const pageConcurrency = 4;
+const infoConcurrency = 6;
+
+interface GroupRef {
+    id: string;
+    title: string;
+}
+
+// iPlayer's collections ("Fright Night", "Must-Watch Movies", ...). The BBC has no list or search for them: they
+// only exist as tiles on its home and category pages (in the page's embedded state), so those pages are read
+// - best effort, a page that fails just contributes nothing - and each collection is then looked up for its
+// artwork and size. The result is cached for hours, since editors change collections rarely.
+class CollectionService {
+    cache: DbCacheService<BrowseCollection[]> = new DbCacheService('collections', 6 * 60 * 60, {
+        label: 'Collections',
+        description: 'The BBC iPlayer collections found on its home and category pages (Browse, and the search by collection name).',
+    });
+
+    async list(): Promise<BrowseCollection[]> {
+        return this.cache.getOr('all', () => this.#build());
+    }
+
+    // The collections whose title has every word of the term; none for a term with no usable words.
+    async search(term: string): Promise<BrowseCollection[]> {
+        if (!queryTerms(term).length) return [];
+        try {
+            return (await this.list()).filter(({ title }) => titleMatchesAllTerms(title, term));
+        } catch (err: any) {
+            loggingService.error(`Collection search failed: ${err?.message ?? err}`);
+            return [];
+        }
+    }
+
+    async #categoryIds(): Promise<string[]> {
+        try {
+            const response = await axios.get(`${IBL_BASE}/categories`);
+            const list: any[] = Array.isArray(response.data?.categories) ? response.data.categories : [];
+            return list.map(({ id }) => String(id)).filter((id) => ID_REGEX.test(id));
+        } catch {
+            return [];
+        }
+    }
+
+    // The collection tiles of one iPlayer page; a ranked list ("Most Popular Today") is not a collection.
+    async #pageGroups(url: string): Promise<GroupRef[]> {
+        try {
+            const page = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            const state = parseIplayerState(String(page.data));
+            const bundles: any[] = Array.isArray(state?.bundles) ? state.bundles : [];
+            return bundles
+                .filter((b) => b?.journey?.type === 'group' && b.type !== 'ranked' && ID_REGEX.test(String(b.journey.id)) && String(b.title?.default ?? '').trim())
+                .map((b) => ({ id: String(b.journey.id), title: String(b.title.default).trim() }));
+        } catch {
+            return [];
+        }
+    }
+
+    // Artwork and size from the collection's own record; undefined when it is empty or cannot be read.
+    async #describe({ id, title }: GroupRef): Promise<BrowseCollection | undefined> {
+        try {
+            const response = await axios.get(`${IBL_BASE}/groups/${encodeURIComponent(id)}/episodes?rights=web&per_page=1`);
+            const group = response.data?.group_episodes;
+            const count = Number(group?.count) || 0;
+            if (!count) return undefined;
+            const image: unknown = group.group?.images?.standard ?? group.group?.images?.promotional;
+            const imagePid = typeof image === 'string' ? IMAGE_PID_REGEX.exec(image)?.[1] : undefined;
+            const synopses = group.group?.synopses;
+            return {
+                id,
+                title: String(group.group?.title ?? title).trim() || title,
+                synopsis: synopses?.small ?? synopses?.medium ?? synopses?.large ?? undefined,
+                thumbnail: imagePid ? `json-api/thumbnail/${imagePid}.jpg` : undefined,
+                count,
+            };
+        } catch {
+            return undefined;
+        }
+    }
+
+    async #build(): Promise<BrowseCollection[]> {
+        const urls = [IPLAYER, ...(await this.#categoryIds()).map((id) => `${IPLAYER}/categories/${encodeURIComponent(id)}/featured`)];
+        const pages = pLimit(pageConcurrency);
+        const found = await Promise.all(urls.map((url) => pages(() => this.#pageGroups(url))));
+        const groups = new Map<string, GroupRef>();
+        for (const group of found.flat()) if (!groups.has(group.id)) groups.set(group.id, group);
+        const info = pLimit(infoConcurrency);
+        const described = await Promise.all([...groups.values()].map((group) => info(() => this.#describe(group))));
+        const collections = described.filter((c): c is BrowseCollection => c !== undefined);
+        loggingService.log(`Collections: found ${collections.length} on ${urls.length} iPlayer pages`);
+        return collections;
+    }
+}
+
+export default new CollectionService();
