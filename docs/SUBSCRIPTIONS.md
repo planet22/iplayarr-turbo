@@ -31,7 +31,7 @@ The subscribe dialog also offers **Sonarr/Radarr only**: the show is recorded bu
 
 ### Versions
 
-If audio described / signed badges are on (Settings → General → Appearance), the subscribe dialog can also ask which versions to follow, and the Subscriptions page has **AD** and **Signed** toggles per show. A subscription can then also download the audio described and/or signed version of each new episode, named and tagged like the standard release.
+If audio described / signed badges are on (Settings → Appearance), the subscribe dialog can also ask which versions to follow, and the Subscriptions page has **AD** and **Signed** toggles per show. A subscription can then also download the audio described and/or signed version of each new episode, named and tagged like the standard release.
 
 - Versions are **never back-filled**: only episodes that appear after you turn a version on are considered.
 - The BBC often publishes these versions later than the standard episode, so each episode is re-checked for 30 days after it first appears.
@@ -47,11 +47,30 @@ A subscription can be added to a Sonarr or Radarr library from the Programme and
 - If the app already has the show under the same title slug with a different id, iPlayarr links to that entry instead of failing.
 - The **Request** action on a programme page also records the show as a Sonarr/Radarr-only subscription with its link, so you can see and undo it. Only shows iPlayarr itself downloads count as "Subscribed"; subscribing to a Sonarr/Radarr-only show upgrades it in place.
 
+### Syncing shows already in Sonarr/Radarr
+
+If Sonarr/Radarr already hold shows that point at iPlayarr, **Sync** (beside **Check all now** on the Subscriptions page) finds them and offers them as Sonarr/Radarr-only subscriptions. A show counts as ours when the app holds:
+
+- a `.strm` link, or
+- a video file carrying the `BBCiPlayarrTurbo` release group (see [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md)), or
+- optionally, a grab recorded in its history through the iPlayarr indexer (slow, so it is off unless ticked).
+
+1. Press **Sync**, pick the apps to scan (your choice is remembered per app), and optionally tick the grab-history scan.
+2. Each app shows step-by-step progress with a tally of `.strm` files and release-group files found. Sonarr/Radarr series and history pages are fetched in parallel.
+3. Closing the dialog scrolls to a **Found in Sonarr/Radarr** list. Import shows one by one, or **Import all**. **Clear** dismisses the list (the next sync offers them again).
+
+Finds are kept until imported, cleared or replaced by the next scan of the same app, so a scheduled scan's results are waiting when you next open the page. A show you have since subscribed to is left out.
+
+Each Sonarr/Radarr-only show keeps its **episode counts** (have of total, and how many are ours), when a file was last added and when the counts were last validated. A show deleted from its app gets a warning icon and loses its stale counts, and if it is re-added in the app the new entry is offered as a relink.
+
+**Scheduled refresh:** switch on **Subscription detection** in an app's settings (Apps page; the app card then shows a *Subscription Detection* pill). A daily job (**Subscription Detection**, 03:47, listed under Settings → Maintenance) refreshes the counts of linked shows and remembers any new finds for the list above. It never imports anything and skips the slow grab-history scan.
+
 ## Subscriptions page (`/subscriptions`)
 
 Lists every subscription with its artwork, channel, when it was last checked, and when and how many episodes were last downloaded. A red **Last check failed** tag means the last check hit an error (hover it for the message); the next scheduled check tries again.
 
-- **Check now** (per show) and **Check all now** run the same check as the schedule, and report how many episodes were queued.
+- **Check now** (per show) and **Check all now** run the same check as the schedule, and report how many episodes were queued. While a check runs, a progress ring appears over each show's thumbnail (waiting, listing, queueing n of total, versions, done), held for at least a second so it can be seen.
+- **Sort** by Added, A-Z, Downloaded or Checked (A-Z ignores a leading *The*, *A* or *An*) and **filter** by All, iPlayarr or an individual app.
 - **Unsubscribe** (trash) stops the subscription. Episodes already downloaded are not touched.
 
 ## Live channels
@@ -111,6 +130,10 @@ Further endpoints:
 | `GET /json-api/subscriptions/arr/apps` | Sonarr/Radarr apps available to link |
 | `GET /json-api/subscriptions/arr/apps/:appId/lookup` | Search the app for a matching show |
 | `GET /json-api/subscriptions/arr/apps/:appId/options` | Root folders and quality profiles |
+| `GET /json-api/subscriptions/arr/detected?appId=&grab=1` | Scan the app(s) for shows that point at iPlayarr (`grab=1` adds the grab-history scan) |
+| `GET /json-api/subscriptions/arr/detected/found` | Finds from earlier scans, manual or scheduled, still waiting to be imported |
+| `DELETE /json-api/subscriptions/arr/detected?appId=` | Clear the waiting finds (of one app when `appId` is given) |
+| `POST /json-api/subscriptions/arr/detected/import` | Import one find (`appId`, `arrId`, `pid`, `title`, optional counts) |
 | `POST /json-api/subscriptions/arr/:id` | Link (add to Sonarr/Radarr) |
 | `DELETE /json-api/subscriptions/arr/:id` | Unlink (optionally removing what iPlayarr added) |
 | `GET/POST/DELETE /json-api/subscriptions/live` | List, add (`POST /all` for every channel) and remove (`/:channelId`) live channels |

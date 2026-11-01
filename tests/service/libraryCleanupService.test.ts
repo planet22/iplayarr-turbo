@@ -125,3 +125,23 @@ describe('LibraryCleanupService', () => {
         await expect(libraryCleanupService.cleanup()).resolves.toBe(0);
     });
 });
+
+describe('LibraryCleanupService when sidecar files cannot be deleted', () => {
+    it('leaves the folder for next time instead of failing', async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iplayarr-library-cleanup-'));
+        const show = path.join(dir, 'Some Show');
+        fs.mkdirSync(show);
+        fs.writeFileSync(path.join(show, 'tvshow.nfo'), '<tvshow/>');
+        (configService.getParameter as jest.Mock).mockImplementation(async (param: string) =>
+            param === 'LIBRARY_FOLDER_STRUCTURE' ? 'true' : param === 'COMPLETE_DIR' ? dir : undefined
+        );
+        const unlink = jest.spyOn(fs.promises, 'unlink').mockRejectedValue(new Error('read-only'));
+        try {
+            expect(await libraryCleanupService.cleanup()).toBe(0);
+            expect(fs.existsSync(show)).toBe(true);
+        } finally {
+            unlink.mockRestore();
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});

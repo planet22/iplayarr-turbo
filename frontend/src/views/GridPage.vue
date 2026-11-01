@@ -1,6 +1,6 @@
 <template>
     <div class="browsePage">
-        <PageHeader :title="heading" />
+        <PageHeader :title="heading" :icon="isAtoZ ? 'arrow-down-a-z' : ''" />
         <SettingsPageToolbar inline-filters>
             <template v-if="items.length" #filters>
                 <span v-if="rails.length" class="gridFiltersTitle">All programmes</span>
@@ -10,6 +10,9 @@
                         {{ option === 'All' ? 'All channels' : option }}
                     </option>
                 </select>
+            </template>
+            <template #actions>
+                <SortControl v-if="items.length" v-model:sort-by="sortKey" v-model:order="sortOrder" :options="SORT_OPTIONS" />
             </template>
         </SettingsPageToolbar>
         <div v-if="isAtoZ" class="letterBar">
@@ -47,8 +50,10 @@ import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
+import SortControl from '@/components/common/SortControl.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch } from '@/lib/browse';
+import { SORT_OPTIONS, sortList } from '@/lib/browseSort';
 import { usePagination } from '@/lib/usePagination';
 
 const PER_PAGE = 150; // the server's max perPage - fewest round trips when fetching everything
@@ -64,6 +69,8 @@ const categoryTitle = ref('');
 const rails = ref([]);
 const textFilter = ref('');
 const channelFilter = ref('All');
+const sortKey = ref('default');
+const sortOrder = ref('asc');
 
 // Everything is fetched up front (in the background, page by page) so filtering and pagination
 // below apply to the whole listing, not just whatever page happened to be loaded so far.
@@ -73,10 +80,14 @@ const channelOptions = computed(() => [
 ]);
 const filteredItems = computed(() => {
     const text = textFilter.value.trim().toLowerCase();
-    return items.value.filter(
-        ({ title, subtitle, channel }) =>
-            (!text || `${title} ${subtitle ?? ''}`.toLowerCase().includes(text)) &&
-            (channelFilter.value === 'All' || channel === channelFilter.value)
+    return sortList(
+        items.value.filter(
+            ({ title, subtitle, channel }) =>
+                (!text || `${title} ${subtitle ?? ''}`.toLowerCase().includes(text)) &&
+                (channelFilter.value === 'All' || channel === channelFilter.value)
+        ),
+        sortKey.value,
+        sortOrder.value
     );
 });
 
@@ -84,7 +95,7 @@ const {
     page: gridPage, pageSize: gridPageSize, pagedItems,
 } = usePagination(filteredItems);
 
-watch([textFilter, channelFilter], () => {
+watch([textFilter, channelFilter, sortKey, sortOrder], () => {
     gridPage.value = 1;
 });
 
@@ -159,6 +170,8 @@ watch(
         rails.value = [];
         textFilter.value = '';
         channelFilter.value = 'All';
+        sortKey.value = 'default';
+        sortOrder.value = 'asc';
         total.value = undefined;
         gridPage.value = 1;
         if (!isAtoZ.value) {

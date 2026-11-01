@@ -1,8 +1,13 @@
 <template>
-    <button v-for="item in pagedItems" :key="JSON.stringify(item)" class="listButton clickable">
+    <button
+        v-for="item in pagedItems"
+        :key="JSON.stringify(item)"
+        class="listButton clickable"
+        @click="emit('select', item)"
+    >
         <slot :item="item" />
         <div class="actionContainer">
-            <button v-for="action in actions" :key="action[0]" class="clickable" @click="action[1](item)">
+            <button v-for="action in actions" :key="action[0]" class="clickable" @click.stop="action[1](item)">
                 <font-awesome-icon :icon="['fas', action[0] === 'refresh' ? 'arrows-rotate' : action[0]]" :spin="!!action[2]?.(item)" />
             </button>
         </div>
@@ -23,7 +28,7 @@ import { usePagination } from '@/lib/usePagination';
 
 import TablePagination from './TablePagination.vue';
 
-const emit = defineEmits(['create']);
+const emit = defineEmits(['create', 'select']);
 
 const props = defineProps({
     showAdd: {
@@ -105,8 +110,10 @@ const { page, pageSize, pagedItems } = usePagination(items);
         padding-bottom: 0.5rem;
 
         button {
-            background: none;
-            border: none;
+            padding: 4px 10px;
+            border: 1px solid @table-border-color;
+            border-radius: 4px;
+            background-color: @nav-background-color;
             color: @primary-text-color;
         }
     }

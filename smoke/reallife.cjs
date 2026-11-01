@@ -9,6 +9,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
     const cleanups = [];
     const later = (name, fn) => cleanups.push({ name, fn });
     const step = async (name, fn) => {
+        if (ctx.want && !ctx.want(name)) return; // --filter on the command line
         try { await fn(); } catch (e) { rec(W, name, 'FAIL', 'threw: ' + e.message); }
     };
     const ok = (name, cond, detail = '') => rec(W, name, cond ? 'PASS' : 'FAIL', cond ? '' : detail);
@@ -150,6 +151,11 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('custom channel needs a name', noName.status === 400, `HTTP ${noName.status}`);
             const probe = await http('/json-api/live-channels/probe', { method: 'POST', body: { streamUrl: url }, timeout: 60000 });
             warn('custom channel probe', probe.status === 200, `HTTP ${probe.status} ${probe.text.slice(0, 120)}`);
+            // The probe must refuse cloud-metadata/link-local targets, including the IPv4-mapped IPv6 spelling
+            for (const target of ['http://169.254.169.254/latest/meta-data/', 'http://[::ffff:169.254.169.254]/latest/meta-data/']) {
+                const blocked = await http('/json-api/live-channels/probe', { method: 'POST', body: { streamUrl: target }, timeout: 30000 });
+                ok(`custom channel probe refuses ${target}`, blocked.status >= 400 || blocked.json?.ok === false, `HTTP ${blocked.status} ${blocked.text.slice(0, 100)}`);
+            }
             const add = await http('/json-api/live-channels/custom', { method: 'POST', body: { name: 'SMOKE-TEMP chan', streamUrl: url, color: '#123456', logoText: 'SMK', group: 'SMOKE' } });
             ok('custom channel create', add.status === 200, `HTTP ${add.status} ${add.text.slice(0, 160)}`);
             const list = (await http('/json-api/live-channels/custom')).json || [];
@@ -243,6 +249,20 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             await cleanHist(ep.pid);
             ok('history entry deleted', (await hist(ep.pid)).length === 0);
 
+            // A film downloaded without a type is queued as a movie, not TV (regression: type was always overwritten with TV)
+            const movieRss = (await http(`/api?t=movie&q=paddington&apikey=${apikey}`, { timeout: 60000 })).text;
+            const filmPid = ((movieRss.match(/<enclosure url="([^"]+)"/) || [])[1] || '').replace(/&amp;/g, '&').match(/[?&]pid=([a-z0-9]+)/i)?.[1];
+            if (filmPid) {
+                later('clean film download history', () => cleanHist(filmPid));
+                await cleanHist(filmPid);
+                const film = await http(`/json-api/download?pid=${filmPid}&media=strm`, { timeout: 60000 });
+                ok('film download without a type accepted', film.status === 200, `HTTP ${film.status} ${film.text.slice(0, 100)}`);
+                await waitDone(filmPid, 120000);
+                const fh = (await hist(filmPid))[0];
+                warn('film downloaded without a type is filed as a movie', !!fh && /movie/i.test(String(fh.type)), JSON.stringify(fh || {}).slice(0, 160) + ' (WARN if the BBC does not class it as a film)');
+                await cleanHist(filmPid);
+            } else rec(W, 'film download without a type', 'SKIP', 'movie search returned no item');
+
             // Queue then cancel (real download so it stays queued long enough)
             const pid2 = eps.find((e) => e.pid && e.pid !== ep.pid)?.pid;
             if (pid2) {
@@ -264,7 +284,11 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             const rss = (await http(`/api?t=tvsearch&q=news&apikey=${apikey}`, { timeout: 60000 })).text;
             const link = (rss.match(/<enclosure url="([^"]+)"/) || [])[1];
             if (link) {
-                const nzbRes = await fetch(link.replace(/&amp;/g, '&'));
+                // An *arr app that only grabs (never searches) must still show as seen on the Apps page
+                const seenApp = ((await http('/json-api/apps')).json || [])[0];
+                const seenBefore = seenApp?.lastSeen ?? 0;
+                const nzbLink = link.replace(/&amp;/g, '&') + (seenApp ? `&app=${encodeURIComponent(seenApp.id)}` : '');
+                const nzbRes = await fetch(nzbLink);
                 const nzbText = await nzbRes.text();
                 const pidInNzb = (nzbText.match(/name="pid">([a-z0-9]+)</i) || nzbText.match(/pid[^>]*>([a-z0-9]{8})</i) || [])[1];
                 const form = new FormData();
@@ -272,6 +296,10 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 const add = await fetch(`${BASE}/api?mode=addfile&apikey=${apikey}&output=json`, { method: 'POST', body: form });
                 const addText = await add.text();
                 ok('SAB addfile accepts NZB (Sonarr hand-off)', add.status === 200 && /true|nzo|ids/i.test(addText), `HTTP ${add.status} ${addText.slice(0, 120)}`);
+                if (seenApp) {
+                    const seenNow = (((await http('/json-api/apps')).json || []).find((a) => a.id === seenApp.id) || {}).lastSeen ?? 0;
+                    ok('NZB download/grab updates the app\'s last seen', seenNow > 0 && seenNow >= seenBefore, `before ${seenBefore}, now ${seenNow}`);
+                } else rec(W, 'NZB download/grab updates the app\'s last seen', 'SKIP', 'no app configured');
                 if (pidInNzb) {
                     later('clean arr-path queue/history', async () => {
                         await http(`/json-api/queue/queue?pid=${pidInNzb}`, { method: 'DELETE' });
@@ -341,6 +369,59 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             }
         });
 
+        // 12b. Sonarr/Radarr sync: import a show against a library entry that does not exist, watch the next scan flag
+        // it as deleted, re-point it, and clean up. Nothing is created or changed in Sonarr/Radarr itself. Assumes the
+        // app has at least one show (an empty library is never taken to mean "everything was deleted").
+        await step('arr sync', async () => {
+            const app = ((await http('/json-api/subscriptions/arr/apps')).json || [])[0];
+            if (!app) return rec(W, 'arr sync flow', 'SKIP', 'no Sonarr/Radarr app');
+            const bpid = (await http(`/json-api/browse/programme/${ctx.pid}`)).json?.pid;
+            if (!bpid) return rec(W, 'arr sync flow', 'SKIP', 'no brand pid');
+            const subs = async () => (await http('/json-api/subscriptions')).json || [];
+            if ((await subs()).some((s) => s.pid === bpid)) return rec(W, 'arr sync flow', 'SKIP', 'the show is already subscribed - not touching it');
+            const find = async () => (await subs()).find((s) => s.pid === bpid);
+            later('remove the arr sync subscription', async () => { const s = await find(); if (s) await http('/json-api/subscriptions/' + s.id, { method: 'DELETE' }); });
+            const FAKE = 987654321;
+            const SEEN = '2026-10-30T10:00:00Z';
+            const imp = (arrId, extra = {}) => http('/json-api/subscriptions/arr/detected/import', {
+                method: 'POST', timeout: 120000,
+                body: { appId: app.id, arrId, pid: bpid, title: 'SMOKE-TEMP sync show', have: 3, total: 5, linked: 2, lastFileAt: SEEN, ...extra },
+            });
+
+            const first = await imp(FAKE);
+            ok('sync import answers', first.status === 200, `HTTP ${first.status} ${first.text.slice(0, 120)}`);
+            let s = await find();
+            ok('an imported show is Sonarr/Radarr-only', s?.arrOnly === true, JSON.stringify(s)?.slice(0, 160));
+            ok('import links it to the entry, marked as not added by us', s?.arr?.appId === app.id && s.arr.arrId === FAKE && s.arr.addedByUs === false, JSON.stringify(s?.arr));
+            ok('import stores the counts and when a file was last added', s?.arrCounts?.have === 3 && s.arrCounts.total === 5 && s.arrCounts.linked === 2 && s.arrCounts.addedAt === SEEN && !('lastFileAt' in s.arrCounts), JSON.stringify(s?.arrCounts));
+            ok('iPlayarr itself neither checks nor queues an imported show', !s?.lastChecked && !s?.lastQueuedAt);
+            const other = await imp(FAKE, { have: -1 });
+            ok('a second import of the same show is idempotent', other.status === 200 && (await subs()).filter((x) => x.pid === bpid).length === 1, `HTTP ${other.status}`);
+
+            // The entry does not exist in the app, so a scan flags the show and drops its (stale) counts
+            const scan = await http(`/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, { timeout: 180000 });
+            ok('a scan answers', scan.status === 200 && Array.isArray(scan.json), `HTTP ${scan.status}`);
+            s = await find();
+            ok('a scan flags a show whose entry was deleted from the app', typeof s?.arrMissing === 'string' && !Number.isNaN(Date.parse(s.arrMissing)), JSON.stringify(s)?.slice(0, 200));
+            ok('and drops its stale counts', s?.arrCounts === undefined, JSON.stringify(s?.arrCounts));
+            const flagged = s?.arrMissing;
+            await http(`/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, { timeout: 180000 });
+            ok('later scans keep the time it was first noticed', (await find())?.arrMissing === flagged);
+            ok('a flagged show still lists, so it can be stopped or relinked', ((await subs()).some((x) => x.pid === bpid)));
+
+            // Importing against another entry re-points the same subscription and clears the flag
+            const second = await imp(FAKE + 1);
+            s = await find();
+            ok('importing against another entry re-points the link', second.status === 200 && s?.arr?.arrId === FAKE + 1 && s.arr.addedByUs === false && (await subs()).filter((x) => x.pid === bpid).length === 1, JSON.stringify(s?.arr));
+            ok('and clears the deleted flag, with fresh counts', s?.arrMissing === undefined && s?.arrCounts?.have === 3, JSON.stringify({ missing: s?.arrMissing, counts: s?.arrCounts }));
+
+            const refused = await http('/json-api/subscriptions/arr/detected/import', { method: 'POST', body: { appId: 'SMOKE-NOPE', arrId: 1, pid: bpid, title: 'x' } });
+            ok('importing for an unknown app is refused', refused.status >= 400 && refused.status < 600 && /not a configured/i.test(refused.text), `HTTP ${refused.status} ${refused.text.slice(0, 100)}`);
+            ok('and changes nothing', (await find())?.arr?.arrId === FAKE + 1);
+            const removed = await http('/json-api/subscriptions/' + s.id, { method: 'DELETE' });
+            ok('unsubscribing removes it', removed.status === 200 && !(await find()), `HTTP ${removed.status}`);
+        });
+
         // 13. Stats clear endpoints are destructive history wipes - exercise one on a recreated entry only
         await step('stats history', async () => {
             const before = (await http('/json-api/stats/failedGrabHistory')).json;
@@ -355,6 +436,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
         for (const p of ['/json-api/synonym', '/json-api/numbering-overrides', '/json-api/offSchedule', '/json-api/live-channels/custom', '/json-api/subscriptions/live'])
             if ((await http(p)).text.includes('SMOKE-TEMP')) leaks.push(p);
         if (((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four') && !ctx.preLiveBbcFour) leaks.push('live sub bbc_four');
+        if (((await http('/json-api/subscriptions')).json || []).some((s) => s.arr?.arrId >= 987654321)) leaks.push('arr sync subscription');
         rec(W, 'cleanup leaves no SMOKE-TEMP entries', leaks.length ? 'FAIL' : 'PASS', leaks.join(', '));
     }
 };

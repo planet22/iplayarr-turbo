@@ -17,6 +17,29 @@ expressApp.use(express.json());
 expressApp.use('/', router);
 
 describe('Synonym and Lookup Routes', () => {
+    describe('requests that used to hang', () => {
+        it('POST with an array for from answers 400 instead of never replying', async () => {
+            (synonymService.getAllSynonyms as jest.Mock).mockResolvedValue([]);
+            const res = await request(expressApp).post('/').send({ from: [], target: {} }).timeout(2000);
+            expect(res.status).toBe(400);
+            expect(res.body.invalid_fields).toEqual(expect.objectContaining({ from: expect.any(String), target: expect.any(String) }));
+            expect(synonymService.addSynonym).not.toHaveBeenCalled();
+        });
+
+        it('PUT with an array for from answers 400', async () => {
+            (synonymService.getAllSynonyms as jest.Mock).mockResolvedValue([]);
+            const res = await request(expressApp).put('/').send({ from: [], target: [] }).timeout(2000);
+            expect(res.status).toBe(400);
+            expect(synonymService.updateSynonym).not.toHaveBeenCalled();
+        });
+
+        it('answers 500 instead of hanging when the service itself rejects', async () => {
+            (synonymService.getAllSynonyms as jest.Mock).mockRejectedValue(new Error('storage down'));
+            const res = await request(expressApp).get('/').timeout(2000);
+            expect(res.status).toBe(500);
+        });
+    });
+
     beforeEach(() => {
         jest.clearAllMocks();
     });

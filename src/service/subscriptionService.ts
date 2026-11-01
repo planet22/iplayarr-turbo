@@ -4,7 +4,7 @@ import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { QueueEntry } from '../types/QueueEntry';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
-import { SubscribeOptions, Subscription, SubscriptionArrLink, SubscriptionCheckResult } from '../types/Subscription';
+import { SubscribeOptions, Subscription, SubscriptionArrLink, SubscriptionCheckResult, SubscriptionProgress } from '../types/Subscription';
 import { VersionProfile } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
 import { createNZBName, getQualityProfile } from '../utils/Utils';
@@ -13,6 +13,7 @@ import historyService from './historyService';
 import iplayerDetailsService from './iplayerDetailsService';
 import loggingService from './loggingService';
 import queueService from './queueService';
+import socketService from './socketService';
 import { versionTypesFor } from './stream/versionVpid';
 import synonymService from './synonymService';
 import videoEventService from './videoEventService';
@@ -40,6 +41,10 @@ class SubscriptionService {
         while (this.#background.size) {
             await Promise.allSettled([...this.#background]);
         }
+    }
+
+    #progress(id: string, phase: SubscriptionProgress['phase'], done?: number, total?: number): void {
+        socketService.emit('subscriptionProgress', { id, phase, done, total } as SubscriptionProgress);
     }
 
     async list(): Promise<Subscription[]> {
@@ -145,6 +150,37 @@ class SubscriptionService {
         if (!(await this.list()).some((s) => s.id === id)) return false;
         await this.#update(id, (s) => ({ ...s, arr }));
         return true;
+    }
+
+    // Stores fresh Sonarr/Radarr episode counts, keyed by subscription id, in a single write. `missing` are
+    // subscriptions whose Sonarr/Radarr entry no longer exists: flagged (keeping the first time it was noticed).
+    async setArrCounts(
+        counts: Map<string, { have: number; total: number; linked: number; lastFileAt?: string }>,
+        missing: Set<string> = new Set()
+    ): Promise<void> {
+        if (!counts.size && !missing.size) return;
+        const all = await this.list();
+        const updatedAt = new Date().toISOString();
+        await storage.setItem(
+            STORAGE_KEY,
+            all.map((s) => {
+                if (counts.has(s.id)) {
+                    // The entry is back (or was never gone): drop any earlier "deleted" flag.
+                    const { lastFileAt, ...next } = counts.get(s.id)!;
+                    // The newest file's import date when Sonarr/Radarr gave one; otherwise the count growing since
+                    // the last scan means episodes were added, else keep the old time.
+                    const addedAt = lastFileAt ?? (s.arrCounts && next.have > s.arrCounts.have ? updatedAt : s.arrCounts?.addedAt);
+                    const refreshed: Subscription = { ...s, arrCounts: { ...next, updatedAt, ...(addedAt ? { addedAt } : {}) } };
+                    delete refreshed.arrMissing;
+                    return refreshed;
+                }
+                if (!missing.has(s.id)) return s;
+                // Counts of an entry that is gone would only mislead.
+                const gone: Subscription = { ...s, arrMissing: s.arrMissing ?? updatedAt };
+                delete gone.arrCounts;
+                return gone;
+            })
+        );
     }
 
     // Episodes already out count as done for a version, so switching one on only affects new episodes.
@@ -265,6 +301,7 @@ class SubscriptionService {
         if (subscription.arrOnly || this.#inFlight.has(subscription.id)) return result;
         this.#inFlight.add(subscription.id);
         try {
+            this.#progress(subscription.id, 'listing');
             const episodes = await this.listEpisodes(subscription.pid);
             // Empty means the lookup failed (or the show has nothing available) - nothing to do.
             const seen = new Set(subscription.seen);
@@ -273,7 +310,8 @@ class SubscriptionService {
                 .filter(({ id }) => !seen.has(id))
                 .sort((a, b) => Date.parse(a.release_date_time as string) - Date.parse(b.release_date_time as string));
             const handled: string[] = [];
-            for (const { id } of fresh) {
+            for (const [index, { id }] of fresh.entries()) {
+                this.#progress(subscription.id, 'queueing', index, fresh.length);
                 if (await this.#alreadyHandled(id)) {
                     handled.push(id);
                     continue;
@@ -287,6 +325,7 @@ class SubscriptionService {
                     loggingService.error(`Subscription "${subscription.title}": could not queue ${id}: ${error}`);
                 }
             }
+            if (subscription.versions?.length) this.#progress(subscription.id, 'versions');
             const doneVersions = await this.#checkVersions(subscription, episodes, result);
             const now = new Date().toISOString();
             await this.#update(subscription.id, (s) => ({
@@ -313,6 +352,7 @@ class SubscriptionService {
             }));
         } finally {
             this.#inFlight.delete(subscription.id);
+            this.#progress(subscription.id, 'done');
         }
         return result;
     }
@@ -323,7 +363,9 @@ class SubscriptionService {
         this.checking = true;
         try {
             const results: SubscriptionCheckResult[] = [];
-            for (const subscription of await this.list()) {
+            const all = await this.list();
+            for (const { id, arrOnly } of all) if (!arrOnly) this.#progress(id, 'waiting');
+            for (const subscription of all) {
                 results.push(await this.check(subscription));
             }
             const queued = results.reduce((n, r) => n + r.queued.length, 0);

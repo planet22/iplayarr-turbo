@@ -6,7 +6,6 @@ import Handlebars from 'handlebars';
 import os from 'os';
 import path from 'path';
 import { deromanize } from 'romans';
-import { pipeline } from 'stream';
 
 import { episodeRegex, filenameSeasonEpisodeRegex, getIplayerSeriesRegex, nativeSeriesRegex } from '../constants/iPlayarrConstants';
 import appService from '../service/appService';
@@ -23,6 +22,7 @@ import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
 import { londonDate } from './airDate';
+import { applyGroupToTemplate } from './releaseGroup';
 
 const removeUnsafeCharsRegex = /[^a-zA-Z0-9\s\\/._-]/g;
 
@@ -31,7 +31,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
         result.type == VideoType.MOVIE
             ? IplayarrParameter.MOVIE_FILENAME_TEMPLATE
             : IplayarrParameter.TV_FILENAME_TEMPLATE;
-    const template = (await configService.getParameter(templateKey)) as string;
+    const template = applyGroupToTemplate((await configService.getParameter(templateKey)) as string);
     const qualityProfile = await getQualityProfile();
     const language = releaseLanguageTag((await configService.getParameter(IplayarrParameter.RELEASE_LANGUAGE)) as string);
     const title = result.title.trim();
@@ -64,7 +64,7 @@ export async function createNZBName(result: IPlayerSearchResult | IPlayerDetails
         quality: qualityProfile.quality,
         language,
     } as FilenameTemplateContext)
-        .replaceAll(/[\s/]|[\s\\-_]{2,}/g, '.')
+        .replaceAll(/[\s/\\]|[\s\\-_]{2,}/g, '.')
         .replaceAll(/\.{2,}/g, '.');
 
     // Sonarr/Radarr read a release's language from its title, so tag it explicitly - unless the
@@ -187,7 +187,7 @@ export async function getThumbnailCacheDir(): Promise<string> {
 export async function getQualityProfile(): Promise<QualityProfile> {
     const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
     const profile = qualityProfiles.find(({ id }) => id == videoQuality) as QualityProfile;
-    return profile ? profile : (qualityProfiles.find(({ quality }) => quality === 'hd') as QualityProfile);
+    return profile ? profile : (qualityProfiles.find(({ id }) => id === 'hd') as QualityProfile);
 }
 
 export function removeAllQueryParams(str: string): string {
@@ -379,13 +379,33 @@ export function copyWithFallback(src: string, dst: string) {
     }
 
     try {
-        pipeline(
-            fs.createReadStream(src),
-            fs.createWriteStream(dst)
-        );
+        copyInChunks(src, dst);
     } catch (err) {
-        fs.unlinkSync(dst);
+        fs.rmSync(dst, { force: true });
         throw err;
+    }
+}
+
+// Plain read/write loop. The callers need the file to be complete when this returns (they go on to delete
+// the source), so it is synchronous, and it moves one chunk at a time so a large video is never held in memory.
+function copyInChunks(src: string, dst: string): void {
+    const input = fs.openSync(src, 'r');
+    try {
+        const output = fs.openSync(dst, 'w');
+        try {
+            const chunk = Buffer.allocUnsafe(1024 * 1024);
+            let read: number;
+            while ((read = fs.readSync(input, chunk, 0, chunk.length, null)) > 0) {
+                let written = 0;
+                while (written < read) {
+                    written += fs.writeSync(output, chunk, written, read - written);
+                }
+            }
+        } finally {
+            fs.closeSync(output);
+        }
+    } finally {
+        fs.closeSync(input);
     }
 }
 

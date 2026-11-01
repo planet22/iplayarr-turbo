@@ -152,12 +152,26 @@ export const addAuthMiddleware = (app: Express) => {
     });
 };
 
-router.get('/method', async (req: Request, res: Response) => {
+// Express 4 never answers a request whose async handler rejects (the client just waits), so a database
+// error while, say, saving a session would hang the page. Turn any rejection into a plain 500.
+const safe =
+    (handler: (req: Request, res: Response) => Promise<unknown> | unknown): RequestHandler =>
+    async (req, res) => {
+        try {
+            await handler(req, res);
+        } catch {
+            if (!res.headersSent) {
+                res.status(500).json({ error: ApiError.INTERNAL_ERROR } as ApiResponse);
+            }
+        }
+    };
+
+router.get('/method', safe(async (req: Request, res: Response) => {
     const authType = await configService.getParameter(IplayarrParameter.AUTH_TYPE);
     res.json({ message: authType });
-});
+}));
 
-router.get('/oidc/login', async (req: Request, res: Response) => {
+router.get('/oidc/login', safe(async (req: Request, res: Response) => {
     const authType = await configService.getParameter(IplayarrParameter.AUTH_TYPE);
     if (authType != 'oidc') {
         res.status(400).json({ error: ApiError.OIDC_NOT_ENABLED } as ApiResponse);
@@ -167,13 +181,13 @@ router.get('/oidc/login', async (req: Request, res: Response) => {
     const url = await OIDCService.getAuthURL(req);
 
     res.json({ url });
-});
+}));
 
 // Safe to embed inside an inline <script>: escapes everything that could close it or break the literal.
 const toScriptLiteral = (value: unknown): string =>
     JSON.stringify(value ?? null).replace(/[<>&\u2028\u2029]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 
-router.post('/oidc/test', async (req: Request, res: Response) => {
+router.post('/oidc/test', safe(async (req: Request, res: Response) => {
     // Starts a discovery request to an address the caller supplies, so it is for logged-in admins only.
     if (!(await isAuthenticatedRequest(req))) {
         res.status(401).json({ error: ApiError.NOT_AUTHORISED } as ApiResponse);
@@ -201,7 +215,7 @@ router.post('/oidc/test', async (req: Request, res: Response) => {
     } catch (err: any) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: err?.message ?? 'OIDC discovery failed' } as ApiResponse);
     }
-});
+}));
 
 router.get('/oidc/callback', async (req: Request, res: Response) => {
     try {
@@ -267,7 +281,7 @@ router.get('/oidc/callback', async (req: Request, res: Response) => {
     }
 });
 
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', safe(async (req: Request, res: Response) => {
     const [AUTH_USERNAME, AUTH_PASSWORD] = await Promise.all([
         configService.getParameter(IplayarrParameter.AUTH_USERNAME),
         configService.getParameter(IplayarrParameter.AUTH_PASSWORD),
@@ -310,7 +324,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     loginLimiter.recordFailure(clientKey);
     res.status(401).json({ error: ApiError.INVALID_CREDENTIALS } as ApiResponse);
-});
+}));
 
 router.get('/logout', (req, res) => {
     req.session.destroy(() => {
@@ -318,7 +332,7 @@ router.get('/logout', (req, res) => {
     });
 });
 
-router.get('/me', async (req: Request, res: Response) => {
+router.get('/me', safe(async (req: Request, res: Response) => {
     const [authType, username] = await Promise.all([
         configService.getParameter(IplayarrParameter.AUTH_TYPE),
         configService.getParameter(IplayarrParameter.AUTH_USERNAME),
@@ -333,7 +347,7 @@ router.get('/me', async (req: Request, res: Response) => {
         res.json(req.session.user);
         return;
     }
-});
+}));
 
 router.get('/generateToken', (_: Request, res: Response) => {
     if (Date.now() - tokenIssuedAt < TOKEN_COOLDOWN_MS) {
@@ -350,7 +364,7 @@ router.get('/generateToken', (_: Request, res: Response) => {
     res.json({ status: true });
 });
 
-router.post('/resetPassword', async (req: Request, res: Response) => {
+router.post('/resetPassword', safe(async (req: Request, res: Response) => {
     const { key } = req.body;
 
     if (tokenMatches(key)) {
@@ -363,6 +377,6 @@ router.post('/resetPassword', async (req: Request, res: Response) => {
     }
 
     res.json({ status: true });
-});
+}));
 
 export default router;

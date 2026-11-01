@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { App } from '../types/App';
 import { AppType } from '../types/AppType';
+import { markAppSeen } from './appSeen';
 
 // Jellyfin 12 only accepts the standard `Authorization: MediaBrowser ...` scheme (same note as
 // youtarr's jellyfinAdapter, which this is ported from), and that scheme works on older versions too.
@@ -12,6 +13,10 @@ function headers(apiKey: string) {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
+
+// What Jellyfin calls need from an app. Callers pass the saved app, so its id is there to record it as seen;
+// a connection test of an app not saved yet has no id.
+type JellyfinTarget = Pick<App, 'url' | 'api_key'> & Partial<Pick<App, 'id'>>;
 
 export interface JellyfinItem {
     path: string;
@@ -38,10 +43,11 @@ class JellyfinService {
     }
 
     // Mirrors youtarr's jellyfinAdapter.testConnection. Resolves true, or the message for the form.
-    async testConnection(app: Pick<App, 'url' | 'api_key'>): Promise<boolean | string> {
+    async testConnection(app: JellyfinTarget): Promise<boolean | string> {
         if (!app.url || !app.api_key) return 'Enter a Jellyfin URL and API key first';
         try {
             await axios.get(`${baseUrl(app.url)}/System/Info`, { headers: headers(app.api_key), timeout: REQUEST_TIMEOUT_MS });
+            void markAppSeen(app.id);
             return true;
         } catch (err: any) {
             const status = err?.response?.status;
@@ -55,12 +61,13 @@ class JellyfinService {
     // Every video library item on a server, for the STRM Watchdog. For a .strm item Jellyfin reports
     // the file contents (the link) as its media source path, so the link can be read from here even
     // when this container cannot read the file itself.
-    async getItems(server: Pick<App, 'url' | 'api_key'>): Promise<JellyfinItem[]> {
+    async getItems(server: JellyfinTarget): Promise<JellyfinItem[]> {
         const { data } = await axios.get(`${baseUrl(server.url)}/Items`, {
             headers: headers(server.api_key as string),
             params: { Recursive: true, IncludeItemTypes: 'Episode,Movie,Video', Fields: 'Path,MediaSources' },
             timeout: REQUEST_TIMEOUT_MS,
         });
+        void markAppSeen(server.id);
         return (data?.Items ?? [])
             .filter((item: any) => typeof item.Path === 'string')
             .map((item: any) => ({ path: item.Path, link: item.MediaSources?.[0]?.Path }));
@@ -69,15 +76,16 @@ class JellyfinService {
     // --- Live TV setup. Only ever touches entries whose URL carries an iPlayarr live_* mode, so a
     // Jellyfin server's other tuners and guide providers are left alone.
 
-    async #liveTvOptions(app: Pick<App, 'url' | 'api_key'>): Promise<any> {
+    async #liveTvOptions(app: JellyfinTarget): Promise<any> {
         const { data } = await axios.get(`${baseUrl(app.url)}/System/Configuration/livetv`, {
             headers: headers(app.api_key as string),
             timeout: REQUEST_TIMEOUT_MS,
         });
+        void markAppSeen(app.id);
         return data ?? {};
     }
 
-    async liveTvStatus(app: Pick<App, 'url' | 'api_key'>): Promise<JellyfinLiveTvStatus> {
+    async liveTvStatus(app: JellyfinTarget): Promise<JellyfinLiveTvStatus> {
         const options = await this.#liveTvOptions(app);
         const tuner = (options.TunerHosts ?? []).find((t: any) => String(t.Url ?? '').includes(TUNER_MARKER));
         const guide = (options.ListingProviders ?? []).find((g: any) => String(g.Path ?? '').includes(GUIDE_MARKER));
@@ -89,7 +97,7 @@ class JellyfinService {
 
     // Adds the M3U tuner, or updates it in place when one of ours already exists.
     // On update, the existing entry's other fields (e.g. a custom UserAgent) are carried over.
-    async upsertTuner(app: Pick<App, 'url' | 'api_key'>, playlistUrl: string): Promise<void> {
+    async upsertTuner(app: JellyfinTarget, playlistUrl: string): Promise<void> {
         const options = await this.#liveTvOptions(app);
         const existing = (options.TunerHosts ?? []).find((t: any) => String(t.Url ?? '').includes(TUNER_MARKER));
         await axios.post(
@@ -115,7 +123,7 @@ class JellyfinService {
         );
     }
 
-    async removeTuner(app: Pick<App, 'url' | 'api_key'>): Promise<boolean> {
+    async removeTuner(app: JellyfinTarget): Promise<boolean> {
         const existing = (await this.liveTvStatus(app)).tuner;
         if (!existing) return false;
         await axios.delete(`${baseUrl(app.url)}/LiveTv/TunerHosts`, {
@@ -127,7 +135,7 @@ class JellyfinService {
     }
 
     // Adds the XMLTV guide provider, or updates it in place when one of ours already exists.
-    async upsertGuide(app: Pick<App, 'url' | 'api_key'>, epgUrl: string): Promise<void> {
+    async upsertGuide(app: JellyfinTarget, epgUrl: string): Promise<void> {
         const existing = (await this.liveTvStatus(app)).guide;
         await axios.post(
             `${baseUrl(app.url)}/LiveTv/ListingProviders`,
@@ -147,7 +155,7 @@ class JellyfinService {
         );
     }
 
-    async removeGuide(app: Pick<App, 'url' | 'api_key'>): Promise<boolean> {
+    async removeGuide(app: JellyfinTarget): Promise<boolean> {
         const existing = (await this.liveTvStatus(app)).guide;
         if (!existing) return false;
         await axios.delete(`${baseUrl(app.url)}/LiveTv/ListingProviders`, {
@@ -159,12 +167,13 @@ class JellyfinService {
     }
 
     // Best-effort: asks Jellyfin to re-read the guide now rather than at its next scheduled refresh.
-    async refreshGuide(app: Pick<App, 'url' | 'api_key'>): Promise<void> {
+    async refreshGuide(app: JellyfinTarget): Promise<void> {
         try {
             const { data } = await axios.get(`${baseUrl(app.url)}/ScheduledTasks`, {
                 headers: headers(app.api_key as string),
                 timeout: REQUEST_TIMEOUT_MS,
             });
+            void markAppSeen(app.id);
             const task = (data ?? []).find((t: any) => t.Key === 'RefreshGuide');
             if (task?.Id) {
                 await axios.post(`${baseUrl(app.url)}/ScheduledTasks/Running/${task.Id}`, undefined, {

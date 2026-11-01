@@ -24,6 +24,9 @@ export interface QueueLibraryMetadata {
     quality?: string;
     // Version profile id this grab is of (audio-described...), when not the plain version.
     version?: string;
+    // The iPlayer collection (curated group) this was queued from. A film then goes under a Jellyfin "<collection> [boxset]"
+    // folder, and its .nfo names the collection (libraryPathBuilder.ts / nfoBuilder.ts).
+    collection?: string;
     // Synopsis, fetched best-effort from iplayerDetailsService at NFO-write time
     // (not carried through the NZB round-trip like the other fields) - populates
     // the .nfo <plot> tag.

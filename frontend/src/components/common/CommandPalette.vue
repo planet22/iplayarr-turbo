@@ -51,6 +51,7 @@ import { computed, defineExpose, nextTick, onBeforeUnmount, onMounted, ref, watc
 import { useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 
 // Ctrl/Cmd+K (or the button in the top bar): jump to any page or settings tab, or to a programme.
 const router = useRouter();
@@ -61,25 +62,28 @@ const PAGES = [
     { label: 'Guide', path: '/browse/schedule', icon: 'calendar-days', words: 'schedule tv listings' },
     { label: 'Channels', path: '/browse/channels', icon: 'tower-broadcast', words: 'live' },
     { label: 'Categories', path: '/browse/categories', icon: 'layer-group', words: 'genres' },
+    { label: 'Collections', path: '/browse/collections', icon: 'photo-film', words: 'themed lists fright night' },
     { label: 'A to Z', path: '/browse/atoz', icon: 'arrow-down-a-z', words: 'alphabetical' },
-    { label: 'Queue', path: '/queue', icon: 'tasks', words: 'downloads history' },
+    { label: 'Queue', path: '/queue', icon: 'clipboard-list', words: 'downloads history' },
     { label: 'Subscriptions', path: '/subscriptions', icon: 'bell', words: 'follow' },
     { label: 'Streaming', path: '/streaming', icon: 'play', words: 'sessions' },
-    { label: 'Video Events', path: '/events', icon: 'film', words: 'playback' },
+    { label: 'Video Events', path: '/events', icon: 'clapperboard', words: 'playback' },
     { label: 'Watchdog', path: '/watchdog', icon: 'shield-halved', words: 'strm links broken' },
-    { label: 'Apps', path: '/apps', icon: 'laptop-code', words: 'sonarr radarr jellyfin' },
-    { label: 'NZB', path: '/nzb', icon: 'satellite-dish', words: 'grabs searches' },
-    { label: 'Synonyms', path: '/synonyms', icon: 'arrows-rotate', words: 'rename' },
+    { label: 'Apps', path: '/apps', icon: 'puzzle-piece', words: 'sonarr radarr jellyfin' },
+    { label: 'NZB', path: '/nzb', icon: 'newspaper', words: 'grabs searches' },
+    { label: 'Synonyms', path: '/synonyms', icon: 'book', words: 'rename' },
     { label: 'Statistics', path: '/stats', icon: 'chart-bar', words: 'charts' },
-    { label: 'Logs', path: '/logs', icon: 'history', words: 'errors' },
+    { label: 'Logs', path: '/logs', icon: 'file-lines', words: 'errors' },
     { label: 'Settings', path: '/settings', icon: 'gears', words: 'config options' },
-    { label: 'Settings: General', path: '/settings#general', icon: 'sliders', words: 'api key appearance theme' },
+    { label: 'Settings: General', path: '/settings#general', icon: 'sliders', words: 'api key' },
+    { label: 'Settings: Search', path: '/settings#search', icon: 'magnifying-glass', words: 'native engine manual collections' },
+    { label: 'Settings: Appearance', path: '/settings#appearance', icon: 'palette', words: 'theme colour dark light badges' },
     { label: 'Settings: Media Management', path: '/settings#mediaManagement', icon: 'folder-open', words: 'folders naming quality' },
     { label: 'Settings: Download Client', path: '/settings#downloadClient', icon: 'download', words: 'get_iplayer yt-dlp' },
     { label: 'Settings: Streaming', path: '/settings#streaming', icon: 'tower-broadcast', words: 'strm subtitles watchdog' },
     { label: 'Settings: Live TV', path: '/settings#liveTv', icon: 'tv', words: 'jellyfin guide' },
     { label: 'Settings: Authentication', path: '/settings#authentication', icon: 'shield-halved', words: 'login oidc password' },
-    { label: 'Settings: Maintenance', path: '/settings#maintenance', icon: 'wrench', words: 'cache cron schedule' },
+    { label: 'Settings: Maintenance', path: '/settings#maintenance', icon: 'wrench', words: 'cache cron schedule rss' },
     { label: 'About', path: '/about', icon: 'circle-info', words: 'version' },
 ];
 
@@ -121,7 +125,7 @@ const results = computed(() => {
     }));
     const list = [];
     if (q) list.push({ key: 'search', icon: 'magnifying-glass', label: `Search iPlayer for "${query.value.trim()}"`, hint: 'Search', path: `/search?searchTerm=${encodeURIComponent(query.value.trim())}` });
-    list.push(...programmes.value.map((p) => ({ key: `prog-${p.pid}`, icon: 'tv', label: p.title, hint: 'Programme', path: `/browse/programme/${p.pid}` })));
+    list.push(...programmes.value.map((p) => ({ key: `prog-${suggestionKey(p)}`, icon: suggestionIcon(p), label: p.title, hint: suggestionLabel(p), path: suggestionPath(p) })));
     list.push(...pages.slice(0, q ? 8 : pages.length));
     return list;
 });

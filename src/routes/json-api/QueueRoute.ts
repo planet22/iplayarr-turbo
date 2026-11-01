@@ -4,8 +4,9 @@ import historyService from '../../service/historyService';
 import queueService from '../../service/queueService';
 import socketService from '../../service/socketService';
 import { QueueEntry } from '../../types/QueueEntry';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 interface DeleteRequest {
     pid: string;

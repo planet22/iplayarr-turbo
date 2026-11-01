@@ -55,6 +55,22 @@ class CronJobService {
         return error ? { ok: false, reason: 'invalid', message: error } : { ok: true };
     }
 
+    // Changes the schedule a task has by default (the REFRESH_SCHEDULE setting). A schedule set on the Maintenance tab
+    // keeps winning; without one the new schedule starts running now instead of at the next restart.
+    setDefaultSchedule(id: string, expression: string): boolean {
+        const task = this.tasks.get(id);
+        if (!task || checkSchedule(expression, task.minIntervalMinutes)) {
+            return false;
+        }
+        task.defaultCron = expression.trim();
+        if (!task.overridden) {
+            task.job.stop();
+            task.job = cron.schedule(task.defaultCron, () => this.runTask(id, 'scheduled'));
+            task.cron = task.defaultCron;
+        }
+        return true;
+    }
+
     // expression null restores the built-in schedule. Returns an error message when it is refused.
     async setSchedule(id: string, expression: string | null): Promise<ScheduleResult> {
         const check = this.validateSchedule(id, expression);

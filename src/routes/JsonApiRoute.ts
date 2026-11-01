@@ -3,6 +3,7 @@ import { Request, Response, Router } from 'express';
 import nzbFacade from '../facade/nzbFacade';
 import scheduleFacade from '../facade/scheduleFacade';
 import searchFacade from '../facade/searchFacade';
+import collectionService from '../service/collectionService';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
@@ -11,17 +12,19 @@ import { versionTypesFor } from '../service/stream/versionVpid';
 import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
 import { MediaMode } from '../types/enums/MediaMode';
-import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
+import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
 import { qualityProfiles } from '../types/QualityProfiles';
 import { QueueLibraryMetadata } from '../types/QueueEntry';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
-import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { versionProfiles } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
+import { asyncRouter } from '../utils/asyncRouter';
 import { isValidPid } from '../utils/pathSafety';
+import { QueueRequestNotFoundError, resolveQueueRequest } from '../utils/queueRequest';
 import { runInSearchContext } from '../utils/searchContext';
 import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
-import { calculateSeasonAndEpisode, getQualityProfile, parseSeasonEpisodeFromFilename } from '../utils/Utils';
+import { failureResponse } from '../utils/upstreamError';
+import { getQualityProfile } from '../utils/Utils';
 import { addAvailableVersions, applyVersionToRelease } from '../utils/videoVersion';
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
@@ -44,7 +47,7 @@ import SynonymsRoute from './json-api/SynonymsRoute';
 import VersionRoute from './json-api/VersionRoute';
 import WatchdogRoute from './json-api/WatchdogRoute';
 
-const router: Router = Router();
+const router: Router = asyncRouter();
 
 router.use('/config', SettingsRoute);
 router.use('/synonym', SynonymsRoute);
@@ -86,6 +89,8 @@ router.post('/nzb/test', async (req: Request, res: Response) => {
 // Searches typed on the Search page go into the search history like Sonarr/Radarr's do (just with no app), so the
 // Search page can offer them again as recent searches. Capped, as a broad search can have hundreds of results.
 const HISTORY_ITEM_LIMIT = 100;
+// Collection tiles shown beside a manual search.
+const SEARCH_COLLECTION_LIMIT = 6;
 const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace: SearchTrace) => {
     if (typeof term !== 'string' || !term.trim() || term === '*') return;
     // Recording is best effort: it must never fail (or slow) the search itself.
@@ -109,6 +114,10 @@ const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace:
 
 router.get('/search', async (req: Request, res: Response) => {
     const { q } = req.query as any;
+    if (q !== undefined && typeof q !== 'string') {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'The search term must be text' } as ApiResponse);
+        return;
+    }
     try {
         const { result, trace } = await withSearchTrace(() =>
             runInSearchContext('manual', () => searchFacade.search(q))
@@ -147,6 +156,15 @@ router.get('/search/stream', async (req: Request, res: Response) => {
         if (open) res.write(`${JSON.stringify(line)}\n`);
     };
 
+    // Collections whose title matches go out as their own line (the page shows them as tiles beside the results).
+    // Asked for alongside the search; a failure here only means no tiles.
+    const tiles = collectionService
+        .matchesForSearch(q, SEARCH_COLLECTION_LIMIT)
+        .then((collections) => {
+            if (collections.length) send({ collections });
+        })
+        .catch(() => undefined);
+
     // Each batch is marked with the versions its programmes have before it is sent; chained so batches keep their order.
     let sending: Promise<void> = Promise.resolve();
     try {
@@ -158,9 +176,10 @@ router.get('/search/stream', async (req: Request, res: Response) => {
             )
         );
         recordManualSearch(q, result, trace);
-        await sending;
+        await Promise.all([sending, tiles]);
         send({ done: true });
     } catch (error: any) {
+        await tiles;
         send({ error: error?.message || 'Search failed' });
     }
     res.end();
@@ -203,85 +222,18 @@ router.get('/download', async (req: Request, res: Response) => {
         return;
     }
 
-    // Structured metadata for library folder/nfo generation (libraryPathBuilder.ts /
-    // nfoBuilder.ts) - sent by the frontend's Search/Download pages, which already have
-    // the full IPlayerSearchResult in hand. When absent (a bare download-by-pid/URL with
-    // no prior search), it's derived below from the BBC metadata itself, the same way
-    // NativeSearchService derives it for search results (calculateSeasonAndEpisode).
-    let library: QueueLibraryMetadata | undefined = title
-        ? {
-            title,
-            series: series != null ? parseInt(series) : undefined,
-            episode: episode != null ? parseInt(episode) : undefined,
-            episodeTitle,
-            channel,
-            pubDate,
-            runtimeSeconds: runtime != null ? parseInt(runtime) : undefined,
-        }
-        : undefined;
-
-    let metadata: IPlayerMetadataResponse | undefined;
-
-    if (!nzbName || !type) {
-        try {
-            metadata = await iplayerDetailsService.getMetadata(pid);
-            if (!metadata?.programme.display_title) {
-                res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: 'Unable to find episode details' } as ApiResponse);
-                return;
-            }
-            if (!type) {
-                if (metadata.programme.categories) {
-                    const formatCategory = metadata.programme.categories.find(({ type }) => type == 'format');
-                    if (formatCategory && formatCategory.key == 'films') {
-                        type = VideoType.MOVIE;
-                    }
-                }
-                type = VideoType.TV;
-            }
-            if (!nzbName) {
-                const { title: displayTitle, subtitle } = metadata.programme.display_title!;
-                nzbName = `${displayTitle}${type == VideoType.TV && subtitle ? `.${subtitle}` : ''}`;
-                nzbName = nzbName.replaceAll('.', '_')
-                nzbName = nzbName.replaceAll(' ', '.');
-            }
-        } catch {
-            res.status(500).json({ error: ApiError.INTERNAL_ERROR, message: 'Unable to find episode details' } as ApiResponse);
+    // What to queue (name, film or TV, library folder/nfo metadata): whatever the caller sent, the gaps filled from the BBC.
+    let library: QueueLibraryMetadata | undefined;
+    try {
+        ({ nzbName, type, library } = await resolveQueueRequest({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtime }));
+    } catch (err: any) {
+        if (err instanceof QueueRequestNotFoundError) {
+            res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' } as ApiResponse);
             return;
         }
-    }
-
-    // No structured metadata sent by the caller (a bare download-by-pid/URL with no prior
-    // search, unlike the frontend's Search/Download pages) - derive it from the BBC
-    // metadata itself, the same way NativeSearchService derives it for search results.
-    // Best-effort: a failure here shouldn't fail the download, only skip the library
-    // folder/nfo treatment for this item (see libraryPathBuilder.ts's flat-name fallback).
-    if (!library) {
-        try {
-            metadata = metadata ?? (await iplayerDetailsService.getMetadata(pid));
-            if (metadata?.programme.display_title) {
-                const [, derivedEpisode, calcEpisodeTitle, derivedSeries] = await calculateSeasonAndEpisode(metadata.programme);
-                let calcEpisode = derivedEpisode;
-                let calcSeries = derivedSeries;
-                // BBC metadata has no resolvable series/episode (e.g. an off-schedule/archive
-                // item) - fall back to parsing a "S01E02" pattern out of the filename itself.
-                if (calcSeries == null || calcEpisode == null) {
-                    const parsed = parseSeasonEpisodeFromFilename(nzbName ?? '');
-                    calcSeries = calcSeries ?? parsed?.series;
-                    calcEpisode = calcEpisode ?? parsed?.episode;
-                }
-                library = {
-                    title: metadata.programme.display_title.title,
-                    series: calcSeries,
-                    episode: calcEpisode,
-                    episodeTitle: calcEpisodeTitle,
-                    channel: metadata.programme.ownership?.service?.title,
-                    pubDate: metadata.programme.first_broadcast_date ?? undefined,
-                    runtimeSeconds: metadata.programme.versions?.length ? metadata.programme.versions[0].duration : undefined,
-                };
-            }
-        } catch {
-            // Best-effort only - proceed without library metadata.
-        }
+        const { status, body } = failureResponse(err, 'Unable to find episode details');
+        res.status(status).json(status === 500 ? { ...body, message: 'Unable to find episode details' } : body);
+        return;
     }
 
     // A chosen version (audio described...) and/or quality, named and carried like a Sonarr/Radarr grab of one.
@@ -330,6 +282,11 @@ router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Re
     // revalidating (sendFile's default is max-age=0) on every card render. 'private' because the
     // route is behind session auth.
     res.sendFile(filePath, { maxAge: '7d', immutable: true, headers: { 'Cache-Control': 'private, max-age=604800, immutable' } });
+});
+
+// Anything under /json-api that no route above answered. Without this the app's catch-all serves the web page (with a 200).
+router.use((_req: Request, res: Response) => {
+    res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such endpoint' } as ApiResponse);
 });
 
 export default router;

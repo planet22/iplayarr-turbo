@@ -39,6 +39,10 @@ interface DetailsRejection {
 
 export default async (req: Request, res: Response) => {
     const { files } = req as any as AddFileRequest;
+    if (!Array.isArray(files) || files.length === 0) {
+        res.status(400).json({ status: false, error: 'No NZB file was sent' });
+        return;
+    }
     try {
         const pids: string[] = [];
         for (const file of files) {
@@ -47,6 +51,13 @@ export default async (req: Request, res: Response) => {
             if (!isValidPid(pid)) {
                 res.status(400).json({ status: false, error: 'Invalid programme id in NZB' });
                 return;
+            }
+            if (type !== undefined && !Object.values(VideoType).includes(type)) {
+                res.status(400).json({ status: false, error: 'Invalid type in NZB' });
+                return;
+            }
+            if (appId) {
+                await appService.touchApp(appId);
             }
             // This endpoint only ever receives files from the SABnzbd-compatible protocol
             // (Sonarr/Radarr/Prowlarr handing off a grab) - the one legitimate NZB source.

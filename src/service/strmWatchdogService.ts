@@ -8,6 +8,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { VideoEventType } from '../types/VideoEvent';
 import { resolveCompleteDir } from '../utils/libraryPathBuilder';
+import { missingMappedFolders, parsePathMap } from '../utils/pathMap';
 import { DetectedMapping, detectPathMapping } from '../utils/pathMappingDetector';
 import { parseStrmPid } from '../utils/Utils';
 import appService from './appService';
@@ -21,8 +22,10 @@ import NativeStreamService from './stream/NativeStreamService';
 import subscriptionService from './subscriptionService';
 import videoEventService from './videoEventService';
 
-// Consecutive failed checks before a link counts as invalid - one failure is as likely a BBC blip.
-const STRIKES = 2;
+// Failed checks in a row before a link counts as invalid (the STRM_WATCHDOG_STRIKES default) - one failure is
+// as likely a BBC blip.
+const DEFAULT_STRIKES = 2;
+const MAX_STRIKES = 30;
 // Failures that say nothing about the programme itself (our network, not BBC saying "gone").
 const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN']);
 
@@ -139,6 +142,8 @@ export interface WatchdogTracked {
 }
 
 export interface WatchdogStatus {
+    // Failed checks in a row before a link is invalid (the setting), so the dashboard can show "1/2".
+    strikes: number;
     tracked?: WatchdogTracked;
     libraryAccess?: LibraryAccessResult;
     enabled: boolean;
@@ -301,6 +306,8 @@ class StrmWatchdogService {
     // counts update link-by-link instead of only when the run finishes and persists.
     #liveState?: Record<string, WatchdogRecord>;
     #stopRequested = false;
+    // The strike limit in force for the current run; evaluate() reads it.
+    #strikes = DEFAULT_STRIKES;
     #tracked?: WatchdogTracked;
 
     // Can this container actually read the .strm files Sonarr/Radarr and Jellyfin report? Lists their
@@ -446,6 +453,7 @@ class StrmWatchdogService {
     async getStatus(): Promise<WatchdogStatus> {
         const state: Record<string, WatchdogRecord> = this.#liveState ?? (await storage.getItem(STATE_KEY)) ?? {};
         return {
+            strikes: await this.#readStrikes(),
             enabled: (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_ENABLED)) === 'true',
             live: this.#live,
             items: Object.entries(state).map(([pid, record]) => ({ pid, ...record })),
@@ -453,6 +461,11 @@ class StrmWatchdogService {
             tracked: this.#tracked ?? (await storage.getItem(TRACKED_KEY)),
             libraryAccess: await storage.getItem(ACCESS_KEY),
         };
+    }
+
+    async #readStrikes(): Promise<number> {
+        const configured = parseInt((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_STRIKES)) as string, 10);
+        return Math.min(MAX_STRIKES, Math.max(1, configured || DEFAULT_STRIKES));
     }
 
     #computeTracked(pids: Map<string, WatchdogTarget>): WatchdogTracked {
@@ -491,6 +504,7 @@ class StrmWatchdogService {
             MAX_CONCURRENCY,
             Math.max(1, parseInt((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_CONCURRENCY)) as string, 10) || DEFAULT_CONCURRENCY)
         );
+        this.#strikes = await this.#readStrikes();
         const state: Record<string, WatchdogRecord> = (await storage.getItem(STATE_KEY)) ?? {};
         const startedAt = new Date().toISOString();
         this.#liveState = state;
@@ -546,7 +560,8 @@ class StrmWatchdogService {
                 for (const [index, [pid, target]] of batch.entries()) {
                     const { result, message } = probed[index];
                     this.#live.checked++;
-                    consecutiveFailures = result === 'ok' ? 0 : consecutiveFailures + 1;
+                    // Only network failures suggest an outage: BBC answering "no version available" proves it is up.
+                    consecutiveFailures = result === 'network' ? consecutiveFailures + 1 : 0;
 
                     if (result === 'ok') {
                         this.#evaluate(state, pid, target, false);
@@ -560,10 +575,10 @@ class StrmWatchdogService {
                         this.#evaluate(state, pid, target, true, message);
                     }
 
-                    // Too many failures in a row: BBC (or our network) is down, not that many programmes
-                    // expiring together. Abandon the run; nothing counted from it is kept.
+                    // Too many network failures in a row: BBC (or our network) is down. Abandon the run;
+                    // nothing counted from it is kept.
                     if (consecutiveFailures >= threshold) {
-                        this.#live.notice = `Run abandoned: ${threshold} links in a row failed, so BBC is assumed unavailable. No links were flagged and no actions were taken`;
+                        this.#live.notice = `Run abandoned: ${threshold} links in a row could not reach BBC, so it is assumed unavailable. No links were flagged and no actions were taken`;
                         loggingService.error(`[STRM Watchdog] ${this.#live.notice}`);
                         break batches;
                     }
@@ -642,7 +657,7 @@ class StrmWatchdogService {
     #evaluate(state: Record<string, WatchdogRecord>, pid: string, target: WatchdogTarget, failed: boolean, message?: string): void {
         const previous = state[pid];
         const failCount = failed ? (previous?.failCount ?? 0) + 1 : 0;
-        const isInvalid = failCount >= STRIKES;
+        const isInvalid = failCount >= this.#strikes;
         state[pid] = {
             status: isInvalid ? 'invalid' : 'ok',
             failCount,
@@ -695,6 +710,32 @@ class StrmWatchdogService {
         // the next full pass forgets it once no source lists it.
         record.actioned = true;
         if (actions.length) record.actions = actions;
+    }
+
+    // Sends a clearly labelled test notification so a wrong address or token shows up before a real link dies.
+    // Uses the address given (the unsaved form value), else the saved one. The address is never echoed back.
+    async testWebhook(url?: string): Promise<{ ok: boolean; message: string }> {
+        const target = (url ?? '').trim() || (((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_WEBHOOK_URL)) as string) ?? '');
+        if (!target) return { ok: false, message: 'Enter a webhook URL first' };
+        if (!/^https?:\/\/\S+$/i.test(target)) return { ok: false, message: 'The address must start with http:// or https://' };
+        try {
+            const { status } = await axios.post(
+                target,
+                { event: 'test', message: 'Test notification from the iPlayarr STRM Watchdog' },
+                { timeout: 10_000, validateStatus: () => true }
+            );
+            return status >= 200 && status < 300
+                ? { ok: true, message: `The webhook answered ${status}` }
+                : { ok: false, message: `The webhook answered ${status}` };
+        } catch (err: any) {
+            return { ok: false, message: `Could not send: ${err?.message ?? 'request failed'}` };
+        }
+    }
+
+    // Problems with a Path Mapping value: malformed entries, and mapped folders this container cannot find.
+    checkPathMap(value: string): { problems: string[]; missing: string[] } {
+        const { pairs, problems } = parsePathMap(value);
+        return { problems, missing: missingMappedFolders(pairs) };
     }
 
     // Fires once when a link first goes invalid. Best effort - a dead webhook never stops the run.

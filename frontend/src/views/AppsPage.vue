@@ -1,13 +1,14 @@
 <template>
     <div class="inner-content">
+        <PageHeader title="Apps" icon="puzzle-piece" />
+        <SettingsPageToolbar :icons="[]" />
         <InfoBar clazz="warning small">
             NZB clients need the category "iplayer" for NZB forwarding to work.
         </InfoBar>
-        <PageHeader title="Apps" />
         <InfoBar small>Manage the apps iPlayarr works with, including Arr and NZB clients.</InfoBar>
         <div class="block-reset" />
-        <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm">
-            <a class="appBox" @click="openForm(item)">
+        <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm" @select="openForm">
+            <a class="appBox">
                 <span class="lastSeen" title="Last Seen">{{ formatRelativeTime(item.lastSeen, now, true) }}</span>
                 <div class="major">
                     <img class="appImg" :src="`/img/${item.type.toLowerCase()}.svg`" />
@@ -37,6 +38,9 @@
                     <span v-if="hasFeature(item.type, 'priority')" :class="['pill', 'grey']">
                         Priority: {{ item.priority }}
                     </span>
+                </div>
+                <div v-if="item.detectSubscriptions" class="featureList">
+                    <span class="pill success">Subscription Detection</span>
                 </div>
             </a>
         </ListEditor>
@@ -165,6 +169,7 @@ import DataCard from '@/components/common/DataCard.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';

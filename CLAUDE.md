@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Code modification or creation instructions
+
+Before changing anything, list every file you'll need and read them in one pass. Then make all edits, then run the tests once.
+
 ## What this is
 
 iPlayarr is a companion tool for Sonarr/Radarr that makes BBC iPlayer content searchable and downloadable through them. It presents itself over HTTP as two protocols simultaneously:
@@ -36,7 +40,7 @@ Frontend dev server runs at `http://localhost:8080` and proxies `/auth`, `/api`,
 
 **Running jest/lint when the repo is on a Windows network share (e.g. `Y:\`)**: `npm install`/`npm ci` fails there (`EUNKNOWN ... symlink`) because npm workspaces symlink `frontend` into `node_modules`, so there is no `node_modules` to run jest from. Run tests from a local copy instead:
 
-1. Copy the repo to a local drive (robocopy `/E`), leaving out `node_modules`, `.git`, `dist`, `coverage`, `cache`, `logs` and the *top-level* `config/`. Keep `src/config/` (it holds `version.json`; suites fail to compile without it). Delete the copied `.env` and any personal `docker-compose*.yaml`.
+1. Copy the repo to a local drive (robocopy `/E`), leaving out `node_modules`, `.git`, `dist`, `coverage`, `cache`, `logs` and the _top-level_ `config/`. Keep `src/config/` (it holds `version.json`; suites fail to compile without it). Delete the copied `.env` and any personal `docker-compose*.yaml`.
 2. In the copy: `npm ci`, then `npx prisma generate` (install does not generate the Prisma client; without it suites fail with "no exported member PrismaClient"), then `npm test` / `npx jest <file>` / `npm run lint`.
 3. After editing the share, resync (`robocopy <share>\src <copy>\src /MIR`, same for `tests` and `frontend\src`, plus changed root files) before re-running.
 
@@ -50,12 +54,19 @@ Node version is pinned in `.node-version`. The backend uses `module-alias` at ru
 
 **Facade layer**: `src/facade/*` (e.g. `searchFacade`, `downloadFacade`, `nzbFacade`, `arrFacade`, `scheduleFacade`) sits between endpoints and services, and is what most business logic and tests target. Endpoints stay thin; facades orchestrate services.
 
-**Pluggable services via Abstract* base classes** — the config decides which concrete implementation is active at runtime:
+**Pluggable services via Abstract\* base classes** — the config decides which concrete implementation is active at runtime:
+
 - `src/service/search/`: `AbstractSearchService` → `GetIplayerSearchService` (shells out to `get_iplayer`) or `NativeSearchService`.
 - `src/service/download/`: `AbstractDownloadService` → `GetIplayerDownloadService`, `YTDLPDownloadService` or `NativeDownloadService` (reuses `NativeStreamService.resolveDownloadUrl`, ffmpeg copies the HLS stream).
 - `src/service/arr/`: `AbstractArrService` → `V1ArrService` / `V3ArrService` (Sonarr/Radarr API version differences).
 
 When changing download or search behavior, check whether the change belongs in the abstract base or needs to be duplicated across both concrete implementations.
+
+**Arr API versions**: each arr service declares its `apiVersion`/`getApiUrl`, and `ArrLibraryService` resolves URLs through `ArrServiceDirectory`, so a new Sonarr/Radarr API version is a subclass plus one directory entry.
+
+**Subscription detection**: `subscriptionDetectService` scans Sonarr/Radarr for shows pointing at iPlayarr (`.strm` links, files with the `BBCiPlayarrTurbo` release group from `utils/releaseGroup.ts`, optionally grab history). Finds are kept under the `subscription_detected` key; a daily task refreshes counts for apps with `detectSubscriptions` on. Routes are under `/json-api/subscriptions/arr/detected`. See [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md).
+
+**Async routes and validation**: json-api routers and `ApiRoute` go through `utils/asyncRouter.ts` so a rejected handler reaches the error handler instead of hanging the request. Settings are validated on save in `validators/ConfigFormValidator.ts`; a new setting needs a rule there and an entry in `smoke/settings.cjs`.
 
 **Native subtitles** (`STREAM_SUBTITLES`, default off): `src/service/stream/subtitles/` converts the BBC's TTML captions to WebVTT and `proxyUrl` (`streamProxyUtils.ts`) adds them to the HLS master as a subtitle rendition when `NativeStreamService`/`LiveStreamService` pass it a subtitle playlist URI (served by `StreamEndpoint`'s `subs=` branch). With the setting off the proxy is called exactly as before. Cue times are deliberately written on the video's own timeline with an identity `X-TIMESTAMP-MAP` - ffmpeg (so Jellyfin) ignores the map. See [docs/STREAMING.md](docs/STREAMING.md#subtitles).
 

@@ -157,3 +157,12 @@ describe('segmentUrlRegistry playlist references', () => {
         expect(resolve(playlist)).toBe('https://cdn/live/v4.m3u8');
     });
 });
+
+describe('segmentUrlRegistry playlist limit', () => {
+    it('forgets the oldest playlist reference once more than 1000 are held', () => {
+        const first = register('https://cdn/limit/first.m3u8');
+        for (let i = 0; i < 1000; i++) register(`https://cdn/limit/${i}.m3u8`);
+        expect(resolve(first)).toBeUndefined();
+        expect(resolve(register('https://cdn/limit/last.m3u8'))).toBe('https://cdn/limit/last.m3u8');
+    });
+});

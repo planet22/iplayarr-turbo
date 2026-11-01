@@ -97,3 +97,31 @@ describe('LiveTvRoute', () => {
         expect(res.body.message).toMatch(/rejected the API key/);
     });
 });
+
+describe('LiveTvRoute Jellyfin tuner and guide actions', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (appService.getApp as jest.Mock).mockResolvedValue({ id: 'a', url: 'u', api_key: 'k' });
+        (jellyfinService.supports as jest.Mock).mockReturnValue(true);
+        (jellyfinService.liveTvStatus as jest.Mock).mockResolvedValue({ status: 'ok' });
+    });
+
+    it('removes the tuner and returns the new status', async () => {
+        const res = await request(app).delete('/jellyfin/tuner').send({ appId: 'a' });
+        expect(res.body).toEqual({ status: 'ok' });
+        expect(jellyfinService.removeTuner).toHaveBeenCalled();
+    });
+
+    it('adds the guide, refreshes it and returns the new status', async () => {
+        const res = await request(app).post('/jellyfin/guide').send({ appId: 'a' });
+        expect(res.body).toEqual({ status: 'ok' });
+        expect(jellyfinService.upsertGuide).toHaveBeenCalledWith(expect.anything(), 'E');
+        expect(jellyfinService.refreshGuide).toHaveBeenCalled();
+    });
+
+    it('removes the guide and returns the new status', async () => {
+        const res = await request(app).delete('/jellyfin/guide').send({ appId: 'a' });
+        expect(res.body).toEqual({ status: 'ok' });
+        expect(jellyfinService.removeGuide).toHaveBeenCalled();
+    });
+});

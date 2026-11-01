@@ -35,9 +35,11 @@ class SkyhookService {
         try {
             const url = `https://skyhook.sonarr.tv/v1/tvdb/search/en?term=${encodeURIComponent(seriesName)}`;
             const { data } = await axios.get(url);
-            if (data && Array.isArray(data)) {
-                await this.skyhookSeriesCache.set(seriesName, data);
+            // An error page or error object with a 200 is not a list of series, and callers iterate the result.
+            if (!Array.isArray(data)) {
+                return [];
             }
+            await this.skyhookSeriesCache.set(seriesName, data);
             return data;
         } catch {
             return [];

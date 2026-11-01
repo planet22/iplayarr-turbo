@@ -89,6 +89,7 @@ const cycle = () => {
     .cycle {
         width: 34px;
         height: 34px;
+        border: 1px solid @settings-button-border-color;
         border-radius: 6px;
         font-size: 16px;
         color: @primary-text-color;

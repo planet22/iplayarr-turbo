@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 
 import downloadFacade from '../../../src/facade/downloadFacade';
 import getIplayerExecutableService from '../../../src/service/getIplayerExecutableService';
+import loggingService from '../../../src/service/loggingService';
 import GetIplayerScheduleService from '../../../src/service/schedule/GetIplayerScheduleService';
 import GetIplayerSearchService from '../../../src/service/search/GetIplayerSearchService';
 
@@ -46,5 +47,28 @@ describe('GetIplayerScheduleService', () => {
             expect(spawn).toHaveBeenCalledWith('get_iplayer', ['--type=tv', '--cache-rebuild']);
             expect(cleanupSpy).toHaveBeenCalled();
         });
+    });
+});
+
+describe('GetIplayerScheduleService cache rebuild output', () => {
+    it('logs what the rebuild prints, and what it complains about', async () => {
+        const handlers: Record<string, (data: Buffer) => void> = {};
+        const child = {
+            stdout: { on: (_: string, cb: (d: Buffer) => void) => (handlers.stdout = cb) },
+            stderr: { on: (_: string, cb: (d: Buffer) => void) => (handlers.stderr = cb) },
+        };
+        (getIplayerExecutableService.getIPlayerExec as jest.Mock).mockResolvedValue({ exec: 'get_iplayer', args: [] });
+        (spawn as jest.Mock).mockReturnValue(child);
+        const cleanup = jest.spyOn(downloadFacade, 'cleanupFailedDownloads').mockResolvedValue();
+        const debug = jest.spyOn(loggingService, 'debug').mockImplementation(() => undefined);
+        const error = jest.spyOn(loggingService, 'error').mockImplementation(() => undefined);
+
+        await GetIplayerScheduleService.refreshCache();
+        handlers.stdout(Buffer.from('indexing'));
+        handlers.stderr(Buffer.from('oops'));
+
+        expect(debug).toHaveBeenCalledWith('indexing');
+        expect(error).toHaveBeenCalledWith('oops');
+        [cleanup, debug, error].forEach((spy) => spy.mockRestore());
     });
 });

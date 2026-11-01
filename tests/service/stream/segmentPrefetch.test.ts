@@ -20,6 +20,7 @@ interface Reply {
     chunks?: Array<Buffer | string>;
     error?: Error;
     hang?: boolean;
+    resError?: Error;
 }
 
 let replies: Record<string, Reply>;
@@ -41,6 +42,7 @@ const install = () => {
             res.headers = reply.headers ?? {};
             res.resume = jest.fn();
             cb(res);
+            if (reply.resError) return res.emit('error', reply.resError);
             (reply.chunks ?? []).forEach((c) => res.emit('data', Buffer.isBuffer(c) ? c : Buffer.from(c)));
             res.emit('end');
         });
@@ -156,5 +158,17 @@ describe('segmentPrefetch', () => {
         expect(prefetchedBytes()).toBeLessThanOrEqual(maxTotalBytes);
         expect(await takePrefetched('https://cdn/0.ts')).toBeUndefined();
         expect(await takePrefetched(`https://cdn/${count - 1}.ts`)).toBeDefined();
+    });
+});
+
+describe('segmentPrefetch response errors', () => {
+    it('gives up on a segment whose response breaks off', async () => {
+        jest.clearAllMocks();
+        clearPrefetch();
+        replies = { 'https://cdn/broken.ts': { resError: new Error('reset') } };
+        install();
+        prefetch('https://cdn/broken.ts');
+        await settle();
+        expect(await takePrefetched('https://cdn/broken.ts')).toBeUndefined();
     });
 });

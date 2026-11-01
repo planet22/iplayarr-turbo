@@ -14,6 +14,7 @@
             <LeftHandNavLink label="Guide" icon="calendar-days" path="/browse/schedule" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Channels" icon="tower-broadcast" path="/browse/channels" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" @option-clicked="closeLHN" />
+            <LeftHandNavLink v-if="globalSettings.BROWSE_SHOW_COLLECTIONS == 'true'" label="Collections" icon="photo-film" path="/browse/collections" @option-clicked="closeLHN" />
             <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" @option-clicked="closeLHN" />
             </template>
 
@@ -25,10 +26,10 @@
                 <font-awesome-icon class="groupChevron" :icon="['fas', isOpen('activity') ? 'chevron-down' : 'chevron-right']" />
             </li>
             <template v-if="isOpen('activity')">
-            <LeftHandNavLink label="Queue" icon="tasks" path="/queue" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Queue" icon="clipboard-list" path="/queue" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Video Events" icon="film" path="/events" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Video Events" icon="clapperboard" path="/events" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" @option-clicked="closeLHN" />
             </template>
 
@@ -40,11 +41,11 @@
                 <font-awesome-icon class="groupChevron" :icon="['fas', isOpen('integrations') ? 'chevron-down' : 'chevron-right']" />
             </li>
             <template v-if="isOpen('integrations')">
-            <LeftHandNavLink label="Apps" icon="laptop-code" path="/apps" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="NZB" icon="satellite-dish" path="/nzb" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Synonyms" icon="arrows-rotate" path="/synonyms" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Apps" icon="puzzle-piece" path="/apps" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="NZB" icon="newspaper" path="/nzb" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Synonyms" icon="book" path="/synonyms" @option-clicked="closeLHN" />
             <template v-if="globalSettings.NATIVE_SEARCH == 'false'">
-                <LeftHandNavLink label="Off Schedule" icon="calendar" path="/offSchedule" @option-clicked="closeLHN" />
+                <LeftHandNavLink label="Off Schedule" icon="calendar-plus" path="/offSchedule" @option-clicked="closeLHN" />
                 <LeftHandNavLink
 label="Refresh Index" icon="address-book" :no-link="true"
                     @option-clicked="refreshCache" />
@@ -60,7 +61,7 @@ label="Refresh Index" icon="address-book" :no-link="true"
             </li>
             <template v-if="isOpen('system')">
             <LeftHandNavLink label="Statistics" icon="chart-bar" path="/stats" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Logs" icon="history" path="/logs" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Logs" icon="file-lines" path="/logs" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Settings" icon="gears" path="/settings" @option-clicked="closeLHN" />
             <LeftHandNavLink label="About" icon="circle-info" path="/about" @option-clicked="closeLHN" />
             <LeftHandNavLink v-if="globalSettings.AUTH_TYPE != 'none'" label="Logout" icon="sign-out" :no-link="true" @option-clicked="logout" />
@@ -76,7 +77,12 @@ label="Refresh Index" icon="address-book" :no-link="true"
                 <span>Native Search</span>
             </div>
             <div class="versionInfo" :title="versionTooltip">
-                <div v-for="line in versionLines" :key="line.text" :class="{ updateAvailable: line.update }">{{ line.text }}</div>
+                <div v-for="line in versionLines" :key="line.text" :class="{ updateAvailable: line.update }">
+                    <RouterLink v-if="line.update" class="updateLink" :to="{ path: '/settings', hash: '#downloadClient' }" title="Update available - open Tool versions" @click="scrollToToolVersions">
+                        {{ line.text }}
+                    </RouterLink>
+                    <template v-else>{{ line.text }}</template>
+                </div>
                 <a class="mobileOnly" href="https://github.com/planet22/iplayarr-turbo" aria-label="GitHub" target="_blank">
                     <font-awesome-icon :icon="['fab', 'github']" fixed-width />
                     <span>GitHub</span>
@@ -96,6 +102,18 @@ import toastService from '@/lib/toastService';
 import LeftHandNavLink from './NavLink.vue';
 
 const router = useRouter();
+
+// The settings tab mounts after the route change, so wait for the Tool versions heading to exist.
+const scrollToToolVersions = () => {
+    let tries = 0;
+    const timer = setInterval(() => {
+        const el = document.getElementById('toolVersions');
+        if (el || ++tries > 30) {
+            clearInterval(timer);
+            el?.scrollIntoView({ block: 'center' });
+        }
+    }, 100);
+};
 const route = useRoute();
 
 // Each group of links can be folded away; which ones are folded is remembered per browser. The group
@@ -247,6 +265,12 @@ const handleClickOutside = (event) => {
 
         .updateAvailable {
             color: @warn-color;
+
+            .updateLink {
+                margin-top: 0;
+                color: inherit;
+                text-decoration: underline;
+            }
         }
 
         a {

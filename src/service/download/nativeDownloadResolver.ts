@@ -1,5 +1,6 @@
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
+import { ProgrammeNotFoundError } from '../../utils/upstreamError';
 import configService from '../configService';
 import queueService from '../queueService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from '../stream/bbcHttp';
@@ -34,7 +35,7 @@ function resolveVpid(pid: string, version?: string): Promise<string> {
 async function fetchVpid(pid: string): Promise<string> {
     const { statusCode, body } = await fetchTextWithStatus(`https://www.bbc.co.uk/programmes/${pid}/playlist.json`);
     if (statusCode < 200 || statusCode >= 300) {
-        throw new Error(`No programme found for pid ${pid} (status ${statusCode})`);
+        throw new ProgrammeNotFoundError(`No programme found for pid ${pid} (status ${statusCode})`);
     }
     const versions: { pid: string; types?: string[] }[] = JSON.parse(body)?.allAvailableVersions ?? [];
     if (versions.length === 0) {

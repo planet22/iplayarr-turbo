@@ -3,11 +3,18 @@ import { Request, Response, Router } from 'express';
 import { isUhdEventFeed, OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
 import browseService from '../../service/browseService';
 import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
+import collectionDownloadService from '../../service/collectionDownloadService';
+import collectionService from '../../service/collectionService';
+import configService from '../../service/configService';
 import liveChannelService from '../../service/liveChannelService';
+import { MediaMode } from '../../types/enums/MediaMode';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
+import { failureResponse } from '../../utils/upstreamError';
 import { addAvailableVersions } from '../../utils/videoVersion';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 const ID_REGEX = /^[a-z0-9_-]+$/i;
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
@@ -29,10 +36,8 @@ const handle =
         try {
             await fn(req, res);
         } catch (error: any) {
-            res.status(500).json({
-                error: ApiError.INTERNAL_ERROR,
-                message: error?.message || 'Browse request failed',
-            } as ApiResponse);
+            const { status, body } = failureResponse(error, 'Browse request failed');
+            res.status(status).json(body);
         }
     };
 
@@ -72,6 +77,47 @@ router.get(
         if (pids.length === 0 || pids.length > MAX_DETAIL_PIDS || !pids.every((pid) => PID_REGEX.test(pid))) return invalid(res, 'pids must be a list of programme ids');
         const found = await addAvailableVersions<{ pid: string; versions?: string[] }>(pids.map((pid) => ({ pid })));
         res.json(Object.fromEntries(found.map(({ pid, versions }) => [pid, versions ?? []])));
+    })
+);
+
+// The iPlayer collections for the Discover page. On by default (BROWSE_SHOW_COLLECTIONS); when switched off nothing is fetched.
+router.get(
+    '/collections',
+    handle(async (_, res) => {
+        const enabled = (await configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS)) === 'true';
+        res.json({ enabled, collections: enabled ? await collectionService.list() : [] });
+    })
+);
+
+router.get(
+    '/collections/:id',
+    handle(async (req, res) => {
+        const id = req.params.id as string;
+        if (!ID_REGEX.test(id)) return invalid(res, 'Invalid collection id');
+        res.json(await browseService.collection(id, toInt(req.query.page), toInt(req.query.perPage)));
+    })
+);
+
+// Queues every title in a collection (see collectionDownloadService). { dryRun: true } only counts them.
+router.post(
+    '/collections/:id/download',
+    handle(async (req, res) => {
+        const id = req.params.id as string;
+        if (!ID_REGEX.test(id)) return invalid(res, 'Invalid collection id');
+        // No body at all means the defaults; a list or other non-object is a mistake, never a request to queue everything.
+        const body = req.body ?? {};
+        if (typeof body !== 'object' || Array.isArray(body)) return invalid(res, 'The body must be a JSON object');
+        const { media, boxset, dryRun } = body;
+        if (media !== undefined && !Object.values(MediaMode).includes(media)) return invalid(res, 'media must be "strm" or "download"');
+        for (const [name, value] of Object.entries({ boxset, dryRun })) {
+            if (value !== undefined && typeof value !== 'boolean') return invalid(res, `${name} must be true or false`);
+        }
+        const result = await collectionDownloadService.queueCollection(id, { media, boxset, dryRun });
+        if (!result) {
+            res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such collection' } as ApiResponse);
+            return;
+        }
+        res.json(result);
     })
 );
 

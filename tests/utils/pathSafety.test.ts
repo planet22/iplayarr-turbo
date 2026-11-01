@@ -38,7 +38,7 @@ describe('pathSafety', () => {
         it('keeps a hostile nzbName inside the complete dir (flat layout)', () => {
             const r = buildLibraryFilePath('/media/complete', item('../../evil'), 'mp4', false);
             expect(path.resolve(r.fullPath).startsWith(path.resolve('/media/complete'))).toBe(true);
-            expect(r.fileName).toBe('evil.mp4');
+            expect(r.fileName).toBe('evil-BBCiPlayarrTurbo.mp4');
         });
 
         it('keeps a ".." show title inside the complete dir (folder layout)', () => {

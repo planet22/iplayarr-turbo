@@ -146,6 +146,17 @@ describe('V3ArrService (extra)', () => {
             mockedAxios.post.mockResolvedValue({ data: { id: 9 } });
             expect(await V3ArrService.upsertDownloadClient(clientForm, { ...app, download_client: undefined } as any)).toBe(9);
         });
+        it('upsertDownloadClient uses Radarr\'s movie priority field names for Radarr only', async () => {
+            mockedAxios.post.mockResolvedValue({ data: { id: 9 } });
+            const names = () => (mockedAxios.post.mock.calls.at(-1)![1] as any).fields.map((f: any) => f.name);
+
+            await V3ArrService.upsertDownloadClient(clientForm, { ...app, type: AppType.RADARR, download_client: undefined } as any);
+            expect(names()).toEqual(expect.arrayContaining(['recentMoviePriority', 'olderMoviePriority']));
+            expect(names()).not.toEqual(expect.arrayContaining(['recentTvPriority']));
+
+            await V3ArrService.upsertDownloadClient(clientForm, { ...app, download_client: undefined } as any);
+            expect(names()).toEqual(expect.arrayContaining(['recentTvPriority', 'olderTvPriority']));
+        });
         it('upsertDownloadClient puts over an existing one', async () => {
             mockedAxios.get.mockResolvedValue({ status: 200, data: dcFields() });
             mockedAxios.put.mockResolvedValue({ data: { id: 7 } });
@@ -179,6 +190,19 @@ describe('V3ArrService (extra)', () => {
             expect(req.priority).toBe(25);
             expect(req.name).toBe('N (iPlayarr Turbo)');
             expect(req.fields.find((f: any) => f.name === 'apiPath')!.value).toBe('/api');
+        });
+    });
+
+    describe('search and getIndexer branches', () => {
+        it('searches the movie library of a Radarr app, and lists everything without a term', async () => {
+            mockedAxios.get.mockResolvedValue({ data: [] });
+            await V3ArrService.search({ ...app, type: AppType.RADARR } as App);
+            expect(mockedAxios.get).toHaveBeenCalledWith('http://sonarr/api/v3/movie', expect.anything());
+        });
+
+        it('returns nothing when the indexer lookup is answered with a non-200 status', async () => {
+            mockedAxios.get.mockResolvedValue({ status: 204, data: {} });
+            expect(await V3ArrService.getIndexer(app)).toBeUndefined();
         });
     });
 });

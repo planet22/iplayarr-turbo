@@ -2,8 +2,9 @@ import { getHost } from './utils.js';
 
 // GET json-api/search/stream: newline-delimited JSON - an array of results per line as the server
 // finds them, then {"done":true} (or {"error":"..."}). Calls onBatch for each array and resolves
-// when the stream ends; rejects on a failed request or a server-reported error.
-export const streamSearch = async (term, onBatch, signal) => {
+// when the stream ends; rejects on a failed request or a server-reported error. A {"collections":[...]} line
+// (collections matching the term, shown as tiles) goes to onCollections.
+export const streamSearch = async (term, onBatch, signal, onCollections) => {
     const response = await fetch(`${getHost()}/json-api/search/stream?q=${encodeURIComponent(term)}`, {
         credentials: 'include',
         signal,
@@ -19,6 +20,8 @@ export const streamSearch = async (term, onBatch, signal) => {
             onBatch(parsed);
         } else if (parsed.error) {
             throw new Error(parsed.error);
+        } else if (Array.isArray(parsed.collections)) {
+            onCollections?.(parsed.collections);
         }
     };
 

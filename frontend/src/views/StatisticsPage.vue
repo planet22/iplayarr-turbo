@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content statsPage">
-        <PageHeader title="Statistics" />
+        <PageHeader title="Statistics" icon="chart-bar" />
         <SettingsPageToolbar
             :icons="['filter']" :filter-enabled="range != 'All'" :filter-options="availableRanges"
             :selected-filter="range" @select-filter="selectRange" />

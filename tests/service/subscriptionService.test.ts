@@ -1,6 +1,8 @@
 import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
+import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
+import socketService from '../../src/service/socketService';
 import { versionTypesFor } from '../../src/service/stream/versionVpid';
 import subscriptionService, { SubscriptionError } from '../../src/service/subscriptionService';
 import synonymService from '../../src/service/synonymService';
@@ -25,6 +27,7 @@ jest.mock('../../src/service/synonymService');
 jest.mock('../../src/service/stream/versionVpid');
 jest.mock('../../src/service/videoEventService');
 jest.mock('../../src/service/loggingService');
+jest.mock('../../src/service/socketService', () => ({ __esModule: true, default: { emit: jest.fn() } }));
 jest.mock('../../src/utils/Utils', () => ({
     ...jest.requireActual('../../src/utils/Utils'),
     createNZBName: jest.fn(),
@@ -175,6 +178,21 @@ describe('subscriptionService', () => {
             // A second pass finds nothing new and queues nothing more.
             expect((await subscriptionService.check(saved)).queued).toEqual([]);
             expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+        });
+
+        it('reports progress over the socket, ending with done', async () => {
+            const sub = await subscribed();
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3'), ep('e4')] as any);
+            const emit = jest.mocked(socketService.emit);
+            emit.mockClear();
+            await subscriptionService.check(sub);
+            const phases = emit.mock.calls.map(([subject, p]) => [subject, p.phase, p.done, p.total]);
+            expect(phases).toEqual([
+                ['subscriptionProgress', 'listing', undefined, undefined],
+                ['subscriptionProgress', 'queueing', 0, 2],
+                ['subscriptionProgress', 'queueing', 1, 2],
+                ['subscriptionProgress', 'done', undefined, undefined],
+            ]);
         });
 
         it('queues several new episodes oldest first', async () => {
@@ -447,6 +465,152 @@ describe('subscriptionService', () => {
             expect(await subscriptionService.setArrLink(sub.id, undefined)).toBe(true);
             expect((await subscriptionService.list())[0].arr).toBeUndefined();
             expect(await subscriptionService.setArrLink('nope', arr)).toBe(false);
+        });
+    });
+
+    describe('branches', () => {
+        afterEach(() => jest.restoreAllMocks());
+
+        const fresh = () => ep('e3', new Date().toISOString());
+        const audioDescribed = [{ types: ['Audiodescribed'] }] as any;
+
+        it('subscribes to a show with no artwork, channel or display title', async () => {
+            details.getMetadata.mockResolvedValue({ programme: { type: 'brand', pid: 'b00brand1', title: 'Bare Show' } } as any);
+            const sub = await subscriptionService.subscribe('m00episode');
+            expect(sub).toMatchObject({ title: 'Bare Show', thumbnail: undefined, channel: undefined });
+        });
+
+        it('passes a programme\'s runtime to the queue in seconds', async () => {
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2')] as any);
+            const sub = await subscriptionService.subscribe('m00episode');
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), fresh()] as any);
+            details.details.mockImplementation(async (pids: string[]) => pids.map((pid) => ({ ...detail(pid), runtime: 30.5 })));
+            await subscriptionService.check(sub);
+            expect(queue.addToQueue.mock.calls[0][4]).toMatchObject({ runtimeSeconds: 1830 });
+        });
+
+        describe('downloading the latest episode with its versions', () => {
+            it('queues a chosen version only if the episode has it', async () => {
+                versionTypes.mockResolvedValue([{ types: ['Original version'] }] as any);
+                await subscriptionService.subscribe('m00episode', { downloadLatest: true, versions: ['audio-described'] });
+                expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+
+                queue.addToQueue.mockClear();
+                versionTypes.mockResolvedValue(audioDescribed);
+                await subscriptionService.unsubscribe((await subscriptionService.list())[0].id);
+                await subscriptionService.subscribe('m00episode', { downloadLatest: true, versions: ['audio-described'] });
+                expect(queue.addToQueue).toHaveBeenCalledTimes(2);
+            });
+        });
+
+        describe('failures along the way', () => {
+            it('refuses to subscribe when the show cannot be looked up', async () => {
+                details.findBrandForPid.mockRejectedValue(new Error('BBC down'));
+                await expect(subscriptionService.subscribe('m00episode')).rejects.toBeInstanceOf(SubscriptionError);
+            });
+
+            it('logs a first check that fails after downloading everything was asked for', async () => {
+                jest.spyOn(subscriptionService, 'check').mockRejectedValue(new Error('check broke'));
+                await subscriptionService.subscribe('m00episode', { downloadAll: true });
+                await new Promise((resolve) => setImmediate(resolve));
+                expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('first check failed'));
+            });
+
+            it('logs, and still subscribes, when the latest episode cannot be queued', async () => {
+                queue.addToQueue.mockImplementation(() => {
+                    throw new Error('queue full');
+                });
+                const sub = await subscriptionService.subscribe('m00episode', { downloadLatest: true });
+                expect(sub.pid).toBe('b00brand1');
+                expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('could not queue latest episode'));
+            });
+
+            it('does not queue a version when its availability cannot be looked up', async () => {
+                versionTypes.mockRejectedValue(new Error('BBC down'));
+                await subscriptionService.subscribe('m00episode', { downloadLatest: true, versions: ['audio-described'] });
+                expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+            });
+        });
+
+        describe('setVersions', () => {
+            it('clears the versions of an arrOnly show whatever is asked for', async () => {
+                const sub = await subscriptionService.subscribe('m00episode', { arrOnly: true });
+                const updated = await subscriptionService.setVersions(sub.id, ['signed']);
+                expect(updated?.versions).toEqual([]);
+            });
+
+            it('refuses to switch a version on when the episode list cannot be read', async () => {
+                const sub = await subscriptionService.subscribe('m00episode');
+                details.getSeriesEpisodes.mockResolvedValue([]);
+                await expect(subscriptionService.setVersions(sub.id, ['signed'])).rejects.toBeInstanceOf(SubscriptionError);
+            });
+
+            it('keeps what a version has already seen when it stays on', async () => {
+                const sub = await subscriptionService.subscribe('m00episode', { versions: ['signed'] });
+                const again = await subscriptionService.setVersions(sub.id, ['signed']);
+                expect(again?.seenVersions).toEqual({ signed: ['e1', 'e2'] });
+            });
+        });
+
+        describe('checking', () => {
+            it('records a failure that carries no message', async () => {
+                const sub = await subscriptionService.subscribe('m00episode');
+                jest.spyOn(subscriptionService, 'listEpisodes').mockRejectedValue({});
+                const result = await subscriptionService.check(sub);
+                expect(result.error).toBe('Check failed');
+                expect((await subscriptionService.list())[0].lastError).toBe('Check failed');
+            });
+
+            it('logs how many episodes a full pass queued', async () => {
+                const sub = await subscriptionService.subscribe('m00episode');
+                details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), fresh()] as any);
+                const results = await subscriptionService.checkAll();
+                expect(results.map((r) => r.queued)).toEqual([['e3']]);
+                expect(loggingService.log).toHaveBeenCalledWith('Subscriptions: queued 1 new episode(s)');
+                expect(sub.id).toBeDefined();
+            });
+
+            it('stays quiet when a full pass queues nothing', async () => {
+                await subscriptionService.subscribe('m00episode');
+                await subscriptionService.checkAll();
+                expect(loggingService.log).not.toHaveBeenCalled();
+            });
+
+            it('does not queue a version the episode lacks, and asks again next check', async () => {
+                const sub = await subscriptionService.subscribe('m00episode', { versions: ['audio-described'] });
+                details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), fresh()] as any);
+                versionTypes.mockResolvedValue([{ types: ['Original version'] }] as any);
+                await subscriptionService.check(sub);
+                expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+                expect((await subscriptionService.list())[0].seenVersions?.['audio-described']).not.toContain('e3');
+
+                versionTypes.mockResolvedValue(audioDescribed);
+                await subscriptionService.check((await subscriptionService.list())[0]);
+                expect(queue.addToQueue).toHaveBeenCalledTimes(2);
+            });
+
+            it('treats a version the subscription has not tracked yet as having seen nothing', async () => {
+                await subscriptionService.subscribe('m00episode');
+                const [stored] = await subscriptionService.list();
+                // An older subscription: versions chosen, but no record yet of what each has seen.
+                store.subscriptions = [{ ...stored, versions: ['signed'] }];
+                details.getSeriesEpisodes.mockResolvedValue([ep('e1', '2020-01-01T00:00:00Z'), ep('e2', '2020-01-02T00:00:00Z')] as any);
+                await subscriptionService.check((await subscriptionService.list())[0]);
+                // Both are older than the window, so they are marked done for that version.
+                expect((await subscriptionService.list())[0].seenVersions?.signed).toEqual(['e1', 'e2']);
+            });
+
+            it('logs an episode it could not queue as a version and tries it again next time', async () => {
+                const sub = await subscriptionService.subscribe('m00episode', { versions: ['audio-described'] });
+                details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), fresh()] as any);
+                versionTypes.mockResolvedValue(audioDescribed);
+                queue.addToQueue.mockImplementationOnce(() => undefined as any).mockImplementationOnce(() => {
+                    throw new Error('queue full');
+                });
+                await subscriptionService.check(sub);
+                expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('could not queue Audio described e3'));
+                expect((await subscriptionService.list())[0].seenVersions?.['audio-described']).not.toContain('e3');
+            });
         });
     });
 });

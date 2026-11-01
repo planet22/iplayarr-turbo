@@ -5,6 +5,7 @@ import { getBasePath, getHost } from '@/lib/utils';
 import AboutPage from '@/views/AboutPage.vue';
 import AppsPage from '@/views/AppsPage.vue';
 import ChannelPage from '@/views/ChannelPage.vue';
+import CollectionsPage from '@/views/CollectionsPage.vue';
 import DiscoverPage from '@/views/DiscoverPage.vue';
 import GridPage from '@/views/GridPage.vue';
 import LoginPage from '@/views/LoginPage.vue';
@@ -48,6 +49,7 @@ const routes = [
     { path: '/browse/channel/:id', component: ChannelPage },
     { path: '/browse/schedule', component: SchedulePage },
     { path: '/browse/categories', component: TilesPage, meta: { tiles: 'categories' } },
+    { path: '/browse/collections', component: CollectionsPage },
     { path: '/browse/category/:id', component: GridPage, meta: { grid: 'category' } },
     { path: '/browse/atoz/:letter?', component: GridPage, meta: { grid: 'atoz' } },
     { path: '/browse/programme/:pid', component: ProgrammePage },
@@ -56,10 +58,12 @@ const routes = [
 const router = createRouter({
     history: createWebHistory(getBasePath() || '/'),
     routes,
-    scrollBehavior(_to, _from, saved) {
+    scrollBehavior(to, from, saved) {
         // Back / forward: return to where the page was. Browse grids and rails fill in after navigation,
         // so wait briefly for them to be tall enough before scrolling.
         if (saved) return new Promise((resolve) => setTimeout(() => resolve(saved), 350));
+        // Opening or closing a collection only changes ?c=; the page scrolls itself to it, so don't jump to the top.
+        if (to.path === from.path && to.path === '/browse/collections') return false;
         return { top: 0 };
     },
 });

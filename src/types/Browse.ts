@@ -48,10 +48,21 @@ export interface BrowseCategory {
     thumbnail?: string;
 }
 
-export interface BrowseSuggestion {
-    pid: string;
+// An iPlayer collection (curated group such as "Fright Night"), listed on iPlayer's home and category pages.
+export interface BrowseCollection {
+    id: string;
     title: string;
+    synopsis?: string;
+    // json-api/thumbnail/<imagePid>.jpg
+    thumbnail?: string;
+    // How many episodes/films it holds.
+    count: number;
 }
+
+// A type-ahead row: a programme (TV or film) to open by pid, or a collection to open by id.
+export type BrowseSuggestion =
+    | { kind: 'tv' | 'film'; pid: string; title: string }
+    | { kind: 'collection'; id: string; title: string; count: number; thumbnail?: string };
 
 export interface BrowseSlot {
     item: BrowseItem;

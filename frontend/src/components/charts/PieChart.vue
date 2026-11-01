@@ -17,6 +17,7 @@ const props = defineProps({
 });
 
 const MAX_ITEMS = 5;
+const MAX_LABEL = 28;
 
 // Screen readers cannot see the chart, so give them its numbers as text.
 const summary = computed(() => {
@@ -83,6 +84,8 @@ const options = computed(() => {
             position: 'right',
             offsetY: 0,
             height: 200,
+            // Long terms (e.g. a pasted URL) would run across the page, so cut them short.
+            formatter: (label) => (String(label).length > MAX_LABEL ? `${String(label).slice(0, MAX_LABEL - 1)}…` : label),
         },
         responsive: [
             {

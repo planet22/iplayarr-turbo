@@ -49,6 +49,21 @@ describe('Statistics Routes', () => {
         });
     });
 
+    describe('DELETE /searchHistory/term', () => {
+        it('removes the term', async () => {
+            const res = await request(expressApp).delete('/searchHistory/term?term=Doctor%20Who');
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ status: true });
+            expect(statisticsService.removeSearchTerm).toHaveBeenCalledWith('Doctor Who');
+        });
+
+        it('rejects a missing term', async () => {
+            const res = await request(expressApp).delete('/searchHistory/term');
+            expect(res.status).toBe(400);
+            expect(statisticsService.removeSearchTerm).not.toHaveBeenCalled();
+        });
+    });
+
     describe('GET /grabHistory', () => {
         it('returns grab history', async () => {
             const history = ['grab1', 'grab2'];

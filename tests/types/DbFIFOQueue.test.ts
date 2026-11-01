@@ -42,6 +42,18 @@ describe('DbFIFOQueue', () => {
         expect(await queue.getItems()).toEqual([{ id: 'e' }, { id: 'd' }, { id: 'c' }]);
     });
 
+    it('removeWhere deletes only matching items in this queue', async () => {
+        const other = new DbFIFOQueue<{ id: string }>('other', 3);
+        await queue.enqueue({ id: 'a' });
+        await queue.enqueue({ id: 'b' });
+        await other.enqueue({ id: 'a' });
+
+        await queue.removeWhere((item) => item.id === 'a');
+
+        expect(await queue.getItems()).toEqual([{ id: 'b' }]);
+        expect(await other.getItems()).toEqual([{ id: 'a' }]);
+    });
+
     it('keeps separate queues apart', async () => {
         const other = new DbFIFOQueue<{ id: string }>('other', 3);
         await queue.enqueue({ id: 'a' });

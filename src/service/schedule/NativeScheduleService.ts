@@ -163,8 +163,10 @@ class NativeScheduleService implements AbstractScheduleService {
                 const label = titleElement.getAttribute('aria-label');
                 if (!label) return false;
 
-                const dateStr = label.split(':')[0].trim(); // e.g., "27 Apr 07:00"
-                const parsedDate = parseDateString(dateStr);
+                // The label starts with the broadcast time, e.g. "27 Apr 07:00: Show title". Splitting on the
+                // first colon would drop the minutes (and read the hour as a year), so match the time itself.
+                const dateStr = /^\s*(\d{1,2}\s+[A-Za-z]{3,}\s+\d{1,2}:\d{2})/.exec(label)?.[1];
+                const parsedDate = dateStr ? parseDateString(dateStr) : null;
 
                 if (!parsedDate) return false;
 

@@ -82,6 +82,19 @@ describe('GetIplayerStreamService', () => {
         expect(proxyUrl).toHaveBeenLastCalledWith('https://ok', req, res, 5, undefined);
     });
 
+    it('treats streams with no priority or type as equal and reports no resolution', async () => {
+        const bare = (stream: string, url: string) => `kind: video\nstream: ${stream}\nstreamurl: ${url}`;
+        setOutput(bare('hlshd1', 'https://first'), bare('hlshd2', 'https://second'));
+        await service.streamDirect('bare-hd', req, res, 'sess');
+        expect(proxyUrl).toHaveBeenCalledWith('https://first', req, res, expect.anything(), 'sess');
+        expect(streamSessionService.setResolution).not.toHaveBeenCalled();
+
+        clearResolveCache();
+        setOutput(bare('dash1', 'https://dash-a'), bare('dash2', 'https://dash-b'));
+        await service.streamDirect('bare-any', req, res, 'sess');
+        expect(proxyUrl).toHaveBeenLastCalledWith('https://dash-a', req, res, expect.anything(), 'sess');
+    });
+
     it('throws when no stream is resolved', async () => {
         setOutput('garbage without keys');
         await expect(service.streamDirect('p1', req, res)).rejects.toThrow('resolved no playable stream for p1');

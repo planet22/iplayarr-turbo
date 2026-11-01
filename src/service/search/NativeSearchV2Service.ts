@@ -10,11 +10,14 @@ import { IPlayerSearchResult } from '../../types/IPlayerSearchResult';
 import { IPlayerNewSearchResponse, IPlayerNewSearchResult } from '../../types/responses/iplayer/IPlayerNewSearchResponse';
 import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../types/Synonym';
+import { extractPid } from '../../utils/extractPid';
 import { lunrSearchQuery } from '../../utils/lunrQuery';
+import { searchContext } from '../../utils/searchContext';
 import { traceCandidate, traceNote } from '../../utils/searchTrace';
 import { seasonHint } from '../../utils/seasonHint';
 import { firstMissingTerm, titleRank } from '../../utils/titleMatch';
 import { getPotentialRoman, getQualityProfile, sanitizeLunrQuery, splitArrayIntoChunks } from '../../utils/Utils';
+import collectionService from '../collectionService';
 import configService from '../configService';
 import iplayerDetailsService from '../iplayerDetailsService';
 import loggingService from '../loggingService';
@@ -27,6 +30,8 @@ const maxEpisodePages = 10;
 const episodeChunkSize = 5;
 const chunksInFlight = 3;
 const lookupConcurrency = 5;
+// Collections found by name that are expanded for one search.
+const maxCollectionsPerSearch = 3;
 // new-search answers with at most this many hits; hitting it means a short or generic term may have
 // had real matches crowded out.
 const newSearchHitCap = 24;
@@ -65,6 +70,39 @@ class NativeSearchV2Service implements AbstractSearchService {
         const { sizeFactor } = await getQualityProfile();
         const matchAllWords = (await searchSettingsService.get(IplayarrParameter.SEARCH_MATCH_ALL_WORDS)) !== 'false';
 
+        const infoPidLedger: Set<string> = new Set();
+        const searchResults: IPlayerSearchResult[] = [];
+
+        // Turns newly found details into results and reports them as soon as they exist.
+        const collect = async (found: IPlayerDetails[]) => {
+            const batch: IPlayerSearchResult[] = [];
+            for (const info of found) {
+                if (infoPidLedger.has(info.pid)) continue;
+                infoPidLedger.add(info.pid);
+                batch.push(await nativeSearchService.createSearchResult(info.title, info, sizeFactor, synonym));
+            }
+            searchResults.push(...batch);
+            if (batch.length) onBatch?.(batch);
+        };
+
+        // A collection's pid or link lists what is in it; anything else (or an empty group) is a normal search.
+        const collectionPid = (await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS)) === 'true' ? extractPid(term) : undefined;
+        if (collectionPid) {
+            const members = await this.#listGroup(collectionPid);
+            if (members.length) {
+                await this.#collectEpisodes(members, collect);
+                return searchResults;
+            }
+        }
+
+        // Collections whose title has every search word are listed first, ahead of the usual results. Only for
+        // Sonarr/Radarr: the Search page shows a collection as a tile that opens it instead (see collectionService.matchesForSearch).
+        if (searchContext() !== 'manual' && (await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES)) === 'true') {
+            for (const { id } of (await collectionService.search(term)).slice(0, maxCollectionsPerSearch)) {
+                await this.#collectEpisodes(await this.#listGroup(id), collect);
+            }
+        }
+
         // Nothing matched every word: retry with the trailing words dropped ("Show Name Episode Title"
         // -> "Show Name"), keeping the all-words rule against the shorter term.
         let results: IPlayerNewSearchResult[] = [];
@@ -72,7 +110,7 @@ class NativeSearchV2Service implements AbstractSearchService {
         for (const candidate of [term, ...shortenedTerms(term)]) {
             const fetched = await this.#fetchHits(candidate);
             if (!fetched) {
-                if (candidate === term) return [];
+                if (candidate === term) return searchResults;
                 continue;
             }
             results = fetched;
@@ -94,20 +132,6 @@ class NativeSearchV2Service implements AbstractSearchService {
         const lookups = await this.#lookupContainers(lunrResults.map(({ ref }) => ref));
 
         const pidLedger: Set<string> = new Set();
-        const infoPidLedger: Set<string> = new Set();
-        const searchResults: IPlayerSearchResult[] = [];
-
-        // Turns newly found details into results and reports them as soon as they exist.
-        const collect = async (found: IPlayerDetails[]) => {
-            const batch: IPlayerSearchResult[] = [];
-            for (const info of found) {
-                if (infoPidLedger.has(info.pid)) continue;
-                infoPidLedger.add(info.pid);
-                batch.push(await nativeSearchService.createSearchResult(info.title, info, sizeFactor, synonym));
-            }
-            searchResults.push(...batch);
-            if (batch.length) onBatch?.(batch);
-        };
 
         for (const { ref, containerPid, failed } of lookups) {
             if (failed) {
@@ -196,6 +220,17 @@ class NativeSearchV2Service implements AbstractSearchService {
                 await collect(details);
             }
         }
+    }
+
+    // The released episodes/films of a collection, at most one search's worth.
+    async #listGroup(groupPid: string): Promise<IPlayerEpisodeMetadata[]> {
+        const all: IPlayerEpisodeMetadata[] = [];
+        for (let page = 1; page <= maxEpisodePages && all.length < searchResultLimit; page++) {
+            const elements = await iplayerDetailsService.getGroupEpisodes(groupPid, page);
+            all.push(...elements.filter(({ type, release_date_time }) => type == 'episode' && release_date_time != null));
+            if (elements.length < searchResultLimit) break;
+        }
+        return all.slice(0, searchResultLimit);
     }
 
     async #listContainer(containerPid: string): Promise<IPlayerEpisodeMetadata[]> {

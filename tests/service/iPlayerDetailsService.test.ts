@@ -3,6 +3,7 @@ import axios from 'axios';
 import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { IPlayerEpisodeMetadata } from '../../src/types/responses/IPlayerMetadataResponse';
+import { ProgrammeNotFoundError } from '../../src/utils/upstreamError';
 import * as Utils from '../../src/utils/Utils';
 
 jest.mock('axios');
@@ -105,6 +106,8 @@ describe('iplayerDetailsService', () => {
 
         await expect(iplayerDetailsService.getMetadata('bbc_two_england')).rejects.toBeDefined();
         await expect(iplayerDetailsService.getMetadata('bbc_two_england')).rejects.toThrow('cached 404');
+        // still a "not found" for the routes (404), not a plain Error (500)
+        await expect(iplayerDetailsService.getMetadata('bbc_two_england')).rejects.toBeInstanceOf(ProgrammeNotFoundError);
 
         expect(mockedAxios.get).toHaveBeenCalledTimes(1);
         iplayerDetailsService.notFound.clear();
@@ -209,6 +212,41 @@ describe('iplayerDetailsService', () => {
         expect(await iplayerDetailsService.getSeriesEpisodes('b8888888')).toEqual([]);
         mockedAxios.get.mockResolvedValueOnce({ data: { programme_episodes: { elements: [{ id: 'e2' }] } } });
         expect(await iplayerDetailsService.getSeriesEpisodes('b8888888')).toEqual([{ id: 'e2' }]);
+    });
+
+    describe('getGroupEpisodes', () => {
+        it('returns the members of a collection from the groups endpoint', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { group_episodes: { elements: [{ id: 'g1' }, { id: 'g2' }] } } });
+            expect(await iplayerDetailsService.getGroupEpisodes('p096h09x')).toEqual([{ id: 'g1' }, { id: 'g2' }]);
+            const url = mockedAxios.get.mock.calls[mockedAxios.get.mock.calls.length - 1][0] as string;
+            expect(url).toContain('/groups/p096h09x/episodes?rights=web&per_page=150');
+            expect(url).not.toContain('&page=');
+        });
+
+        it('requests the given page and page size', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { group_episodes: { elements: [] } } });
+            await iplayerDetailsService.getGroupEpisodes('p096h09x', 2, 30);
+            expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('per_page=30&page=2'));
+        });
+
+        it('serves a repeat request from the cache', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { group_episodes: { elements: [{ id: 'g1' }] } } });
+            await iplayerDetailsService.getGroupEpisodes('p0cached1');
+            expect(await iplayerDetailsService.getGroupEpisodes('p0cached1')).toEqual([{ id: 'g1' }]);
+            expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        });
+
+        it('is empty for a response without elements', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: {} });
+            expect(await iplayerDetailsService.getGroupEpisodes('p0noelem1')).toEqual([]);
+        });
+
+        it('is empty, and not cached, when the request fails (not a group)', async () => {
+            mockedAxios.get.mockRejectedValueOnce(new Error('404'));
+            expect(await iplayerDetailsService.getGroupEpisodes('p0notgrp1')).toEqual([]);
+            mockedAxios.get.mockResolvedValueOnce({ data: { group_episodes: { elements: [{ id: 'g3' }] } } });
+            expect(await iplayerDetailsService.getGroupEpisodes('p0notgrp1')).toEqual([{ id: 'g3' }]);
+        });
     });
 
     describe('getSeriesEpisodesChecked', () => {

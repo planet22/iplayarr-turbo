@@ -14,6 +14,7 @@ import { isValidPid, sanitizeFileName } from '../utils/pathSafety';
 import activeJobs from './activeJobs';
 import configService from './configService';
 import historyService from './historyService';
+import loggingService from './loggingService';
 import socketService from './socketService';
 import StatisticsService from './stats/StatisticsService';
 import videoEventService from './videoEventService';
@@ -44,6 +45,11 @@ const queueService = {
             throw new InvalidQueueInputError('Invalid programme id');
         }
         nzbName = sanitizeFileName(nzbName) || pid;
+        // A double-clicked Download (or a retried request) must not queue the same release twice.
+        if (queue.some((entry) => entry.pid === pid && entry.nzbName === nzbName && entry.source === source)) {
+            loggingService.debug(`${pid} is already queued as ${nzbName}; ignoring the duplicate`);
+            return;
+        }
         const queueEntry: QueueEntry = {
             jobId: randomUUID(),
             pid,

@@ -68,3 +68,28 @@ describe('SynonymFormValidator', () => {
         expect(result).toEqual({});
     });
 });
+
+describe('SynonymFormValidator with input that is not text', () => {
+    const validator = new SynonymFormValidator();
+
+    beforeEach(() => {
+        (synonymService.getAllSynonyms as jest.Mock).mockResolvedValue([]);
+    });
+
+    it.each([
+        ['an array', []],
+        ['an object', {}],
+        ['a number', 7],
+        ['null', null],
+    ])('treats %s as a missing from and target instead of throwing', async (_label, value) => {
+        const result = await validator.validate({ from: value, target: value, exemptions: '' } as any);
+        expect(result.from).toBeDefined();
+        expect(result.target).toBeDefined();
+    });
+
+    it('treats a body that is not an object as missing values', async () => {
+        const result = await validator.validate(null as any);
+        expect(result.from).toBeDefined();
+        expect(result.target).toBeDefined();
+    });
+});

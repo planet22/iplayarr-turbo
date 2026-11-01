@@ -1,10 +1,13 @@
 import { Request, Response } from 'express';
 import { Builder } from 'xml2js';
 
+import appService from '../../service/appService';
 import configService from '../../service/configService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { VideoType } from '../../types/IPlayerSearchResult';
+import { ApiError } from '../../types/responses/ApiResponse';
 import { NZBFileResponse, NZBMetaEntry } from '../../types/responses/newznab/NZBFileResponse';
+import { isValidPid } from '../../utils/pathSafety';
 
 interface DownloadNZBRequest {
     pid: string;
@@ -25,6 +28,20 @@ interface DownloadNZBRequest {
 export default async (req: Request, res: Response) => {
     const { pid, nzbName, type, app, title, series, episode, episodeTitle, channel, pubDate, runtime, quality, version } =
         req.query as any as DownloadNZBRequest;
+
+    if (!isValidPid(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' });
+        return;
+    }
+
+    if (type !== undefined && !Object.values(VideoType).includes(type)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid type' });
+        return;
+    }
+
+    if (app) {
+        await appService.touchApp(app);
+    }
 
     const date: Date = new Date();
     date.setMinutes(date.getMinutes() - 720);

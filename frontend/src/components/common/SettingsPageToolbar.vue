@@ -5,6 +5,33 @@
                 <font-awesome-icon :icon="['fas', 'arrow-left']" />
             </button>
             <slot name="nav" />
+            <div v-if="filterFirst && icons.some((i) => i == 'filter')" class="filterWrap filterWrapFirst">
+                <button
+                    :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
+                    title="Filter"
+                    aria-label="Filter"
+                    @click="toggleFilter"
+                >
+                    <font-awesome-icon :icon="['fas', 'filter']" />
+                </button>
+                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown">
+                    <ul>
+                        <li
+                            v-for="option in filterOptions"
+                            :key="option"
+                            :class="['clickable', selectedFilter == option ? 'selected' : '']"
+                            @click="selectFilter(option)"
+                        >
+                            <div>
+                                {{ option }}
+                            </div>
+                            <div>
+                                <font-awesome-icon v-if="selectedFilter == option" :icon="['fas', 'check']" />
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
             <button
                 v-if="icons.some((i) => i == 'filterToggle')"
                 :class="['SettingsPageToolbar-button clickable', filtersActive ? 'enabled' : '']"
@@ -88,6 +115,7 @@
                 <font-awesome-icon :icon="['fas', refreshIcon]" :spin="refreshing && refreshIcon === 'arrows-rotate'" :beat-fade="refreshing && refreshIcon !== 'arrows-rotate'" />
                 <div v-if="refreshLabel && !iconOnly" class="SettingsPageToolbar-label">{{ refreshLabel }}</div>
             </button>
+            <slot name="refresh-after" />
             <button
                 v-if="icons.some((i) => i == 'arrImport')"
                 class="SettingsPageToolbar-button clickable"
@@ -100,6 +128,12 @@
             </button>
         </div>
         <div>
+            <ViewToggle
+                v-if="viewModes.length"
+                :model-value="viewMode"
+                :modes="viewModes"
+                @update:model-value="emit('update:viewMode', $event)"
+            />
             <slot name="actions" />
             <button
                 v-if="icons.some((i) => i == 'delete')"
@@ -122,7 +156,7 @@
                 <font-awesome-icon :icon="['fas', 'trash-can']" />
                 <div v-if="!iconOnly" class="SettingsPageToolbar-label">{{ clearLabel }}</div>
             </button>
-            <div v-if="icons.some((i) => i == 'filter')" class="filterWrap">
+            <div v-if="!filterFirst && icons.some((i) => i == 'filter')" class="filterWrap">
                 <button
                     :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
                     title="Filter"
@@ -158,6 +192,8 @@ import { defineEmits, defineProps, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import { toolbarCount, useBackNav } from '@/lib/useBackNav';
 
+import ViewToggle from './ViewToggle.vue';
+
 const emit = defineEmits([
     'save',
     'toggleAdvanced',
@@ -171,6 +207,7 @@ const emit = defineEmits([
     'stop',
     'refresh',
     'clear',
+    'update:viewMode',
 ]);
 const { canGoBack, goBack } = useBackNav();
 // A page can have several toolbars (one per section); only the first carries the Back button.
@@ -186,6 +223,17 @@ const showFilterDropdown = ref(false);
 const dropdownDiv = ref(null);
 
 defineProps({
+    // The page's table / list / card choice, shown as a toggle at the right of the bar; no modes, no toggle.
+    viewMode: {
+        type: String,
+        required: false,
+        default: '',
+    },
+    viewModes: {
+        type: Array,
+        required: false,
+        default: () => [],
+    },
     // The 'advanced' button's state: the advanced settings are showing.
     advancedOn: {
         type: Boolean,
@@ -201,6 +249,12 @@ defineProps({
     },
     // Phones: keep the filter boxes on the same row as the buttons instead of dropping them onto their own row.
     inlineFilters: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    // Put the 'filter' dropdown button on the left, straight after the Back button, instead of at the right of the bar.
+    filterFirst: {
         type: Boolean,
         required: false,
         default: false,
@@ -376,6 +430,50 @@ const handleClickOutside = (event) => {
     }
 }
 
+// The view toggle takes the toolbar buttons' look, with the chosen view in the brand colour.
+.SettingsPageToolbar > div .viewToggle {
+    align-items: stretch;
+    gap: 0;
+    margin: 6px 3px;
+
+    button {
+        width: 38px;
+        height: auto;
+        min-height: 32px;
+        margin: 0;
+        padding: 0;
+        justify-content: center;
+        border-radius: 0;
+        background-color: transparent;
+
+        &:first-child {
+            border-radius: 4px 0 0 4px;
+        }
+
+        &:last-child {
+            border-radius: 0 4px 4px 0;
+        }
+
+        &:not(:first-child) {
+            border-left-width: 0;
+        }
+
+        svg {
+            height: 16px;
+        }
+
+        &.active {
+            background-color: @brand-color;
+            border-color: @brand-color;
+
+            svg,
+            &:hover svg {
+                color: @on-brand-color;
+            }
+        }
+    }
+}
+
 .SettingsPageToolbar {
     min-height: 44px;
     background-color: @toolbar-background-color;
@@ -500,6 +598,11 @@ const handleClickOutside = (event) => {
         .filterWrap {
             position: relative;
             display: inline-flex;
+        }
+
+        .filterWrapFirst .filterDropdown {
+            right: auto;
+            left: 0;
         }
 
         .filterDropdown {

@@ -5,8 +5,10 @@ import cronJobService from '../../service/cronJobService';
 import strmWatchdogService from '../../service/strmWatchdogService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
+import { parsePathMap } from '../../utils/pathMap';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/', async (_: Request, res: Response) => {
     res.json(await strmWatchdogService.getStatus());
@@ -62,12 +64,37 @@ router.post('/check-access', async (_: Request, res: Response) => {
     }
 });
 
+// Sends a test notification to the given (unsaved) webhook address, or the saved one.
+router.post('/test-webhook', async (req: Request, res: Response) => {
+    const url = req.body?.url;
+    if (url !== undefined && typeof url !== 'string') {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'url must be a string' } as ApiResponse);
+        return;
+    }
+    res.json(await strmWatchdogService.testWebhook(url));
+});
+
+// Format problems and missing folders in a (possibly unsaved) Path Mapping value.
+router.post('/check-path-map', async (req: Request, res: Response) => {
+    const value = req.body?.value;
+    if (typeof value !== 'string') {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'value must be a string' } as ApiResponse);
+        return;
+    }
+    res.json(strmWatchdogService.checkPathMap(value));
+});
+
 // Saves just the Path Mapping (the Settings form's PUT needs the whole config), e.g. from the dashboard's
 // "Apply" button on a suggested mapping.
 router.put('/path-map', async (req: Request, res: Response) => {
     const value = req.body?.value;
     if (typeof value !== 'string') {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'value must be a string' } as ApiResponse);
+        return;
+    }
+    const { problems } = parsePathMap(value);
+    if (problems.length) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: `Path mapping: ${problems[0]}` } as ApiResponse);
         return;
     }
     await configService.setParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP, value);

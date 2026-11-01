@@ -5,6 +5,7 @@ import request from 'supertest';
 import liveChannelFacade from '../../../src/facade/liveChannelFacade';
 import SettingsRoute from '../../../src/routes/json-api/SettingsRoute';
 import configService from '../../../src/service/configService';
+import cronJobService from '../../../src/service/cronJobService';
 import historyService from '../../../src/service/historyService';
 import videoEventService from '../../../src/service/videoEventService';
 import { qualityProfiles } from '../../../src/types/QualityProfiles';
@@ -16,6 +17,7 @@ import { ConfigFormValidator } from '../../../src/validators/ConfigFormValidator
 
 jest.mock('../../../src/facade/liveChannelFacade');
 jest.mock('../../../src/service/configService');
+jest.mock('../../../src/service/cronJobService', () => ({ __esModule: true, default: { setDefaultSchedule: jest.fn() } }));
 jest.mock('../../../src/service/historyService');
 jest.mock('../../../src/service/videoEventService');
 const mockedConfigService = jest.mocked(configService);
@@ -29,6 +31,7 @@ const mockedConfigFormValidator: jest.Mocked<ConfigFormValidator> = {
     isNumber: jest.fn(),
     matchesRegex: jest.fn(),
     isValidUrl: jest.fn(),
+    isHttpUrl: jest.fn(),
 };
 jest.mock('../../../src/validators/ConfigFormValidator', () => ({
     ConfigFormValidator: jest.fn(() => mockedConfigFormValidator),
@@ -138,6 +141,31 @@ describe('SettingsRoute', () => {
                 expect(response.statusCode).toBe(400);
                 expect(response.body.invalid_fields).toEqual({ EVIL: 'Unknown setting' });
                 expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
+            });
+
+            it('stores JSON booleans and numbers as text, and null as empty', async () => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                const response = await put({ DEBUG: true, ACTIVE_LIMIT: 5, UI_PILL_COLORS: false, LIVE_STRM_DIR: null });
+                expect(response.statusCode).toBe(200);
+                expect(mockedConfigService.setParameter).toHaveBeenCalledWith('DEBUG', 'true');
+                expect(mockedConfigService.setParameter).toHaveBeenCalledWith('ACTIVE_LIMIT', '5');
+                expect(mockedConfigService.setParameter).toHaveBeenCalledWith('UI_PILL_COLORS', 'false');
+                expect(mockedConfigService.setParameter).toHaveBeenCalledWith('LIVE_STRM_DIR', '');
+            });
+
+            it('applies a saved REFRESH_SCHEDULE to the running schedule refresh straight away', async () => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                mockedConfigService.getParameter.mockResolvedValue('*/30 * * * *');
+                const response = await put({ REFRESH_SCHEDULE: '*/30 * * * *' });
+                expect(response.statusCode).toBe(200);
+                expect(cronJobService.setDefaultSchedule).toHaveBeenCalledWith('schedule-refresh', '*/30 * * * *');
+            });
+
+            it('leaves the schedule alone when other settings are saved', async () => {
+                mockedConfigFormValidator.validate.mockResolvedValue({});
+                (cronJobService.setDefaultSchedule as jest.Mock).mockClear();
+                await put({ ACTIVE_LIMIT: '5' });
+                expect(cronJobService.setDefaultSchedule).not.toHaveBeenCalled();
             });
 
             it('rejects object values', async () => {
@@ -369,5 +397,32 @@ describe('SettingsRoute', () => {
             expect(response.statusCode).toBe(200);
             expect(response.body).toEqual(qualityProfiles);
         });
+    });
+
+    describe('when the stored configuration is missing', () => {
+        it('reports an empty value for an executable setting that has no value in effect', async () => {
+            mockedConfigService.removeParameter.mockResolvedValue();
+            mockedConfigService.getParameter.mockResolvedValue(undefined);
+            const res = await request(app).delete('/executableOverride/GET_IPLAYER_EXEC');
+            expect(res.body).toEqual({ status: true, value: '' });
+        });
+
+        it('still checks an update against an empty configuration', async () => {
+            mockedConfigService.getAllConfig.mockResolvedValue(undefined as any);
+            const res = await request(app).put('/').send({ NOT_A_SETTING: 'x' });
+            expect(res.status).toBe(400);
+            expect(res.body.invalid_fields).toHaveProperty('NOT_A_SETTING', 'Unknown setting');
+        });
+    });
+});
+
+describe('GET /versionProfiles', () => {
+    it('lists the version profiles with just their id, name and tag', async () => {
+        const app = express();
+        app.use('/', SettingsRoute);
+        const response = await request(app).get('/versionProfiles');
+        expect(response.status).toBe(200);
+        expect(response.body.length).toBeGreaterThan(0);
+        expect(Object.keys(response.body[0]).sort()).toEqual(['id', 'name', 'tag']);
     });
 });

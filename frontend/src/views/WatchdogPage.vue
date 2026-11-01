@@ -1,6 +1,6 @@
 <template>
     <div class="inner-content">
-        <PageHeader title="STRM Watchdog" />
+        <PageHeader title="Watchdog" icon="shield-halved" />
         <SettingsPageToolbar
             :icons="['run', 'refresh']"
             :running="live.running" :run-disabled="live.running ? stopping : !canRun"
@@ -126,15 +126,7 @@
         </div>
         <div class="chartRow">
             <div class="chartCard">
-                <LineChart
-                    title="Checked vs Failed"
-                    :local-time="true"
-                    :window-minutes="live.running ? 2 : 0"
-                    :series="[
-                        { name: 'Checked', data: checkedSeries, color: 'chart-1' },
-                        { name: 'Failed', data: failedSeries, color: 'danger-color' },
-                    ]"
-                />
+                <RunsChart title="Results per run" :rows="runChartRows" :strikes="status.strikes" />
             </div>
         </div>
 
@@ -192,14 +184,12 @@
 
         <PageHeader title="Links" />
         <SettingsPageToolbar
-            :icons="['delete']" delete-label="Clear links" :delete-disabled="live.running || !sortedItems.length"
+            :view-mode="viewMode" :view-modes="sortedItems.length ? ['table', 'cards'] : []" :icons="['delete']"
+            delete-label="Clear links" :delete-disabled="live.running || !sortedItems.length" @update:view-mode="setViewMode"
             @delete-queue-item="clearItems"
         />
         <p v-if="!sortedItems.length" class="empty">No links have been checked yet.</p>
         <template v-else>
-        <div class="viewToggleRow">
-            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
-        </div>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
         <div v-if="cardView" class="cardList">
             <DataCard v-for="item in pagedItems" :key="item.pid">
@@ -216,14 +206,18 @@
                 <template #title>
                     <router-link :to="`/browse/programme/${item.pid}`">{{ details[item.pid]?.title ?? item.pid }}</router-link>
                 </template>
-                <template v-if="details[item.pid]?.title || getSeriesEpisodeLabel(details[item.pid])" #subtitle>
-                    {{ [details[item.pid]?.title ? item.pid : '', getSeriesEpisodeLabel(details[item.pid])].filter(Boolean).join(' · ') }}
+                <template v-if="details[item.pid]?.title || getSeriesEpisodeLabel(details[item.pid]) || libraryLabel(item)" #subtitle>
+                    {{
+                        [details[item.pid]?.title ? item.pid : '', getSeriesEpisodeLabel(details[item.pid]) || libraryLabel(item)]
+                            .filter(Boolean)
+                            .join(' · ')
+                    }}
                 </template>
                 <template #chips>
                     <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
                         {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
                     </span>
-                    <span v-if="item.status == 'ok' && item.failCount" class="pill grey">1 strike</span>
+                    <span v-if="item.status == 'ok' && item.failCount" class="pill grey">{{ strikeLabel(item) }} strikes</span>
                     <span v-if="(item.sourceNames || item.sources || []).length" class="linkMeta">
                         {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') }}
                     </span>
@@ -232,16 +226,19 @@
                     </span>
                     <span v-if="(item.actions || []).length" class="linkMeta">{{ item.actions.join(', ') }}</span>
                 </template>
-                <template v-if="item.status == 'invalid' && (item.message || (item.files || []).length)">
+                <template v-if="item.message || (item.files || []).length">
                     {{ item.message || (item.files || []).join(', ') }}
                 </template>
             </DataCard>
         </div>
-        <table v-else class="dataTable">
+        <table v-else class="dataTable watchdogTable">
             <thead>
                 <tr>
+                    <th></th>
                     <th>Programme</th>
+                    <th>Episode</th>
                     <th>Status</th>
+                    <th>Strikes</th>
                     <th>Source</th>
                     <th>Last Checked</th>
                     <th>Action</th>
@@ -250,13 +247,24 @@
             </thead>
             <tbody>
                 <tr v-for="item in pagedItems" :key="item.pid">
+                    <td>
+                        <img
+                            v-if="getProgrammeThumbnailUrl(item.pid)"
+                            class="thumbnail clickable"
+                            :src="getProgrammeThumbnailUrl(item.pid)"
+                            @click="router.push(`/browse/programme/${item.pid}`)"
+                            @error="hideBrokenImage"
+                        />
+                        <div v-else class="thumbnail-placeholder"></div>
+                    </td>
                     <td class="text"><router-link :to="`/browse/programme/${item.pid}`">{{ item.pid }}</router-link></td>
+                    <td data-title="Episode" class="libraryLabel">{{ libraryLabel(item) || '—' }}</td>
                     <td data-title="Status">
                         <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
                             {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
                         </span>
-                        <span v-if="item.status == 'ok' && item.failCount" class="pill grey">1 strike</span>
                     </td>
+                    <td data-title="Strikes">{{ strikeLabel(item) }}</td>
                     <td data-title="Source">
                         {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') || '—' }}
                     </td>
@@ -275,14 +283,13 @@
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import LineChart from '@/components/charts/LineChart.vue';
+import RunsChart from '@/components/charts/RunsChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import DataCard from '@/components/common/DataCard.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import Pagination from '@/components/common/TablePagination.vue';
-import ViewToggle from '@/components/common/ViewToggle.vue';
 import TypeCounts from '@/components/watchdog/TypeCounts.vue';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
@@ -290,6 +297,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useViewMode } from '@/lib/useViewMode';
 import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
+import { libraryLabel, runChartData } from '@/lib/watchdog';
 
 const socket = inject('socket');
 const router = useRouter();
@@ -303,6 +311,7 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.watchdogViewMode', {
 const cardView = computed(() => viewMode.value === 'cards');
 
 const status = ref({
+    strikes: 2,
     enabled: false,
     live: { running: false, total: 0, checked: 0, ok: 0, invalid: 0, inconclusive: 0 },
     items: [],
@@ -390,16 +399,10 @@ const lastRunLabel = computed(() => (lastRun.value ? formatRelativeTime(Date.par
 
 // Percentage to two decimal places (a handful of failures in hundreds of links is well under 1%).
 const failureRate = (run) => (run && run.checked ? Math.round((run.invalid / run.checked) * 10000) / 100 : 0);
-// Past runs (one point each, when they finished) followed by the current run's progress, sampled by the
-// server every few seconds, so the chart moves while a run is going. Once it finishes its saved point
-// replaces the ramp (which starts at 0 and would otherwise show as a dip at the end of the line).
-const seriesOf = (field) =>
-    Object.fromEntries([
-        ...status.value.runs.map((run) => [run.finishedAt, run[field]]),
-        ...(live.value.running ? live.value.samples ?? [] : []).map((sample) => [new Date(sample.t).toISOString(), sample[field]]),
-    ]);
-const checkedSeries = computed(() => seriesOf('checked'));
-const failedSeries = computed(() => seriesOf('invalid'));
+// Finished runs only; the progress bar above shows the one in flight.
+// "1/2": failed checks so far over the strikes it takes to go invalid.
+const strikeLabel = (item) => `${item.failCount ?? 0}/${status.value.strikes}`;
+const runChartRows = computed(() => runChartData(status.value.runs));
 
 const onStatus = (data) => {
     status.value = data;
@@ -481,6 +484,22 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="less">
+// The links table has many narrow columns: tight horizontal padding, and the thumbnail, pid, episode,
+// status, source, checked and action columns shrink to their content so the detail column gets the room.
+.watchdogTable {
+    th,
+    td {
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+
+    th:not(:last-child),
+    td:not(:last-child) {
+        width: 1%;
+        white-space: nowrap;
+    }
+}
+
 // Source, check time and any action, in the pill row of a Links card.
 .linkMeta {
     display: inline-flex;

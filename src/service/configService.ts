@@ -48,24 +48,29 @@ const configService = {
 
     defaultConfigMap: {
         DEBUG: 'false',
-        ACTIVE_LIMIT: '3',
+        ACTIVE_LIMIT: '4',
         REFRESH_SCHEDULE: '0 * * * *',
         AUTH_USERNAME: 'admin',
         // No default password: initialCredentialsService generates a random one on first boot.
-        FALLBACK_FILENAME_SUFFIX: 'WEB.H264-BBC',
-        MOVIE_FILENAME_TEMPLATE: '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC',
+        MOVIE_FILENAME_TEMPLATE: '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBCiPlayarrTurbo',
         TV_FILENAME_TEMPLATE:
-            '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC',
+            '{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBCiPlayarrTurbo',
         VIDEO_QUALITY: 'fhd',
         EXTRA_VIDEO_QUALITIES: '',
         EXTRA_VERSIONS: '',
         AIRDATE_NUMBERING: 'false',
-        RELEASE_LANGUAGE: 'none',
+        RELEASE_LANGUAGE: 'english',
         SEARCH_MATCH_ALL_WORDS: 'true',
         MANUAL_NATIVE_SEARCH: 'inherit',
         MANUAL_NATIVE_SEARCH_ENGINE: 'inherit',
         MANUAL_SEARCH_MATCH_ALL_WORDS: 'inherit',
         NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'false',
+        NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false',
+        NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false',
+        MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'inherit',
+        MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'inherit',
+        BROWSE_SHOW_COLLECTIONS: 'true',
+        BROWSE_COLLECTION_SOURCES: 'all',
         RSS_FEED_HOURS: '48',
         // 'false' re-fetches/re-parses only today's BBC schedule page per channel each refresh,
         // reusing a cached result for any day that's already fully passed (it can't change once
@@ -73,7 +78,7 @@ const configService = {
         // window on every refresh, in case the caching ever causes stale/missing results.
         SCHEDULE_FULL_REFRESH: 'false',
         NATIVE_SEARCH: 'true',
-        NATIVE_SEARCH_ENGINE: 'V1',
+        NATIVE_SEARCH_ENGINE: 'V2',
         ARCHIVE_ENABLED: 'false',
         THUMBNAIL_RETENTION_DAYS: '30',
         STREAM_HISTORY_RETENTION_DAYS: '30',
@@ -86,30 +91,31 @@ const configService = {
         STREAM_NATIVE_ADAPTIVE: 'false',
         STREAM_NATIVE_HQ_PROBE: 'false',
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
-        STREAM_SUBTITLES: 'false',
-        STREAM_LIVE_DASH_1080: 'false',
+        STREAM_SUBTITLES: 'true',
+        STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
-        LIVE_TV_ENABLED: 'false',
+        LIVE_TV_ENABLED: 'true',
         LIVE_TV_EPG_OFFSET: '0',
         LIVE_TV_LOGO_SHAPE: 'landscape',
         LIVE_TV_GUIDE_CATEGORIES: 'true',
         LIVE_TV_GUIDE_FLAGS: 'true',
         LIVE_TV_GUIDE_HD: 'true',
-        STRM_WATCHDOG_ENABLED: 'false',
+        STRM_WATCHDOG_ENABLED: 'true',
         STRM_WATCHDOG_SOURCES: 'history',
         STRM_WATCHDOG_ACTION: 'notify',
         STRM_WATCHDOG_ARR_ACTION: 'none',
         STRM_WATCHDOG_FAIL_THRESHOLD: '10',
+        STRM_WATCHDOG_STRIKES: '2',
         STRM_WATCHDOG_CONCURRENCY: '4',
         UI_PILL_COLORS: 'true',
-        UI_CHANNEL_TOOLS: 'false',
+        UI_CHANNEL_TOOLS: 'true',
         UI_INFO_MESSAGES: 'true',
-        UI_QUALITY_BADGES: 'false',
-        UI_VERSION_BADGES: 'false',
-        UI_SUBTITLE_BADGES: 'false',
+        UI_QUALITY_BADGES: 'true',
+        UI_VERSION_BADGES: 'true',
+        UI_SUBTITLE_BADGES: 'true',
         DOWNLOAD_ASK_VERSION: 'true',
         // '' is the standard version; otherwise a version profile id (audio-described, signed).
         DOWNLOAD_DEFAULT_VERSION: '',
@@ -136,7 +142,13 @@ const configService = {
         const oldValue = configMap[parameter];
         configMap[parameter] = value;
         await storage.setItem('config', encryptSettings(configMap));
-        if ((parameter == IplayarrParameter.NATIVE_SEARCH || parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE) && oldValue != value) {
+        if (
+            (parameter == IplayarrParameter.NATIVE_SEARCH ||
+                parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE ||
+                parameter == IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS ||
+                parameter == IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES) &&
+            oldValue != value
+        ) {
             searchFacade.clearSearchCache();
         }
         if (parameter == IplayarrParameter.AIRDATE_NUMBERING && oldValue != value) {

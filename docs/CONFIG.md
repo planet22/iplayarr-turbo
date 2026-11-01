@@ -14,11 +14,13 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 
 ## Using the Settings page
 
-- **Tabs:** General, Media Management, Download Client, Streaming, Live TV, Authentication and Maintenance. The open tab is kept in the URL (`/settings#streaming`), so it can be bookmarked or linked, and Back/forward switch tabs.
+- **Tabs:** General, Search, Appearance, Media Management, Download Client, Streaming, Live TV, Authentication and Maintenance. The open tab is kept in the URL (`/settings#streaming`), so it can be bookmarked or linked, and Back/forward switch tabs.
 - **Save bar:** nothing applies until you save. A sticky bar shows "N unsaved changes" with **Discard** and **Save**. Edited fields, the tab that holds them and the Save button are highlighted in amber. Save applies the open tab; switching away from a tab with edits, leaving the page, or closing/reloading the browser asks first. The bar also covers edits to scheduled-task times, cache lifetimes and the per-browser Appearance choices.
 - **Filter box:** the box in the toolbar hides settings on the open tab that do not match what you type (and any section heading left empty).
 - **(i) buttons:** field descriptions are behind an (i) button beside each field (hover, focus or tap).
 - **Number settings** have a minimum and maximum in the form and are validated on the server (table below). A stored or environment value outside its range is pulled back into range when read, so a value left by an older version cannot stop you saving.
+- **Validation:** settings that must be one of a fixed set (`AUTH_TYPE`, download and stream clients, media and stream mode, video quality, search engines, NFO mode, release language, logo shape, watchdog actions, every on/off setting, `OUTPUT_FORMAT` of `mp4` or `mkv`, thumbnail retention) are checked on save and an unknown value is refused. A blank value still means "use the default". `REFRESH_SCHEDULE` must be a five-field cron running at most every 15 minutes (a bad saved value falls back to the default and is logged). `STREAM_BASE_URL` (when needed) and `STRM_WATCHDOG_WEBHOOK_URL` must be http(s), and `STRM_WATCHDOG_SOURCES` must name known sources. JSON booleans and numbers sent to the API are stored as text. A saved `REFRESH_SCHEDULE` reschedules the running job at once (a schedule set on the Maintenance tab still wins).
+- **Removed:** `SUB_DIR` and `FALLBACK_FILENAME_SUFFIX` did nothing and no longer exist.
 - **Quick find:** `Ctrl+K` (`Cmd+K` on a Mac) opens a palette that jumps to any page or Settings tab, suggests programmes and runs a plain search. See [USAGE_GUIDE.md](USAGE_GUIDE.md#quick-find).
 
 | Setting | Allowed range |
@@ -28,26 +30,31 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | `STREAM_HISTORY_RETENTION_DAYS` | 1-3650 |
 | `STRM_WATCHDOG_CONCURRENCY` | 1-10 |
 | `STRM_WATCHDOG_FAIL_THRESHOLD` | 1-1000 |
+| `STRM_WATCHDOG_STRIKES` | 1-30 |
 
 ## General (Settings → General)
-
-Sections: Access, NZB Search, Manual Search, Appearance and (advanced) Schedule.
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
 | Api Key | `API_KEY` | _(auto-generated)_ | Secures the Newznab/SABnzbd API surface (`?apikey=`). Regenerate from the field's button; Settings will offer to push the new key out to configured Apps. |
+| Hours in RSS Feed | `RSS_FEED_HOURS` | `48` | Advanced. How many hours back the RSS feed covers (1-720). |
+| Full Schedule Refresh | `SCHEDULE_FULL_REFRESH` | `false` | Advanced. `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh. Applies to the Schedule Refresh task on the Maintenance tab. |
+
+## Search (Settings → Search)
+
+Sections: NZB Search and Manual Search. The two collection options are explained in [BROWSE.md](BROWSE.md#collections).
+
+| Setting | Env var | Default | Notes |
+| --- | --- | --- | --- |
 | Native Search | `NATIVE_SEARCH` | `true` | Queries BBC's own search API + local Lunr re-ranking (`NativeSearchService`) instead of shelling out to `get_iplayer --search`. Toggling it clears the search cache. |
-| Native Search Engine _(advanced)_ | `NATIVE_SEARCH_ENGINE` | `V1` | Only shown when Native Search is on. `V1` ("1.0") is the stable engine. `V2` ("2.0", experimental) looks hits up concurrently, fetches episode details several at a time, retries failed episode-list pages and pages nested series; results should be identical, so switch back if anything looks wrong. |
+| Native Search Engine _(advanced)_ | `NATIVE_SEARCH_ENGINE` | `V2` | Only shown when Native Search is on. `V1` ("1.0") is the original engine. `V2` ("2.0", the default) looks hits up concurrently, fetches episode details several at a time, retries failed episode-list pages and pages nested series; results should be identical, so switch to `V1` if anything looks wrong. |
 | Requested Series Only _(advanced)_ | `NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY` | `false` | Engine 2.0 only. Fetch just the season Sonarr/Radarr asks for, which is faster for long shows. Not used with synonyms or Airdate Numbering. Never applies to manual search. |
+| Expand BBC Collections _(advanced)_ | `NATIVE_SEARCH_V2_EXPAND_COLLECTIONS` | `false` | Engine 2.0 only. Searching for the pid or bbc.co.uk link of an iPlayer collection (a curated list such as "Fright Night") lists the episodes and films in it. Applies to manual and Sonarr/Radarr search. |
+| Find BBC Collections by Name _(advanced)_ | `NATIVE_SEARCH_V2_COLLECTION_NAMES` | `false` | Engine 2.0 only. Finds the iPlayer collections whose title has every search word ("fright night"). On the Search page they are listed first among the results (type Collection, so the type filter covers them) and at the top of the type-ahead; clicking one opens it on the Collections page (so this needs **Show Collections** on). Sonarr/Radarr searches, which cannot click a tile, list the episodes/films of up to three matching collections ahead of the normal results instead. The BBC has no collection search, so only collections currently on iPlayer's home and category pages are found (the list is cached for 6 hours; see Maintenance > Caches). |
 | Match All Words _(advanced)_ | `SEARCH_MATCH_ALL_WORDS` | `true` | Only list results containing every word searched for. Turn off for looser matching. |
-| Manual Search overrides | `MANUAL_NATIVE_SEARCH`, `MANUAL_NATIVE_SEARCH_ENGINE`, `MANUAL_SEARCH_MATCH_ALL_WORDS` | `inherit` | The Native Search, engine and Match All Words settings above are the NZB search settings (used by Sonarr/Radarr). These twins apply to manual search on the Search page only; `inherit` ("Same as NZB search") follows the setting above, so you can try a different engine by hand without changing what Sonarr/Radarr get. Manual results are cached separately when the settings differ. The Search page shows the active manual setup below its results, with a link to Settings. |
-| Items Before Paging _(advanced, per browser)_ | _(browser only)_ | `4` | A list shows page controls only when it has more items than this (0-1000); `0` always shows them. |
-| Hours in RSS Feed _(advanced)_ | `RSS_FEED_HOURS` | `48` | How far back the RSS feed endpoint looks (1-720). |
-| Full Schedule Refresh _(advanced)_ | `SCHEDULE_FULL_REFRESH` | `false` | `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh. |
+| Manual Search overrides | `MANUAL_NATIVE_SEARCH`, `MANUAL_NATIVE_SEARCH_ENGINE`, `MANUAL_SEARCH_MATCH_ALL_WORDS`, `MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS`, `MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES` | `inherit` | The Native Search, engine, Match All Words and collection settings above (all but Requested Series Only, which manual search never uses) are the NZB search settings (used by Sonarr/Radarr). These twins apply to manual search on the Search page only; `inherit` ("Same as NZB search") follows the setting above, so you can try a different engine by hand without changing what Sonarr/Radarr get. Manual results are cached separately when the settings differ. The Search page shows the active manual setup below its results, with a link to Settings. |
 
-`REFRESH_SCHEDULE` (the cron expression for the proactive BBC schedule refresh) now lives on the Maintenance tab with the other [scheduled tasks](#maintenance-settings--maintenance).
-
-### Appearance
+## Appearance (Settings → Appearance)
 
 Settings named `UI_*` are stored with the rest of the configuration and apply to **every browser** that opens this iPlayarr. The others are per browser (`localStorage`). All of them only apply on Save. See [THEMING.md](THEMING.md).
 
@@ -56,12 +63,15 @@ Settings named `UI_*` are stored with the rest of the configuration and apply to
 | Colour Scheme / Colour Mode | _(per browser)_ | iPlayarr / Match system | Six schemes, each with a dark and a light version. The sun/monitor/moon switch in the top bar changes the mode at once. |
 | Top Bar | _(per browser)_ | Slim | Slim keeps the bar on screen while scrolling; Hide on scroll shows it again when you scroll up. |
 | Show Quick Find Button | _(per browser)_ | on | The lightning-bolt button in the top bar. `Ctrl+K` / `Cmd+K` works either way. |
+| Show Collections | `BROWSE_SHOW_COLLECTIONS` | `true` | Adds a **Collections** page to the Browse menu: each collection is a tile with a group icon, and clicking it opens what is in it. See [BROWSE.md](BROWSE.md#collections). |
+| Where to Look for Collections _(advanced)_ | `BROWSE_COLLECTION_SOURCES` | `all` | iPlayer has no collection list, so they are collected from its pages. `all` reads the home page and every category page (over a hundred collections, about twenty page reads each time the list refreshes, every 6 hours); `home` reads only the home page (about thirty, lightest). The list feeds the Collections page, finding collections by name in search, and Download collection; each source keeps its own list. Generic shelves ("Featured Films", "Live and Latest News") are left out. |
 | Show Info Messages | `UI_INFO_MESSAGES` | `true` | The blue explanatory notes at the top of pages. Warnings and errors always show. |
 | Colour Channel Pills | `UI_PILL_COLORS` | `true` | Colour channel labels to match each BBC logo. |
-| Show Channel Tools | `UI_CHANNEL_TOOLS` | `false` | The arrange, library, Live TV and customise buttons on the Channels page. Off keeps the page simple. |
-| Show HDR / UHD Badge _(advanced)_ | `UI_QUALITY_BADGES` | `false` | A badge where iPlayer lists HDR or Ultra HD. It is only a label: iPlayarr streams HD at most. |
-| Show Audio Described / Signed Badge _(advanced)_ | `UI_VERSION_BADGES` | `false` | Marks programmes and episodes that have an audio described or signed version. Also reveals the Versions settings. |
-| Show Subtitle Badge _(advanced)_ | `UI_SUBTITLE_BADGES` | `false` | A subtitles icon on episodes. Not checked per programme: the BBC gives most of them subtitles. |
+| Show Channel Tools | `UI_CHANNEL_TOOLS` | `true` | The arrange, library, Live TV and customise buttons on the Channels page. Turn off to keep the page simple. |
+| Show HDR / UHD Badge _(advanced)_ | `UI_QUALITY_BADGES` | `true` | A badge where iPlayer lists HDR or Ultra HD. It is only a label: iPlayarr streams HD at most. |
+| Show Audio Described / Signed Badge _(advanced)_ | `UI_VERSION_BADGES` | `true` | Marks programmes and episodes that have an audio described or signed version. Also reveals the Versions settings. |
+| Show Subtitle Badge _(advanced)_ | `UI_SUBTITLE_BADGES` | `true` | A subtitles icon on episodes. Not checked per programme: the BBC gives most of them subtitles. |
+| Items Before Paging _(advanced, per browser)_ | _(browser only)_ | `4` | A list with this many items or fewer is shown whole on one page, whatever the per-page size; longer lists get page controls (0-1000). `0` always pages. |
 
 Debug logging is controlled by the `DEBUG` env var (default `false`) — not exposed in the Settings UI, since it also flips permissive CORS for local frontend-dev-server use (`src/server.ts`). Set it in the container/process environment, not via Settings.
 
@@ -86,14 +96,13 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
-| Download Limit | `ACTIVE_LIMIT` | `3` | Max simultaneous downloads, 1-10. The queue never runs fewer than one at a time. |
+| Download Limit | `ACTIVE_LIMIT` | `4` | Max simultaneous downloads, 1-10. The queue never runs fewer than one at a time. |
 | Download Client? | `DOWNLOAD_CLIENT` | `NATIVE` | `NATIVE`, `GET_IPLAYER` or `YTDLP` (experimental) — which tool actually performs full downloads (`AbstractDownloadService` implementations). `NATIVE` (the default and the fastest) resolves the BBC stream itself and has ffmpeg copy it to a file, so no get_iplayer/yt-dlp is spawned; it doesn't embed subtitles or resume an interrupted download yet, so pick `GET_IPLAYER` if you need those. `YTDLP` in a non-root container needs `cap_add: [NET_BIND_SERVICE]` - see the note under [Stream Client](#streaming-settings--streaming) below. |
 | Additional Download Parameters _(advanced)_ | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | Extra CLI parameters appended to the `get_iplayer` download invocation. |
 | Ask Which Version _(advanced)_ | `DOWNLOAD_ASK_VERSION` | `true` | Shown once the Audio Described / Signed badge setting is on. When an item has an audio described or signed version, ask which to download or subscribe to. Off uses the Default Version wherever the item has it. See [Versions](#versions-audio-described-and-signed). |
 | Default Version _(advanced)_ | `DOWNLOAD_DEFAULT_VERSION` | _(standard)_ | Used when Ask is off and pre-selected when it is on. Items without that version download as the standard one. |
 | — | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (baked into the Docker image) | Path to the `get_iplayer` binary. Env-only; not in the Settings UI. |
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |
-| — | `SUB_DIR` | _(unset)_ | Optional subtitle download directory passed through to the downloader. Env-only. |
 | — | `VIDEO_QUALITY` | `fhd` | Maximum quality requested from `get_iplayer`/`yt-dlp`/native streaming. Set via Settings → Media Management's "Video Quality" dropdown (populated from `json-api/config/qualityProfiles`), not a raw env var most users would hand-type. |
 | — | `OUTPUT_FORMAT` | `mp4` | Output container (`mp4` or `mkv`) passed to `get_iplayer`. Settings → Media Management. |
 
@@ -107,7 +116,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Video Quality | `VIDEO_QUALITY` | `fhd` | See above. |
 | Additional Qualities | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | Offer these qualities as extra search results too, so Sonarr/Radarr can choose between them. Empty offers only the Video Quality. |
 | Additional Versions | `EXTRA_VERSIONS` | _(empty)_ | Also list these programme versions (audio described, signed) as separate releases tagged in the name (`...AUDIO.DESCRIBED.WEBDL...`). Only programmes that have the version get a variant. Match the tag with a Sonarr/Radarr Custom Format. See [Versions](#versions-audio-described-and-signed). |
-| Release Language _(advanced)_ | `RELEASE_LANGUAGE` | `none` | Adds a language tag such as `ENGLISH` to release names. Use it if Sonarr/Radarr shows an Unknown language and will not grab. |
+| Release Language _(advanced)_ | `RELEASE_LANGUAGE` | `english` | Adds a language tag such as `ENGLISH` to release names. Use it if Sonarr/Radarr shows an Unknown language and will not grab. |
 | Airdate Numbering _(advanced)_ | `AIRDATE_NUMBERING` | `false` | Number episodes by UK air date (TheTVDB) instead of iPlayer's numbers; falls back to iPlayer's if nothing matches. Changing it clears the episode-details and search caches. |
 | Output Format? | `OUTPUT_FORMAT` | `mp4` | `mp4` or `mkv`. |
 | Archive Downloads? | `ARCHIVE_ENABLED` | `false` | Keep cancelled/removed queue and history items instead of discarding them. See `src/facade/downloadFacade.ts` and `historyService.addArchive`. |
@@ -115,9 +124,8 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Live Channels Directory | `LIVE_STRM_DIR` | _(unset)_ | Where `.strm` files for live channels added to the library are written; point a Jellyfin library at it. Blank uses `COMPLETE_DIR`. See [STREAMING.md](STREAMING.md#live-channels). |
 | Write .nfo Metadata Files? | `WRITE_NFO_STRM` | `manual` | `none` / `all` / `nzb` (Sonarr/Radarr-triggered only) / `manual` (UI-triggered only). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
 | Write .strmtool.json Files? | `WRITE_STRMTOOL_JSON` | `false` | Also writes a `.strmtool.json` sidecar next to each `.strm` file, for the StrmTool Jellyfin plugin's probe-skip cache. Only takes effect when `WRITE_NFO_STRM` is enabled and the completed item is a `.strm` (Media Mode = Streaming). See [LIBRARY_ORGANIZATION.md](LIBRARY_ORGANIZATION.md). |
-| TV Filename Template _(advanced)_ | `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBC` | Handlebars template; only affects the flat (non-folder-structure) filename. Must compile against `{title, season, episode, episodeTitle, synonym, quality}`. |
-| Movie Filename Template _(advanced)_ | `MOVIE_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBC` | Same caveat as above. |
-| — | `FALLBACK_FILENAME_SUFFIX` | `WEB.H264-BBC` | Env-only; suffix used when the structured metadata needed for the normal template isn't available. |
+| TV Filename Template _(advanced)_ | `TV_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.S{{season}}E{{episode}}{{#if episodeTitle}}.{{episodeTitle}}{{/if}}.WEBDL.{{quality}}-BBCiPlayarrTurbo` | Handlebars template for the release name and flat filename. The release group is always `BBCiPlayarrTurbo`: a hard-coded trailing `-group` is replaced, and a variable after the final `-` is rejected. Must compile against `{title, season, episode, episodeTitle, synonym, quality}`. |
+| Movie Filename Template _(advanced)_ | `MOVIE_FILENAME_TEMPLATE` | `{{#if synonym}}{{synonym}}{{else}}{{title}}{{/if}}.WEBDL.{{quality}}-BBCiPlayarrTurbo` | Same caveat as above. |
 
 ## Streaming (Settings → Streaming)
 
@@ -132,9 +140,9 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Native Quality | `STREAM_NATIVE_ADAPTIVE` | `false` | Native client only. |
 | Native Quality Probe | `STREAM_NATIVE_HQ_PROBE` | `false` | Native client only. |
 | Native FHD Upgrade | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only. |
-| Native Subtitles | `STREAM_SUBTITLES` | `false` | Native client, Direct mode. Adds the BBC's captions as an English subtitle track, for on-demand and live. See [STREAMING.md](STREAMING.md#subtitles). |
+| Native Subtitles | `STREAM_SUBTITLES` | `true` | Native client, Direct mode. Adds the BBC's captions as an English subtitle track, for on-demand and live. See [STREAMING.md](STREAMING.md#subtitles). |
 | UHD Event Feeds | `LIVE_UHD_EVENT_FEEDS` | `false` | Native client. Lists BBC's UHD event feeds (`uk bbc stream 031`, `041`-`044`: up to 2160p HEVC, DASH only) among the live channels. They only carry video while a big event is on; between events they are listed but do not play. Needs a UK IP and a player (or Jellyfin transcoder) that handles 4K HEVC. Turning it off removes any subscribed feeds from the library (their `.strm` files are deleted) and from Jellyfin Live TV; the UI asks first. |
-| Live 1080p (Experimental) | `STREAM_LIVE_DASH_1080` | `false` | Native client. Live channels as 1080p HEVC (BBC's DASH feed, mediaset `iptv-mse`) instead of 720p HLS, in both Direct and Progressive MKV modes. Direct mode presents the feed as HLS playlists and proxies BBC's segments untouched (no ffmpeg); Progressive MKV mode needs ffmpeg. Needs a player that decodes HEVC; subtitles are not offered on these channels. Falls back to 720p HLS if BBC offers no DASH for the channel. |
+| Live 1080p (Experimental) | `STREAM_LIVE_DASH_1080` | `true` | Native client. Live channels as 1080p HEVC (BBC's DASH feed, mediaset `iptv-mse`) instead of 720p HLS, in both Direct and Progressive MKV modes. Direct mode presents the feed as HLS playlists and proxies BBC's segments untouched (no ffmpeg); Progressive MKV mode needs ffmpeg. Needs a player that decodes HEVC; subtitles are not offered on these channels. Falls back to 720p HLS if BBC offers no DASH for the channel. |
 | Ask Which Version to Play _(advanced)_ | `PLAY_ASK_VERSION` | `true` | Native client, once the Audio Described / Signed badge setting is on. The Play button asks which version to play when there is more than one. Off plays the default below. The player can switch version either way. |
 | Default Version to Play _(advanced)_ | `PLAY_DEFAULT_VERSION` | _(standard)_ | Used when Ask is off and pre-selected when it is on. |
 | Stream Mode | `STREAM_MODE` | `direct` | `direct` or `progressive-mkv` (needs `ffmpeg`). |
@@ -147,7 +155,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
-| Live TV | `LIVE_TV_ENABLED` | `false` | Enables the tuner and guide endpoints and shows the tuner/guide URLs. |
+| Live TV | `LIVE_TV_ENABLED` | `true` | Enables the tuner and guide endpoints and shows the tuner/guide URLs. |
 | EPG Time Offset | `LIVE_TV_EPG_OFFSET` | `0` | Minutes to shift the guide (whole number, -1440 to 1440). Guide times are already in the server's timezone. |
 | Channel Logo Shape | `LIVE_TV_LOGO_SHAPE` | `landscape` | `landscape` (16:9, suits guide cards) or `square` (suits channel tiles). Save and Update the tuner after changing. |
 | Guide Categories | `LIVE_TV_GUIDE_CATEGORIES` | `true` | Tag programmes with their BBC category (plus Movie/Sports/News/Kids) for Jellyfin's colours and filters. |
@@ -157,7 +165,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 
 ## STRM Watchdog (Settings → Streaming)
 
-Daily check that `.strm` links still resolve on BBC. Off by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_WEBHOOK_URL`.
+Daily check that `.strm` links still resolve on BBC. On by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_STRIKES`, `STRM_WATCHDOG_WEBHOOK_URL`.
 
 ## Versions (audio described and signed)
 
@@ -167,7 +175,7 @@ Some programmes have an **audio described** or **signed** version alongside the 
 - **Manual download:** the Search page has version filters, results carry version badges, and the download dialog shows version and quality. Batch downloads (programme page, Search multi-select), quick downloads and download-by-URL ask which version, or use the default.
 - **Subscriptions:** can also download the audio described / signed version of new episodes. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#versions).
 - **Play:** the Play button asks for, or defaults to, a version and the in-app player has a version switcher that resumes at the same position.
-- **Badges:** Settings → General → Appearance. Programme-page answers are cached and the rest are fetched in the background, and only when the badge setting is on.
+- **Badges:** Settings → Appearance. Programme-page answers are cached and the rest are fetched in the background, and only when the badge setting is on.
 
 ## Maintenance (Settings → Maintenance)
 
@@ -185,6 +193,7 @@ Some programmes have an **audio described** or **signed** version alongside the 
 | Library cleanup | `45 3 * * *` | - | Removes empty Show/Season folders left after import |
 | Expired cache purge | `50 3 * * *` | - | Deletes expired entries from the database cache |
 | STRM Watchdog | `15 4 * * *` | 60 min | Checks that `.strm` links still resolve ([WATCHDOG.md](WATCHDOG.md)) |
+| Subscription Detection | `47 3 * * *` | 15 min | Refreshes episode counts of linked shows for apps with detection on, and remembers new finds ([SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#syncing-shows-already-in-sonarrradarr)) |
 
 ## Archive & Retention (Settings → Maintenance / Media Management)
 

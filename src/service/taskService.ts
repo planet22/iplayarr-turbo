@@ -1,20 +1,32 @@
 import downloadFacade from '../facade/downloadFacade';
 import scheduleFacade from '../facade/scheduleFacade';
 import { IplayarrParameter } from '../types/IplayarrParameters';
+import { checkSchedule } from '../utils/cronSchedule';
+import { REFRESH_SCHEDULE_MIN_MINUTES } from '../validators/ConfigFormValidator';
 import configService from './configService';
 import cronJobService from './cronJobService';
 import DbCacheService from './db/dbCacheService';
 import episodeCacheService from './episodeCacheService';
 import libraryCleanupService from './libraryCleanupService';
 import liveTvService from './liveTvService';
+import loggingService from './loggingService';
 import streamSessionService from './stream/streamSessionService';
 import strmWatchdogService from './strmWatchdogService';
+import subscriptionDetectService from './subscriptionDetectService';
 import subscriptionService from './subscriptionService';
 import thumbnailCacheService from './thumbnailCacheService';
 
+const DEFAULT_REFRESH_SCHEDULE = '0 * * * *';
+
 class TaskService {
     async init() {
-        const cronSchedule = (await configService.getParameter(IplayarrParameter.REFRESH_SCHEDULE)) as string;
+        // node-cron throws on text it cannot parse, which would leave every job after this one unscheduled.
+        const configured = (await configService.getParameter(IplayarrParameter.REFRESH_SCHEDULE)) as string;
+        const problem = checkSchedule(configured, REFRESH_SCHEDULE_MIN_MINUTES);
+        if (problem) {
+            loggingService.error(`REFRESH_SCHEDULE "${configured}" cannot be used (${problem}); using ${DEFAULT_REFRESH_SCHEDULE}`);
+        }
+        const cronSchedule = problem ? DEFAULT_REFRESH_SCHEDULE : configured;
         await cronJobService.defineTask(
             {
                 id: 'schedule-refresh',
@@ -61,6 +73,19 @@ class TaskService {
                 minIntervalMinutes: 15,
             },
             () => subscriptionService.checkAll()
+        );
+
+        // Subscription detection - 3:47 AM daily. Only touches apps with "detect subscriptions" switched on in
+        // their settings, and only refreshes the episode counts of shows already linked to them.
+        await cronJobService.defineTask(
+            {
+                id: 'subscriptions-detect',
+                label: 'Subscription Detection',
+                description: 'Refreshes episode counts for Sonarr/Radarr apps with detection on.',
+                cron: '47 3 * * *',
+                minIntervalMinutes: 15,
+            },
+            () => subscriptionDetectService.autoDetect()
         );
 
         // Unused thumbnail prune - 3:35 AM daily. Fixed schedule (not user-configurable, like

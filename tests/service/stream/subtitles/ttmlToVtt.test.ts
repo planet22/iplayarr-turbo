@@ -66,4 +66,12 @@ describe('ttmlToVtt', () => {
     it('rejects a document that is not XML', async () => {
         await expect(ttmlToVtt('<html><body>nope')).rejects.toBeDefined();
     });
+
+    it('places cues without a line when a region has a malformed origin or extent', async () => {
+        const doc = `<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling"><head><layout>
+            <region xml:id="odd" tts:origin="10%" tts:extent="wide tall"/></layout></head>
+            <body><div><p begin="00:00:01.000" end="00:00:02.000" region="odd">Hi</p></div></body></tt>`;
+        const { vtt } = await ttmlToVtt(doc);
+        expect(vtt).toContain('00:00:11.000 --> 00:00:12.000\nHi');
+    });
 });

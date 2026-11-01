@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { requestedQuality } from '../../utils/qualityContext';
+import { ProgrammeNotFoundError } from '../../utils/upstreamError';
 import { requestedVersion } from '../../utils/versionContext';
 import configService from '../configService';
 import getIplayerExecutableService from '../getIplayerExecutableService';
@@ -212,7 +213,7 @@ class NativeStreamService implements AbstractStreamService {
     async #fetchVpid(pid: string): Promise<string> {
         const { statusCode, body } = await fetchTextWithStatus(`https://www.bbc.co.uk/programmes/${pid}/playlist.json`);
         if (statusCode < 200 || statusCode >= 300) {
-            throw new Error(`No programme found for pid ${pid} (status ${statusCode})`);
+            throw new ProgrammeNotFoundError(`No programme found for pid ${pid} (status ${statusCode})`);
         }
         const data = JSON.parse(body);
         const versions: ProgrammeVersion[] = data?.allAvailableVersions ?? [];

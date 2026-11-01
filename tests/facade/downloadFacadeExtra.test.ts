@@ -6,12 +6,14 @@ import GetIplayerDownloadService from '../../src/service/download/GetIplayerDown
 import StrmDownloadService from '../../src/service/download/StrmDownloadService';
 import YTDLPDownloadService from '../../src/service/download/YTDLPDownloadService';
 import historyService from '../../src/service/historyService';
+import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
 import socketService from '../../src/service/socketService';
 import videoEventService from '../../src/service/videoEventService';
 import { DownloadClient } from '../../src/types/enums/DownloadClient';
 import { MediaMode } from '../../src/types/enums/MediaMode';
+import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../../src/types/VideoEvent';
 
@@ -290,4 +292,54 @@ describe('DownloadFacade (extra)', () => {
             expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Error deleting'), expect.any(Error));
         });
     });
+
+    describe('branches', () => {
+        const writes = () => (fs.writeFileSync as jest.Mock).mock.calls.map(([file]) => String(file));
+
+        it('leaves a directory alone when a download claims it between the age check and the delete', async () => {
+            config({});
+            (fs.promises.readdir as jest.Mock).mockResolvedValue([{ name: 'a', isDirectory: () => true }]);
+            (fs.promises.stat as jest.Mock).mockResolvedValue({ mtimeMs: Date.now() - 4 * 3600 * 1000 });
+            (queueService.getFromQueue as jest.Mock)
+                .mockReturnValueOnce(undefined)
+                .mockReturnValueOnce(undefined)
+                .mockReturnValue({ pid: 'a' });
+
+            await downloadFacade.cleanupFailedDownloads();
+
+            expect(fs.promises.rm).not.toHaveBeenCalled();
+        });
+
+        it('hands the job id to the service post-processing of a job download', async () => {
+            config({ DOWNLOAD_CLIENT: DownloadClient.GET_IPLAYER, LIBRARY_FOLDER_STRUCTURE: 'false', WRITE_NFO_STRM: 'none' });
+            const child = { stdout: { on: jest.fn() }, stderr: { on: jest.fn() }, on: jest.fn() };
+            (GetIplayerDownloadService.download as jest.Mock).mockResolvedValue(child);
+            await downloadFacade.download(pid, 'job-a');
+            (queueService.getFromQueue as jest.Mock).mockReturnValue({ pid, nzbName: 'Show', type: 'tv', status: 'DOWNLOADING' });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['a.mp4']);
+
+            await child.on.mock.calls.find(([e]) => e === 'close')![1](0);
+
+            expect(GetIplayerDownloadService.postProcess).toHaveBeenCalledWith(pid, '/downloads/job-a', 0, 'job-a');
+        });
+
+        it('writes a movie .nfo and no tvshow.nfo for a film', async () => {
+            config({ DOWNLOAD_CLIENT: DownloadClient.GET_IPLAYER, LIBRARY_FOLDER_STRUCTURE: 'true', WRITE_NFO_STRM: 'all' });
+            const { close } = await startDownload(GetIplayerDownloadService);
+            (queueService.getFromQueue as jest.Mock).mockReturnValue({
+                pid, nzbName: 'Film.2020', type: VideoType.MOVIE, status: 'DOWNLOADING', library: { title: 'Film', year: 2020 },
+            });
+            (fs.readdirSync as jest.Mock).mockReturnValue(['a.mp4']);
+            (fs.existsSync as jest.Mock).mockReturnValue(false);
+            (iplayerDetailsService.episodeDetails as jest.Mock).mockResolvedValue({ description: 'A film' });
+
+            await close(0);
+
+            expect(writes().some((f) => f.endsWith('.nfo'))).toBe(true);
+            expect(writes().some((f) => f.endsWith('tvshow.nfo'))).toBe(false);
+            const nfo = (fs.writeFileSync as jest.Mock).mock.calls.find(([f]) => String(f).endsWith('.nfo'))![1];
+            expect(nfo).toContain('<movie>');
+        });
+    });
 });
+

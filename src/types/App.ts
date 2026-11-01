@@ -12,6 +12,8 @@ export interface App {
     priority?: number;
     tags?: string[];
     lastSeen?: number;
+    // Sonarr/Radarr only: a scheduled scan keeps the episode counts of this app's linked subscriptions fresh.
+    detectSubscriptions?: boolean;
     iplayarr: {
         host: string;
         port: number;

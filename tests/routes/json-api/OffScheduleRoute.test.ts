@@ -15,6 +15,12 @@ app.use(express.json());
 app.use('/', router);
 
 describe('Episode Cache Router', () => {
+    it('answers 500 instead of hanging when the cache service rejects', async () => {
+        (episodeCacheService.getCachedSeries as jest.Mock).mockRejectedValue(new Error('storage down'));
+        const res = await request(app).get('/').timeout(2000);
+        expect(res.status).toBe(500);
+    });
+
     beforeEach(() => {
         jest.clearAllMocks();
     });

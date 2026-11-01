@@ -157,12 +157,21 @@
                     </template>
                 </TablePagination>
                 <div class="episodeList">
-                    <div v-for="episode in pagedEpisodes" :key="episode.pid" class="episodeRow">
+                    <div
+                        v-for="episode in pagedEpisodes" :id="`ep-${episode.pid}`" :key="episode.pid"
+                        :class="['episodeRow', episode.pid === highlightPid ? 'focused' : '', episode.pid === highlightPid && highlightFading ? 'fading' : '']"
+                    >
+                        <button
+                            v-if="episode.pid === highlightPid" type="button" class="dismissFocus" title="Remove the highlight" aria-label="Remove the highlight"
+                            @click="dismissHighlight"
+                        >
+                            <font-awesome-icon :icon="['fas', 'xmark']" />
+                        </button>
                         <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
                         <div :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '']">
                             <img
-                                v-if="episode.thumbnail" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
-                                loading="lazy" role="button" tabindex="0" @error="hideBrokenImage" @click="download(episode)" @keydown.enter="download(episode)"
+                                v-if="episode.thumbnail && !brokenThumbs[episode.pid]" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
+                                loading="lazy" role="button" tabindex="0" @error="brokenThumbs[episode.pid] = true" @click="download(episode)" @keydown.enter="download(episode)"
                             />
                             <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="download(episode)" @keydown.enter="download(episode)">
                                 <font-awesome-icon :icon="['fas', 'tv']" />
@@ -211,7 +220,7 @@
 </template>
 
 <script setup>
-import { computed, inject, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
@@ -331,6 +340,7 @@ const {
 
 const sortTitle = computed(() => (oldestFirst.value ? 'Oldest first - click for newest first' : 'Newest first - click for oldest first'));
 const toggleSort = () => {
+    focusFollow = false;
     oldestFirst.value = !oldestFirst.value;
     episodePage.value = 1;
     try {
@@ -346,6 +356,8 @@ const seasonDownloadLabel = computed(
 const isMobile = useIsMobile('(max-width: 600px)');
 
 // Episode descriptions are clamped to three lines; a "... more" link (or a tap on the text) opens the rest.
+// Episodes whose thumbnail failed to load show the placeholder instead (a hidden image can't be clicked).
+const brokenThumbs = reactive({});
 const openDescriptions = reactive({});
 const clampedDescriptions = reactive({});
 const toggleDescription = (pid) => {
@@ -359,8 +371,45 @@ const measureDescription = (el, pid) => {
 };
 
 const selectSeason = (index) => {
+    focusFollow = false;
     selected.value = index;
     episodePage.value = 1;
+};
+
+// Arriving with an episode's pid (e.g. from the Schedule) opens its series on the right page, scrolled to
+// and highlighted. Episodes can arrive on later pages, so it is retried until it is found.
+const focusedPid = ref(null);
+// The outline: only when there is a list to pick from. It stays until the small x on the row is clicked, which fades it out.
+const highlightPid = ref(null);
+const highlightFading = ref(false);
+const HIGHLIGHT_FADE_MS = 400;
+let highlightTimer = null;
+const clearHighlight = () => {
+    clearTimeout(highlightTimer);
+    highlightFading.value = false;
+    highlightPid.value = null;
+};
+const dismissHighlight = () => {
+    highlightFading.value = true;
+    clearTimeout(highlightTimer);
+    highlightTimer = setTimeout(clearHighlight, HIGHLIGHT_FADE_MS);
+};
+let focusPending = null;
+// Later batches can re-sort the list and move the episode to another page, so it is re-placed after each
+// one until the user pages or picks a series themselves.
+let focusFollow = false;
+const focusEpisode = () => {
+    const pid = focusPending ?? (focusFollow ? focusedPid.value : null);
+    const index = programme.value?.seasons.findIndex((season) => season.episodes.some((e) => e.pid === pid));
+    if (!pid || index == null || index < 0) return;
+    focusPending = null;
+    focusFollow = true;
+    selected.value = index;
+    episodePage.value = Math.floor(episodes.value.findIndex((e) => e.pid === pid) / episodePageSize.value) + 1;
+    focusedPid.value = pid;
+    clearHighlight();
+    highlightPid.value = episodes.value.length > 1 ? pid : null;
+    nextTick(() => document.getElementById(`ep-${pid}`)?.scrollIntoView({ block: 'center' }));
 };
 
 const loadingMore = ref(false);
@@ -463,6 +512,7 @@ const loadRemainingPages = async (pid, first) => {
         const seasons = mergeSeasons(programme.value.seasons, next.seasons);
         programme.value = { ...programme.value, seasons };
         selected.value = Math.max(0, seasons.findIndex(({ series }) => series === selectedSeries));
+        focusEpisode();
         ({ page, hasMore } = next);
     }
 };
@@ -511,13 +561,17 @@ const reloadKey = ref(0);
 const reload = () => reloadKey.value++;
 
 watch(
-    () => [route.params.pid, reloadKey.value],
+    () => [route.params.pid, reloadKey.value, route.query.episode],
     async ([pid]) => {
         if (!pid) return;
         loading.value = true;
         loadingMore.value = false;
         error.value = null;
         selected.value = 0;
+        focusedPid.value = null;
+        clearHighlight();
+        focusFollow = false;
+        focusPending = route.query.episode || pid;
         try {
             const first = await browseFetch(`programme/${encodeURIComponent(pid)}`);
             if (route.params.pid !== pid) return;
@@ -526,6 +580,7 @@ watch(
             const { seasons } = first;
             const latest = seasons.reduce((best, { series }, i) => (series > (seasons[best].series ?? -1) ? i : best), 0);
             selected.value = latest;
+            focusEpisode();
             loading.value = false;
             await loadRemainingPages(pid, first);
         } catch (e) {
@@ -562,6 +617,51 @@ const duplicatesBannerDownload = computed(
         &.browsePage :deep(.SettingsPageToolbar) {
             margin-left: 0;
             margin-right: 0;
+        }
+    }
+}
+
+.episodeRow.focused {
+    position: relative;
+    outline: 2px solid @brand-color;
+    outline-offset: 4px;
+    border-radius: 4px;
+    transition: outline-color 400ms ease;
+
+    // A manual decision: the highlight stays until this is clicked, then fades out.
+    .dismissFocus {
+        position: absolute;
+        top: 6px;
+        right: 4px;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 1px solid @settings-button-border-color;
+        border-radius: 50%;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+        font-size: 11px;
+        cursor: pointer;
+        transition: opacity 400ms ease;
+
+        &:hover,
+        &:focus-visible {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
+        }
+    }
+
+    &.fading {
+        outline-color: transparent;
+
+        .dismissFocus {
+            opacity: 0;
+            pointer-events: none;
         }
     }
 }

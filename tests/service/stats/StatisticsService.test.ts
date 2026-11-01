@@ -84,6 +84,18 @@ describe('statisticsService', () => {
         expect(history).toHaveLength(0); // History should be empty
     });
 
+    it('removeSearchTerm drops UI searches for the term but keeps app searches', async () => {
+        await statisticsService.addSearch({ term: 'Doctor Who', results: 1, time: 1 });
+        await statisticsService.addSearch({ term: ' doctor who ', results: 2, time: 2 });
+        await statisticsService.addSearch({ term: 'Doctor Who', results: 3, time: 3, appId: 'sonarr' });
+        await statisticsService.addSearch({ term: 'Other', results: 4, time: 4 });
+
+        await statisticsService.removeSearchTerm('doctor who');
+
+        const history = await statisticsService.getSearchHistory();
+        expect(history.map(({ term, appId }) => [term, appId])).toEqual([['Doctor Who', 'sonarr'], ['Other', undefined]]);
+    });
+
     it('should add items to the grab history queue', async () => {
         const entry1: GrabHistoryEntry = { pid: 'test1', nzbName: 'test1', time: 1, type: VideoType.TV };
         const entry2: GrabHistoryEntry = { pid: 'test2', nzbName: 'test2', time: 1, type: VideoType.TV };
@@ -176,5 +188,16 @@ describe('statisticsService', () => {
         const result = await statisticsService.getUptime();
 
         expect(result).toBe(0);
+    });
+});
+
+describe('statisticsService failed grab history', () => {
+    it('clears the failed grab history and tells clients', async () => {
+        const clear = jest.spyOn(statisticsService.failedGrabHistory, 'clear').mockResolvedValue(undefined as any);
+        const get = jest.spyOn(statisticsService, 'getFailedGrabHistory').mockResolvedValue([]);
+        await statisticsService.clearFailedGrabHistory();
+        expect(clear).toHaveBeenCalled();
+        expect(get).toHaveBeenCalled();
+        jest.restoreAllMocks();
     });
 });

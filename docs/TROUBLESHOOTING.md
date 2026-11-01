@@ -35,7 +35,7 @@ Both are spawned as child processes (`child_process.spawn`), not shelled through
 
 ## Downloads stuck in queue
 
-- Check `ACTIVE_LIMIT` (Settings → Download Client → Download Limit, default `3`) — if it's genuinely busy, additional items wait their turn; that's expected, not stuck.
+- Check `ACTIVE_LIMIT` (Settings → Download Client → Download Limit, default `4`) — if it's genuinely busy, additional items wait their turn; that's expected, not stuck.
 - Check `DOWNLOAD_DIR` and `COMPLETE_DIR` actually exist and are writable by the container's `PUID`/`PGID` — `ConfigFormValidator` refuses to save Settings if either directory doesn't exist on save, but a directory that existed at save-time and was later removed/unmounted (e.g. a dropped network share) will fail downloads silently from Sonarr/Radarr's point of view (stuck "downloading" in its queue).
 - Look at the item in iPlayarr's own Queue page (not just Sonarr/Radarr's) — iPlayarr reports real progress back over the SABnzbd protocol, so if iPlayarr's own Queue page shows it stuck too, the problem is in the actual `get_iplayer`/`yt-dlp` process, not the Sonarr/Radarr integration.
 

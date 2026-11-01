@@ -6,7 +6,11 @@ New to iPlayarr? Start with [GETTING_STARTED_BBC.md](GETTING_STARTED_BBC.md).
 
 ## Quick find
 
-Press `Ctrl+K` (`Cmd+K` on a Mac), or the lightning-bolt button in the top bar (Settings → General can hide it), to open a palette that jumps to any page or Settings tab, suggests programmes as you type and runs a plain search. The side menu's groups fold away (remembered per browser) and re-open for the page you visit; the iPlayarr, get_iplayer and yt-dlp versions are at the bottom of it, with an amber note when an update is available.
+Press `Ctrl+K` (`Cmd+K` on a Mac), or the lightning-bolt button in the top bar (Settings → Appearance can hide it), to open a palette that jumps to any page or Settings tab, suggests programmes as you type and runs a plain search. The side menu's groups fold away (remembered per browser) and re-open for the page you visit; the iPlayarr, get_iplayer and yt-dlp versions are at the bottom of it, with an amber note when an update is available.
+
+## Page layout
+
+Every menu page opens with a heading showing its nav label and icon, above a toolbar. Pages reached from a programme (Streaming, Apps, About) share the same flush **Back** toolbar. The Table / List / Cards view toggle lives in the toolbar. Server timestamps ("checked 35 seconds ago") are aged against the server's own clock, so a server clock that differs from your browser's no longer skews them.
 
 ## Notifications and feedback
 
@@ -18,11 +22,11 @@ A browse-first way in: a hero banner and rows of programmes (Featured, Recently 
 
 ## Subscriptions (`/subscriptions`)
 
-Shows you have subscribed to, whose new episodes are queued automatically (checked hourly, or on demand), optionally linked to Sonarr/Radarr, plus the live channels added to your library. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md).
+Shows you have subscribed to, whose new episodes are queued automatically (checked hourly, or on demand, with a progress ring per show), optionally linked to Sonarr/Radarr, sortable and filterable, plus a **Sync** that imports shows Sonarr/Radarr already hold, and the live channels added to your library. See [SUBSCRIPTIONS.md](SUBSCRIPTIONS.md).
 
 ## Search (`/search`)
 
-Manual search against the same backend Sonarr/Radarr use (`NativeSearchService` or `get_iplayer --search`, depending on `NATIVE_SEARCH`) — useful for grabbing something one-off without waiting for Sonarr/Radarr's own scheduled search, or for content that isn't matched to a series Sonarr/Radarr is tracking. The search box also suggests titles as you type, the **Posters** toggle shows results as artwork cards, and a dropdown filters by channel (see [BROWSE.md](BROWSE.md#search)). Results can be downloaded directly from here; see [DownloadPage](#download-download) for how that request is handled. Search settings here (engine, match-all-words) can differ from what Sonarr/Radarr use, and audio described / signed versions can be filtered; see [BROWSE.md](BROWSE.md#search).
+Manual search against the same backend Sonarr/Radarr use (`NativeSearchService` or `get_iplayer --search`, depending on `NATIVE_SEARCH`) — useful for grabbing something one-off without waiting for Sonarr/Radarr's own scheduled search, or for content that isn't matched to a series Sonarr/Radarr is tracking. The search box also suggests titles as you type, the **Posters** toggle shows results as artwork cards, and a dropdown filters by channel (see [BROWSE.md](BROWSE.md#search)). The toolbar sits above the search box and shows the view options before you search; recent searches appear as chips, each removable with its **x**. Clicking an episode in the results (or on a programme card) opens that episode. Results can be downloaded directly from here; see [DownloadPage](#download-download) for how that request is handled. Search settings here (engine, match-all-words) can differ from what Sonarr/Radarr use, and audio described / signed versions can be filtered; see [BROWSE.md](BROWSE.md#search).
 
 ## Downloading by hand
 
@@ -50,7 +54,7 @@ Diagnostics for the Newznab/SABnzbd integration specifically — recent searches
 
 ## Apps (`/apps`)
 
-Manage Sonarr/Radarr/Prowlarr/Jellyfin integrations and NZB-client forwarding. A Jellyfin app (URL + API key, with a Test button) is used as a source by the [STRM Watchdog](WATCHDOG.md). Covered in full in [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md), including the User-Agent attribution table and deleting an Indexer/Download Client from the form.
+Manage Sonarr/Radarr/Prowlarr/Jellyfin integrations and NZB-client forwarding. Each app records when iPlayarr last heard from it (any successful call, including an NZB download or grab and a client test), and Sonarr/Radarr cards show a *Subscription Detection* pill when [subscription sync](SUBSCRIPTIONS.md#syncing-shows-already-in-sonarrradarr) is on for them. The whole card opens its form. A Jellyfin app (URL + API key, with a Test button) is used as a source by the [STRM Watchdog](WATCHDOG.md). Covered in full in [SONARR_RADARR_INTEGRATION.md](SONARR_RADARR_INTEGRATION.md), including the User-Agent attribution table and deleting an Indexer/Download Client from the form.
 
 ## Off Schedule (`/offSchedule`)
 

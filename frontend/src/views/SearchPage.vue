@@ -1,4 +1,36 @@
 <template>
+    <div class="inner-content searchTop">
+        <PageHeader title="Search" icon="search" />
+        <SettingsPageToolbar
+            :icons="toolbarIcons"
+            :view-mode="viewMode" :view-modes="['table', 'posters']" @update:view-mode="setViewMode"
+            @download="multipleImmediateDownload"
+        >
+            <template #actions>
+                <button
+                    v-if="viewMode === 'posters'"
+                    type="button"
+                    :class="{ enabled: smallIcons }"
+                    :aria-pressed="smallIcons"
+                    :title="smallIcons ? 'Showing small TV / film / series icons on posters' : 'Show small TV / film / series icons on posters'"
+                    aria-label="Small icons on posters"
+                    @click="toggleSmallIcons"
+                >
+                    <font-awesome-icon :icon="['fas', 'icons']" />
+                </button>
+                <button
+                    v-if="viewMode === 'posters' && searchResults.length"
+                    type="button"
+                    :class="{ enabled: selectMode }"
+                    :title="selectMode ? 'Done selecting' : 'Select results to download'"
+                    :aria-label="selectMode ? 'Done selecting' : 'Select results to download'"
+                    @click="toggleSelectMode"
+                >
+                    <font-awesome-icon :icon="['fas', selectMode ? 'square-check' : 'list-check']" />
+                </button>
+            </template>
+        </SettingsPageToolbar>
+    </div>
     <div class="pageSearchBar">
         <div class="searchPanel">
             <font-awesome-icon class="searchIcon" :icon="['fas', 'search']" />
@@ -13,51 +45,25 @@
             </button>
             <ul v-if="showSuggestions && suggestions.length" class="suggestions">
                 <li
-                    v-for="(suggestion, index) in suggestions" :key="suggestion.pid"
-                    :class="{ active: index === activeIndex }" @mousedown.prevent="openSuggestion(suggestion)"
+                    v-for="(suggestion, index) in suggestions" :key="suggestionKey(suggestion)"
+                    :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
                 >
-                    <font-awesome-icon :icon="['fas', 'tv']" />
+                    <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
                     <span>{{ suggestion.title }}</span>
                 </li>
                 <li class="seeAll" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
             </ul>
         </div>
     </div>
-    <SettingsPageToolbar :icons="toolbarIcons" @download="multipleImmediateDownload">
-        <template #actions>
-            <button
-                v-if="viewMode === 'posters' && searchResults.length"
-                type="button"
-                :class="{ enabled: smallIcons }"
-                :aria-pressed="smallIcons"
-                :title="smallIcons ? 'Showing small TV / film / series icons on posters' : 'Show small TV / film / series icons on posters'"
-                aria-label="Small icons on posters"
-                @click="toggleSmallIcons"
-            >
-                <font-awesome-icon :icon="['fas', 'icons']" />
-            </button>
-            <button
-                v-if="viewMode === 'posters' && searchResults.length"
-                type="button"
-                :class="{ enabled: selectMode }"
-                :title="selectMode ? 'Done selecting' : 'Select results to download'"
-                :aria-label="selectMode ? 'Done selecting' : 'Select results to download'"
-                @click="toggleSelectMode"
-            >
-                <font-awesome-icon :icon="['fas', selectMode ? 'square-check' : 'list-check']" />
-            </button>
-        </template>
-    </SettingsPageToolbar>
     <div v-if="!loading" class="inner-content scroll-x">
         <div v-if="searchResults.length" class="resultsToolbar">
             <span class="resultCount">
                 {{ filteredResults.length }} result{{ filteredResults.length === 1 ? '' : 's' }}
-                <template v-if="searchTerm">for &ldquo;{{ searchTerm }}&rdquo;</template>
+                <template v-if="searchTerm">for &ldquo;<span class="termText" :title="searchTerm">{{ searchTerm }}</span>&rdquo;</template>
                 <span v-if="loadingMore" class="loadingMoreNote">
                     <font-awesome-icon :icon="['fas', 'circle-notch']" spin /> more arriving
                 </span>
             </span>
-            <ViewToggle :model-value="viewMode" :modes="['table', 'posters']" @update:model-value="setViewMode" />
         </div>
         <div v-if="typeOptions.length > 2 || channelOptions.length > 2 || versionOptions.length > 1" class="channelChips" role="group" aria-label="Filter results">
             <template v-if="typeOptions.length > 2">
@@ -89,8 +95,8 @@
         </div>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
         <div v-if="selectMode && viewMode === 'posters' && searchResults.length" class="selectBar">
-            <span>{{ selectedCount }} of {{ filteredResults.length }} selected</span>
-            <button type="button" :title="`Select all ${filteredResults.length} results`" :aria-label="`Select all ${filteredResults.length} results`" @click="setAllChecked(true)">
+            <span>{{ selectedCount }} of {{ downloadableResults.length }} selected</span>
+            <button type="button" :title="`Select all ${downloadableResults.length} results`" :aria-label="`Select all ${downloadableResults.length} results`" @click="setAllChecked(true)">
                 <font-awesome-icon :icon="['fas', 'check-double']" />
             </button>
             <button type="button" title="Clear selection" aria-label="Clear selection" :disabled="!selectedCount" @click="setAllChecked(false)">
@@ -98,11 +104,14 @@
             </button>
         </div>
         <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
-            <ProgrammeCard
-                v-for="item in posterItems" :key="item.pid" :item="item"
-                :selectable="selectMode" :selected="!!item.result.checked" :icon-badges="smallIcons"
-                @toggle="item.result.checked = !item.result.checked"
-            />
+            <template v-for="item in posterItems" :key="item.pid">
+                <CollectionCard v-if="item.result.kind === 'collection'" :collection="item.result" @click="openCollection(item.result)" />
+                <ProgrammeCard
+                    v-else :item="item"
+                    :selectable="selectMode" :selected="!!item.result.checked" :icon-badges="smallIcons"
+                    @toggle="item.result.checked = !item.result.checked"
+                />
+            </template>
         </div>
         <table v-else-if="filteredResults.length" class="resultsTable responsive-table">
             <colgroup>
@@ -136,7 +145,20 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="result of pagedResults" :key="result.pid" class="clickable">
+                <template v-for="result of pagedResults" :key="result.pid">
+                <tr v-if="result.kind === 'collection'" class="clickable" @click="openCollection(result)">
+                    <td />
+                    <td data-title="Type"><span class="pill">{{ result.type }}</span></td>
+                    <td class="text" :title="result.synopsis">{{ result.title }}</td>
+                    <td data-title="Series">-</td>
+                    <td data-title="Episode">{{ result.count }} {{ result.count === 1 ? 'title' : 'titles' }}</td>
+                    <td data-title="Est. Size">-</td>
+                    <td data-title="Channel" />
+                    <td data-title="First Broadcast">-</td>
+                    <td />
+                    <td />
+                </tr>
+                <tr v-else class="clickable">
                     <td>
                         <CheckInput v-model="result.checked" />
                     </td>
@@ -153,7 +175,7 @@
                     <td
                         data-title="Series"
                         :title="result.seriesPid ? 'View Series' : undefined"
-                        @click="result.seriesPid ? router.push(`/browse/programme/${result.seriesPid}`) : download(result)"
+                        @click="result.seriesPid ? router.push({ path: `/browse/programme/${result.seriesPid}`, query: { episode: result.pid } }) : download(result)"
                     >
                         {{ result.series ? `Series ${result.series}` : '-' }}
                     </td>
@@ -186,28 +208,35 @@
                         />
                     </td>
                 </tr>
+                </template>
             </tbody>
         </table>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
         <div v-if="filteredResults.length == 0 && !loadingMore && searchTerm" class="emptyState">
             <font-awesome-icon class="emptyIcon" :icon="['fas', 'magnifying-glass']" />
             <div class="emptyTitle">
-                {{ searchResults.length ? 'Nothing matches that filter' : `No results for “${searchTerm}”` }}
+                <template v-if="searchResults.length">Nothing matches that filter</template>
+                <template v-else>No results for “<span class="termText" :title="searchTerm">{{ searchTerm }}</span>”</template>
             </div>
             <div v-if="!searchResults.length" class="emptyHint">Try fewer words, or one of your recent searches below.</div>
         </div>
-        <p v-if="searchTerm && searchSettingsLine" class="searchSettingsNote">
+        <p v-if="searchSettingsLine && (searchTerm || showHome)" class="searchSettingsNote">
             <font-awesome-icon :icon="['fas', 'sliders']" />
             <span>{{ searchSettingsLine }}</span>
-            <router-link :to="{ path: '/settings', hash: '#general' }">Change in Settings</router-link>
+            <router-link :to="{ path: '/settings', hash: '#search' }">Change in Settings</router-link>
         </p>
         <div v-if="showHome" class="searchHome">
             <section v-if="recent.length">
                 <h3>Recent searches</h3>
                 <div class="chipRow">
-                    <button v-for="term in recent" :key="term" type="button" class="chip" @click="searchFor(term)">
-                        <font-awesome-icon :icon="['fas', 'clock-rotate-left']" />{{ term }}
-                    </button>
+                    <span v-for="term in recent" :key="term" class="chip chipWrap">
+                        <button type="button" class="chipMain" @click="searchFor(term)">
+                            <font-awesome-icon :icon="['fas', 'clock-rotate-left']" /><span class="termText" :title="term">{{ term }}</span>
+                        </button>
+                        <button type="button" class="chipRemove" :aria-label="`Remove ${term} from recent searches`" :title="`Remove ${term}`" @click="removeRecent(term)">
+                            <font-awesome-icon :icon="['fas', 'circle-xmark']" />
+                        </button>
+                    </span>
                 </div>
             </section>
         </div>
@@ -220,14 +249,15 @@ import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
+import CollectionCard from '@/components/browse/CollectionCard.vue';
 import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
-import ViewToggle from '@/components/common/ViewToggle.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
@@ -237,6 +267,8 @@ import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
 import { streamSearch } from '@/lib/searchStream';
+import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
+import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
 import { useViewMode } from '@/lib/useViewMode';
 import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
@@ -271,6 +303,8 @@ const searchSettingsLine = computed(() => {
     const parts = [settings.native ? `Native ${settings.engine === 'V2' ? '2.0' : '1.0'}` : 'get_iplayer search'];
     if (settings.native) {
         parts.push(settings.matchAllWords ? 'all words' : 'any word');
+        if (settings.expandCollections) parts.push('collections by pid or link');
+        if (settings.collectionNames) parts.push('collections by name');
     }
     return `Search: ${parts.join(' · ')}`;
 });
@@ -278,7 +312,7 @@ const searchSettingsLine = computed(() => {
 const toolbarIcons = computed(() => {
     const icons = [];
     // The table has its own checkboxes; in the poster view the button needs a selection to act on.
-    if (viewMode.value === 'posters' ? selectedCount.value > 0 : filteredResults.value.length) icons.push('download');
+    if (viewMode.value === 'posters' ? selectedCount.value > 0 : downloadableResults.value.length) icons.push('download');
     return icons;
 });
 
@@ -331,7 +365,7 @@ const moveActive = (delta) => {
 const openSuggestion = (suggestion) => {
     closeSuggestions();
     searchInput.value = '';
-    router.push(`/browse/programme/${suggestion.pid}`);
+    router.push(suggestionPath(suggestion));
 };
 
 const onEnter = () => {
@@ -344,10 +378,16 @@ const onEnter = () => {
     }
 };
 
+// A collection is a result you open, not download from here: it is left out of selecting and downloading.
+const isCollection = (result) => result.kind === 'collection';
+const collectionResult = (collection) => ({ ...collection, pid: collection.id, kind: 'collection', type: 'COLLECTION' });
+const openCollection = ({ id }) => router.push({ path: '/browse/collections', query: { c: id } });
+const downloadableResults = computed(() => filteredResults.value.filter((result) => !isCollection(result)));
+
 const selectedCount = computed(() => searchResults.value.filter((result) => result.checked).length);
 
 const setAllChecked = (value) => {
-    filteredResults.value.forEach((result) => {
+    downloadableResults.value.forEach((result) => {
         result.checked = value;
     });
     allChecked.value = value;
@@ -360,6 +400,7 @@ const toggleSelectMode = () => {
 
 const clearInput = () => {
     searchInput.value = '';
+    rememberSearch('');
     closeSuggestions();
     searchEl.value?.focus();
 };
@@ -379,37 +420,58 @@ const pickChannel = (option) => {
 const recent = ref([]);
 const showHome = computed(() => !loading.value && (!searchTerm.value || (searchResults.value.length === 0 && !loadingMore.value)));
 
+// Up to 8 distinct terms are shown; the rest of the fetched history backfills a removed chip.
+const RECENT_SHOWN = 8;
+const recentPool = ref([]);
+
 onMounted(async () => {
     if (!searchInput.value) searchEl.value?.focus();
+    // The blank page shows how searching is set up, above the recent searches.
+    loadManualSettings();
     try {
         const { ok, data } = await ipFetch('json-api/stats/searchHistory?limit=80&filterRss=true');
         if (ok && Array.isArray(data)) {
             const seen = new Set();
             // Searches typed here have no app behind them (Sonarr/Radarr ones do); newest first, each term once.
-            recent.value = data
+            recentPool.value = data
                 .filter(({ term, appId }) => term && term !== '*' && !appId)
                 .sort((a, b) => (b.time ?? 0) - (a.time ?? 0))
                 .map(({ term }) => term.trim())
-                .filter((term) => term && !seen.has(term.toLowerCase()) && seen.add(term.toLowerCase()))
-                .slice(0, 8);
+                .filter((term) => term && !seen.has(term.toLowerCase()) && seen.add(term.toLowerCase()));
+            recent.value = recentPool.value.slice(0, RECENT_SHOWN);
         }
     } catch {
         // Recent searches are a nicety.
     }
 });
 
+const removeRecent = async (term) => {
+    const before = recentPool.value;
+    recentPool.value = before.filter((t) => t !== term);
+    recent.value = recentPool.value.slice(0, RECENT_SHOWN);
+    try {
+        const { ok } = await ipFetch(`json-api/stats/searchHistory/term?term=${encodeURIComponent(term)}`, 'DELETE');
+        if (!ok) throw new Error('delete failed');
+    } catch {
+        recentPool.value = before;
+        recent.value = before.slice(0, RECENT_SHOWN);
+        toastService.error('Unable to remove that search');
+    }
+};
+
 const runSearch = () => {
     closeSuggestions();
     filter.value = 'All';
     channelFilter.value = 'All';
     versionFilter.value = 'All';
+    if (!searchInput.value.trim()) rememberSearch('');
     router.push({ name: 'search', query: { searchTerm: searchInput.value } });
 };
 
 // Only offered when the results really mix TV and movies.
 const typeOptions = computed(() => [
     'All',
-    ...['TV', 'Movie'].filter((type) => searchResults.value.some((result) => result.type === type.toUpperCase())),
+    ...['TV', 'Movie', 'Collection'].filter((type) => searchResults.value.some((result) => result.type === type.toUpperCase())),
 ]);
 
 const channelFilter = ref('All');
@@ -456,26 +518,35 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.searchViewMode', {
 
 // Search results only carry pids, so artwork for the posters is fetched per visible page
 // (server-side metadata is cached) and merged in as it arrives.
+const DETAILS_CHUNK = 40; // BrowseRoute's MAX_DETAIL_PIDS
 const thumbnails = ref({});
 const requestedThumbnails = new Set();
 watch(
     [pagedResults, viewMode],
     async ([results, mode]) => {
         if (mode !== 'posters') return;
-        const missing = results.map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
+        const missing = results.filter((result) => !isCollection(result)).map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
         if (missing.length === 0) return;
         missing.forEach((pid) => requestedThumbnails.add(pid));
-        try {
-            const details = await browseFetch(`details?pids=${missing.join(',')}`);
-            const found = {};
-            details.forEach(({ pid, thumbnail }) => {
-                if (thumbnail) found[pid] = thumbnail;
-            });
-            thumbnails.value = { ...thumbnails.value, ...found };
-        } catch {
-            // Posters just fall back to the placeholder tile.
-            missing.forEach((pid) => requestedThumbnails.delete(pid));
-        }
+        // The server takes at most 40 pids per lookup, and with a big page (Items Before Paging) or a page restored
+        // on Back they all arrive at once, so ask in chunks.
+        const chunks = [];
+        for (let i = 0; i < missing.length; i += DETAILS_CHUNK) chunks.push(missing.slice(i, i + DETAILS_CHUNK));
+        await Promise.all(
+            chunks.map(async (chunk) => {
+                try {
+                    const details = await browseFetch(`details?pids=${chunk.join(',')}`);
+                    const found = {};
+                    details.forEach(({ pid, thumbnail }) => {
+                        if (thumbnail) found[pid] = thumbnail;
+                    });
+                    thumbnails.value = { ...thumbnails.value, ...found };
+                } catch {
+                    // Posters just fall back to the placeholder tile (and are asked for again next time).
+                    chunk.forEach((pid) => requestedThumbnails.delete(pid));
+                }
+            })
+        );
     },
     { immediate: true }
 );
@@ -522,6 +593,28 @@ const posterItems = computed(() =>
 // Results stream in: the table appears with the first batch while the rest keep arriving behind it.
 // A new search aborts the previous stream so its late batches can't land in the new results.
 let searchAbort = null;
+
+// Coming back to Search from another menu item (no term in the URL) reopens the last search of this tab; clearing the
+// box forgets it. Per tab (sessionStorage), and storage may be unavailable.
+const LAST_SEARCH_KEY = 'iplayarr.lastSearchTerm';
+const rememberSearch = (term) => {
+    try {
+        if (term) sessionStorage.setItem(LAST_SEARCH_KEY, term);
+        else sessionStorage.removeItem(LAST_SEARCH_KEY);
+    } catch {
+        // Not remembered.
+    }
+};
+if (!route.query.searchTerm) {
+    let last = null;
+    try {
+        last = sessionStorage.getItem(LAST_SEARCH_KEY);
+    } catch {
+        // Nothing to restore.
+    }
+    if (last) router.replace({ name: 'search', query: { searchTerm: last } });
+}
+
 watch(
     () => route.query.searchTerm,
     async (newSearchTerm) => {
@@ -537,6 +630,7 @@ watch(
             searchResults.value = [];
             searchTerm.value = newSearchTerm;
             searchInput.value = newSearchTerm;
+            rememberSearch(newSearchTerm);
             loadManualSettings();
             try {
                 await streamSearch(
@@ -546,7 +640,13 @@ watch(
                         searchResults.value.push(...batch);
                         loading.value = false;
                     },
-                    abort.signal
+                    abort.signal,
+                    (found) => {
+                        if (abort.signal.aborted) return;
+                        // Collections are results like any other (own type, so the type filter covers them), listed first.
+                        searchResults.value.unshift(...found.map(collectionResult));
+                        loading.value = false;
+                    }
                 );
             } catch {
                 // Keep whatever arrived; an empty list reads as "No Results Found".
@@ -627,7 +727,7 @@ const selectFilter = (option) => {
 watch(
     allChecked,
     (newValue) => {
-        filteredResults.value.forEach((result) => {
+        downloadableResults.value.forEach((result) => {
             result.checked = newValue;
         });
     },
@@ -644,6 +744,11 @@ watch(
     color: inherit;
     font: inherit;
     cursor: pointer;
+}
+
+// The title and toolbar open the page like every other; the search box follows with its own spacing.
+.searchTop {
+    padding-bottom: 0;
 }
 
 .pageSearchBar {
@@ -806,6 +911,43 @@ watch(
     &.active {
         border-color: @brand-color;
         color: @brand-color;
+    }
+}
+
+// A recent-search chip: the search button plus a small remove button at the right-hand end.
+.chipWrap {
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+
+    .chipMain,
+    .chipRemove {
+        display: inline-flex;
+        align-items: center;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+    }
+
+    .chipMain {
+        gap: 6px;
+        padding: 6px 4px 6px 12px;
+        min-width: 0;
+    }
+
+    .chipRemove {
+        padding: 6px 10px 6px 4px;
+
+        svg {
+            color: @subtle-text-color;
+        }
+
+        &:hover svg,
+        &:focus-visible svg {
+            color: @primary-text-color;
+        }
     }
 }
 

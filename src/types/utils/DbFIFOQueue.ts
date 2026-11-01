@@ -57,6 +57,15 @@ export class DbFIFOQueue<T> implements AbstractFIFOQueue<T> {
         return rows.map((row) => JSON.parse(row.value) as T);
     }
 
+    async removeWhere(predicate: (item: T) => boolean): Promise<void> {
+        await dbReady();
+        const rows = await prisma.queueItem.findMany({ where: { queue: this.key } });
+        const matching = rows.filter((row) => predicate(JSON.parse(row.value) as T)).map((row) => row.id);
+        if (matching.length) {
+            await prisma.queueItem.deleteMany({ where: { id: { in: matching } } });
+        }
+    }
+
     async clear(): Promise<void> {
         await dbReady();
         await prisma.queueItem.deleteMany({ where: { queue: this.key } });

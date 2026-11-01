@@ -7,7 +7,7 @@ colours, channel tools, info notes and the badge options) are server settings (`
 
 ## Where to change it
 
-- **Settings > General > Appearance**: pick a **Colour Scheme** (cards show the dark and light version of each) and a
+- **Settings > Appearance**: pick a **Colour Scheme** (cards show the dark and light version of each) and a
   **Colour Mode**. Like every settings page change, these apply when you press **Save**.
 - **Top bar**: a sun / monitor / moon switch (a single button that cycles on phones) changes the mode straight away.
 

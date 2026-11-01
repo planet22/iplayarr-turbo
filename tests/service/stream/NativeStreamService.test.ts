@@ -9,6 +9,7 @@ import { attemptFhdUpgrade } from '../../../src/service/stream/experimental/bbcF
 import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 import service from '../../../src/service/stream/NativeStreamService';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
+import { hqProbeCache } from '../../../src/service/stream/streamProbeCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import { runWithVersion } from '../../../src/utils/versionContext';
@@ -307,6 +308,36 @@ describe('NativeStreamService', () => {
             expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, undefined);
         });
 
+        it('still streams when the winning connection cannot be remembered', async () => {
+            const spy = jest.spyOn(hqProbeCache, 'set').mockRejectedValue(new Error('disk full'));
+            route = (url, m) => {
+                if (url.includes('mediaselector')) return { body: twoConnections };
+                if (url.startsWith('https://hq/master.m3u8')) return { body: master(1080) };
+                return defaultRoute(url, m);
+            };
+            await service.streamDirect('p1', req, res);
+            spy.mockRestore();
+            expect(proxyUrl).toHaveBeenCalledWith('https://hq/master.m3u8', req, res, 5, undefined);
+        });
+
+        it('still re-probes when a gone connection cannot be forgotten', async () => {
+            const spy = jest.spyOn(hqProbeCache, 'del').mockRejectedValue(new Error('disk full'));
+            let remembered = true;
+            route = (url, m) => {
+                if (url.includes('mediaselector')) {
+                    return { body: remembered ? twoConnections : mediaXml([conn('transferFormat="hls" protocol="https" supplier="a" href="https://cdn/redirect?only"')]) };
+                }
+                if (url.startsWith('https://hq/master.m3u8')) return { body: master(1080) };
+                return defaultRoute(url, m);
+            };
+            await service.streamDirect('p1', req, res);
+            clearResolveCache();
+            remembered = false;
+            await service.streamDirect('p1', req, res);
+            spy.mockRestore();
+            expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, undefined);
+        });
+
         it('skips candidates that fail to probe', async () => {
             route = (url, m) => {
                 if (url.includes('mediaselector')) return { body: twoConnections };
@@ -359,6 +390,19 @@ describe('NativeStreamService', () => {
         it('says why, in BBC\'s own words, when mediaselector gave a reason', async () => {
             route = (url, m) => (url.includes('mediaselector') ? { body: '<error id="geolocation"/>' } : defaultRoute(url, m));
             await expect(service.streamDirect('p1', req, res)).rejects.toThrow('(BBC says: geolocation)');
+        });
+
+        it('leaves "BBC says" out when mediaselector gave no reason', async () => {
+            route = (url, m) => (url.includes('mediaselector') ? { body: '<mediaSelection/>' } : defaultRoute(url, m));
+            const error = await service.streamDirect('p1', req, res).catch((e) => e);
+            expect(error.message).toBe('No HLS stream connection found for vpid plain');
+        });
+
+        it('takes the first version when none declares any types', async () => {
+            route = (url, m) => (url.includes('/playlist.json') ? { body: JSON.stringify({ allAvailableVersions: [{ pid: 'first' }, { pid: 'second' }] }) } : defaultRoute(url, m));
+            await service.streamDirect('p-untyped', req, res);
+            const vpids = (https.get as jest.Mock).mock.calls.map((c) => /\/vpid\/([^/]+)\//.exec(c[0] as string)?.[1]).filter(Boolean);
+            expect(vpids[0]).toBe('first');
         });
 
         it('ignores non-video media and keeps walking pairs until one has connections', async () => {
@@ -533,6 +577,21 @@ describe('NativeStreamService', () => {
             const track = await service.getSubtitles('p1');
             expect(track?.vtt).toContain('00:00:11.000 --> 00:00:12.000');
             expect(track?.durationSeconds).toBe(2);
+        });
+
+        it('uses an empty stream key when the request carries none', async () => {
+            setConfig({ STREAM_SUBTITLES: 'true' });
+            route = withCaptions();
+            await service.streamDirect('p1', {} as any, res, 'sess');
+            expect(proxyUrl).toHaveBeenCalledWith(
+                'https://cdn/master.m3u8',
+                {},
+                res,
+                5,
+                'sess',
+                false,
+                '/api/subs.m3u8?mode=stream&pid=p1&subs=playlist&streamkey='
+            );
         });
 
         it('falls back to the plain proxy call when the programme has no captions', async () => {

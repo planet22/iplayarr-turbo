@@ -77,10 +77,10 @@ const totalPages = computed(() => Math.max(1, Math.ceil(props.total / props.page
 const showControls = computed(() => props.total > 0);
 
 // A short list is shown whole, without a pager (the cut-off is the Settings > General "Items Before Paging"
-// preference). Never when the list would not fit on the one page, or its rows would be cut off.
+// preference); usePagination keeps such a list on one page so no rows are cut off.
 const { state: pagingMinimum } = usePagingMinimum();
 const showPager = computed(
-    () => showControls.value && (props.force || props.total > pagingMinimum.minimum || props.total > props.pageSize)
+    () => showControls.value && (props.force || props.total > pagingMinimum.minimum)
 );
 
 // On a phone the page list collapses sooner (at most five slots), so the per-page select stays on the same row.

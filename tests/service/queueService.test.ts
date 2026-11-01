@@ -6,6 +6,7 @@ import historyService from '../../src/service/historyService';
 import queueService from '../../src/service/queueService';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import videoEventService from '../../src/service/videoEventService';
+import { MediaMode } from '../../src/types/enums/MediaMode';
 import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
@@ -61,6 +62,41 @@ describe('queueService', () => {
         while (queueService.getQueue().length > 0) {
             queueService.removeFromQueue(queueService.getQueue()[0].pid);
         }
+    });
+
+    describe('addToQueue duplicates', () => {
+        const entries = (pid: string) => queueService.getQueue().filter((e) => e.pid === pid);
+
+        beforeEach(() => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('1');
+            (downloadFacade.download as jest.Mock).mockReturnValue(new Promise(() => undefined));
+        });
+
+        it('ignores the same release queued twice, as a double-clicked Download would', () => {
+            queueService.addToQueue('dupe1', 'Dupe NZB', VideoType.TV);
+            queueService.addToQueue('dupe1', 'Dupe NZB', VideoType.TV);
+            expect(entries('dupe1')).toHaveLength(1);
+            queueService.cancelItem('dupe1');
+        });
+
+        it('keeps releases that differ by name (an extra quality or version), by source, or by programme', () => {
+            queueService.addToQueue('dupe2', 'Dupe.1080p', VideoType.TV);
+            queueService.addToQueue('dupe2', 'Dupe.720p', VideoType.TV);
+            queueService.addToQueue('dupe2', 'Dupe.1080p', VideoType.TV, undefined, undefined, QueueEntrySource.NZB);
+            queueService.addToQueue('dupe3', 'Dupe.1080p', VideoType.TV);
+            expect(entries('dupe2')).toHaveLength(3);
+            expect(entries('dupe3')).toHaveLength(1);
+            queueService.cancelItem('dupe2');
+            queueService.cancelItem('dupe3');
+        });
+
+        it('does not record a grab for the ignored duplicate', () => {
+            (statisticsService.addGrab as jest.Mock).mockClear();
+            queueService.addToQueue('dupe4', 'Dupe NZB', VideoType.TV, undefined, undefined, QueueEntrySource.NZB);
+            queueService.addToQueue('dupe4', 'Dupe NZB', VideoType.TV, undefined, undefined, QueueEntrySource.NZB);
+            expect(statisticsService.addGrab).toHaveBeenCalledTimes(1);
+            queueService.cancelItem('dupe4');
+        });
     });
 
     describe('addToQueue', () => {
@@ -234,4 +270,48 @@ describe('queueService', () => {
             expect(queueService.getFromQueue('321')).toEqual(expect.objectContaining({ pid: '321' }));
         });
     });
+
+    describe('input and settings edge cases', () => {
+        it('refuses a programme id that is not safe to use in paths and URLs', () => {
+            expect(() => queueService.addToQueue('../etc', 'Name', VideoType.TV)).toThrow('Invalid programme id');
+            expect(queueService.getQueue()).toHaveLength(0);
+        });
+
+        it('falls back to the programme id when the name has nothing usable left', () => {
+            queueService.addToQueue('abc123', '../..', VideoType.TV);
+            expect(queueService.getFromQueue('abc123')?.nzbName).toBe('abc123');
+        });
+
+        it('records a media mode override on the entry only when one is given', () => {
+            queueService.addToQueue('mm1', 'With', VideoType.TV, undefined, undefined, QueueEntrySource.MANUAL, MediaMode.STRM);
+            queueService.addToQueue('mm2', 'Without', VideoType.TV);
+            expect(queueService.getFromQueue('mm1')?.mediaMode).toBe(MediaMode.STRM);
+            expect(queueService.getFromQueue('mm2')).not.toHaveProperty('mediaMode');
+        });
+
+        it('runs three downloads at once when the active limit is not a number', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('lots');
+            (downloadFacade.download as jest.Mock).mockResolvedValue({ pid: 1 });
+            for (const pid of ['l1', 'l2', 'l3', 'l4']) queueService.addToQueue(pid, pid, VideoType.TV);
+            await new Promise((r) => setTimeout(r, 20));
+            expect(queueService.getQueue().filter(({ status }) => status === QueueEntryStatus.DOWNLOADING)).toHaveLength(3);
+        });
+
+        it('drops a download that fails to start and moves on', async () => {
+            (configService.getParameter as jest.Mock).mockResolvedValue('1');
+            (downloadFacade.download as jest.Mock).mockRejectedValueOnce(new Error('no disk')).mockResolvedValue({ pid: 7 });
+            queueService.addToQueue('bad1', 'Bad', VideoType.TV);
+            queueService.addToQueue('good1', 'Good', VideoType.TV);
+            await new Promise((r) => setTimeout(r, 20));
+            expect(queueService.getFromQueue('bad1')).toBeUndefined();
+            expect(queueService.getFromQueue('good1')?.status).toBe(QueueEntryStatus.DOWNLOADING);
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.DOWNLOAD_FAILED, expect.stringContaining('no disk'), expect.anything());
+        });
+
+        it('names the programme id when cancelling something that is not queued', () => {
+            queueService.cancelItem('ghost');
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.CANCELLED, 'Cancelled "ghost"', { pid: 'ghost', jobId: undefined });
+        });
+    });
 });
+

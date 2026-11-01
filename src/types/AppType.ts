@@ -17,6 +17,7 @@ export enum AppFeature {
     PRIORITY = 'priority',
     LINK = 'link',
     TAGS = 'tags',
+    SUBSCRIPTION_DETECT = 'subscription_detect',
 }
 
 export const appCategories: Record<AppType, number[]> = {
@@ -35,6 +36,7 @@ export const appFeatures: Record<AppType, AppFeature[]> = {
         AppFeature.DOWNLOAD_CLIENT,
         AppFeature.INDEXER,
         AppFeature.TAGS,
+        AppFeature.SUBSCRIPTION_DETECT,
     ],
     [AppType.RADARR]: [
         AppFeature.API_KEY,
@@ -42,6 +44,7 @@ export const appFeatures: Record<AppType, AppFeature[]> = {
         AppFeature.DOWNLOAD_CLIENT,
         AppFeature.INDEXER,
         AppFeature.TAGS,
+        AppFeature.SUBSCRIPTION_DETECT,
     ],
     [AppType.PROWLARR]: [
         AppFeature.API_KEY,

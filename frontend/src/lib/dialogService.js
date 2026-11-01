@@ -51,7 +51,7 @@ const dialogService = {
 
     // Confirms a batch of downloads and resolves with { media: 'strm' | 'download', version } (see planDownloads in
     // downloadVersions.js), or false if cancelled. `versions` lists the extra versions to offer a choice of.
-    confirmDownload: (text, { count, totalMb, versions = [], initialVersion = '' }) => {
+    confirmDownload: (text, { count, totalMb, versions = [], initialVersion = '', offerBoxset = false }) => {
         return new Promise((resolve) => {
             const formModal = useModal({
                 component: DownloadBatchConfirm,
@@ -61,6 +61,7 @@ const dialogService = {
                     totalMb,
                     versions,
                     initialVersion,
+                    offerBoxset,
                     onConfirm: (choice) => {
                         resolve(choice);
                         formModal.close();

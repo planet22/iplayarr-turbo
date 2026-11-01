@@ -226,6 +226,22 @@ describe('proxyUrl', () => {
             return [0, 1, 2].map((i) => tokenOf(body, i));
         };
 
+        it('counts a read-ahead segment\'s bytes once, from memory, when its request carries no usable segment number', async () => {
+            const tokens = await loadPlaylist([
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg0' },
+                { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg1' },
+            ]);
+            await proxyUrl('https://cdn/p/seg0.ts', makeReq({ token: tokens[0], seg: '0' }), makeRes(), 5, 'sess');
+            await tick();
+            await tick();
+            (streamSessionService.addBytesTransferred as jest.Mock).mockClear();
+            (streamSessionService.recordSegmentDelivered as jest.Mock).mockClear();
+
+            await proxyUrl('https://cdn/p/seg1.ts', makeReq({ token: tokens[1], seg: 'not-a-number' }), makeRes(), 5, 'sess');
+            expect(streamSessionService.addBytesTransferred).toHaveBeenCalledWith('sess', 4);
+            expect(streamSessionService.recordSegmentDelivered).not.toHaveBeenCalled();
+        });
+
         it('reads the next segment ahead once one is served, then answers its request from memory', async () => {
             const tokens = await loadPlaylist([
                 { status: 200, headers: { 'content-type': 'video/mp2t', 'content-length': '4' }, body: 'seg0' },
@@ -645,5 +661,106 @@ describe('remuxToMkv', () => {
         ffmpeg.emit('close', 0);
         await p;
         expect(streamSessionService.addBytesTransferred).not.toHaveBeenCalled();
+    });
+});
+
+describe('proxyUrl edge cases', () => {
+    const mpegurl = { 'content-type': 'application/vnd.apple.mpegurl' };
+    const vod = '#EXTM3U\n#EXTINF:4,\nseg1.ts\n#EXT-X-ENDLIST\n';
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        clearPlaylistCache();
+        clearPrefetch();
+    });
+
+    it('keeps at most 200 finished playlists, dropping the oldest', async () => {
+        const urls = Array.from({ length: 201 }, (_, i) => `https://cdn/vod/${i}/media.m3u8`);
+        mockGet(https, urls.map(() => ({ status: 200, headers: mpegurl, body: vod })));
+        for (const url of urls) {
+            await proxyUrl(url, makeReq(), makeRes());
+        }
+        expect(https.get).toHaveBeenCalledTimes(201);
+
+        // The newest is still cached; the oldest was evicted and has to be fetched again.
+        await proxyUrl(urls[200], makeReq(), makeRes());
+        expect(https.get).toHaveBeenCalledTimes(201);
+        mockGet(https, [{ status: 200, headers: mpegurl, body: vod }]);
+        await proxyUrl(urls[0], makeReq(), makeRes());
+        expect(https.get).toHaveBeenCalledTimes(202);
+    });
+
+    it('wraps a media playlist for subtitles with an empty stream key when the request has none', async () => {
+        mockGet(https, [{ status: 200, headers: mpegurl, body: '#EXTM3U\n#EXT-X-TARGETDURATION:6\nseg1.ts\n' }]);
+        const res = makeRes();
+        await proxyUrl('https://cdn/v.m3u8', makeReq(), res, 5, undefined, false, '/api/subs.m3u8');
+        expect(res.send.mock.calls[0][0]).toContain('#EXT-X-STREAM-INF');
+        expect(res.send.mock.calls[0][0]).toMatch(/streamkey=(&|\n|$)/);
+    });
+
+    it('counts a whole-segment delivery of zero bytes without recording anything', async () => {
+        mockGet(https, [{ status: 200 }]);
+        await proxyUrl('https://cdn/empty.ts', makeReq(), makeRes(), 5, 'sess');
+        expect(streamSessionService.addBytesTransferred).not.toHaveBeenCalled();
+        expect(streamSessionService.recordSegmentDelivered).not.toHaveBeenCalled();
+    });
+
+    describe('responses with no status code', () => {
+        const noStatus = (headers: any, body?: string) => {
+            (https.get as jest.Mock).mockImplementation((_u: string, _o: any, cb: any) => {
+                const upstreamRes: any = new EventEmitter();
+                upstreamRes.headers = headers;
+                upstreamRes.resume = jest.fn();
+                upstreamRes.pipe = jest.fn();
+                const upstream: any = new EventEmitter();
+                upstream.destroy = jest.fn();
+                setImmediate(() => {
+                    cb(upstreamRes);
+                    if (body !== undefined) upstreamRes.emit('data', Buffer.from(body));
+                    upstreamRes.emit('end');
+                });
+                return upstream;
+            });
+        };
+
+        it('does not follow a redirect without a status, and serves a playlist as a 200', async () => {
+            noStatus({ ...mpegurl, location: 'https://elsewhere/x.m3u8' }, '#EXTM3U\n#EXTINF:4,\nseg1.ts\n');
+            const res = makeRes();
+            await proxyUrl('https://cdn/p.m3u8', makeReq(), res);
+            expect(https.get).toHaveBeenCalledTimes(1);
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('serves a binary response as a 200', async () => {
+            noStatus({});
+            const res = makeRes();
+            await proxyUrl('https://cdn/s.ts', makeReq(), res);
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+    });
+});
+
+describe('remuxToMkv request headers', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const run = async (headers?: Record<string, string>) => {
+        const ffmpeg: any = new EventEmitter();
+        ffmpeg.stdout = Object.assign(new EventEmitter(), { pipe: jest.fn() });
+        ffmpeg.stderr = new EventEmitter();
+        (spawn as jest.Mock).mockReturnValue(ffmpeg);
+        const p = remuxToMkv('https://cdn/x.m3u8', 'pid', makeRes(), undefined, headers);
+        await new Promise((r) => setImmediate(r));
+        ffmpeg.emit('close', 0);
+        await p;
+        return (spawn as jest.Mock).mock.calls[0][1] as string[];
+    };
+
+    it('passes them to ffmpeg as one CRLF-joined string before the input', async () => {
+        const args = await run({ 'User-Agent': 'X', Referer: 'https://ref/' });
+        expect(args.slice(0, 3)).toEqual(['-headers', 'User-Agent: X\r\nReferer: https://ref/\r\n', '-i']);
+    });
+
+    it.each([[undefined], [{}]])('adds nothing for %j', async (headers) => {
+        expect((await run(headers as any)).slice(0, 1)).toEqual(['-i']);
     });
 });

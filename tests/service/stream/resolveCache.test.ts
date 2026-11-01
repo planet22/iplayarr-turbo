@@ -131,4 +131,15 @@ describe('resolveCache', () => {
         await cached('k', 1000, load);
         expect(load).toHaveBeenCalledTimes(2);
     });
+
+    it('forgets the oldest entry once more than 500 are held', async () => {
+        const load = jest.fn().mockImplementation(async () => 'x');
+        for (let i = 0; i <= 500; i++) await cached(`key${i}`, 1000, load);
+        expect(load).toHaveBeenCalledTimes(501);
+
+        await cached('key500', 1000, load);
+        expect(load).toHaveBeenCalledTimes(501);
+        await cached('key0', 1000, load);
+        expect(load).toHaveBeenCalledTimes(502);
+    });
 });

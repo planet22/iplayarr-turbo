@@ -4,6 +4,7 @@ import { pidRegex, searchResultLimit } from '../constants/iPlayarrConstants';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { withRetry } from '../utils/retry';
+import { ProgrammeNotFoundError } from '../utils/upstreamError';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
 import DbCacheService from './db/dbCacheService';
 import episodeDetailsCache from './episodeDetailsCache';
@@ -86,7 +87,7 @@ class IPlayerDetailsService {
     async getMetadata(pid: string, axiosInstance: Axios = axios): Promise<IPlayerMetadataResponse> {
         const retryAt = this.notFound.get(pid);
         if (retryAt !== undefined) {
-            if (retryAt > Date.now()) throw new Error(`No programme metadata for PID ${pid} (cached 404)`);
+            if (retryAt > Date.now()) throw new ProgrammeNotFoundError(`No programme metadata for PID ${pid} (cached 404)`);
             this.notFound.delete(pid);
         }
         // When the BBC's programme pages are down they redirect to an HTML "Service Temporarily Unavailable" page,
@@ -138,7 +139,25 @@ class IPlayerDetailsService {
             const response: AxiosResponse<IPlayerEpisodesResponse> = await withRetry(() => axios.get(
                 `https://ibl.api.bbci.co.uk/ibl/v1/programmes/${encodeURIComponent(pid)}/episodes?per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`
             ));
-            const elements = response.data.programme_episodes.elements;
+            const elements = response.data.programme_episodes.elements ?? [];
+            await this.episodesCache.set(cacheKey, elements).catch(() => undefined);
+            return elements;
+        } catch {
+            return [];
+        }
+    }
+
+    // The episodes/films in an iPlayer curated group ("collection"), a page at a time. Empty when the pid is
+    // not a group (IBL answers 404) or the page failed.
+    async getGroupEpisodes(pid: string, page: number = 1, perPage: number = searchResultLimit): Promise<IPlayerEpisodeMetadata[]> {
+        const cacheKey = `group_${pid}_${perPage}_${page}`;
+        const cached = await this.episodesCache.get(cacheKey);
+        if (cached) return cached;
+        try {
+            const response = await withRetry(() =>
+                axios.get(`https://ibl.api.bbci.co.uk/ibl/v1/groups/${encodeURIComponent(pid)}/episodes?rights=web&per_page=${perPage}${page > 1 ? `&page=${page}` : ''}`)
+            );
+            const elements: IPlayerEpisodeMetadata[] = response.data?.group_episodes?.elements ?? [];
             await this.episodesCache.set(cacheKey, elements).catch(() => undefined);
             return elements;
         } catch {

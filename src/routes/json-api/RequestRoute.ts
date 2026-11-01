@@ -2,9 +2,10 @@ import { Request, Response, Router } from 'express';
 
 import subscriptionArrService, { SubscriptionArrError } from '../../service/subscriptionArrService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 import { FailureLimiter } from '../../utils/FailureLimiter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 // A request lets an authenticated user issue add/search commands against the configured Sonarr and
 // Radarr instances, so it gets its own limit, counted per client (every attempt, not just failures).

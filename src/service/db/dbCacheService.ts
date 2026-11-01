@@ -33,14 +33,15 @@ export default class DbCacheService<T> {
     // Hit/miss counts per cache, kept in memory and saved to the database every so often so the hit rate
     // survives restarts. Saved counts are added to whatever has been tallied before they finish loading.
     private static lookups: Map<string, { hits: number; misses: number }> = new Map();
-    private static lookupsLoad?: Promise<void>;
+    private static lookupsLoad?: Promise<boolean>;
     private static flushTimer?: NodeJS.Timeout;
 
     static lookupsFor(prefix: string): { hits: number; misses: number } {
         return DbCacheService.lookups.get(prefix) ?? { hits: 0, misses: 0 };
     }
 
-    static async loadLookups(): Promise<void> {
+    // Resolves false when the saved counts could not be read (a later call tries again).
+    static async loadLookups(): Promise<boolean> {
         DbCacheService.lookupsLoad ??= (async () => {
             try {
                 await dbReady();
@@ -49,8 +50,11 @@ export default class DbCacheService<T> {
                     const entry = DbCacheService.lookupsFor(prefix);
                     DbCacheService.lookups.set(prefix, { hits: entry.hits + saved.hits, misses: entry.misses + saved.misses });
                 }
+                return true;
             } catch {
-                // Start counting from zero.
+                // Keep counting from zero, but don't save over the stored counts until they have been read.
+                DbCacheService.lookupsLoad = undefined;
+                return false;
             }
         })();
         return DbCacheService.lookupsLoad;
@@ -67,7 +71,7 @@ export default class DbCacheService<T> {
     static async flushLookups(): Promise<void> {
         DbCacheService.flushTimer = undefined;
         try {
-            await DbCacheService.loadLookups();
+            if (!(await DbCacheService.loadLookups())) return;
             const value = JSON.stringify(Object.fromEntries(DbCacheService.lookups));
             await prisma.keyValue.upsert({ where: { key: LOOKUPS_KEY }, create: { key: LOOKUPS_KEY, value }, update: { value } });
         } catch {

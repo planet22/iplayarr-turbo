@@ -1,6 +1,6 @@
 <template>
     <div class="browsePage">
-        <PageHeader :title="isChannels ? 'Channels' : 'Categories'" />
+        <PageHeader :title="isChannels ? 'Channels' : 'Categories'" :icon="isChannels ? 'tower-broadcast' : 'layer-group'" />
         <SettingsPageToolbar>
             <template #actions>
                 <button

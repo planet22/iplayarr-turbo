@@ -3,10 +3,15 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/BrowseRoute';
 import browseService from '../../../src/service/browseService';
+import collectionDownloadService from '../../../src/service/collectionDownloadService';
+import collectionService from '../../../src/service/collectionService';
+import configService from '../../../src/service/configService';
 import liveChannelService from '../../../src/service/liveChannelService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 
 jest.mock('../../../src/service/browseService');
+jest.mock('../../../src/service/collectionDownloadService');
+jest.mock('../../../src/service/collectionService');
 const mocked = jest.mocked(browseService);
 
 const app = express();
@@ -21,6 +26,97 @@ describe('BrowseRoute', () => {
         const res = await request(app).get('/home');
         expect(res.status).toBe(200);
         expect(res.body).toEqual([{ id: 'x', title: 'X', items: [] }]);
+    });
+
+    describe('collections', () => {
+        const setting = (value: string) => jest.spyOn(configService, 'getParameter').mockResolvedValue(value);
+        afterEach(() => jest.restoreAllMocks());
+
+        it('GET /collections lists them when Show Collections is on', async () => {
+            setting('true');
+            jest.mocked(collectionService.list).mockResolvedValue([{ id: 'p096h09x', title: 'Fright Night', count: 34 }]);
+            const res = await request(app).get('/collections');
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ enabled: true, collections: [{ id: 'p096h09x', title: 'Fright Night', count: 34 }] });
+        });
+
+        it('GET /collections lists nothing, and fetches nothing, when it is off', async () => {
+            setting('false');
+            const res = await request(app).get('/collections');
+            expect(res.body).toEqual({ enabled: false, collections: [] });
+            expect(collectionService.list).not.toHaveBeenCalled();
+        });
+
+        it('GET /collections turns a failure into the standard error response', async () => {
+            setting('true');
+            jest.mocked(collectionService.list).mockRejectedValue(new Error('boom'));
+            expect((await request(app).get('/collections')).status).toBeGreaterThanOrEqual(500);
+        });
+
+        it('GET /collections/:id passes paging through as numbers', async () => {
+            mocked.collection.mockResolvedValue({ items: [], page: 2, perPage: 10 });
+            const res = await request(app).get('/collections/p096h09x?page=2&perPage=10');
+            expect(res.status).toBe(200);
+            expect(mocked.collection).toHaveBeenCalledWith('p096h09x', 2, 10);
+        });
+
+        describe('POST /collections/:id/download', () => {
+            const result = { title: 'Fright Night', total: 2, queued: 2, skipped: 0, failed: 0 };
+
+            it('queues the collection and returns the counts', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockResolvedValue(result);
+
+                const res = await request(app).post('/collections/p096h09x/download').send({ media: 'strm', boxset: false });
+
+                expect(res.status).toBe(200);
+                expect(res.body).toEqual(result);
+                expect(collectionDownloadService.queueCollection).toHaveBeenCalledWith('p096h09x', { media: 'strm', boxset: false, dryRun: undefined });
+            });
+
+            it('passes a dry run through', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockResolvedValue({ ...result, queued: 0 });
+                await request(app).post('/collections/p096h09x/download').send({ dryRun: true });
+                expect(collectionDownloadService.queueCollection).toHaveBeenCalledWith('p096h09x', { media: undefined, boxset: undefined, dryRun: true });
+            });
+
+            it('works with no body at all', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockResolvedValue(result);
+                expect((await request(app).post('/collections/p096h09x/download')).status).toBe(200);
+            });
+
+            it('is 404 for a collection that does not exist', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockResolvedValue(undefined);
+                const res = await request(app).post('/collections/p000zzzz/download').send({});
+                expect(res.status).toBe(404);
+                expect(res.body.error).toBe(ApiError.API_NOT_FOUND);
+            });
+
+            it.each([
+                ['an invalid id', '/collections/bad%20id!/download', {}],
+                ['an unknown media mode', '/collections/p096h09x/download', { media: 'torrent' }],
+                ['a non-boolean boxset', '/collections/p096h09x/download', { boxset: 'yes' }],
+                ['a non-boolean dryRun', '/collections/p096h09x/download', { dryRun: 1 }],
+                ['a list instead of an object', '/collections/p096h09x/download', []],
+                ['a media object', '/collections/p096h09x/download', { media: { $ne: 1 } }],
+            ])('rejects %s', async (_name, url, body) => {
+                const res = await request(app).post(url).send(body);
+                expect(res.status).toBe(400);
+                expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+                expect(collectionDownloadService.queueCollection).not.toHaveBeenCalled();
+            });
+
+            it('turns a failure into the standard error response', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockRejectedValue(new Error('boom'));
+                expect((await request(app).post('/collections/p096h09x/download').send({})).status).toBeGreaterThanOrEqual(500);
+            });
+        });
+
+        it('GET /collections/:id rejects an invalid id', async () => {
+            const res = await request(app).get('/collections/bad%20id!');
+            expect(res.status).toBe(400);
+            expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+            expect(mocked.collection).not.toHaveBeenCalled();
+        });
     });
 
     it('GET /categories returns categories', async () => {
@@ -103,9 +199,9 @@ describe('BrowseRoute', () => {
     });
 
     it('GET /suggest passes the query through', async () => {
-        mocked.suggest.mockResolvedValue([{ pid: 'a1', title: 'Doctor Who' }]);
+        mocked.suggest.mockResolvedValue([{ kind: 'tv', pid: 'a1', title: 'Doctor Who' }]);
         const res = await request(app).get('/suggest?q=doct');
-        expect(res.body).toEqual([{ pid: 'a1', title: 'Doctor Who' }]);
+        expect(res.body).toEqual([{ kind: 'tv', pid: 'a1', title: 'Doctor Who' }]);
         expect(mocked.suggest).toHaveBeenCalledWith('doct');
     });
 
@@ -137,5 +233,13 @@ describe('BrowseRoute', () => {
         const res = await request(app).get('/home');
         expect(res.status).toBe(500);
         expect(res.body).toEqual({ error: ApiError.INTERNAL_ERROR, message: 'BBC down' });
+    });
+});
+
+describe('BrowseRoute channel colours', () => {
+    it('GET /channel-colors returns the colour map', async () => {
+        mocked.channelColors.mockResolvedValue({ bbcone: { bg: '#000', fg: '#fff', name: 'BBC One' } });
+        const res = await request(app).get('/channel-colors');
+        expect(res.body).toEqual({ bbcone: { bg: '#000', fg: '#fff', name: 'BBC One' } });
     });
 });

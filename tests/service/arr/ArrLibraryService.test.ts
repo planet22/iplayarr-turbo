@@ -5,6 +5,7 @@ import { App } from '../../../src/types/App';
 import { AppType } from '../../../src/types/AppType';
 
 jest.mock('axios');
+jest.mock('../../../src/service/appSeen');
 const mockedAxios = jest.mocked(axios);
 
 const sonarr = { id: 's', api_key: 'key', url: 'http://sonarr', type: AppType.SONARR } as any as App;

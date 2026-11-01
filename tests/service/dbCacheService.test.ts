@@ -163,6 +163,36 @@ describe('DbCacheService', () => {
         });
     });
 
+    describe('lookup counts', () => {
+        const readSaved = async () => {
+            const row = await prisma.keyValue.findUnique({ where: { key: 'cacheLookups' } });
+            return row ? JSON.parse(row.value) : undefined;
+        };
+
+        beforeEach(() => {
+            DbCacheService.resetOverridesForTests();
+        });
+
+        it('adds the saved counts to those tallied since start-up when saving', async () => {
+            await prisma.keyValue.create({ data: { key: 'cacheLookups', value: JSON.stringify({ lk: { hits: 5, misses: 2 } }) } });
+            DbCacheService.tally('lk', true);
+            await DbCacheService.flushLookups();
+            expect((await readSaved()).lk).toEqual({ hits: 6, misses: 2 });
+        });
+
+        it('does not overwrite the saved counts when they could not be read, and merges on the next flush', async () => {
+            await prisma.keyValue.create({ data: { key: 'cacheLookups', value: JSON.stringify({ lk2: { hits: 10, misses: 0 } }) } });
+            jest.spyOn(prisma.keyValue, 'findUnique').mockRejectedValueOnce(new Error('locked'));
+            DbCacheService.tally('lk2', false);
+
+            await DbCacheService.flushLookups();
+            expect((await readSaved()).lk2).toEqual({ hits: 10, misses: 0 });
+
+            await DbCacheService.flushLookups();
+            expect((await readSaved()).lk2).toEqual({ hits: 10, misses: 1 });
+        });
+    });
+
     describe('delWithVariants', () => {
         it('removes the key and its #variants but not look-alike keys', async () => {
             await service.set('show', { hello: '1' });
@@ -208,5 +238,21 @@ describe('DbCacheService', () => {
         await DbCacheService.purgeExpired();
 
         expect((await prisma.cache.findMany()).map((r) => r.key)).toEqual(['new']);
+    });
+});
+
+describe('DbCacheService lookup flush timer', () => {
+    afterEach(() => {
+        jest.useRealTimers();
+        jest.restoreAllMocks();
+    });
+
+    it('saves the tallied lookups on its own shortly after the first one', async () => {
+        jest.useFakeTimers();
+        (DbCacheService as any).flushTimer = undefined;
+        const flush = jest.spyOn(DbCacheService, 'flushLookups').mockResolvedValue(undefined);
+        DbCacheService.tally('timer-test', true);
+        await jest.advanceTimersByTimeAsync(31_000);
+        expect(flush).toHaveBeenCalledTimes(1);
     });
 });

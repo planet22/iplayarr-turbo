@@ -1,9 +1,11 @@
 <template>
     <div class="inner-content scroll-x">
+        <PageHeader title="NZB" icon="newspaper" />
+        <SettingsPageToolbar
+            :icons="[]"
+            :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
+        />
         <PageHeader title="Recent Searches" />
-        <div class="viewToggleRow">
-            <ViewToggle :model-value="viewMode" :modes="['table', 'cards']" @update:model-value="setViewMode" />
-        </div>
         <SettingsPageToolbar
             :icons="['delete', 'filterToggle']" delete-label="Clear searches"
             :filters-shown="searchShowFilters" :filters-active="searchFiltersActive"
@@ -17,7 +19,9 @@
         <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
         <div v-if="cardView" class="cardList">
             <DataCard v-for="(entry, index) in pagedSearches" :key="index">
-                <template #title>{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</template>
+                <template #title>
+                    <span class="termText" :title="entry.term">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</span>
+                </template>
                 <template v-if="entry.series != null || entry.episode != null" #subtitle>
                     {{ [entry.series != null ? `Season ${entry.series}` : '', entry.episode != null ? `Episode ${entry.episode}` : ''].filter(Boolean).join(' · ') }}
                 </template>
@@ -71,7 +75,7 @@
             </thead>
             <tbody>
                 <tr v-for="(entry, index) in pagedSearches" :key="index">
-                    <td class="text">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</td>
+                    <td class="text"><span class="termText" :title="entry.term">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</span></td>
                     <td data-title="Season">{{ entry.series ?? '' }}</td>
                     <td data-title="Episode">{{ entry.episode ?? '' }}</td>
                     <td data-title="Results">
@@ -271,7 +275,6 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import Pagination from '@/components/common/TablePagination.vue';
-import ViewToggle from '@/components/common/ViewToggle.vue';
 import SearchResultsDialog from '@/components/modals/SearchResultsDialog.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import { channelLabel } from '@/lib/channelPillColors';
@@ -282,7 +285,7 @@ import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
-    formatDateTimeWithMillis, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage,
+    formatDateTimeWithMillis, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage, sortableTitle,
 } from '@/lib/utils';
 
 // Cards on phones (dense tables), tables on wide screens; either can be chosen and is remembered.
@@ -354,7 +357,7 @@ const {
         appName(entry.appId),
     ].some((value) => String(value ?? '').toLowerCase().includes(query)),
     sortAccessors: {
-        term: (entry) => (entry.term == '*' ? 'RSS Feed' : entry.term ?? ''),
+        term: (entry) => (entry.term == '*' ? 'RSS Feed' : sortableTitle(entry.term)),
         results: (entry) => entry.results,
         series: (entry) => entry.series,
         episode: (entry) => entry.episode,
@@ -377,7 +380,7 @@ const {
         .some((value) => String(value ?? '').toLowerCase().includes(query)),
     sortAccessors: {
         pid: (entry) => entry.pid,
-        nzbName: (entry) => entry.nzbName,
+        nzbName: (entry) => sortableTitle(entry.nzbName),
         type: (entry) => entry.type,
         app: (entry) => appName(entry.appId),
         time: (entry) => entry.time,
@@ -397,7 +400,7 @@ const {
         .some((value) => String(value ?? '').toLowerCase().includes(query)),
     sortAccessors: {
         pid: (entry) => entry.pid,
-        nzbName: (entry) => entry.nzbName,
+        nzbName: (entry) => sortableTitle(entry.nzbName),
         error: (entry) => entry.error,
         app: (entry) => appName(entry.appId),
         time: (entry) => entry.time,

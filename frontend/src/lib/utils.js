@@ -210,7 +210,18 @@ export function formatDateTimeWithMillis(dateString) {
 
 // "20 seconds ago" style relative time ("20s ago" when `short`, for the phone cards). `now` defaults to Date.now()
 // but can be passed in so callers can drive this off a ticking ref and get a reactive re-render as time passes.
-export function formatRelativeTime(timestamp, now = Date.now(), short = false) {
+// How far the server's clock is from this browser's (server minus browser, ms), learned from the Date header of API
+// responses. Server timestamps ("checked 0s ago") are aged against the server's clock, so a skewed one isn't shown as
+// "35 seconds ago" the moment it happens.
+let serverClockOffset = 0;
+
+export function noteServerTime(dateHeader) {
+    const serverMs = Date.parse(dateHeader);
+    // The header is whole seconds, so aim for the middle of that second.
+    if (!Number.isNaN(serverMs)) serverClockOffset = serverMs + 500 - Date.now();
+}
+
+export function formatRelativeTime(timestamp, now = Date.now() + serverClockOffset, short = false) {
     if (!timestamp) {
         return 'Never';
     }
@@ -230,6 +241,12 @@ export function formatRelativeTime(timestamp, now = Date.now(), short = false) {
         }
     }
     return 'just now';
+}
+
+// A title as it should sort: without a leading "The", "A" or "An", so "The Traitors" files under T. Also reads
+// release names, which separate words with dots ("The.Traitors.S01E01"). A title that is only the article is left alone.
+export function sortableTitle(title) {
+    return String(title ?? '').trim().replace(/^(?:the|an?)(?:\s+|\.(?=[^.\s]))(?=\S)/i, '');
 }
 
 // A shuffled copy (Fisher-Yates); the original list is left alone.

@@ -139,3 +139,26 @@ describe('historyService', () => {
         );
     });
 });
+
+describe('historyService edge cases', () => {
+    it('records no speed for a download that did not complete', async () => {
+        await historyService.addHistory({ ...sampleEntry, details: { size: 100 } as any }, QueueEntryStatus.FAILED);
+        const [[, history]] = mockSetItem.mock.calls;
+        expect(history[0].details.speed).toBe(0);
+    });
+
+    it('names the programme id when removing something that is not in the history', async () => {
+        await historyService.removeHistory('ghost', true);
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.HISTORY_REMOVED, 'Removed "ghost" from history', { pid: 'ghost', jobId: undefined });
+    });
+
+    it('archives a removed item only when asked', async () => {
+        mockGetItem.mockResolvedValue([{ ...sampleEntry, pid: '123' }]);
+        const archive = jest.spyOn(historyService, 'addArchive').mockResolvedValue(undefined as any);
+        await historyService.removeHistory('123', false);
+        expect(archive).not.toHaveBeenCalled();
+        await historyService.removeHistory('123', true);
+        expect(archive).toHaveBeenCalledWith(expect.objectContaining({ pid: '123' }), QueueEntryStatus.REMOVED);
+        archive.mockRestore();
+    });
+});

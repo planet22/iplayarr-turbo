@@ -115,4 +115,10 @@ describe('API Route Tests', () => {
             .attach('nzbfile', Buffer.alloc(6 * 1024 * 1024), 'big.nzb');
         expect(response.status).toBeGreaterThanOrEqual(400);
     });
+
+    it('answers 404 when neither a mode nor a usable t is given', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('correct-api-key');
+        expect((await request(app).get('/api').query({ apikey: 'correct-api-key' })).status).toBe(404);
+        expect((await request(app).get('/api?apikey=correct-api-key&t=a&t=b')).status).toBe(404);
+    });
 });

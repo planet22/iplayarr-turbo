@@ -105,4 +105,26 @@ describe('bbcHttp', () => {
             await expect(pending).rejects.toThrow('timed out');
         });
     });
+
+    it('reports a status of 0 when the response carries none', async () => {
+        (https.get as jest.Mock).mockImplementation((_url: string, _opts: any, cb: any) => {
+            const req: any = new EventEmitter();
+            setImmediate(() => {
+                const res: any = new EventEmitter();
+                cb(res);
+                res.emit('end');
+            });
+            return req;
+        });
+        expect(await fetchTextWithStatus('https://bbc/nostatus')).toEqual({ statusCode: 0, body: '' });
+    });
+
+    it('treats a HEAD response with no status as the final destination', async () => {
+        (https.request as jest.Mock).mockImplementation((_url: string, _opts: any, cb: any) => {
+            const req: any = new EventEmitter();
+            req.end = () => setImmediate(() => cb(Object.assign(new EventEmitter(), { headers: {}, resume: jest.fn() })));
+            return req;
+        });
+        expect(await resolveRedirect('https://cdn/nostatus')).toBe('https://cdn/nostatus');
+    });
 });

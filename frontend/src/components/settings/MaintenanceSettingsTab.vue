@@ -10,7 +10,7 @@
             </div>
             <div class="rowActions">
                 <button class="clickable" type="button" title="Rebuild" aria-label="Rebuild" :disabled="rebuilding" @click="rebuildLogos">
-                    <font-awesome-icon :icon="['fas', 'rotate']" :spin="rebuilding" />
+                    <font-awesome-icon :icon="['fas', 'wand-magic-sparkles']" :beat="rebuilding" />
                 </button>
             </div>
         </div>

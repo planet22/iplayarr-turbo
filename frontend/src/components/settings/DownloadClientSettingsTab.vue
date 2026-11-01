@@ -61,7 +61,7 @@
         Looking for NZB Passthrough? Check the <RouterLink to="/apps"> Apps </RouterLink> section
     </InfoBar>
 
-    <SettingsSubheading text="Tool versions" />
+    <SettingsSubheading id="toolVersions" text="Tool versions" />
     <div class="toolVersionRow">
         <div class="toolVersionInfo">
             <strong>get_iplayer</strong>
@@ -120,7 +120,7 @@ const showAdvanced = inject('settingsShowAdvanced');
 const toolVersions = inject('toolVersions');
 const refreshToolVersions = inject('refreshToolVersions');
 
-// Only offered while the AD / Signed badges are on (Settings > General > Appearance).
+// Only offered while the AD / Signed badges are on (Settings > Appearance).
 const askOptions = [
     { key: 'true', value: 'Yes' },
     { key: 'false', value: 'No, use the default' },

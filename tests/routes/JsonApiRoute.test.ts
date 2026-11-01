@@ -16,12 +16,14 @@ jest.mock('../../src/service/stats/StatisticsService');
 import nzbFacade from '../../src/facade/nzbFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import searchFacade from '../../src/facade/searchFacade';
+import collectionService from '../../src/service/collectionService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
 import searchSettingsService from '../../src/service/searchSettingsService';
 import statisticsService from '../../src/service/stats/StatisticsService';
 import { ApiError } from '../../src/types/responses/ApiResponse';
 import { searchContext } from '../../src/utils/searchContext';
+import { traceCandidate } from '../../src/utils/searchTrace';
 
 const app = express();
 app.use(bodyParser.json());
@@ -60,7 +62,23 @@ describe('JsonApiRoute', () => {
         });
     });
 
+    describe('unknown endpoints', () => {
+        it.each([['GET', '/no-such-endpoint'], ['POST', '/synonym/nope/deeper'], ['DELETE', '/nothing']])('%s %s answers a JSON 404, not the web page', async (method, path) => {
+            const res = await (request(app) as any)[method.toLowerCase()](path);
+            expect(res.status).toBe(404);
+            expect(res.body).toEqual({ error: ApiError.API_NOT_FOUND, message: 'No such endpoint' });
+        });
+    });
+
     describe('GET /search', () => {
+        it('answers 400 for a repeated or nested q instead of failing inside the search', async () => {
+            const repeated = await request(app).get('/search?q=a&q=b');
+            const nested = await request(app).get('/search?q[x]=1');
+            expect(repeated.status).toBe(400);
+            expect(nested.status).toBe(400);
+            expect(searchFacade.search).not.toHaveBeenCalled();
+        });
+
         it('should return search results', async () => {
             const mockResults = [{ title: 'Episode 1', pid: 'b012345' }];
             (searchFacade.search as jest.Mock).mockResolvedValue(mockResults);
@@ -105,6 +123,21 @@ describe('JsonApiRoute', () => {
             }));
             expect((statisticsService.addSearch as jest.Mock).mock.calls[0][0].appId).toBeUndefined();
             expect(statisticsService.addSearch).toHaveBeenNthCalledWith(2, expect.objectContaining({ term: 'bake', results: 0 }));
+        });
+
+        it('records only the dropped candidates, and a failure to record never fails the search', async () => {
+            (searchFacade.search as jest.Mock).mockImplementation(async () => {
+                traceCandidate({ title: 'dropped', stage: 'episode', kept: false, reason: 'wrong-season' });
+                traceCandidate({ title: 'kept', stage: 'episode', kept: true });
+                return [];
+            });
+            (statisticsService.addSearch as jest.Mock).mockResolvedValueOnce(undefined);
+            await request(app).get('/search').query({ q: 'trace' }).expect(200);
+            await new Promise((resolve) => setImmediate(resolve));
+            expect((statisticsService.addSearch as jest.Mock).mock.calls.at(-1)[0].trace.candidates.map(({ title }: any) => title)).toEqual(['dropped']);
+
+            (statisticsService.addSearch as jest.Mock).mockRejectedValueOnce(new Error('db locked'));
+            await request(app).get('/search').query({ q: 'trace again' }).expect(200);
         });
 
         it('GET /search/settings describes the manual setup', async () => {
@@ -154,6 +187,29 @@ describe('JsonApiRoute', () => {
             expect(lines[1][0].pid).toBe('p2');
             expect(lines[1][0]).not.toHaveProperty('versions');
             expect(lines[2]).toEqual({ done: true });
+        });
+
+        it('sends the collections that match as their own /search/stream line, before done', async () => {
+            const found = [{ id: 'p096h09x', title: 'Fright Night', count: 34 }];
+            const spy = jest.spyOn(collectionService, 'matchesForSearch').mockResolvedValue(found);
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async (_q: string, onBatch: (batch: unknown[]) => void) => {
+                onBatch([{ pid: 'p1', title: 'One', type: 'TV' }]);
+                return [];
+            });
+            const res = await request(app).get('/search/stream').query({ q: 'fright night' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(spy).toHaveBeenCalledWith('fright night', 6);
+            expect(lines).toContainEqual({ collections: found });
+            expect(lines[lines.length - 1]).toEqual({ done: true });
+            spy.mockRestore();
+        });
+
+        it('still streams the results when the collections cannot be looked up', async () => {
+            const spy = jest.spyOn(collectionService, 'matchesForSearch').mockRejectedValue(new Error('down'));
+            (searchFacade.searchStreaming as jest.Mock).mockResolvedValue([]);
+            const res = await request(app).get('/search/stream').query({ q: 'x' });
+            expect(res.text.trim()).toBe(JSON.stringify({ done: true }));
+            spy.mockRestore();
         });
 
         it('still returns the results when BBC cannot be asked about versions', async () => {

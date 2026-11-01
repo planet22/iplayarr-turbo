@@ -13,9 +13,12 @@ export const defaultMediaMode = (settings) => (isStrmMode(settings) ? 'strm' : '
 
 // Estimated size in MB of one video, from a known size (search results carry one) or its runtime in seconds.
 // undefined when neither is known.
-export const estimateSizeMb = (settings, { size, runtimeSeconds, runtimeMinutes } = {}) => {
-    if (size > 0) return size;
-    const factor = SIZE_FACTORS[settings?.VIDEO_QUALITY] ?? SIZE_FACTORS.hd;
+// `quality` (a quality profile id) is a per-download choice that overrides the Video Quality setting; a known size
+// was worked out at the setting, so it is rescaled to the chosen quality.
+export const estimateSizeMb = (settings, { size, runtimeSeconds, runtimeMinutes, quality } = {}) => {
+    const settingFactor = SIZE_FACTORS[settings?.VIDEO_QUALITY] ?? SIZE_FACTORS.hd;
+    const factor = SIZE_FACTORS[quality] ?? settingFactor;
+    if (size > 0) return Math.floor((size * factor) / settingFactor);
     const seconds = runtimeSeconds > 0 ? runtimeSeconds : runtimeMinutes > 0 ? runtimeMinutes * 60 : undefined;
     return seconds ? Math.floor(seconds * factor) : undefined;
 };
