@@ -56,7 +56,7 @@
 }
 
 .dataCard:has(.dcCorner) .dcBody {
-    padding-right: 48px;
+    padding-right: 64px;
 }
 
 // A page can enlarge its posters with --dc-thumb-width on the card.

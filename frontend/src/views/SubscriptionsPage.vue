@@ -4,7 +4,8 @@
         <SettingsPageToolbar
             :icons="toolbarIcons" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
             refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" :filter-options="filterOptions"
-            :selected-filter="activeFilter" :filter-enabled="activeFilter !== 'All'" @refresh="checkAll" @select-filter="selectFilter"
+            :selected-filter="activeFilter" :filter-enabled="activeFilter !== 'All'" :view-mode="viewMode" :view-modes="['table', 'cards']"
+            @refresh="checkAll" @select-filter="selectFilter" @update:view-mode="setViewMode"
         >
             <template #actions>
                 <div v-if="subscriptions.length > 1" class="sortControl">
@@ -40,7 +41,7 @@
         </EmptyState>
         <p v-if="loaded && subscriptions.length && !sorted.length" class="filterEmpty">Nothing matches this filter.</p>
         <TablePagination v-if="loaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
-        <div v-if="isMobile && loaded && subscriptions.length" class="cardList">
+        <div v-if="cardView && loaded && subscriptions.length" :class="['cardList', { cardGrid: !isMobile }]">
             <DataCard v-for="subscription in pagedItems" :key="subscription.id" style="--dc-thumb-width: 120px">
                 <template #thumb>
                     <RouterLink :to="`/browse/programme/${subscription.pid}`" class="thumbLink">
@@ -55,16 +56,17 @@
                 <template #chips>
                     <ChannelPill :channel="subscription.channel" />
                     <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
-                    <span v-if="subscription.arrOnly && subscription.arrCounts && !subscription.arrMissing" class="pill" :title="countsTitle(subscription)">{{ countsLabel(subscription) }}</span>
+                    <span v-if="subscription.arrOnly && subscription.arrCounts && !subscription.arrMissing" class="splitPill" role="img" :title="countsTitle(subscription)" :aria-label="countsAria(subscription)">
+                        <img :src="logoUrl" class="splitLogo" alt="" />{{ subscription.arrCounts.linked }}
+                        <font-awesome-icon :icon="['fas', 'hard-drive']" />{{ otherCount(subscription.arrCounts) }}
+                    </span>
                     <span v-if="subscription.arrMissing" class="missingIcon" role="img" tabindex="0" :title="missingTitle(subscription)" aria-label="No longer in Sonarr/Radarr">
                         <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
                     </span>
                     <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                 </template>
-                <template v-if="subscription.lastQueuedAt" #corner>
-                    <span class="pill" :title="`${subscription.lastQueuedCount} episode${subscription.lastQueuedCount === 1 ? '' : 's'} in the last download`">
-                        {{ subscription.lastQueuedCount }}
-                    </span>
+                <template v-if="countBadge(subscription)" #corner>
+                    <span class="pill" :title="countBadge(subscription).title">{{ countBadge(subscription).text }}</span>
                 </template>
                 <div class="cardInfoRow">
                     <div class="cardLines">
@@ -119,6 +121,7 @@
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
                     <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
+                    <span v-if="countBadge(subscription)" class="thumbBadge" :title="countBadge(subscription).title">{{ countBadge(subscription).text }}</span>
                 </RouterLink>
                 <div class="info">
                     <RouterLink :to="`/browse/programme/${subscription.pid}`" class="title">{{ subscription.title }}</RouterLink>
@@ -134,7 +137,10 @@
                         <span v-if="subscription.arrMissing" class="missingIcon" role="img" tabindex="0" :title="missingTitle(subscription)" aria-label="No longer in Sonarr/Radarr">
                             <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
                         </span>
-                        <span v-if="subscription.arrOnly && subscription.arrCounts && !subscription.arrMissing" :title="countsTitle(subscription)">{{ countsLabel(subscription) }}</span>
+                        <span v-if="subscription.arrOnly && subscription.arrCounts && !subscription.arrMissing" class="splitPill" role="img" :title="countsTitle(subscription)" :aria-label="countsAria(subscription)">
+                            <img :src="logoUrl" class="splitLogo" alt="" />{{ subscription.arrCounts.linked }}
+                            <font-awesome-icon :icon="['fas', 'hard-drive']" />{{ otherCount(subscription.arrCounts) }}
+                        </span>
                         <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                         <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                     </div>
@@ -296,9 +302,18 @@ import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
-import { formatRelativeTime, getThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
+import { useViewMode } from '@/lib/useViewMode';
+import { formatRelativeTime, getBasePath, getThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
 
 const isMobile = useIsMobile();
+// Cards on phones, a table on wide screens; either can be chosen and is remembered.
+const { viewMode, setViewMode } = useViewMode('iplayarr.subscriptionsViewMode', {
+    modes: ['table', 'cards'],
+    desktop: 'table',
+    mobile: 'cards',
+});
+const cardView = computed(() => viewMode.value === 'cards');
+const logoUrl = `${getBasePath()}/iplayarr.png`;
 const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion } = useSubscriptions();
 
 // Sort choices. Subscriptions missing a date (never downloaded, Sonarr/Radarr-only never checked) always go last.
@@ -526,9 +541,20 @@ const sourceTitle = ({ have, linked }) => `${linked} .strm or release group, ${M
 const missingTitle = ({ arr, arrMissing }) =>
     `Gone from ${arrAppName(arr.appId)} since ${formatRelativeTime(Date.parse(arrMissing))}. Stop tracking it or add it back.`;
 
-const countsLabel = ({ arrCounts: { have, total, linked } }) => `${have} of ${total} episodes (${sourceLabel({ have, linked })})`;
-const countsTitle = ({ arr, arrCounts }) =>
-    `${arrAppName(arr.appId)}: ${sourceTitle(arrCounts)} (${formatRelativeTime(Date.parse(arrCounts.updatedAt))})`;
+const otherCount = ({ have, linked }) => Math.max(have - linked, 0);
+const countsAria = ({ arrCounts }) => sourceLabel(arrCounts);
+const countsTitle = ({ arrCounts }) => `${arrCounts.linked} from iPlayarr, ${otherCount(arrCounts)} from elsewhere`;
+
+// The number on a show's picture: episodes in the last download over all episodes seen (downloaded, or already
+// available when subscribed). A Sonarr/Radarr-only show has no downloads of ours, so it shows the episodes it holds.
+const countBadge = ({ arrOnly, arrCounts, arrMissing, seen, lastQueuedAt, lastQueuedCount }) => {
+    if (arrOnly) {
+        return arrCounts && !arrMissing ? { text: `${arrCounts.have}`, title: `${arrCounts.have} episodes` } : null;
+    }
+    const total = seen?.length ?? 0;
+    if (!lastQueuedAt) return { text: `${total}`, title: `${total} seen` };
+    return { text: `${lastQueuedCount}/${total}`, title: `${lastQueuedCount} last download, ${total} seen` };
+};
 
 const checkedLabel = (subscription, short = false) =>
     checkedAt(subscription) ? formatRelativeTime(Date.parse(checkedAt(subscription)), undefined, short) : 'not yet';
@@ -809,6 +835,43 @@ const removeLive = async (live) => {
     position: relative;
     display: block;
     border-radius: 3px;
+}
+
+// Wide screens: several cards across (about four on a big monitor) instead of one per line.
+.cardList.cardGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 12px;
+
+    :deep(.dataCard) {
+        margin-bottom: 0;
+    }
+}
+
+// Episode count over the picture's top right corner. A fixed dark chip, as it sits on artwork.
+.thumbBadge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background-color: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+// Sonarr/Radarr-only counts: the iPlayarr logo with ours, then an icon with the rest.
+.splitPill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+
+    .splitLogo {
+        width: 14px;
+        height: 14px;
+        object-fit: contain;
+    }
 }
 
 .cardTitle {
