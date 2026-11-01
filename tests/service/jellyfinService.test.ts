@@ -4,6 +4,7 @@ import jellyfinService from '../../src/service/jellyfinService';
 import { AppType } from '../../src/types/AppType';
 
 jest.mock('axios');
+jest.mock('../../src/service/appSeen');
 
 describe('jellyfinService', () => {
     beforeEach(() => jest.clearAllMocks());

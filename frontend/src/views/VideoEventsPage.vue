@@ -2,9 +2,9 @@
     <div class="inner-content scroll-x">
         <PageHeader title="Video Events" icon="clapperboard" />
         <SettingsPageToolbar
-            :view-mode="viewMode" :view-modes="['table', 'cards']" @update:view-mode="setViewMode"
-            :icons="['delete', 'filterToggle']" delete-label="Clear video events"
-            :filters-shown="showFilters" :filters-active="filtersActive"
+            :view-mode="viewMode" :view-modes="['table', 'cards']" :icons="['delete', 'filterToggle']"
+            delete-label="Clear video events" :filters-shown="showFilters"
+            :filters-active="filtersActive" @update:view-mode="setViewMode"
             @delete-queue-item="clearEvents" @toggle-filters="showFilters = !showFilters"
         >
             <template v-if="showFilters" #filters>
@@ -134,7 +134,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
-import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
 
 const events = inject('videoEvents');
 
@@ -167,7 +167,7 @@ const {
     filterFn: (event, query) => [videoLabel(event), event.type, event.level, event.message]
         .some((value) => String(value ?? '').toLowerCase().includes(query)),
     sortAccessors: {
-        video: (event) => videoLabel(event),
+        video: (event) => sortableTitle(videoLabel(event)),
         type: (event) => event.type,
         level: (event) => event.level,
         message: (event) => event.message,

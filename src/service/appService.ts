@@ -9,6 +9,7 @@ import { QueuedStorage } from '../types/QueuedStorage';
 import { CreateDownloadClientForm } from '../types/requests/form/CreateDownloadClientForm';
 import { CreateIndexerForm } from '../types/requests/form/CreateIndexerForm';
 import { decryptApp, encryptApp, hasPlainSecret } from '../utils/secretCrypto';
+import { LAST_SEEN_KEY, LAST_SEEN_THROTTLE_MS, lastTouched } from './appSeen';
 import configService from './configService';
 import jellyfinService from './jellyfinService';
 import socketService from './socketService';
@@ -16,11 +17,7 @@ import userAgentMappingService from './userAgentMappingService';
 
 const storage: QueuedStorage = new QueuedStorage();
 
-// lastSeen lives under its own key so touching it never read-modify-writes the apps list (which
-// could resurrect a deleted app or overwrite an edit), and is throttled as it is hit on every search.
-const LAST_SEEN_KEY = 'apps_last_seen';
-const LAST_SEEN_THROTTLE_MS = 60_000;
-const lastTouched = new Map<string, number>();
+// lastSeen (see appSeen) lives under its own key so touching it never read-modify-writes the apps list.
 
 // Rewrites any app credentials still stored in plaintext in their encrypted form (a no-op once done).
 export async function encryptStoredApps(): Promise<void> {
@@ -180,13 +177,17 @@ const appService = {
             }
             case AppType.NZBGET:
             case AppType.SABNZBD: {
-                return await nzbFacade.testConnection(
+                const result = await nzbFacade.testConnection(
                     form.type.toString().toLowerCase(),
                     form.url,
                     form.api_key,
                     form.username,
                     form.password
                 );
+                if (result === true && form.id) {
+                    await appService.touchApp(form.id);
+                }
+                return result;
             }
             default:
                 return false;
@@ -296,6 +297,9 @@ const createUpdateFeature: Record<AppFeature, (form: App, allowCreate: boolean) 
             return form;
         },
         [AppFeature.TAGS]: async (form: App): Promise<App> => {
+            return form;
+        },
+        [AppFeature.SUBSCRIPTION_DETECT]: async (form: App): Promise<App> => {
             return form;
         },
     };

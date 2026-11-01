@@ -243,6 +243,12 @@ export function formatRelativeTime(timestamp, now = Date.now() + serverClockOffs
     return 'just now';
 }
 
+// A title as it should sort: without a leading "The", "A" or "An", so "The Traitors" files under T. Also reads
+// release names, which separate words with dots ("The.Traitors.S01E01"). A title that is only the article is left alone.
+export function sortableTitle(title) {
+    return String(title ?? '').trim().replace(/^(?:the|an?)(?:\s+|\.(?=[^.\s]))(?=\S)/i, '');
+}
+
 // A shuffled copy (Fisher-Yates); the original list is left alone.
 export function shuffled(list) {
     const copy = [...list];

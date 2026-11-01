@@ -76,6 +76,7 @@ import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
+import { sortableTitle } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
 import SortIcon from '../common/SortIcon.vue';
@@ -115,7 +116,7 @@ const {
 } = useSortFilter(history, {
     filterFn: (item, query) => [item.nzbName, item.type].some((value) => String(value ?? '').toLowerCase().includes(query)),
     sortAccessors: {
-        filename: (item) => item.nzbName,
+        filename: (item) => sortableTitle(item.nzbName),
         type: (item) => item.type,
         start: (item) => item.details?.start,
         size: (item) => item.details?.size,

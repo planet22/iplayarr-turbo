@@ -263,6 +263,117 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('light mode is lighter than dark mode', light > dark + 60, `light ${light} dark ${dark}`);
         });
 
+        // ---- Subscriptions: the Sync dialog, run for real (read-only against Sonarr/Radarr; it only refreshes cached counts)
+        await flow('subscriptions sync dialog', async (page) => {
+            const apps = (await http('/json-api/subscriptions/arr/apps')).json || [];
+            if (!apps.length) return rec(U, 'subscriptions sync dialog', 'SKIP', 'no Sonarr/Radarr app');
+            const open = async () => {
+                await page.locator('button[title="Sync Sonarr/Radarr"]').click();
+                await page.waitForSelector('.syncApp', { timeout: 10000 });
+            };
+            const syncButton = page.locator('.button-container button', { hasText: /^Sync$/ });
+            await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
+            await open();
+            ok('every app starts ticked in a fresh browser', (await page.locator('.syncApp:not(.syncOption) .CheckInput-isChecked').count()) === apps.length);
+            // Untick all but the first, so the run is short and the choice has something to remember
+            for (const app of apps.slice(1)) await page.locator('.syncApp', { hasText: app.name }).locator('.syncAppName').click();
+            await shot(page, 'sync-dialog-pick');
+            await syncButton.click();
+            await page.waitForSelector('.syncRun', { timeout: 10000 });
+            ok('only the ticked app is scanned', (await page.locator('.syncRun').count()) === 1);
+            await page.waitForSelector('.syncSteps li', { timeout: 15000 });
+            const stepText = (await page.locator('.syncSteps').first().innerText()).replace(/\s+/g, ' ');
+            ok('progress lists the library, episode files and BBC match steps', /Library/.test(stepText) && /Episode files/.test(stepText) && /BBC match/.test(stepText), stepText);
+            ok('grab history is not run unless ticked', !/Grab history/.test(stepText), stepText);
+            await shot(page, 'sync-dialog-running');
+            await page.waitForSelector('.syncSummary', { timeout: 240000 });
+            const summary = (await page.locator('.syncSummary').innerText()).trim();
+            ok('a finished sync says what it found', /^(\d+ new found\.|Nothing new\.)$/.test(summary), summary);
+            ok('and tallies .strm links against release-group files', /\d+ \.strm . \d+ release group/.test((await page.locator('.syncTally').first().innerText()).trim()));
+            ok('every step is ticked off', (await page.locator('.syncSteps li.complete').count()) === 3);
+            await shot(page, 'sync-dialog-done');
+            const found = /^(\d+) new/.exec(summary)?.[1];
+            await page.locator('.button-container button', { hasText: /^Close$/ }).click();
+            await page.waitForSelector('.syncApp', { state: 'detached', timeout: 5000 });
+            await page.waitForTimeout(1200);
+            if (found) {
+                const top = await page.locator('legend:has-text("Found in Sonarr/Radarr")').evaluate((el) => Math.round(el.getBoundingClientRect().top));
+                ok('closing the dialog scrolls to the shows it found', top >= 0 && top < 300, `heading at ${top}px`);
+                ok('the found list holds as many shows as the dialog reported', (await page.locator('.subscriptionRow:has(button[title="Import"])').count()) === Number(found));
+            } else rec(U, 'closing the dialog scrolls to the shows it found', 'SKIP', 'nothing new was found');
+            await shot(page, 'sync-after-close');
+
+            // Remembered per app
+            if (apps.length > 1) {
+                await page.reload({ waitUntil: 'networkidle' });
+                await open();
+                ok('the unticked apps stay unticked after a reload', (await page.locator('.syncApp:not(.syncOption) .CheckInput-isChecked').count()) === 1);
+                await page.locator('.button-container button', { hasText: /^Cancel$/ }).click();
+            }
+
+            // Grab history, when ticked, is its own step - and the choice is remembered too
+            await page.reload({ waitUntil: 'networkidle' });
+            await open();
+            await page.locator('.syncOption .syncAppName').click();
+            await syncButton.click();
+            await page.waitForSelector('.syncSteps li', { timeout: 15000 });
+            ok('ticking grab history adds its step', /Grab history/.test((await page.locator('.syncSteps').first().innerText())));
+            await page.waitForSelector('.syncSummary', { timeout: 300000 });
+            ok('a sync with grab history finishes', /new found|Nothing new/.test(await page.locator('.syncSummary').innerText()));
+            await page.locator('.button-container button', { hasText: /^Close$/ }).click();
+            await page.reload({ waitUntil: 'networkidle' });
+            await open();
+            ok('the grab history tick is remembered', (await page.locator('.syncOption .CheckInput-isChecked').count()) === 1);
+        });
+
+        // ---- Apps: the subscription-detection setting is on Sonarr/Radarr forms only (opened and cancelled, never saved)
+        await flow('apps subscription detection setting', async (page) => {
+            const all = (await http('/json-api/apps')).json || [];
+            const arr = all.find((a) => a.type === 'SONARR' || a.type === 'RADARR');
+            if (!arr) return rec(U, 'apps subscription detection setting', 'SKIP', 'no Sonarr/Radarr app');
+            await page.goto(BASE + '/apps', { waitUntil: 'networkidle' });
+            await page.locator('a.appBox', { hasText: arr.name }).first().click();
+            await page.waitForSelector('legend.sub:has-text("Subscription detection")', { timeout: 10000 });
+            const options = (await page.locator('select option').allTextContents()).map((o) => o.trim());
+            ok('a Sonarr/Radarr form offers the detection setting as Yes / No', options.includes('Yes') && options.includes('No'), options.join());
+            await shot(page, 'apps-detection-setting');
+            await page.locator('.button-container button', { hasText: /^Cancel$/ }).click();
+            const other = all.find((a) => a.type !== 'SONARR' && a.type !== 'RADARR');
+            if (other) {
+                await page.locator('a.appBox', { hasText: other.name }).first().click();
+                await page.waitForSelector('.modal-inner', { timeout: 10000 });
+                await page.waitForTimeout(500);
+                ok(`a ${other.type} form has no detection setting`, (await page.locator('legend.sub:has-text("Subscription detection")').count()) === 0);
+                await page.locator('.button-container button', { hasText: /^Cancel$/ }).click();
+            }
+            ok('cancelling saved nothing', JSON.stringify(((await http('/json-api/apps')).json || []).map((a) => a.detectSubscriptions)) === JSON.stringify(all.map((a) => a.detectSubscriptions)));
+        });
+
+        // ---- Subscriptions: a show deleted from its app gets a warning icon with an explanation, and its counts go
+        await flow('subscriptions deleted-from-app icon', async (page) => {
+            const app = ((await http('/json-api/subscriptions/arr/apps')).json || [])[0];
+            if (!app || !bpid || ctx.preSubscribed) return rec(U, 'subscriptions deleted-from-app icon', 'SKIP', !app ? 'no Sonarr/Radarr app' : 'show already subscribed');
+            const find = async () => ((await http('/json-api/subscriptions')).json || []).find((s) => s.pid === bpid);
+            cleanups.push(async () => { const s = await find(); if (s) await http('/json-api/subscriptions/' + s.id, { method: 'DELETE' }); });
+            const imp = await http('/json-api/subscriptions/arr/detected/import', { method: 'POST', timeout: 120000, body: { appId: app.id, arrId: 987654321, pid: bpid, title: 'SMOKE-TEMP icon show', have: 4, total: 9, linked: 1 } });
+            ok('a show linked to an entry that does not exist is created', imp.status === 200, `HTTP ${imp.status} ${imp.text.slice(0, 100)}`);
+            await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
+            const counts = await page.locator('.subscriptionRow', { hasText: brand.title }).first().innerText();
+            ok('before a scan it shows its counts', /4 of 9 episodes/.test(counts), counts.replace(/\s+/g, ' ').slice(0, 160));
+            await http(`/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, { timeout: 180000 });
+            await page.reload({ waitUntil: 'networkidle' });
+            const row = page.locator('.subscriptionRow', { hasText: brand.title }).first();
+            const icon = row.locator('.missingIcon');
+            ok('after a scan it carries the warning icon', (await icon.count()) === 1);
+            const tip = (await icon.getAttribute('title')) || '';
+            ok('whose tooltip explains it briefly', /^Gone from .+ since .+\. Stop tracking it or add it back\.$/.test(tip), tip);
+            ok('and its stale counts are gone', !/of 9 episodes/.test(await row.innerText()));
+            await shot(page, 'subscriptions-missing-icon', true);
+            const s = await find();
+            if (s) await http('/json-api/subscriptions/' + s.id, { method: 'DELETE' });
+            ok('and it can be removed again', !(await find()));
+        });
+
         // ---- Phone visuals of the main real flows
         const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
         const pp = await phone.newPage();

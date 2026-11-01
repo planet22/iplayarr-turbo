@@ -152,6 +152,37 @@ class SubscriptionService {
         return true;
     }
 
+    // Stores fresh Sonarr/Radarr episode counts, keyed by subscription id, in a single write. `missing` are
+    // subscriptions whose Sonarr/Radarr entry no longer exists: flagged (keeping the first time it was noticed).
+    async setArrCounts(
+        counts: Map<string, { have: number; total: number; linked: number; lastFileAt?: string }>,
+        missing: Set<string> = new Set()
+    ): Promise<void> {
+        if (!counts.size && !missing.size) return;
+        const all = await this.list();
+        const updatedAt = new Date().toISOString();
+        await storage.setItem(
+            STORAGE_KEY,
+            all.map((s) => {
+                if (counts.has(s.id)) {
+                    // The entry is back (or was never gone): drop any earlier "deleted" flag.
+                    const { lastFileAt, ...next } = counts.get(s.id)!;
+                    // The newest file's import date when Sonarr/Radarr gave one; otherwise the count growing since
+                    // the last scan means episodes were added, else keep the old time.
+                    const addedAt = lastFileAt ?? (s.arrCounts && next.have > s.arrCounts.have ? updatedAt : s.arrCounts?.addedAt);
+                    const refreshed: Subscription = { ...s, arrCounts: { ...next, updatedAt, ...(addedAt ? { addedAt } : {}) } };
+                    delete refreshed.arrMissing;
+                    return refreshed;
+                }
+                if (!missing.has(s.id)) return s;
+                // Counts of an entry that is gone would only mislead.
+                const gone: Subscription = { ...s, arrMissing: s.arrMissing ?? updatedAt };
+                delete gone.arrCounts;
+                return gone;
+            })
+        );
+    }
+
     // Episodes already out count as done for a version, so switching one on only affects new episodes.
     #baseline(versions: string[], episodes: IPlayerEpisodeMetadata[]): Record<string, string[]> {
         return Object.fromEntries(versions.map((version) => [version, episodes.map(({ id }) => id)]));

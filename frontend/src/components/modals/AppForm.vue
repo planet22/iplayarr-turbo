@@ -172,6 +172,20 @@
                         :error="validationErrors?.tags"
                     />
                 </template>
+
+                <template v-if="showForm('subscription_detect')">
+                    <legend class="sub">Subscription detection</legend>
+                    <SelectInput
+                        v-model="form.detectSubscriptions"
+                        name="Include in detection"
+                        tooltip="Keep episode counts up to date"
+                        :options="[
+                            { key: true, value: 'Yes' },
+                            { key: false, value: 'No' },
+                        ]"
+                    />
+                    <InfoBar clazz="info small">Daily: refreshes episode counts and flags shows deleted here.</InfoBar>
+                </template>
             </template>
         </template>
     </IPlayarrModal>
@@ -208,6 +222,7 @@ const defaultForm = {
     indexer: {},
     priority: 5,
     tags: [],
+    detectSubscriptions: false,
 };
 
 // A deleted Download Client/Indexer is now removed from storage entirely (rather than left as
@@ -222,6 +237,7 @@ const [features, form] = [
                   ...props.inputObj,
                   download_client: props.inputObj.download_client || {},
                   indexer: props.inputObj.indexer || {},
+                  detectSubscriptions: props.inputObj.detectSubscriptions ?? false,
               }
             : defaultForm
     ),

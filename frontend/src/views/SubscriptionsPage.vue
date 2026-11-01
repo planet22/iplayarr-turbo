@@ -2,9 +2,34 @@
     <div class="inner-content">
         <PageHeader title="Subscriptions" icon="bell" />
         <SettingsPageToolbar
-            :icons="['refresh']" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
-            refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" @refresh="checkAll"
-        />
+            :icons="toolbarIcons" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
+            refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" :filter-options="filterOptions"
+            :selected-filter="activeFilter" :filter-enabled="activeFilter !== 'All'" @refresh="checkAll" @select-filter="selectFilter"
+        >
+            <template #actions>
+                <div v-if="subscriptions.length > 1" class="sortControl">
+                    <select v-model="sortChoice" class="sortSelect" title="Sort by" aria-label="Sort by">
+                        <option v-for="option in SORTS" :key="option.key" :value="option.key">{{ option.label }}</option>
+                    </select>
+                    <button
+                        class="SettingsPageToolbar-button clickable"
+                        :title="sortOrder === 'asc' ? 'Ascending' : 'Descending'" :aria-label="sortOrder === 'asc' ? 'Ascending' : 'Descending'"
+                        @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'"
+                    >
+                        <font-awesome-icon :icon="['fas', sortOrder === 'asc' ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
+                    </button>
+                </div>
+            </template>
+            <!-- Next to "Check all now": the two-way arrows are what marks Sonarr/Radarr on this page. -->
+            <template #refresh-after>
+                <button
+                    v-if="arrApps.length" class="SettingsPageToolbar-button clickable"
+                    title="Sync Sonarr/Radarr" aria-label="Sync Sonarr/Radarr" @click="openSync"
+                >
+                    <font-awesome-icon :icon="['fas', 'right-left']" />
+                </button>
+            </template>
+        </SettingsPageToolbar>
         <InfoBar small>New episodes are queued automatically, checked hourly or on demand.</InfoBar>
         <LoadingIndicator v-if="!loaded" />
         <EmptyState
@@ -13,7 +38,8 @@
         >
             <RouterLink to="/browse">Browse programmes</RouterLink>
         </EmptyState>
-        <TablePagination v-if="loaded && subscriptions.length" v-model="page" v-model:page-size="pageSize" :total="subscriptions.length" />
+        <p v-if="loaded && subscriptions.length && !sorted.length" class="filterEmpty">Nothing matches this filter.</p>
+        <TablePagination v-if="loaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
         <div v-if="isMobile && loaded && subscriptions.length" class="cardList">
             <DataCard v-for="subscription in pagedItems" :key="subscription.id" style="--dc-thumb-width: 120px">
                 <template #thumb>
@@ -29,6 +55,10 @@
                 <template #chips>
                     <ChannelPill :channel="subscription.channel" />
                     <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
+                    <span v-if="subscription.arrOnly && subscription.arrCounts && !subscription.arrMissing" class="pill" :title="countsTitle(subscription)">{{ countsLabel(subscription) }}</span>
+                    <span v-if="subscription.arrMissing" class="missingIcon" role="img" tabindex="0" :title="missingTitle(subscription)" aria-label="No longer in Sonarr/Radarr">
+                        <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
+                    </span>
                     <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                 </template>
                 <template v-if="subscription.lastQueuedAt" #corner>
@@ -40,10 +70,10 @@
                     <div class="cardLines">
                         <div v-if="progress[subscription.id]" class="cardLine">{{ progressLabel(progress[subscription.id]) }}</div>
                         <div class="cardLine" title="Last checked">
-                            <font-awesome-icon :icon="['fas', 'clock']" />{{ subscription.arrOnly ? 'n/a' : checkedLabel(subscription, true) }}
+                            <font-awesome-icon :icon="['fas', 'clock']" />{{ checkedLabel(subscription, true) }}
                         </div>
-                        <div v-if="subscription.lastQueuedAt || subscription.arrOnly" class="cardLine" title="Last download">
-                            <font-awesome-icon :icon="['fas', 'download']" />{{ subscription.lastQueuedAt ? formatRelativeTime(Date.parse(subscription.lastQueuedAt), undefined, true) : 'n/a' }}
+                        <div v-if="downloadedAt(subscription) || subscription.arrOnly" class="cardLine" :title="subscription.lastQueuedAt ? 'Last download' : 'Episodes last added'">
+                            <font-awesome-icon :icon="['fas', 'download']" />{{ downloadedAt(subscription) ? formatRelativeTime(Date.parse(downloadedAt(subscription)), undefined, true) : 'n/a' }}
                         </div>
                     </div>
                     <div v-if="subscription.arrOnly" class="rowActions">
@@ -95,11 +125,16 @@
                     <div class="details">
                         <ChannelPill :channel="subscription.channel" />
                         <span v-if="progress[subscription.id]">{{ progressLabel(progress[subscription.id]) }}</span>
-                        <span v-if="!subscription.arrOnly">Checked {{ checkedLabel(subscription) }}</span>
+                        <span>Checked {{ checkedLabel(subscription) }}</span>
                         <span v-if="subscription.lastQueuedAt">
                             Last download {{ formatRelativeTime(Date.parse(subscription.lastQueuedAt)) }}
                             ({{ subscription.lastQueuedCount }} episode{{ subscription.lastQueuedCount === 1 ? '' : 's' }})
                         </span>
+                        <span v-else-if="subscription.arrCounts?.addedAt">Episodes added {{ formatRelativeTime(Date.parse(subscription.arrCounts.addedAt)) }}</span>
+                        <span v-if="subscription.arrMissing" class="missingIcon" role="img" tabindex="0" :title="missingTitle(subscription)" aria-label="No longer in Sonarr/Radarr">
+                            <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
+                        </span>
+                        <span v-if="subscription.arrOnly && subscription.arrCounts && !subscription.arrMissing" :title="countsTitle(subscription)">{{ countsLabel(subscription) }}</span>
                         <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                         <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                     </div>
@@ -149,7 +184,34 @@
                 </div>
             </div>
         </div>
-        <TablePagination v-if="loaded && subscriptions.length" v-model="page" v-model:page-size="pageSize" :total="subscriptions.length" />
+        <TablePagination v-if="loaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
+
+        <template v-if="detected.length">
+            <legend ref="foundSection" class="liveLegend">Found in Sonarr/Radarr</legend>
+            <div class="detectedIntro">
+                <span>Shows in Sonarr/Radarr linked to iPlayarr.</span>
+                <button class="clickable importAll" :disabled="importing" @click="importAll">Import all</button>
+            </div>
+            <div class="subscriptionList">
+                <div v-for="show in detected" :key="`${show.appId}-${show.arrId}`" class="subscriptionRow">
+                    <div class="info">
+                        <RouterLink :to="`/browse/programme/${show.pid}`" class="title">{{ show.title }}</RouterLink>
+                        <div class="details">
+                            <span class="pill">{{ show.appName }}</span>
+                            <span>{{ SOURCE_LABELS[show.source] }}</span>
+                            <span v-if="show.relink" class="pill error" title="Already subscribed to a deleted entry. Import re-points it here.">Relink</span>
+                            <span :title="`${show.have} of ${show.total} episodes have files`">{{ episodeLabel(show) }}</span>
+                            <span :title="sourceTitle(show)">{{ sourceLabel(show) }}</span>
+                        </div>
+                    </div>
+                    <div class="rowActions">
+                        <button class="clickable" title="Import" aria-label="Import" :disabled="importing" @click="importShow(show)">
+                            <font-awesome-icon :icon="['fas', 'right-left']" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
 
         <template v-if="liveSubscriptions.length">
             <legend class="liveLegend">Live channels</legend>
@@ -205,7 +267,8 @@
 </template>
 
 <script setup>
-import { inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { useModal } from 'vue-final-modal';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import DataCard from '@/components/common/DataCard.vue';
@@ -215,6 +278,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import SubscriptionSyncDialog from '@/components/modals/SubscriptionSyncDialog.vue';
 import ProgressRing, { progressLabel } from '@/components/subscriptions/ProgressRing.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
@@ -224,11 +288,74 @@ import { subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
 import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
-import { formatRelativeTime, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { useSortFilter } from '@/lib/useSortFilter';
+import { formatRelativeTime, getThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
 
 const isMobile = useIsMobile();
 const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion } = useSubscriptions();
-const { page, pageSize, pagedItems } = usePagination(subscriptions);
+
+// Sort choices. Subscriptions missing a date (never downloaded, Sonarr/Radarr-only never checked) always go last.
+const SORTS = [
+    { key: 'added', label: 'Added', order: 'asc' },
+    { key: 'name', label: 'A-Z', order: 'asc' },
+    { key: 'downloaded', label: 'Downloaded', order: 'desc' },
+    { key: 'checked', label: 'Checked', order: 'desc' },
+];
+const time = (iso) => (iso ? Date.parse(iso) : null);
+// iPlayarr's own check / download times, or for a Sonarr/Radarr show the last scan that validated its episodes /
+// saw more of them arrive.
+const checkedAt = ({ lastChecked, arrCounts }) => lastChecked ?? arrCounts?.updatedAt;
+const downloadedAt = ({ lastQueuedAt, arrCounts }) => lastQueuedAt ?? arrCounts?.addedAt;
+// Filter: everything, only what iPlayarr itself downloads, or what is linked to one Sonarr/Radarr app (by name).
+// Remembered per browser; a saved app that has since gone falls back to everything.
+const arrApps = ref([]);
+const FILTER_KEY = 'iplayarr.subscriptions.filter';
+const filterChoice = ref('All');
+try {
+    filterChoice.value = localStorage.getItem(FILTER_KEY) || 'All';
+} catch {
+    // Not remembered.
+}
+const filterOptions = computed(() => ['All', 'iPlayarr', ...arrApps.value.map(({ name }) => name)]);
+const activeFilter = computed(() => (filterOptions.value.includes(filterChoice.value) ? filterChoice.value : 'All'));
+const toolbarIcons = computed(() => [...(subscriptions.value.length > 1 ? ['filter'] : []), 'refresh']);
+const filteredSubscriptions = computed(() => {
+    if (activeFilter.value === 'All') return subscriptions.value;
+    if (activeFilter.value === 'iPlayarr') return subscriptions.value.filter(({ arrOnly }) => !arrOnly);
+    const app = arrApps.value.find(({ name }) => name === activeFilter.value);
+    return subscriptions.value.filter(({ arr }) => arr?.appId === app?.id);
+});
+const selectFilter = (option) => {
+    filterChoice.value = option;
+    try {
+        localStorage.setItem(FILTER_KEY, option);
+    } catch {
+        // Not remembered.
+    }
+};
+
+const { sortBy, sortOrder, sorted } = useSortFilter(filteredSubscriptions, {
+    filterFn: ({ title }, query) => title.toLowerCase().includes(query),
+    sortAccessors: {
+        added: ({ createdAt }) => time(createdAt),
+        name: ({ title }) => sortableTitle(title),
+        downloaded: (subscription) => time(downloadedAt(subscription)),
+        checked: (subscription) => time(checkedAt(subscription)),
+    },
+    storageKey: 'subscriptions',
+    defaultSortBy: 'added',
+    defaultSortOrder: 'asc',
+});
+// Picking a sort starts it in its natural direction (names A-Z, dates newest first); the arrow flips it.
+const sortChoice = computed({
+    get: () => sortBy.value,
+    set: (key) => {
+        sortBy.value = key;
+        sortOrder.value = SORTS.find((option) => option.key === key)?.order ?? 'asc';
+    },
+});
+const { page, pageSize, pagedItems } = usePagination(sorted);
+watch([sortBy, sortOrder, activeFilter], () => (page.value = 1));
 const busy = reactive({});
 // Live channel logos that failed to load fall back to the TV icon.
 const failedLogos = reactive({});
@@ -268,6 +395,14 @@ const onProgress = ({ id, phase, done, total }) => {
     else clear();
 };
 
+const SOURCE_LABELS = {
+    strm: '.strm',
+    group: 'Release group',
+    grab: 'Grabbed',
+};
+
+const episodeLabel = ({ have, total }) => (total === 1 && have <= 1 ? (have ? 'Has a file' : 'No file yet') : `${have} of ${total} episodes`);
+
 let boundSocket;
 const bindSocket = (s) => {
     boundSocket?.off('subscriptionProgress', onProgress);
@@ -275,7 +410,76 @@ const bindSocket = (s) => {
     boundSocket?.on('subscriptionProgress', onProgress);
 };
 
+// Sonarr/Radarr apps that can be synced for shows linking to iPlayarr; the dialog does the scanning and shows its progress.
+const BASE = 'json-api/subscriptions/arr';
+const detected = ref([]);
+const importing = ref(false);
+const foundSection = ref(null);
+
+const loadApps = async () => {
+    try {
+        const { ok, data } = await ipFetch(`${BASE}/apps`);
+        if (ok && Array.isArray(data)) arrApps.value = data;
+    } catch {
+        // No buttons; the page works without them.
+    }
+};
+
+// The sync dialog hands back what it found when its scans finish; closing it then jumps to that list.
+const openSync = () => {
+    const modal = useModal({
+        component: SubscriptionSyncDialog,
+        attrs: {
+            // Each app's result arrives as soon as its scan finishes, so closing part-way keeps what was found.
+            onFound: async (appId, shows) => {
+                // Replace that app's earlier results; keep what any other app found.
+                detected.value = [...detected.value.filter((show) => show.appId !== appId), ...shows];
+                // The scan also refreshed the episode counts (and deleted-flags) of shows already linked.
+                await load();
+            },
+            onClosed: async () => {
+                if (!detected.value.length) return;
+                await nextTick();
+                foundSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            },
+        },
+    });
+    modal.open();
+};
+
+const importOne = async (show) => {
+    const { ok, data } = await ipFetch(`${BASE}/detected/import`, 'POST', {
+        appId: show.appId, arrId: show.arrId, pid: show.pid, title: show.title, have: show.have, total: show.total, linked: show.linked, lastFileAt: show.lastFileAt,
+    });
+    if (!ok) {
+        toastService.error(`Couldn't import ${show.title}`, { detail: data?.message || 'Something went wrong' });
+        return false;
+    }
+    detected.value = detected.value.filter((s) => s !== show);
+    return true;
+};
+
+const importShow = async (show) => {
+    importing.value = true;
+    try {
+        if (await importOne(show)) await load();
+    } finally {
+        importing.value = false;
+    }
+};
+
+const importAll = async () => {
+    importing.value = true;
+    try {
+        for (const show of [...detected.value]) await importOne(show);
+        await load();
+    } finally {
+        importing.value = false;
+    }
+};
+
 onMounted(() => {
+    loadApps();
     load();
     loadLive();
     loadAppNames();
@@ -292,8 +496,19 @@ const arrPillTitle = ({ arr, arrOnly }) => {
     return arrOnly ? `${where} - downloads are handled there, not by iPlayarr` : where;
 };
 
+// Of the episodes Sonarr has files for: those that are iPlayarr .strm links, and those from any other source.
+const sourceLabel = ({ have, linked }) => `${linked} iPlayarr, ${Math.max(have - linked, 0)} other`;
+const sourceTitle = ({ have, linked }) => `${linked} .strm or release group, ${Math.max(have - linked, 0)} other`;
+
+const missingTitle = ({ arr, arrMissing }) =>
+    `Gone from ${arrAppName(arr.appId)} since ${formatRelativeTime(Date.parse(arrMissing))}. Stop tracking it or add it back.`;
+
+const countsLabel = ({ arrCounts: { have, total, linked } }) => `${have} of ${total} episodes (${sourceLabel({ have, linked })})`;
+const countsTitle = ({ arr, arrCounts }) =>
+    `${arrAppName(arr.appId)}: ${sourceTitle(arrCounts)} (${formatRelativeTime(Date.parse(arrCounts.updatedAt))})`;
+
 const checkedLabel = (subscription, short = false) =>
-    subscription.lastChecked ? formatRelativeTime(Date.parse(subscription.lastChecked), undefined, short) : 'not yet';
+    checkedAt(subscription) ? formatRelativeTime(Date.parse(checkedAt(subscription)), undefined, short) : 'not yet';
 
 const summarise = (results) => {
     const queued = results.reduce((n, r) => n + r.queued.length, 0);
@@ -369,6 +584,63 @@ const removeLive = async (live) => {
 <style lang="less" scoped>
 .liveLegend {
     margin-top: 28px;
+    // Room for the sticky header when a section is scrolled into view (the sync dialog jumps to the found shows).
+    scroll-margin-top: 72px;
+}
+
+.filterEmpty {
+    margin: 12px 0;
+    font-size: 14px;
+    color: @subtle-text-color;
+}
+
+.sortControl {
+    display: flex;
+    align-items: stretch;
+
+    .sortSelect {
+        box-sizing: border-box;
+        height: 32px;
+        margin: 6px 3px;
+        padding: 0 8px;
+        border: 1px solid @input-border-color;
+        border-radius: 4px;
+        background-color: @input-background-color;
+        color: @input-text-color;
+    }
+}
+
+// A linked show that has gone from Sonarr/Radarr: a warning icon with the explanation as its tooltip.
+.missingIcon {
+    display: inline-flex;
+    align-items: center;
+    color: @warn-color;
+    cursor: help;
+}
+
+.detectedIntro {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+    margin: 8px 0;
+    font-size: 13px;
+    color: @subtle-text-color;
+
+    .importAll {
+        padding: 6px 14px;
+        border-radius: 4px;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+
+        &:hover:not(:disabled) {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
+        }
+    }
 }
 
 // Channel logos are wide (76x32) rather than 16:9 artwork - sized to their own shape so nothing crops.

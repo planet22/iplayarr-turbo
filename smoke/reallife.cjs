@@ -368,6 +368,59 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             }
         });
 
+        // 12b. Sonarr/Radarr sync: import a show against a library entry that does not exist, watch the next scan flag
+        // it as deleted, re-point it, and clean up. Nothing is created or changed in Sonarr/Radarr itself. Assumes the
+        // app has at least one show (an empty library is never taken to mean "everything was deleted").
+        await step('arr sync', async () => {
+            const app = ((await http('/json-api/subscriptions/arr/apps')).json || [])[0];
+            if (!app) return rec(W, 'arr sync flow', 'SKIP', 'no Sonarr/Radarr app');
+            const bpid = (await http(`/json-api/browse/programme/${ctx.pid}`)).json?.pid;
+            if (!bpid) return rec(W, 'arr sync flow', 'SKIP', 'no brand pid');
+            const subs = async () => (await http('/json-api/subscriptions')).json || [];
+            if ((await subs()).some((s) => s.pid === bpid)) return rec(W, 'arr sync flow', 'SKIP', 'the show is already subscribed - not touching it');
+            const find = async () => (await subs()).find((s) => s.pid === bpid);
+            later('remove the arr sync subscription', async () => { const s = await find(); if (s) await http('/json-api/subscriptions/' + s.id, { method: 'DELETE' }); });
+            const FAKE = 987654321;
+            const SEEN = '2026-10-30T10:00:00Z';
+            const imp = (arrId, extra = {}) => http('/json-api/subscriptions/arr/detected/import', {
+                method: 'POST', timeout: 120000,
+                body: { appId: app.id, arrId, pid: bpid, title: 'SMOKE-TEMP sync show', have: 3, total: 5, linked: 2, lastFileAt: SEEN, ...extra },
+            });
+
+            const first = await imp(FAKE);
+            ok('sync import answers', first.status === 200, `HTTP ${first.status} ${first.text.slice(0, 120)}`);
+            let s = await find();
+            ok('an imported show is Sonarr/Radarr-only', s?.arrOnly === true, JSON.stringify(s)?.slice(0, 160));
+            ok('import links it to the entry, marked as not added by us', s?.arr?.appId === app.id && s.arr.arrId === FAKE && s.arr.addedByUs === false, JSON.stringify(s?.arr));
+            ok('import stores the counts and when a file was last added', s?.arrCounts?.have === 3 && s.arrCounts.total === 5 && s.arrCounts.linked === 2 && s.arrCounts.addedAt === SEEN && !('lastFileAt' in s.arrCounts), JSON.stringify(s?.arrCounts));
+            ok('iPlayarr itself neither checks nor queues an imported show', !s?.lastChecked && !s?.lastQueuedAt);
+            const other = await imp(FAKE, { have: -1 });
+            ok('a second import of the same show is idempotent', other.status === 200 && (await subs()).filter((x) => x.pid === bpid).length === 1, `HTTP ${other.status}`);
+
+            // The entry does not exist in the app, so a scan flags the show and drops its (stale) counts
+            const scan = await http(`/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, { timeout: 180000 });
+            ok('a scan answers', scan.status === 200 && Array.isArray(scan.json), `HTTP ${scan.status}`);
+            s = await find();
+            ok('a scan flags a show whose entry was deleted from the app', typeof s?.arrMissing === 'string' && !Number.isNaN(Date.parse(s.arrMissing)), JSON.stringify(s)?.slice(0, 200));
+            ok('and drops its stale counts', s?.arrCounts === undefined, JSON.stringify(s?.arrCounts));
+            const flagged = s?.arrMissing;
+            await http(`/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, { timeout: 180000 });
+            ok('later scans keep the time it was first noticed', (await find())?.arrMissing === flagged);
+            ok('a flagged show still lists, so it can be stopped or relinked', ((await subs()).some((x) => x.pid === bpid)));
+
+            // Importing against another entry re-points the same subscription and clears the flag
+            const second = await imp(FAKE + 1);
+            s = await find();
+            ok('importing against another entry re-points the link', second.status === 200 && s?.arr?.arrId === FAKE + 1 && s.arr.addedByUs === false && (await subs()).filter((x) => x.pid === bpid).length === 1, JSON.stringify(s?.arr));
+            ok('and clears the deleted flag, with fresh counts', s?.arrMissing === undefined && s?.arrCounts?.have === 3, JSON.stringify({ missing: s?.arrMissing, counts: s?.arrCounts }));
+
+            const refused = await http('/json-api/subscriptions/arr/detected/import', { method: 'POST', body: { appId: 'SMOKE-NOPE', arrId: 1, pid: bpid, title: 'x' } });
+            ok('importing for an unknown app is refused', refused.status >= 400 && refused.status < 600 && /not a configured/i.test(refused.text), `HTTP ${refused.status} ${refused.text.slice(0, 100)}`);
+            ok('and changes nothing', (await find())?.arr?.arrId === FAKE + 1);
+            const removed = await http('/json-api/subscriptions/' + s.id, { method: 'DELETE' });
+            ok('unsubscribing removes it', removed.status === 200 && !(await find()), `HTTP ${removed.status}`);
+        });
+
         // 13. Stats clear endpoints are destructive history wipes - exercise one on a recreated entry only
         await step('stats history', async () => {
             const before = (await http('/json-api/stats/failedGrabHistory')).json;
@@ -382,6 +435,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
         for (const p of ['/json-api/synonym', '/json-api/numbering-overrides', '/json-api/offSchedule', '/json-api/live-channels/custom', '/json-api/subscriptions/live'])
             if ((await http(p)).text.includes('SMOKE-TEMP')) leaks.push(p);
         if (((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four') && !ctx.preLiveBbcFour) leaks.push('live sub bbc_four');
+        if (((await http('/json-api/subscriptions')).json || []).some((s) => s.arr?.arrId >= 987654321)) leaks.push('arr sync subscription');
         rec(W, 'cleanup leaves no SMOKE-TEMP entries', leaks.length ? 'FAIL' : 'PASS', leaks.join(', '));
     }
 };

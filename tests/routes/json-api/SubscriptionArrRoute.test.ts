@@ -3,6 +3,7 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/SubscriptionArrRoute';
 import subscriptionArrService, { SubscriptionArrError } from '../../../src/service/subscriptionArrService';
+import subscriptionDetectService from '../../../src/service/subscriptionDetectService';
 
 jest.mock('../../../src/service/subscriptionArrService', () => ({
     __esModule: true,
@@ -15,7 +16,12 @@ jest.mock('../../../src/service/subscriptionArrService', () => ({
         unlink: jest.fn(),
     },
 }));
+jest.mock('../../../src/service/subscriptionDetectService', () => ({
+    __esModule: true,
+    default: { detect: jest.fn(), importShow: jest.fn() },
+}));
 const mocked = jest.mocked(subscriptionArrService);
+const detectService = jest.mocked(subscriptionDetectService);
 
 const app = express();
 app.use(express.json());
@@ -47,6 +53,82 @@ describe('SubscriptionArrRoute', () => {
         expect((await request(app).get('/apps/a1/options')).body).toEqual({ rootFolders: [], qualityProfiles: [] });
         mocked.options.mockRejectedValueOnce(new Error('boom'));
         expect((await request(app).get('/apps/a1/options')).status).toBe(500);
+    });
+
+    describe('GET /detected', () => {
+        it('scans every app, without grab history, unless told otherwise', async () => {
+            detectService.detect.mockResolvedValue([{ title: 'Show' } as any]);
+            expect((await request(app).get('/detected')).body).toEqual([{ title: 'Show' }]);
+            expect(detectService.detect).toHaveBeenLastCalledWith(undefined, { grabHistory: false });
+        });
+
+        it('scans one app, and reads grab history only for grab=1', async () => {
+            detectService.detect.mockResolvedValue([]);
+            await request(app).get('/detected?appId=a1').expect(200);
+            expect(detectService.detect).toHaveBeenLastCalledWith(['a1'], { grabHistory: false });
+            await request(app).get('/detected?appId=a1&grab=1').expect(200);
+            expect(detectService.detect).toHaveBeenLastCalledWith(['a1'], { grabHistory: true });
+            await request(app).get('/detected?grab=true').expect(200);
+            expect(detectService.detect).toHaveBeenLastCalledWith(undefined, { grabHistory: false });
+        });
+
+        it('maps a failure to 500, with a default message when it has none', async () => {
+            detectService.detect.mockRejectedValueOnce(new Error('boom'));
+            const failed = await request(app).get('/detected');
+            expect(failed.status).toBe(500);
+            expect(failed.body.message).toBe('boom');
+            detectService.detect.mockRejectedValueOnce({});
+            expect((await request(app).get('/detected')).body.message).toBe('Unable to scan Sonarr/Radarr');
+        });
+    });
+
+    describe('POST /detected/import', () => {
+        const show = { appId: 'a1', arrId: 7, pid: 'b006ml0g', title: 'QI' };
+
+        it('rejects a request that is missing or mistypes something', async () => {
+            for (const bad of [{}, { ...show, appId: 1 }, { ...show, arrId: '7' }, { ...show, arrId: 1.5 }, { ...show, pid: 'ab' }, { ...show, pid: 'not a pid!' }, { ...show, title: 5 }]) {
+                expect((await request(app).post('/detected/import').send(bad)).status).toBe(400);
+            }
+            expect((await request(express().use('/', router)).post('/detected/import')).status).toBe(400);
+            expect(detectService.importShow).not.toHaveBeenCalled();
+        });
+
+        it('imports without counts when none are given or they are invalid', async () => {
+            await request(app).post('/detected/import').send(show).expect(200, { status: true });
+            expect(detectService.importShow).toHaveBeenLastCalledWith('a1', 7, 'b006ml0g', 'QI', undefined);
+            await request(app).post('/detected/import').send({ ...show, have: -1, total: 3, linked: 0 }).expect(200);
+            expect(detectService.importShow).toHaveBeenLastCalledWith('a1', 7, 'b006ml0g', 'QI', undefined);
+            await request(app).post('/detected/import').send({ ...show, have: 1.5, total: 3, linked: 0 }).expect(200);
+            expect(detectService.importShow).toHaveBeenLastCalledWith('a1', 7, 'b006ml0g', 'QI', undefined);
+            await request(app).post('/detected/import').send({ ...show, have: 1, total: 3 }).expect(200);
+            expect(detectService.importShow).toHaveBeenLastCalledWith('a1', 7, 'b006ml0g', 'QI', undefined);
+        });
+
+        it('passes valid counts on, with the last file date only when it is a real date', async () => {
+            const counts = { have: 5, total: 9, linked: 2 };
+            await request(app).post('/detected/import').send({ ...show, ...counts }).expect(200);
+            expect(detectService.importShow).toHaveBeenLastCalledWith('a1', 7, 'b006ml0g', 'QI', counts);
+            await request(app).post('/detected/import').send({ ...show, ...counts, lastFileAt: '2026-10-30T10:00:00Z' }).expect(200);
+            expect(detectService.importShow).toHaveBeenLastCalledWith('a1', 7, 'b006ml0g', 'QI', { ...counts, lastFileAt: '2026-10-30T10:00:00Z' });
+            await request(app).post('/detected/import').send({ ...show, ...counts, lastFileAt: 'not a date' }).expect(200);
+            expect(detectService.importShow).toHaveBeenLastCalledWith('a1', 7, 'b006ml0g', 'QI', counts);
+            await request(app).post('/detected/import').send({ ...show, ...counts, lastFileAt: 123 }).expect(200);
+            expect(detectService.importShow).toHaveBeenLastCalledWith('a1', 7, 'b006ml0g', 'QI', counts);
+        });
+
+        it('maps a failure to 500, with a default message when it has none', async () => {
+            detectService.importShow.mockRejectedValueOnce(new Error('That app is not a configured Sonarr or Radarr'));
+            const failed = await request(app).post('/detected/import').send(show);
+            expect(failed.status).toBe(500);
+            expect(failed.body.message).toBe('That app is not a configured Sonarr or Radarr');
+            detectService.importShow.mockRejectedValueOnce({});
+            expect((await request(app).post('/detected/import').send(show)).body.message).toBe('Unable to import');
+        });
+
+        it('is not mistaken for the link route (/:id)', async () => {
+            await request(app).post('/detected/import').send(show).expect(200);
+            expect(mocked.link).not.toHaveBeenCalled();
+        });
     });
 
     it('POST /:id validates input and links', async () => {

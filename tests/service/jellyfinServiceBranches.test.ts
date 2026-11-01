@@ -3,6 +3,7 @@ import axios from 'axios';
 import jellyfinService from '../../src/service/jellyfinService';
 
 jest.mock('axios');
+jest.mock('../../src/service/appSeen');
 const mocked = axios as jest.Mocked<typeof axios>;
 const app = { url: 'http://jf:8096', api_key: 'key' };
 

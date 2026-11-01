@@ -89,6 +89,23 @@ describe('appService branches', () => {
             expect(nzbFacade.testConnection).toHaveBeenCalledWith(name, 'http://sonarr', 'plain-key', 'u', 'p');
         });
 
+        describe('NZB clients', () => {
+            it('records a saved client as reached when the test passes', async () => {
+                (nzbFacade.testConnection as jest.Mock).mockResolvedValue(true);
+                mockStorageData.apps = [{ id: 'nzb-1', name: 'SAB', type: AppType.SABNZBD }];
+                expect(await appService.testAppConnection(sonarr({ type: AppType.SABNZBD, id: 'nzb-1' }))).toBe(true);
+                expect(mockStorageData.apps_last_seen).toHaveProperty('nzb-1');
+            });
+
+            it('records nothing for an unsaved client or a failed test', async () => {
+                (nzbFacade.testConnection as jest.Mock).mockResolvedValue(true);
+                expect(await appService.testAppConnection(sonarr({ type: AppType.NZBGET, id: undefined as any }))).toBe(true);
+                (nzbFacade.testConnection as jest.Mock).mockResolvedValue('bad key');
+                expect(await appService.testAppConnection(sonarr({ type: AppType.SABNZBD, id: 'nzb-2' }))).toBe('bad key');
+                expect(mockStorageData.apps_last_seen).toBeUndefined();
+            });
+        });
+
         describe('Jellyfin', () => {
             it('records that a saved server was reached, when the test passes', async () => {
                 (jellyfinService.testConnection as jest.Mock).mockResolvedValue(true);

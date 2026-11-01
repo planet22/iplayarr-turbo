@@ -103,13 +103,15 @@ export function useSubscriptions() {
     };
 
     const unsubscribe = async (subscription) => {
-        const text = subscription.arrOnly
-            ? `Remove ${subscription.title} from your subscriptions? Sonarr/Radarr is doing the downloading for it.`
+        const arrOnly = subscription.arrOnly;
+        const text = arrOnly
+            ? `Stop showing ${subscription.title} here? It stays in Sonarr/Radarr, which keeps downloading it as before - nothing is removed there.`
             : `Stop downloading new episodes of ${subscription.title}?`;
         // When iPlayarr added the show to Sonarr/Radarr, the remove-or-keep choice below doubles as
         // the confirmation, so there is a single prompt.
         const choiceFollows = subscription.arr?.addedByUs;
-        if (!choiceFollows && !(await dialogService.confirm('Unsubscribe', text, undefined, { danger: true, confirmLabel: 'Unsubscribe' }))) {
+        const [title, confirmLabel] = arrOnly ? ['Stop tracking', 'Stop tracking'] : ['Unsubscribe', 'Unsubscribe'];
+        if (!choiceFollows && !(await dialogService.confirm(title, text, undefined, { danger: true, confirmLabel }))) {
             return false;
         }
         // A linked show is unlinked first (offering to remove it from Sonarr/Radarr if we added it).

@@ -88,6 +88,7 @@
                 <font-awesome-icon :icon="['fas', refreshIcon]" :spin="refreshing && refreshIcon === 'arrows-rotate'" :beat-fade="refreshing && refreshIcon !== 'arrows-rotate'" />
                 <div v-if="refreshLabel && !iconOnly" class="SettingsPageToolbar-label">{{ refreshLabel }}</div>
             </button>
+            <slot name="refresh-after" />
             <button
                 v-if="icons.some((i) => i == 'arrImport')"
                 class="SettingsPageToolbar-button clickable"

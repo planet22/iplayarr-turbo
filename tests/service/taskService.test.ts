@@ -8,6 +8,7 @@ import libraryCleanupService from '../../src/service/libraryCleanupService';
 import liveTvService from '../../src/service/liveTvService';
 import streamSessionService from '../../src/service/stream/streamSessionService';
 import strmWatchdogService from '../../src/service/strmWatchdogService';
+import subscriptionDetectService from '../../src/service/subscriptionDetectService';
 import subscriptionService from '../../src/service/subscriptionService';
 import TaskService from '../../src/service/taskService';
 import thumbnailCacheService from '../../src/service/thumbnailCacheService';
@@ -36,6 +37,10 @@ jest.mock('../../src/service/episodeCacheService', () => ({
 
 jest.mock('../../src/service/subscriptionService', () => ({
     checkAll: jest.fn(),
+}));
+
+jest.mock('../../src/service/subscriptionDetectService', () => ({
+    autoDetect: jest.fn(),
 }));
 
 jest.mock('../../src/service/thumbnailCacheService', () => ({
@@ -128,6 +133,10 @@ describe('TaskService', () => {
 
         await tasks['subscriptions-check'].run();
         expect(subscriptionService.checkAll).toHaveBeenCalled();
+
+        expect(tasks['subscriptions-detect'].definition.cron).toBe('47 3 * * *');
+        await tasks['subscriptions-detect'].run();
+        expect(subscriptionDetectService.autoDetect).toHaveBeenCalled();
 
         await tasks['thumbnail-cleanup'].run();
         expect(thumbnailCacheService.cleanup).toHaveBeenCalled();

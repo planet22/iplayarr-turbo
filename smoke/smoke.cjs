@@ -178,6 +178,7 @@ async function apiLayer(ctx) {
     await check(A, 'subscriptions', '/json-api/subscriptions', isArr);
     await check(A, 'live subscriptions', '/json-api/subscriptions/live', isArr);
     await check(A, 'subscription arr apps', '/json-api/subscriptions/arr/apps', isArr);
+    await arrSyncChecks(A, ctx);
     await check(A, 'maintenance tasks', '/json-api/maintenance/tasks', isArr);
     await check(A, 'maintenance caches', '/json-api/maintenance/caches', isArr);
     const wd = await check(A, 'watchdog state', '/json-api/watchdog', (r) => typeof r.json?.enabled === 'boolean' || 'no enabled flag');
@@ -200,6 +201,61 @@ async function apiLayer(ctx) {
     // CSRF/cross-site guard sanity: a state-changing call from a foreign origin must not succeed
     const csrf = await http('/json-api/synonym', { method: 'POST', body: { from: 'x', target: 'y' }, headers: { origin: 'http://evil.example', 'sec-fetch-site': 'cross-site' } });
     rec(A, 'cross-site POST blocked', csrf.status === 403 || csrf.status === 401 ? 'PASS' : 'WARN', `HTTP ${csrf.status} (AUTH none may bypass)`);
+}
+
+// Sonarr/Radarr sync: the per-app setting, the detection scan and what it stores. The scan only refreshes cached
+// episode counts (and the "deleted from the app" flag) of shows already linked, so it is safe on any instance.
+async function arrSyncChecks(A, ctx) {
+    const types = (await check(A, 'app types', '/json-api/apps/types', isObj)).json || {};
+    const offered = Object.entries(types).filter(([, features]) => features.includes('subscription_detect')).map(([type]) => type).sort();
+    rec(A, 'subscription-detection setting is offered for Sonarr and Radarr only', offered.join() === 'RADARR,SONARR' ? 'PASS' : 'FAIL', `offered for ${offered.join(', ') || 'nobody'}`);
+
+    // Bad input is refused before anything is imported
+    const goodImport = { appId: 'SMOKE-NOPE', arrId: 1, pid: 'b006ml0g', title: 'SMOKE-TEMP' };
+    for (const [name, body] of [['an empty body', {}], ['a bad pid', { ...goodImport, pid: '!!' }], ['a non-numeric arrId', { ...goodImport, arrId: '1' }], ['a fractional arrId', { ...goodImport, arrId: 1.5 }], ['a missing title', { ...goodImport, title: undefined }], ['an array body', []]]) {
+        const r = await http('/json-api/subscriptions/arr/detected/import', { method: 'POST', body });
+        rec(A, `sync import refuses ${name}`, r.status === 400 ? 'PASS' : 'FAIL', `HTTP ${r.status} ${r.text.slice(0, 80)}`);
+    }
+    const unknown = await http('/json-api/subscriptions/arr/detected?appId=SMOKE-NOPE');
+    rec(A, 'sync scan of an unknown app finds nothing', unknown.status === 200 && Array.isArray(unknown.json) && !unknown.json.length ? 'PASS' : 'FAIL', `HTTP ${unknown.status}`);
+    const long = await http(`/json-api/subscriptions/arr/detected?appId=${'x'.repeat(5000)}`);
+    rec(A, 'sync scan with a very long app id answers cleanly', long.status === 200 && Array.isArray(long.json) ? 'PASS' : 'FAIL', `HTTP ${long.status}`);
+
+    const arrApps = (await http('/json-api/subscriptions/arr/apps')).json || [];
+    if (!arrApps.length) return rec(A, 'sync scan', 'SKIP', 'no Sonarr/Radarr app configured');
+    const subscriptions = async () => (await http('/json-api/subscriptions')).json || [];
+    const lastSeenOf = async (id) => ((await http('/json-api/apps')).json || []).find((a) => a.id === id)?.lastSeen ?? 0;
+    const iso = (v) => typeof v === 'string' && !Number.isNaN(Date.parse(v));
+    for (const app of arrApps) {
+        const before = await lastSeenOf(app.id);
+        const shape = (s) => s.appId === app.id && s.appName && Number.isInteger(s.arrId) && s.title && /^[a-z0-9]{6,}$/i.test(s.pid)
+            && ['strm', 'group', 'grab'].includes(s.source) && [s.have, s.total, s.linked].every((n) => Number.isInteger(n) && n >= 0)
+            && s.linked <= s.have && (s.relink === undefined || s.relink === true) && (s.lastFileAt === undefined || iso(s.lastFileAt));
+        const scan = await check(A, `sync scan of ${app.name} answers with well-formed shows`, `/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, (r) => {
+            if (!Array.isArray(r.json)) return 'not an array';
+            const bad = r.json.find((s) => !shape(s));
+            return bad ? `malformed: ${JSON.stringify(bad).slice(0, 160)}` : true;
+        }, { timeout: 180000 });
+        const found = Array.isArray(scan.json) ? scan.json : [];
+        rec(A, `sync scan of ${app.name} offers each BBC show once`, new Set(found.map((s) => s.pid)).size === found.length ? 'PASS' : 'FAIL', found.map((s) => s.pid).join(','));
+        const subs = await subscriptions();
+        const owned = found.filter((s) => subs.some((x) => x.pid === s.pid) && !s.relink);
+        rec(A, `sync scan of ${app.name} never offers a show you already track (unless relinking)`, owned.length ? 'FAIL' : 'PASS', owned.map((s) => s.title).join(', '));
+        const after = await lastSeenOf(app.id);
+        // The server's clock can differ from this machine's, so allow a few minutes of slack.
+        rec(A, `sync scan of ${app.name} marks the app as seen`, after >= before && Date.now() - after < 10 * 60 * 1000 ? 'PASS' : 'FAIL', `lastSeen ${before ? new Date(before).toISOString() : 'never'} -> ${after ? new Date(after).toISOString() : 'never'}`);
+    }
+    // One app is enough to prove the optional, slower grab-history pass answers and agrees on the shape
+    const withGrab = await check(A, `sync scan of ${arrApps[0].name} with grab history answers`, `/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(arrApps[0].id)}&grab=1`, isArr, { timeout: 240000 });
+    rec(A, 'grab history only ever adds shows, with the same fields', (withGrab.json || []).every((s) => ['strm', 'group', 'grab'].includes(s.source) && Number.isInteger(s.have)) ? 'PASS' : 'FAIL');
+
+    // What the scans stored on the subscriptions
+    const subs = await subscriptions();
+    const bad = subs.filter((s) => (s.arrMissing && (s.arrCounts || !iso(s.arrMissing)))
+        || (s.arrCounts && !(Number.isInteger(s.arrCounts.have) && Number.isInteger(s.arrCounts.total) && s.arrCounts.linked <= s.arrCounts.have
+            && iso(s.arrCounts.updatedAt) && (s.arrCounts.addedAt === undefined || iso(s.arrCounts.addedAt)) && s.arrCounts.lastFileAt === undefined)));
+    rec(A, 'stored episode counts are well-formed, and none are kept for a show deleted from its app', bad.length ? 'FAIL' : 'PASS', bad.map((s) => s.title).join(', '));
+    ctx.arrApps = arrApps;
 }
 
 // ---------------------------------------------------------------- filesystem layer
@@ -335,6 +391,7 @@ async function uiInteractions(browser, ctx) {
         rec(U, 'settings save bar clean (not dirty) after only navigating', (await page.locator('.settingsTab.dirty').count()) === 0 ? 'PASS' : 'FAIL');
         await page.screenshot({ path: path.join(SHOTS, 'flow-settings.png'), fullPage: true });
     } catch (e) { rec(U, 'settings tabs', 'FAIL', e.message.split('\n')[0]); }
+    await subscriptionsToolbar(page, ctx, U);
     // Programme page: play/download controls exist
     if (ctx.pid) {
         try {
@@ -348,6 +405,80 @@ async function uiInteractions(browser, ctx) {
     rec(U, 'socket.io handshake', sock.status === 200 && /sid/.test(sock.text) ? 'PASS' : 'FAIL', `HTTP ${sock.status}`);
     rec(U, 'no uncaught page errors during flows', bad.length ? 'FAIL' : 'PASS', bad.slice(0, 2).join(' | '));
     await context.close();
+}
+
+// Subscriptions toolbar: the Sync dialog (opened and cancelled, never run), sort and filter. Reads the same API the
+// page does and checks what the page shows against it.
+async function subscriptionsToolbar(page, ctx, U) {
+    const sortable = (t) => t.trim().replace(/^(?:the|an?)(?:\s+|\.(?=[^.\s]))(?=\S)/i, '');
+    try {
+        const apps = (await http('/json-api/subscriptions/arr/apps')).json || [];
+        const subs = (await http('/json-api/subscriptions')).json || [];
+        await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
+        const sync = page.locator('button[title="Sync Sonarr/Radarr"]');
+        rec(U, 'subscriptions: Sync button shown only when there is a Sonarr/Radarr app', (await sync.count()) === (apps.length ? 1 : 0) ? 'PASS' : 'FAIL', `${apps.length} app(s)`);
+        if (apps.length) {
+            const [checkBox, syncBox] = [await page.locator('button[title="Check all now"]').boundingBox(), await sync.boundingBox()];
+            rec(U, 'subscriptions: Sync button sits right beside Check all now', checkBox && syncBox && Math.abs(checkBox.y - syncBox.y) < 6 && syncBox.x > checkBox.x && syncBox.x - (checkBox.x + checkBox.width) < 24 ? 'PASS' : 'FAIL', JSON.stringify({ checkBox, syncBox }));
+            await sync.click();
+            await page.waitForSelector('.syncApp', { timeout: 10000 });
+            const names = (await page.locator('.syncApp:not(.syncOption) .syncAppName').allTextContents()).map((n) => n.trim());
+            rec(U, 'sync dialog lists every Sonarr/Radarr app', names.join() === apps.map((a) => a.name).join() ? 'PASS' : 'FAIL', names.join());
+            rec(U, 'sync dialog offers grab history as an extra, off by default', (await page.locator('.syncOption').count()) === 1 && (await page.locator('.syncOption .CheckInput-isChecked').count()) === 0 ? 'PASS' : 'FAIL');
+            await page.locator('.button-container button', { hasText: /^Cancel$/ }).click();
+            await page.waitForSelector('.syncApp', { state: 'detached', timeout: 5000 });
+            rec(U, 'cancelling the sync dialog closes it without scanning', 'PASS');
+        }
+        if (subs.length < 2) return rec(U, 'subscriptions: sort and filter', 'SKIP', 'fewer than two subscriptions');
+
+        const select = page.locator('.sortSelect');
+        const options = (await select.locator('option').allTextContents()).map((o) => o.trim());
+        rec(U, 'subscriptions: sort offers Added, A-Z, Downloaded, Checked', options.join() === 'Added,A-Z,Downloaded,Checked' ? 'PASS' : 'FAIL', options.join());
+        const visible = async () => (await page.locator('.subscriptionRow .info a.title').allTextContents()).map((t) => t.trim()).slice(0, Math.min(16, subs.length));
+        await select.selectOption({ label: 'A-Z' });
+        await page.waitForTimeout(300);
+        const expected = subs.map((s) => s.title).sort((a, b) => sortable(a).localeCompare(sortable(b))).slice(0, 16);
+        const az = await visible();
+        rec(U, 'subscriptions: A-Z ignores a leading The / A / An', az.join('|') === expected.join('|') ? 'PASS' : 'FAIL', `${az.join(' | ')}  !=  ${expected.join(' | ')}`);
+        await page.locator('.sortControl button').click();
+        await page.waitForTimeout(300);
+        const reversed = await visible();
+        const expectedReversed = subs.map((s) => s.title).sort((a, b) => sortable(b).localeCompare(sortable(a))).slice(0, 16);
+        rec(U, 'subscriptions: the arrow reverses the sort', reversed.join('|') === expectedReversed.join('|') ? 'PASS' : 'FAIL', reversed.join(' | '));
+        for (const label of ['Downloaded', 'Checked', 'Added']) {
+            await select.selectOption({ label });
+            await page.waitForTimeout(250);
+            const got = await visible();
+            rec(U, `subscriptions: sorting by ${label} keeps every subscription`, got.length === Math.min(16, subs.length) && got.every((t) => subs.some((s) => s.title === t)) ? 'PASS' : 'FAIL', got.join(' | '));
+        }
+        await select.selectOption({ label: 'A-Z' });
+        await page.reload({ waitUntil: 'networkidle' });
+        rec(U, 'subscriptions: the sort is remembered after a reload', (await select.inputValue()) === 'name' ? 'PASS' : 'FAIL', await select.inputValue());
+
+        // Filter: All, iPlayarr (downloaded by us) and each Sonarr/Radarr app
+        await page.locator('.filterWrap button').click();
+        const filters = (await page.locator('.filterDropdown li').allTextContents()).map((t) => t.trim());
+        rec(U, 'subscriptions: filter offers All, iPlayarr and each app', filters.join() === ['All', 'iPlayarr', ...apps.map((a) => a.name)].join() ? 'PASS' : 'FAIL', filters.join());
+        const pick = async (option) => {
+            if (!(await page.locator('.filterDropdown').count())) await page.locator('.filterWrap button').click();
+            await page.locator('.filterDropdown li', { hasText: new RegExp(`^\\s*${option}\\s*$`) }).click();
+            await page.waitForTimeout(300);
+        };
+        const titlesOf = (list) => list.map((s) => s.title).sort((a, b) => sortable(a).localeCompare(sortable(b))).slice(0, 16);
+        await pick('iPlayarr');
+        const ours = subs.filter((s) => !s.arrOnly);
+        rec(U, 'subscriptions: the iPlayarr filter shows only what iPlayarr downloads', ours.length ? ((await visible()).join('|') === titlesOf(ours).join('|') ? 'PASS' : 'FAIL') : 'SKIP', (await visible()).join(' | '));
+        for (const app of apps) {
+            await pick(app.name);
+            const linked = subs.filter((s) => s.arr?.appId === app.id);
+            const got = await visible();
+            const shows = linked.length ? got.join('|') === titlesOf(linked).join('|') : (await page.locator('.filterEmpty').count()) === 1;
+            rec(U, `subscriptions: the ${app.name} filter shows what is linked to it`, shows ? 'PASS' : 'FAIL', `${got.join(' | ')} (${linked.length} linked)`);
+        }
+        await pick('All');
+        rec(U, 'subscriptions: filter back to All shows everything again', (await visible()).length === Math.min(16, subs.length) ? 'PASS' : 'FAIL');
+        await page.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-toolbar.png') });
+    } catch (e) { rec(U, 'subscriptions toolbar', 'FAIL', e.message.split('\n')[0]); }
 }
 
 // ---------------------------------------------------------------- main

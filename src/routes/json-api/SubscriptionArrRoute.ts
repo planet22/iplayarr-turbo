@@ -1,10 +1,13 @@
 import { Request, Response, Router } from 'express';
 
 import subscriptionArrService, { SubscriptionArrError } from '../../service/subscriptionArrService';
+import subscriptionDetectService from '../../service/subscriptionDetectService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 
 const router: Router = asyncRouter();
+
+const PID_REGEX = /^[a-z0-9]{6,}$/i;
 
 const fail = (res: Response, error: any, fallback: string) => {
     const known = error instanceof SubscriptionArrError;
@@ -37,6 +40,33 @@ router.get('/apps/:appId/options', async (req: Request, res: Response) => {
         res.json(await subscriptionArrService.options(req.params.appId as string));
     } catch (error) {
         fail(res, error, 'Unable to load root folders and quality profiles');
+    }
+});
+
+// Registered before '/:id' so "detected" isn't read as an id.
+router.get('/detected', async (req: Request, res: Response) => {
+    try {
+        const appId = typeof req.query.appId === 'string' ? req.query.appId : undefined;
+        res.json(await subscriptionDetectService.detect(appId ? [appId] : undefined, { grabHistory: req.query.grab === '1' }));
+    } catch (error) {
+        fail(res, error, 'Unable to scan Sonarr/Radarr');
+    }
+});
+
+router.post('/detected/import', async (req: Request, res: Response) => {
+    const { appId, arrId, pid, title } = req.body ?? {};
+    if (typeof appId !== 'string' || !Number.isInteger(arrId) || typeof pid !== 'string' || !PID_REGEX.test(pid) || typeof title !== 'string') {
+        return invalid(res, 'appId, arrId, pid and title are required');
+    }
+    try {
+        const { have, total, linked, lastFileAt } = req.body;
+        const counts = [have, total, linked].every((n) => Number.isInteger(n) && n >= 0)
+            ? { have, total, linked, ...(typeof lastFileAt === 'string' && !isNaN(Date.parse(lastFileAt)) ? { lastFileAt } : {}) }
+            : undefined;
+        await subscriptionDetectService.importShow(appId, arrId, pid, title, counts);
+        res.json({ status: true });
+    } catch (error) {
+        fail(res, error, 'Unable to import');
     }
 });
 
