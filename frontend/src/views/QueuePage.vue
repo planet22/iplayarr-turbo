@@ -4,8 +4,8 @@
         <SettingsPageToolbar
             :view-mode="queueTable?.viewMode" :view-modes="queueTable ? ['table', 'cards'] : []"
             :icons="['delete', 'filterToggle']" delete-label="Remove selected"
-            @update:view-mode="(mode) => queueTable.setViewMode(mode)"
-            :filters-shown="queueTable?.showFilters" :filters-active="queueTable?.filtersActive"
+            :filters-shown="queueTable?.showFilters"
+            :filters-active="queueTable?.filtersActive" @update:view-mode="(mode) => queueTable.setViewMode(mode)"
             @delete-queue-item="deleteItems" @toggle-filters="queueTable.showFilters = !queueTable.showFilters"
         >
             <template v-if="queueTable?.showFilters" #filters>

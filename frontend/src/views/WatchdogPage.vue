@@ -184,8 +184,8 @@
 
         <PageHeader title="Links" />
         <SettingsPageToolbar
-            :view-mode="viewMode" :view-modes="sortedItems.length ? ['table', 'cards'] : []" @update:view-mode="setViewMode"
-            :icons="['delete']" delete-label="Clear links" :delete-disabled="live.running || !sortedItems.length"
+            :view-mode="viewMode" :view-modes="sortedItems.length ? ['table', 'cards'] : []" :icons="['delete']"
+            delete-label="Clear links" :delete-disabled="live.running || !sortedItems.length" @update:view-mode="setViewMode"
             @delete-queue-item="clearItems"
         />
         <p v-if="!sortedItems.length" class="empty">No links have been checked yet.</p>

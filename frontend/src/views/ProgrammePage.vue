@@ -158,7 +158,7 @@
                 </TablePagination>
                 <div class="episodeList">
                     <div
-                        v-for="episode in pagedEpisodes" :key="episode.pid" :id="`ep-${episode.pid}`"
+                        v-for="episode in pagedEpisodes" :id="`ep-${episode.pid}`" :key="episode.pid"
                         :class="['episodeRow', episode.pid === highlightPid ? 'focused' : '']" @click="highlightPid = null"
                     >
                         <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
