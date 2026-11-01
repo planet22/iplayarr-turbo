@@ -297,7 +297,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Hours in RSS Feed and Full Schedule Refresh sit with the scheduled tasks (advanced)', !/Hours in RSS Feed/.test(maint) || maint.indexOf('Hours in RSS Feed') > maint.indexOf('Scheduled tasks'), 'RSS setting is above the Scheduled tasks heading');
 
             // Old links: #general still opens General, and an unknown hash opens the first tab rather than a blank page.
-            await page.goto(`${BASE}/settings#nonsense`, { waitUntil: 'networkidle' });
+            await page.goto(`${BASE}/settings#nonsense`, { waitUntil: 'networkidle' }); await page.waitForTimeout(1000);
             ok('an unknown tab in the link opens General', (await page.locator('.settingsTab.active').first().innerText()).includes('General'));
         });
 
@@ -370,6 +370,9 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const queued0 = await queueSize();
             const dlButton = page.locator('.openCollection .downloadCollection');
             ok('an open collection has a Download collection button', (await dlButton.count()) === 1 && /Download collection/.test(await dlButton.innerText()));
+            const dry = (await http(`/json-api/browse/collections/${listed[0].id}/download`, { method: 'POST', body: { dryRun: true }, timeout: 120000 })).json;
+            await page.waitForFunction(() => /Download collection \(\d+\)/.test(document.querySelector('.openCollection .downloadCollection')?.innerText || ''), null, { timeout: 30000 }).catch(() => {});
+            ok('the button shows the number of titles in brackets, like Download all', (await dlButton.innerText()).replace(/\s+/g, ' ').trim() === `Download collection (${dry?.total})`, await dlButton.innerText());
             await dlButton.click();
             await page.waitForSelector('.modal-inner, [role=dialog]', { timeout: 60000 }).catch(() => {});
             const modalText = await page.locator('.modal-inner, [role=dialog]').first().innerText().catch(() => '');
@@ -388,7 +391,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
 
         // ---- Programme page: the highlighted episode (arriving with ?episode=) stays until its x is clicked, then fades
         await flow('programme highlight is dismissed manually', async (page) => {
-            const eps = (brand?.seasons || []).flatMap((s) => s.episodes || []);
+            // The highlight only shows where there is a list to pick from, so aim at a season with several episodes.
+            const eps = ((brand?.seasons || []).find((s) => (s.episodes || []).length > 1)?.episodes) || [];
             if (!bpid || eps.length < 2) return rec(U, 'programme highlight is dismissed manually', 'SKIP', 'no programme with several episodes');
             const target = eps[0].pid;
             await page.goto(`${BASE}/browse/programme/${bpid}?episode=${target}`, { waitUntil: 'networkidle' });
@@ -397,7 +401,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the arriving episode is highlighted with a small x', (await row.evaluate((el) => el.classList.contains('focused'))) && (await row.locator('.dismissFocus').count()) === 1);
             await page.waitForTimeout(7500);
             ok('the highlight is still there after the old 6 seconds', await row.evaluate((el) => el.classList.contains('focused')));
-            await row.locator('.description, .episodeDescription').first().click({ trial: true }).catch(() => {});
+            await row.locator('.episodeTitle').first().click();
             ok('clicking elsewhere on the row does not remove it', await row.evaluate((el) => el.classList.contains('focused')));
             await shot(page, 'programme-highlight');
             await row.locator('.dismissFocus').click();

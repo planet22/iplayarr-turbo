@@ -3,7 +3,7 @@
         <PageHeader title="Collections" icon="photo-film" />
         <SkeletonLoader v-if="loading" variant="tiles" tile-shape="category" :count="12" />
         <ErrorState v-else-if="error" :message="error" @retry="load" />
-        <InfoBar v-else-if="!enabled">
+        <InfoBar v-else-if="!enabled" clazz="warning">
             Collections are switched off.
             <RouterLink :to="{ path: '/settings', hash: '#appearance' }">Turn on Show Collections in Settings</RouterLink>
         </InfoBar>
@@ -32,7 +32,7 @@
                         @click="downloadCollection"
                     >
                         <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-download']" :spin="downloading" />
-                        <span>Download collection</span>
+                        <span>Download collection<template v-if="downloadable"> ({{ downloadable }})</template></span>
                     </button>
                 </div>
                 <p v-if="open.synopsis" class="synopsis">{{ open.synopsis }}</p>
@@ -79,6 +79,7 @@ const error = ref(null);
 const openId = computed(() => (typeof route.query.c === 'string' ? route.query.c : null));
 const open = computed(() => collections.value.find((collection) => collection.id === openId.value));
 const items = ref([]);
+const downloadable = ref(undefined);
 const itemsLoading = ref(false);
 const itemsError = ref(null);
 const openSection = ref(null);
@@ -101,8 +102,15 @@ const loadItems = async () => {
     const id = openId.value;
     items.value = [];
     itemsError.value = null;
+    downloadable.value = undefined;
     if (!id || !open.value) return;
     itemsLoading.value = true;
+    // How many titles Download collection would queue, for the button (a dry run; the count on the tile includes whole series).
+    ipFetch(`json-api/browse/collections/${encodeURIComponent(id)}/download`, 'POST', { dryRun: true })
+        .then(({ ok, data }) => {
+            if (ok && openId.value === id) downloadable.value = data.total;
+        })
+        .catch(() => undefined);
     try {
         const page = await browseFetch(`collections/${encodeURIComponent(id)}?perPage=${PER_PAGE}`);
         if (openId.value === id) items.value = page.items;
