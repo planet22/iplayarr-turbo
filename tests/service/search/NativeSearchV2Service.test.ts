@@ -574,16 +574,17 @@ describe('NativeSearchV2Service', () => {
                 expect(iplayerDetailsService.getGroupEpisodes).not.toHaveBeenCalled();
             });
 
-            it('honours the manual search override, either way', async () => {
+            it('never lists a collection\'s contents for a manual search, which shows it as a tile instead', async () => {
                 found('g1');
                 (iplayerDetailsService.getGroupEpisodes as jest.Mock).mockResolvedValue([member('m1')]);
                 searchHits();
                 setConfig({ NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false', MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' });
-                expect((await runInSearchContext('manual', () => NativeSearchV2Service.search(term))).map(({ pid }) => pid)).toEqual(['m1']);
-                expect(await NativeSearchV2Service.search(term)).toEqual([]);
-
-                setConfig({ NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true', MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false' });
                 expect(await runInSearchContext('manual', () => NativeSearchV2Service.search(term))).toEqual([]);
+                expect(collectionService.search).not.toHaveBeenCalled();
+
+                setConfig({ NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true', MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' });
+                expect(await runInSearchContext('manual', () => NativeSearchV2Service.search(term))).toEqual([]);
+                expect(collectionService.search).not.toHaveBeenCalled();
                 expect((await NativeSearchV2Service.search(term)).map(({ pid }) => pid)).toEqual(['m1']);
             });
 

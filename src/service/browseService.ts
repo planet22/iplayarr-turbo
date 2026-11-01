@@ -9,6 +9,7 @@ import {
     BrowseCategory,
     BrowseChannel,
     BrowseChannelSchedule,
+    BrowseCollection,
     BrowseItem,
     BrowseKind,
     BrowseNowNext,
@@ -29,6 +30,7 @@ import { splitArrayIntoChunks } from '../utils/Utils';
 import { cachedVersionIds } from '../utils/videoVersion';
 import categoryDiscoverService from './categoryDiscoverService';
 import { readableTextColor } from './channelLogoService';
+import collectionService from './collectionService';
 import DbCacheService from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
 import liveChannelService from './liveChannelService';
@@ -37,6 +39,9 @@ import loggingService from './loggingService';
 const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
 const IMAGE_PID_REGEX = /\/([a-z0-9]{6,})\.(?:jpg|jpeg|png)(?:$|\?)/i;
 const KINDS: BrowseKind[] = ['episode', 'series', 'brand'];
+// Type-ahead: how many matching collections lead the list, and how long a film check may take.
+const SUGGEST_COLLECTION_LIMIT = 3;
+const SUGGEST_FILM_LOOKUP_MS = 1500;
 
 // Pull the `elements` array out of an IBL response regardless of which wrapper key
 // (home_highlights, category_programmes, atoz_programmes, ...) the endpoint uses.
@@ -472,23 +477,51 @@ class BrowseService {
         });
     }
 
-    // Title-only type-ahead for the search box.
+    // Whether the programme is a film, from the BBC's format category (the same test a download uses). The BBC's
+    // search rows do not say; a lookup that fails or is slow counts as TV so the type-ahead never waits on it
+    // (programme metadata is cached, so a repeat costs nothing).
+    async #isFilm(pid: string): Promise<boolean> {
+        let timer: NodeJS.Timeout | undefined;
+        try {
+            const metadata = await Promise.race([
+                iplayerDetailsService.getMetadata(pid),
+                new Promise<undefined>((resolve) => {
+                    timer = setTimeout(() => resolve(undefined), SUGGEST_FILM_LOOKUP_MS);
+                }),
+            ]);
+            return metadata?.programme.categories?.find(({ type }) => type == 'format')?.key == 'films';
+        } catch {
+            return false;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    // Type-ahead for the search box: matching collections first (when search shows them), then programmes by title,
+    // each marked as TV or a film for its icon.
     async suggest(term: string, limit: number = 8): Promise<BrowseSuggestion[]> {
         const query = term.trim();
         if (query.length < 2) return [];
-        const data = await this.#ibl(`new-search?q=${encodeURIComponent(query)}`);
+        const [data, collections] = await Promise.all([
+            this.#ibl(`new-search?q=${encodeURIComponent(query)}`),
+            collectionService.matchesForSearch(query, SUGGEST_COLLECTION_LIMIT).catch((): BrowseCollection[] => []),
+        ]);
         const results: any[] = data?.new_search?.results ?? [];
         const seen = new Set<string>();
-        const suggestions: BrowseSuggestion[] = [];
+        const programmes: { pid: string; title: string }[] = [];
         for (const { id, title } of results) {
             const key = String(title).toLowerCase();
             if (id && title && !seen.has(key)) {
                 seen.add(key);
-                suggestions.push({ pid: id, title });
+                programmes.push({ pid: id, title });
             }
-            if (suggestions.length >= limit) break;
+            if (programmes.length >= limit) break;
         }
-        return suggestions;
+        const films = await Promise.all(programmes.map(({ pid }) => this.#isFilm(pid)));
+        return [
+            ...collections.map(({ id, title, count, thumbnail }): BrowseSuggestion => ({ kind: 'collection', id, title, count, thumbnail })),
+            ...programmes.map(({ pid, title }, index): BrowseSuggestion => ({ kind: films[index] ? 'film' : 'tv', pid, title })),
+        ];
     }
 
     async skipMarkers(pid: string): Promise<BrowseSkipMarker[]> {

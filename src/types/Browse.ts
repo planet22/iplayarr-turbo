@@ -59,10 +59,10 @@ export interface BrowseCollection {
     count: number;
 }
 
-export interface BrowseSuggestion {
-    pid: string;
-    title: string;
-}
+// A type-ahead row: a programme (TV or film) to open by pid, or a collection to open by id.
+export type BrowseSuggestion =
+    | { kind: 'tv' | 'film'; pid: string; title: string }
+    | { kind: 'collection'; id: string; title: string; count: number; thumbnail?: string };
 
 export interface BrowseSlot {
     item: BrowseItem;

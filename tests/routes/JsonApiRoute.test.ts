@@ -16,6 +16,7 @@ jest.mock('../../src/service/stats/StatisticsService');
 import nzbFacade from '../../src/facade/nzbFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import searchFacade from '../../src/facade/searchFacade';
+import collectionService from '../../src/service/collectionService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
 import searchSettingsService from '../../src/service/searchSettingsService';
@@ -186,6 +187,29 @@ describe('JsonApiRoute', () => {
             expect(lines[1][0].pid).toBe('p2');
             expect(lines[1][0]).not.toHaveProperty('versions');
             expect(lines[2]).toEqual({ done: true });
+        });
+
+        it('sends the collections that match as their own /search/stream line, before done', async () => {
+            const found = [{ id: 'p096h09x', title: 'Fright Night', count: 34 }];
+            const spy = jest.spyOn(collectionService, 'matchesForSearch').mockResolvedValue(found);
+            (searchFacade.searchStreaming as jest.Mock).mockImplementation(async (_q: string, onBatch: (batch: unknown[]) => void) => {
+                onBatch([{ pid: 'p1', title: 'One', type: 'TV' }]);
+                return [];
+            });
+            const res = await request(app).get('/search/stream').query({ q: 'fright night' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(spy).toHaveBeenCalledWith('fright night', 6);
+            expect(lines).toContainEqual({ collections: found });
+            expect(lines[lines.length - 1]).toEqual({ done: true });
+            spy.mockRestore();
+        });
+
+        it('still streams the results when the collections cannot be looked up', async () => {
+            const spy = jest.spyOn(collectionService, 'matchesForSearch').mockRejectedValue(new Error('down'));
+            (searchFacade.searchStreaming as jest.Mock).mockResolvedValue([]);
+            const res = await request(app).get('/search/stream').query({ q: 'x' });
+            expect(res.text.trim()).toBe(JSON.stringify({ done: true }));
+            spy.mockRestore();
         });
 
         it('still returns the results when BBC cannot be asked about versions', async () => {

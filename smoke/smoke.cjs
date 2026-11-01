@@ -181,7 +181,20 @@ async function apiLayer(ctx) {
         rec(A, `collection download refuses ${what}`, r.status === 400 ? 'PASS' : 'FAIL', `HTTP ${r.status}`);
     }
     const unknown = await http('/json-api/browse/collections/p000zzzz/download', { method: 'POST', body: { dryRun: true }, timeout: 60000 });
-    rec(A, 'collection download of an unknown collection is a 404', unknown.status === 404 ? 'PASS' : 'FAIL', `HTTP ${unknown.status}`);    await check(A, 'browse suggest', '/json-api/browse/suggest?q=doc', isJson);
+    rec(A, 'collection download of an unknown collection is a 404', unknown.status === 404 ? 'PASS' : 'FAIL', `HTTP ${unknown.status}`);
+    // Type-ahead rows say what they are: a programme is TV or a film (pid), a collection has an id and a count.
+    await check(A, 'browse suggest', '/json-api/browse/suggest?q=doc', (r) => {
+        const arr = isArr(r);
+        if (arr !== true) return arr;
+        const bad = r.json.filter((s) => !(((s.kind === 'tv' || s.kind === 'film') && s.pid && s.title) || (s.kind === 'collection' && s.id && s.title && typeof s.count === 'number')));
+        return bad.length === 0 || `rows with no usable kind: ${JSON.stringify(bad[0])}`;
+    });
+    await check(A, 'search stream sends its collections as their own line, then done', '/json-api/search/stream?q=fright%20night', (r) => {
+        const lines = String(r.text).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+        const tiles = lines.filter((l) => l.collections);
+        if (lines[lines.length - 1]?.done !== true) return 'the stream did not finish with {"done":true}';
+        return tiles.every(({ collections }) => Array.isArray(collections) && collections.every((c) => c.id && c.title && typeof c.count === 'number')) || 'a collections line was malformed';
+    }, { timeout: 120000 });
     await check(A, 'browse schedule', '/json-api/browse/schedule', isJson);
     await check(A, 'browse channel-colors', '/json-api/browse/channel-colors', isJson);
     await check(A, 'browse atoz', '/json-api/browse/atoz/a', isJson);

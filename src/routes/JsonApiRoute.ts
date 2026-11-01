@@ -3,6 +3,7 @@ import { Request, Response, Router } from 'express';
 import nzbFacade from '../facade/nzbFacade';
 import scheduleFacade from '../facade/scheduleFacade';
 import searchFacade from '../facade/searchFacade';
+import collectionService from '../service/collectionService';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
@@ -88,6 +89,8 @@ router.post('/nzb/test', async (req: Request, res: Response) => {
 // Searches typed on the Search page go into the search history like Sonarr/Radarr's do (just with no app), so the
 // Search page can offer them again as recent searches. Capped, as a broad search can have hundreds of results.
 const HISTORY_ITEM_LIMIT = 100;
+// Collection tiles shown beside a manual search.
+const SEARCH_COLLECTION_LIMIT = 6;
 const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace: SearchTrace) => {
     if (typeof term !== 'string' || !term.trim() || term === '*') return;
     // Recording is best effort: it must never fail (or slow) the search itself.
@@ -153,6 +156,15 @@ router.get('/search/stream', async (req: Request, res: Response) => {
         if (open) res.write(`${JSON.stringify(line)}\n`);
     };
 
+    // Collections whose title matches go out as their own line (the page shows them as tiles beside the results).
+    // Asked for alongside the search; a failure here only means no tiles.
+    const tiles = collectionService
+        .matchesForSearch(q, SEARCH_COLLECTION_LIMIT)
+        .then((collections) => {
+            if (collections.length) send({ collections });
+        })
+        .catch(() => undefined);
+
     // Each batch is marked with the versions its programmes have before it is sent; chained so batches keep their order.
     let sending: Promise<void> = Promise.resolve();
     try {
@@ -164,9 +176,10 @@ router.get('/search/stream', async (req: Request, res: Response) => {
             )
         );
         recordManualSearch(q, result, trace);
-        await sending;
+        await Promise.all([sending, tiles]);
         send({ done: true });
     } catch (error: any) {
+        await tiles;
         send({ error: error?.message || 'Search failed' });
     }
     res.end();

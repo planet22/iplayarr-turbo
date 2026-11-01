@@ -140,14 +140,14 @@ describe('searchSettingsService', () => {
             expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual-prefix:get_iplayer');
         });
 
-        it('separates manual searches that expand collections, by pid and by name', async () => {
+        it('separates manual searches that expand collections by pid, but not those that find them by name (tiles, not results)', async () => {
             const v2 = { ...base, NATIVE_SEARCH_ENGINE: 'V2' };
             setConfig({ ...v2, MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'true' });
             expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual-prefix:V2|true|pid');
             setConfig({ ...v2, MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' });
-            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual-prefix:V2|true|names');
+            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual-prefix:V2|true');
             setConfig({ ...v2, NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'true', NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' });
-            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual-prefix:V2|true|pid|names');
+            expect(await runInSearchContext('manual', () => searchSettingsService.cacheSuffix())).toBe('|manual-prefix:V2|true|pid');
         });
     });
 });

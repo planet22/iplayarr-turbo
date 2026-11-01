@@ -316,9 +316,13 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const list = (await http('/json-api/browse/collections')).json;
             const collection = on || list?.enabled ? (list?.collections || [])[0] : undefined;
             if (!collection) return base.pass ? { ...base, detail: `${base.detail}; no collection is available to search for (turn on Show Collections to probe)` } : base;
-            const r = await http(`/json-api/search?q=${encodeURIComponent(collection.title)}`, { timeout: 120000 });
-            const n = Array.isArray(r.json) ? r.json.length : -1;
-            return { ...base, pass: base.pass && (!on || n > 0), detail: `${base.detail}; a manual search for "${collection.title}" gave ${n} results` };
+            // Manual search shows the collection as a result of its own (a {collections} line of the search stream, listed
+            // first by the page), not its episodes; the type-ahead leads with it too.
+            const stream = await http(`/json-api/search/stream?q=${encodeURIComponent(collection.title)}`, { timeout: 120000 });
+            const lines = String(stream.text || '').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } });
+            const tiled = lines.some((l) => (l.collections || []).some((c) => c.id === collection.id));
+            const suggested = ((await http(`/json-api/browse/suggest?q=${encodeURIComponent(collection.title)}`, { timeout: 60000 })).json || []).some((s) => s.kind === 'collection' && s.id === collection.id);
+            return { ...base, pass: base.pass && tiled === on && suggested === on, detail: `${base.detail}; "${collection.title}": collection in search results ${tiled}, in type-ahead ${suggested}` };
         },
         BROWSE_SHOW_COLLECTIONS: async ({ next }) => {
             const on = next === 'true';

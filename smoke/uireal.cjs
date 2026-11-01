@@ -443,6 +443,74 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the footer link opens the Search settings tab', /#search/.test(page.url()) && (await page.locator('.settingsTab.active').first().innerText()).includes('Search'), page.url());
         });
 
+        // ---- Collections inside search: one results list (type Collection, filterable), table and posters, type-ahead (restored afterwards)
+        await flow('collections in search results and type-ahead', async (page) => {
+            const cfg0 = (await http('/json-api/config')).json || {};
+            const keys = ['NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'MANUAL_NATIVE_SEARCH', 'MANUAL_NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS'];
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: Object.fromEntries(keys.map((k) => [k, cfg0[k]])) }); });
+            const put = (body) => http('/json-api/config', { method: 'PUT', body });
+            await put({ NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V2', MANUAL_NATIVE_SEARCH: 'inherit', MANUAL_NATIVE_SEARCH_ENGINE: 'inherit', NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true', MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'inherit', BROWSE_SHOW_COLLECTIONS: 'true' });
+            const listed = ((await http('/json-api/browse/collections', { timeout: 120000 })).json?.collections) || [];
+            if (!listed.length) return rec(U, 'collections in search results', 'SKIP', 'iPlayer lists no collections right now');
+            const term = listed[0].title;
+            const rows = () => page.locator('.resultsTable tbody tr.clickable');
+            const collectionRows = () => page.locator('.resultsTable tbody tr.clickable', { hasText: 'COLLECTION' });
+
+            await page.goto(`${BASE}/search?searchTerm=${encodeURIComponent(term)}`, { waitUntil: 'networkidle' });
+            await collectionRows().first().waitFor({ timeout: 90000 });
+            ok('the collection is a row of the one results table, type COLLECTION', (await collectionRows().count()) >= 1);
+            ok('collections are listed first', /COLLECTION/.test(await rows().first().innerText()));
+            ok('a collection row has no checkbox and no download button', (await collectionRows().first().locator('.CheckInput-container, .rowIconButton').count()) === 0);
+            await shot(page, 'search-collection-row');
+
+            const chip = page.locator('.channelChips .chip', { hasText: /^\s*Collection\s*$/ });
+            if (await chip.count()) {
+                await chip.first().click();
+                const total = await rows().count();
+                ok('the Collection type filter leaves only collections', total > 0 && total === (await collectionRows().count()));
+                await page.locator('.channelChips .chip', { hasText: 'All types' }).first().click();
+            } else rec(U, 'the Collection type filter', 'SKIP', 'the results hold only collections, so there is no type filter');
+            const channel = page.locator('.channelChips .chip', { hasText: /^\s*BBC (One|Two|Four|News)\s*$/ });
+            if (await channel.count()) {
+                await channel.first().click();
+                ok('a channel filter hides collections (they have no channel)', (await collectionRows().count()) === 0);
+                await page.locator('.channelChips .chip', { hasText: 'All channels' }).first().click();
+            }
+
+            await collectionRows().first().click();
+            await page.waitForTimeout(800);
+            ok('clicking a collection opens it on the Collections page', new RegExp(`/browse/collections\\?c=${listed[0].id}`).test(page.url()), page.url());
+
+            // Poster view: the tile sits level with the programme cards beside it.
+            await page.addInitScript(() => { try { localStorage.setItem('iplayarr.searchViewMode', 'posters'); } catch { /* storage unavailable */ } });
+            await page.goto(`${BASE}/search?searchTerm=${encodeURIComponent(term)}`, { waitUntil: 'networkidle' });
+            const tile = page.locator('.browseGrid > .collectionCard');
+            if (await tile.count().catch(() => 0)) {
+                const beside = page.locator('.browseGrid > :not(.collectionCard)').first();
+                if (await beside.count()) {
+                    const [a, b] = [await tile.first().boundingBox(), await beside.boundingBox()];
+                    ok('in the poster view a collection tile lines up with the programme cards', !!a && !!b && Math.abs(a.y - b.y) < 2, `${a?.y} vs ${b?.y}`);
+                } else rec(U, 'poster alignment', 'SKIP', 'only collections in the results');
+                await shot(page, 'search-collection-poster');
+            } else rec(U, 'collections as poster tiles', 'SKIP', 'the poster view was not selected');
+
+            // Type-ahead: the collection leads, with the collection icon.
+            const box = page.locator('.pageSearchBar .searchBox');
+            await box.fill('');
+            await box.type(term.slice(0, Math.max(5, term.length)), { delay: 40 });
+            await page.waitForSelector('.suggestions li', { timeout: 20000 });
+            ok('the type-ahead leads with the collection, with the collection icon', (await page.locator('.suggestions li').first().locator('svg[data-icon="layer-group"]').count()) === 1);
+            await shot(page, 'search-collection-typeahead');
+            await page.locator('.suggestions li').first().dispatchEvent('mousedown');
+            await page.waitForTimeout(800);
+            ok('picking it opens the collection', /\/browse\/collections\?c=/.test(page.url()), page.url());
+
+            await put({ BROWSE_SHOW_COLLECTIONS: 'false' });
+            await page.goto(`${BASE}/search?searchTerm=${encodeURIComponent(term)}`, { waitUntil: 'networkidle' });
+            await page.waitForTimeout(3000);
+            ok('no collection results while Show Collections is off', (await page.locator('tr.clickable', { hasText: 'COLLECTION' }).count()) + (await page.locator('.browseGrid > .collectionCard').count()) === 0);
+        });
+
         // ---- Light/dark mode toggle
         await flow('light/dark mode', async (page) => {
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });

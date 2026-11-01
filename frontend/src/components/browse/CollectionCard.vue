@@ -38,6 +38,8 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
 <style lang="less" scoped>
 .collectionCard {
     display: block;
+    // A button centres its content when a grid row stretches it (beside taller programme cards in search results).
+    align-self: start;
     min-width: 0;
     padding: 0;
     border: 0;

@@ -56,13 +56,6 @@
         </div>
     </div>
     <div v-if="!loading" class="inner-content scroll-x">
-        <!-- Collections whose title matches the search: click one to open it on the Collections page. -->
-        <div v-if="collections.length" class="collectionGrid">
-            <CollectionCard
-                v-for="collection in collections" :key="collection.id" :collection="collection"
-                @click="router.push({ path: '/browse/collections', query: { c: collection.id } })"
-            />
-        </div>
         <div v-if="searchResults.length" class="resultsToolbar">
             <span class="resultCount">
                 {{ filteredResults.length }} result{{ filteredResults.length === 1 ? '' : 's' }}
@@ -102,8 +95,8 @@
         </div>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
         <div v-if="selectMode && viewMode === 'posters' && searchResults.length" class="selectBar">
-            <span>{{ selectedCount }} of {{ filteredResults.length }} selected</span>
-            <button type="button" :title="`Select all ${filteredResults.length} results`" :aria-label="`Select all ${filteredResults.length} results`" @click="setAllChecked(true)">
+            <span>{{ selectedCount }} of {{ downloadableResults.length }} selected</span>
+            <button type="button" :title="`Select all ${downloadableResults.length} results`" :aria-label="`Select all ${downloadableResults.length} results`" @click="setAllChecked(true)">
                 <font-awesome-icon :icon="['fas', 'check-double']" />
             </button>
             <button type="button" title="Clear selection" aria-label="Clear selection" :disabled="!selectedCount" @click="setAllChecked(false)">
@@ -111,11 +104,14 @@
             </button>
         </div>
         <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
-            <ProgrammeCard
-                v-for="item in posterItems" :key="item.pid" :item="item"
-                :selectable="selectMode" :selected="!!item.result.checked" :icon-badges="smallIcons"
-                @toggle="item.result.checked = !item.result.checked"
-            />
+            <template v-for="item in posterItems" :key="item.pid">
+                <CollectionCard v-if="item.result.kind === 'collection'" :collection="item.result" @click="openCollection(item.result)" />
+                <ProgrammeCard
+                    v-else :item="item"
+                    :selectable="selectMode" :selected="!!item.result.checked" :icon-badges="smallIcons"
+                    @toggle="item.result.checked = !item.result.checked"
+                />
+            </template>
         </div>
         <table v-else-if="filteredResults.length" class="resultsTable responsive-table">
             <colgroup>
@@ -149,7 +145,20 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="result of pagedResults" :key="result.pid" class="clickable">
+                <template v-for="result of pagedResults" :key="result.pid">
+                <tr v-if="result.kind === 'collection'" class="clickable" @click="openCollection(result)">
+                    <td />
+                    <td data-title="Type"><span class="pill">{{ result.type }}</span></td>
+                    <td class="text" :title="result.synopsis">{{ result.title }}</td>
+                    <td data-title="Series">-</td>
+                    <td data-title="Episode">{{ result.count }} {{ result.count === 1 ? 'title' : 'titles' }}</td>
+                    <td data-title="Est. Size">-</td>
+                    <td data-title="Channel" />
+                    <td data-title="First Broadcast">-</td>
+                    <td />
+                    <td />
+                </tr>
+                <tr v-else class="clickable">
                     <td>
                         <CheckInput v-model="result.checked" />
                     </td>
@@ -199,10 +208,11 @@
                         />
                     </td>
                 </tr>
+                </template>
             </tbody>
         </table>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
-        <div v-if="filteredResults.length == 0 && !loadingMore && searchTerm && !collections.length" class="emptyState">
+        <div v-if="filteredResults.length == 0 && !loadingMore && searchTerm" class="emptyState">
             <font-awesome-icon class="emptyIcon" :icon="['fas', 'magnifying-glass']" />
             <div class="emptyTitle">
                 <template v-if="searchResults.length">Nothing matches that filter</template>
@@ -270,8 +280,6 @@ const globalSettings = inject('globalSettings', ref({}));
 const searchEl = ref(null);
 const selectMode = ref(false);
 const searchResults = ref([]);
-// Collections matching the search, shown as tiles above the results.
-const collections = ref([]);
 const searchTerm = ref('');
 const searchInput = ref(route.query.searchTerm ?? '');
 const loading = ref(searchTerm.value !== '');
@@ -304,7 +312,7 @@ const searchSettingsLine = computed(() => {
 const toolbarIcons = computed(() => {
     const icons = [];
     // The table has its own checkboxes; in the poster view the button needs a selection to act on.
-    if (viewMode.value === 'posters' ? selectedCount.value > 0 : filteredResults.value.length) icons.push('download');
+    if (viewMode.value === 'posters' ? selectedCount.value > 0 : downloadableResults.value.length) icons.push('download');
     return icons;
 });
 
@@ -370,10 +378,16 @@ const onEnter = () => {
     }
 };
 
+// A collection is a result you open, not download from here: it is left out of selecting and downloading.
+const isCollection = (result) => result.kind === 'collection';
+const collectionResult = (collection) => ({ ...collection, pid: collection.id, kind: 'collection', type: 'COLLECTION' });
+const openCollection = ({ id }) => router.push({ path: '/browse/collections', query: { c: id } });
+const downloadableResults = computed(() => filteredResults.value.filter((result) => !isCollection(result)));
+
 const selectedCount = computed(() => searchResults.value.filter((result) => result.checked).length);
 
 const setAllChecked = (value) => {
-    filteredResults.value.forEach((result) => {
+    downloadableResults.value.forEach((result) => {
         result.checked = value;
     });
     allChecked.value = value;
@@ -457,7 +471,7 @@ const runSearch = () => {
 // Only offered when the results really mix TV and movies.
 const typeOptions = computed(() => [
     'All',
-    ...['TV', 'Movie'].filter((type) => searchResults.value.some((result) => result.type === type.toUpperCase())),
+    ...['TV', 'Movie', 'Collection'].filter((type) => searchResults.value.some((result) => result.type === type.toUpperCase())),
 ]);
 
 const channelFilter = ref('All');
@@ -511,7 +525,7 @@ watch(
     [pagedResults, viewMode],
     async ([results, mode]) => {
         if (mode !== 'posters') return;
-        const missing = results.map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
+        const missing = results.filter((result) => !isCollection(result)).map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
         if (missing.length === 0) return;
         missing.forEach((pid) => requestedThumbnails.add(pid));
         // The server takes at most 40 pids per lookup, and with a big page (Items Before Paging) or a page restored
@@ -614,7 +628,6 @@ watch(
             loading.value = true;
             loadingMore.value = true;
             searchResults.value = [];
-            collections.value = [];
             searchTerm.value = newSearchTerm;
             searchInput.value = newSearchTerm;
             rememberSearch(newSearchTerm);
@@ -630,7 +643,8 @@ watch(
                     abort.signal,
                     (found) => {
                         if (abort.signal.aborted) return;
-                        collections.value = found;
+                        // Collections are results like any other (own type, so the type filter covers them), listed first.
+                        searchResults.value.unshift(...found.map(collectionResult));
                         loading.value = false;
                     }
                 );
@@ -713,7 +727,7 @@ const selectFilter = (option) => {
 watch(
     allChecked,
     (newValue) => {
-        filteredResults.value.forEach((result) => {
+        downloadableResults.value.forEach((result) => {
             result.checked = newValue;
         });
     },
@@ -837,18 +851,6 @@ watch(
                 }
             }
         }
-    }
-}
-
-// Same tiles as the Collections page.
-.collectionGrid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 12px;
-    margin-bottom: 1.25rem;
-
-    @media (max-width: @mobile-breakpoint) {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

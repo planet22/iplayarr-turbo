@@ -74,9 +74,10 @@ class SearchSettingsService {
     // own entries (per setting combination; "prefix" versions the key so entries from before prefix matching are never reused) and are never served to Sonarr/Radarr, or the other way round.
     async cacheSuffix(): Promise<string> {
         if (searchContext() !== 'manual') return '';
-        const { native, engine, matchAllWords, expandCollections, collectionNames } = await this.effective('manual');
-        // The collection options only show up in the key when on, so entries made without them stay valid.
-        const collections = `${expandCollections ? '|pid' : ''}${collectionNames ? '|names' : ''}`;
+        const { native, engine, matchAllWords, expandCollections } = await this.effective('manual');
+        // Expanding by pid only shows up in the key when on, so entries made without it stay valid. Finding by
+        // name does not change manual results (it adds tiles beside them), so it is not part of the key.
+        const collections = expandCollections ? '|pid' : '';
         return `|manual-prefix:${native ? `${engine}|${matchAllWords}${collections}` : 'get_iplayer'}`;
     }
 }

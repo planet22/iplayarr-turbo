@@ -8,6 +8,7 @@ import { queryTerms, titleMatchesAllTerms } from '../utils/titleMatch';
 import configService from './configService';
 import DbCacheService from './db/dbCacheService';
 import loggingService from './loggingService';
+import searchSettingsService from './searchSettingsService';
 import thumbnailCacheService from './thumbnailCacheService';
 
 const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
@@ -55,6 +56,17 @@ class CollectionService {
             loggingService.error(`Collection search failed: ${err?.message ?? err}`);
             return [];
         }
+    }
+
+    // The collections to offer as tiles beside a manual search for the term: none unless Show Collections and the
+    // by-name option (manual search's own setting) are both on, since the tile opens the Collections page.
+    async matchesForSearch(term: string, limit: number): Promise<BrowseCollection[]> {
+        const [show, settings] = await Promise.all([
+            configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS),
+            searchSettingsService.effective('manual'),
+        ]);
+        if (show !== 'true' || !settings?.collectionNames) return [];
+        return (await this.search(term)).slice(0, limit);
     }
 
     async #categoryIds(): Promise<string[]> {

@@ -12,6 +12,7 @@ import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataRes
 import { Synonym } from '../../types/Synonym';
 import { extractPid } from '../../utils/extractPid';
 import { lunrSearchQuery } from '../../utils/lunrQuery';
+import { searchContext } from '../../utils/searchContext';
 import { traceCandidate, traceNote } from '../../utils/searchTrace';
 import { seasonHint } from '../../utils/seasonHint';
 import { firstMissingTerm, titleRank } from '../../utils/titleMatch';
@@ -94,8 +95,9 @@ class NativeSearchV2Service implements AbstractSearchService {
             }
         }
 
-        // Collections whose title has every search word are listed first, ahead of the usual results.
-        if ((await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES)) === 'true') {
+        // Collections whose title has every search word are listed first, ahead of the usual results. Only for
+        // Sonarr/Radarr: the Search page shows a collection as a tile that opens it instead (see collectionService.matchesForSearch).
+        if (searchContext() !== 'manual' && (await searchSettingsService.get(IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES)) === 'true') {
             for (const { id } of (await collectionService.search(term)).slice(0, maxCollectionsPerSearch)) {
                 await this.#collectEpisodes(await this.#listGroup(id), collect);
             }

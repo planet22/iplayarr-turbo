@@ -3,6 +3,7 @@ import axios from 'axios';
 import collectionService from '../../src/service/collectionService';
 import configService from '../../src/service/configService';
 import loggingService from '../../src/service/loggingService';
+import searchSettingsService from '../../src/service/searchSettingsService';
 import thumbnailCacheService from '../../src/service/thumbnailCacheService';
 
 jest.mock('axios');
@@ -302,6 +303,34 @@ describe('collectionService', () => {
             expect(await collectionService.search('fright night')).toEqual([]);
             expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('db down'));
             spy.mockRestore();
+        });
+    });
+
+    describe('matchesForSearch', () => {
+        const fright = { id: 'p096h09x', title: 'Fright Night', count: 34 };
+        const setup = (show: string, collectionNames: boolean | undefined, found = [fright, { ...fright, id: 'g2' }, { ...fright, id: 'g3' }]) => {
+            jest.spyOn(configService, 'getParameter').mockResolvedValue(show);
+            jest.spyOn(searchSettingsService, 'effective').mockResolvedValue({ native: true, engine: 'V2', collectionNames, inherited: [] });
+            return jest.spyOn(collectionService, 'search').mockResolvedValue(found);
+        };
+        afterEach(() => jest.restoreAllMocks());
+
+        it('offers the matching collections, up to the limit, when Show Collections and finding by name are on', async () => {
+            const search = setup('true', true);
+            expect((await collectionService.matchesForSearch('fright night', 2)).map(({ id }) => id)).toEqual(['p096h09x', 'g2']);
+            expect(search).toHaveBeenCalledWith('fright night');
+        });
+
+        it('offers none when Show Collections is off, as the tile could only open a switched-off page', async () => {
+            const search = setup('false', true);
+            expect(await collectionService.matchesForSearch('fright night', 6)).toEqual([]);
+            expect(search).not.toHaveBeenCalled();
+        });
+
+        it('offers none when finding collections by name is off for manual search', async () => {
+            const search = setup('true', undefined);
+            expect(await collectionService.matchesForSearch('fright night', 6)).toEqual([]);
+            expect(search).not.toHaveBeenCalled();
         });
     });
 });

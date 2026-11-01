@@ -199,9 +199,9 @@ describe('BrowseRoute', () => {
     });
 
     it('GET /suggest passes the query through', async () => {
-        mocked.suggest.mockResolvedValue([{ pid: 'a1', title: 'Doctor Who' }]);
+        mocked.suggest.mockResolvedValue([{ kind: 'tv', pid: 'a1', title: 'Doctor Who' }]);
         const res = await request(app).get('/suggest?q=doct');
-        expect(res.body).toEqual([{ pid: 'a1', title: 'Doctor Who' }]);
+        expect(res.body).toEqual([{ kind: 'tv', pid: 'a1', title: 'Doctor Who' }]);
         expect(mocked.suggest).toHaveBeenCalledWith('doct');
     });
 

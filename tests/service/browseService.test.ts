@@ -13,6 +13,7 @@ import browseService, {
     toBrowseItem,
     toBrowseItems,
 } from '../../src/service/browseService';
+import collectionService from '../../src/service/collectionService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import liveChannelService from '../../src/service/liveChannelService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
@@ -341,10 +342,48 @@ describe('browseService', () => {
         expect(await browseService.suggest('d')).toEqual([]);
         expect(mockedAxios.get).not.toHaveBeenCalled();
         expect(await browseService.suggest(' doct ')).toEqual([
-            { pid: 'a1', title: 'Doctor Who' },
-            { pid: 'a3', title: 'Doctors' },
+            { kind: 'tv', pid: 'a1', title: 'Doctor Who' },
+            { kind: 'tv', pid: 'a3', title: 'Doctors' },
         ]);
         expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('new-search?q=doct'));
+    });
+
+    describe('suggest kinds', () => {
+        const metadata = (key?: string) => ({ programme: { categories: key ? [{ type: 'format', key }] : [] } }) as any;
+
+        afterEach(() => jest.restoreAllMocks());
+
+        it('marks a programme in the films format as a film and the rest, or a failed lookup, as TV', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { new_search: { results: [{ id: 'f1', title: 'Paddington' }, { id: 't1', title: 'Paddington Show' }, { id: 'x1', title: 'Paddington Bear' }] } } });
+            mockedDetails.getMetadata.mockImplementation(async (pid: string) => {
+                if (pid === 'x1') throw new Error('down');
+                return metadata(pid === 'f1' ? 'films' : 'drama');
+            });
+            expect((await browseService.suggest('paddington')).map(({ kind }) => kind)).toEqual(['film', 'tv', 'tv']);
+        });
+
+        it('puts matching collections first, with what a tile needs', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { new_search: { results: [{ id: 't1', title: 'Fright Night Live' }] } } });
+            jest.spyOn(collectionService, 'matchesForSearch').mockResolvedValue([{ id: 'p096h09x', title: 'Fright Night', count: 34, thumbnail: 'json-api/thumbnail/p1.jpg', synopsis: 'Scary' }]);
+            expect(await browseService.suggest('fright night')).toEqual([
+                { kind: 'collection', id: 'p096h09x', title: 'Fright Night', count: 34, thumbnail: 'json-api/thumbnail/p1.jpg' },
+                { kind: 'tv', pid: 't1', title: 'Fright Night Live' },
+            ]);
+            expect(collectionService.matchesForSearch).toHaveBeenCalledWith('fright night', 3);
+        });
+
+        it('still suggests programmes when the collection lookup fails', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { new_search: { results: [{ id: 't1', title: 'Fright Night Live' }] } } });
+            jest.spyOn(collectionService, 'matchesForSearch').mockRejectedValue(new Error('down'));
+            expect(await browseService.suggest('fright night')).toEqual([{ kind: 'tv', pid: 't1', title: 'Fright Night Live' }]);
+        });
+
+        it('does not wait on a film lookup that never answers', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { new_search: { results: [{ id: 'f1', title: 'Paddington' }] } } });
+            jest.spyOn(collectionService, 'matchesForSearch').mockResolvedValue([]);
+            mockedDetails.getMetadata.mockReturnValue(new Promise(() => undefined));
+            expect(await browseService.suggest('paddington')).toEqual([{ kind: 'tv', pid: 'f1', title: 'Paddington' }]);
+        });
     });
 
     const broadcast = (id: string, start: string, end: string) => ({
