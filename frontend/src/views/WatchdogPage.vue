@@ -239,7 +239,7 @@
                 </template>
             </DataCard>
         </div>
-        <table v-else class="dataTable">
+        <table v-else class="dataTable watchdogTable">
             <thead>
                 <tr>
                     <th></th>
@@ -496,6 +496,22 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="less">
+// The links table has many narrow columns: tight horizontal padding, and the thumbnail, pid, episode,
+// status, source, checked and action columns shrink to their content so the detail column gets the room.
+.watchdogTable {
+    th,
+    td {
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+
+    th:not(:last-child),
+    td:not(:last-child) {
+        width: 1%;
+        white-space: nowrap;
+    }
+}
+
 // Source, check time and any action, in the pill row of a Links card.
 .linkMeta {
     display: inline-flex;
