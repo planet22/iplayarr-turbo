@@ -314,7 +314,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             // Search for a collection that is on iPlayer right now; a title no programme shares, so any hit is a collection member.
             const list = (await http('/json-api/browse/collections')).json;
             const collection = on || list?.enabled ? (list?.collections || [])[0] : undefined;
-            if (!collection) return base.pass ? { ...base, detail: `${base.detail}; no collection is available to search for (turn on Show Collections on Discover to probe)` } : base;
+            if (!collection) return base.pass ? { ...base, detail: `${base.detail}; no collection is available to search for (turn on Show Collections to probe)` } : base;
             const r = await http(`/json-api/search?q=${encodeURIComponent(collection.title)}`, { timeout: 120000 });
             const n = Array.isArray(r.json) ? r.json.length : -1;
             return { ...base, pass: base.pass && (!on || n > 0), detail: `${base.detail}; a manual search for "${collection.title}" gave ${n} results` };
@@ -328,7 +328,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             if (r.status === 200 && list.enabled === true && count === 0) return 'the BBC pages listed no collections to show right now';
             const first = (list.collections || [])[0];
             const members = first ? (await http(`/json-api/browse/collections/${first.id}?perPage=5`)).json : undefined;
-            return { what: 'Discover lists collections and a collection opens to its titles', pass: r.status === 200 && list.enabled === true && count > 0 && (members?.items || []).length > 0, detail: `${count} collections; "${first?.title}" opened ${(members?.items || []).length} titles` };
+            return { what: 'the Collections page lists collections and one opens to its titles', pass: r.status === 200 && list.enabled === true && count > 0 && (members?.items || []).length > 0, detail: `${count} collections; "${first?.title}" opened ${(members?.items || []).length} titles` };
         },
         NATIVE_SEARCH: async ({ next }) => {
             if ((effective(await get(), 'MANUAL_NATIVE_SEARCH') || 'inherit') !== 'inherit') return 'manual search has its own native-search override';

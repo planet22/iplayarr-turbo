@@ -52,7 +52,7 @@
         v-model="config.BROWSE_SHOW_COLLECTIONS"
         field="BROWSE_SHOW_COLLECTIONS"
         name="Show Collections"
-        tooltip="Adds a Collections page to the menu and a Collections row to Discover, for iPlayer's themed lists (e.g. Fright Night). Click one to open what is in it."
+        tooltip="Adds a Collections page to the Browse menu, for iPlayer's themed lists (e.g. Fright Night). Click one to open what is in it."
         :error="validationErrors.config?.BROWSE_SHOW_COLLECTIONS"
         :options="trueOrFalse"
     />

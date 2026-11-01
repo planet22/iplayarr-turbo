@@ -61,7 +61,7 @@ Settings named `UI_*` are stored with the rest of the configuration and apply to
 | Colour Scheme / Colour Mode | _(per browser)_ | iPlayarr / Match system | Six schemes, each with a dark and a light version. The sun/monitor/moon switch in the top bar changes the mode at once. |
 | Top Bar | _(per browser)_ | Slim | Slim keeps the bar on screen while scrolling; Hide on scroll shows it again when you scroll up. |
 | Show Quick Find Button | _(per browser)_ | on | The lightning-bolt button in the top bar. `Ctrl+K` / `Cmd+K` works either way. |
-| Show Collections | `BROWSE_SHOW_COLLECTIONS` | `false` | Adds a **Collections** page to the Browse menu and a Collections row to Discover: each collection is a tile with a group icon, and clicking it opens what is in it. See [BROWSE.md](BROWSE.md#collections). |
+| Show Collections | `BROWSE_SHOW_COLLECTIONS` | `false` | Adds a **Collections** page to the Browse menu: each collection is a tile with a group icon, and clicking it opens what is in it. See [BROWSE.md](BROWSE.md#collections). |
 | Show Info Messages | `UI_INFO_MESSAGES` | `true` | The blue explanatory notes at the top of pages. Warnings and errors always show. |
 | Colour Channel Pills | `UI_PILL_COLORS` | `true` | Colour channel labels to match each BBC logo. |
 | Show Channel Tools | `UI_CHANNEL_TOOLS` | `true` | The arrange, library, Live TV and customise buttons on the Channels page. Turn off to keep the page simple. |

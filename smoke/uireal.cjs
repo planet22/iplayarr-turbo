@@ -326,8 +326,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('nothing was saved', (await http('/json-api/config')).json?.NATIVE_SEARCH === n0);
         });
 
-        // ---- Collections: menu item, page, Discover row and the Search footer follow Show Collections (restored afterwards)
-        await flow('collections menu, page and Discover row', async (page) => {
+        // ---- Collections: the menu item and page follow Show Collections, and Discover never has a row (restored afterwards)
+        await flow('collections menu and page', async (page) => {
             const cfg0 = (await http('/json-api/config')).json || {};
             const was = cfg0.BROWSE_SHOW_COLLECTIONS;
             cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: { BROWSE_SHOW_COLLECTIONS: was } }); });
@@ -337,7 +337,6 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await put('false');
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
             ok('no Collections menu item while it is off', (await nav().count()) === 0);
-            ok('no Collections row on Discover while it is off', (await page.locator('.collectionsRail').count()) === 0);
             await page.goto(BASE + '/browse/collections', { waitUntil: 'networkidle' });
             await page.waitForTimeout(800);
             ok('the Collections page says it is switched off and links to Settings', /switched off/i.test(await page.locator('body').innerText()) && (await page.locator('a[href*="settings"][href*="appearance"]').count()) > 0);
@@ -347,20 +346,13 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('a Collections menu item appears when it is on', (await nav().count()) === 1);
             const listed = ((await http('/json-api/browse/collections', { timeout: 120000 })).json?.collections) || [];
             if (!listed.length) return rec(U, 'collections page tiles', 'SKIP', 'iPlayer lists no collections right now');
-            await page.waitForSelector('.collectionsRail .collectionCard', { timeout: 30000 }).catch(() => {});
-            ok('Discover shows the Collections row with a tile per collection', (await page.locator('.collectionsRail .collectionCard').count()) === listed.length, `${listed.length} expected`);
-            ok('each tile carries the group icon and a title count', (await page.locator('.collectionsRail .collectionCard .groupIcon').count()) === listed.length && /\d+ titles?/.test(await page.locator('.collectionsRail .collectionCard .count').first().innerText()));
-            await page.locator('.collectionsRail .collectionCard').first().click();
-            await page.waitForSelector('.programmeRail .programmeCard', { timeout: 30000 }).catch(() => {});
-            ok('clicking a Discover tile opens its titles under the row', (await page.locator('.programmeRail', { hasText: listed[0].title }).count()) >= 1);
-            await page.locator('.collectionsRail .collectionCard').first().click();
-            await page.waitForTimeout(300);
-            ok('clicking it again closes it', (await page.locator('.collectionsRail .collectionCard.selected').count()) === 0);
+            ok('Discover has no Collections row even while it is on (they have their own page)', (await page.locator('.collectionsRail, .collectionCard').count()) === 0);
 
             await nav().first().click();
             await page.waitForSelector('.collectionGrid .collectionCard', { timeout: 30000 });
             ok('the menu item opens the Collections page', /\/browse\/collections/.test(page.url()));
             ok('the page lists the same collections', (await page.locator('.collectionGrid .collectionCard').count()) === listed.length);
+            ok('each tile carries the group icon and a title count', (await page.locator('.collectionGrid .collectionCard .groupIcon').count()) === listed.length && /\d+ titles?/.test(await page.locator('.collectionGrid .collectionCard .count').first().innerText()));
             await shot(page, 'collections-page');
             await page.locator('.collectionGrid .collectionCard').first().click();
             await page.waitForSelector('.openCollection .programmeCard', { timeout: 30000 }).catch(() => {});
