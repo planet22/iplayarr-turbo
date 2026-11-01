@@ -76,6 +76,20 @@ describe('nfoBuilder', () => {
 
             expect(xml).toContain('<title>Movie.Name</title>');
         });
+
+        it('names the collection it came from (the Kodi/Jellyfin set tag), escaped', () => {
+            const item = baseItem({ type: VideoType.MOVIE, library: { title: 'Halloween', collection: 'Scary & Co' } });
+
+            const xml = buildMovieNfo(item);
+
+            expect(xml).toContain('<set>\n    <name>Scary &amp; Co</name>\n  </set>');
+            expect(xml.trimEnd().endsWith('</movie>')).toBe(true);
+        });
+
+        it('has no set tag without a collection', () => {
+            const xml = buildMovieNfo(baseItem({ type: VideoType.MOVIE, library: { title: 'Halloween' } }));
+            expect(xml).not.toContain('<set>');
+        });
     });
 
     describe('buildShowNfo', () => {

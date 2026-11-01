@@ -106,6 +106,32 @@ describe('collectionService', () => {
         });
     });
 
+    describe('find', () => {
+        it('returns a listed collection without another lookup', async () => {
+            serve();
+            expect((await collectionService.find('p096h09x'))?.title).toBe('Fright Night');
+        });
+
+        it('looks a collection up directly when iPlayer is not listing it', async () => {
+            serve({ 'groups/p0hidden1/': () => groupRecord('Hidden Gems', 5) });
+            expect(await collectionService.find('p0hidden1')).toMatchObject({ id: 'p0hidden1', title: 'Hidden Gems', count: 5 });
+        });
+
+        it('is undefined for an id that is not a collection, an empty one, or an odd id', async () => {
+            serve({ 'groups/p0empty01/': () => groupRecord('Empty', 0), 'groups/p0broken1/': () => Promise.reject(new Error('404')) });
+            expect(await collectionService.find('p0empty01')).toBeUndefined();
+            expect(await collectionService.find('p0broken1')).toBeUndefined();
+            expect(await collectionService.find('bad id!')).toBeUndefined();
+        });
+
+        it('still finds one directly when the list cannot be built', async () => {
+            const spy = jest.spyOn(collectionService, 'list').mockRejectedValue(new Error('db down'));
+            serve({ 'groups/p0direct01/': () => groupRecord('Direct', 2) });
+            expect(await collectionService.find('p0direct01')).toMatchObject({ title: 'Direct' });
+            spy.mockRestore();
+        });
+    });
+
     describe('search', () => {
         it('finds collections whose title has every word', async () => {
             serve();

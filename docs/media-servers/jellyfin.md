@@ -15,6 +15,22 @@ With `WRITE_NFO_STRM` enabled, each completed item gets a matching Jellyfin/Kodi
 
 Jellyfin reads this natively on a library scan — no plugin needed. Despite the setting's name, this isn't limited to `.strm` mode; it writes NFO for any completed download when enabled, full file or `.strm` pointer alike.
 
+## Collections (BoxSets)
+
+**Download collection** on an open collection (Browse → Collections) queues every film and episode in it through the normal queue; with Media Mode `strm` that is a folder of `.strm` links. With **Group the films as a Jellyfin collection** ticked (the default) each film goes under a `<Collection> [boxset]` folder, which is how Jellyfin is told to gather the films inside into one collection:
+
+```
+Fright Night [boxset]/
+  Halloween/Halloween-BBCiPlayarrTurbo.strm
+  Halloween/Halloween-BBCiPlayarrTurbo.nfo
+  The Boogeyman/...
+```
+
+- Add `COMPLETE_DIR` as a **Movies** library (or a Mixed one) and run a library scan; a "Fright Night" collection appears under Collections. With `WRITE_NFO_STRM` on, each film's `.nfo` also names the collection (`<set>`), which Jellyfin can use when it is set to read NFO.
+- **TV episodes in a collection keep their normal `Show/Season NN/` folders**: a boxset folder inside a TV library would break it. Whole series or programmes listed in a collection are not expanded (they can be hundreds of episodes); download those from their own page.
+- This is a library, not a playlist: items play with seeking, subtitles and watched state like any other `.strm`. An M3U playlist would show them as Live TV channels in Jellyfin with none of that, so none is produced.
+- The `.strm` requirements and link signing below apply as usual.
+
 ## `.strm` playback
 
 With `MEDIA_MODE=strm`, completed items are a small pointer file instead of the full media — Jellyfin's scanner sees it as a normal video file and resolves playback through iPlayarr on demand. Requirements:

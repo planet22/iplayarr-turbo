@@ -31,12 +31,15 @@ const illegalCharsRegex = /[<>:"/\\|?*\x00-\x1F]/g;
 
 function sanitizeSegment(segment: string): string {
     // Leading dots would let a title of ".." name the parent directory.
-    return segment.replace(illegalCharsRegex, '').replace(/^[.s]+/, '').trim() || 'Unknown';
+    return segment.replace(illegalCharsRegex, '').replace(/^[.\s]+/, '').trim() || 'Unknown';
 }
 
 // Release group stamped on every file name, so Sonarr/Radarr record it and a scan can tell our
 // video files (not just .strm links) from anything else in the library.
 const releaseGroupSuffix = `-${RELEASE_GROUP}`;
+
+// Jellyfin's naming for a folder of films that form one collection (BoxSet).
+const boxsetSuffix = ' [boxset]';
 
 export interface LibraryFilePath {
     // Absolute directory the file should be written into.
@@ -93,7 +96,10 @@ function buildUncheckedLibraryFilePath(
 
     if (item.type === VideoType.MOVIE) {
         const fileName = `${showTitle}${releaseGroupSuffix}.${extension}`;
-        const directory = path.join(completeDir, showTitle);
+        // A film from an iPlayer collection sits in a "<collection> [boxset]" folder, which is how Jellyfin is told to
+        // gather the films inside into one collection. (TV keeps its show folders: a boxset folder would break them.)
+        const collectionFolder = item.library.collection ? `${sanitizeSegment(item.library.collection)}${boxsetSuffix}` : undefined;
+        const directory = collectionFolder ? path.join(completeDir, collectionFolder, showTitle) : path.join(completeDir, showTitle);
         return {
             directory,
             fileName,
@@ -101,7 +107,7 @@ function buildUncheckedLibraryFilePath(
             // Built with explicit '/' (not path.join) to match the '/'-joined
             // style the rest of this codebase reports paths to Sonarr/Radarr
             // in, regardless of the host OS's path separator.
-            relativePath: `${showTitle}/${fileName}`,
+            relativePath: `${collectionFolder ? `${collectionFolder}/` : ''}${showTitle}/${fileName}`,
             showDirectory: directory,
         };
     }

@@ -365,6 +365,20 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.goto(`${BASE}/browse/collections?c=${listed[0].id}`, { waitUntil: 'networkidle' });
             await page.waitForSelector('.openCollection .programmeCard', { timeout: 30000 }).catch(() => {});
             ok('a link with ?c= opens that collection on load', (await page.locator('.openCollection h2', { hasText: listed[0].title }).count()) === 1);
+            // Download collection: the button asks first (count, strm / real files, Jellyfin collection folder); Cancel queues nothing.
+            const queueSize = async () => ((await http('/json-api/queue/queue')).json || []).length;
+            const queued0 = await queueSize();
+            const dlButton = page.locator('.openCollection .downloadCollection');
+            ok('an open collection has a Download collection button', (await dlButton.count()) === 1 && /Download collection/.test(await dlButton.innerText()));
+            await dlButton.click();
+            await page.waitForSelector('.modal-inner, [role=dialog]', { timeout: 60000 }).catch(() => {});
+            const modalText = await page.locator('.modal-inner, [role=dialog]').first().innerText().catch(() => '');
+            ok('the dialog states the number of titles and offers the Jellyfin collection folder', /Download \d+ titles from/.test(modalText) && /Jellyfin collection/i.test(modalText), modalText.slice(0, 120));
+            ok('the dialog offers strm or real files', /\.strm|small/i.test(modalText) || (await page.locator('.modal-inner [role=radio], .modal-inner button').count()) > 1);
+            await shot(page, 'collections-download-dialog');
+            await page.getByRole('button', { name: /^Cancel$/ }).last().click();
+            await page.waitForTimeout(500);
+            ok('cancelling queued nothing', (await queueSize()) === queued0, `${queued0} before, ${await queueSize()} after`);
             // The quick-find palette knows the page.
             await page.keyboard.press('Control+k');
             await page.keyboard.type('collections');

@@ -68,8 +68,16 @@ class CollectionService {
         }
     }
 
+    // One collection by id: from the list when iPlayer shows it on its pages, else straight from its own record (a
+    // collection can be reached by pid without being listed). undefined when the BBC has no such non-empty collection.
+    async find(id: string): Promise<BrowseCollection | undefined> {
+        if (!ID_REGEX.test(id)) return undefined;
+        const listed = (await this.list().catch(() => [])).find((collection) => collection.id === id);
+        return listed ?? this.describe({ id, title: id });
+    }
+
     // Artwork and size from the collection's own record; undefined when it is empty or cannot be read.
-    async #describe({ id, title }: GroupRef): Promise<BrowseCollection | undefined> {
+    async describe({ id, title }: GroupRef): Promise<BrowseCollection | undefined> {
         try {
             const response = await axios.get(`${IBL_BASE}/groups/${encodeURIComponent(id)}/episodes?rights=web&per_page=1`);
             const group = response.data?.group_episodes;
@@ -97,7 +105,7 @@ class CollectionService {
         const groups = new Map<string, GroupRef>();
         for (const group of found.flat()) if (!groups.has(group.id)) groups.set(group.id, group);
         const info = pLimit(infoConcurrency);
-        const described = await Promise.all([...groups.values()].map((group) => info(() => this.#describe(group))));
+        const described = await Promise.all([...groups.values()].map((group) => info(() => this.describe(group))));
         const collections = described.filter((c): c is BrowseCollection => c !== undefined);
         loggingService.log(`Collections: found ${collections.length} on ${urls.length} iPlayer pages`);
         return collections;

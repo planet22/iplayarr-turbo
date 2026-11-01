@@ -25,7 +25,16 @@
                 />
             </div>
             <section v-if="open" ref="openSection" class="openCollection">
-                <h2>{{ open.title }}</h2>
+                <div class="openHeader">
+                    <h2>{{ open.title }}</h2>
+                    <button
+                        type="button" class="downloadCollection" :disabled="downloading" title="Queue every title in this collection"
+                        @click="downloadCollection"
+                    >
+                        <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-download']" :spin="downloading" />
+                        <span>Download collection</span>
+                    </button>
+                </div>
                 <p v-if="open.synopsis" class="synopsis">{{ open.synopsis }}</p>
                 <SkeletonLoader v-if="itemsLoading" pagination :count="12" />
                 <ErrorState v-else-if="itemsError" :message="itemsError" @retry="loadItems" />
@@ -39,7 +48,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, inject, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import CollectionCard from '@/components/browse/CollectionCard.vue';
@@ -50,11 +59,16 @@ import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import { browseFetch } from '@/lib/browse';
+import dialogService from '@/lib/dialogService';
+import { defaultMediaMode } from '@/lib/downloadSummary';
+import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 const PER_PAGE = 150; // the server's max perPage
 
 const route = useRoute();
 const router = useRouter();
+const globalSettings = inject('globalSettings', ref({}));
 
 const enabled = ref(true);
 const collections = ref([]);
@@ -99,6 +113,44 @@ const loadItems = async () => {
     }
 };
 
+// Queues the whole collection on the server (it pages through everything and files films as films). A dry run first
+// gives the count for the confirmation; strm or real files and the Jellyfin collection folder are chosen there.
+const downloading = ref(false);
+const downloadCollection = async () => {
+    const collection = open.value;
+    if (!collection || downloading.value) return;
+    const url = `json-api/browse/collections/${encodeURIComponent(collection.id)}/download`;
+    downloading.value = true;
+    try {
+        const preview = await ipFetch(url, 'POST', { dryRun: true });
+        if (!preview.ok) {
+            toastService.error('Unable to read the collection', { detail: preview.data?.message });
+            return;
+        }
+        const { total, skipped } = preview.data;
+        if (!total) {
+            toastService.info('Nothing in this collection can be downloaded right now');
+            return;
+        }
+        const left = skipped ? ` ${skipped} whole series ${skipped === 1 ? 'is' : 'are'} left out.` : '';
+        const choice = await dialogService.confirmDownload(`Download ${total} titles from ${collection.title}?${left}`, { count: total, offerBoxset: true });
+        if (!choice) return;
+        // Only sent when it differs from the Media Mode setting.
+        const media = choice.media === defaultMediaMode(globalSettings.value) ? undefined : choice.media;
+        const run = await ipFetch(url, 'POST', { ...(media ? { media } : {}), boxset: choice.boxset });
+        if (!run.ok) {
+            toastService.error('Unable to queue the collection', { detail: run.data?.message });
+            return;
+        }
+        const { queued, failed } = run.data;
+        if (failed) toastService.error(`${failed} title${failed === 1 ? '' : 's'} could not be queued`, { detail: `${queued} were queued.` });
+        else toastService.success(`${queued} title${queued === 1 ? '' : 's'} queued`);
+        if (queued) router.push('/queue');
+    } finally {
+        downloading.value = false;
+    }
+};
+
 const toggle = (collection) => router.push({ query: openId.value === collection.id ? {} : { c: collection.id } });
 
 // Open the contents under the tiles and bring them into view.
@@ -125,10 +177,43 @@ onMounted(load);
 }
 
 .openCollection {
+    .openHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 4px;
+    }
+
     h2 {
-        margin: 0 0 4px;
+        margin: 0;
         font-size: 20px;
         font-weight: 400;
+    }
+
+    .downloadCollection {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+        font: inherit;
+        cursor: pointer;
+
+        &:hover:not(:disabled) {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
+        }
+
+        &:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
     }
 
     .synopsis {

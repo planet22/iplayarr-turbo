@@ -123,6 +123,26 @@ async function readOnly(ctx, h) {
     }
     rec(P, `hostile ids never crash a handler, leak internals or read files (${total} requests)`, bad ? 'FAIL' : 'PASS', `${bad} bad`);
 
+    // 3b. Download collection takes a body: hostile ids and bodies are refused with a 4xx, and nothing is queued
+    const dl = (id, body, headers = { 'content-type': 'application/json' }) => raw(`/json-api/browse/collections/${id}/download`, { method: 'POST', headers, body, timeout: 60000 });
+    let badDl = 0, totalDl = 0;
+    for (const n of nasty) {
+        const enc = /%/.test(n) ? n : encodeURIComponent(n);
+        const r = await dl(enc, JSON.stringify({ dryRun: true }));
+        totalDl++;
+        if (r.status === 0 || r.status >= 500 || STACK.test(r.text || '') || r.status === 200) { badDl++; rec(P, `collection download hostile id ${n.slice(0, 20)}`, 'FAIL', `HTTP ${r.status} ${r.error || (r.text || '').slice(0, 100)}`); }
+    }
+    for (const body of ['{bad json', '[]', 'null', '"text"', JSON.stringify({ media: { $ne: 1 }, dryRun: true }), JSON.stringify({ boxset: [1], dryRun: true }), JSON.stringify({ dryRun: { a: 1 } }), JSON.stringify({ media: 'x'.repeat(10000), dryRun: true }), JSON.stringify({ dryRun: 'true' })]) {
+        const r = await dl('p096h09x', body);
+        totalDl++;
+        // 404 is fine too: the collection may be gone. Anything that reaches the queue (a 200 without dryRun true) is not.
+        if (r.status === 0 || r.status >= 500 || STACK.test(r.text || '') || (r.status === 200 && r.json?.queued > 0)) { badDl++; rec(P, `collection download hostile body ${body.slice(0, 24)}`, 'FAIL', `HTTP ${r.status} ${r.error || (r.text || '').slice(0, 100)}`); }
+    }
+    const wrongType = await dl('p096h09x', 'dryRun=true', { 'content-type': 'application/x-www-form-urlencoded' });
+    totalDl++;
+    if (wrongType.status === 0 || wrongType.status >= 500 || (wrongType.status === 200 && wrongType.json?.queued > 0)) { badDl++; rec(P, 'collection download with a form body', 'FAIL', `HTTP ${wrongType.status}`); }
+    rec(P, `collection download refuses hostile ids and bodies without queueing or crashing (${totalDl} requests)`, badDl ? 'FAIL' : 'PASS', `${badDl} bad`);
+
     // 4. Keys are not interchangeable: the stream key must not buy a download, the API key must not buy a stream
     const pid = ctx.pid || 'm0030pxt';
     const sep = [

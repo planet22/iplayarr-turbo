@@ -6,12 +6,16 @@
         cancel-label="Cancel"
         :show-confirm="true"
         confirm-label="Download"
-        @confirm="emit('confirm', { media: mode, version: extra })"
+        @confirm="emit('confirm', { media: mode, version: extra, boxset })"
         @cancel="emit('cancel')"
         @dismiss="emit('cancel')"
     >
         <p class="question">{{ text }}</p>
         <DownloadModeToggle v-model="mode" />
+        <label v-if="offerBoxset" class="boxsetChoice">
+            <CheckInput v-model="boxset" aria-label="Group the films as a Jellyfin collection" />
+            <span>Group the films as a Jellyfin collection <small>(a "&lt;collection&gt; [boxset]" folder)</small></span>
+        </label>
         <div v-if="versions.length" class="versionChoice">
             <SelectInput
                 v-model="extra"
@@ -31,6 +35,7 @@
 import { computed, defineEmits, defineProps, inject, ref } from 'vue';
 
 import DownloadModeToggle from '@/components/common/DownloadModeToggle.vue';
+import CheckInput from '@/components/common/form/CheckInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import { defaultMediaMode, describeDownload } from '@/lib/downloadSummary';
 
@@ -48,8 +53,11 @@ const props = defineProps({
     versions: { type: Array, default: () => [] },
     // The version choice the dialog starts on.
     initialVersion: { type: String, default: '' },
+    // A collection download also offers to put its films in a Jellyfin collection folder; confirms with { boxset }.
+    offerBoxset: { type: Boolean, default: false },
 });
 const emit = defineEmits(['confirm', 'cancel']);
+const boxset = ref(true);
 
 const globalSettings = inject('globalSettings', ref({}));
 const mode = ref(defaultMediaMode(globalSettings.value));
@@ -70,6 +78,18 @@ const summary = computed(() => describeDownload(globalSettings.value, { count: p
 
 .versionChoice {
     margin-top: 12px;
+}
+
+.boxsetChoice {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    cursor: pointer;
+
+    small {
+        color: @subtle-text-color;
+    }
 }
 
 .noteBox {

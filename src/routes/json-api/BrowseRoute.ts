@@ -3,9 +3,11 @@ import { Request, Response, Router } from 'express';
 import { isUhdEventFeed, OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
 import browseService from '../../service/browseService';
 import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
+import collectionDownloadService from '../../service/collectionDownloadService';
 import collectionService from '../../service/collectionService';
 import configService from '../../service/configService';
 import liveChannelService from '../../service/liveChannelService';
+import { MediaMode } from '../../types/enums/MediaMode';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
@@ -93,6 +95,29 @@ router.get(
         const id = req.params.id as string;
         if (!ID_REGEX.test(id)) return invalid(res, 'Invalid collection id');
         res.json(await browseService.collection(id, toInt(req.query.page), toInt(req.query.perPage)));
+    })
+);
+
+// Queues every title in a collection (see collectionDownloadService). { dryRun: true } only counts them.
+router.post(
+    '/collections/:id/download',
+    handle(async (req, res) => {
+        const id = req.params.id as string;
+        if (!ID_REGEX.test(id)) return invalid(res, 'Invalid collection id');
+        // No body at all means the defaults; a list or other non-object is a mistake, never a request to queue everything.
+        const body = req.body ?? {};
+        if (typeof body !== 'object' || Array.isArray(body)) return invalid(res, 'The body must be a JSON object');
+        const { media, boxset, dryRun } = body;
+        if (media !== undefined && !Object.values(MediaMode).includes(media)) return invalid(res, 'media must be "strm" or "download"');
+        for (const [name, value] of Object.entries({ boxset, dryRun })) {
+            if (value !== undefined && typeof value !== 'boolean') return invalid(res, `${name} must be true or false`);
+        }
+        const result = await collectionDownloadService.queueCollection(id, { media, boxset, dryRun });
+        if (!result) {
+            res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such collection' } as ApiResponse);
+            return;
+        }
+        res.json(result);
     })
 );
 

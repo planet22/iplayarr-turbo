@@ -33,6 +33,8 @@ Opening an *episode* card takes you to its whole show, not just that one episode
 
 The BBC has no list or search for its collections: they exist only as tiles on iPlayer's home and category pages. iPlayarr reads those pages, looks each collection up for its artwork and size, and keeps the list for 6 hours (Maintenance → Caches → Collections). So only collections currently on those pages are listed. Two search options (Settings → Search, Engine 2.0 only, each with a manual-search override) reach them from search: a collection's **pid or bbc.co.uk link** typed into search lists what is in it, and **Find by name** lists the contents of up to three collections whose title has every search word, ahead of the normal results. The Search page footer shows which of these are on.
 
+**Download collection** (button on an open collection) queues every released film and episode in it with one request (`POST /collections/:id/download`), each named and filed like any other download: films as films, TV by show and season. The dialog gives the count, the `.strm` or real-files choice and a tick to group films as a Jellyfin collection (a `<Collection> [boxset]` folder, see [Jellyfin](media-servers/jellyfin.md#collections-boxsets)). Whole series or programmes inside a collection are left out and counted, not expanded. There is no `.m3u8`: a library of `.strm` files plays better in Jellyfin than a playlist would.
+
 ### Channels page tools
 
 With **Show Channel Tools** on:
@@ -131,3 +133,4 @@ All under `/json-api/browse` (behind the same login as the rest of `/json-api`),
 | `GET /suggest?q=` | Title suggestions for type-ahead |
 | `GET /collections` | `{ enabled, collections: [{ id, title, synopsis?, thumbnail?, count }] }`; empty and nothing fetched while Show Collections is off |
 | `GET /collections/:id?page=&perPage=` | A page of what is in a collection |
+| `POST /collections/:id/download` | Body `{ media?, boxset?, dryRun? }`. Queues the collection; returns `{ title, total, queued, skipped, failed }`. `dryRun: true` only counts |

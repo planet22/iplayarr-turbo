@@ -11,19 +11,19 @@ import { versionTypesFor } from '../service/stream/versionVpid';
 import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
 import { MediaMode } from '../types/enums/MediaMode';
-import { IPlayerSearchResult, VideoType } from '../types/IPlayerSearchResult';
+import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
 import { qualityProfiles } from '../types/QualityProfiles';
 import { QueueLibraryMetadata } from '../types/QueueEntry';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
-import { IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { versionProfiles } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
 import { asyncRouter } from '../utils/asyncRouter';
 import { isValidPid } from '../utils/pathSafety';
+import { QueueRequestNotFoundError, resolveQueueRequest } from '../utils/queueRequest';
 import { runInSearchContext } from '../utils/searchContext';
 import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
 import { failureResponse } from '../utils/upstreamError';
-import { calculateSeasonAndEpisode, getQualityProfile, parseSeasonEpisodeFromFilename } from '../utils/Utils';
+import { getQualityProfile } from '../utils/Utils';
 import { addAvailableVersions, applyVersionToRelease } from '../utils/videoVersion';
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
@@ -209,81 +209,18 @@ router.get('/download', async (req: Request, res: Response) => {
         return;
     }
 
-    // Structured metadata for library folder/nfo generation (libraryPathBuilder.ts /
-    // nfoBuilder.ts) - sent by the frontend's Search/Download pages, which already have
-    // the full IPlayerSearchResult in hand. When absent (a bare download-by-pid/URL with
-    // no prior search), it's derived below from the BBC metadata itself, the same way
-    // NativeSearchService derives it for search results (calculateSeasonAndEpisode).
-    let library: QueueLibraryMetadata | undefined = title
-        ? {
-            title,
-            series: series != null ? parseInt(series) : undefined,
-            episode: episode != null ? parseInt(episode) : undefined,
-            episodeTitle,
-            channel,
-            pubDate,
-            runtimeSeconds: runtime != null ? parseInt(runtime) : undefined,
-        }
-        : undefined;
-
-    let metadata: IPlayerMetadataResponse | undefined;
-
-    if (!nzbName || !type) {
-        try {
-            metadata = await iplayerDetailsService.getMetadata(pid);
-            if (!metadata?.programme.display_title) {
-                res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' } as ApiResponse);
-                return;
-            }
-            if (!type) {
-                const formatCategory = metadata.programme.categories?.find(({ type }) => type == 'format');
-                type = formatCategory?.key == 'films' ? VideoType.MOVIE : VideoType.TV;
-            }
-            if (!nzbName) {
-                const { title: displayTitle, subtitle } = metadata.programme.display_title!;
-                nzbName = `${displayTitle}${type == VideoType.TV && subtitle ? `.${subtitle}` : ''}`;
-                nzbName = nzbName.replaceAll('.', '_')
-                nzbName = nzbName.replaceAll(' ', '.');
-            }
-        } catch (err: any) {
-            const { status, body } = failureResponse(err, 'Unable to find episode details');
-            res.status(status).json(status === 500 ? { ...body, message: 'Unable to find episode details' } : body);
+    // What to queue (name, film or TV, library folder/nfo metadata): whatever the caller sent, the gaps filled from the BBC.
+    let library: QueueLibraryMetadata | undefined;
+    try {
+        ({ nzbName, type, library } = await resolveQueueRequest({ pid, nzbName, type, title, series, episode, episodeTitle, channel, pubDate, runtime }));
+    } catch (err: any) {
+        if (err instanceof QueueRequestNotFoundError) {
+            res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Unable to find episode details' } as ApiResponse);
             return;
         }
-    }
-
-    // No structured metadata sent by the caller (a bare download-by-pid/URL with no prior
-    // search, unlike the frontend's Search/Download pages) - derive it from the BBC
-    // metadata itself, the same way NativeSearchService derives it for search results.
-    // Best-effort: a failure here shouldn't fail the download, only skip the library
-    // folder/nfo treatment for this item (see libraryPathBuilder.ts's flat-name fallback).
-    if (!library) {
-        try {
-            metadata = metadata ?? (await iplayerDetailsService.getMetadata(pid));
-            if (metadata?.programme.display_title) {
-                const [, derivedEpisode, calcEpisodeTitle, derivedSeries] = await calculateSeasonAndEpisode(metadata.programme);
-                let calcEpisode = derivedEpisode;
-                let calcSeries = derivedSeries;
-                // BBC metadata has no resolvable series/episode (e.g. an off-schedule/archive
-                // item) - fall back to parsing a "S01E02" pattern out of the filename itself.
-                if (calcSeries == null || calcEpisode == null) {
-                    const parsed = parseSeasonEpisodeFromFilename(nzbName ?? '');
-                    calcSeries = calcSeries ?? parsed?.series;
-                    calcEpisode = calcEpisode ?? parsed?.episode;
-                }
-                library = {
-                    title: metadata.programme.display_title.title,
-                    series: calcSeries,
-                    episode: calcEpisode,
-                    episodeTitle: calcEpisodeTitle,
-                    channel: metadata.programme.ownership?.service?.title,
-                    pubDate: metadata.programme.first_broadcast_date ?? undefined,
-                    runtimeSeconds: metadata.programme.versions?.length ? metadata.programme.versions[0].duration : undefined,
-                };
-            }
-        } catch {
-            // Best-effort only - proceed without library metadata.
-        }
+        const { status, body } = failureResponse(err, 'Unable to find episode details');
+        res.status(status).json(status === 500 ? { ...body, message: 'Unable to find episode details' } : body);
+        return;
     }
 
     // A chosen version (audio described...) and/or quality, named and carried like a Sonarr/Radarr grab of one.

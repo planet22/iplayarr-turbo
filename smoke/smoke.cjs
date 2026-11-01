@@ -149,7 +149,30 @@ async function apiLayer(ctx) {
     const firstCollection = (collections.json?.collections || [])[0];
     if (firstCollection) await check(A, 'browse collection contents', `/json-api/browse/collections/${firstCollection.id}?perPage=5`, (r) => (r.json && Array.isArray(r.json.items)) || 'no items array');
     await check(A, 'browse collection contents (unknown id is an empty page or an error, not a crash)', '/json-api/browse/collections/p000zzzz', (r) => r.status < 500 || `HTTP ${r.status}`, { warnOnly: true });
-    await check(A, 'browse suggest', '/json-api/browse/suggest?q=doc', isJson);
+    // Download collection: a dry run counts and queues nothing; bad input is refused before anything is read.
+    const queueSize = async () => ((await http('/json-api/queue/queue')).json || []).length;
+    const collectionId = firstCollection?.id ?? 'p096h09x';
+    const queued0 = await queueSize();
+    const dry = await http(`/json-api/browse/collections/${collectionId}/download`, { method: 'POST', body: { dryRun: true }, timeout: 120000 });
+    if (dry.status === 404) rec(A, 'collection download dry run', 'SKIP', `the BBC has no collection ${collectionId} right now`);
+    else {
+        const d = dry.json || {};
+        rec(A, 'collection download dry run counts the titles and queues nothing', dry.status === 200 && ['total', 'queued', 'skipped', 'failed'].every((k) => Number.isInteger(d[k])) && d.queued === 0 && typeof d.title === 'string' ? 'PASS' : 'FAIL', `HTTP ${dry.status} ${dry.text.slice(0, 100)}`);
+        rec(A, 'collection download dry run left the queue alone', (await queueSize()) === queued0 ? 'PASS' : 'FAIL', `${queued0} before, ${await queueSize()} after`);
+        const withBody = await http(`/json-api/browse/collections/${collectionId}/download`, { method: 'POST', timeout: 120000, body: { dryRun: true, boxset: false, media: 'strm' } });
+        rec(A, 'collection download accepts the media and grouping choices', withBody.status === 200 && withBody.json?.total === d.total ? 'PASS' : 'FAIL', `HTTP ${withBody.status}`);
+    }
+    for (const [what, p, body] of [
+        ['an invalid id', '/json-api/browse/collections/bad%20id!/download', { dryRun: true }],
+        ['an unknown media mode', `/json-api/browse/collections/${collectionId}/download`, { media: 'torrent', dryRun: true }],
+        ['a non-boolean boxset', `/json-api/browse/collections/${collectionId}/download`, { boxset: 'yes', dryRun: true }],
+        ['a non-boolean dryRun', `/json-api/browse/collections/${collectionId}/download`, { dryRun: 'true' }],
+    ]) {
+        const r = await http(p, { method: 'POST', body });
+        rec(A, `collection download refuses ${what}`, r.status === 400 ? 'PASS' : 'FAIL', `HTTP ${r.status}`);
+    }
+    const unknown = await http('/json-api/browse/collections/p000zzzz/download', { method: 'POST', body: { dryRun: true }, timeout: 60000 });
+    rec(A, 'collection download of an unknown collection is a 404', unknown.status === 404 ? 'PASS' : 'FAIL', `HTTP ${unknown.status}`);    await check(A, 'browse suggest', '/json-api/browse/suggest?q=doc', isJson);
     await check(A, 'browse schedule', '/json-api/browse/schedule', isJson);
     await check(A, 'browse channel-colors', '/json-api/browse/channel-colors', isJson);
     await check(A, 'browse atoz', '/json-api/browse/atoz/a', isJson);

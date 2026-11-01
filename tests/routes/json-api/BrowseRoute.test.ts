@@ -3,12 +3,14 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/BrowseRoute';
 import browseService from '../../../src/service/browseService';
+import collectionDownloadService from '../../../src/service/collectionDownloadService';
 import collectionService from '../../../src/service/collectionService';
 import configService from '../../../src/service/configService';
 import liveChannelService from '../../../src/service/liveChannelService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 
 jest.mock('../../../src/service/browseService');
+jest.mock('../../../src/service/collectionDownloadService');
 jest.mock('../../../src/service/collectionService');
 const mocked = jest.mocked(browseService);
 
@@ -56,6 +58,57 @@ describe('BrowseRoute', () => {
             const res = await request(app).get('/collections/p096h09x?page=2&perPage=10');
             expect(res.status).toBe(200);
             expect(mocked.collection).toHaveBeenCalledWith('p096h09x', 2, 10);
+        });
+
+        describe('POST /collections/:id/download', () => {
+            const result = { title: 'Fright Night', total: 2, queued: 2, skipped: 0, failed: 0 };
+
+            it('queues the collection and returns the counts', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockResolvedValue(result);
+
+                const res = await request(app).post('/collections/p096h09x/download').send({ media: 'strm', boxset: false });
+
+                expect(res.status).toBe(200);
+                expect(res.body).toEqual(result);
+                expect(collectionDownloadService.queueCollection).toHaveBeenCalledWith('p096h09x', { media: 'strm', boxset: false, dryRun: undefined });
+            });
+
+            it('passes a dry run through', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockResolvedValue({ ...result, queued: 0 });
+                await request(app).post('/collections/p096h09x/download').send({ dryRun: true });
+                expect(collectionDownloadService.queueCollection).toHaveBeenCalledWith('p096h09x', { media: undefined, boxset: undefined, dryRun: true });
+            });
+
+            it('works with no body at all', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockResolvedValue(result);
+                expect((await request(app).post('/collections/p096h09x/download')).status).toBe(200);
+            });
+
+            it('is 404 for a collection that does not exist', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockResolvedValue(undefined);
+                const res = await request(app).post('/collections/p000zzzz/download').send({});
+                expect(res.status).toBe(404);
+                expect(res.body.error).toBe(ApiError.API_NOT_FOUND);
+            });
+
+            it.each([
+                ['an invalid id', '/collections/bad%20id!/download', {}],
+                ['an unknown media mode', '/collections/p096h09x/download', { media: 'torrent' }],
+                ['a non-boolean boxset', '/collections/p096h09x/download', { boxset: 'yes' }],
+                ['a non-boolean dryRun', '/collections/p096h09x/download', { dryRun: 1 }],
+                ['a list instead of an object', '/collections/p096h09x/download', []],
+                ['a media object', '/collections/p096h09x/download', { media: { $ne: 1 } }],
+            ])('rejects %s', async (_name, url, body) => {
+                const res = await request(app).post(url).send(body);
+                expect(res.status).toBe(400);
+                expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+                expect(collectionDownloadService.queueCollection).not.toHaveBeenCalled();
+            });
+
+            it('turns a failure into the standard error response', async () => {
+                jest.mocked(collectionDownloadService.queueCollection).mockRejectedValue(new Error('boom'));
+                expect((await request(app).post('/collections/p096h09x/download').send({})).status).toBeGreaterThanOrEqual(500);
+            });
         });
 
         it('GET /collections/:id rejects an invalid id', async () => {

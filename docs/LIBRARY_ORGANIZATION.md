@@ -6,7 +6,7 @@ Two settings fix that without changing anything about how Sonarr/Radarr see the 
 
 ## What you get
 
-- **`LIBRARY_FOLDER_STRUCTURE`** — nests completed files into `Show Title/Season 01/Show Title - S01E02 - Episode Title.ext` for TV, and `Movie Title/Movie Title.ext` for movies, instead of one flat folder.
+- **`LIBRARY_FOLDER_STRUCTURE`** — nests completed files into `Show Title/Season 01/Show Title - S01E02 - Episode Title.ext` for TV, and `Movie Title/Movie Title.ext` for movies, instead of one flat folder. A film queued with **Download collection** goes under `Collection Name [boxset]/Movie Title/Movie Title.ext` so Jellyfin gathers it into a collection (see [Jellyfin](media-servers/jellyfin.md#collections-boxsets)); TV is unaffected.
 - **`ARR_COMPLETE_DIR`** — optional override of `COMPLETE_DIR`, used only for TV downloads Sonarr/Radarr themselves queued (what the *arr imports) - a manual download from the UI, or one a [subscription](SUBSCRIPTIONS.md) queued, stays in `COMPLETE_DIR` even if it's TV, so your manually-curated and *arr-managed TV don't get mixed into the same folder tree. Leave unset to keep using `COMPLETE_DIR` for everything.
 - **`WRITE_NFO_STRM`** — writes a Jellyfin/Kodi/Emby-compatible `.nfo` metadata file alongside each item (episode title, air date, season/episode numbers, channel), and a `tvshow.nfo` at the show-folder level. Can be scoped to only downloads added by Sonarr/Radarr (`nzb`) or only ones triggered manually from the UI (`manual`), as well as `all`/`none`.
 - **`WRITE_STRMTOOL_JSON`** — when `WRITE_NFO_STRM` is enabled, also writes a `.strmtool.json` sidecar next to each `.strm` file (Media Mode = Streaming only), for the [StrmTool Jellyfin plugin](https://github.com/jinlin-teck/StrmTool)'s probe-skip cache.

@@ -64,6 +64,60 @@ describe('buildLibraryFilePath', () => {
         expect(result.showDirectory).toBe(path.join(completeDir, 'Movie Name'));
     });
 
+    describe('films from a collection', () => {
+        const film = (collection?: string, title = 'Halloween') =>
+            baseItem({ type: VideoType.MOVIE, nzbName: 'Halloween', library: { title, collection } });
+
+        it('goes into a "<collection> [boxset]" folder for Jellyfin', () => {
+            const result = buildLibraryFilePath(completeDir, film('Fright Night'), 'strm', true);
+
+            expect(result.relativePath).toBe('Fright Night [boxset]/Halloween/Halloween-BBCiPlayarrTurbo.strm');
+            expect(result.directory).toBe(path.join(completeDir, 'Fright Night [boxset]', 'Halloween'));
+            expect(result.fullPath).toBe(path.join(completeDir, 'Fright Night [boxset]', 'Halloween', 'Halloween-BBCiPlayarrTurbo.strm'));
+            // The movie .nfo is written beside the file.
+            expect(result.showDirectory).toBe(path.join(completeDir, 'Fright Night [boxset]', 'Halloween'));
+        });
+
+        it('is unchanged without a collection', () => {
+            const result = buildLibraryFilePath(completeDir, film(undefined), 'strm', true);
+            expect(result.relativePath).toBe('Halloween/Halloween-BBCiPlayarrTurbo.strm');
+        });
+
+        it('is ignored with the flat layout', () => {
+            const result = buildLibraryFilePath(completeDir, film('Fright Night'), 'strm', false);
+            expect(result.relativePath).toBe('Halloween-BBCiPlayarrTurbo.strm');
+        });
+
+        it('leaves TV episodes in their show folders', () => {
+            const item = baseItem({ library: { title: 'Show Name', series: 1, episode: 2, collection: 'Comedy Night' } });
+            const result = buildLibraryFilePath(completeDir, item, 'strm', true);
+            expect(result.relativePath).toBe('Show Name/Season 01/Show Name - S01E02-BBCiPlayarrTurbo.strm');
+        });
+
+        it('strips illegal characters from the collection name', () => {
+            const result = buildLibraryFilePath(completeDir, film('Who/What: Night?'), 'strm', true);
+            expect(result.relativePath).toBe('WhoWhat Night [boxset]/Halloween/Halloween-BBCiPlayarrTurbo.strm');
+        });
+
+        it('cannot climb out of the complete directory', () => {
+            const result = buildLibraryFilePath(completeDir, film('../../etc'), 'strm', true);
+            expect(result.relativePath.startsWith('..')).toBe(false);
+            expect(result.relativePath).toBe('etc [boxset]/Halloween/Halloween-BBCiPlayarrTurbo.strm');
+            expect(path.relative(completeDir, result.fullPath).startsWith('..')).toBe(false);
+        });
+
+        it('names an all-punctuation collection "Unknown"', () => {
+            const result = buildLibraryFilePath(completeDir, film('...'), 'strm', true);
+            expect(result.relativePath).toBe('Unknown [boxset]/Halloween/Halloween-BBCiPlayarrTurbo.strm');
+        });
+    });
+
+    it('keeps a leading lowercase "s" in a title (only dots and spaces are stripped from the front)', () => {
+        const item = baseItem({ type: VideoType.MOVIE, nzbName: 'x', library: { title: '  ..shaun the sheep' } });
+        const result = buildLibraryFilePath(completeDir, item, 'mp4', true);
+        expect(result.relativePath).toBe('shaun the sheep/shaun the sheep-BBCiPlayarrTurbo.mp4');
+    });
+
     it('strips filesystem-illegal characters from show/episode titles', () => {
         const item = baseItem({
             library: { title: 'Show: Name?', series: 1, episode: 2, episodeTitle: 'Who/What' },
