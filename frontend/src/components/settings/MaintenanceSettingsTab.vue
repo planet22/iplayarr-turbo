@@ -112,7 +112,7 @@
 </template>
 
 <script setup>
-import { computed, defineProps, inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
