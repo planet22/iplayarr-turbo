@@ -57,7 +57,8 @@ RUN apk --update add \
     su-exec \
     python3 \
     tzdata \
-    font-dejavu
+    font-dejavu \
+    zstd-libs
 
 # atomicparsley still isn't packaged in any stable Alpine release, only edge/testing,
 # so it needs its own apk invocation - keeping --allow-untrusted scoped to just this
@@ -94,6 +95,10 @@ ENV YTDLP_EXEC=/ytdlp/yt-dlp
 WORKDIR /redis
 COPY --from=redis /usr/local/bin/redis-server /redis/redis-server
 RUN chmod +x /redis/redis-server
+# Fails the build if the copied binary cannot load (it comes from a different Alpine release than this stage,
+# so a shared library it needs, like zstd-libs, can be missing - which would stop the container at startup
+# for anyone upgrading from a Redis-era install).
+RUN /redis/redis-server --version
 
 # Install iplayarr - the built output makes it into this image either way; src/ and
 # frontend/src/ stay behind in the build stages regardless of which node_modules gets
