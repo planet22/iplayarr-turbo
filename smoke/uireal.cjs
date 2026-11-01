@@ -354,20 +354,69 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the page lists the same collections', (await page.locator('.collectionGrid .collectionCard').count()) === listed.length);
             ok('each tile carries the group icon and a title count', (await page.locator('.collectionGrid .collectionCard .groupIcon').count()) === listed.length && /\d+ titles?/.test(await page.locator('.collectionGrid .collectionCard .count').first().innerText()));
             if (listed.length > 12) {
-                const filter = page.locator('input.collectionFilter');
-                ok('a long list has a title filter', (await filter.count()) === 1);
+                const filter = page.locator('.SettingsPageToolbar input.tableFilter[aria-label="Filter collections by title"]');
+                ok('a long list has a title filter in the standard toolbar', (await filter.count()) === 1);
                 await filter.fill(listed[0].title.split(' ')[0]);
                 const narrowed = await page.locator('.collectionGrid .collectionCard').count();
                 ok('typing narrows the tiles and keeps the matching collection', narrowed >= 1 && narrowed < listed.length, `${narrowed} of ${listed.length}`);
                 await filter.fill('zzqqxxy');
                 ok('a word that matches nothing shows none and says so', (await page.locator('.collectionGrid .collectionCard').count()) === 0 && /No collection matches/.test(await page.locator('body').innerText()));
                 await filter.fill('');
-                ok('clearing the filter brings every collection back', (await page.locator('.collectionGrid .collectionCard').count()) === listed.length);
+                ok('clearing the filter brings every collection back', (await page.locator('.collectionGrid .collectionCard').count()) === listed.length || (await page.locator('.listPagination').count()) > 0);
+                // Sort: the standard control (select + direction arrow); BBC order has a greyed, non-clickable arrow.
+                const sortSel = page.locator('.SettingsPageToolbar select[aria-label="Sort by"]').first();
+                ok('the tiles have the standard sort control', (await sortSel.count()) === 1);
+                ok('BBC order shows a greyed direction icon that is not a button', (await page.locator('.SettingsPageToolbar .orderPlaceholder').count()) === 1 && (await page.locator('.SettingsPageToolbar button[aria-label="Ascending"], .SettingsPageToolbar button[aria-label="Descending"]').count()) === 0);
+                await sortSel.selectOption('name');
+                const cmp = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+                const titles = async () => page.locator('.collectionGrid .collectionCard .title').allInnerTexts();
+                const sizes = async () => (await page.locator('.collectionGrid .collectionCard .count').allInnerTexts()).map((t) => parseInt(t, 10));
+                const byName = await titles();
+                ok('A-Z orders the tiles by title', byName.length < 2 || byName.slice(1).every((t, i) => cmp(byName[i], t) <= 0), byName.slice(0, 3).join(' | '));
+                await page.locator('.SettingsPageToolbar button[aria-label="Ascending"]').click();
+                const byNameDesc = await titles();
+                ok('the arrow flips to Z-A', byNameDesc.length < 2 || byNameDesc.slice(1).every((t, i) => cmp(byNameDesc[i], t) >= 0), byNameDesc.slice(0, 3).join(' | '));
+                await sortSel.selectOption('size');
+                const bySize = await sizes();
+                ok('Size starts largest first', bySize.length < 2 || bySize.slice(1).every((n, i) => bySize[i] >= n), bySize.slice(0, 5).join(','));
+                await sortSel.selectOption('default');
+                // Paging follows the Items Before Paging preference (default 4) and the 16 per page default.
+                ok('more tiles than a page shows the pager (above and below) with page sizes up to 1024', listed.length <= 16 || ((await page.locator('.listPagination').count()) === 2 && (await page.locator('.listPagination select option[value="1024"]').count()) >= 1));
             }
             await shot(page, 'collections-page');
             await page.locator('.collectionGrid .collectionCard').first().click();
             await page.waitForSelector('.openCollection .programmeCard', { timeout: 30000 }).catch(() => {});
             ok('opening a collection shows its titles and puts it in the URL', (await page.locator('.openCollection .programmeCard').count()) > 0 && /[?&]c=/.test(page.url()), page.url());
+            // Opening scrolls the page to the collection's own header (the router must not jump back to the top).
+            await page.waitForTimeout(1200);
+            const headerTop = await page.locator('.openCollection .PageHeader').evaluate((el) => el.getBoundingClientRect().top).catch(() => 9999);
+            ok('opening a collection scrolls its header into view', (await page.evaluate(() => window.scrollY)) > 0 && headerTop >= -2 && headerTop < 300, `scrollY ${await page.evaluate(() => window.scrollY)}, header top ${headerTop}`);
+            ok('the open collection has a normal page header with the icon and its name', /^Collection: /.test(await page.locator('.openCollection .PageHeader').innerText()) && (await page.locator('.openCollection .PageHeader svg').count()) === 1);
+            const upButton = page.locator('.openCollection .SettingsPageToolbar button[aria-label="Back to top"]');
+            ok('its toolbar has a Back to top button at the left', (await upButton.count()) === 1);
+            const openItems = await page.locator('.openCollection .programmeCard').count();
+            const openFilter = page.locator('.openCollection .SettingsPageToolbar input.tableFilter');
+            ok('its toolbar filters by title', (await openFilter.count()) === 1);
+            await openFilter.fill('zzqqxxy');
+            ok('a word that matches nothing says so', (await page.locator('.openCollection .programmeCard').count()) === 0 && /Nothing matches that filter/.test(await page.locator('.openCollection').innerText()));
+            await openFilter.fill('');
+            ok('clearing it brings the titles back', (await page.locator('.openCollection .programmeCard').count()) === openItems);
+            const openSort = page.locator('.openCollection .SettingsPageToolbar select[aria-label="Sort by"]');
+            await openSort.selectOption('name');
+            const openTitles = await page.locator('.openCollection .programmeCard .title').allInnerTexts();
+            ok('its toolbar sorts A-Z', openTitles.length < 2 || openTitles.slice(1).every((t, i) => openTitles[i].localeCompare(t, undefined, { sensitivity: 'base', numeric: true }) <= 0), openTitles.slice(0, 3).join(' | '));
+            await openSort.selectOption('default');
+            const channelSel = page.locator('.openCollection .SettingsPageToolbar select[aria-label="Channel"]');
+            if (await channelSel.count()) {
+                const channel = (await channelSel.locator('option').nth(1).innerText()).trim();
+                await channelSel.selectOption({ index: 1 });
+                const left = await page.locator('.openCollection .programmeCard').count();
+                ok('the channel filter narrows the titles', left >= 1 && left <= openItems, `${channel}: ${left} of ${openItems}`);
+                await channelSel.selectOption({ index: 0 });
+            } else rec(U, 'the channel filter narrows the titles', 'SKIP', 'single-channel collection');
+            await upButton.click();
+            await page.waitForTimeout(1500);
+            ok('Back to top scrolls to the top of the page', (await page.evaluate(() => window.scrollY)) < 5, `scrollY ${await page.evaluate(() => window.scrollY)}`);
             await shot(page, 'collections-open', true);
             await page.goBack();
             await page.waitForTimeout(500);
@@ -375,15 +424,15 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // A link straight to an open collection works.
             await page.goto(`${BASE}/browse/collections?c=${listed[0].id}`, { waitUntil: 'networkidle' });
             await page.waitForSelector('.openCollection .programmeCard', { timeout: 30000 }).catch(() => {});
-            ok('a link with ?c= opens that collection on load', (await page.locator('.openCollection h2', { hasText: listed[0].title }).count()) === 1);
+            ok('a link with ?c= opens that collection on load', (await page.locator('.openCollection .PageHeader', { hasText: listed[0].title }).count()) === 1);
             // Download collection: the button asks first (count, strm / real files, Jellyfin collection folder); Cancel queues nothing.
             const queueSize = async () => ((await http('/json-api/queue/queue')).json || []).length;
             const queued0 = await queueSize();
-            const dlButton = page.locator('.openCollection .downloadCollection');
-            ok('an open collection has a Download collection button', (await dlButton.count()) === 1 && /Download collection/.test(await dlButton.innerText()));
+            const dlButton = page.locator('.openCollection .SettingsPageToolbar button[aria-label^="Download collection"]');
+            ok('an open collection has a Download collection icon button in its toolbar', (await dlButton.count()) === 1);
             const dry = (await http(`/json-api/browse/collections/${listed[0].id}/download`, { method: 'POST', body: { dryRun: true }, timeout: 120000 })).json;
-            await page.waitForFunction(() => /Download collection \(\d+\)/.test(document.querySelector('.openCollection .downloadCollection')?.innerText || ''), null, { timeout: 30000 }).catch(() => {});
-            ok('the button shows the number of titles in brackets, like Download all', (await dlButton.innerText()).replace(/\s+/g, ' ').trim() === `Download collection (${dry?.total})`, await dlButton.innerText());
+            await page.waitForFunction(() => /Download collection \(\d+\)/.test(document.querySelector('.openCollection button[aria-label^="Download collection"]')?.getAttribute('aria-label') || ''), null, { timeout: 30000 }).catch(() => {});
+            ok('the button names the number of titles in brackets, like Download all', (await dlButton.getAttribute('aria-label')) === `Download collection (${dry?.total})`, await dlButton.getAttribute('aria-label'));
             await dlButton.click();
             await page.waitForSelector('.modal-inner, [role=dialog]', { timeout: 60000 }).catch(() => {});
             const modalText = await page.locator('.modal-inner, [role=dialog]').first().innerText().catch(() => '');
@@ -398,6 +447,89 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.keyboard.type('collections');
             await page.waitForTimeout(500);
             ok('quick find offers Collections', (await page.getByText('Collections', { exact: true }).count()) > 0);
+        });
+
+        // ---- Category page: the standard toolbar, sort, channel filter and paging (Items Before Paging honoured)
+        await flow('category grid toolbar, sort and paging', async (page) => {
+            const cats = (await http('/json-api/browse/categories')).json || [];
+            const films = cats.find((c) => c.id === 'films') || cats[0];
+            if (!films) return rec(U, 'category grid', 'SKIP', 'no categories');
+            const cmp = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+            await page.goto(`${BASE}/browse/category/${films.id}`, { waitUntil: 'networkidle' });
+            await page.waitForSelector('.browseGrid .programmeCard', { timeout: 60000 });
+            ok('the category page has a title filter and the standard sort control in its toolbar', (await page.locator('.SettingsPageToolbar input.tableFilter').count()) === 1 && (await page.locator('.SettingsPageToolbar select[aria-label="Sort by"]').count()) === 1);
+            ok('BBC order has the greyed, non-button direction icon', (await page.locator('.SettingsPageToolbar .orderPlaceholder').count()) === 1);
+            await page.locator('.SettingsPageToolbar select[aria-label="Sort by"]').selectOption('name');
+            const t = await page.locator('.browseGrid .programmeCard .title').allInnerTexts();
+            ok('A-Z orders the programmes by title', t.length < 2 || t.slice(1).every((x, i) => cmp(t[i], x) <= 0), t.slice(0, 3).join(' | '));
+            await page.locator('.SettingsPageToolbar button[aria-label="Ascending"]').click();
+            const d = await page.locator('.browseGrid .programmeCard .title').allInnerTexts();
+            ok('the arrow reverses it', d.length < 2 || d.slice(1).every((x, i) => cmp(d[i], x) >= 0), d.slice(0, 3).join(' | '));
+            await shot(page, 'category-sorted');
+            // Items Before Paging at its 1000 maximum shows a whole listing with no pager; at 0 it always pages.
+            await page.evaluate(() => localStorage.setItem('iplayarr.paging.minimum', '1000'));
+            await page.reload({ waitUntil: 'networkidle' });
+            await page.waitForSelector('.browseGrid .programmeCard', { timeout: 60000 });
+            await page.waitForFunction(() => !/Loading more/.test(document.body.innerText), null, { timeout: 120000 }).catch(() => {});
+            const whole = await page.locator('.browseGrid .programmeCard').count();
+            ok('with Items Before Paging at 1000 the listing is shown whole with no pager', (await page.locator('.listPagination').count()) === 0 && whole > 16, `${whole} cards`);
+            await page.evaluate(() => localStorage.setItem('iplayarr.paging.minimum', '0'));
+            await page.reload({ waitUntil: 'networkidle' });
+            await page.waitForSelector('.browseGrid .programmeCard', { timeout: 60000 });
+            ok('with Items Before Paging at 0 it pages at 16 and has the pager', (await page.locator('.browseGrid .programmeCard').count()) <= 16 && (await page.locator('.listPagination').count()) >= 1);
+            await page.evaluate(() => localStorage.removeItem('iplayarr.paging.minimum'));
+        });
+
+        // ---- Subscriptions: the filter sits right after Back, and the sort is the shared control
+        await flow('subscriptions toolbar order', async (page) => {
+            const subs = (await http('/json-api/subscriptions')).json || [];
+            if (subs.length < 2) return rec(U, 'subscriptions toolbar order', 'SKIP', 'needs two subscriptions for the filter and sort to show');
+            await page.goto(`${BASE}/subscriptions`, { waitUntil: 'networkidle' });
+            await page.waitForSelector('.SettingsPageToolbar', { timeout: 15000 });
+            const firstDiv = page.locator('.SettingsPageToolbar').first().locator(':scope > div').first();
+            const labels = await firstDiv.locator('button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label') || b.title));
+            const at = labels.indexOf('Filter');
+            ok('the filter button is in the left group, straight after Back', at === 0 || (at === 1 && labels[0] === 'Back'), labels.join(' | '));
+            ok('the right group has the shared sort control', (await page.locator('.SettingsPageToolbar select[aria-label="Sort by"]').count()) === 1);
+        });
+
+        // ---- Search: remembers its term across menu items, shows how it is set up when blank, keeps posters after Back
+        await flow('search remembers, blank page options, thumbnails after Back', async (page, context) => {
+            await context.addInitScript(() => { try { localStorage.setItem('iplayarr.searchViewMode', 'posters'); } catch { /* ignore */ } });
+            const menu = (label) => page.locator('.LeftHandNav a', { hasText: new RegExp(`^\\s*${label}\\s*$`) }).first();
+            await page.goto(`${BASE}/search`, { waitUntil: 'networkidle' });
+            await page.waitForTimeout(1000);
+            ok('the blank Search page says how searching is set up, above the recent searches', (await page.locator('.searchSettingsNote').count()) === 1 && /^Search:/.test(await page.locator('.searchSettingsNote').innerText()));
+            await page.goto(`${BASE}/search?searchTerm=celebrity+traitors`, { waitUntil: 'networkidle' });
+            await page.waitForSelector('.programmeCard', { timeout: 60000 }).catch(() => {});
+            await page.waitForFunction(() => !/Searching|Loading/i.test(document.body.innerText), null, { timeout: 60000 }).catch(() => {});
+            await page.waitForTimeout(2500);
+            const cards = await page.locator('.programmeCard').count();
+            if (!cards) return rec(U, 'search thumbnails after Back', 'SKIP', 'no results for the test term');
+            const withImg = () => page.locator('.programmeCard .thumb img').count();
+            const before = await withImg();
+            // Away via a menu item (the Search menu link has no term) ...
+            await menu('Discover').click();
+            await page.waitForTimeout(800);
+            await menu('Search').click();
+            await page.waitForTimeout(1500);
+            ok('coming back to Search from another menu item reopens the last search', /searchTerm=celebrity/.test(page.url()), page.url());
+            // ... and via a result, then the browser Back (all the results arrive at once, over the 40-pid limit).
+            await page.waitForFunction(() => document.querySelectorAll('.programmeCard').length > 0, null, { timeout: 60000 }).catch(() => {});
+            await page.waitForTimeout(2500);
+            await page.locator('.programmeCard').first().click();
+            await page.waitForTimeout(1000);
+            await page.goBack();
+            await page.waitForTimeout(4000);
+            const after = await withImg();
+            ok('after Back the poster thumbnails are still there', after >= Math.floor(before * 0.8), `${before} before, ${after} after`);
+            // Clearing the box forgets the search.
+            await page.locator('.clearSearch').click();
+            await menu('Discover').click();
+            await page.waitForTimeout(500);
+            await menu('Search').click();
+            await page.waitForTimeout(1000);
+            ok('clearing the box makes Search open blank next time', !/searchTerm=/.test(page.url()), page.url());
         });
 
         // ---- Programme page: the highlighted episode (arriving with ?episode=) stays until its x is clicked, then fades
