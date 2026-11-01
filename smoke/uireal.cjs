@@ -380,6 +380,27 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('quick find offers Collections', (await page.getByText('Collections', { exact: true }).count()) > 0);
         });
 
+        // ---- Programme page: the highlighted episode (arriving with ?episode=) stays until its x is clicked, then fades
+        await flow('programme highlight is dismissed manually', async (page) => {
+            const eps = (brand?.seasons || []).flatMap((s) => s.episodes || []);
+            if (!bpid || eps.length < 2) return rec(U, 'programme highlight is dismissed manually', 'SKIP', 'no programme with several episodes');
+            const target = eps[0].pid;
+            await page.goto(`${BASE}/browse/programme/${bpid}?episode=${target}`, { waitUntil: 'networkidle' });
+            const row = page.locator(`#ep-${target}`);
+            await row.waitFor({ timeout: 20000 });
+            ok('the arriving episode is highlighted with a small x', (await row.evaluate((el) => el.classList.contains('focused'))) && (await row.locator('.dismissFocus').count()) === 1);
+            await page.waitForTimeout(7500);
+            ok('the highlight is still there after the old 6 seconds', await row.evaluate((el) => el.classList.contains('focused')));
+            await row.locator('.description, .episodeDescription').first().click({ trial: true }).catch(() => {});
+            ok('clicking elsewhere on the row does not remove it', await row.evaluate((el) => el.classList.contains('focused')));
+            await shot(page, 'programme-highlight');
+            await row.locator('.dismissFocus').click();
+            await page.waitForTimeout(150);
+            ok('clicking the x starts a fade (the row is still there, fading)', await row.evaluate((el) => el.classList.contains('fading')));
+            await page.waitForTimeout(800);
+            ok('after the fade the highlight and the x are gone', await row.evaluate((el) => !el.classList.contains('focused') && !el.querySelector('.dismissFocus')));
+        });
+
         // ---- Search page footer reflects the collection options (read-only: settings are restored)
         await flow('search footer reports the collection options', async (page) => {
             const cfg0 = (await http('/json-api/config')).json || {};

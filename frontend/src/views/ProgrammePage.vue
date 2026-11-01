@@ -159,8 +159,14 @@
                 <div class="episodeList">
                     <div
                         v-for="episode in pagedEpisodes" :id="`ep-${episode.pid}`" :key="episode.pid"
-                        :class="['episodeRow', episode.pid === highlightPid ? 'focused' : '']" @click="highlightPid = null"
+                        :class="['episodeRow', episode.pid === highlightPid ? 'focused' : '', episode.pid === highlightPid && highlightFading ? 'fading' : '']"
                     >
+                        <button
+                            v-if="episode.pid === highlightPid" type="button" class="dismissFocus" title="Remove the highlight" aria-label="Remove the highlight"
+                            @click="dismissHighlight"
+                        >
+                            <font-awesome-icon :icon="['fas', 'xmark']" />
+                        </button>
                         <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
                         <div :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '']">
                             <img
@@ -373,9 +379,21 @@ const selectSeason = (index) => {
 // Arriving with an episode's pid (e.g. from the Schedule) opens its series on the right page, scrolled to
 // and highlighted. Episodes can arrive on later pages, so it is retried until it is found.
 const focusedPid = ref(null);
-// The outline: only when there is a list to pick from, and it fades after a few seconds or on a click.
+// The outline: only when there is a list to pick from. It stays until the small x on the row is clicked, which fades it out.
 const highlightPid = ref(null);
+const highlightFading = ref(false);
+const HIGHLIGHT_FADE_MS = 400;
 let highlightTimer = null;
+const clearHighlight = () => {
+    clearTimeout(highlightTimer);
+    highlightFading.value = false;
+    highlightPid.value = null;
+};
+const dismissHighlight = () => {
+    highlightFading.value = true;
+    clearTimeout(highlightTimer);
+    highlightTimer = setTimeout(clearHighlight, HIGHLIGHT_FADE_MS);
+};
 let focusPending = null;
 // Later batches can re-sort the list and move the episode to another page, so it is re-placed after each
 // one until the user pages or picks a series themselves.
@@ -389,9 +407,8 @@ const focusEpisode = () => {
     selected.value = index;
     episodePage.value = Math.floor(episodes.value.findIndex((e) => e.pid === pid) / episodePageSize.value) + 1;
     focusedPid.value = pid;
-    clearTimeout(highlightTimer);
+    clearHighlight();
     highlightPid.value = episodes.value.length > 1 ? pid : null;
-    highlightTimer = setTimeout(() => (highlightPid.value = null), 6000);
     nextTick(() => document.getElementById(`ep-${pid}`)?.scrollIntoView({ block: 'center' }));
 };
 
@@ -552,7 +569,7 @@ watch(
         error.value = null;
         selected.value = 0;
         focusedPid.value = null;
-        highlightPid.value = null;
+        clearHighlight();
         focusFollow = false;
         focusPending = route.query.episode || pid;
         try {
@@ -605,9 +622,48 @@ const duplicatesBannerDownload = computed(
 }
 
 .episodeRow.focused {
+    position: relative;
     outline: 2px solid @brand-color;
     outline-offset: 4px;
     border-radius: 4px;
+    transition: outline-color 400ms ease;
+
+    // A manual decision: the highlight stays until this is clicked, then fades out.
+    .dismissFocus {
+        position: absolute;
+        top: 6px;
+        right: 4px;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 1px solid @settings-button-border-color;
+        border-radius: 50%;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+        font-size: 11px;
+        cursor: pointer;
+        transition: opacity 400ms ease;
+
+        &:hover,
+        &:focus-visible {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
+        }
+    }
+
+    &.fading {
+        outline-color: transparent;
+
+        .dismissFocus {
+            opacity: 0;
+            pointer-events: none;
+        }
+    }
 }
 
 .programmeBanner {
