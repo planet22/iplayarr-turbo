@@ -178,7 +178,7 @@ describe('collectionService', () => {
             await collectionService.list();
             setSource('all');
             await collectionService.list();
-            expect(keys).toEqual(['all:home', 'all:all']);
+            expect(keys).toEqual(['v2:all:home', 'v2:all:all']);
             spy.mockRestore();
         });
 
@@ -200,6 +200,34 @@ describe('collectionService', () => {
             });
             const titles = (await collectionService.list()).map(({ title }) => title);
             expect(titles).toEqual(expect.arrayContaining(['Comedy Hall of Fame', 'Panel Show Palooza!']));
+        });
+    });
+
+    describe('thumbnails', () => {
+        const withImages = (groupImages: object | undefined, firstImages: object | undefined) => ({
+            data: { group_episodes: { count: 5, group: { title: 'Pics', images: groupImages }, elements: firstImages ? [{ id: 'm0first01', images: firstImages }] : [] } },
+        });
+        const thumbnailFor = async (record: object) => {
+            serve({ 'groups/p096h09x/': () => record });
+            return (await collectionService.list()).find(({ id }) => id === 'p096h09x')?.thumbnail;
+        };
+
+        it('uses the collection\'s own picture when it is a real image', async () => {
+            expect(await thumbnailFor(withImages({ standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0own001.jpg' }, { standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0first01.jpg' }))).toBe('json-api/thumbnail/p0own001.jpg');
+        });
+
+        it('borrows the first programme\'s artwork when the collection\'s picture is a programme id, not an image', async () => {
+            expect(await thumbnailFor(withImages({ standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/m002yd35.jpg' }, { standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0p0cph2.jpg' }))).toBe('json-api/thumbnail/p0p0cph2.jpg');
+        });
+
+        it('tries the promotional pictures too, and a later one when an earlier is not an image', async () => {
+            expect(await thumbnailFor(withImages({ promotional: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0promo1.jpg' }, undefined))).toBe('json-api/thumbnail/p0promo1.jpg');
+            expect(await thumbnailFor(withImages({ standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/b095dzjm.jpg' }, { promotional: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0firstp.jpg' }))).toBe('json-api/thumbnail/p0firstp.jpg');
+        });
+
+        it('has no thumbnail when nothing is a real image', async () => {
+            expect(await thumbnailFor(withImages({ standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/m002yd35.jpg' }, undefined))).toBeUndefined();
+            expect(await thumbnailFor(withImages(undefined, { standard: 5 }))).toBeUndefined();
         });
     });
 

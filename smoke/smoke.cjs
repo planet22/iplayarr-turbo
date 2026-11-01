@@ -146,6 +146,15 @@ async function apiLayer(ctx) {
     // Collections: the list is empty (and nothing is fetched) while Show Collections is off; a collection's contents are always readable.
     const collections = await check(A, 'browse collections', '/json-api/browse/collections', (r) => (r.json && typeof r.json.enabled === 'boolean' && Array.isArray(r.json.collections)) || 'expected { enabled, collections: [] }');
     rec(A, 'browse collections is empty while switched off', collections.json?.enabled === false ? (collections.json.collections.length === 0 ? 'PASS' : 'FAIL') : 'SKIP', collections.json?.enabled ? 'Show Collections is on' : 'listed collections while off');
+    // Every collection should have a picture that really loads (some pictures are programme ids, not images: those borrow a programme's artwork).
+    const listedCollections = collections.json?.collections || [];
+    if (listedCollections.length) {
+        const noPicture = listedCollections.filter((c) => !c.thumbnail).length;
+        let broken = 0;
+        const sample = listedCollections.filter((c) => c.thumbnail).slice(0, 40);
+        for (const c of sample) { const r = await fetch(BASE + '/' + c.thumbnail).catch(() => ({ status: 0 })); if (r.status !== 200) broken++; }
+        rec(A, `collection pictures load (${sample.length} checked of ${listedCollections.length})`, broken || noPicture ? 'FAIL' : 'PASS', `${broken} broken, ${noPicture} with no picture`);
+    }
     const firstCollection = (collections.json?.collections || [])[0];
     if (firstCollection) await check(A, 'browse collection contents', `/json-api/browse/collections/${firstCollection.id}?perPage=5`, (r) => (r.json && Array.isArray(r.json.items)) || 'no items array');
     await check(A, 'browse collection contents (unknown id is an empty page or an error, not a crash)', '/json-api/browse/collections/p000zzzz', (r) => r.status < 500 || `HTTP ${r.status}`, { warnOnly: true });

@@ -13,6 +13,7 @@ const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
 const IPLAYER = 'https://www.bbc.co.uk/iplayer';
 const IMAGE_PID_REGEX = /\/([a-z0-9]{6,})\.(?:jpg|jpeg|png)(?:$|\?)/i;
 const ID_REGEX = /^[a-z0-9_-]+$/i;
+const REAL_IMAGE_PID = /^p[0-9a-z]{7}$/;
 const GENERIC_SHELF = /^(featured\b|live and latest\b)/i;
 const pageConcurrency = 4;
 const infoConcurrency = 6;
@@ -40,7 +41,8 @@ class CollectionService {
     // Cached per source, so changing the setting shows its list at once without clearing anything.
     async list(): Promise<BrowseCollection[]> {
         const source = await this.source();
-        return this.cache.getOr(`all:${source}`, () => this.#build(source));
+        // v2: lists built before collections borrowed a programme's artwork when their own picture was not an image.
+        return this.cache.getOr(`v2:all:${source}`, () => this.#build(source));
     }
 
     // The collections whose title has every word of the term; none for a term with no usable words.
@@ -97,8 +99,12 @@ class CollectionService {
             const group = response.data?.group_episodes;
             const count = Number(group?.count) || 0;
             if (!count) return undefined;
-            const image: unknown = group.group?.images?.standard ?? group.group?.images?.promotional;
-            const imagePid = typeof image === 'string' ? IMAGE_PID_REGEX.exec(image)?.[1] : undefined;
+            // A collection's own picture is sometimes just its first programme's id (not an image, so it never loads);
+            // then the first programme's artwork stands in. Real image pids start with "p".
+            const first = group.elements?.[0]?.images;
+            const imagePid = [group.group?.images?.standard, group.group?.images?.promotional, first?.standard, first?.promotional]
+                .map((image: unknown) => (typeof image === 'string' ? IMAGE_PID_REGEX.exec(image)?.[1] : undefined))
+                .find((pid): pid is string => !!pid && REAL_IMAGE_PID.test(pid));
             const synopses = group.group?.synopses;
             return {
                 id,
