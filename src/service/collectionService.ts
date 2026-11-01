@@ -8,6 +8,7 @@ import { queryTerms, titleMatchesAllTerms } from '../utils/titleMatch';
 import configService from './configService';
 import DbCacheService from './db/dbCacheService';
 import loggingService from './loggingService';
+import thumbnailCacheService from './thumbnailCacheService';
 
 const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
 const IPLAYER = 'https://www.bbc.co.uk/iplayer';
@@ -99,12 +100,19 @@ class CollectionService {
             const group = response.data?.group_episodes;
             const count = Number(group?.count) || 0;
             if (!count) return undefined;
-            // A collection's own picture is sometimes just its first programme's id (not an image, so it never loads);
-            // then the first programme's artwork stands in. Real image pids start with "p".
+            // A collection's own picture is sometimes not an image that exists (its first programme's id, or one the image
+            // server never had), so each candidate is checked and the first programme's artwork stands in.
             const first = group.elements?.[0]?.images;
-            const imagePid = [group.group?.images?.standard, group.group?.images?.promotional, first?.standard, first?.promotional]
+            const candidates = [group.group?.images?.standard, group.group?.images?.promotional, first?.standard, first?.promotional]
                 .map((image: unknown) => (typeof image === 'string' ? IMAGE_PID_REGEX.exec(image)?.[1] : undefined))
-                .find((pid): pid is string => !!pid && REAL_IMAGE_PID.test(pid));
+                .filter((pid): pid is string => !!pid && REAL_IMAGE_PID.test(pid));
+            let imagePid: string | undefined;
+            for (const candidate of new Set(candidates)) {
+                if (await this.#imageExists(candidate)) {
+                    imagePid = candidate;
+                    break;
+                }
+            }
             const synopses = group.group?.synopses;
             return {
                 id,
@@ -116,6 +124,13 @@ class CollectionService {
         } catch {
             return undefined;
         }
+    }
+
+    // Whether the BBC image server has this picture. It goes through the thumbnail cache, which keeps the picture on
+    // disk (so the tile is then served from there, counted and cleaned up with the other thumbnails) and says no
+    // when the image server has no such image.
+    async #imageExists(imagePid: string): Promise<boolean> {
+        return !!(await thumbnailCacheService.getOrFetch(imagePid, true));
     }
 
     async #build(source: 'home' | 'all'): Promise<BrowseCollection[]> {

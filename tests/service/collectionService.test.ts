@@ -3,9 +3,11 @@ import axios from 'axios';
 import collectionService from '../../src/service/collectionService';
 import configService from '../../src/service/configService';
 import loggingService from '../../src/service/loggingService';
+import thumbnailCacheService from '../../src/service/thumbnailCacheService';
 
 jest.mock('axios');
 jest.mock('../../src/service/loggingService');
+jest.mock('../../src/service/thumbnailCacheService');
 jest.mock('../../src/service/db/dbCacheService', () => ({
     __esModule: true,
     default: class {
@@ -16,6 +18,9 @@ jest.mock('../../src/service/db/dbCacheService', () => ({
 }));
 
 const mockedGet = axios.get as jest.Mock;
+const mockedCache = thumbnailCacheService.getOrFetch as jest.Mock;
+// The thumbnail cache has every picture unless a test says otherwise (it answers undefined for one the image server lacks).
+const imagesExist = (missing: string[] = []) => mockedCache.mockImplementation(async (pid: string) => (missing.includes(pid) ? undefined : `/cache/${pid}.small.jpg`));
 
 const stateHtml = (bundles: object[]) => `<html><script>window.__IPLAYER_REDUX_STATE__ = ${JSON.stringify({ bundles })};</script></html>`;
 const group = (id: string, title: string, extra: object = {}) => ({ id: `b-${id}`, title: { default: title }, journey: { id, type: 'group' }, ...extra });
@@ -55,7 +60,10 @@ const serve = (overrides: Record<string, () => unknown> = {}) =>
     });
 
 describe('collectionService', () => {
-    beforeEach(() => jest.resetAllMocks());
+    beforeEach(() => {
+        jest.resetAllMocks();
+        imagesExist();
+    });
 
     describe('list', () => {
         it('collects the collections on the home and category pages, once each, with artwork and size', async () => {
@@ -223,6 +231,23 @@ describe('collectionService', () => {
         it('tries the promotional pictures too, and a later one when an earlier is not an image', async () => {
             expect(await thumbnailFor(withImages({ promotional: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0promo1.jpg' }, undefined))).toBe('json-api/thumbnail/p0promo1.jpg');
             expect(await thumbnailFor(withImages({ standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/b095dzjm.jpg' }, { promotional: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0firstp.jpg' }))).toBe('json-api/thumbnail/p0firstp.jpg');
+        });
+
+        it('steps down to the next picture when the image server does not have the first', async () => {
+            imagesExist(['p0missin']);
+            expect(await thumbnailFor(withImages({ standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0missin.jpg' }, { standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0artwrk.jpg' }))).toBe('json-api/thumbnail/p0artwrk.jpg');
+        });
+
+        it('asks about each picture once, and stops at the first that exists', async () => {
+            await thumbnailFor(withImages({ standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0same01.jpg', promotional: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0same01.jpg' }, { standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0other1.jpg' }));
+            expect(mockedCache).toHaveBeenCalledTimes(1);
+            // Asked for the small picture the tiles show, so it is the one kept on disk.
+            expect(mockedCache).toHaveBeenCalledWith('p0same01', true);
+        });
+
+        it('has no thumbnail when none of the pictures exist on the image server', async () => {
+            imagesExist(['p0gone01', 'p0gone02']);
+            expect(await thumbnailFor(withImages({ standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0gone01.jpg' }, { standard: 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0gone02.jpg' }))).toBeUndefined();
         });
 
         it('has no thumbnail when nothing is a real image', async () => {
