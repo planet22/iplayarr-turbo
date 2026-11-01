@@ -37,7 +37,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `NATIVE_SEARCH_V2_EXPAND_COLLECTIONS` | `false` | No | Engine V2: a search for an iPlayer collection's pid or link lists its episodes/films. |
 | `NATIVE_SEARCH_V2_COLLECTION_NAMES` | `false` | No | Engine V2: a search also lists the contents of iPlayer collections whose title matches. |
 | `BROWSE_COLLECTION_SOURCES` | `all` | No | Where collections are collected from: `all` (home page and every category page) or `home` (home page only). |
-| `BROWSE_SHOW_COLLECTIONS` | `false` | No | Show iPlayer collections on the Discover page. |
+| `BROWSE_SHOW_COLLECTIONS` | `true` | No | Show iPlayer collections on the Discover page. |
 | `SEARCH_MATCH_ALL_WORDS` | `true` | No | Only list results containing every searched word. |
 | `MANUAL_NATIVE_SEARCH` | `inherit` | No | Search-page override of `NATIVE_SEARCH` (`inherit`, `true`, `false`). |
 | `MANUAL_NATIVE_SEARCH_ENGINE` | `inherit` | No | Search-page override of `NATIVE_SEARCH_ENGINE`. |

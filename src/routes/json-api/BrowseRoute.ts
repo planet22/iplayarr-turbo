@@ -80,7 +80,7 @@ router.get(
     })
 );
 
-// The iPlayer collections for the Discover page. Off by default (BROWSE_SHOW_COLLECTIONS): then nothing is fetched.
+// The iPlayer collections for the Discover page. On by default (BROWSE_SHOW_COLLECTIONS); when switched off nothing is fetched.
 router.get(
     '/collections',
     handle(async (_, res) => {

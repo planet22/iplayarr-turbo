@@ -69,7 +69,7 @@ const configService = {
         NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false',
         MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'inherit',
         MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'inherit',
-        BROWSE_SHOW_COLLECTIONS: 'false',
+        BROWSE_SHOW_COLLECTIONS: 'true',
         BROWSE_COLLECTION_SOURCES: 'all',
         RSS_FEED_HOURS: '48',
         // 'false' re-fetches/re-parses only today's BBC schedule page per channel each refresh,

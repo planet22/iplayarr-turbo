@@ -136,11 +136,11 @@ describe('configService', () => {
     expect(searchFacade.clearSearchCache).not.toHaveBeenCalled();
   });
 
-  it('defaults the collection settings to off', () => {
+  it('defaults Show Collections on and the other collection settings off', () => {
     expect(configService.defaultConfigMap).toMatchObject({
       NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false',
       NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false',
-      BROWSE_SHOW_COLLECTIONS: 'false',
+      BROWSE_SHOW_COLLECTIONS: 'true',
       BROWSE_COLLECTION_SOURCES: 'all',
       MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'inherit',
       MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'inherit',
