@@ -242,6 +242,7 @@
         <table v-else class="dataTable">
             <thead>
                 <tr>
+                    <th></th>
                     <th>Programme</th>
                     <th>Episode</th>
                     <th>Status</th>
@@ -253,6 +254,16 @@
             </thead>
             <tbody>
                 <tr v-for="item in pagedItems" :key="item.pid">
+                    <td>
+                        <img
+                            v-if="getProgrammeThumbnailUrl(item.pid)"
+                            class="thumbnail clickable"
+                            :src="getProgrammeThumbnailUrl(item.pid)"
+                            @click="router.push(`/browse/programme/${item.pid}`)"
+                            @error="hideBrokenImage"
+                        />
+                        <div v-else class="thumbnail-placeholder"></div>
+                    </td>
                     <td class="text"><router-link :to="`/browse/programme/${item.pid}`">{{ item.pid }}</router-link></td>
                     <td data-title="Episode" class="libraryLabel">{{ libraryLabel(item) || '—' }}</td>
                     <td data-title="Status">
