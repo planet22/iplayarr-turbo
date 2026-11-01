@@ -1,5 +1,6 @@
 import { Request, Response, Router } from 'express';
 
+import iplayerDetailsService from '../../service/iplayerDetailsService';
 import subscriptionService, { SubscriptionError } from '../../service/subscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
@@ -8,8 +9,18 @@ const router: Router = asyncRouter();
 
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
 
+// The show's synopsis comes from the cached BBC metadata rather than being stored on the subscription;
+// a show whose metadata cannot be had right now simply goes without.
 router.get('/', async (_, res: Response) => {
-    res.json(await subscriptionService.list());
+    const subscriptions = await subscriptionService.list();
+    res.json(
+        await Promise.all(
+            subscriptions.map(async (subscription) => {
+                const synopsis = (await iplayerDetailsService.getMetadata(subscription.pid).catch(() => undefined))?.programme?.medium_synopsis;
+                return synopsis ? { ...subscription, synopsis } : subscription;
+            })
+        )
+    );
 });
 
 router.post('/', async (req: Request, res: Response) => {

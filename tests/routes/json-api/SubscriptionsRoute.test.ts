@@ -2,6 +2,7 @@ import express from 'express';
 import request from 'supertest';
 
 import router from '../../../src/routes/json-api/SubscriptionsRoute';
+import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import subscriptionService, { SubscriptionError } from '../../../src/service/subscriptionService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 
@@ -16,7 +17,12 @@ jest.mock('../../../src/service/subscriptionService', () => ({
         checkOne: jest.fn(),
     },
 }));
+jest.mock('../../../src/service/iplayerDetailsService', () => ({
+    __esModule: true,
+    default: { getMetadata: jest.fn() },
+}));
 const mocked = jest.mocked(subscriptionService);
+const mockedDetails = jest.mocked(iplayerDetailsService);
 
 const app = express();
 app.use(express.json());
@@ -25,9 +31,17 @@ app.use('/', router);
 describe('SubscriptionsRoute', () => {
     beforeEach(() => jest.resetAllMocks());
 
-    it('GET / lists subscriptions', async () => {
-        mocked.list.mockResolvedValue([{ id: 'a' } as any]);
-        expect((await request(app).get('/')).body).toEqual([{ id: 'a' }]);
+    it('GET / lists subscriptions, adding each show\'s synopsis when the BBC metadata has one', async () => {
+        mocked.list.mockResolvedValue([{ id: 'a', pid: 'p1' } as any, { id: 'b', pid: 'p2' } as any, { id: 'c', pid: 'p3' } as any]);
+        mockedDetails.getMetadata
+            .mockResolvedValueOnce({ programme: { medium_synopsis: 'A topical quiz.' } } as any)
+            .mockRejectedValueOnce(new Error('BBC down'))
+            .mockResolvedValueOnce({ programme: {} } as any);
+        expect((await request(app).get('/')).body).toEqual([
+            { id: 'a', pid: 'p1', synopsis: 'A topical quiz.' },
+            { id: 'b', pid: 'p2' },
+            { id: 'c', pid: 'p3' },
+        ]);
     });
 
     it('POST / subscribes, passing downloadLatest only when strictly true', async () => {

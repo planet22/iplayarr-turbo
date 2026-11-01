@@ -5,6 +5,8 @@ export interface Subscription {
     title: string;
     thumbnail?: string;
     channel?: string;
+    // Added to the list response from the cached BBC metadata; never stored.
+    synopsis?: string;
     createdAt: string;
     lastChecked?: string;
     // How many episodes the last check queued, and when something was last queued.
