@@ -80,6 +80,7 @@ const OTHER = {
     RSS_FEED_HOURS: 'numeric range test',
     STRM_WATCHDOG_CONCURRENCY: 'numeric range test',
     STRM_WATCHDOG_FAIL_THRESHOLD: 'numeric range test',
+    STRM_WATCHDOG_STRIKES: 'numeric range test',
     STREAM_HISTORY_RETENTION_DAYS: 'numeric range test',
     LIVE_TV_EPG_OFFSET: 'range test + guide time shift',
     DOWNLOAD_DIR: 'directory test + SABnzbd get_config',
@@ -409,7 +410,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         }
 
         // 4. Numeric settings: validated range
-        const limits = { ACTIVE_LIMIT: [1, 10, true], RSS_FEED_HOURS: [1, 720, true], STRM_WATCHDOG_CONCURRENCY: [1, 10, false], STRM_WATCHDOG_FAIL_THRESHOLD: [1, 1000, false], STREAM_HISTORY_RETENTION_DAYS: [1, 3650, false] };
+        const limits = { ACTIVE_LIMIT: [1, 10, true], RSS_FEED_HOURS: [1, 720, true], STRM_WATCHDOG_CONCURRENCY: [1, 10, false], STRM_WATCHDOG_FAIL_THRESHOLD: [1, 1000, false], STRM_WATCHDOG_STRIKES: [1, 30, false], STREAM_HISTORY_RETENTION_DAYS: [1, 3650, false] };
         for (const [key, [min, max, required]] of Object.entries(limits)) {
             touched.add(key);
             const cur = effective(before, key);

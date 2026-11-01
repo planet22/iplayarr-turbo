@@ -21,8 +21,10 @@ import NativeStreamService from './stream/NativeStreamService';
 import subscriptionService from './subscriptionService';
 import videoEventService from './videoEventService';
 
-// Consecutive failed checks before a link counts as invalid - one failure is as likely a BBC blip.
-const STRIKES = 2;
+// Failed checks in a row before a link counts as invalid (the STRM_WATCHDOG_STRIKES default) - one failure is
+// as likely a BBC blip.
+const DEFAULT_STRIKES = 2;
+const MAX_STRIKES = 30;
 // Failures that say nothing about the programme itself (our network, not BBC saying "gone").
 const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN']);
 
@@ -139,6 +141,8 @@ export interface WatchdogTracked {
 }
 
 export interface WatchdogStatus {
+    // Failed checks in a row before a link is invalid (the setting), so the dashboard can show "1/2".
+    strikes: number;
     tracked?: WatchdogTracked;
     libraryAccess?: LibraryAccessResult;
     enabled: boolean;
@@ -301,6 +305,8 @@ class StrmWatchdogService {
     // counts update link-by-link instead of only when the run finishes and persists.
     #liveState?: Record<string, WatchdogRecord>;
     #stopRequested = false;
+    // The strike limit in force for the current run; evaluate() reads it.
+    #strikes = DEFAULT_STRIKES;
     #tracked?: WatchdogTracked;
 
     // Can this container actually read the .strm files Sonarr/Radarr and Jellyfin report? Lists their
@@ -446,6 +452,7 @@ class StrmWatchdogService {
     async getStatus(): Promise<WatchdogStatus> {
         const state: Record<string, WatchdogRecord> = this.#liveState ?? (await storage.getItem(STATE_KEY)) ?? {};
         return {
+            strikes: await this.#readStrikes(),
             enabled: (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_ENABLED)) === 'true',
             live: this.#live,
             items: Object.entries(state).map(([pid, record]) => ({ pid, ...record })),
@@ -453,6 +460,11 @@ class StrmWatchdogService {
             tracked: this.#tracked ?? (await storage.getItem(TRACKED_KEY)),
             libraryAccess: await storage.getItem(ACCESS_KEY),
         };
+    }
+
+    async #readStrikes(): Promise<number> {
+        const configured = parseInt((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_STRIKES)) as string, 10);
+        return Math.min(MAX_STRIKES, Math.max(1, configured || DEFAULT_STRIKES));
     }
 
     #computeTracked(pids: Map<string, WatchdogTarget>): WatchdogTracked {
@@ -491,6 +503,7 @@ class StrmWatchdogService {
             MAX_CONCURRENCY,
             Math.max(1, parseInt((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_CONCURRENCY)) as string, 10) || DEFAULT_CONCURRENCY)
         );
+        this.#strikes = await this.#readStrikes();
         const state: Record<string, WatchdogRecord> = (await storage.getItem(STATE_KEY)) ?? {};
         const startedAt = new Date().toISOString();
         this.#liveState = state;
@@ -643,7 +656,7 @@ class StrmWatchdogService {
     #evaluate(state: Record<string, WatchdogRecord>, pid: string, target: WatchdogTarget, failed: boolean, message?: string): void {
         const previous = state[pid];
         const failCount = failed ? (previous?.failCount ?? 0) + 1 : 0;
-        const isInvalid = failCount >= STRIKES;
+        const isInvalid = failCount >= this.#strikes;
         state[pid] = {
             status: isInvalid ? 'invalid' : 'ok',
             failCount,

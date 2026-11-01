@@ -102,6 +102,7 @@ const configService = {
         STRM_WATCHDOG_ACTION: 'notify',
         STRM_WATCHDOG_ARR_ACTION: 'none',
         STRM_WATCHDOG_FAIL_THRESHOLD: '10',
+        STRM_WATCHDOG_STRIKES: '2',
         STRM_WATCHDOG_CONCURRENCY: '4',
         UI_PILL_COLORS: 'true',
         UI_CHANNEL_TOOLS: 'true',

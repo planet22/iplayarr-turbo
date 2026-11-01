@@ -126,7 +126,7 @@
         </div>
         <div class="chartRow">
             <div class="chartCard">
-                <RunsChart title="Results per run" :rows="runChartRows" />
+                <RunsChart title="Results per run" :rows="runChartRows" :strikes="status.strikes" />
             </div>
         </div>
 
@@ -217,7 +217,7 @@
                     <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
                         {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
                     </span>
-                    <span v-if="item.status == 'ok' && item.failCount" class="pill grey">1 strike</span>
+                    <span v-if="item.status == 'ok' && item.failCount" class="pill grey">{{ strikeLabel(item) }} strikes</span>
                     <span v-if="(item.sourceNames || item.sources || []).length" class="linkMeta">
                         {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') }}
                     </span>
@@ -238,6 +238,7 @@
                     <th>Programme</th>
                     <th>Episode</th>
                     <th>Status</th>
+                    <th>Strikes</th>
                     <th>Source</th>
                     <th>Last Checked</th>
                     <th>Action</th>
@@ -262,8 +263,8 @@
                         <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
                             {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
                         </span>
-                        <span v-if="item.status == 'ok' && item.failCount" class="pill grey">1 strike</span>
                     </td>
+                    <td data-title="Strikes">{{ strikeLabel(item) }}</td>
                     <td data-title="Source">
                         {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') || '—' }}
                     </td>
@@ -310,6 +311,7 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.watchdogViewMode', {
 const cardView = computed(() => viewMode.value === 'cards');
 
 const status = ref({
+    strikes: 2,
     enabled: false,
     live: { running: false, total: 0, checked: 0, ok: 0, invalid: 0, inconclusive: 0 },
     items: [],
@@ -398,6 +400,8 @@ const lastRunLabel = computed(() => (lastRun.value ? formatRelativeTime(Date.par
 // Percentage to two decimal places (a handful of failures in hundreds of links is well under 1%).
 const failureRate = (run) => (run && run.checked ? Math.round((run.invalid / run.checked) * 10000) / 100 : 0);
 // Finished runs only; the progress bar above shows the one in flight.
+// "1/2": failed checks so far over the strikes it takes to go invalid.
+const strikeLabel = (item) => `${item.failCount ?? 0}/${status.value.strikes}`;
 const runChartRows = computed(() => runChartData(status.value.runs));
 
 const onStatus = (data) => {

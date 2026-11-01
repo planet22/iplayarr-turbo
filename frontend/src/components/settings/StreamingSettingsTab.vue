@@ -175,6 +175,17 @@
             :options="watchdogArrActionOptions"
         />
         <TextInput
+            v-model="config.STRM_WATCHDOG_STRIKES"
+            field="STRM_WATCHDOG_STRIKES"
+            type-override="number"
+            :min="1"
+            :max="30"
+            :step="1"
+            name="Failed Checks Before Invalid"
+            tooltip="How many checks in a row a link must fail before it is invalid (1-30, default 2). The check runs once a day, so 2 means a dead link is flagged on the second day. 1 flags it at once, with no protection against a one-off BBC error."
+            :error="validationErrors.config?.STRM_WATCHDOG_STRIKES"
+        />
+        <TextInput
             v-if="showAdvanced"
             v-model="config.STRM_WATCHDOG_CONCURRENCY"
             field="STRM_WATCHDOG_CONCURRENCY"

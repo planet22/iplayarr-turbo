@@ -113,6 +113,29 @@ describe('StrmWatchdogService', () => {
         expect(fs.existsSync(badPath)).toBe(true);
     });
 
+    it('flags a link on the first failure when the strike limit is 1', async () => {
+        extra = { STRM_WATCHDOG_STRIKES: '1' };
+        expect(await strmWatchdogService.run()).toEqual({ checked: 2, invalid: 1 });
+        expect((await strmWatchdogService.getStatus()).strikes).toBe(1);
+    });
+
+    it('needs as many failures in a row as the strike limit says', async () => {
+        extra = { STRM_WATCHDOG_STRIKES: '3' };
+        expect((await strmWatchdogService.run()).invalid).toBe(0);
+        expect((await strmWatchdogService.run()).invalid).toBe(0);
+        const mid = (await strmWatchdogService.getStatus()).items.find(({ pid }) => pid === BAD);
+        expect(mid).toMatchObject({ status: 'ok', failCount: 2 });
+        expect((await strmWatchdogService.run()).invalid).toBe(1);
+    });
+
+    it('reports the default strike limit, and clamps an out-of-range one', async () => {
+        expect((await strmWatchdogService.getStatus()).strikes).toBe(2);
+        extra = { STRM_WATCHDOG_STRIKES: '99' };
+        expect((await strmWatchdogService.getStatus()).strikes).toBe(30);
+        extra = { STRM_WATCHDOG_STRIKES: '0' };
+        expect((await strmWatchdogService.getStatus()).strikes).toBe(2);
+    });
+
     it('ignores network errors', async () => {
         (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async (pid: string) => {
             if (pid === BAD) throw Object.assign(new Error('x'), { code: 'ETIMEDOUT' });

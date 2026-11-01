@@ -183,6 +183,7 @@ async function apiLayer(ctx) {
     await check(A, 'maintenance caches', '/json-api/maintenance/caches', isArr);
     const wd = await check(A, 'watchdog state', '/json-api/watchdog', (r) => typeof r.json?.enabled === 'boolean' || 'no enabled flag');
     ctx.wd = wd.json;
+    await check(A, 'watchdog reports its strike limit (1-30)', '/json-api/watchdog', (r) => (Number.isInteger(r.json?.strikes) && r.json.strikes >= 1 && r.json.strikes <= 30) || `strikes=${r.json?.strikes}`);
     if (ctx.wd?.enabled) await check(A, 'watchdog path-map access', '/json-api/watchdog/check-access', isJson, { method: 'POST', warnOnly: true, timeout: 180000 });
 
     // Per-app connectivity (uses stored masked keys; read-only test call)
@@ -425,6 +426,8 @@ async function watchdogLinks(page, ctx, U) {
         const sample = items.slice(0, 5);
         const table = await view('table');
         rec(U, 'watchdog table lists the library name under each link', sample.some((i) => table.includes(label(i))) ? 'PASS' : 'FAIL', label(sample[0]));
+        const strikes = (await http('/json-api/watchdog')).json?.strikes;
+        rec(U, 'watchdog table has a Strikes column showing n/limit', table.includes('Strikes') && table.includes(`0/${strikes}`) ? 'PASS' : 'FAIL', `limit ${strikes}`);
         const cards = await view('cards');
         rec(U, 'watchdog cards show the same library name', sample.some((i) => cards.includes(label(i))) ? 'PASS' : 'FAIL', label(sample[0]));
         const valid = sample.find((i) => i.status === 'ok');

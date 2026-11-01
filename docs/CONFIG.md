@@ -30,6 +30,7 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | `STREAM_HISTORY_RETENTION_DAYS` | 1-3650 |
 | `STRM_WATCHDOG_CONCURRENCY` | 1-10 |
 | `STRM_WATCHDOG_FAIL_THRESHOLD` | 1-1000 |
+| `STRM_WATCHDOG_STRIKES` | 1-30 |
 
 ## General (Settings → General)
 
@@ -157,7 +158,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 
 ## STRM Watchdog (Settings → Streaming)
 
-Daily check that `.strm` links still resolve on BBC. On by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_WEBHOOK_URL`.
+Daily check that `.strm` links still resolve on BBC. On by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_STRIKES`, `STRM_WATCHDOG_WEBHOOK_URL`.
 
 ## Versions (audio described and signed)
 

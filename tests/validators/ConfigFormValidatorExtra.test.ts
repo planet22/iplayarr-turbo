@@ -61,13 +61,15 @@ describe('ConfigFormValidator (extra)', () => {
     });
 
     it('range-checks the optional numbers only when they are given', async () => {
-        const blank = await validator.validate({ ...validInput(), STRM_WATCHDOG_CONCURRENCY: '', STRM_WATCHDOG_FAIL_THRESHOLD: undefined, STREAM_HISTORY_RETENTION_DAYS: '' });
+        const blank = await validator.validate({ ...validInput(), STRM_WATCHDOG_CONCURRENCY: '', STRM_WATCHDOG_FAIL_THRESHOLD: undefined, STRM_WATCHDOG_STRIKES: '', STREAM_HISTORY_RETENTION_DAYS: '' });
         expect(blank.STRM_WATCHDOG_CONCURRENCY).toBeUndefined();
         expect(blank.STRM_WATCHDOG_FAIL_THRESHOLD).toBeUndefined();
+        expect(blank.STRM_WATCHDOG_STRIKES).toBeUndefined();
         expect(blank.STREAM_HISTORY_RETENTION_DAYS).toBeUndefined();
-        const bad = await validator.validate({ ...validInput(), STRM_WATCHDOG_CONCURRENCY: '11', STRM_WATCHDOG_FAIL_THRESHOLD: '0', STREAM_HISTORY_RETENTION_DAYS: '-5' });
+        const bad = await validator.validate({ ...validInput(), STRM_WATCHDOG_CONCURRENCY: '11', STRM_WATCHDOG_FAIL_THRESHOLD: '0', STRM_WATCHDOG_STRIKES: '31', STREAM_HISTORY_RETENTION_DAYS: '-5' });
         expect(bad.STRM_WATCHDOG_CONCURRENCY).toBe('Parallel checks must be a whole number from 1 to 10');
         expect(bad.STRM_WATCHDOG_FAIL_THRESHOLD).toBe('Minimum valid before action must be a whole number from 1 to 1000');
+        expect(bad.STRM_WATCHDOG_STRIKES).toBe('Failed checks before invalid must be a whole number from 1 to 30');
         expect(bad.STREAM_HISTORY_RETENTION_DAYS).toBe('Stream history retention must be a positive number');
     });
 

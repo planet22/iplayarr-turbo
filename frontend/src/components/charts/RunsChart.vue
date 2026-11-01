@@ -13,14 +13,17 @@ const props = defineProps({
     title: String,
     // [{ finishedAt, valid, oneStrike, invalid, inconclusive, flag }] - see runChartData
     rows: { type: Array, required: true },
+    // Failed checks in a row before a link is invalid (the Watchdog setting), named in the legend.
+    strikes: { type: Number, default: 2 },
 });
 
-const STACKS = [
+// With a single strike a failing link is invalid at once, so the "failing" stack could never hold anything.
+const STACKS = computed(() => [
     { key: 'valid', name: 'Valid', color: 'positive-color' },
-    { key: 'oneStrike', name: 'Failing once', color: 'caution-color' },
+    { key: 'oneStrike', name: `Failing (under ${props.strikes} ${props.strikes === 1 ? 'strike' : 'strikes'})`, color: 'caution-color' },
     { key: 'invalid', name: 'Invalid', color: 'danger-color' },
     { key: 'inconclusive', name: 'Inconclusive', color: 'info-color' },
-];
+].filter(({ key }) => key !== 'oneStrike' || props.strikes > 1));
 
 const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
 
@@ -29,13 +32,13 @@ const label = (finishedAt) => {
     return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 };
 const categories = computed(() => props.rows.map(({ finishedAt }) => label(finishedAt)));
-const series = computed(() => STACKS.map(({ key, name }) => ({ name, data: props.rows.map((row) => row[key]) })));
+const series = computed(() => STACKS.value.map(({ key, name }) => ({ name, data: props.rows.map((row) => row[key]) })));
 
 // Screen readers cannot see the chart, so give them the latest run's numbers as text.
 const summary = computed(() => {
     const last = props.rows[props.rows.length - 1];
     if (!last) return `${props.title || 'Chart'}: no runs yet`;
-    return `${props.title || 'Chart'}, latest of ${props.rows.length} runs: ${STACKS.map(({ key, name }) => `${last[key]} ${name.toLowerCase()}`).join(', ')}`;
+    return `${props.title || 'Chart'}, latest of ${props.rows.length} runs: ${STACKS.value.map(({ key, name }) => `${last[key]} ${name.toLowerCase()}`).join(', ')}`;
 });
 
 const options = computed(() => {
@@ -44,7 +47,7 @@ const options = computed(() => {
         chart: { type: 'bar', stacked: true, background: 'transparent', zoom: { enabled: false }, toolbar: { show: false } },
         title: { text: props.title, style: { fontSize: '20px', color: t.text } },
         theme: { mode: t.mode },
-        colors: STACKS.map(({ color }) => chartColor(color)),
+        colors: STACKS.value.map(({ color }) => chartColor(color)),
         plotOptions: { bar: { columnWidth: '60%', borderRadius: 2 } },
         xaxis: { categories: categories.value, labels: { rotate: -45, style: { colors: t.text } }, tooltip: { enabled: false } },
         yaxis: { min: 0, forceNiceScale: true, labels: { style: { colors: t.text } } },

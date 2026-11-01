@@ -89,6 +89,7 @@ export class ConfigFormValidator extends Validator {
         checkWholeNumber(validatorError, input, 'RSS_FEED_HOURS', 'RSS Feed Hours', 1, MAX_RSS_FEED_HOURS, true);
         checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_CONCURRENCY', 'Parallel checks', 1, 10, false);
         checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', 1, 1000, false);
+        checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_STRIKES', 'Failed checks before invalid', 1, 30, false);
         checkWholeNumber(validatorError, input, 'STREAM_HISTORY_RETENTION_DAYS', 'Stream history retention', 1, 3650, false);
 
         for (const [key, allowed] of Object.entries(ENUM_SETTINGS)) {

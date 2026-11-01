@@ -19,7 +19,7 @@ Sonarr/Radarr/Jellyfin sources are the apps you added on the **Apps** page (Jell
 
 ## When a link counts as dead
 
-- **Two strikes:** a link must fail two checks in a row before it is invalid; one failure is as likely a BBC blip.
+- **Strikes:** a link must fail a set number of checks in a row before it is invalid (**Failed Checks Before Invalid**, `STRM_WATCHDOG_STRIKES`, default `2`, 1-30); one failure is as likely a BBC blip. The check runs once a day, so the default flags a dead link on the second day. The links table shows each link's count as `1/2`.
 - **BBC must be confirmed up:** failures are only counted and acted on once enough links have validated OK in the same run (**Minimum Valid Before Action**, `STRM_WATCHDOG_FAIL_THRESHOLD`, default `10`, or half your links if you have fewer). That same number of *network* failures in a row (BBC unreachable, as opposed to BBC saying a programme has no version available) abandons the run as a BBC/network outage, so an outage never wipes your library.
 - A pre-flight check runs first, and our own network errors (DNS, timeouts, resets) never count against a programme.
 
@@ -45,6 +45,7 @@ Actions are taken once per link.
 | Sonarr/Radarr Action | `STRM_WATCHDOG_ARR_ACTION` | `none` | `none` / `unmonitor` / `search`. |
 | Parallel Checks | `STRM_WATCHDOG_CONCURRENCY` | `4` | 1-10. 1 is gentlest on BBC; 4 is about three times faster. |
 | Minimum Valid Before Action | `STRM_WATCHDOG_FAIL_THRESHOLD` | `10` | See above. |
+| Failed Checks Before Invalid | `STRM_WATCHDOG_STRIKES` | `2` | 1-30. See above. |
 | Watchdog Webhook URL | `STRM_WATCHDOG_WEBHOOK_URL` | _(unset)_ | Optional. |
 
 ## Watchdog page
