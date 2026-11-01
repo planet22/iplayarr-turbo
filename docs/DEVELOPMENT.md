@@ -41,7 +41,21 @@ npx jest path/to/File.test.ts                 # run a single test file
 npx jest -t "test name"                       # run tests matching a name
 ```
 
-Tests live under `tests/`, mirroring the `src/` directory structure (e.g. `src/facade/searchFacade.ts` → `tests/facade/searchFacade.test.ts`). Fixture JSON lives under `tests/data/`. Redis is mocked with `ioredis-mock` in tests — you don't need a real Redis instance running to run the test suite.
+Tests live under `tests/`, mirroring the `src/` directory structure (e.g. `src/facade/searchFacade.ts` → `tests/facade/searchFacade.test.ts`). Fixture JSON lives under `tests/data/`. Tests use a real throwaway SQLite file per Jest worker (`tests/setup.ts`), cleared before each test, so nothing external needs to run. Frontend helpers in `frontend/src/lib` (for example `downloadSummary`) have Jest tests too.
+
+## Smoke tests
+
+`smoke/` holds Playwright/HTTP scripts run against a live instance: `smoke.cjs` (read-only: API, Newznab/SABnzbd, browse, UI at desktop and phone widths), `smoke.cjs --write` (adds `reallife.cjs` and `uireal.cjs`: subscribes, queues, streams, changes and reverts settings), `settings.cjs` (every setting changed, read back and restored; fails if a setting has no entry) and `probes.cjs` (data quality, hostile input, SSRF guards, config races). `smoke/SMOKE_PROMPT.md` is a repeatable prompt for running the lot.
+
+## Conventions worth knowing
+
+- **Async routes:** Express 4 ignores the promise an async handler returns, so a throw would leave the request hanging. `src/utils/asyncRouter.ts` wraps every json-api router and `ApiRoute` so rejections reach the error handler. Use it for new routers.
+- **Input validation:** `src/validators/ConfigFormValidator.ts` checks settings on save (allowed values, cron, URLs, ranges). When adding a setting, add its rule there and an entry in `smoke/settings.cjs`. Validators treat non-text input as missing (400).
+- **Release group:** `src/utils/releaseGroup.ts` owns `BBCiPlayarrTurbo` (`applyGroupToTemplate`, `applyGroupToName`, `templateGroupProblem`).
+- **Arr API versions:** each `AbstractArrService` subclass declares its `apiVersion` and `getApiUrl`; `ArrLibraryService` resolves URLs through `ArrServiceDirectory`. A new Sonarr/Radarr API version is a subclass plus one directory entry.
+- **Subscription detection:** `src/service/subscriptionDetectService.ts` scans Sonarr/Radarr for shows pointing at iPlayarr; finds are stored under the `subscription_detected` key and the daily `subscriptions-detect` task refreshes them. `src/service/appSeen.ts` stamps an app's last-seen time.
+- **Progress events:** subscription checks emit `subscriptionProgress` over Socket.IO.
+- **Reverse proxy:** `TRUST_PROXY` (`src/utils/trustProxy.ts`) sets Express's proxy trust so rate limits see real client addresses.
 
 ## Linting and formatting
 

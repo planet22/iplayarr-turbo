@@ -32,6 +32,16 @@ On the Apps page, editing an App and clearing its Download Client or Indexer nam
 
 Also on the Apps page: a **User-Agent Lookup** table. Search/grab requests that arrive without an app ID — e.g. an indexer you added manually in Sonarr/Radarr rather than through the Apps auto-setup flow — can't normally be attributed to a specific app for stats/logging. iPlayarr automatically captures any unrecognized `User-Agent` header it sees with a blank app name; filling that in (partial/substring match against future requests) attributes that traffic to the named app going forward. Useful if you run multiple Sonarr/Radarr instances against one iPlayarr and want the NZB diagnostics page (see [USAGE_GUIDE.md](USAGE_GUIDE.md)) to tell them apart.
 
+## Release group
+
+Release names and library file names (structured and flat) all end in `-BBCiPlayarrTurbo`. Sonarr/Radarr record it as the release group, and iPlayarr uses it to recognise its own video files (not just `.strm` links) when [syncing subscriptions](SUBSCRIPTIONS.md#syncing-shows-already-in-sonarrradarr). It is fixed: a hard-coded trailing group in a filename template is replaced, and a template with a variable after the final `-` is rejected. Create a Custom Format on it if you want to prefer or avoid iPlayarr releases.
+
+## Request handling
+
+- Sonarr/Radarr (and Prowlarr) searches with a repeated or nested `q`, `cat` or `app` get a 400. SABnzbd queue/history actions with an unknown or repeated name also get 400.
+- An unknown programme answers 404 (also on repeat attempts) and a failing BBC lookup 502, rather than a 500 carrying a raw upstream error. `addfile` with no upload answers 400 and records no failed grab.
+- An NZB download needs a real programme id and a type of TV, MOVIE or UNKNOWN. The same release is not queued twice if Download is double-clicked.
+
 ## Quality and version variants
 
 - **Additional Qualities** (Settings → Media Management) lists the same programme at several qualities so Sonarr/Radarr can pick one.

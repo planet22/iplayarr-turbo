@@ -19,6 +19,8 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 - **Filter box:** the box in the toolbar hides settings on the open tab that do not match what you type (and any section heading left empty).
 - **(i) buttons:** field descriptions are behind an (i) button beside each field (hover, focus or tap).
 - **Number settings** have a minimum and maximum in the form and are validated on the server (table below). A stored or environment value outside its range is pulled back into range when read, so a value left by an older version cannot stop you saving.
+- **Validation:** settings that must be one of a fixed set (`AUTH_TYPE`, download and stream clients, media and stream mode, video quality, search engines, NFO mode, release language, logo shape, watchdog actions, every on/off setting, `OUTPUT_FORMAT` of `mp4` or `mkv`, thumbnail retention) are checked on save and an unknown value is refused. A blank value still means "use the default". `REFRESH_SCHEDULE` must be a five-field cron running at most every 15 minutes (a bad saved value falls back to the default and is logged). `STREAM_BASE_URL` (when needed) and `STRM_WATCHDOG_WEBHOOK_URL` must be http(s), and `STRM_WATCHDOG_SOURCES` must name known sources. JSON booleans and numbers sent to the API are stored as text. A saved `REFRESH_SCHEDULE` reschedules the running job at once (a schedule set on the Maintenance tab still wins).
+- **Removed:** `SUB_DIR` and `FALLBACK_FILENAME_SUFFIX` did nothing and no longer exist.
 - **Quick find:** `Ctrl+K` (`Cmd+K` on a Mac) opens a palette that jumps to any page or Settings tab, suggests programmes and runs a plain search. See [USAGE_GUIDE.md](USAGE_GUIDE.md#quick-find).
 
 | Setting | Allowed range |
@@ -183,6 +185,7 @@ Some programmes have an **audio described** or **signed** version alongside the 
 | Library cleanup | `45 3 * * *` | - | Removes empty Show/Season folders left after import |
 | Expired cache purge | `50 3 * * *` | - | Deletes expired entries from the database cache |
 | STRM Watchdog | `15 4 * * *` | 60 min | Checks that `.strm` links still resolve ([WATCHDOG.md](WATCHDOG.md)) |
+| Subscription Detection | `47 3 * * *` | 15 min | Refreshes episode counts of linked shows for apps with detection on, and remembers new finds ([SUBSCRIPTIONS.md](SUBSCRIPTIONS.md#syncing-shows-already-in-sonarrradarr)) |
 
 ## Archive & Retention (Settings → Maintenance / Media Management)
 
