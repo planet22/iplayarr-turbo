@@ -10,7 +10,7 @@
             </div>
             <div class="rowActions">
                 <button class="clickable" type="button" title="Rebuild" aria-label="Rebuild" :disabled="rebuilding" @click="rebuildLogos">
-                    <font-awesome-icon :icon="['fas', 'rotate']" :spin="rebuilding" />
+                    <font-awesome-icon :icon="['fas', 'wand-magic-sparkles']" :beat="rebuilding" />
                 </button>
             </div>
         </div>
@@ -105,29 +105,6 @@
     </div>
 
     <SettingsSubheading text="Scheduled tasks" />
-    <template v-if="showAdvanced">
-        <TextInput
-            v-model="config.RSS_FEED_HOURS"
-            field="RSS_FEED_HOURS"
-            :advanced="true"
-            type-override="number"
-            :min="1"
-            :max="720"
-            :step="1"
-            name="Hours in RSS Feed"
-            tooltip="How many hours back the RSS feed covers (1-720, default 48)."
-            :error="validationErrors.config?.RSS_FEED_HOURS"
-        />
-        <SelectInput
-            v-model="config.SCHEDULE_FULL_REFRESH"
-            field="SCHEDULE_FULL_REFRESH"
-            :advanced="true"
-            name="Full Schedule Refresh"
-            tooltip="Off refreshes only today's schedule. On refreshes everything. Applies to the schedule refresh task below."
-            :error="validationErrors.config?.SCHEDULE_FULL_REFRESH"
-            :options="trueOrFalse"
-        />
-    </template>
     <LoadingIndicator v-if="!loaded" />
     <div v-else class="scheduledTasks cacheGrid">
         <ScheduledTaskRow v-for="task in tasks" :key="task.id" :task="task" :busy="!!running[task.id]" @run="runNow" />
@@ -138,8 +115,6 @@
 import { computed, defineProps, inject, onMounted, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
-import SelectInput from '@/components/common/form/SelectInput.vue';
-import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -151,15 +126,7 @@ import toastService from '@/lib/toastService';
 import { splitTtl, TTL_UNITS, ttlEntryChanged, useCaches } from '@/lib/useCaches';
 import { useScheduledTasks } from '@/lib/useScheduledTasks';
 
-defineProps({
-    trueOrFalse: {
-        type: Array,
-        required: true,
-    },
-});
-
 const config = inject('settingsConfig');
-const showAdvanced = inject('settingsShowAdvanced');
 const validationErrors = inject('settingsValidationErrors');
 const changedKeys = inject('settingsChangedKeys');
 const schedulesReload = inject('settingsSchedulesReload');

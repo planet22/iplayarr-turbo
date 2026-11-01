@@ -37,6 +37,8 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
 | Api Key | `API_KEY` | _(auto-generated)_ | Secures the Newznab/SABnzbd API surface (`?apikey=`). Regenerate from the field's button; Settings will offer to push the new key out to configured Apps. |
+| Hours in RSS Feed | `RSS_FEED_HOURS` | `48` | Advanced. How many hours back the RSS feed covers (1-720). |
+| Full Schedule Refresh | `SCHEDULE_FULL_REFRESH` | `false` | Advanced. `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh. Applies to the Schedule Refresh task on the Maintenance tab. |
 
 ## Search (Settings → Search)
 
@@ -179,7 +181,6 @@ Some programmes have an **audio described** or **signed** version alongside the 
 
 - **Rebuild Logos:** redraws every live channel logo, rewrites library posters and asks Jellyfin to refresh.
 - **Caches:** BBC data is cached in the database so repeat searches and page loads are fast. Each cache row shows its item count and size, an editable **Keep for** lifetime (minutes to months, with Reset to default), and a **Clear** button; the toolbar has **Refresh** and **Clear All** (with confirmation). Caches are ordered by what they hold: browse, BBC programme data, search and schedule feeds, Skyhook, then streaming. A new lifetime applies to entries stored from then on; existing entries keep their old expiry until cleared. Thumbnails and **Stream History** (`STREAM_HISTORY_RETENTION_DAYS`) are managed here too. Hit rates are on the [Statistics](USAGE_GUIDE.md#statistics-stats) page.
-- **Hours in RSS Feed** (`RSS_FEED_HOURS`, advanced, default `48`, 1-720) and **Full Schedule Refresh** (`SCHEDULE_FULL_REFRESH`, advanced, default `false`) sit above the task list, since they shape the schedule refresh and the RSS feed it feeds. `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh.
 - **Scheduled tasks:** every cron job is listed in run order with its next run time, a **Run now** button and an editable cron expression (**Validate** checks it, **Reset to default** restores the built-in one). Edits are drafts applied by Save and take effect without a restart. Some tasks enforce a minimum interval so they cannot be set to hammer the BBC.
 
 | Task | Default schedule | Minimum interval | What it does |

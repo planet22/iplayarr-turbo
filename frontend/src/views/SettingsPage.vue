@@ -24,7 +24,7 @@
     </div>
     <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
     <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody">
-        <GeneralSettingsTab v-if="activeTab == 'general'" @generate-api-key="generateApiKey" />
+        <GeneralSettingsTab v-if="activeTab == 'general'" :true-or-false="trueOrFalse" @generate-api-key="generateApiKey" />
         <SearchSettingsTab v-if="activeTab == 'search'" :true-or-false="trueOrFalse" />
         <AppearanceSettingsTab v-if="activeTab == 'appearance'" :true-or-false="trueOrFalse" />
         <MediaManagementSettingsTab
@@ -51,7 +51,7 @@
             :oidc-callback-tooltip="oidcCallbackTooltip"
             @test-oidc="testOIDC"
         />
-        <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" :true-or-false="trueOrFalse" />
+        <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" />
         <div v-if="filterText.trim() && !filterMatches" class="settingsFilterEmpty">
             No settings on this tab match "{{ filterText.trim() }}".
         </div>
@@ -128,7 +128,7 @@ const activeTab = ref(initialTab ?? 'general');
 // the tabs whose keys differ from what was last loaded or saved. STREAM_BASE_URL and STREAM_KEY are
 // shared by Streaming and Live TV.
 const TAB_KEYS = {
-    general: ['API_KEY'],
+    general: ['API_KEY', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH'],
     search: [
         'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS',
         'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH',
@@ -156,7 +156,7 @@ const TAB_KEYS = {
         'AUTH_TYPE', 'AUTH_USERNAME', 'AUTH_PASSWORD', 'OIDC_CONFIG_URL', 'OIDC_CALLBACK_HOST', 'OIDC_CLIENT_ID',
         'OIDC_CLIENT_SECRET', 'OIDC_ALLOWED_EMAILS',
     ],
-    maintenance: ['STREAM_HISTORY_RETENTION_DAYS', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH'],
+    maintenance: ['STREAM_HISTORY_RETENTION_DAYS'],
 };
 
 // What each key held when the config was loaded or last saved.

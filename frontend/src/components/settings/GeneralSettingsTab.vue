@@ -11,15 +11,49 @@
         button-tooltip="Regenerate API Key"
         @action="emit('generate-api-key')"
     />
+
+    <template v-if="showAdvanced">
+        <SettingsSubheading text="Schedule" />
+        <TextInput
+            v-model="config.RSS_FEED_HOURS"
+            field="RSS_FEED_HOURS"
+            :advanced="true"
+            type-override="number"
+            :min="1"
+            :max="720"
+            :step="1"
+            name="Hours in RSS Feed"
+            tooltip="How many hours back the RSS feed covers (1-720, default 48)."
+            :error="validationErrors.config?.RSS_FEED_HOURS"
+        />
+        <SelectInput
+            v-model="config.SCHEDULE_FULL_REFRESH"
+            field="SCHEDULE_FULL_REFRESH"
+            :advanced="true"
+            name="Full Schedule Refresh"
+            tooltip="Off refreshes only today's schedule. On refreshes everything. Applies to the Schedule Refresh task on the Maintenance tab."
+            :error="validationErrors.config?.SCHEDULE_FULL_REFRESH"
+            :options="trueOrFalse"
+        />
+    </template>
 </template>
 
 <script setup>
-import { defineEmits, inject } from 'vue';
+import { defineEmits, defineProps, inject } from 'vue';
 
+import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 
+defineProps({
+    trueOrFalse: {
+        type: Array,
+        required: true,
+    },
+});
+
 const config = inject('settingsConfig');
+const showAdvanced = inject('settingsShowAdvanced');
 const validationErrors = inject('settingsValidationErrors');
 
 const emit = defineEmits(['generate-api-key']);

@@ -272,7 +272,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const names = await page.locator('.settingsTab').allTextContents();
             ok('the tab bar lists General, Search and Appearance', ['General', 'Search', 'Appearance'].every((t) => names.some((n) => n.includes(t))), names.join());
             const general = await labels();
-            ok('General holds the API key only', general.some((l) => /Api Key/i.test(l)) && !general.some((l) => /Native Search|Colour Scheme|Hours in RSS Feed/i.test(l)), general.join(' | '));
+            ok('General holds the API key (and the advanced RSS/schedule settings)', general.some((l) => /Api Key/i.test(l)) && !general.some((l) => /Native Search|Colour Scheme/i.test(l)), general.join(' | '));
 
             await tab('search');
             const search = await labels();
@@ -293,9 +293,11 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Appearance has no search settings', !looks.some((l) => /Native Search|Match All/i.test(l)), looks.join(' | '));
 
             await tab('maintenance');
+            // Wait for the Maintenance content itself: a hash-only navigation can be read before the tab has switched.
+            await page.waitForFunction(() => /Scheduled tasks/i.test(document.querySelector('.settingsBody')?.innerText || ''), null, { timeout: 15000 }).catch(() => {});
             const maint = (await page.locator('.settingsBody').innerText());
             ok('Maintenance lists the scheduled tasks', /Scheduled tasks/i.test(maint));
-            ok('Hours in RSS Feed and Full Schedule Refresh sit with the scheduled tasks (advanced)', !/Hours in RSS Feed/.test(maint) || maint.indexOf('Hours in RSS Feed') > maint.indexOf('Scheduled tasks'), 'RSS setting is above the Scheduled tasks heading');
+            ok('Hours in RSS Feed and Full Schedule Refresh are no longer on Maintenance', !/Hours in RSS Feed|Full Schedule Refresh/.test(maint));
 
             // Old links: #general still opens General, and an unknown hash opens the first tab rather than a blank page.
             await page.goto('about:blank'); await page.goto(`${BASE}/settings#nonsense`, { waitUntil: 'networkidle' }); await page.waitForTimeout(1000);
@@ -805,7 +807,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('after a scan it carries the warning icon', (await icon.count()) === 1);
             const tip = (await icon.getAttribute('title')) || '';
             ok('whose tooltip explains it briefly', /^Gone from .+ since .+\. Stop tracking it or add it back\.$/.test(tip), tip);
-            ok('and its stale counts are gone', !/of 9 episodes/.test(await row.innerText()));
+            ok('and its stale counts are gone', (await row.locator('.thumbBadge').count()) === 0 && (await row.locator('.splitPill').count()) === 0);
             await shot(page, 'subscriptions-missing-icon', true);
             const s = await find();
             if (s) await http('/json-api/subscriptions/' + s.id, { method: 'DELETE' });
