@@ -64,6 +64,21 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 const d = dialog(page);
                 warn('download dialog opens from search', (await d.count()) > 0 && (await d.isVisible().catch(() => false)));
                 await shot(page, 'search-3-download-dialog');
+                // The size shown for a file download follows the Quality picker (full-HD is bigger than mobile).
+                const sizeOf = async () => {
+                    const m = (await d.locator('.outputNote').innerText().catch(() => '')).match(/about ([\d.]+) (KB|MB|GB)/);
+                    return m ? parseFloat(m[1]) * { KB: 1 / 1024, MB: 1, GB: 1024 }[m[2]] : undefined;
+                };
+                await d.getByText('Video file', { exact: true }).click().catch(() => {});
+                const quality = d.locator('select').last();
+                if (await quality.count()) {
+                    await quality.selectOption({ value: 'fhd' }).catch(() => {});
+                    const fhd = await sizeOf();
+                    await quality.selectOption({ value: 'mobile' }).catch(() => {});
+                    const mobile = await sizeOf();
+                    warn('download dialog size follows the Quality picker', fhd > 0 && mobile > 0 && mobile < fhd, `fhd ${fhd} MB, mobile ${mobile} MB`);
+                    await shot(page, 'search-3b-download-dialog-quality');
+                } else rec(U, 'download dialog size follows the Quality picker', 'WARN', 'no quality select');
                 await page.keyboard.press('Escape');
             } else rec(U, 'search result download button', 'WARN', 'not found');
         });

@@ -105,7 +105,7 @@ const globalSettings = inject('globalSettings', ref({}));
 // Starts from the Media Mode setting; the toggle changes it for this one download.
 const mode = ref(defaultMediaMode(globalSettings.value));
 const summary = computed(() =>
-    describeDownload(globalSettings.value, { totalMb: estimateSizeMb(globalSettings.value, searchResult.value), mode: mode.value })
+    describeDownload(globalSettings.value, { totalMb: estimateSizeMb(globalSettings.value, { ...searchResult.value, quality: quality.value }), mode: mode.value })
 );
 
 const download = async () => {
