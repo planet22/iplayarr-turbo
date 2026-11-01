@@ -39,9 +39,14 @@
             </div>
             <TablePagination v-model="collectionPage" v-model:page-size="collectionPageSize" :total="shownCollections.length" />
             <section v-if="open" ref="openSection" class="openCollection">
+                <PageHeader :title="`Collection: ${open.title}`" icon="photo-film" />
                 <SettingsPageToolbar inline-filters>
+                    <template #nav>
+                        <button type="button" class="SettingsPageToolbar-button clickable" title="Back to top" aria-label="Back to top" @click="scrollToTop">
+                            <font-awesome-icon :icon="['fas', 'arrow-up']" />
+                        </button>
+                    </template>
                     <template #filters>
-                        <span class="openTitle">{{ open.title }}</span>
                         <input
                             v-if="items.length" v-model="itemFilter" type="text" class="tableFilter" placeholder="Filter by title"
                             aria-label="Filter by title" @keydown.esc="itemFilter = ''"
@@ -257,10 +262,13 @@ const toggle = (collection) => router.push({ query: openId.value === collection.
 
 // Open the contents under the tiles and bring them into view.
 watch([openId, collections], async () => {
-    await loadItems();
+    const loaded = loadItems();
     await nextTick();
     openSection.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    await loaded;
 });
+
+const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
 // Loading the collections also opens the one named in the URL (the watch above).
 onMounted(load);
@@ -269,24 +277,6 @@ onMounted(load);
 <style lang="less" scoped>
 .browsePage :deep(.SettingsPageToolbar) {
     margin-bottom: 1rem;
-}
-
-.gridFiltersTitle {
-    margin-right: 6px;
-    font-size: 14px;
-    color: @primary-text-color;
-}
-
-@media (max-width: @mobile-breakpoint) {
-    .gridFiltersTitle {
-        display: none;
-    }
-}
-
-.openTitle {
-    margin-right: 6px;
-    font-size: 14px;
-    color: @primary-text-color;
 }
 
 .gridFilter {
@@ -322,6 +312,8 @@ onMounted(load);
 }
 
 .openCollection {
+    margin-top: 1.75rem;
+
     .synopsis {
         margin: 0 0 12px;
         color: @subtle-text-color;

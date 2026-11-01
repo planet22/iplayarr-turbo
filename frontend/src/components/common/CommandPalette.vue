@@ -51,6 +51,7 @@ import { computed, defineExpose, nextTick, onBeforeUnmount, onMounted, ref, watc
 import { useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 
 // Ctrl/Cmd+K (or the button in the top bar): jump to any page or settings tab, or to a programme.
 const router = useRouter();
@@ -124,7 +125,7 @@ const results = computed(() => {
     }));
     const list = [];
     if (q) list.push({ key: 'search', icon: 'magnifying-glass', label: `Search iPlayer for "${query.value.trim()}"`, hint: 'Search', path: `/search?searchTerm=${encodeURIComponent(query.value.trim())}` });
-    list.push(...programmes.value.map((p) => ({ key: `prog-${p.pid}`, icon: 'tv', label: p.title, hint: 'Programme', path: `/browse/programme/${p.pid}` })));
+    list.push(...programmes.value.map((p) => ({ key: `prog-${suggestionKey(p)}`, icon: suggestionIcon(p), label: p.title, hint: suggestionLabel(p), path: suggestionPath(p) })));
     list.push(...pages.slice(0, q ? 8 : pages.length));
     return list;
 });

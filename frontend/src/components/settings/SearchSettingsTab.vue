@@ -44,7 +44,7 @@
         field="NATIVE_SEARCH_V2_COLLECTION_NAMES"
         :advanced="true"
         name="Find BBC Collections by Name (2.0)"
-        tooltip="Also list the films and episodes of any iPlayer collection whose title contains your search words (e.g. 'fright night'). Only collections currently on iPlayer's home and category pages are found."
+        tooltip="Find any iPlayer collection whose title contains your search words (e.g. 'fright night'). The Search page shows it as a tile (and in the type-ahead) that opens it on the Collections page, which needs Show Collections on; Sonarr/Radarr searches list its films and episodes. Only collections currently on iPlayer's home and category pages are found."
         :error="validationErrors.config?.NATIVE_SEARCH_V2_COLLECTION_NAMES"
         :options="trueOrFalse"
     />

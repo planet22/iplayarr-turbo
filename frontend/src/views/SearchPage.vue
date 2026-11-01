@@ -45,10 +45,10 @@
             </button>
             <ul v-if="showSuggestions && suggestions.length" class="suggestions">
                 <li
-                    v-for="(suggestion, index) in suggestions" :key="suggestion.pid"
-                    :class="{ active: index === activeIndex }" @mousedown.prevent="openSuggestion(suggestion)"
+                    v-for="(suggestion, index) in suggestions" :key="suggestionKey(suggestion)"
+                    :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
                 >
-                    <font-awesome-icon :icon="['fas', 'tv']" />
+                    <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
                     <span>{{ suggestion.title }}</span>
                 </li>
                 <li class="seeAll" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
@@ -56,6 +56,13 @@
         </div>
     </div>
     <div v-if="!loading" class="inner-content scroll-x">
+        <!-- Collections whose title matches the search: click one to open it on the Collections page. -->
+        <div v-if="collections.length" class="collectionGrid">
+            <CollectionCard
+                v-for="collection in collections" :key="collection.id" :collection="collection"
+                @click="router.push({ path: '/browse/collections', query: { c: collection.id } })"
+            />
+        </div>
         <div v-if="searchResults.length" class="resultsToolbar">
             <span class="resultCount">
                 {{ filteredResults.length }} result{{ filteredResults.length === 1 ? '' : 's' }}
@@ -195,7 +202,7 @@
             </tbody>
         </table>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
-        <div v-if="filteredResults.length == 0 && !loadingMore && searchTerm" class="emptyState">
+        <div v-if="filteredResults.length == 0 && !loadingMore && searchTerm && !collections.length" class="emptyState">
             <font-awesome-icon class="emptyIcon" :icon="['fas', 'magnifying-glass']" />
             <div class="emptyTitle">
                 <template v-if="searchResults.length">Nothing matches that filter</template>
@@ -232,6 +239,7 @@ import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
+import CollectionCard from '@/components/browse/CollectionCard.vue';
 import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
@@ -249,6 +257,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
 import { streamSearch } from '@/lib/searchStream';
+import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
 import { useViewMode } from '@/lib/useViewMode';
@@ -261,6 +270,8 @@ const globalSettings = inject('globalSettings', ref({}));
 const searchEl = ref(null);
 const selectMode = ref(false);
 const searchResults = ref([]);
+// Collections matching the search, shown as tiles above the results.
+const collections = ref([]);
 const searchTerm = ref('');
 const searchInput = ref(route.query.searchTerm ?? '');
 const loading = ref(searchTerm.value !== '');
@@ -346,7 +357,7 @@ const moveActive = (delta) => {
 const openSuggestion = (suggestion) => {
     closeSuggestions();
     searchInput.value = '';
-    router.push(`/browse/programme/${suggestion.pid}`);
+    router.push(suggestionPath(suggestion));
 };
 
 const onEnter = () => {
@@ -603,6 +614,7 @@ watch(
             loading.value = true;
             loadingMore.value = true;
             searchResults.value = [];
+            collections.value = [];
             searchTerm.value = newSearchTerm;
             searchInput.value = newSearchTerm;
             rememberSearch(newSearchTerm);
@@ -615,7 +627,12 @@ watch(
                         searchResults.value.push(...batch);
                         loading.value = false;
                     },
-                    abort.signal
+                    abort.signal,
+                    (found) => {
+                        if (abort.signal.aborted) return;
+                        collections.value = found;
+                        loading.value = false;
+                    }
                 );
             } catch {
                 // Keep whatever arrived; an empty list reads as "No Results Found".
@@ -820,6 +837,18 @@ watch(
                 }
             }
         }
+    }
+}
+
+// Same tiles as the Collections page.
+.collectionGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+    margin-bottom: 1.25rem;
+
+    @media (max-width: @mobile-breakpoint) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

@@ -27,10 +27,10 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
                         @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
                     <ul v-if="showSuggestions && suggestions.length" class="suggestions">
                         <li
-                            v-for="(suggestion, index) in suggestions" :key="suggestion.pid"
-                            :class="{ active: index === activeIndex }" @mousedown.prevent="openSuggestion(suggestion)"
+                            v-for="(suggestion, index) in suggestions" :key="suggestionKey(suggestion)"
+                            :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
                         >
-                            <font-awesome-icon :icon="['fas', 'tv']" />
+                            <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
                             <span>{{ suggestion.title }}</span>
                         </li>
                         <li class="seeAll" @mousedown.prevent="search">See all results for "<span class="termText">{{ searchTerm }}</span>"</li>
@@ -65,6 +65,7 @@ import dialogService from '@/lib/dialogService';
 import { askAboutVersions, preferredVersion, versionsActive } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { useQuickFind } from '@/lib/quickFind';
+import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
 import { getPidFromBBCUrl } from '@/lib/utils';
@@ -138,7 +139,7 @@ const moveActive = (delta) => {
 const openSuggestion = (suggestion) => {
     closeSuggestions();
     searchTerm.value = '';
-    router.push(`/browse/programme/${suggestion.pid}`);
+    router.push(suggestionPath(suggestion));
 };
 
 const onEnter = () => {
