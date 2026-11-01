@@ -64,6 +64,7 @@
                             :title="downloadTitle" :aria-label="downloadTitle" @click="downloadCollection"
                         >
                             <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-download']" :spin="downloading" />
+                            <span v-if="downloadable" class="downloadCount">{{ downloadable }}</span>
                         </button>
                     </template>
                 </SettingsPageToolbar>
@@ -275,6 +276,12 @@ onMounted(load);
 </script>
 
 <style lang="less" scoped>
+.downloadCount {
+    margin-left: 6px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
 .browsePage :deep(.SettingsPageToolbar) {
     margin-bottom: 1rem;
 }

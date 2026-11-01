@@ -87,6 +87,15 @@ const summary = computed(() => describeDownload(globalSettings.value, { count: p
     margin-top: 12px;
     cursor: pointer;
 
+    // The form checkbox is built to fill a settings row (flex 65%, 7px top margin); here it is just a box beside its text.
+    :deep(.CheckInput-container) {
+        flex: none;
+    }
+
+    :deep(.CheckInput-input) {
+        margin: 0;
+    }
+
     small {
         color: @subtle-text-color;
     }
