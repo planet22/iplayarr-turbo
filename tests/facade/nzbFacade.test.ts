@@ -111,4 +111,11 @@ describe('NZBFacade', () => {
             }));
         });
     });
+
+    describe('createRelayEntry without a name', () => {
+        it('records the relayed grab as Unknown', () => {
+            NZBFacade.createRelayEntry(app);
+            expect(historyService.addRelay).toHaveBeenCalledWith(expect.objectContaining({ nzbName: 'Unknown' }));
+        });
+    });
 });

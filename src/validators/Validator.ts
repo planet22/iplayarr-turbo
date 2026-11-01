@@ -15,6 +15,15 @@ export abstract class Validator {
         return regexp.test(val);
     }
 
+    // An address a request can actually be sent to: http or https only.
+    isHttpUrl(val: string): boolean {
+        if (typeof val !== 'string' || !this.isValidUrl(val)) {
+            return false;
+        }
+        const { protocol } = new URL(val);
+        return protocol === 'http:' || protocol === 'https:';
+    }
+
     isValidUrl(val: string): boolean {
         try {
             new URL(val);

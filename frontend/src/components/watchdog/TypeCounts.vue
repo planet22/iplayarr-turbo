@@ -46,19 +46,16 @@ const labels = { HISTORY: 'iPlayarr', SONARR: 'Sonarr', RADARR: 'Radarr', JELLYF
     }
 }
 
-// Cards are full width on mobile, so there's room for a bigger grid.
+// Cards are full width on mobile: one compact row of four instead of the 2 x 2 grid, to keep them short.
 @media (max-width: @mobile-breakpoint) {
     .typeCounts {
-        gap: 10px 18px;
-        font-size: 17px;
-
-        > span {
-            gap: 6px;
-        }
+        grid-template-columns: repeat(4, auto);
+        gap: 6px 12px;
+        font-size: 14px;
 
         .typeLogo {
-            height: 28px;
-            width: 28px;
+            height: 24px;
+            width: 24px;
         }
     }
 }

@@ -1,18 +1,30 @@
 import { Request, Response, Router } from 'express';
 
+import iplayerDetailsService from '../../service/iplayerDetailsService';
 import subscriptionService, { SubscriptionError } from '../../service/subscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
 
+// The show's synopsis comes from the cached BBC metadata rather than being stored on the subscription;
+// a show whose metadata cannot be had right now simply goes without.
 router.get('/', async (_, res: Response) => {
-    res.json(await subscriptionService.list());
+    const subscriptions = await subscriptionService.list();
+    res.json(
+        await Promise.all(
+            subscriptions.map(async (subscription) => {
+                const synopsis = (await iplayerDetailsService.getMetadata(subscription.pid).catch(() => undefined))?.programme?.medium_synopsis;
+                return synopsis ? { ...subscription, synopsis } : subscription;
+            })
+        )
+    );
 });
 
 router.post('/', async (req: Request, res: Response) => {
-    const { pid, downloadLatest, downloadAll, arrOnly } = req.body ?? {};
+    const { pid, downloadLatest, downloadAll, arrOnly, versions } = req.body ?? {};
     if (typeof pid !== 'string' || !PID_REGEX.test(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A valid pid is required' } as ApiResponse);
         return;
@@ -23,6 +35,7 @@ router.post('/', async (req: Request, res: Response) => {
                 downloadLatest: downloadLatest === true,
                 downloadAll: downloadAll === true,
                 ...(arrOnly === true ? { arrOnly: true } : {}),
+                ...(Array.isArray(versions) ? { versions: versions.filter((v) => typeof v === 'string') } : {}),
             })
         );
     } catch (error: any) {
@@ -46,6 +59,25 @@ router.post('/:id/check', async (req: Request, res: Response) => {
         return;
     }
     res.json(result);
+});
+
+router.put('/:id/versions', async (req: Request, res: Response) => {
+    const { versions } = req.body ?? {};
+    if (!Array.isArray(versions)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'versions must be a list' } as ApiResponse);
+        return;
+    }
+    try {
+        const updated = await subscriptionService.setVersions(req.params.id as string, versions.filter((v) => typeof v === 'string'));
+        if (updated) res.json(updated);
+        else res.status(404).json({ error: ApiError.INVALID_INPUT, message: 'Subscription not found' } as ApiResponse);
+    } catch (error: any) {
+        const known = error instanceof SubscriptionError;
+        res.status(known ? 400 : 500).json({
+            error: known ? ApiError.INVALID_INPUT : ApiError.INTERNAL_ERROR,
+            message: error?.message || 'Unable to update versions',
+        } as ApiResponse);
+    }
 });
 
 router.delete('/:id', async (req: Request, res: Response) => {

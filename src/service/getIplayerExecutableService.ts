@@ -10,7 +10,9 @@ import { LogLine, LogLineLevel } from '../types/LogLine';
 import { QueueEntry } from '../types/QueueEntry';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../types/Synonym';
+import { versionProfiles } from '../types/VersionProfiles';
 import { resolveInside, sanitizeFileName } from '../utils/pathSafety';
+import { requestedQuality } from '../utils/qualityContext';
 import { calculateSeasonAndEpisode, copyWithFallback, createNZBName, parseEpisodeDetailStrings } from '../utils/Utils';
 import configService from './configService';
 import historyService from './historyService';
@@ -49,20 +51,31 @@ export class GetIplayerExecutableService {
         };
     }
 
-    async #getQualityParam(): Promise<string> {
-        const chain: string[] = await this.getQualityFallbackChain();
+    // A grab of a non-plain version (audio described...) tells get_iplayer which version to fetch.
+    #getVersionParams(pid: string, jobId?: string): string[] {
+        const versionId = queueService.getFromQueue(pid, jobId)?.library?.version;
+        const profile = versionProfiles.find(({ id }) => id === versionId);
+        return profile ? [`--versions=${profile.getIplayerVersion}`] : [];
+    }
+
+    async #getQualityParam(pid?: string, jobId?: string): Promise<string> {
+        const chain: string[] = await this.getQualityFallbackChain(pid, jobId);
         return `--tv-quality=${chain.join(',')}`;
     }
 
     // Same preference order used for --tv-quality, exposed separately so callers that need to
     // pick a specific --streaminfo stream variant (rather than let get_iplayer itself download
     // the best available one) can walk the same fallback chain.
-    async getQualityFallbackChain(): Promise<string[]> {
-        const videoQuality = (await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string;
+    async getQualityFallbackChain(pid?: string, jobId?: string): Promise<string[]> {
+        // A grab made from an extra-quality variant carries its own quality on the queue entry.
+        const videoQuality =
+            (pid ? queueService.getFromQueue(pid, jobId)?.library?.quality : undefined) ??
+            requestedQuality() ??
+            ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
         return [...new Set([videoQuality, 'hd', 'sd', 'web', 'mobile'])];
     }
 
-    async getAllDownloadParameters(pid: string, directory: string): Promise<SpawnExecutable> {
+    async getAllDownloadParameters(pid: string, directory: string, jobId?: string): Promise<SpawnExecutable> {
         const { exec, args } = await this.getIPlayerExec();
         const additionalParamsString: string = (await configService.getParameter(
             IplayarrParameter.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS
@@ -72,7 +85,8 @@ export class GetIplayerExecutableService {
         const allArgs: string[] = [
             ...args,
             ...additionalParams,
-            await this.#getQualityParam(),
+            ...this.#getVersionParams(pid, jobId),
+            await this.#getQualityParam(pid, jobId),
             '--output',
             directory,
             '--overwrite',

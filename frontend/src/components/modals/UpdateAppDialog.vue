@@ -1,6 +1,20 @@
 <template>
     <IPlayarrModal title="Updating Apps" :show-close="true" close-label="Close">
-        <table class="resultsTable responsive-table">
+        <div v-if="isMobile" class="cardList">
+            <DataCard v-for="app of apps" :key="app.id">
+                <template #title>
+                    <div class="appDisplay">
+                        <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" />
+                        <span class="appName">{{ app.name }}</span>
+                    </div>
+                </template>
+                <template v-if="appStatus[app.id]" #chips>
+                    <span :class="['pill', getPillColor(appStatus[app.id].status)]">{{ appStatus[app.id].status }}</span>
+                </template>
+                <template v-if="appStatus[app.id]?.message" #default>{{ appStatus[app.id].message }}</template>
+            </DataCard>
+        </div>
+        <table v-else class="resultsTable responsive-table">
             <thead>
                 <tr>
                     <th>App</th>
@@ -37,10 +51,13 @@
 <script setup>
 import { defineEmits, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 
+import DataCard from '@/components/common/DataCard.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import { useIsMobile } from '@/lib/useIsMobile';
 
 import IPlayarrModal from './IPlayarrModal.vue';
 
+const isMobile = useIsMobile();
 const apps = ref([]);
 const features = ref([]);
 const socket = inject('socket');

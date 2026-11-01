@@ -1,17 +1,32 @@
 <template>
     <div class="browsePage">
-        <PageHeader :title="channel?.title ?? route.params.id">
-            <button v-if="channel?.live" class="watchLive" type="button" @click="watchLive">
-                <font-awesome-icon :icon="['fas', 'play']" /> Watch Live
-            </button>
-            <!-- Read-only status; the toggles live on the Channels page's edit mode. -->
-            <span v-if="channel?.live" class="statusIcons">
-                <font-awesome-icon v-if="isSubscribed(channel.id)" :icon="['fas', 'bell']" title="Live channel subscribed" />
-                <font-awesome-icon v-if="liveTvEnabled && isLiveTvSelected(channel.id)" :icon="['fas', 'tv']" title="In Jellyfin Live TV" />
-            </span>
+        <PageHeader :title="pageTitle">
+            <img
+                v-if="channel?.logo && !logoFailed"
+                class="headerLogo"
+                :src="getThumbnailUrl(channel.logo)"
+                :alt="channel.title"
+                @error="logoFailed = true"
+            />
         </PageHeader>
-        <LoadingIndicator v-if="loading" />
-        <InfoBar v-else-if="error" clazz="danger">{{ error }}</InfoBar>
+        <SettingsPageToolbar>
+            <template #actions>
+                <!-- Read-only status; the toggles live on the Channels page's edit mode. -->
+                <template v-if="channel?.live">
+                    <span v-if="isSubscribed(channel.id)" class="statusIcon" title="Live channel subscribed">
+                        <font-awesome-icon :icon="['fas', 'bell']" />
+                    </span>
+                    <span v-if="liveTvEnabled && isLiveTvSelected(channel.id)" class="statusIcon" title="In Jellyfin Live TV">
+                        <font-awesome-icon :icon="['fas', 'tv']" />
+                    </span>
+                </template>
+                <button v-if="channel?.live" type="button" :title="`Watch ${channel.title} live`" @click="watchLive">
+                    <font-awesome-icon :icon="['fas', 'play']" />
+                </button>
+            </template>
+        </SettingsPageToolbar>
+        <SkeletonLoader v-if="loading" variant="rails" :hero="false" />
+        <ErrorState v-else-if="error" :message="error" @retry="reload" />
         <template v-else>
             <div v-if="nowNext?.now || nowNext?.next" class="nowNext">
                 <RouterLink
@@ -35,7 +50,10 @@
                 </RouterLink>
             </div>
             <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
-            <p v-if="rails.length === 0">Nothing found for this channel.</p>
+            <p v-if="rails.length === 0 && channel?.liveOnly && !nowNext">
+                This is a live stream only, with no schedule or programmes.
+            </p>
+            <p v-else-if="rails.length === 0">Nothing found for this channel.</p>
         </template>
     </div>
 </template>
@@ -45,14 +63,15 @@ import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
-import InfoBar from '@/components/common/InfoBar.vue';
-import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import { browseFetch } from '@/lib/browse';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
-import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { formatTime as formatClock, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const channel = ref(null);
@@ -70,16 +89,29 @@ const slots = computed(() =>
         { label: 'Next', data: nowNext.value?.next },
     ].filter(({ data }) => data)
 );
-const formatTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const formatTime = (iso) => formatClock(iso);
 const loading = ref(true);
 const error = ref(null);
+const logoFailed = ref(false);
+
+// The route only has the channel's id (bbc_one_east), which is not a name to show: the title stays blank
+// (a non-breaking space, so the bar keeps its height) until the channel has loaded, and falls back to the
+// id only if it never does.
+const pageTitle = computed(() => channel.value?.title ?? (loading.value ? '\u00a0' : route.params.id));
+
+// Bumped by "Try again" to load the same channel once more.
+const reloadKey = ref(0);
+const reload = () => reloadKey.value++;
 
 watch(
-    () => route.params.id,
-    async (id) => {
+    () => [route.params.id, reloadKey.value],
+    async ([id]) => {
         if (!id) return;
         loading.value = true;
         error.value = null;
+        // Moving from one channel to another must not show the previous channel's name meanwhile.
+        channel.value = null;
+        logoFailed.value = false;
         try {
             const result = await browseFetch(`channel/${encodeURIComponent(id)}`);
             channel.value = result.channel ?? null;
@@ -96,6 +128,21 @@ watch(
 </script>
 
 <style lang="less" scoped>
+// The toolbar sits under the title bar; keep a gap before the content (as on the Channels page).
+.browsePage :deep(.SettingsPageToolbar) {
+    margin-bottom: 12px;
+}
+
+// The channel's own logo at the right end of the title bar, in the tiles' 76:32 shape.
+.headerLogo {
+    display: block;
+    height: 30px;
+    aspect-ratio: 2.375 / 1;
+    object-fit: cover;
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
+
 .channelHeader {
     display: flex;
     align-items: center;
@@ -105,23 +152,6 @@ watch(
 
     .browseTitle {
         margin: 0;
-    }
-}
-
-.watchLive {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
-    border: none;
-    border-radius: 4px;
-    background-color: @brand-color;
-    color: #fff;
-    font-size: 14px;
-    cursor: pointer;
-
-    &:hover {
-        opacity: 0.85;
     }
 }
 
@@ -202,6 +232,7 @@ watch(
 
             &.live {
                 background-color: @brand-color;
+                color: @on-brand-color;
             }
         }
 
@@ -224,11 +255,19 @@ watch(
     }
 }
 
-.statusIcons {
+// Indicators, not buttons: the same box as a toolbar button (padding, margin, height) so they space evenly
+// with them, but no outline and no hover.
+.statusIcon {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    margin-left: 12px;
-    color: #fff;
+    box-sizing: border-box;
+    min-height: 32px;
+    margin: 6px 3px;
+    padding: 0 13px;
+    color: @toolbar-text-color;
+
+    svg {
+        height: 21px;
+    }
 }
 </style>

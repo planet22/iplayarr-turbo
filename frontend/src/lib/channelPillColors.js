@@ -24,6 +24,16 @@ const state = reactive({
 });
 
 let loadPromise = null;
+// Re-reads names and colours (after the user restyled a channel).
+export const refreshChannelColors = () => {
+    loadPromise = null;
+    return loadColors();
+};
+
+// A channel's name as the user wants to see it: their own if they renamed it, else the BBC's. Programmes
+// carry the BBC's name, so everything that shows one passes it through here.
+export const channelLabel = (channel) => (channel && state.colors[channel.replaceAll(' ', '')]?.name) || channel;
+
 const loadColors = () => {
     if (!loadPromise) {
         loadPromise = browseFetch('channel-colors')

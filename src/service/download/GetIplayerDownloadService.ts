@@ -44,8 +44,8 @@ class GetIplayerDownloadService implements AbstractDownloadService {
         }
     }
 
-    async download(pid: string, directory: string): Promise<ChildProcess> {
-        const { exec, args } = await getIplayerExecutableService.getAllDownloadParameters(pid, directory);
+    async download(pid: string, directory: string, jobId?: string): Promise<ChildProcess> {
+        const { exec, args } = await getIplayerExecutableService.getAllDownloadParameters(pid, directory, jobId);
         return spawn(exec, args);
     }
 }

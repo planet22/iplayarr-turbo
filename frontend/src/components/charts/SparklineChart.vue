@@ -1,9 +1,13 @@
 <template>
-    <apexchart type="area" height="40" :options="options" :series="series"></apexchart>
+    <div aria-hidden="true">
+        <apexchart type="area" height="40" :options="options" :series="series"></apexchart>
+    </div>
 </template>
 
 <script setup>
 import { computed, defineProps } from 'vue';
+
+import { chartColor } from '@/lib/chartTheme';
 
 const props = defineProps({
     data: {
@@ -12,7 +16,7 @@ const props = defineProps({
     },
     color: {
         type: String,
-        default: '#F12D7F'
+        default: 'chart-1'
     }
 });
 
@@ -33,7 +37,7 @@ const options = computed(() => ({
     fill: {
         opacity: 0.25
     },
-    colors: [props.color],
+    colors: [chartColor(props.color)],
     tooltip: {
         enabled: false
     }

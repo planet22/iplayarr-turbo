@@ -1,18 +1,41 @@
 import { Request, Response, Router } from 'express';
 
 import statisticsService from '../../service/stats/StatisticsService';
+import { asyncRouter } from '../../utils/asyncRouter';
+import { summariseSearchHistory } from '../../utils/searchHistorySummary';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/searchHistory', async (req: Request, res: Response) => {
-    const { limit, filterRss } = req.query as any as { limit?: number, filterRss?: boolean };
+    const { limit, filterRss, summary } = req.query as any as { limit?: number, filterRss?: boolean, summary?: string };
     let searchHistory = await statisticsService.getSearchHistory();
     searchHistory = filterRss ? searchHistory.filter(({ term }) => term != '*') : searchHistory;
-    res.json(limit ? searchHistory.slice(limit * -1) : searchHistory);
+    const limited = limit ? searchHistory.slice(limit * -1) : searchHistory;
+    res.json(summary == 'true' ? summariseSearchHistory(limited) : limited);
+});
+
+router.get('/searchHistory/detail', async (req: Request, res: Response) => {
+    const { term, time } = req.query as { term?: string, time?: string };
+    const entry = (await statisticsService.getSearchHistory()).find((e) => e.term == term && String(e.time) == time);
+    if (!entry) {
+        res.status(404).json({ error: 'Search not found' });
+        return;
+    }
+    res.json({ items: entry.items ?? [], trace: entry.trace });
 });
 
 router.delete('/searchHistory', async (_: Request, res: Response) => {
     await statisticsService.clearSearchHistory();
+    res.json({ status: true });
+});
+
+router.delete('/searchHistory/term', async (req: Request, res: Response) => {
+    const { term } = req.query as { term?: string };
+    if (!term?.trim()) {
+        res.status(400).json({ error: 'term is required' });
+        return;
+    }
+    await statisticsService.removeSearchTerm(term);
     res.json({ status: true });
 });
 
@@ -41,11 +64,6 @@ router.delete('/failedGrabHistory', async (_: Request, res: Response) => {
 router.get('/uptime', async (_, res: Response) => {
     const uptime = await statisticsService.getUptime();
     res.json({ uptime });
-});
-
-router.get('/cacheSizes', async (_, res: Response) => {
-    const cacheSizes = await statisticsService.getCacheSizes();
-    res.json(cacheSizes);
 });
 
 export default router;

@@ -19,8 +19,8 @@ Sonarr/Radarr/Jellyfin sources are the apps you added on the **Apps** page (Jell
 
 ## When a link counts as dead
 
-- **Two strikes:** a link must fail two checks in a row before it is invalid; one failure is as likely a BBC blip.
-- **BBC must be confirmed up:** failures are only counted and acted on once enough links have validated OK in the same run (**Minimum Valid Before Action**, `STRM_WATCHDOG_FAIL_THRESHOLD`, default `10`, or half your links if you have fewer). That same number of failures *in a row* abandons the run as a BBC/network outage, so an outage never wipes your library.
+- **Strikes:** a link must fail a set number of checks in a row before it is invalid (**Failed Checks Before Invalid**, `STRM_WATCHDOG_STRIKES`, default `2`, 1-30); one failure is as likely a BBC blip. The check runs once a day, so the default flags a dead link on the second day. The links table shows each link's count as `1/2`.
+- **BBC must be confirmed up:** failures are only counted and acted on once enough links have validated OK in the same run (**Minimum Valid Before Action**, `STRM_WATCHDOG_FAIL_THRESHOLD`, default `10`, or half your links if you have fewer). That same number of *network* failures in a row (BBC unreachable, as opposed to BBC saying a programme has no version available) abandons the run as a BBC/network outage, so an outage never wipes your library.
 - A pre-flight check runs first, and our own network errors (DNS, timeouts, resets) never count against a programme.
 
 ## Actions
@@ -38,21 +38,22 @@ Actions are taken once per link.
 
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
-| STRM Watchdog | `STRM_WATCHDOG_ENABLED` | `false` | Master switch. |
+| STRM Watchdog | `STRM_WATCHDOG_ENABLED` | `true` | Master switch. |
 | Watchdog Sources | `STRM_WATCHDOG_SOURCES` | `history` | Comma-separated: `subscribed`, `history`, `app:<id>`. |
 | Watchdog Action | `STRM_WATCHDOG_ACTION` | `notify` | `notify` / `delete`. |
 | Watchdog Path Mapping | `STRM_WATCHDOG_PATH_MAP` | _(unset)_ | Sonarr/Jellyfin path to the same folder inside this container, e.g. `/tv=/library/tv`; separate several with `;`. Shown when a Sonarr/Radarr/Jellyfin source is selected. |
 | Sonarr/Radarr Action | `STRM_WATCHDOG_ARR_ACTION` | `none` | `none` / `unmonitor` / `search`. |
 | Parallel Checks | `STRM_WATCHDOG_CONCURRENCY` | `4` | 1-10. 1 is gentlest on BBC; 4 is about three times faster. |
 | Minimum Valid Before Action | `STRM_WATCHDOG_FAIL_THRESHOLD` | `10` | See above. |
-| Watchdog Webhook URL | `STRM_WATCHDOG_WEBHOOK_URL` | _(unset)_ | Optional. |
+| Failed Checks Before Invalid | `STRM_WATCHDOG_STRIKES` | `2` | 1-30. See above. |
+| Watchdog Webhook URL | `STRM_WATCHDOG_WEBHOOK_URL` | _(unset)_ | Optional. Must be an `http://` or `https://` address. The paper-plane button sends a test notification (`"event": "test"`) to what is typed in the box, without saving it, and reports the result. |
 
 ## Watchdog page
 
 - **Run** a check now, **Stop** a running one, or **Refresh counts** (re-list links from the sources without checking them against BBC). Live progress is shown per source while links are being collected and checked.
 - Stat cards and charts: tracked, valid and invalid links, a per-type breakdown (iPlayarr, Sonarr, Radarr, Jellyfin) and checked-vs-failed.
 - **Library Access:** tests whether each Sonarr/Radarr/Jellyfin source's files are visible inside the container, and suggests a path mapping when they are not.
-- **Links:** a table of every tracked link with status, source, when it was last checked, and the action taken. A button clears the table.
+- **Links:** a table of every tracked link with status, source, when it was last checked, and the action taken. Each row shows the library file's own name (for example `Pointless (2009) - S34E05 - Episode 5`) under the pid, and any message or file list, not just for invalid links. A button clears the table.
 
 ## Schedule
 

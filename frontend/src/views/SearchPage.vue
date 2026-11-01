@@ -1,73 +1,126 @@
 <template>
+    <div class="inner-content searchTop">
+        <PageHeader title="Search" icon="search" />
+        <SettingsPageToolbar
+            :icons="toolbarIcons"
+            :view-mode="viewMode" :view-modes="['table', 'posters']" @update:view-mode="setViewMode"
+            @download="multipleImmediateDownload"
+        >
+            <template #actions>
+                <button
+                    v-if="viewMode === 'posters'"
+                    type="button"
+                    :class="{ enabled: smallIcons }"
+                    :aria-pressed="smallIcons"
+                    :title="smallIcons ? 'Showing small TV / film / series icons on posters' : 'Show small TV / film / series icons on posters'"
+                    aria-label="Small icons on posters"
+                    @click="toggleSmallIcons"
+                >
+                    <font-awesome-icon :icon="['fas', 'icons']" />
+                </button>
+                <button
+                    v-if="viewMode === 'posters' && searchResults.length"
+                    type="button"
+                    :class="{ enabled: selectMode }"
+                    :title="selectMode ? 'Done selecting' : 'Select results to download'"
+                    :aria-label="selectMode ? 'Done selecting' : 'Select results to download'"
+                    @click="toggleSelectMode"
+                >
+                    <font-awesome-icon :icon="['fas', selectMode ? 'square-check' : 'list-check']" />
+                </button>
+            </template>
+        </SettingsPageToolbar>
+    </div>
     <div class="pageSearchBar">
         <div class="searchPanel">
-            <font-awesome-icon :icon="['fas', 'search']" />
-            <div class="searchWrap">
-                <input
-                    v-model="searchInput" class="searchBox" type="text" placeholder="Search or Download Url"
-                    autocomplete="off" @input="onInput" @focus="onInput" @blur="closeSuggestions"
-                    @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
-                    @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
-                <ul v-if="showSuggestions && suggestions.length" class="suggestions">
-                    <li
-                        v-for="(suggestion, index) in suggestions" :key="suggestion.pid"
-                        :class="{ active: index === activeIndex }" @mousedown.prevent="openSuggestion(suggestion)"
-                    >
-                        <font-awesome-icon :icon="['fas', 'tv']" />
-                        <span>{{ suggestion.title }}</span>
-                    </li>
-                    <li class="seeAll" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
-                </ul>
-            </div>
+            <font-awesome-icon class="searchIcon" :icon="['fas', 'search']" />
+            <input
+                ref="searchEl" v-model="searchInput" class="searchBox" type="text"
+                placeholder="Search programmes, or paste a BBC URL" autocomplete="off" enterkeyhint="search"
+                @input="onInput" @focus="onInput" @blur="closeSuggestions"
+                @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
+                @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
+            <button v-if="searchInput" type="button" class="clearSearch" title="Clear" aria-label="Clear" @mousedown.prevent="clearInput">
+                <font-awesome-icon :icon="['fas', 'xmark']" />
+            </button>
+            <ul v-if="showSuggestions && suggestions.length" class="suggestions">
+                <li
+                    v-for="(suggestion, index) in suggestions" :key="suggestionKey(suggestion)"
+                    :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
+                >
+                    <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
+                    <span>{{ suggestion.title }}</span>
+                </li>
+                <li class="seeAll" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
+            </ul>
         </div>
     </div>
-    <SettingsPageToolbar
-        :icons="toolbarIcons"
-        :filter-options="availableFilters"
-        :selected-filter="filter"
-        :filter-enabled="filter != 'All'"
-        @download="multipleImmediateDownload"
-        @select-filter="selectFilter"
-    />
     <div v-if="!loading" class="inner-content scroll-x">
-        <div v-if="searchResults.length" class="viewToggle">
-            <span v-if="loadingMore" class="loadingMoreNote">
-                <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
-                Loading more results… ({{ searchResults.length }} so far)
+        <div v-if="searchResults.length" class="resultsToolbar">
+            <span class="resultCount">
+                {{ filteredResults.length }} result{{ filteredResults.length === 1 ? '' : 's' }}
+                <template v-if="searchTerm">for &ldquo;<span class="termText" :title="searchTerm">{{ searchTerm }}</span>&rdquo;</template>
+                <span v-if="loadingMore" class="loadingMoreNote">
+                    <font-awesome-icon :icon="['fas', 'circle-notch']" spin /> more arriving
+                </span>
             </span>
-            <select v-if="channelOptions.length > 2" v-model="channelFilter" class="channelFilter" title="Filter by channel">
-                <option v-for="option in channelOptions" :key="option" :value="option">
+        </div>
+        <div v-if="typeOptions.length > 2 || channelOptions.length > 2 || versionOptions.length > 1" class="channelChips" role="group" aria-label="Filter results">
+            <template v-if="typeOptions.length > 2">
+                <button
+                    v-for="option in typeOptions" :key="`type-${option}`" type="button"
+                    :class="['chip', filter === option ? 'active' : '']" @click="selectFilter(option)"
+                >
+                    {{ option === 'All' ? 'All types' : option }}
+                </button>
+                <span v-if="channelOptions.length > 2 || versionOptions.length > 1" class="chipDivider" aria-hidden="true"></span>
+            </template>
+            <template v-if="versionOptions.length > 1">
+                <button
+                    v-for="option in versionOptions" :key="`version-${option.key}`" type="button"
+                    :class="['chip', versionFilter === option.key ? 'active' : '']" @click="pickVersion(option.key)"
+                >
+                    <font-awesome-icon v-if="option.icon" :icon="['fas', option.icon]" /> {{ option.label }}
+                </button>
+                <span v-if="channelOptions.length > 2" class="chipDivider" aria-hidden="true"></span>
+            </template>
+            <template v-if="channelOptions.length > 2">
+                <button
+                    v-for="option in channelOptions" :key="option" type="button"
+                    :class="['chip', channelFilter === option ? 'active' : '']" @click="pickChannel(option)"
+                >
                     {{ option === 'All' ? 'All channels' : option }}
-                </option>
-            </select>
-            <button
-                :class="['clickable', viewMode === 'table' ? 'active' : '']"
-                title="Table view"
-                @click="setViewMode('table')"
-            >
-                <font-awesome-icon :icon="['fas', 'table-list']" />
-            </button>
-            <button
-                :class="['clickable', viewMode === 'posters' ? 'active' : '']"
-                title="Poster view"
-                @click="setViewMode('posters')"
-            >
-                <font-awesome-icon :icon="['fas', 'table-cells-large']" />
-            </button>
+                </button>
+            </template>
         </div>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
-        <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
-            <ProgrammeCard v-for="item in posterItems" :key="item.pid" :item="item" />
+        <div v-if="selectMode && viewMode === 'posters' && searchResults.length" class="selectBar">
+            <span>{{ selectedCount }} of {{ downloadableResults.length }} selected</span>
+            <button type="button" :title="`Select all ${downloadableResults.length} results`" :aria-label="`Select all ${downloadableResults.length} results`" @click="setAllChecked(true)">
+                <font-awesome-icon :icon="['fas', 'check-double']" />
+            </button>
+            <button type="button" title="Clear selection" aria-label="Clear selection" :disabled="!selectedCount" @click="setAllChecked(false)">
+                <font-awesome-icon :icon="['fas', 'xmark']" />
+            </button>
         </div>
-        <table v-else class="resultsTable responsive-table">
+        <div v-if="viewMode === 'posters' && filteredResults.length" class="browseGrid">
+            <template v-for="item in posterItems" :key="item.pid">
+                <CollectionCard v-if="item.result.kind === 'collection'" :collection="item.result" @click="openCollection(item.result)" />
+                <ProgrammeCard
+                    v-else :item="item"
+                    :selectable="selectMode" :selected="!!item.result.checked" :icon-badges="smallIcons"
+                    @toggle="item.result.checked = !item.result.checked"
+                />
+            </template>
+        </div>
+        <table v-else-if="filteredResults.length" class="resultsTable responsive-table">
             <colgroup>
                 <col style="width: 40px" />
                 <col style="width: 70px" />
                 <col />
-                <col style="width: 110px" />
-                <col style="width: 160px" />
-                <col />
-                <col style="width: 95px" />
+                <col style="width: 100px" />
+                <col style="width: 150px" />
+                <col style="width: 90px" />
                 <col style="width: 100px" />
                 <col style="width: 190px" />
                 <col style="width: 44px" />
@@ -82,7 +135,6 @@
                     <th>Title</th>
                     <th>Series</th>
                     <th>Episode</th>
-                    <th>Filename</th>
                     <th>Est. Size</th>
                     <th>Channel</th>
                     <th>First Broadcast</th>
@@ -93,7 +145,20 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="result of pagedResults" :key="result.pid" class="clickable">
+                <template v-for="result of pagedResults" :key="result.pid">
+                <tr v-if="result.kind === 'collection'" class="clickable" @click="openCollection(result)">
+                    <td />
+                    <td data-title="Type"><span class="pill">{{ result.type }}</span></td>
+                    <td class="text" :title="result.synopsis">{{ result.title }}</td>
+                    <td data-title="Series">-</td>
+                    <td data-title="Episode">{{ result.count }} {{ result.count === 1 ? 'title' : 'titles' }}</td>
+                    <td data-title="Est. Size">-</td>
+                    <td data-title="Channel" />
+                    <td data-title="First Broadcast">-</td>
+                    <td />
+                    <td />
+                </tr>
+                <tr v-else class="clickable">
                     <td>
                         <CheckInput v-model="result.checked" />
                     </td>
@@ -104,19 +169,18 @@
                     </td>
                     <td class="text" @click="download(result)">
                         {{ result.title }}
+                        <QualityBadges :item="result" class="titleBadges" />
+                        <div class="filename">{{ result.nzbName }}</div>
                     </td>
                     <td
                         data-title="Series"
                         :title="result.seriesPid ? 'View Series' : undefined"
-                        @click="result.seriesPid ? router.push(`/browse/programme/${result.seriesPid}`) : download(result)"
+                        @click="result.seriesPid ? router.push({ path: `/browse/programme/${result.seriesPid}`, query: { episode: result.pid } }) : download(result)"
                     >
                         {{ result.series ? `Series ${result.series}` : '-' }}
                     </td>
                     <td data-title="Episode" @click="download(result)">
                         {{ result.episode ? `Episode ${result.episode}` : result.episodeTitle }}
-                    </td>
-                    <td class="wrap" data-title="Filename" @click="download(result)">
-                        {{ result.nzbName }}
                     </td>
                     <td data-title="Est. Size" @click="download(result)">
                         {{ formatStorageSize(result.size) }}
@@ -128,10 +192,12 @@
                         {{ formatDate(result.pubDate) }}
                     </td>
                     <td @click="immediateDownload(result)">
-                        <font-awesome-icon
-                            :class="['clickable', result.downloading ? 'downloading' : '']"
-                            :icon="['fas', 'cloud-download']"
-                        />
+                        <button type="button" class="rowIconButton" title="Download" aria-label="Download">
+                            <font-awesome-icon
+                                :class="['clickable', result.downloading ? 'downloading' : '']"
+                                :icon="['fas', 'cloud-download']"
+                            />
+                        </button>
                     </td>
                     <td>
                         <font-awesome-icon
@@ -142,52 +208,111 @@
                         />
                     </td>
                 </tr>
+                </template>
             </tbody>
         </table>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
-        <template v-if="filteredResults.length == 0 && !loadingMore">
-            <p>No Results Found</p>
-        </template>
+        <div v-if="filteredResults.length == 0 && !loadingMore && searchTerm" class="emptyState">
+            <font-awesome-icon class="emptyIcon" :icon="['fas', 'magnifying-glass']" />
+            <div class="emptyTitle">
+                <template v-if="searchResults.length">Nothing matches that filter</template>
+                <template v-else>No results for “<span class="termText" :title="searchTerm">{{ searchTerm }}</span>”</template>
+            </div>
+            <div v-if="!searchResults.length" class="emptyHint">Try fewer words, or one of your recent searches below.</div>
+        </div>
+        <p v-if="searchSettingsLine && (searchTerm || showHome)" class="searchSettingsNote">
+            <font-awesome-icon :icon="['fas', 'sliders']" />
+            <span>{{ searchSettingsLine }}</span>
+            <router-link :to="{ path: '/settings', hash: '#search' }">Change in Settings</router-link>
+        </p>
+        <div v-if="showHome" class="searchHome">
+            <section v-if="recent.length">
+                <h3>Recent searches</h3>
+                <div class="chipRow">
+                    <span v-for="term in recent" :key="term" class="chip chipWrap">
+                        <button type="button" class="chipMain" @click="searchFor(term)">
+                            <font-awesome-icon :icon="['fas', 'clock-rotate-left']" /><span class="termText" :title="term">{{ term }}</span>
+                        </button>
+                        <button type="button" class="chipRemove" :aria-label="`Remove ${term} from recent searches`" :title="`Remove ${term}`" @click="removeRecent(term)">
+                            <font-awesome-icon :icon="['fas', 'circle-xmark']" />
+                        </button>
+                    </span>
+                </div>
+            </section>
+        </div>
     </div>
     <LoadingIndicator v-if="loading" />
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
+import CollectionCard from '@/components/browse/CollectionCard.vue';
 import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
+import QualityBadges from '@/components/common/QualityBadges.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
+import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
+import { askAboutVersions, batchVersionKey, initialVersionKey, offeredVersions, planDownloads, quickVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
+import { playProgramme } from '@/lib/playVersion';
 import { streamSearch } from '@/lib/searchStream';
+import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
+import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
+import { useViewMode } from '@/lib/useViewMode';
 import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();
 
+const globalSettings = inject('globalSettings', ref({}));
+const searchEl = ref(null);
+const selectMode = ref(false);
 const searchResults = ref([]);
 const searchTerm = ref('');
 const searchInput = ref(route.query.searchTerm ?? '');
 const loading = ref(searchTerm.value !== '');
 const loadingMore = ref(false); // results still arriving after the first batch has been shown
-const availableFilters = ref(['All', 'TV', 'Movie']);
 const filter = ref('All');
 const allChecked = ref(false);
 
+// How manual search is set up right now, so a surprising result can be traced to a setting.
+const manualSettings = ref(undefined);
+const loadManualSettings = async () => {
+    try {
+        const { ok, data } = await ipFetch('json-api/search/settings');
+        manualSettings.value = ok ? data : undefined;
+    } catch {
+        manualSettings.value = undefined;
+    }
+};
+const searchSettingsLine = computed(() => {
+    const settings = manualSettings.value;
+    if (!settings) return '';
+    const parts = [settings.native ? `Native ${settings.engine === 'V2' ? '2.0' : '1.0'}` : 'get_iplayer search'];
+    if (settings.native) {
+        parts.push(settings.matchAllWords ? 'all words' : 'any word');
+        if (settings.expandCollections) parts.push('collections by pid or link');
+        if (settings.collectionNames) parts.push('collections by name');
+    }
+    return `Search: ${parts.join(' · ')}`;
+});
+
 const toolbarIcons = computed(() => {
     const icons = [];
-    if (searchResults.value.length) icons.push('filter');
-    if (filteredResults.value.length) icons.push('download');
+    // The table has its own checkboxes; in the poster view the button needs a selection to act on.
+    if (viewMode.value === 'posters' ? selectedCount.value > 0 : downloadableResults.value.length) icons.push('download');
     return icons;
 });
 
@@ -240,7 +365,7 @@ const moveActive = (delta) => {
 const openSuggestion = (suggestion) => {
     closeSuggestions();
     searchInput.value = '';
-    router.push(`/browse/programme/${suggestion.pid}`);
+    router.push(suggestionPath(suggestion));
 };
 
 const onEnter = () => {
@@ -253,12 +378,101 @@ const onEnter = () => {
     }
 };
 
+// A collection is a result you open, not download from here: it is left out of selecting and downloading.
+const isCollection = (result) => result.kind === 'collection';
+const collectionResult = (collection) => ({ ...collection, pid: collection.id, kind: 'collection', type: 'COLLECTION' });
+const openCollection = ({ id }) => router.push({ path: '/browse/collections', query: { c: id } });
+const downloadableResults = computed(() => filteredResults.value.filter((result) => !isCollection(result)));
+
+const selectedCount = computed(() => searchResults.value.filter((result) => result.checked).length);
+
+const setAllChecked = (value) => {
+    downloadableResults.value.forEach((result) => {
+        result.checked = value;
+    });
+    allChecked.value = value;
+};
+
+const toggleSelectMode = () => {
+    if (selectMode.value) setAllChecked(false);
+    selectMode.value = !selectMode.value;
+};
+
+const clearInput = () => {
+    searchInput.value = '';
+    rememberSearch('');
+    closeSuggestions();
+    searchEl.value?.focus();
+};
+
+const searchFor = (term) => {
+    searchInput.value = term;
+    runSearch();
+};
+
+const pickChannel = (option) => {
+    channelFilter.value = option;
+    resultsPage.value = 1;
+};
+
+// An empty page offers somewhere to go: the viewer's own recent searches. The same chips come back under a
+// search that found nothing.
+const recent = ref([]);
+const showHome = computed(() => !loading.value && (!searchTerm.value || (searchResults.value.length === 0 && !loadingMore.value)));
+
+// Up to 8 distinct terms are shown; the rest of the fetched history backfills a removed chip.
+const RECENT_SHOWN = 8;
+const recentPool = ref([]);
+
+onMounted(async () => {
+    if (!searchInput.value) searchEl.value?.focus();
+    // The blank page shows how searching is set up, above the recent searches.
+    loadManualSettings();
+    try {
+        const { ok, data } = await ipFetch('json-api/stats/searchHistory?limit=80&filterRss=true');
+        if (ok && Array.isArray(data)) {
+            const seen = new Set();
+            // Searches typed here have no app behind them (Sonarr/Radarr ones do); newest first, each term once.
+            recentPool.value = data
+                .filter(({ term, appId }) => term && term !== '*' && !appId)
+                .sort((a, b) => (b.time ?? 0) - (a.time ?? 0))
+                .map(({ term }) => term.trim())
+                .filter((term) => term && !seen.has(term.toLowerCase()) && seen.add(term.toLowerCase()));
+            recent.value = recentPool.value.slice(0, RECENT_SHOWN);
+        }
+    } catch {
+        // Recent searches are a nicety.
+    }
+});
+
+const removeRecent = async (term) => {
+    const before = recentPool.value;
+    recentPool.value = before.filter((t) => t !== term);
+    recent.value = recentPool.value.slice(0, RECENT_SHOWN);
+    try {
+        const { ok } = await ipFetch(`json-api/stats/searchHistory/term?term=${encodeURIComponent(term)}`, 'DELETE');
+        if (!ok) throw new Error('delete failed');
+    } catch {
+        recentPool.value = before;
+        recent.value = before.slice(0, RECENT_SHOWN);
+        toastService.error('Unable to remove that search');
+    }
+};
+
 const runSearch = () => {
     closeSuggestions();
     filter.value = 'All';
     channelFilter.value = 'All';
+    versionFilter.value = 'All';
+    if (!searchInput.value.trim()) rememberSearch('');
     router.push({ name: 'search', query: { searchTerm: searchInput.value } });
 };
+
+// Only offered when the results really mix TV and movies.
+const typeOptions = computed(() => [
+    'All',
+    ...['TV', 'Movie', 'Collection'].filter((type) => searchResults.value.some((result) => result.type === type.toUpperCase())),
+]);
 
 const channelFilter = ref('All');
 const channelOptions = computed(() => [
@@ -266,11 +480,27 @@ const channelOptions = computed(() => [
     ...[...new Set(searchResults.value.map(({ channel }) => channel).filter(Boolean))].sort(),
 ]);
 
+// Only the versions some result actually has are offered.
+const versionLabels = [
+    { key: 'audio-described', label: 'Audio described', icon: 'audio-description' },
+    { key: 'signed', label: 'Signed', icon: 'sign-language' },
+];
+const versionFilter = ref('All');
+const versionOptions = computed(() => [
+    { key: 'All', label: 'All versions' },
+    ...versionLabels.filter(({ key }) => searchResults.value.some((result) => result.versions?.includes(key))),
+]);
+const pickVersion = (key) => {
+    versionFilter.value = key;
+    resultsPage.value = 1;
+};
+
 const filteredResults = computed(() => {
     return searchResults.value.filter(
-        ({ type, channel }) =>
+        ({ type, channel, versions }) =>
             (filter.value == 'All' || type == filter.value.toUpperCase()) &&
-            (channelFilter.value == 'All' || channel == channelFilter.value)
+            (channelFilter.value == 'All' || channel == channelFilter.value) &&
+            (versionFilter.value == 'All' || versions?.includes(versionFilter.value))
     );
 });
 
@@ -278,51 +508,67 @@ const {
     page: resultsPage, pageSize: resultsPageSize, pagedItems: pagedResults,
 } = usePagination(filteredResults);
 
-// Table (default) or poster grid. Remembered per browser; storage can be unavailable (private
-// windows, blocked site data) so every access is guarded.
-const VIEW_MODE_KEY = 'iplayarr.searchViewMode';
-const readViewMode = () => {
-    try {
-        return localStorage.getItem(VIEW_MODE_KEY) === 'posters' ? 'posters' : 'table';
-    } catch {
-        return 'table';
-    }
-};
-const viewMode = ref(readViewMode());
-const setViewMode = (mode) => {
-    viewMode.value = mode;
-    try {
-        localStorage.setItem(VIEW_MODE_KEY, mode);
-    } catch {
-        // Not persisted - the toggle still works for this session.
-    }
-};
+// Posters on phones (the table collapses into long stacks of cramped cards there), the table on
+// desktop; the user's own choice is remembered per browser.
+const { viewMode, setViewMode } = useViewMode('iplayarr.searchViewMode', {
+    modes: ['table', 'posters'],
+    desktop: 'table',
+    mobile: 'posters',
+});
 
 // Search results only carry pids, so artwork for the posters is fetched per visible page
 // (server-side metadata is cached) and merged in as it arrives.
+const DETAILS_CHUNK = 40; // BrowseRoute's MAX_DETAIL_PIDS
 const thumbnails = ref({});
 const requestedThumbnails = new Set();
 watch(
     [pagedResults, viewMode],
     async ([results, mode]) => {
         if (mode !== 'posters') return;
-        const missing = results.map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
+        const missing = results.filter((result) => !isCollection(result)).map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
         if (missing.length === 0) return;
         missing.forEach((pid) => requestedThumbnails.add(pid));
-        try {
-            const details = await browseFetch(`details?pids=${missing.join(',')}`);
-            const found = {};
-            details.forEach(({ pid, thumbnail }) => {
-                if (thumbnail) found[pid] = thumbnail;
-            });
-            thumbnails.value = { ...thumbnails.value, ...found };
-        } catch {
-            // Posters just fall back to the placeholder tile.
-            missing.forEach((pid) => requestedThumbnails.delete(pid));
-        }
+        // The server takes at most 40 pids per lookup, and with a big page (Items Before Paging) or a page restored
+        // on Back they all arrive at once, so ask in chunks.
+        const chunks = [];
+        for (let i = 0; i < missing.length; i += DETAILS_CHUNK) chunks.push(missing.slice(i, i + DETAILS_CHUNK));
+        await Promise.all(
+            chunks.map(async (chunk) => {
+                try {
+                    const details = await browseFetch(`details?pids=${chunk.join(',')}`);
+                    const found = {};
+                    details.forEach(({ pid, thumbnail }) => {
+                        if (thumbnail) found[pid] = thumbnail;
+                    });
+                    thumbnails.value = { ...thumbnails.value, ...found };
+                } catch {
+                    // Posters just fall back to the placeholder tile (and are asked for again next time).
+                    chunk.forEach((pid) => requestedThumbnails.delete(pid));
+                }
+            })
+        );
     },
     { immediate: true }
 );
+
+// Small TV / film icons on the poster thumbnails, remembered per browser (storage may be unavailable).
+const SMALL_ICONS_KEY = 'iplayarr.searchSmallIcons';
+const readSmallIcons = () => {
+    try {
+        return localStorage.getItem(SMALL_ICONS_KEY) === 'true';
+    } catch {
+        return false;
+    }
+};
+const smallIcons = ref(readSmallIcons());
+const toggleSmallIcons = () => {
+    smallIcons.value = !smallIcons.value;
+    try {
+        localStorage.setItem(SMALL_ICONS_KEY, String(smallIcons.value));
+    } catch {
+        // Not persisted - the toggle still works for this session.
+    }
+};
 
 const posterItems = computed(() =>
     pagedResults.value.map((result) => ({
@@ -338,26 +584,54 @@ const posterItems = computed(() =>
         channel: result.channel,
         pubDate: result.pubDate,
         nzbName: result.nzbName,
+        versions: result.versions,
         thumbnail: thumbnails.value[result.pid],
+        result,
     }))
 );
 
 // Results stream in: the table appears with the first batch while the rest keep arriving behind it.
 // A new search aborts the previous stream so its late batches can't land in the new results.
 let searchAbort = null;
+
+// Coming back to Search from another menu item (no term in the URL) reopens the last search of this tab; clearing the
+// box forgets it. Per tab (sessionStorage), and storage may be unavailable.
+const LAST_SEARCH_KEY = 'iplayarr.lastSearchTerm';
+const rememberSearch = (term) => {
+    try {
+        if (term) sessionStorage.setItem(LAST_SEARCH_KEY, term);
+        else sessionStorage.removeItem(LAST_SEARCH_KEY);
+    } catch {
+        // Not remembered.
+    }
+};
+if (!route.query.searchTerm) {
+    let last = null;
+    try {
+        last = sessionStorage.getItem(LAST_SEARCH_KEY);
+    } catch {
+        // Nothing to restore.
+    }
+    if (last) router.replace({ name: 'search', query: { searchTerm: last } });
+}
+
 watch(
     () => route.query.searchTerm,
     async (newSearchTerm) => {
         if (newSearchTerm) {
             searchAbort?.abort();
+            selectMode.value = false;
             const abort = (searchAbort = new AbortController());
             filter.value = 'All';
             channelFilter.value = 'All';
+    versionFilter.value = 'All';
             loading.value = true;
             loadingMore.value = true;
             searchResults.value = [];
             searchTerm.value = newSearchTerm;
             searchInput.value = newSearchTerm;
+            rememberSearch(newSearchTerm);
+            loadManualSettings();
             try {
                 await streamSearch(
                     newSearchTerm,
@@ -366,7 +640,13 @@ watch(
                         searchResults.value.push(...batch);
                         loading.value = false;
                     },
-                    abort.signal
+                    abort.signal,
+                    (found) => {
+                        if (abort.signal.aborted) return;
+                        // Collections are results like any other (own type, so the type filter covers them), listed first.
+                        searchResults.value.unshift(...found.map(collectionResult));
+                        loading.value = false;
+                    }
                 );
             } catch {
                 // Keep whatever arrived; an empty list reads as "No Results Found".
@@ -394,24 +674,46 @@ const download = (searchResult) => {
     modal.open();
 };
 
-const immediateDownload = async (searchResult) => {
-    const response = await ipFetch(`json-api/download?${buildDownloadQuery(searchResult)}`);
+// The download button on a row. A result with audio described / signed versions asks which one (the download
+// dialog has the choice) unless Settings says to use the default.
+const immediateDownload = async (searchResult, media, version = quickVersion(searchResult)) => {
+    if (media === undefined && version === undefined && askAboutVersions() && !searchResult.version && searchResult.versions?.length) {
+        download(searchResult);
+        return;
+    }
+    await sendDownload(searchResult, media, version);
+};
+
+const sendDownload = async (searchResult, media, version) => {
+    const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult, media, version })}`);
     if (response.ok) {
         router.push('/queue');
     }
 };
 
 const preview = (searchResult) => {
-    playInPip(searchResult.pid, searchResult.title);
+    // A result that is itself a version (the audio described row) plays that cut; others ask or use the default.
+    if (searchResult.version) playInPip(searchResult.pid, searchResult.title, false, searchResult.version);
+    else playProgramme(searchResult.pid, searchResult.title, searchResult.versions);
 };
 
 const multipleImmediateDownload = async () => {
     const selectedResults = filteredResults.value.filter((result) => result.checked);
     if (selectedResults.length > 0) {
-        if (await dialogService.confirm('Download', `Do you want to download ${selectedResults.length} items?`)) {
+        const sizes = selectedResults.map((result) => estimateSizeMb(globalSettings.value, result));
+        const offered = offeredVersions(selectedResults);
+        const choice = await dialogService.confirmDownload(`Do you want to download ${selectedResults.length} items?`, {
+            count: selectedResults.length,
+            totalMb: sizes.some((size) => size === undefined) ? undefined : sizes.reduce((sum, size) => sum + size, 0),
+            versions: offered,
+            initialVersion: initialVersionKey(offered),
+        });
+        if (choice) {
             loading.value = true;
-            for (const item of selectedResults) {
-                await immediateDownload(item);
+            // Only sent when it differs from the setting.
+            const override = choice.media === defaultMediaMode(globalSettings.value) ? undefined : choice.media;
+            for (const { item, version } of planDownloads(selectedResults, batchVersionKey(choice, offered))) {
+                await sendDownload(item, override, version);
             }
         }
     }
@@ -425,7 +727,7 @@ const selectFilter = (option) => {
 watch(
     allChecked,
     (newValue) => {
-        filteredResults.value.forEach((result) => {
+        downloadableResults.value.forEach((result) => {
             result.checked = newValue;
         });
     },
@@ -434,58 +736,99 @@ watch(
 </script>
 
 <style lang="less" scoped>
-.pageSearchBar {
-    padding: 1rem 1rem 0;
+// A bare icon button: keeps the icon's look while giving the download action an accessible name.
+.rowIconButton {
+    background: none;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
 
+// The title and toolbar open the page like every other; the search box follows with its own spacing.
+.searchTop {
+    padding-bottom: 0;
+}
+
+.pageSearchBar {
+    padding: 1rem 1rem 0.75rem;
+
+    // The search box is the page's own (the top bar hides its box here): one roomy field.
     .searchPanel {
+        position: relative;
         display: flex;
         align-items: center;
         gap: 10px;
-        max-width: 480px;
+        max-width: 720px;
+        padding: 0 8px 0 14px;
+        border: 1px solid @input-border-color;
+        border-radius: 8px;
+        background-color: @input-background-color;
+        transition: border-color 0.2s ease-out;
 
-        .searchWrap {
-            position: relative;
-            flex: 1;
-            display: flex;
-            align-items: center;
+        &:focus-within {
+            border-color: @brand-color;
+        }
+
+        .searchIcon {
+            flex: 0 0 auto;
+            color: @subtle-text-color;
         }
 
         .searchBox {
             flex: 1;
-            background-color: transparent;
-            border: 0px;
-            border-bottom: 1px solid @primary-text-color;
-            padding: 5px 5px;
+            min-width: 0;
+            height: 46px;
+            padding: 0;
+            border: 0;
+            background: transparent;
             color: @primary-text-color;
-            border-radius: 0px;
-            transition: border-bottom-color 0.3s ease-out;
+            // 16px stops iOS Safari zooming the page when the box is focused.
+            font-size: 16px;
+            border-radius: 0;
+            box-shadow: none;
 
             &:focus {
                 outline: none;
                 box-shadow: none;
-                border-bottom-color: @brand-color;
+            }
+        }
+
+        .clearSearch {
+            flex: 0 0 auto;
+            width: 32px;
+            height: 32px;
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: @subtle-text-color;
+            cursor: pointer;
+
+            &:hover {
+                color: @primary-text-color;
             }
         }
 
         .suggestions {
             position: absolute;
-            top: calc(100% - 4px);
+            top: calc(100% + 4px);
             left: 0;
             right: 0;
             margin: 0;
             padding: 4px 0;
             list-style: none;
             z-index: 10;
-            border-radius: 4px;
+            border-radius: 6px;
             border: 1px solid @settings-button-border-color;
             background-color: @nav-active-background-color;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 6px 18px @shadow-color;
 
             li {
                 display: flex;
                 align-items: center;
                 gap: 10px;
-                padding: 8px 12px;
+                padding: 10px 14px;
                 cursor: pointer;
                 font-size: 14px;
                 white-space: nowrap;
@@ -511,49 +854,193 @@ watch(
     }
 }
 
-.viewToggle {
+.searchSettingsNote {
     display: flex;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    margin: 14px 0 0;
+    font-size: 13px;
+    color: @subtle-text-color;
+
+    a {
+        color: @brand-color;
+    }
+}
+
+.resultsToolbar {
+    display: flex;
+    justify-content: space-between;
     align-items: center;
     gap: 6px;
     margin-bottom: 10px;
 
-    .loadingMoreNote {
-        margin-right: 8px;
-        color: @subtle-text-color;
+    .resultCount {
         font-size: 13px;
+        color: @subtle-text-color;
     }
 
-    .channelFilter {
-        height: 30px;
-        margin-right: 6px;
-        padding: 0 8px;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
+    .loadingMoreNote {
+        margin-left: 8px;
+    }
+}
+
+// Filter chips (channel) and the home / empty-state chips share one look.
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    border: 1px solid @settings-button-border-color;
+    border-radius: 16px;
+    background-color: @settings-button-background-color;
+    color: @primary-text-color;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+
+    svg {
+        color: @subtle-text-color;
+    }
+
+    &:hover {
+        background-color: @settings-button-hover-background-color;
+    }
+
+    &.active {
+        border-color: @brand-color;
+        color: @brand-color;
+    }
+}
+
+// A recent-search chip: the search button plus a small remove button at the right-hand end.
+.chipWrap {
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+
+    .chipMain,
+    .chipRemove {
+        display: inline-flex;
+        align-items: center;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+    }
+
+    .chipMain {
+        gap: 6px;
+        padding: 6px 4px 6px 12px;
+        min-width: 0;
+    }
+
+    .chipRemove {
+        padding: 6px 10px 6px 4px;
+
+        svg {
+            color: @subtle-text-color;
+        }
+
+        &:hover svg,
+        &:focus-visible svg {
+            color: @primary-text-color;
+        }
+    }
+}
+
+.channelChips {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+.selectBar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: @subtle-text-color;
+
+    span {
+        margin-right: auto;
     }
 
     button {
-        display: flex;
+        // Flex centring keeps the icon glyph in the middle of the square whatever the font metrics.
+        display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 34px;
-        height: 30px;
         padding: 0;
-        border-radius: 4px;
+        width: 32px;
+        height: 32px;
         border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
+        border-radius: 4px;
+        background: transparent;
         color: @primary-text-color;
+        cursor: pointer;
 
-        &:hover {
-            background-color: @settings-button-hover-background-color;
+        &:disabled {
+            opacity: 0.4;
+            cursor: default;
         }
+    }
+}
 
-        &.active {
-            background-color: @brand-color;
-            border-color: @brand-color;
-        }
+.titleBadges {
+    margin-left: 6px;
+}
+
+.chipDivider {
+    flex: 0 0 1px;
+    align-self: stretch;
+    margin: 4px 2px;
+    background-color: @settings-button-border-color;
+}
+
+.chipRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.searchHome h3 {
+    margin: 18px 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: @subtle-text-color;
+}
+
+.emptyState {
+    padding: 28px 16px 8px;
+    text-align: center;
+    color: @subtle-text-color;
+
+    .emptyIcon {
+        margin-bottom: 10px;
+        font-size: 28px;
+    }
+
+    .emptyTitle {
+        font-size: 16px;
+        color: @primary-text-color;
+    }
+
+    .emptyHint {
+        margin-top: 4px;
+        font-size: 13px;
     }
 }
 
@@ -607,9 +1094,14 @@ watch(
 
                 // Filenames can genuinely need the extra height - deliberately excluded from
                 // the single-line ellipsis truncation every other column gets.
-                &.wrap {
+                &.text {
                     white-space: normal;
-                    word-break: break-word;
+                }
+
+                .filename {
+                    font-size: 12px;
+                    color: @subtle-text-color;
+                    word-break: break-all;
                 }
 
                 &:first-child,
@@ -635,25 +1127,32 @@ watch(
     &.BBCTwo {
         background-color: @primary-color;
         border-color: @primary-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 
     &.BBCThree {
         background-color: @brand-color;
         border-color: @brand-color;
+        color: @on-brand-color;
         color: @primary-text-color;
     }
 
     &.CBeebies {
         background-color: @complete-color;
         border-color: @complete-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
     }
 
     &.CBBC {
         background-color: @success-color;
         border-color: @success-color;
-        color: @primary-text-color;
+        color: @on-fill-color;
+    }
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .chip {
+        min-height: 36px;
     }
 }
 </style>

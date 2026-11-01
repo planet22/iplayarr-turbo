@@ -1,6 +1,11 @@
 <template>
-    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
-    <table class="queueTable responsive-table" summary="Hed">
+    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force>
+        <!-- Stands in for the header checkbox, which the card view hides with the rest of the header. -->
+        <template v-if="cardView && sortedHistory.length" #leading>
+            <CheckInput v-model="allChecked" class="selectAll" title="Select all" />
+        </template>
+    </TablePagination>
+    <table :class="['queueTable', cardView ? 'cards' : 'responsive-table']" summary="Queue">
         <colgroup>
             <col style="width: 36px" />
             <col style="width: 40px" />
@@ -10,11 +15,13 @@
                  date, "12.3 Mb/s") and scale with font-size/zoom, instead of a guessed pixel
                  width that clips content whenever it runs a bit longer than expected. -->
             <col style="width: 8ch" />
+            <col class="hideMd" style="width: 11ch" />
+            <col style="width: 8ch" />
             <col style="width: 20ch" />
             <col style="width: 12ch" />
+            <col class="hideMd" style="width: 16ch" />
             <col style="width: 16ch" />
-            <col style="width: 16ch" />
-            <col style="width: 10ch" />
+            <col class="hideMd" style="width: 10ch" />
             <col style="width: 12ch" />
             <col style="width: 70px" />
         </colgroup>
@@ -31,15 +38,17 @@
                 <th class="sortable" @click="toggleSort('type')">
                     Type <SortIcon :active="sortBy == 'type'" :order="sortOrder" />
                 </th>
+                <th class="hideMd">Client</th>
+                <th>Output</th>
                 <th class="sortable" @click="toggleSort('start')">
                     Start <SortIcon :active="sortBy == 'start'" :order="sortOrder" />
                 </th>
                 <th class="sortable" @click="toggleSort('size')">
                     Size <SortIcon :active="sortBy == 'size'" :order="sortOrder" />
                 </th>
-                <th>App</th>
+                <th class="hideMd">App</th>
                 <th class="progress-column">Progress</th>
-                <th>ETA</th>
+                <th class="hideMd">ETA</th>
                 <th>Speed</th>
                 <th class="center">
                     <font-awesome-icon :icon="['fas', 'cog']" />
@@ -48,16 +57,16 @@
         </thead>
         <tbody>
             <QueueTableRow
-                v-for="item in filteredQueue" :key="item.id" ref="queueRows" :item="item"
-                :details="detailsFor(item.pid)"
+                v-for="item in filteredQueue" :key="item.jobId ?? item.pid" ref="queueRows" :item="item"
+                :details="detailsFor(item.pid)" :card-view="cardView"
             />
             <QueueTableRow
-                v-for="item in pagedHistory" :key="item.id" ref="historyRows" :item="item"
-                :details="detailsFor(item.pid)"
+                v-for="item in pagedHistory" :key="item.jobId ?? `${item.pid}_${item.nzbName}_${item.details?.start}`" ref="historyRows" :item="item"
+                :details="detailsFor(item.pid)" :card-view="cardView"
             />
         </tbody>
     </table>
-    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
+    <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force />
 </template>
 
 <script setup>
@@ -66,6 +75,8 @@ import { computed, defineExpose, defineProps, onMounted, ref, watch } from 'vue'
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
+import { useViewMode } from '@/lib/useViewMode';
+import { sortableTitle } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
 import SortIcon from '../common/SortIcon.vue';
@@ -86,6 +97,15 @@ const props = defineProps({
 
 const history = computed(() => props.history);
 
+// Cards on phones and narrow windows (14 columns need the room), the table on wide screens; either can be chosen.
+const { viewMode, setViewMode } = useViewMode('iplayarr.queueViewMode', {
+    modes: ['table', 'cards'],
+    desktop: 'table',
+    mobile: 'cards',
+    query: '(max-width: 1100px)',
+});
+const cardView = computed(() => viewMode.value === 'cards');
+
 // One filter/sort/date-range bar drives both halves of this table (the small live "active
 // downloads" list above, and the paginated history below) - useSortFilter itself only owns
 // history's sort order (sorting a handful of actively-downloading rows isn't useful and would
@@ -96,7 +116,7 @@ const {
 } = useSortFilter(history, {
     filterFn: (item, query) => [item.nzbName, item.type].some((value) => String(value ?? '').toLowerCase().includes(query)),
     sortAccessors: {
-        filename: (item) => item.nzbName,
+        filename: (item) => sortableTitle(item.nzbName),
         type: (item) => item.type,
         start: (item) => item.details?.start,
         size: (item) => item.details?.size,
@@ -134,7 +154,7 @@ const filteredQueue = computed(() => {
 
 const {
     page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
-} = usePagination(sortedHistory);
+} = usePagination(sortedHistory, { ignoreMinimum: true });
 
 
 
@@ -183,6 +203,8 @@ defineExpose({
     filtersActive,
     selectedHistory,
     selectedQueue,
+    viewMode,
+    setViewMode,
 });
 
 watch(
@@ -200,6 +222,26 @@ watch(
 </script>
 
 <style lang="less">
+// Select-all checkbox in the card view's pagination row, lined up with the cards' own checkboxes.
+.CheckInput-container.selectAll {
+    flex: 0 0 auto;
+    padding-left: 10px;
+
+    .CheckInput-label {
+        align-items: center;
+    }
+
+    .CheckInput-input {
+        margin-top: 0;
+    }
+}
+
+// Pills here are fully rounded (smooth ends) rather than square-cornered.
+.queueTable .pill {
+    padding: 1px 8px;
+    border-radius: 999px;
+}
+
 .queueTable {
     max-width: 100%;
     width: 100%;
@@ -299,6 +341,46 @@ watch(
 
     .progress-column {
         min-width: 75px;
+    }
+
+    // Lower-value columns give way first when the table is squeezed, so Filename keeps room.
+    @media (max-width: 1500px) {
+        .hideMd {
+            display: none;
+        }
+    }
+
+    // Card view: each row is a self-contained card, laid out as a responsive grid.
+    &.cards {
+        display: block;
+
+        thead,
+        colgroup {
+            display: none;
+        }
+
+        tbody {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+            gap: 12px;
+            margin-top: 8px;
+
+            // The row stretches to the tallest card in its grid row; the cell and card fill it,
+            // so cards sharing a row are the same height.
+            tr {
+                display: flex;
+
+                &:hover {
+                    background-color: transparent;
+                }
+            }
+
+            td {
+                display: flex;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+        }
     }
 
     @media (max-width: @mobile-breakpoint) {

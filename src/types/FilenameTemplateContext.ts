@@ -5,4 +5,5 @@ export interface FilenameTemplateContext {
     season?: string;
     quality?: string;
     synonym?: string;
+    language?: string;
 }

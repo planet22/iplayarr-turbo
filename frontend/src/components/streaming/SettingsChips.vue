@@ -8,7 +8,10 @@
     <td class="chipCol" data-title="FHD">
         <span v-if="fhd" class="pill" :class="fhd == 'On' ? 'success' : 'grey'">{{ fhd }}</span>
     </td>
-    <td class="chipCol" data-title="Video Quality">
+    <td class="chipCol" data-title="Subs">
+        <span v-if="subtitles" class="pill" :class="subtitles == 'On' ? 'success' : 'grey'">{{ subtitles }}</span>
+    </td>
+    <td class="chipCol hideLg" data-title="Video Quality">
         <span v-if="videoQuality" class="pill grey">{{ videoQuality }}</span>
     </td>
 </template>
@@ -16,11 +19,12 @@
 <script setup>
 import { computed } from 'vue';
 
-// Four fixed columns - one per settings key StreamEndpoint.ts's buildSettingsSnapshot can
+// Five fixed columns - one per settings key StreamEndpoint.ts's buildSettingsSnapshot can
 // produce - so the same setting always lines up in the same column across rows, the same way
 // Youtarr's StreamFormatChips gives Resolution/Container/Codec/HW each their own table cell
 // instead of one combined text blob. Only the keys relevant to the session's client are ever
-// populated (Native: Quality/Quality Probe/FHD Upgrade; get_iplayer/yt-dlp: Video Quality), so
+// populated (Native, live channels included: Quality/Quality Probe/FHD Upgrade/Subtitles;
+// get_iplayer/yt-dlp: Video Quality), so
 // the other columns render empty for that row - same pattern as Youtarr's HW column being blank
 // for a non-hardware-transcoded row.
 const props = defineProps({
@@ -33,5 +37,6 @@ const props = defineProps({
 const quality = computed(() => props.settings?.Quality ?? '');
 const probe = computed(() => props.settings?.['Quality Probe'] ?? '');
 const fhd = computed(() => props.settings?.['FHD Upgrade'] ?? '');
+const subtitles = computed(() => props.settings?.Subtitles ?? '');
 const videoQuality = computed(() => props.settings?.['Video Quality'] ?? '');
 </script>

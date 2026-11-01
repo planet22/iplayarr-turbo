@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { SpawnExecutable } from '../../types/GetIplayer/SpawnExecutable';
 import getIplayerExecutableService from '../getIplayerExecutableService';
 import AbstractStreamService from './AbstractStreamService';
+import { cached, resolveTtlMs } from './resolveCache';
 import { spawnCollectOutput } from './spawnWithTimeout';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
@@ -71,14 +72,18 @@ class GetIplayerStreamService implements AbstractStreamService {
     }
 
     async #resolveUrl(pid: string, sessionId?: string): Promise<string> {
-        const entry = await this.#resolveEntry(pid);
-        if (sessionId) {
-            const resolution = resolutionInTypeRegex.exec(entry.type ?? '')?.[1];
-            if (resolution) {
-                streamSessionService.setResolution(sessionId, resolution);
-            }
+        // --streaminfo is the slowest resolve of all (13-40s+), so repeat requests for a pid (a seek
+        // restarting Jellyfin's ffmpeg, a library probe) reuse the last result. The quality chain is
+        // in the key so changing Video Quality isn't served a stale pick.
+        const qualityChain: string[] = await getIplayerExecutableService.getQualityFallbackChain();
+        const { url, resolution } = await cached(`get_iplayer:${pid}:${qualityChain.join(',')}`, resolveTtlMs, async () => {
+            const entry = await this.#resolveEntry(pid);
+            return { url: entry.streamurl, resolution: resolutionInTypeRegex.exec(entry.type ?? '')?.[1] };
+        });
+        if (sessionId && resolution) {
+            streamSessionService.setResolution(sessionId, resolution);
         }
-        return entry.streamurl;
+        return url;
     }
 
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {

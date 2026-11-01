@@ -55,6 +55,9 @@
                         name="Priority"
                         placeholder="25"
                         type-override="number"
+                        :min="1"
+                        :max="50"
+                        :step="1"
                         :tooltip="`NZB Client Priority, (lower number is first)`"
                         :error="validationErrors?.priority"
                     />
@@ -70,7 +73,7 @@
                 </template>
 
                 <template v-if="showForm('callback')">
-                    <InfoBar v-if="form.type == 'PROWLARR'" class="warning">
+                    <InfoBar v-if="form.type == 'PROWLARR'" clazz="warning">
                         Prowlarr cannot force download client affinity in downstream Arrs
                     </InfoBar>
                     <SelectInput
@@ -91,6 +94,9 @@
                         v-model="form.iplayarr.port"
                         name="iPlayarr Turbo Port"
                         type-override="number"
+                        :min="1"
+                        :max="65535"
+                        :step="1"
                         :tooltip="`iPlayarr Turbo Port for connection from ${capitalize(form.type)}`"
                     />
                 </template>
@@ -118,6 +124,9 @@
                         name="Priority"
                         placeholder="1"
                         type-override="number"
+                        :min="1"
+                        :max="50"
+                        :step="1"
                         :tooltip="`Download Client Priority in ${capitalize(form.type)} (lower number is first)`"
                         :error="validationErrors?.download_client_priority"
                     />
@@ -145,6 +154,9 @@
                         name="Priority"
                         placeholder="25"
                         type-override="number"
+                        :min="1"
+                        :max="50"
+                        :step="1"
                         :tooltip="`Priority in ${capitalize(form.type)}`"
                         :error="validationErrors?.indexer_priority"
                     />
@@ -159,6 +171,20 @@
                         :tooltip="`Tags for Download Client & Indexer for ${capitalize(form.type)}`"
                         :error="validationErrors?.tags"
                     />
+                </template>
+
+                <template v-if="showForm('subscription_detect')">
+                    <legend class="sub">Subscription detection</legend>
+                    <SelectInput
+                        v-model="form.detectSubscriptions"
+                        name="Include in detection"
+                        tooltip="Keep episode counts up to date"
+                        :options="[
+                            { key: true, value: 'Yes' },
+                            { key: false, value: 'No' },
+                        ]"
+                    />
+                    <InfoBar clazz="info small">Daily: refreshes episode counts and flags shows deleted here.</InfoBar>
                 </template>
             </template>
         </template>
@@ -196,6 +222,7 @@ const defaultForm = {
     indexer: {},
     priority: 5,
     tags: [],
+    detectSubscriptions: false,
 };
 
 // A deleted Download Client/Indexer is now removed from storage entirely (rather than left as
@@ -210,6 +237,7 @@ const [features, form] = [
                   ...props.inputObj,
                   download_client: props.inputObj.download_client || {},
                   indexer: props.inputObj.indexer || {},
+                  detectSubscriptions: props.inputObj.detectSubscriptions ?? false,
               }
             : defaultForm
     ),

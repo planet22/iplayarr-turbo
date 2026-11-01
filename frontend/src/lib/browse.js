@@ -48,6 +48,9 @@ export const toDownloadResult = (item) => ({
     pubDate: item.pubDate ?? item.firstBroadcast,
     nzbName: item.nzbName ?? defaultNzbName(item),
     runtimeSeconds: item.runtimeSeconds,
+    size: item.size,
+    // Browse episodes give their runtime in minutes; kept apart from runtimeSeconds, which goes into the download.
+    runtimeMinutes: item.runtime,
 });
 
 export const channelPillClass = (channel) => (channel ? channel.replaceAll(' ', '') : '');

@@ -6,8 +6,9 @@ import { EndpointDirectory, NewzNabEndpointDirectory, SabNZBDEndpointDirectory }
 import configService from '../service/configService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
+import { asyncRouter } from '../utils/asyncRouter';
 
-const router: Router = Router();
+const router: Router = asyncRouter();
 // NZB uploads are a few KB; the limits just stop an oversized or endless multipart body.
 const upload: Multer = multer({ limits: { fileSize: 5 * 1024 * 1024, files: 10, fields: 50 } });
 
@@ -60,7 +61,7 @@ router.all(['/', '/*'], authorise, upload.any(), async (req: Request, res: Respo
     const directory: EndpointDirectory = mode ? SabNZBDEndpointDirectory : NewzNabEndpointDirectory;
     // hasOwn: 'constructor' or '__proto__' as a mode must not resolve to something on the prototype.
     if (endpoint && Object.prototype.hasOwnProperty.call(directory, endpoint)) {
-        directory[endpoint](req, res, next);
+        await directory[endpoint](req, res, next);
     } else {
         res.status(404).json({ error: ApiError.API_NOT_FOUND } as ApiResponse);
     }

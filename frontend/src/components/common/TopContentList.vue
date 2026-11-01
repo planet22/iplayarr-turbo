@@ -6,13 +6,16 @@
                 v-if="thumbnailFor(item.pid) && !failedThumbs.has(item.pid)"
                 class="topContentThumb"
                 :src="thumbnailFor(item.pid)"
+                alt=""
                 loading="lazy"
                 @error="onImgError(item.pid)"
             />
             <div v-else class="topContentThumb topContentThumbPlaceholder">
                 <font-awesome-icon :icon="['fas', 'film']" />
             </div>
-            <span class="topContentTitle">{{ item.title }}</span>
+            <!-- With a pid the title opens the programme. -->
+            <RouterLink v-if="item.pid" class="topContentTitle" :to="`/browse/programme/${item.pid}`">{{ item.title }}</RouterLink>
+            <span v-else class="topContentTitle">{{ item.title }}</span>
             <span class="pill primary">{{ item.count }}</span>
         </div>
         <div v-if="!items.length" class="topContentEmpty">No data yet</div>
@@ -21,6 +24,7 @@
 
 <script setup>
 import { defineProps, ref } from 'vue';
+import { RouterLink } from 'vue-router';
 
 import { getProgrammeThumbnailUrl } from '@/lib/utils';
 
@@ -90,6 +94,11 @@ const thumbnailFor = (pid) => {
             text-overflow: ellipsis;
             white-space: nowrap;
             color: @table-text-color;
+            text-decoration: none;
+        }
+
+        a.topContentTitle:hover {
+            color: @brand-color;
         }
     }
 

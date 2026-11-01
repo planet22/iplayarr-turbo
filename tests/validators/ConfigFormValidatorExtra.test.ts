@@ -36,6 +36,43 @@ describe('ConfigFormValidator (extra)', () => {
         expect(errors.RSS_FEED_HOURS).toBe('RSS Feed Hours must be a positive number');
     });
 
+    it('keeps the download limit and RSS hours to whole numbers in range', async () => {
+        for (const bad of [0, 11, 2.5]) {
+            expect((await validator.validate({ ...validInput(), ACTIVE_LIMIT: bad })).ACTIVE_LIMIT).toBe('Download limit must be a whole number from 1 to 10');
+        }
+        for (const good of [1, 3, 10, '10']) {
+            expect((await validator.validate({ ...validInput(), ACTIVE_LIMIT: good })).ACTIVE_LIMIT).toBeUndefined();
+        }
+        expect((await validator.validate({ ...validInput(), RSS_FEED_HOURS: 0 })).RSS_FEED_HOURS).toBe('RSS Feed Hours must be a whole number from 1 to 720');
+        expect((await validator.validate({ ...validInput(), RSS_FEED_HOURS: 721 })).RSS_FEED_HOURS).toBe('RSS Feed Hours must be a whole number from 1 to 720');
+    });
+
+    it('checks the UI and version choices', async () => {
+        const bad = await validator.validate({ ...validInput(), UI_PILL_COLORS: 'maybe', PLAY_ASK_VERSION: '1', DOWNLOAD_DEFAULT_VERSION: 'bogus', PLAY_DEFAULT_VERSION: 'nope' });
+        expect(bad.UI_PILL_COLORS).toBe('Must be true or false');
+        expect(bad.PLAY_ASK_VERSION).toBe('Must be true or false');
+        expect(bad.DOWNLOAD_DEFAULT_VERSION).toBe('Unknown version');
+        expect(bad.PLAY_DEFAULT_VERSION).toBe('Unknown version');
+        const good = await validator.validate({ ...validInput(), UI_PILL_COLORS: 'false', PLAY_ASK_VERSION: 'true', DOWNLOAD_DEFAULT_VERSION: '', PLAY_DEFAULT_VERSION: 'signed' });
+        expect(good.UI_PILL_COLORS).toBeUndefined();
+        expect(good.PLAY_ASK_VERSION).toBeUndefined();
+        expect(good.DOWNLOAD_DEFAULT_VERSION).toBeUndefined();
+        expect(good.PLAY_DEFAULT_VERSION).toBeUndefined();
+    });
+
+    it('range-checks the optional numbers only when they are given', async () => {
+        const blank = await validator.validate({ ...validInput(), STRM_WATCHDOG_CONCURRENCY: '', STRM_WATCHDOG_FAIL_THRESHOLD: undefined, STRM_WATCHDOG_STRIKES: '', STREAM_HISTORY_RETENTION_DAYS: '' });
+        expect(blank.STRM_WATCHDOG_CONCURRENCY).toBeUndefined();
+        expect(blank.STRM_WATCHDOG_FAIL_THRESHOLD).toBeUndefined();
+        expect(blank.STRM_WATCHDOG_STRIKES).toBeUndefined();
+        expect(blank.STREAM_HISTORY_RETENTION_DAYS).toBeUndefined();
+        const bad = await validator.validate({ ...validInput(), STRM_WATCHDOG_CONCURRENCY: '11', STRM_WATCHDOG_FAIL_THRESHOLD: '0', STRM_WATCHDOG_STRIKES: '31', STREAM_HISTORY_RETENTION_DAYS: '-5' });
+        expect(bad.STRM_WATCHDOG_CONCURRENCY).toBe('Parallel checks must be a whole number from 1 to 10');
+        expect(bad.STRM_WATCHDOG_FAIL_THRESHOLD).toBe('Minimum valid before action must be a whole number from 1 to 1000');
+        expect(bad.STRM_WATCHDOG_STRIKES).toBe('Failed checks before invalid must be a whole number from 1 to 30');
+        expect(bad.STREAM_HISTORY_RETENTION_DAYS).toBe('Stream history retention must be a positive number');
+    });
+
     it('rejects non-numeric limits and hours', async () => {
         const errors = await validator.validate({ ...validInput(), ACTIVE_LIMIT: 'x', RSS_FEED_HOURS: '' });
         expect(errors.ACTIVE_LIMIT).toBe('Download limit must be a number');
@@ -44,7 +81,7 @@ describe('ConfigFormValidator (extra)', () => {
 
     it('requires a valid stream base URL in strm mode only', async () => {
         const strm = await validator.validate({ ...validInput(), MEDIA_MODE: 'strm', STREAM_BASE_URL: 'nope' });
-        expect(strm.STREAM_BASE_URL).toContain('valid base URL');
+        expect(strm.STREAM_BASE_URL).toContain('base URL');
         expect(await validator.validate({ ...validInput(), MEDIA_MODE: 'strm', STREAM_BASE_URL: 'http://h:4404' })).toEqual({});
         expect(await validator.validate({ ...validInput(), MEDIA_MODE: 'download', STREAM_BASE_URL: 'nope' })).toEqual({});
     });
@@ -86,4 +123,17 @@ describe('ConfigFormValidator (extra)', () => {
         expect(errors.TV_FILENAME_TEMPLATE).toBe('Template does not compile');
         expect(errors.MOVIE_FILENAME_TEMPLATE).toBe('Template does not compile');
     });
+
+    describe('LIVE_TV_EPG_OFFSET', () => {
+        const offsetError = async (value: unknown) => (await validator.validate({ ...validInput(), LIVE_TV_EPG_OFFSET: value })).LIVE_TV_EPG_OFFSET;
+
+        it.each(['', undefined, '0', '60', '-30', '1440', '-1440', 90])('accepts %p', async (value) => {
+            expect(await offsetError(value)).toBeUndefined();
+        });
+
+        it.each(['abc', '1.5', '1441', '-1441', ' '])('rejects %p', async (value) => {
+            expect(await offsetError(value)).toBe('Please provide a whole number of minutes between -1440 and 1440');
+        });
+    });
 });
+

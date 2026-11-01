@@ -1,9 +1,11 @@
 <template>
     <div class="inner-content scroll-x">
-        <PageHeader title="Queue" />
+        <PageHeader title="Queue" icon="clipboard-list" />
         <SettingsPageToolbar
+            :view-mode="queueTable?.viewMode" :view-modes="queueTable ? ['table', 'cards'] : []"
             :icons="['delete', 'filterToggle']" delete-label="Remove selected"
-            :filters-shown="queueTable?.showFilters" :filters-active="queueTable?.filtersActive"
+            :filters-shown="queueTable?.showFilters"
+            :filters-active="queueTable?.filtersActive" @update:view-mode="(mode) => queueTable.setViewMode(mode)"
             @delete-queue-item="deleteItems" @toggle-filters="queueTable.showFilters = !queueTable.showFilters"
         >
             <template v-if="queueTable?.showFilters" #filters>
@@ -23,6 +25,7 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 import QueueTable from '../components/queue/QueueTable.vue';
 
@@ -43,11 +46,11 @@ const deleteItems = async () => {
     const queueItems = queueTable.value.selectedQueue;
     const historyItems = queueTable.value.selectedHistory;
     if (queueItems.length == 0 && historyItems.length == 0) {
-        dialogService.alert('Nothing Selected', 'Tick the items you want to remove first.');
+        toastService.info('Tick the items you want to remove first');
         return;
     }
     const count = queueItems.length + historyItems.length;
-    if (await dialogService.confirm('Remove From Queue', `Are you sure you want to remove these ${count} items?`)) {
+    if (await dialogService.confirm('Remove From Queue', `Are you sure you want to remove these ${count} items?`, undefined, { danger: true, confirmLabel: 'Remove' })) {
         for (const { pid } of queueItems) {
             await ipFetch(`json-api/queue/queue?pid=${pid}`, 'DELETE');
         }

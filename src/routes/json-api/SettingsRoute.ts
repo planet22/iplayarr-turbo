@@ -3,7 +3,9 @@ import fs from 'fs';
 import path from 'path';
 
 import { version } from '../../config/version.json';
+import liveChannelFacade from '../../facade/liveChannelFacade';
 import configService, { ConfigMap } from '../../service/configService';
+import cronJobService from '../../service/cronJobService';
 import historyService from '../../service/historyService';
 import loggingService from '../../service/loggingService';
 import videoEventService from '../../service/videoEventService';
@@ -11,15 +13,17 @@ import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { QueueEntry } from '../../types/QueueEntry';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { versionProfiles } from '../../types/VersionProfiles';
 import { VideoEventType } from '../../types/VideoEvent';
+import { asyncRouter } from '../../utils/asyncRouter';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
 import { maskConfig, restoreConfig } from '../../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../../utils/Utils';
 import { ConfigFormValidator } from '../../validators/ConfigFormValidator';
-import { checkSettingsUpdate, EXECUTABLE_SETTINGS } from '../../validators/SettingsGuard';
+import { checkSettingsUpdate, EXECUTABLE_SETTINGS, normaliseSettingValues } from '../../validators/SettingsGuard';
 import { Validator } from '../../validators/Validator';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/hiddenSettings', (_, res: Response) => {
     res.json({
@@ -59,7 +63,7 @@ router.put('/', async (req: Request, res: Response) => {
     const currentConfig: ConfigMap = (await configService.getAllConfig()) ?? {};
     // The GET above hands secrets out masked; a masked value coming back means "unchanged".
     if (req.body && typeof req.body === 'object') {
-        req.body = restoreConfig(req.body, currentConfig);
+        req.body = restoreConfig(normaliseSettingValues(req.body) as Record<string, unknown>, currentConfig);
     }
     const guardErrors = checkSettingsUpdate(req.body, currentConfig, currentConfig[IplayarrParameter.AUTH_TYPE]);
     if (Object.keys(guardErrors).length > 0) {
@@ -67,7 +71,12 @@ router.put('/', async (req: Request, res: Response) => {
         return;
     }
     const validator: Validator = new ConfigFormValidator();
-    const validationResult: { [key: string]: string } = await validator.validate(req.body);
+    // The UI saves one tab at a time, so the body may hold only some keys: validate them against the stored
+    // config, and report only problems with the keys that were actually sent.
+    const validationAll: { [key: string]: string } = await validator.validate({ ...currentConfig, ...req.body });
+    const validationResult: { [key: string]: string } = Object.fromEntries(
+        Object.entries(validationAll).filter(([key]) => key in req.body)
+    );
     if (Object.keys(validationResult).length > 0) {
         const apiResponse: ApiResponse = {
             error: ApiError.INVALID_INPUT,
@@ -84,6 +93,8 @@ router.put('/', async (req: Request, res: Response) => {
     const oldStreamKey: string | undefined = streamKeyChanging
         ? await configService.getParameter(IplayarrParameter.STREAM_KEY)
         : undefined;
+
+    const uhdWasOn: boolean = currentConfig[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'true';
 
     for (const key of Object.keys(req.body)) {
         const val = req.body[key];
@@ -119,6 +130,17 @@ router.put('/', async (req: Request, res: Response) => {
     const newStreamKey: string | undefined = req.body[IplayarrParameter.STREAM_KEY];
     if (newStreamKey && oldStreamKey && newStreamKey !== oldStreamKey) {
         await rewriteStrmKeys('streamkey', oldStreamKey, newStreamKey, VideoEventType.STREAM_KEY_ROTATED, 'Stream key');
+    }
+
+    // The schedule refresh job is set up at start-up from this setting, so a change has to reach it now.
+    if (IplayarrParameter.REFRESH_SCHEDULE in req.body) {
+        const schedule = await configService.getParameter(IplayarrParameter.REFRESH_SCHEDULE);
+        if (schedule) cronJobService.setDefaultSchedule('schedule-refresh', schedule);
+    }
+
+    // Switching the UHD event feeds off takes them out of the library and Live TV (the UI warns first).
+    if (uhdWasOn && req.body[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'false') {
+        await liveChannelFacade.removeUhdFeeds();
     }
 
     res.json(req.body);
@@ -157,6 +179,10 @@ async function rewriteStrmKeys(
 
 router.get('/qualityProfiles', (_, res: Response) => {
     res.json(qualityProfiles);
+});
+
+router.get('/versionProfiles', (_, res: Response) => {
+    res.json(versionProfiles.map(({ id, name, tag }) => ({ id, name, tag })));
 });
 
 export default router;

@@ -1,11 +1,14 @@
 <template>
-    <div ref="root" :class="['form-group', advanced ? 'advanced' : '']">
+    <div ref="root" :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
         <label v-if="name">{{ name }}</label>
         <div :class="['inputBox', error ? 'error' : '']">
+            <div class="fieldRow">
             <button type="button" class="trigger" :aria-expanded="open" @click="open = !open">
                 <span class="summary">{{ summary }}</span>
                 <font-awesome-icon :icon="['fas', open ? 'chevron-up' : 'chevron-down']" />
             </button>
+            <InfoTip v-if="showInfo" :text="tooltip" />
+            </div>
             <ul v-if="open" class="menu">
                 <li v-for="option of options" :key="option.key">
                     <label class="option">
@@ -21,7 +24,7 @@
             <div v-if="error" class="error">
                 {{ error }}
             </div>
-            <div class="tooltip">
+            <div v-if="!showInfo" class="tooltip">
                 {{ tooltip }}
             </div>
         </div>
@@ -29,7 +32,9 @@
 </template>
 
 <script setup>
-import { computed, defineEmits, defineProps, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, defineEmits, defineProps, inject, onBeforeUnmount, onMounted, ref } from 'vue';
+
+import InfoTip from '@/components/common/form/InfoTip.vue';
 
 // Dropdown of tick boxes. The model is a comma-separated string of the ticked option keys
 // (e.g. 'history,arr'), matching how multi-valued settings are already stored as plain strings.
@@ -37,12 +42,22 @@ const props = defineProps({
     name: { type: String, required: true },
     options: { type: Array, required: true }, // [{ key, value }]
     tooltip: { type: String, required: true },
+    inlineTooltip: { type: Boolean, required: false, default: false },
     modelValue: { type: String, required: true },
     error: { type: String, required: false, default: undefined },
     advanced: { type: Boolean, required: false, default: false },
+    field: { type: String, required: false, default: undefined },
 });
 
 const emit = defineEmits(['update:modelValue']);
+
+// Settings page shows the tooltip behind an (i) button; elsewhere (and when inlineTooltip is set) it stays as text below.
+const infoTips = inject('infoTips', false);
+const showInfo = computed(() => infoTips && !props.inlineTooltip);
+
+// Settings page lists the keys edited since the last save; those fields get a highlight.
+const changedKeys = inject('settingsChangedKeys', null);
+const changed = computed(() => !!props.field && !!changedKeys?.value?.has(props.field));
 
 const open = ref(false);
 const root = ref(null);
@@ -104,24 +119,31 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         font-size: 14px;
         color: @table-text-color;
 
-        @media (max-width: @mobile-breakpoint) {
-            flex: 0 0 80px;
-        }
     }
 
     .inputBox {
         position: relative;
         flex: 1 1 auto;
+        // Without this the box grows to fit the longest summary instead of staying the width of the other fields
+        // (the summary is cut off with an ellipsis instead).
+        min-width: 0;
         box-sizing: border-box;
 
+        .fieldRow {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         .trigger {
+            flex: 1 1 auto;
+            min-width: 0;
             box-sizing: border-box;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
             padding: 6px 16px;
-            width: 100%;
             height: 35px;
             border: 1px solid @input-border-color;
             border-radius: 4px;
@@ -190,10 +212,39 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         color: @subtle-text-color;
     }
 
+    &.changed .trigger {
+        border-color: @changed-color;
+        box-shadow: 0 0 0 2px @changed-soft-color;
+    }
+
     &.advanced {
         > label,
         .tooltip {
             color: @warn-color;
+        }
+    }
+}
+
+// Phones: the label sits above its box (left-aligned, smaller) instead of in a narrow right-aligned column
+// that wraps long names onto four lines and leaves the box top-aligned beside them.
+.form-group {
+    @media (max-width: @mobile-breakpoint) {
+        flex-direction: column;
+        margin-bottom: 0.9rem;
+
+        label {
+            flex: none;
+            justify-content: flex-start;
+            margin: 0 0 4px;
+            padding-top: 0;
+            min-height: 0;
+            text-align: start;
+            font-size: 13px;
+        }
+
+        .tooltip,
+        .error {
+            font-size: 12px;
         }
     }
 }

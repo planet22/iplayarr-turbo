@@ -2,10 +2,13 @@ import downloadFacade from '../../src/facade/downloadFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import configService from '../../src/service/configService';
 import cronJobService from '../../src/service/cronJobService';
+import DbCacheService from '../../src/service/db/dbCacheService';
 import episodeCacheService from '../../src/service/episodeCacheService';
 import libraryCleanupService from '../../src/service/libraryCleanupService';
+import liveTvService from '../../src/service/liveTvService';
 import streamSessionService from '../../src/service/stream/streamSessionService';
 import strmWatchdogService from '../../src/service/strmWatchdogService';
+import subscriptionDetectService from '../../src/service/subscriptionDetectService';
 import subscriptionService from '../../src/service/subscriptionService';
 import TaskService from '../../src/service/taskService';
 import thumbnailCacheService from '../../src/service/thumbnailCacheService';
@@ -36,6 +39,10 @@ jest.mock('../../src/service/subscriptionService', () => ({
     checkAll: jest.fn(),
 }));
 
+jest.mock('../../src/service/subscriptionDetectService', () => ({
+    autoDetect: jest.fn(),
+}));
+
 jest.mock('../../src/service/thumbnailCacheService', () => ({
     cleanup: jest.fn(),
 }));
@@ -47,6 +54,8 @@ jest.mock('../../src/service/stream/streamSessionService', () => ({
 jest.mock('../../src/service/libraryCleanupService', () => ({
     cleanup: jest.fn(),
 }));
+
+jest.mock('../../src/service/liveTvService', () => ({ refreshGuide: jest.fn() }));
 
 const definedTasks = () => {
     const tasks: Record<string, { definition: any; run: () => Promise<unknown> }> = {};
@@ -63,13 +72,13 @@ describe('TaskService', () => {
 
     it('registers the schedule-refresh task with the configured cron and refreshes/cleans up when run', async () => {
         (configService.getParameter as jest.Mock)
-            .mockResolvedValueOnce('*/5 * * * *') // REFRESH_SCHEDULE
+            .mockResolvedValueOnce('*/30 * * * *') // REFRESH_SCHEDULE
             .mockResolvedValueOnce('false'); // NATIVE_SEARCH
 
         await TaskService.init();
 
         const { 'schedule-refresh': task } = definedTasks();
-        expect(task.definition.cron).toBe('*/5 * * * *');
+        expect(task.definition.cron).toBe('*/30 * * * *');
 
         await task.run();
 
@@ -78,9 +87,26 @@ describe('TaskService', () => {
         expect(episodeCacheService.recacheAllSeries).toHaveBeenCalled();
     });
 
+    it.each([['not a cron'], ['* * * * *'], [''], [undefined]])(
+        'falls back to the default schedule for %j and still defines every other job',
+        async (configured) => {
+            (configService.getParameter as jest.Mock)
+                .mockResolvedValueOnce(configured) // REFRESH_SCHEDULE
+                .mockResolvedValueOnce('true'); // NATIVE_SEARCH
+
+            await TaskService.init();
+
+            const tasks = definedTasks();
+            expect(tasks['schedule-refresh'].definition.cron).toBe('0 * * * *');
+            expect(Object.keys(tasks)).toEqual(
+                expect.arrayContaining(['guide-refresh', 'subscriptions-check', 'thumbnail-cleanup', 'strm-watchdog'])
+            );
+        }
+    );
+
     it('skips recaching if native search is enabled', async () => {
         (configService.getParameter as jest.Mock)
-            .mockResolvedValueOnce('*/5 * * * *') // REFRESH_SCHEDULE
+            .mockResolvedValueOnce('*/30 * * * *') // REFRESH_SCHEDULE
             .mockResolvedValueOnce('true'); // NATIVE_SEARCH
 
         await TaskService.init();
@@ -108,6 +134,10 @@ describe('TaskService', () => {
         await tasks['subscriptions-check'].run();
         expect(subscriptionService.checkAll).toHaveBeenCalled();
 
+        expect(tasks['subscriptions-detect'].definition.cron).toBe('47 3 * * *');
+        await tasks['subscriptions-detect'].run();
+        expect(subscriptionDetectService.autoDetect).toHaveBeenCalled();
+
         await tasks['thumbnail-cleanup'].run();
         expect(thumbnailCacheService.cleanup).toHaveBeenCalled();
 
@@ -119,5 +149,23 @@ describe('TaskService', () => {
 
         await tasks['strm-watchdog'].run();
         expect(strmWatchdogService.run).toHaveBeenCalled();
+    });
+});
+
+describe('TaskService maintenance task bodies', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('refreshes the Live TV guide and purges expired cache entries when those tasks run', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('*/5 * * * *');
+        const purge = jest.spyOn(DbCacheService, 'purgeExpired').mockResolvedValue(0 as any);
+
+        await TaskService.init();
+        const tasks = definedTasks();
+        await tasks['guide-refresh'].run();
+        await tasks['cache-purge'].run();
+
+        expect(liveTvService.refreshGuide).toHaveBeenCalled();
+        expect(purge).toHaveBeenCalled();
+        purge.mockRestore();
     });
 });

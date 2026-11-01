@@ -89,6 +89,11 @@ export function buildMovieNfo(item: QueueEntry): string {
     if (studio) {
         xml += `  <studio>${studio}</studio>\n`;
     }
+    // The Kodi/Jellyfin way to name the collection (set) a film belongs to.
+    const collection = escapeXml(library?.collection);
+    if (collection) {
+        xml += `  <set>\n    <name>${collection}</name>\n  </set>\n`;
+    }
     xml += '</movie>\n';
     return xml;
 }

@@ -1,9 +1,13 @@
 #!/bin/sh
 set -e
 
-if [[ -z "$REDIS_HOST" ]]; then
-    echo "Starting redis"
-    /redis/redis-server --dir /config &
+# Older versions kept all data in a bundled Redis (/config/dump.rdb). If that file is still there and
+# no SQLite database exists yet, start Redis briefly on loopback so the app can import it once.
+if [ -z "$REDIS_HOST" ] && [ -f /config/dump.rdb ] && [ ! -f /config/iplayarr.db ]; then
+    echo "Found legacy Redis data in /config/dump.rdb - starting Redis temporarily for a one-time import"
+    /redis/redis-server --dir /config --bind 127.0.0.1 --save "" --appendonly no --daemonize yes
+    export REDIS_IMPORT_HOST=127.0.0.1
+    export REDIS_IMPORT_SHUTDOWN=true
 fi
 
 PUID=${PUID:-1000}
@@ -45,6 +49,10 @@ if [ -n "$LOG_DIR" ] && [ -d "$LOG_DIR" ]; then
 else
     echo "LOG_DIR is not set or does not exist"
     exit 1
+fi
+
+if [ -d /config ]; then
+    chown -R "${EXISTING_USER}":"${GROUPNAME}" /config || { echo "Failed to change ownership of /config to ${PUID}:${PGID}"; exit 1; }
 fi
 
 find /app -name "node_modules" -prune -o \! -user "$PUID" \! -group "$PGID" -exec chown "${EXISTING_USER}":"${GROUPNAME}" {} +

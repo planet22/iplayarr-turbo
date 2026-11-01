@@ -10,6 +10,8 @@ export const pipPlayerState = reactive({
     status: 'loading', // 'loading' | 'playing' | 'pip' | 'error'
     errorMessage: null,
     live: false, // a BBC live channel (pid is a channel id, not a programme pid)
+    version: '', // '' (standard) or a version id (audio-described, signed) being played
+    versions: [], // the other versions this programme has, [{ id, name }], for switching in the player
 });
 
 // Bumped on every play()/close() so a stale async callback from a previous request (e.g. an HLS
@@ -17,15 +19,15 @@ export const pipPlayerState = reactive({
 // that belongs to a newer request.
 let requestId = 0;
 
-export function playInPip(pid, title, live = false) {
+export function playInPip(pid, title, live = false, version = '', versions = []) {
     requestId += 1;
-    Object.assign(pipPlayerState, { pid, title, status: 'loading', errorMessage: null, live });
+    Object.assign(pipPlayerState, { pid, title, status: 'loading', errorMessage: null, live, version, versions });
     return requestId;
 }
 
 export function closePip() {
     requestId += 1;
-    Object.assign(pipPlayerState, { pid: null, title: null, status: 'loading', errorMessage: null, live: false });
+    Object.assign(pipPlayerState, { pid: null, title: null, status: 'loading', errorMessage: null, live: false, version: '', versions: [] });
 }
 
 export function currentPipRequestId() {

@@ -3,8 +3,9 @@ import { Request, Response, Router } from 'express';
 import streamSessionService from '../../service/stream/streamSessionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { StreamSession } from '../../types/StreamSession';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/', async (_: Request, res: Response) => {
     const active: StreamSession[] = streamSessionService.getActive();

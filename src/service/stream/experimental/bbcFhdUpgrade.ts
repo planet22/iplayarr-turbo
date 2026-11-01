@@ -107,5 +107,12 @@ export async function attemptFhdUpgrade(
         return undefined;
     }
 
+    // Beyond get_iplayer's own checks (borrowed from the Beeb player): an HLS body must really be a
+    // playlist, and an encrypted one (FairPlay/SAMPLE-AES) is unplayable here - better to fall back
+    // to the 720p ladder up front than to hand the player a stream that fails mid-playback.
+    if (isHls && (!body.trimStart().startsWith('#EXTM3U') || /METHOD=SAMPLE-AES|skd:\/\//.test(body))) {
+        return undefined;
+    }
+
     return candidateUrl;
 }

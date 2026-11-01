@@ -49,6 +49,21 @@ describe('Statistics Routes', () => {
         });
     });
 
+    describe('DELETE /searchHistory/term', () => {
+        it('removes the term', async () => {
+            const res = await request(expressApp).delete('/searchHistory/term?term=Doctor%20Who');
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ status: true });
+            expect(statisticsService.removeSearchTerm).toHaveBeenCalledWith('Doctor Who');
+        });
+
+        it('rejects a missing term', async () => {
+            const res = await request(expressApp).delete('/searchHistory/term');
+            expect(res.status).toBe(400);
+            expect(statisticsService.removeSearchTerm).not.toHaveBeenCalled();
+        });
+    });
+
     describe('GET /grabHistory', () => {
         it('returns grab history', async () => {
             const history = ['grab1', 'grab2'];
@@ -77,18 +92,6 @@ describe('Statistics Routes', () => {
             const res = await request(expressApp).get('/uptime');
             expect(res.status).toBe(200);
             expect(res.body).toEqual({ uptime });
-        });
-    });
-
-    describe('GET /cacheSizes', () => {
-        it('returns cacheSizes', async () => {
-            const cacheSizes = { search: 100, schedule: 500 };
-
-            (statisticsService.getCacheSizes as jest.Mock).mockReturnValue(cacheSizes);
-
-            const res = await request(expressApp).get('/cacheSizes');
-            expect(res.status).toBe(200);
-            expect(res.body).toEqual(cacheSizes);
         });
     });
 });

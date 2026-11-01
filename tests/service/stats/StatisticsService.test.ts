@@ -1,12 +1,9 @@
-import RedisCacheService from '../../../src/service/redis/redisCacheService';
-import { redis } from '../../../src/service/redis/redisService';
+import { dbReady, prisma } from '../../../src/service/db/prismaService';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 import { GrabHistoryEntry } from '../../../src/types/data/GrabHistoryEntry';
 import { SearchHistoryEntry } from '../../../src/types/data/SearchHistoryEntry';
 import { VideoType } from '../../../src/types/IPlayerSearchResult';
 import { FixedFIFOQueue } from '../../../src/types/utils/FixedFIFOQueue';
-
-jest.mock('../../../src/service/redis/redisService');
 
 describe('statisticsService', () => {
     // Clear history before each test run
@@ -87,6 +84,18 @@ describe('statisticsService', () => {
         expect(history).toHaveLength(0); // History should be empty
     });
 
+    it('removeSearchTerm drops UI searches for the term but keeps app searches', async () => {
+        await statisticsService.addSearch({ term: 'Doctor Who', results: 1, time: 1 });
+        await statisticsService.addSearch({ term: ' doctor who ', results: 2, time: 2 });
+        await statisticsService.addSearch({ term: 'Doctor Who', results: 3, time: 3, appId: 'sonarr' });
+        await statisticsService.addSearch({ term: 'Other', results: 4, time: 4 });
+
+        await statisticsService.removeSearchTerm('doctor who');
+
+        const history = await statisticsService.getSearchHistory();
+        expect(history.map(({ term, appId }) => [term, appId])).toEqual([['Doctor Who', 'sonarr'], ['Other', undefined]]);
+    });
+
     it('should add items to the grab history queue', async () => {
         const entry1: GrabHistoryEntry = { pid: 'test1', nzbName: 'test1', time: 1, type: VideoType.TV };
         const entry2: GrabHistoryEntry = { pid: 'test2', nzbName: 'test2', time: 1, type: VideoType.TV };
@@ -154,20 +163,21 @@ describe('statisticsService', () => {
         expect(history).toHaveLength(0); // History should be empty
     });
 
-    it('setUptime stores current timestamp in Redis', async () => {
+    it('setUptime stores current timestamp in the database', async () => {
         const now = 100;
-        jest.spyOn(global.Date, 'now').mockReturnValueOnce(now);
+        jest.spyOn(global.Date, 'now').mockReturnValue(now);
 
         await statisticsService.setUptime();
 
-        expect(redis.set).toHaveBeenCalledWith('iplayarr_uptime', now);
+        expect((await prisma.keyValue.findUnique({ where: { key: 'iplayarr_uptime' } }))?.value).toBe('100');
     });
 
     it('getUptime returns difference between now and stored uptime', async () => {
         const now = 50000;
         const past = now - 5000;
         jest.spyOn(global.Date, 'now').mockReturnValue(now);
-        (redis.get as jest.Mock).mockResolvedValue(past.toString());
+        await dbReady();
+        await prisma.keyValue.create({ data: { key: 'iplayarr_uptime', value: past.toString() } });
 
         const result = await statisticsService.getUptime();
 
@@ -175,33 +185,19 @@ describe('statisticsService', () => {
     });
 
     it('getUptime returns 0 if uptime is not set', async () => {
-        (redis.get as jest.Mock).mockResolvedValue(null);
-
         const result = await statisticsService.getUptime();
 
         expect(result).toBe(0);
     });
+});
 
-    describe('RedisCacheService.getCacheSizes', () => {
-        it('returns the correct cache sizes for search and schedule', async () => {
-            const getCacheSizeInMBSpy = jest
-                .spyOn(RedisCacheService, 'getCacheSizeInMB')
-                .mockImplementation((patterns: string[]) => {
-                    if (patterns.includes('search_cache_*')) return Promise.resolve('1.23');
-                    if (patterns.includes('schedule_cache_*')) return Promise.resolve('4.56');
-                    return Promise.resolve('0.00');
-                });
-
-            const sizes = await statisticsService.getCacheSizes();
-
-            expect(sizes).toEqual({
-                search: '1.23',
-                schedule: '4.56'
-            })
-
-            expect(getCacheSizeInMBSpy).toHaveBeenCalledTimes(2);
-            expect(getCacheSizeInMBSpy).toHaveBeenCalledWith(['search_cache_*']);
-            expect(getCacheSizeInMBSpy).toHaveBeenCalledWith(['schedule_cache_*']);
-        });
+describe('statisticsService failed grab history', () => {
+    it('clears the failed grab history and tells clients', async () => {
+        const clear = jest.spyOn(statisticsService.failedGrabHistory, 'clear').mockResolvedValue(undefined as any);
+        const get = jest.spyOn(statisticsService, 'getFailedGrabHistory').mockResolvedValue([]);
+        await statisticsService.clearFailedGrabHistory();
+        expect(clear).toHaveBeenCalled();
+        expect(get).toHaveBeenCalled();
+        jest.restoreAllMocks();
     });
 });

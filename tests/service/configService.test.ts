@@ -1,6 +1,7 @@
 
 import searchFacade from '../../src/facade/searchFacade';
-import configService from '../../src/service/configService';
+import configService, { encryptStoredSettings } from '../../src/service/configService';
+import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 
 jest.mock('../../src/facade/searchFacade', () => ({
@@ -48,7 +49,34 @@ describe('configService', () => {
 
   it('returns parameter from default config', async () => {
     const result = await configService.getParameter(IplayarrParameter.ACTIVE_LIMIT);
-    expect(result).toBe('3');
+    expect(result).toBe('4');
+  });
+
+  it('ships the chosen out-of-the-box defaults', () => {
+    expect(configService.defaultConfigMap).toMatchObject({
+      ACTIVE_LIMIT: '4',
+      RELEASE_LANGUAGE: 'english',
+      NATIVE_SEARCH_ENGINE: 'V2',
+      STREAM_SUBTITLES: 'true',
+      STREAM_LIVE_DASH_1080: 'true',
+      LIVE_TV_ENABLED: 'true',
+      STRM_WATCHDOG_ENABLED: 'true',
+      UI_CHANNEL_TOOLS: 'true',
+      UI_QUALITY_BADGES: 'true',
+      UI_VERSION_BADGES: 'true',
+      UI_SUBTITLE_BADGES: 'true',
+    });
+  });
+
+  it('clamps an out-of-range stored whole-number setting into its validated range', async () => {
+    mockStorage['config'] = { [IplayarrParameter.ACTIVE_LIMIT]: '17', [IplayarrParameter.RSS_FEED_HOURS]: '0' };
+    expect(await configService.getParameter(IplayarrParameter.ACTIVE_LIMIT)).toBe('10');
+    expect(await configService.getParameter(IplayarrParameter.RSS_FEED_HOURS)).toBe('1');
+  });
+
+  it('leaves a non-numeric whole-number setting alone for the validator to reject', async () => {
+    mockStorage['config'] = { [IplayarrParameter.ACTIVE_LIMIT]: 'abc' };
+    expect(await configService.getParameter(IplayarrParameter.ACTIVE_LIMIT)).toBe('abc');
   });
 
   it('returns multiple parameters', async () => {
@@ -86,6 +114,39 @@ describe('configService', () => {
     expect(searchFacade.clearSearchCache).toHaveBeenCalled();
   });
 
+  it('clears search cache when NATIVE_SEARCH_V2_EXPAND_COLLECTIONS changes', async () => {
+    mockStorage['config'] = {
+      [IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS]: 'false',
+    };
+    await configService.setParameter(IplayarrParameter.NATIVE_SEARCH_V2_EXPAND_COLLECTIONS, 'true');
+    expect(searchFacade.clearSearchCache).toHaveBeenCalled();
+  });
+
+  it('clears search cache when NATIVE_SEARCH_V2_COLLECTION_NAMES changes', async () => {
+    mockStorage['config'] = {
+      [IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES]: 'false',
+    };
+    await configService.setParameter(IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES, 'true');
+    expect(searchFacade.clearSearchCache).toHaveBeenCalled();
+  });
+
+  it('does not clear search cache for BROWSE_SHOW_COLLECTIONS', async () => {
+    mockStorage['config'] = {};
+    await configService.setParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS, 'true');
+    expect(searchFacade.clearSearchCache).not.toHaveBeenCalled();
+  });
+
+  it('defaults Show Collections on and the other collection settings off', () => {
+    expect(configService.defaultConfigMap).toMatchObject({
+      NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'false',
+      NATIVE_SEARCH_V2_COLLECTION_NAMES: 'false',
+      BROWSE_SHOW_COLLECTIONS: 'true',
+      BROWSE_COLLECTION_SOURCES: 'all',
+      MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'inherit',
+      MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'inherit',
+    });
+  });
+
   it('does not clear search cache when NATIVE_SEARCH is unchanged', async () => {
     mockStorage['config'] = {
       [IplayarrParameter.NATIVE_SEARCH]: 'true',
@@ -101,5 +162,23 @@ describe('configService', () => {
     const config = await configService.getAllConfig();
     expect(config.DEBUG).toBe('true');
     expect(config.REFRESH_SCHEDULE).toBe('0 * * * *');
+  });
+
+  describe('AIRDATE_NUMBERING changes', () => {
+    it('clears the computed details and search cache only when the value really changes', async () => {
+      const clear = jest.spyOn(episodeDetailsCache, 'clear').mockResolvedValue(undefined as any);
+      await configService.setParameter(IplayarrParameter.AIRDATE_NUMBERING, 'true');
+      expect(clear).toHaveBeenCalledTimes(1);
+      expect(searchFacade.clearSearchCache).toHaveBeenCalledTimes(1);
+
+      await configService.setParameter(IplayarrParameter.AIRDATE_NUMBERING, 'true');
+      expect(clear).toHaveBeenCalledTimes(1);
+      clear.mockRestore();
+    });
+  });
+
+  it('leaves nothing to encrypt when no settings are stored', async () => {
+    await encryptStoredSettings();
+    expect(mockStorage['config']).toBeUndefined();
   });
 });

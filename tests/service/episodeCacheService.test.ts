@@ -156,4 +156,41 @@ describe('episodeCacheService', () => {
         await episodeCacheService.recacheSeries(series);
         expect(series.cacheRefreshed).toBeInstanceOf(Date);
     });
+
+    describe('sparse data', () => {
+        it('returns nothing for a term that sanitises to empty', async () => {
+            expect(await episodeCacheService.searchEpisodeCache('+-')).toEqual([]);
+        });
+
+        it('returns nothing for a term with no cache entry', async () => {
+            expect(await episodeCacheService.getEpisodeCache('no-such-term')).toEqual([]);
+        });
+
+        it('stores results without a channel, broadcast date or runtime', async () => {
+            (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockResolvedValue([
+                { title: 'Bare Show', pid: 'p1', episode: 1, series: 1 },
+            ]);
+            expect(await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/bare')).toBe(true);
+
+            const [result] = await episodeCacheService.searchEpisodeCache('bare');
+            expect(result).toMatchObject({ channel: '', size: undefined, runtimeSeconds: undefined });
+            expect(result.pubDate).toBeUndefined();
+        });
+    });
+});
+
+describe('episodeCacheService with several series in a brand', () => {
+    it('lists the episodes of each series', async () => {
+        (iplayerDetailsService.findBrandForUrl as jest.Mock).mockResolvedValue('b0brand');
+        (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockImplementation(async (pid: string) =>
+            pid === 'b0brand'
+                ? [{ id: 's1', type: 'series' }, { id: 's2', type: 'series' }]
+                : [{ id: `${pid}-ep`, type: 'episode', release_date_time: '2020-01-01' }]
+        );
+        (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockResolvedValue([{ title: 'Multi Show', pid: 'x', runtime: 30 }]);
+
+        expect(await episodeCacheService.cacheEpisodesForUrl('https://www.bbc.co.uk/programmes/b0brand')).toBe(true);
+        expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledWith('s1');
+        expect(iplayerDetailsService.getSeriesEpisodes).toHaveBeenCalledWith('s2');
+    });
 });

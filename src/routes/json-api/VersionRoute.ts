@@ -2,8 +2,9 @@ import { Request, Response, Router } from 'express';
 
 import versionService from '../../service/versionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 router.get('/', async (_: Request, res: Response) => {
     res.json(await versionService.getVersionInfo());

@@ -33,9 +33,13 @@ export function extractArrErrorMessage(error: unknown): string {
 }
 
 export class V3ArrService implements AbstractArrService {
+    // The only place a service names its API version. A new version is a subclass that sets this
+    // (and overrides whatever payloads differ), registered in ArrServiceDirectory.
+    readonly apiVersion: string = 'v3';
+
     async search(app: App, term?: string): Promise<ArrLookupResponse[]> {
         const endpoint: string = app.type == AppType.SONARR ? 'series' : 'movie';
-        const url: string = `${this.getApiUrl(app)}/${endpoint}${term ? `/lookup?term=${term}` : ''}`;
+        const url: string = `${this.getApiUrl(app)}/${endpoint}${term ? `/lookup?term=${encodeURIComponent(term)}` : ''}`;
 
         try {
             const response = await axios.get(url, {
@@ -259,7 +263,7 @@ export class V3ArrService implements AbstractArrService {
     }
 
     getApiUrl(app: App): string {
-        return `${app.url}/api/v3`;
+        return `${app.url}/api/${this.apiVersion}`;
     }
 
     async upsertDownloadClient(form: CreateDownloadClientForm, app: App, allowCreate: boolean = true): Promise<number> {
@@ -267,6 +271,14 @@ export class V3ArrService implements AbstractArrService {
 
         const tags = await this.getTagDefsForForm(app, form.tags);
         const createDownloadClientRequest = this.createDownloadClientRequestObject(form, tags);
+
+        // The skeleton uses Sonarr's field names; Radarr's SABnzbd priorities are named for movies.
+        if (app.type == AppType.RADARR) {
+            const radarrNames: Record<string, string> = { recentTvPriority: 'recentMoviePriority', olderTvPriority: 'olderMoviePriority' };
+            createDownloadClientRequest.fields = createDownloadClientRequest.fields.map((field) =>
+                field.name && radarrNames[field.name] ? { ...field, name: radarrNames[field.name] } : field
+            );
+        }
 
         //Find an existing one
         try {

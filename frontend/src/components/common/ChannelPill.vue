@@ -1,6 +1,6 @@
 <template>
     <span v-if="channel" :class="['pill', 'channelPill', channelPillClass(channel)]" :style="pillStyle(channel)">
-        <slot />{{ channel }}
+        <slot />{{ channelLabel(channel) }}
     </span>
 </template>
 
@@ -8,7 +8,7 @@
 import { defineProps } from 'vue';
 
 import { channelPillClass } from '@/lib/browse';
-import { useChannelPillColors } from '@/lib/channelPillColors';
+import { channelLabel, useChannelPillColors } from '@/lib/channelPillColors';
 
 defineProps({
     channel: {

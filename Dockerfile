@@ -12,23 +12,32 @@ RUN apk add --no-cache python3 make g++
 FROM base AS deps
 WORKDIR /app
 COPY package*.json ./
-COPY frontend/package*.json ./frontend/
-RUN npm run install:both
+COPY frontend/package.json ./frontend/
+RUN npm ci
+# The Prisma client is generated into node_modules, so every stage that installs deps needs this.
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npx prisma generate
 
-# ---- build: compile backend (tsc) and frontend (vue-cli-service) ----
+# ---- build: compile backend (tsc) and frontend (vite) ----
 FROM deps AS build
 COPY . .
 RUN npm run build:both
 
 # ---- prod-deps: production-only backend node_modules for the runtime image ----
 # Frontend has no runtime deps of its own - it ships as static files from the build
-# stage - so this only ever installs the backend's package.json.
+# stage - so --workspaces=false installs only the backend's dependencies. The frontend
+# manifest is still copied because the lockfile covers the whole workspace.
 FROM base AS prod-deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev
+COPY frontend/package.json ./frontend/
+RUN npm ci --omit=dev --workspaces=false
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npx prisma generate
 
-# ---- redis: source of the bundled redis-server binary ----
+# ---- redis: only used to import data from older versions that stored it in Redis ----
 FROM redis:8-alpine3.23 AS redis
 
 # ---- runtime-base: everything the app needs to run, shared by both the dev and
@@ -36,6 +45,8 @@ FROM redis:8-alpine3.23 AS redis
 # one thing that differs between them.
 FROM node:24-alpine3.24 AS runtime-base
 
+# font-dejavu: the live channel logos/posters carry text that sharp (librsvg) rasterises, and Alpine has no
+# fonts by default - without one the text renders as empty boxes.
 RUN apk --update add \
     ffmpeg \
     openssl \
@@ -45,7 +56,8 @@ RUN apk --update add \
     perl-xml-libxml \
     su-exec \
     python3 \
-    tzdata
+    tzdata \
+    font-dejavu
 
 # atomicparsley still isn't packaged in any stable Alpine release, only edge/testing,
 # so it needs its own apk invocation - keeping --allow-untrusted scoped to just this
@@ -68,6 +80,7 @@ RUN wget -qO- https://github.com/get-iplayer/get_iplayer/archive/v${GET_IPLAYER_
 ENV GET_IPLAYER_EXEC=/iplayer/get_iplayer
 ENV STORAGE_LOCATION=/node-persist
 ENV CACHE_LOCATION=/data
+ENV DATABASE_URL=file:/config/iplayarr.db
 
 WORKDIR /ytdlp
 
@@ -76,7 +89,8 @@ RUN wget -q https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && 
 
 ENV YTDLP_EXEC=/ytdlp/yt-dlp
 
-# Copy Redis binary from the Redis Alpine image
+# Redis binary: kept solely so docker_entry.sh can read an old /config/dump.rdb once, for the
+# one-time import into SQLite. Nothing runs Redis during normal operation any more.
 WORKDIR /redis
 COPY --from=redis /usr/local/bin/redis-server /redis/redis-server
 RUN chmod +x /redis/redis-server

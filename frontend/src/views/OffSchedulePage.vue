@@ -1,15 +1,16 @@
 <template>
     <div class="inner-content">
-        <PageHeader title="Off Schedule" />
-        <p>
+        <PageHeader title="Off Schedule" icon="calendar-plus" />
+        <SettingsPageToolbar :icons="[]" />
+        <InfoBar small>
             By default, only media broadcast in the last 30 days is returned, to extend this, you need to index specific
             iPlayer URLs
-        </p>
+        </InfoBar>
         <ListEditor
             v-slot="{ item }"
             :items="cacheDefinitions"
             :actions="[
-                ['refresh', refreshCacheDefinition],
+                ['refresh', refreshCacheDefinition, (def) => refreshingIds.has(def.id)],
                 ['trash', remove],
             ]"
             @create="openForm"
@@ -29,12 +30,14 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRouter } from 'vue-router';
 
+import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import OffScheduleForm from '@/components/modals/OffScheduleForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
@@ -42,6 +45,7 @@ import { deepCopy } from '@/lib/utils';
 
 const cacheDefinitions = ref([]);
 const router = useRouter();
+const refreshingIds = reactive(new Set());
 
 const refreshCacheDefinitions = async () => {
     cacheDefinitions.value = (await ipFetch('json-api/offSchedule')).data;
@@ -55,11 +59,13 @@ const openForm = (cacheDef) => {
         attrs: {
             inputObj: deepCopy(cacheDef),
             action: cacheDef ? 'Edit' : 'Create',
-            onSave: async (form, success) => {
+            onSave: async (form, success, failed) => {
                 const result = await saveCacheDefinition(form);
-                if (result) {
+                if (result.ok) {
                     formModal.close();
                     success();
+                } else {
+                    failed(result.errors);
                 }
             },
         },
@@ -69,7 +75,7 @@ const openForm = (cacheDef) => {
 
 const remove = async ({ id }) => {
     if (
-        await dialogService.confirm('Delete Cache Definition', 'Are you sure you want to delete this Cache Definition?')
+        await dialogService.confirm('Delete Cache Definition', 'Are you sure you want to delete this Cache Definition?', undefined, { danger: true, confirmLabel: 'Delete' })
     ) {
         await ipFetch('json-api/offSchedule', 'DELETE', { id });
         refreshCacheDefinitions();
@@ -81,16 +87,20 @@ const saveCacheDefinition = async (form) => {
     const response = await ipFetch('json-api/offSchedule', method, form);
     if (response.ok) {
         refreshCacheDefinitions();
-        return true;
+        return { ok: true };
     } else {
-        dialogService.alert('Validation Error', response.data.invalid_fields?.url);
-        return false;
+        return { ok: false, errors: response.data.invalid_fields ?? { url: response.data.message } };
     }
 };
 
 const refreshCacheDefinition = async (def) => {
     if (await dialogService.confirm('Refresh Cache', `Are you sure you want to refresh the cache for ${def.name}?`)) {
-        await ipFetch('json-api/offSchedule/refresh', 'POST', def);
+        refreshingIds.add(def.id);
+        try {
+            await ipFetch('json-api/offSchedule/refresh', 'POST', def);
+        } finally {
+            refreshingIds.delete(def.id);
+        }
         if (await dialogService.confirm('Show Results?', `Show Results for ${def.name}?`)) {
             router.push(`/search?searchTerm=${def.name}`);
         }

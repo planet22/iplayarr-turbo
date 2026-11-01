@@ -15,6 +15,24 @@ With `WRITE_NFO_STRM` enabled, each completed item gets a matching Jellyfin/Kodi
 
 Jellyfin reads this natively on a library scan — no plugin needed. Despite the setting's name, this isn't limited to `.strm` mode; it writes NFO for any completed download when enabled, full file or `.strm` pointer alike.
 
+## Collections (BoxSets)
+
+**Download collection** on an open collection (Browse → Collections) queues every film and episode in it through the normal queue; with Media Mode `strm` that is a folder of `.strm` links. With **Group the films as a Jellyfin collection** ticked (the default) each film goes under a `<Collection> [boxset]` folder, which is how Jellyfin is told to gather the films inside into one collection:
+
+```
+Fright Night [boxset]/
+  Halloween/Halloween-BBCiPlayarrTurbo.strm
+  Halloween/Halloween-BBCiPlayarrTurbo.nfo
+  The Boogeyman/...
+```
+
+- Add `COMPLETE_DIR` as a **Movies** library (or a Mixed one) and run a library scan; a "Fright Night" collection appears under Collections. With `WRITE_NFO_STRM` on, each film's `.nfo` also names the collection (`<set>`), which Jellyfin can use when it is set to read NFO.
+- **TV episodes in a collection keep their normal `Show/Season NN/` folders**: a boxset folder inside a TV library would break it. Whole series or programmes listed in a collection are not expanded (they can be hundreds of episodes); download those from their own page.
+- This is a library, not a playlist: items play with seeking, subtitles and watched state like any other `.strm`. An M3U playlist would show them as Live TV channels in Jellyfin with none of that, so none is produced.
+- The `.strm` requirements and link signing below apply as usual.
+- Checked against a throwaway Movies library: all 34 films of Fright Night landed in one "Fright Night" BoxSet. A collection that mixes films with programmes (World Cinema Classics: 6 films, 9 documentary episodes) groups only the films into the BoxSet; the rest are filed as TV and a Movies library ignores them, so use a Mixed library or a TV library alongside. A first scan can take a few minutes. Deleting a library does not delete the BoxSet it made in Jellyfin, and **deleting a BoxSet in Jellyfin deletes its `[boxset]` folder (and the `.strm` files in it) from disk**, so only do that when you mean to.
+- A plain **Movies** library is enough, no Mixed library needed: the 34 films were `Movie` items and `PlaybackInfo` on one returned an HLS source with 3 streams and a ~100 minute runtime. A library with no content type (Mixed) behaved the same.
+
 ## `.strm` playback
 
 With `MEDIA_MODE=strm`, completed items are a small pointer file instead of the full media — Jellyfin's scanner sees it as a normal video file and resolves playback through iPlayarr on demand. Requirements:
@@ -22,6 +40,10 @@ With `MEDIA_MODE=strm`, completed items are a small pointer file instead of the 
 - Jellyfin must be able to reach iPlayarr at the address set in `STREAM_BASE_URL` (Settings → Streaming) — not `localhost`, unless Jellyfin and iPlayarr genuinely share a network namespace.
 - The link baked into each `.strm` file is signed with `STREAM_KEY`. If you regenerate the Stream Key, existing `.strm` files keep the old one and will fail to play until re-downloaded/regenerated.
 
+**Subtitles:** with `STREAM_SUBTITLES` on (Settings → Streaming), on-demand `.strm` items expose an English WebVTT subtitle track that Jellyfin extracts for its own subtitle menu, once Jellyfin has probed the item (items probed earlier need a metadata refresh). Jellyfin's **Live TV does not show subtitle tracks** from tuner channels, so live channels have no subtitles in Jellyfin. See [STREAMING.md](../STREAMING.md#subtitles).
+
 Live BBC channels can also be added as `.strm` entries (point a library at `LIVE_STRM_DIR`), and the [STRM Watchdog](../WATCHDOG.md) can use Jellyfin as a source (add it on the Apps page with a URL and API key) to find expired links.
+
+**Live TV and Live 1080p:** with `STREAM_LIVE_DASH_1080` on, live channels are 1080p HEVC. Jellyfin reads and transcodes that fine (a client that cannot decode HEVC gets a transcode, hardware-assisted if Jellyfin has VAAPI/QSV/NVENC set up). Jellyfin keeps one cached probe per Live TV channel (small `.json` files in `cache/mediainfo/` inside its config directory) and trusts it on later plays. After turning `STREAM_LIVE_DASH_1080` on or off, delete those files (or just a channel's) so Jellyfin probes the stream again. Otherwise Jellyfin assumes the old stream and passes it through unconverted, which a browser cannot play.
 
 See [STREAMING.md](../STREAMING.md) for the full setup, including the three stream client options (`STREAM_CLIENT`) and their tradeoffs.

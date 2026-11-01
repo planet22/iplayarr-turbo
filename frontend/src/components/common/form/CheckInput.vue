@@ -68,17 +68,37 @@ watch(
             margin-right: 5px;
             width: 20px;
             height: 20px;
-            border: 1px solid #ccc;
+            border: 1px solid @input-border-color;
             border-radius: 2px;
-            background-color: white;
+            background-color: @input-background-color;
             color: white;
             text-align: center;
             line-height: 20px;
+
+            // The tick is always in the markup; it is the white-on-dark box that makes it show, so hide it unless checked.
+            &:not(.CheckInput-isChecked) svg {
+                visibility: hidden;
+            }
 
             &.CheckInput-isChecked {
                 border-color: @primary-color;
                 background-color: @primary-color;
             }
+        }
+    }
+}
+
+// Phones: the ticking area is a 20px box, so the label around it grows into a fingertip-sized hit area.
+@media (max-width: @mobile-breakpoint) {
+    .CheckInput-container .CheckInput-label {
+        align-items: center;
+        justify-content: center;
+        min-width: 40px;
+        min-height: 40px;
+
+        .CheckInput-input {
+            flex: 0 0 20px;
+            margin: 0;
         }
     }
 }

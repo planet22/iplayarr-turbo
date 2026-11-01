@@ -11,10 +11,12 @@ import { AppType } from '../../types/AppType';
 import { FailedGrabEntry } from '../../types/data/FailedGrabEntry';
 import { QueueEntrySource } from '../../types/enums/QueueEntrySource';
 import { VideoType } from '../../types/IPlayerSearchResult';
+import { qualityProfiles } from '../../types/QualityProfiles';
 import { QueueLibraryMetadata } from '../../types/QueueEntry';
 import { NZBMetaEntry } from '../../types/responses/newznab/NZBFileResponse';
 import { VideoEventType } from '../../types/VideoEvent';
 import { isValidPid } from '../../utils/pathSafety';
+import { isVersionId } from '../../utils/versionContext';
 
 const parser = new Parser();
 
@@ -37,6 +39,10 @@ interface DetailsRejection {
 
 export default async (req: Request, res: Response) => {
     const { files } = req as any as AddFileRequest;
+    if (!Array.isArray(files) || files.length === 0) {
+        res.status(400).json({ status: false, error: 'No NZB file was sent' });
+        return;
+    }
     try {
         const pids: string[] = [];
         for (const file of files) {
@@ -45,6 +51,13 @@ export default async (req: Request, res: Response) => {
             if (!isValidPid(pid)) {
                 res.status(400).json({ status: false, error: 'Invalid programme id in NZB' });
                 return;
+            }
+            if (type !== undefined && !Object.values(VideoType).includes(type)) {
+                res.status(400).json({ status: false, error: 'Invalid type in NZB' });
+                return;
+            }
+            if (appId) {
+                await appService.touchApp(appId);
             }
             // This endpoint only ever receives files from the SABnzbd-compatible protocol
             // (Sonarr/Radarr/Prowlarr handing off a grab) - the one legitimate NZB source.
@@ -132,6 +145,8 @@ async function getDetails(xml: string): Promise<NZBDetails> {
                     channel: findMeta('channel'),
                     pubDate: findMeta('pubDate'),
                     runtimeSeconds: findMeta('runtime') != null ? parseInt(findMeta('runtime') as string) : undefined,
+                    quality: qualityProfiles.some(({ id }) => id === findMeta('quality')) ? findMeta('quality') : undefined,
+                    version: isVersionId(findMeta('version')) ? findMeta('version') : undefined,
                 }
                 : undefined;
 

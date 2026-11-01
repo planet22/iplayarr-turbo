@@ -1,9 +1,20 @@
 import { Request, Response, Router } from 'express';
 
+import { isUhdEventFeed, OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
 import browseService from '../../service/browseService';
+import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
+import collectionDownloadService from '../../service/collectionDownloadService';
+import collectionService from '../../service/collectionService';
+import configService from '../../service/configService';
+import liveChannelService from '../../service/liveChannelService';
+import { MediaMode } from '../../types/enums/MediaMode';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
+import { asyncRouter } from '../../utils/asyncRouter';
+import { failureResponse } from '../../utils/upstreamError';
+import { addAvailableVersions } from '../../utils/videoVersion';
 
-const router = Router();
+const router: Router = asyncRouter();
 
 const ID_REGEX = /^[a-z0-9_-]+$/i;
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
@@ -25,16 +36,90 @@ const handle =
         try {
             await fn(req, res);
         } catch (error: any) {
-            res.status(500).json({
-                error: ApiError.INTERNAL_ERROR,
-                message: error?.message || 'Browse request failed',
-            } as ApiResponse);
+            const { status, body } = failureResponse(error, 'Browse request failed');
+            res.status(status).json(body);
         }
     };
 
 router.get('/home', handle(async (_, res) => res.json(await browseService.home())));
 
-router.get('/categories', handle(async (_, res) => res.json(await browseService.categories())));
+router.get(
+    '/categories',
+    handle(async (_, res) => {
+        const featured = await categoryDiscoverService.list();
+        res.json((await browseService.categories()).map((c) => ({ ...c, discover: featured.includes(c.id) })));
+    })
+);
+
+// Feature a category as a rail on Discover (or take it off); capped, see categoryDiscoverService.
+router.put(
+    '/categories/:id/discover',
+    handle(async (req, res) => {
+        const id = req.params.id as string;
+        const { enabled } = req.body ?? {};
+        if (!ID_REGEX.test(id)) return invalid(res, 'Invalid category id');
+        if (typeof enabled !== 'boolean') return invalid(res, 'enabled must be true or false');
+        try {
+            res.json(await categoryDiscoverService.set(id, enabled));
+        } catch (error: any) {
+            if (error instanceof CategoryDiscoverError) return invalid(res, error.message);
+            throw error;
+        }
+    })
+);
+
+// The audio described / signed versions of some episodes ({ pid: ids }), asked for in the background by the
+// programme page when it shows those badges. The BBC's answer is cached a day, so a repeat costs nothing.
+router.get(
+    '/versions',
+    handle(async (req, res) => {
+        const pids = String(req.query.pids ?? '').split(',').filter(Boolean);
+        if (pids.length === 0 || pids.length > MAX_DETAIL_PIDS || !pids.every((pid) => PID_REGEX.test(pid))) return invalid(res, 'pids must be a list of programme ids');
+        const found = await addAvailableVersions<{ pid: string; versions?: string[] }>(pids.map((pid) => ({ pid })));
+        res.json(Object.fromEntries(found.map(({ pid, versions }) => [pid, versions ?? []])));
+    })
+);
+
+// The iPlayer collections for the Discover page. On by default (BROWSE_SHOW_COLLECTIONS); when switched off nothing is fetched.
+router.get(
+    '/collections',
+    handle(async (_, res) => {
+        const enabled = (await configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS)) === 'true';
+        res.json({ enabled, collections: enabled ? await collectionService.list() : [] });
+    })
+);
+
+router.get(
+    '/collections/:id',
+    handle(async (req, res) => {
+        const id = req.params.id as string;
+        if (!ID_REGEX.test(id)) return invalid(res, 'Invalid collection id');
+        res.json(await browseService.collection(id, toInt(req.query.page), toInt(req.query.perPage)));
+    })
+);
+
+// Queues every title in a collection (see collectionDownloadService). { dryRun: true } only counts them.
+router.post(
+    '/collections/:id/download',
+    handle(async (req, res) => {
+        const id = req.params.id as string;
+        if (!ID_REGEX.test(id)) return invalid(res, 'Invalid collection id');
+        // No body at all means the defaults; a list or other non-object is a mistake, never a request to queue everything.
+        const body = req.body ?? {};
+        if (typeof body !== 'object' || Array.isArray(body)) return invalid(res, 'The body must be a JSON object');
+        const { media, boxset, dryRun } = body;
+        if (media !== undefined && !Object.values(MediaMode).includes(media)) return invalid(res, 'media must be "strm" or "download"');
+        for (const [name, value] of Object.entries({ boxset, dryRun })) {
+            if (value !== undefined && typeof value !== 'boolean') return invalid(res, `${name} must be true or false`);
+        }
+        const result = await collectionDownloadService.queueCollection(id, { media, boxset, dryRun });
+        if (!result) {
+            res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such collection' } as ApiResponse);
+            return;
+        }
+        res.json(result);
+    })
+);
 
 router.get(
     '/suggest',
@@ -63,7 +148,26 @@ router.get(
     })
 );
 
-router.get('/channels', (_, res) => res.json(browseService.channels()));
+// A channel switched off in Settings > Live Channels is no longer offered for live viewing.
+router.get(
+    '/channels',
+    handle(async (_, res) => {
+        const channels = browseService.channels();
+        // Every live channel in the user's order, switched off ones included (the page hides them unless
+        // arranging) so a disabled channel keeps its place.
+        const settings = await liveChannelService.list();
+        const byId = new Map(channels.map((channel) => [channel.id, channel]));
+        res.json(
+            settings.map(({ id, title, logo, vpid, optional, enabled, discover, ...look }) => {
+                const channel = byId.get(id);
+                // look: the user's name/colour/logo/number overrides and custom-channel details, if any.
+                return channel
+                    ? { ...channel, title, ...(look.customised && { logo }), vpid, enabled, discover, live: channel.live && enabled, ...look }
+                    : { id, title, logo, vpid, enabled, discover, live: enabled, liveOnly: optional || look.custom, ...look };
+            })
+        );
+    })
+);
 
 router.get(
     '/channel-logo/:file',
@@ -103,7 +207,46 @@ router.get(
     handle(async (req, res) => {
         const id = req.params.id as string;
         if (!ID_REGEX.test(id)) return invalid(res, 'Invalid channel id');
-        res.json(await browseService.channel(id));
+        // The user's own channels have a page of their own, but no schedule or programmes.
+        const own = (await liveChannelService.list()).find((c) => c.id === id && c.custom);
+        if (own) {
+            res.json({ channel: { id, title: own.title, logo: own.logo, live: own.enabled, liveOnly: true }, rails: [] });
+            return;
+        }
+        // The optional nations/regions are not in iPlayer's channel list, but most have their own schedule
+        // and programmes there; whatever a feed lacks is filled from its parent national channel.
+        const extra = (await liveChannelService.list()).find((c) => c.id === id && c.optional);
+        if (extra) {
+            const def = OptionalLiveChannels.find((c) => c.id === id) as OptionalLiveChannel;
+            // Event feeds have no schedule or programmes, so nothing is borrowed from the parent channel.
+            if (isUhdEventFeed(id)) {
+                res.json({
+                    channel: { id, title: extra.title, logo: extra.logo, live: extra.enabled, liveOnly: true },
+                    rails: [],
+                });
+                return;
+            }
+            const own = await browseService.channel(def.iblId).catch(() => undefined);
+            const hasNowNext = !!(own?.nowNext?.now || own?.nowNext?.next);
+            const parent =
+                own?.rails.length && hasNowNext ? undefined : await browseService.channel(def.parentId).catch(() => undefined);
+            res.json({
+                channel: { id, title: extra.title, logo: extra.logo, live: extra.enabled, liveOnly: true },
+                rails: own?.rails.length ? own.rails : (parent?.rails ?? []),
+                nowNext: hasNowNext ? own?.nowNext : parent?.nowNext,
+            });
+            return;
+        }
+        const result = await browseService.channel(id);
+        if (result.channel?.live && !(await liveChannelService.isEnabled(id))) {
+            result.channel = { ...result.channel, live: false };
+        }
+        // A name, colour, text or logo the user changed shows here too.
+        const restyled = result.channel && (await liveChannelService.list()).find((c) => c.id === id && c.customised);
+        if (result.channel && restyled) {
+            result.channel = { ...result.channel, title: restyled.title, logo: restyled.logo };
+        }
+        res.json(result);
     })
 );
 
@@ -119,13 +262,24 @@ router.get(
 router.get(
     '/details',
     handle(async (req, res) => {
-        const pids = String(req.query.pids ?? '')
+        const asked = String(req.query.pids ?? '')
             .split(',')
             .filter(Boolean);
-        if (pids.length === 0 || pids.length > MAX_DETAIL_PIDS || !pids.every((pid) => PID_REGEX.test(pid))) {
+        // Ids that are not programme pids (e.g. live channel ids) are dropped rather than failing the batch.
+        const pids = asked.filter((pid) => PID_REGEX.test(pid));
+        if (pids.length === 0 || asked.length > MAX_DETAIL_PIDS) {
             return invalid(res, `pids must be 1-${MAX_DETAIL_PIDS} comma-separated pids`);
         }
         res.json(await browseService.details(pids));
+    })
+);
+
+router.get(
+    '/markers/:pid',
+    handle(async (req, res) => {
+        const pid = req.params.pid as string;
+        if (!PID_REGEX.test(pid)) return invalid(res, 'Invalid pid');
+        res.json(await browseService.skipMarkers(pid));
     })
 );
 

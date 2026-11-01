@@ -5,20 +5,21 @@ Contributor-facing setup. See the main [README.md](../README.md#development-setu
 ## Prerequisites
 
 - Node.js — version pinned in `.node-version` (currently tracks Node 24, matching the Dockerfile's `node:24-alpine3.24`).
-- Docker — for a local Redis instance (`npm run serve:redis`). You can point at any other reachable Redis instead via `REDIS_HOST`/`REDIS_PORT` (see [REDIS.md](REDIS.md)).
+- Nothing else: the database is a SQLite file created automatically at `./config/iplayarr.db` (override with `DATABASE_URL`, see [DATABASE.md](DATABASE.md)). After changing `prisma/schema.prisma`, run `npm run prisma:generate` and update the matching statements in `src/service/db/prismaService.ts`.
 
 ## Setup
 
 ```bash
-npm run install:both   # installs deps for both / (backend) and /frontend
-npm run serve:redis    # starts Redis via docker-compose.redis.yml
+npm install   # one install at the root covers backend + the /frontend workspace
 npm run dev            # runs backend (nodemon) + frontend (vite dev server) concurrently, DEBUG=true
 ```
+
+npm workspaces link `frontend` into `node_modules` with a symlink, so run `npm install` on a local drive (or in WSL or a container). It fails with `EUNKNOWN ... symlink` on a mapped network share such as an SMB drive.
 
 - Frontend dev server: `http://localhost:8080`
 - Backend API: `http://localhost:4404`
 
-`DEBUG=true` (set automatically by `npm run dev`) enables permissive CORS and verbose request/response logging (`src/server.ts`), so the two dev servers on different ports/origins can talk to each other.
+`DEBUG=true` (set automatically by `npm run dev`) enables verbose request/response logging (`src/server.ts`). The Vite dev server proxies backend routes to :4404, so there is no CORS in dev.
 
 ## Module resolution: module-alias, not TS paths
 
@@ -40,7 +41,21 @@ npx jest path/to/File.test.ts                 # run a single test file
 npx jest -t "test name"                       # run tests matching a name
 ```
 
-Tests live under `tests/`, mirroring the `src/` directory structure (e.g. `src/facade/searchFacade.ts` → `tests/facade/searchFacade.test.ts`). Fixture JSON lives under `tests/data/`. Redis is mocked with `ioredis-mock` in tests — you don't need a real Redis instance running to run the test suite.
+Tests live under `tests/`, mirroring the `src/` directory structure (e.g. `src/facade/searchFacade.ts` → `tests/facade/searchFacade.test.ts`). Fixture JSON lives under `tests/data/`. Tests use a real throwaway SQLite file per Jest worker (`tests/setup.ts`), cleared before each test, so nothing external needs to run. Frontend helpers in `frontend/src/lib` (for example `downloadSummary`) have Jest tests too.
+
+## Smoke tests
+
+`smoke/` holds Playwright/HTTP scripts run against a live instance: `smoke.cjs` (read-only: API, Newznab/SABnzbd, browse, UI at desktop and phone widths), `smoke.cjs --write` (adds `reallife.cjs` and `uireal.cjs`: subscribes, queues, streams, changes and reverts settings), `settings.cjs` (every setting changed, read back and restored; fails if a setting has no entry) and `probes.cjs` (data quality, hostile input, SSRF guards, config races). `smoke/SMOKE_PROMPT.md` is a repeatable prompt for running the lot. `jellyfin.cjs` is an optional extra for dev instances with a Jellyfin server: it downloads a film collection as `.strm` links into a scratch folder, checks Jellyfin gathers them into a BoxSet and can probe a film, then removes what it made. It reads its settings (instance and Jellyfin URLs, Jellyfin API key, scratch folder as the apps and as this machine see it) from the environment or a `.env`, or asks when run in a terminal, and skips with exit code 2 without them; the logic is unit tested against a fake server in `tests/smoke/`.
+
+## Conventions worth knowing
+
+- **Async routes:** Express 4 ignores the promise an async handler returns, so a throw would leave the request hanging. `src/utils/asyncRouter.ts` wraps every json-api router and `ApiRoute` so rejections reach the error handler. Use it for new routers.
+- **Input validation:** `src/validators/ConfigFormValidator.ts` checks settings on save (allowed values, cron, URLs, ranges). When adding a setting, add its rule there and an entry in `smoke/settings.cjs`. Validators treat non-text input as missing (400).
+- **Release group:** `src/utils/releaseGroup.ts` owns `BBCiPlayarrTurbo` (`applyGroupToTemplate`, `applyGroupToName`, `templateGroupProblem`).
+- **Arr API versions:** each `AbstractArrService` subclass declares its `apiVersion` and `getApiUrl`; `ArrLibraryService` resolves URLs through `ArrServiceDirectory`. A new Sonarr/Radarr API version is a subclass plus one directory entry.
+- **Subscription detection:** `src/service/subscriptionDetectService.ts` scans Sonarr/Radarr for shows pointing at iPlayarr; finds are stored under the `subscription_detected` key and the daily `subscriptions-detect` task refreshes them. `src/service/appSeen.ts` stamps an app's last-seen time.
+- **Progress events:** subscription checks emit `subscriptionProgress` over Socket.IO.
+- **Reverse proxy:** `TRUST_PROXY` (`src/utils/trustProxy.ts`) sets Express's proxy trust so rate limits see real client addresses.
 
 ## Linting and formatting
 

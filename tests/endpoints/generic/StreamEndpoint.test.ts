@@ -11,6 +11,8 @@ import YTDLPStreamService from '../../../src/service/stream/YTDLPStreamService';
 import { StreamClient } from '../../../src/types/enums/StreamClient';
 import { StreamMode } from '../../../src/types/enums/StreamMode';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
+import { requestedQuality } from '../../../src/utils/qualityContext';
+import { requestedVersion } from '../../../src/utils/versionContext';
 
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn() } }));
@@ -57,7 +59,7 @@ describe('StreamEndpoint live channel routing', () => {
 
         expect(LiveStreamService.streamDirect).toHaveBeenCalledWith('bbc_one_london', req, res, 'sess');
         expect(GetIplayerStreamService.streamDirect).not.toHaveBeenCalled();
-        expect(streamSessionService.start).toHaveBeenCalledWith('bbc_one_london', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', { Quality: 'Live' }, {
+        expect(streamSessionService.start).toHaveBeenCalledWith('bbc_one_london', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', { Quality: 'Live', Subtitles: 'Off' }, {
             title: 'BBC One',
         });
     });
@@ -150,13 +152,14 @@ describe('StreamEndpoint live channel routing', () => {
 
             (streamSessionService.start as jest.Mock).mockClear();
             mockConfig({ [IplayarrParameter.STREAM_CLIENT]: StreamClient.NATIVE, [IplayarrParameter.STREAM_MODE]: StreamMode.DIRECT });
-            (configService.getParameters as jest.Mock).mockResolvedValue([undefined, 'true', 'true']);
+            (configService.getParameters as jest.Mock).mockResolvedValue([undefined, 'true', 'true', 'true']);
             await StreamEndpoint(makeReq('m0032yps'), makeRes());
             expect(NativeStreamService.streamDirect).toHaveBeenCalled();
             expect((streamSessionService.start as jest.Mock).mock.calls[0][4]).toEqual({
                 Quality: 'Adaptive',
                 'Quality Probe': 'On',
                 'FHD Upgrade': 'On',
+                Subtitles: 'On',
             });
         });
 
@@ -173,5 +176,78 @@ describe('StreamEndpoint live channel routing', () => {
             await StreamEndpoint(makeReq('m0032yps'), sent);
             expect(sent.status).not.toHaveBeenCalled();
         });
+    });
+});
+
+describe('StreamEndpoint ?quality override', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (configService.getParameter as jest.Mock).mockImplementation(async (param: IplayarrParameter) => {
+            if (param === IplayarrParameter.STREAM_CLIENT) return StreamClient.GET_IPLAYER;
+            if (param === IplayarrParameter.STREAM_MODE) return StreamMode.DIRECT;
+            if (param === IplayarrParameter.VIDEO_QUALITY) return 'fhd';
+            return undefined;
+        });
+        (configService.getParameters as jest.Mock).mockResolvedValue([]);
+    });
+
+    it('makes a valid ?quality visible to the stream backend and the session snapshot', async () => {
+        let seen: string | undefined;
+        (GetIplayerStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedQuality();
+        });
+        const req = { ...makeReq('m0026fkl'), query: { pid: 'm0026fkl', quality: 'sd' } };
+        await StreamEndpoint(req, makeRes());
+        expect(seen).toBe('sd');
+        expect((streamSessionService.start as jest.Mock).mock.calls[0][4]).toEqual({ 'Video Quality': 'SD' });
+    });
+
+    it('ignores an unknown ?quality', async () => {
+        let seen: string | undefined = 'unset';
+        (GetIplayerStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedQuality();
+        });
+        const req = { ...makeReq('m0026fkl'), query: { pid: 'm0026fkl', quality: '../../x' } };
+        await StreamEndpoint(req, makeRes());
+        expect(seen).toBeUndefined();
+    });
+});
+
+describe('StreamEndpoint ?version override', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (configService.getParameter as jest.Mock).mockImplementation(async (param: IplayarrParameter) => {
+            if (param === IplayarrParameter.STREAM_CLIENT) return StreamClient.GET_IPLAYER;
+            if (param === IplayarrParameter.STREAM_MODE) return StreamMode.DIRECT;
+            return undefined;
+        });
+        (configService.getParameters as jest.Mock).mockResolvedValue([]);
+    });
+
+    it('serves a valid ?version with the native client, whatever client is configured, and makes it visible to it', async () => {
+        let seen: string | undefined;
+        (NativeStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedVersion();
+        });
+        const req = { ...makeReq('m00336jl'), query: { pid: 'm00336jl', version: 'audio-described' } };
+        await StreamEndpoint(req, makeRes());
+
+        expect(seen).toBe('audio-described');
+        expect(NativeStreamService.streamDirect).toHaveBeenCalled();
+        expect(GetIplayerStreamService.streamDirect).not.toHaveBeenCalled();
+        expect((streamSessionService.start as jest.Mock).mock.calls[0][2]).toBe(StreamClient.NATIVE);
+    });
+
+    it('ignores an unknown ?version and keeps the configured client', async () => {
+        let seen: string | undefined = 'unset';
+        (GetIplayerStreamService.streamDirect as jest.Mock).mockImplementation(async () => {
+            seen = requestedVersion();
+        });
+        const req = { ...makeReq('m00336jl'), query: { pid: 'm00336jl', version: '../../x' } };
+        await StreamEndpoint(req, makeRes());
+
+        expect(seen).toBeUndefined();
+        expect(GetIplayerStreamService.streamDirect).toHaveBeenCalled();
+        expect(NativeStreamService.streamDirect).not.toHaveBeenCalled();
     });
 });

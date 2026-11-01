@@ -3,26 +3,35 @@
     <div class="main-layout">
         <LeftHandNav v-if="authState.user" ref="leftHandNav" @clear-search="clearSearch" />
         <div class="content">
+            <BackButton v-if="authState.user" />
             <RouterView />
         </div>
     </div>
     <ModalsContainer />
     <ConnectionLostOverlay />
+    <ToastHost />
+    <CommandPalette v-if="authState.user" ref="palette" />
     <PipPlayer v-if="authState.user" />
 </template>
 
 <script setup>
 import { io } from 'socket.io-client';
-import { inject, provide, ref, watch } from 'vue';
+import { computed, inject, provide, ref, watch } from 'vue';
 import { ModalsContainer } from 'vue-final-modal';
 import { RouterView } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { applyServerUiSettings } from '@/lib/serverUiSettings';
+import { useSubscriptions } from '@/lib/subscriptions';
+import { getBasePath } from '@/lib/utils';
 
+import BackButton from './components/common/BackButton.vue';
+import CommandPalette from './components/common/CommandPalette.vue';
 import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue';
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
 import PipPlayer from './components/common/PipPlayer.vue';
+import ToastHost from './components/common/ToastHost.vue';
 import { enforceMaxLength } from './lib/utils';
 
 const authState = inject('authState');
@@ -45,6 +54,9 @@ const navBar = ref(null);
 
 const leftHandNav = ref(null);
 
+const palette = ref(null);
+provide('openCommandPalette', () => palette.value?.show());
+
 const updateQueue = async () => {
     queue.value = (await ipFetch('json-api/queue/queue')).data;
     history.value = (await ipFetch('json-api/queue/history')).data;
@@ -55,6 +67,14 @@ const updateQueue = async () => {
 const toggleLeftHandNav = () => {
     leftHandNav.value.toggleLHN();
 };
+
+// What is already queued / downloaded, by pid, so programme cards can say so without each searching the lists.
+const itemStatus = computed(() => ({
+    queued: new Set(queue.value.map((entry) => entry.pid)),
+    downloaded: new Set(history.value.filter((entry) => entry.status == 'Complete' || entry.status == 'Forwarded').map((entry) => entry.pid)),
+}));
+provide('itemStatus', itemStatus);
+const { load: loadSubscriptions } = useSubscriptions();
 
 provide('queue', queue);
 provide('history', history);
@@ -80,6 +100,7 @@ provide('refreshToolVersions', refreshToolVersions);
 
 const refreshGlobalSettings = async () => {
     globalSettings.value = (await ipFetch('json-api/config')).data;
+    applyServerUiSettings(globalSettings.value);
 };
 provide('refreshGlobalSettings', refreshGlobalSettings);
 
@@ -87,12 +108,7 @@ const pageSetup = async () => {
     if (socket.value == null) {
         document.body.scrollTop = document.documentElement.scrollTop = 0;
         await updateQueue();
-        if (import.meta.env.PROD) {
-            socket.value = io();
-        } else {
-            const socketUrl = `http://${window.location.hostname}:4404`;
-            socket.value = io(socketUrl, { withCredentials: true });
-        }
+        socket.value = io({ path: `${getBasePath()}/socket.io` });
 
         socket.value.on('queue', (data) => {
             queue.value = data;
@@ -107,8 +123,17 @@ const pageSetup = async () => {
             enforceMaxLength(logs.value, 5000);
         });
 
+        // Full state: on connect and whenever history changes (a session ended, history cleared).
         socket.value.on('streams', (data) => {
             streams.value = data;
+        });
+
+        // Lightweight, much more frequent updates (segments, bytes, resolution, a session starting):
+        // only the live sessions. Assigning just `active` (not a new `streams` object) means nothing
+        // that depends only on the history - its sorted copy, the paged table - is recomputed or
+        // re-rendered by these updates.
+        socket.value.on('streamsActive', (data) => {
+            streams.value.active = data.active;
         });
 
         socket.value.on('videoEvents', (data) => {
@@ -127,6 +152,7 @@ const pageSetup = async () => {
         apps.value = (await ipFetch('json-api/apps')).data;
         refreshGlobalSettings();
         refreshToolVersions();
+        loadSubscriptions();
     }
 };
 

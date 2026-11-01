@@ -1,11 +1,16 @@
 import axios from 'axios';
+import lunr from 'lunr';
 
 import { searchResultLimit } from '../../../src/constants/iPlayarrConstants';
+import configService from '../../../src/service/configService';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
+import loggingService from '../../../src/service/loggingService';
 import NativeSearchService from '../../../src/service/search/NativeSearchService';
+import newSearchCache from '../../../src/service/search/newSearchCache';
 import { IPlayerSearchResult, VideoType } from '../../../src/types/IPlayerSearchResult';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
 import { Synonym } from '../../../src/types/Synonym';
+import { withSearchTrace } from '../../../src/utils/searchTrace';
 import { createNZBName, getQualityProfile } from '../../../src/utils/Utils';
 
 jest.mock('axios');
@@ -63,7 +68,7 @@ describe('NativeSearchService', () => {
                 status: 200,
                 data: {
                     new_search: {
-                        results: [{ id: 'testId', title: 'Test' }],
+                        results: [{ id: 'testId', title: 'Test Term' }],
                     },
                 }
             });
@@ -80,6 +85,72 @@ describe('NativeSearchService', () => {
             expect(results[0]).toHaveProperty('title', 'Test Title');
             expect(results[0]).toHaveProperty('pid', 'testPid');
             expect(results[0]).toHaveProperty('nzbName', 'testNZBName');
+        });
+
+        it.each(['Him and Her', 'Him & Her', 'Him Her'])(
+            'matches a title made only of stop words (e.g. "Him & Her") for the query %s',
+            async (query) => {
+                (axios.get as jest.Mock).mockResolvedValueOnce({
+                    status: 200,
+                    data: { new_search: { results: [{ id: 'm000him1', title: 'Him & Her' }] } },
+                });
+                (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { type: 'episode' } });
+                (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+                (iplayerDetailsService.details as jest.Mock).mockResolvedValue([
+                    { title: 'Him & Her', pid: 'm000him1', type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 },
+                ]);
+
+                const results = await NativeSearchService.search(query);
+
+                expect(results.map(({ pid }) => pid)).toEqual(['m000him1']);
+            }
+        );
+
+        it('drops hits that only share some of the query words (e.g. Stickman vs Spider-Man)', async () => {
+            (axios.get as jest.Mock).mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    new_search: {
+                        results: [
+                            { id: 'p0stick1', title: 'Stickman' },
+                            { id: 'p0spide1', title: 'Spider-Man' },
+                            { id: 'p0moon01', title: 'Man on the Moon' },
+                        ],
+                    },
+                },
+            });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockImplementation(async ([pid]: string[]) => [
+                { title: pid, pid, type: 'episode', firstBroadcast: '2025-01-01', runtime: 30 },
+            ]);
+
+            const results = await NativeSearchService.search('Stickman');
+
+            expect(results.map(({ pid }) => pid)).toEqual(['p0stick1']);
+        });
+
+        it('traces why each BBC hit was kept or dropped', async () => {
+            (axios.get as jest.Mock).mockResolvedValueOnce({
+                status: 200,
+                data: {
+                    new_search: {
+                        results: [
+                            { id: 'p0doc001', title: 'Doctor Who' },
+                            { id: 'p0doc002', title: 'Doctor Strange' },
+                            { id: 'p0misc01', title: 'Gardeners World' },
+                        ],
+                    },
+                },
+            });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockResolvedValue([]);
+
+            const { trace } = await withSearchTrace(() => NativeSearchService.search('Doctor Who'));
+
+            const byTitle = Object.fromEntries(trace.candidates.map((c) => [c.title, c]));
+            expect(byTitle['Doctor Who']).toMatchObject({ kept: true });
+            expect(byTitle['Doctor Strange']).toMatchObject({ kept: false, reason: 'missing-word', detail: 'Missing the word "who"' });
+            expect(byTitle['Gardeners World']).toMatchObject({ kept: false, reason: 'no-match' });
         });
 
         it('should return an empty array when the response status is not 200', async () => {
@@ -195,7 +266,7 @@ describe('NativeSearchService', () => {
                 status: 200,
                 data: {
                     new_search: {
-                        results: [{ id: 'brandId', title: 'Test Brand' }],
+                        results: [{ id: 'brandId', title: 'Test Term Brand' }],
                     },
                 }
             });
@@ -229,7 +300,7 @@ describe('NativeSearchService', () => {
             }));
             (axios.get as jest.Mock).mockResolvedValueOnce({
                 status: 200,
-                data: { new_search: { results: [{ id: 'brandId', title: 'Test Brand' }] } }
+                data: { new_search: { results: [{ id: 'brandId', title: 'Test Term Brand' }] } }
             });
             (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue('testBrandPid');
             (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockResolvedValue(manyEpisodes);
@@ -258,7 +329,7 @@ describe('NativeSearchService', () => {
             const arrange = () => {
                 (axios.get as jest.Mock).mockResolvedValueOnce({
                     status: 200,
-                    data: { new_search: { results: [{ id: 'brandId', title: 'Test Brand' }] } }
+                    data: { new_search: { results: [{ id: 'brandId', title: 'Test Term Brand' }] } }
                 });
                 (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue('testBrandPid');
                 (iplayerDetailsService.detailsForEpisodeMetadata as jest.Mock).mockImplementation(
@@ -318,8 +389,8 @@ describe('NativeSearchService', () => {
                 data: {
                     new_search: {
                         results: [
-                            { id: 'brand1', title: 'Test Brand 1' },
-                            { id: 'brand2', title: 'Test Brand 2' }
+                            { id: 'brand1', title: 'Test Term Brand 1' },
+                            { id: 'brand2', title: 'Test Term Brand 2' }
                         ],
                     },
                 }
@@ -509,5 +580,82 @@ describe('NativeSearchService', () => {
 
             expect(results).toEqual([mockResults[0]]); // Should return the first entry, which doesn't match exclusion terms
         });
+    });
+
+    describe('branches', () => {
+        const hits = (...results: { id: string; title: string }[]) =>
+            (axios.get as jest.Mock).mockResolvedValue({ status: 200, data: { new_search: { results } } });
+
+        it('reports a failed BBC request that is not an Error by its value', async () => {
+            (axios.get as jest.Mock).mockRejectedValue('network down');
+            expect(await NativeSearchService.search('Test Term')).toEqual([]);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('network down'));
+        });
+
+        it('lists an episode once however many hits lead to it', async () => {
+            hits({ id: 'lone1', title: 'Test Term' }, { id: 'lone2', title: 'Test Term Again' });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockResolvedValue([mockEpisodeDetails('samePid', 'Same')]);
+            const results = await NativeSearchService.search('Test Term');
+            expect(results.map(({ pid }) => pid)).toEqual(['samePid']);
+        });
+
+        it('returns nothing for a term that is only punctuation', async () => {
+            hits({ id: 'hit1', title: 'Test Term' });
+            expect(await NativeSearchService.search('+++ ---')).toEqual([]);
+            expect(iplayerDetailsService.findBrandForPid).not.toHaveBeenCalled();
+        });
+
+        it('drops a hit that is missing a search word, and says why', async () => {
+            hits({ id: 'hit1', title: 'Test Show' });
+            const { trace } = await withSearchTrace(() => NativeSearchService.search('Test Term'));
+            expect(trace.candidates).toEqual(expect.arrayContaining([expect.objectContaining({ reason: 'missing-word', kept: false })]));
+        });
+
+        it('keeps a hit that is missing a search word when matching all words is switched off', async () => {
+            hits({ id: 'hit1', title: 'Test Show' });
+            (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue(undefined);
+            (iplayerDetailsService.details as jest.Mock).mockResolvedValue([mockEpisodeDetails('loose1', 'Loose')]);
+            const config = jest.spyOn(configService, 'getParameter').mockImplementation(async (key: any) => (key === 'SEARCH_MATCH_ALL_WORDS' ? 'false' : undefined));
+            const results = await NativeSearchService.search('Test Term');
+            config.mockRestore();
+            expect(results.map(({ pid }) => pid)).toEqual(['loose1']);
+        });
+
+        describe('when lunr cannot run the query', () => {
+            afterEach(() => jest.restoreAllMocks());
+
+            it('treats an unparseable query as no results and logs it', async () => {
+                hits({ id: 'hit1', title: 'Test Term' });
+                jest.spyOn(lunr.Index.prototype, 'search').mockImplementation(() => {
+                    throw Object.assign(new Error('bad query'), { name: 'QueryParseError' });
+                });
+                expect(await NativeSearchService.search('Test Term')).toEqual([]);
+                expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Lunr QueryParseError'));
+            });
+
+            it.each([
+                ['an error of another kind', new Error('index corrupt')],
+                ['a thrown value that is not an object', undefined],
+            ])('lets %s through', async (_label, error) => {
+                hits({ id: 'hit1', title: 'Test Term' });
+                jest.spyOn(lunr.Index.prototype, 'search').mockImplementation(() => {
+                    throw error;
+                });
+                await expect(NativeSearchService.search('Test Term')).rejects.toBe(error);
+            });
+        });
+    });
+});
+
+describe('NativeSearchService when the search cache cannot be written', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('still returns the results', async () => {
+        jest.spyOn(newSearchCache, 'get').mockResolvedValue(undefined);
+        const set = jest.spyOn(newSearchCache, 'set').mockRejectedValue(new Error('disk full'));
+        (axios.get as jest.Mock).mockResolvedValueOnce({ status: 200, data: { new_search: { results: [] } } });
+        await expect(NativeSearchService.search('Test Term')).resolves.toEqual([]);
+        expect(set).toHaveBeenCalled();
     });
 });

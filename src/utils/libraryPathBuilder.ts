@@ -4,21 +4,25 @@ import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueEntry } from '../types/QueueEntry';
 import { resolveInside, sanitizeFileName } from './pathSafety';
+import { applyGroupToName, RELEASE_GROUP } from './releaseGroup';
 
-// Picks which configured complete directory a completed item should land under.
-// ARR_COMPLETE_DIR (set via the *arr Complete Directory setting) is an
-// optional override for TV content that Sonarr/Radarr actually queued (source
-// NZB) - Movies, and any manually-triggered or subscription-queued TV
-// download (source MANUAL), always use COMPLETE_DIR. Falls back to
-// COMPLETE_DIR when unset, so leaving it blank keeps the old single-directory
-// behavior.
+// The directory reported as complete_dir by get_config, and where everything Sonarr/Radarr/
+// Prowlarr queued lands: ARR_COMPLETE_DIR when set, otherwise COMPLETE_DIR. The apps only
+// import the files they asked for, so any number of them can share it.
+export function arrBaseDir(completeDir: string, arrCompleteDir?: string): string {
+    return arrCompleteDir || completeDir;
+}
+
+// Picks which configured complete directory a completed item should land under: the arr
+// directory for anything an *arr app queued (source NZB), COMPLETE_DIR for manually-triggered
+// and subscription-queued downloads (source MANUAL).
 export function resolveCompleteDir(
-    type: VideoType,
+    _type: VideoType,
     source: QueueEntrySource | undefined,
     completeDir: string,
     arrCompleteDir?: string
 ): string {
-    return type === VideoType.TV && source === QueueEntrySource.NZB && arrCompleteDir ? arrCompleteDir : completeDir;
+    return source === QueueEntrySource.NZB ? arrBaseDir(completeDir, arrCompleteDir) : completeDir;
 }
 
 // Windows/POSIX-illegal filename characters.
@@ -27,8 +31,15 @@ const illegalCharsRegex = /[<>:"/\\|?*\x00-\x1F]/g;
 
 function sanitizeSegment(segment: string): string {
     // Leading dots would let a title of ".." name the parent directory.
-    return segment.replace(illegalCharsRegex, '').replace(/^[.s]+/, '').trim() || 'Unknown';
+    return segment.replace(illegalCharsRegex, '').replace(/^[.\s]+/, '').trim() || 'Unknown';
 }
+
+// Release group stamped on every file name, so Sonarr/Radarr record it and a scan can tell our
+// video files (not just .strm links) from anything else in the library.
+const releaseGroupSuffix = `-${RELEASE_GROUP}`;
+
+// Jellyfin's naming for a folder of films that form one collection (BoxSet).
+const boxsetSuffix = ' [boxset]';
 
 export interface LibraryFilePath {
     // Absolute directory the file should be written into.
@@ -70,7 +81,7 @@ function buildUncheckedLibraryFilePath(
     extension: string,
     useFolderStructure: boolean
 ): LibraryFilePath {
-    const flatFileName = `${sanitizeFileName(item.nzbName)}.${extension}`;
+    const flatFileName = `${sanitizeFileName(applyGroupToName(item.nzbName))}.${extension}`;
     if (!useFolderStructure || !item.library?.title) {
         return {
             directory: completeDir,
@@ -84,8 +95,11 @@ function buildUncheckedLibraryFilePath(
     const showTitle = sanitizeSegment(title);
 
     if (item.type === VideoType.MOVIE) {
-        const fileName = `${showTitle}.${extension}`;
-        const directory = path.join(completeDir, showTitle);
+        const fileName = `${showTitle}${releaseGroupSuffix}.${extension}`;
+        // A film from an iPlayer collection sits in a "<collection> [boxset]" folder, which is how Jellyfin is told to
+        // gather the films inside into one collection. (TV keeps its show folders: a boxset folder would break them.)
+        const collectionFolder = item.library.collection ? `${sanitizeSegment(item.library.collection)}${boxsetSuffix}` : undefined;
+        const directory = collectionFolder ? path.join(completeDir, collectionFolder, showTitle) : path.join(completeDir, showTitle);
         return {
             directory,
             fileName,
@@ -93,7 +107,7 @@ function buildUncheckedLibraryFilePath(
             // Built with explicit '/' (not path.join) to match the '/'-joined
             // style the rest of this codebase reports paths to Sonarr/Radarr
             // in, regardless of the host OS's path separator.
-            relativePath: `${showTitle}/${fileName}`,
+            relativePath: `${collectionFolder ? `${collectionFolder}/` : ''}${showTitle}/${fileName}`,
             showDirectory: directory,
         };
     }
@@ -105,7 +119,7 @@ function buildUncheckedLibraryFilePath(
     const fileNameBase = episodeTitle
         ? `${showTitle} - ${episodeCode} - ${sanitizeSegment(episodeTitle)}`
         : `${showTitle} - ${episodeCode}`;
-    const fileName = `${fileNameBase}.${extension}`;
+    const fileName = `${fileNameBase}${releaseGroupSuffix}.${extension}`;
 
     const showDirectory = path.join(completeDir, showTitle);
     const directory = path.join(showDirectory, seasonFolderName);

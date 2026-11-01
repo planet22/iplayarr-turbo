@@ -1,6 +1,8 @@
 <template>
     <div class="inner-content about-content">
-        <img src="/iplayarr.png" alt="Logo" class="logo" />
+        <PageHeader title="About" icon="circle-info" />
+        <SettingsPageToolbar :icons="[]" />
+        <img :src="logoUrl" alt="Logo" class="logo" />
         <h3>iPlayarr Turbo</h3>
         <p>Version {{ hiddenSettings.VERSION }}</p>
         <p>2026</p>
@@ -41,6 +43,11 @@
 </template>
 
 <script setup>
+import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import { getBasePath } from '@/lib/utils';
+
+const logoUrl = `${getBasePath()}/iplayarr.png`;
 import { computed, inject } from 'vue';
 
 const hiddenSettings = inject('hiddenSettings');
@@ -53,6 +60,11 @@ const isAppleDevice = computed(() => {
 <style lang="less">
 .about-content {
     text-align: center;
+
+    // The title bar reads like every other page's, not centred with the text.
+    .PageHeader {
+        text-align: left;
+    }
 }
 
 .logo {

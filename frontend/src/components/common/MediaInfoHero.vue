@@ -1,14 +1,18 @@
 <template>
-    <div class="infoBanner" :style="{ 'background-image': `url(${getThumbnailUrl(details.thumbnail)})` }">
+    <div :class="['infoBanner', { compact }]" :style="{ 'background-image': `url(${getThumbnailUrl(details.thumbnail)})` }">
         <div class="infoContainer">
             <h1>{{ title ?? details.title }}</h1>
             <h2 v-if="details.episodeTitle || subtitle">
                 {{ details.episodeTitle ?? subtitle }}
             </h2>
-            <div v-if="details.category" class="seriesDetails">
-                <span v-if="roundUpMinutes(details.runtime)">{{ roundUpMinutes(details.runtime) }} Minutes</span>
-                <span>{{ details.category }}</span>
-                <span>{{ formatDate(details.firstBroadcast, 'full', 'long') }}</span>
+            <div v-if="details.category" class="seriesDetails factRow">
+                <span v-if="roundUpMinutes(details.runtime)" title="Duration">
+                    <font-awesome-icon :icon="['fas', 'clock']" />{{ roundUpMinutes(details.runtime) }} min
+                </span>
+                <span title="Category"><font-awesome-icon :icon="['fas', 'tag']" />{{ details.category }}</span>
+                <span title="First broadcast">
+                    <font-awesome-icon :icon="['fas', 'calendar']" />{{ formatDate(details.firstBroadcast, ...broadcastDateStyle) }}
+                </span>
             </div>
             <div v-if="details.category" class="seriesDetails pillRow">
                 <span :class="['pill', 'grey']">
@@ -41,6 +45,7 @@
 import { computed, defineProps, inject, ref, watch } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { useIsMobile } from '@/lib/useIsMobile';
 import { formatDate, getThumbnailUrl, roundUpMinutes } from '@/lib/utils';
 
 import ChannelPill from './ChannelPill.vue';
@@ -69,16 +74,41 @@ const props = defineProps({
         type: String,
         required: false,
     },
+    // Release name of the specific download to report on, when the same programme has several (one per resolution).
+    matchName: {
+        type: String,
+        required: false,
+        default: null,
+    },
+    // Exactly which download to report on (see VideoInfoModal's jobId).
+    matchId: {
+        type: String,
+        required: false,
+        default: null,
+    },
+    // Smaller padding and type, for use inside a modal.
+    compact: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
 });
+
+// A long date ("Monday, 19 October 2026 at 12:30:00 am GMT-4") wraps badly in a phone-width popup.
+const isMobile = useIsMobile();
+const broadcastDateStyle = computed(() => (props.compact && isMobile.value ? ['medium', 'short'] : ['full', 'long']));
 
 const resolvedType = computed(() => props.type ?? details.value.type);
 
 const downloadDetails = computed(() => {
-    const historyItem = history.value.find(({ pid }) => pid == props.pid);
-    if (historyItem) return historyItem.details;
-    const queueItem = queue.value.find(({ pid }) => pid == props.pid);
-    if (queueItem) return queueItem.details;
-    return {};
+    const same = ({ jobId, pid, nzbName }) =>
+        props.matchId ? jobId == props.matchId : pid == props.pid && (!props.matchName || nzbName == props.matchName);
+    const found =
+        queue.value.find(same) ||
+        history.value.findLast(same) ||
+        history.value.findLast(({ pid }) => pid == props.pid) ||
+        queue.value.find(({ pid }) => pid == props.pid);
+    return found ? found.details : {};
 });
 
 watch(
@@ -110,6 +140,8 @@ const fixCasing = (str) => {
     .infoContainer {
         width: 100%;
         background-color: rgba(0, 0, 0, 0.6);
+        // Over the artwork: fixed white, not the theme's text colour (dark in light mode).
+        color: #fff;
         padding: 2rem;
         box-sizing: border-box;
 
@@ -127,6 +159,36 @@ const fixCasing = (str) => {
                     margin-right: 10px;
                 }
             }
+        }
+    }
+
+    &.compact {
+        .infoContainer {
+            padding: 0.75rem 1rem;
+
+            .seriesDetails {
+                margin-bottom: 6px;
+                font-size: 14px;
+
+                span {
+                    margin-right: 10px;
+                }
+            }
+        }
+
+        h1 {
+            font-size: 26px;
+            line-height: 30px;
+        }
+
+        h2 {
+            font-size: 17px;
+            margin: 2px 0 6px;
+        }
+
+        .seriesDetails .pill.grey,
+        .seriesDetails .pill.channelPill {
+            font-size: 13px;
         }
     }
 
@@ -152,6 +214,25 @@ const fixCasing = (str) => {
         font-size: 17px;
 
         margin-right: 0 !important;
+    }
+}
+
+// Duration / category / date, each led by an icon so they read as separate facts.
+.seriesDetails.factRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+
+    span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-right: 0;
+    }
+
+    svg {
+        opacity: 0.75;
+        font-size: 0.85em;
     }
 }
 

@@ -1,5 +1,6 @@
 import configService from '../../../src/service/configService';
 import { ensureDnsRelayRunning } from '../../../src/service/dnsRelayService';
+import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 import { spawnCollectOutput } from '../../../src/service/stream/spawnWithTimeout';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
@@ -26,6 +27,7 @@ describe('YTDLPStreamService', () => {
 
     beforeEach(() => {
         jest.resetAllMocks();
+        clearResolveCache();
         (getStreamCacheDir as jest.Mock).mockResolvedValue('/cache');
         (spawnCollectOutput as jest.Mock).mockResolvedValue({ stdout: 'https://cdn/v.m3u8\nsecond\n', stderr: '' });
     });
@@ -50,6 +52,29 @@ describe('YTDLPStreamService', () => {
         expect(args).not.toContain('-f');
         expect(streamSessionService.setResolution).not.toHaveBeenCalled();
         expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/v.m3u8', 'p1', res, 'sess');
+    });
+
+    it('reuses a resolved URL for the same pid and quality, reporting the resolution to each session', async () => {
+        config(profile.id);
+        await service.streamDirect('p1', req, res, 'a');
+        await service.streamDirect('p1', req, res, 'b');
+        expect(spawnCollectOutput).toHaveBeenCalledTimes(1);
+        expect(streamSessionService.setResolution).toHaveBeenCalledWith('a', `${parseInt(profile.quality)}`);
+        expect(streamSessionService.setResolution).toHaveBeenCalledWith('b', `${parseInt(profile.quality)}`);
+    });
+
+    it('resolves again for another pid or quality, and after a failure', async () => {
+        config(profile.id);
+        await service.streamDirect('p1', req, res);
+        await service.streamDirect('p2', req, res);
+        config('unknown');
+        await service.streamDirect('p1', req, res);
+        expect(spawnCollectOutput).toHaveBeenCalledTimes(3);
+
+        (spawnCollectOutput as jest.Mock).mockRejectedValueOnce(new Error('timed out'));
+        await expect(service.streamDirect('p3', req, res)).rejects.toThrow('timed out');
+        await service.streamDirect('p3', req, res);
+        expect(spawnCollectOutput).toHaveBeenCalledTimes(5);
     });
 
     it('throws when yt-dlp returns no URL', async () => {

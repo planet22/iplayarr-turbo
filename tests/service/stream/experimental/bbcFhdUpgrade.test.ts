@@ -29,6 +29,12 @@ describe('attemptFhdUpgrade', () => {
         expect(await attemptFhdUpgrade(hlsUrl, jest.fn().mockResolvedValue('#EXTM3U\nvideo=2000000'))).toBeUndefined();
     });
 
+    it('rejects an HLS body that is not a playlist or is encrypted', async () => {
+        const body = (text: string) => jest.fn().mockResolvedValue(text);
+        expect(await attemptFhdUpgrade(hlsUrl, body('video=12000000-seg.ts'))).toBeUndefined();
+        expect(await attemptFhdUpgrade(hlsUrl, body('#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://k"\nvideo=12000000'))).toBeUndefined();
+    });
+
     it('skips the bitrate check for non-HLS (dash) URLs', async () => {
         const dash = 'https://cdn/x.ism/video=2000000/manifest.mpd';
         expect(await attemptFhdUpgrade(dash, jest.fn().mockResolvedValue('<MPD/>'))).toBe(

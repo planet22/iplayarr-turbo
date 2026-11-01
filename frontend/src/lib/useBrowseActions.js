@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 
 import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { toDownloadResult } from '@/lib/browse';
-import { playInPip } from '@/lib/pipPlayer';
+import { playProgramme } from '@/lib/playVersion';
 
 // The browse screens don't implement playback or downloading themselves - they hand a pid to
 // the existing shared PiP player and the existing download confirmation modal / queue.
@@ -16,7 +16,7 @@ export function useBrowseActions() {
     const canPlay = computed(() => Boolean(globalSettings?.value?.STREAM_KEY));
 
     const play = (item) => {
-        playInPip(item.pid, item.episodeTitle ? `${item.title} - ${item.episodeTitle}` : item.title);
+        playProgramme(item.pid, item.episodeTitle ? `${item.title} - ${item.episodeTitle}` : item.title, item.versions);
     };
 
     const download = (item) => {

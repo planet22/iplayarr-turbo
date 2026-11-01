@@ -45,7 +45,7 @@ const sizeInPx = computed(() => `${props.size}px`);
 
 .ripple {
     position: absolute;
-    border: 2px solid white;
+    border: 2px solid var(--primary-text-color);
     border-radius: 100%;
     animation: rippleContainer 1.25s 0s infinite cubic-bezier(0.21, 0.53, 0.56, 0.8);
     animation-fill-mode: both;

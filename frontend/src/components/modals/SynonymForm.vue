@@ -1,5 +1,6 @@
 <template>
     <IPlayarrModal
+        compact
         :title="`${action} Synonym`"
         :show-close="true"
         close-label="Cancel"
@@ -53,8 +54,8 @@
 import { defineEmits, defineProps, onMounted, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 import TextInput from '../common/form/TextInput.vue';
 import ArrLookupDialog from './ArrLookupDialog.vue';
@@ -102,20 +103,23 @@ onMounted(() => {
 });
 
 const saveSynonym = async () => {
-    if (form.value.from && form.value.target) {
-        if (form.value.filenameOverride == '') {
-            delete form.value.filenameOverride;
-        }
-        const method = form.value.id ? 'PUT' : 'POST';
-        const response = await ipFetch('json-api/synonym', method, form.value);
-        if (response.ok) {
-            validationErrors.value = {};
-            emit('saved');
-        } else {
-            validationErrors.value = response.data.invalid_fields ?? {};
-        }
+    if (!form.value.from || !form.value.target) {
+        validationErrors.value = {
+            from: form.value.from ? undefined : 'Enter the term Sonarr/Radarr sends',
+            target: form.value.target ? undefined : 'Enter what to search iPlayer for',
+        };
+        return;
+    }
+    if (form.value.filenameOverride == '') {
+        delete form.value.filenameOverride;
+    }
+    const method = form.value.id ? 'PUT' : 'POST';
+    const response = await ipFetch('json-api/synonym', method, form.value);
+    if (response.ok) {
+        validationErrors.value = {};
+        emit('saved');
     } else {
-        dialogService.alert('Can\'t Save', 'Please fill in a To and From');
+        validationErrors.value = response.data.invalid_fields ?? {};
     }
 };
 
@@ -140,11 +144,7 @@ const openArrLookup = () => {
             app: searchApp.value,
             term: form.value.from,
             onError: (err) => {
-                dialogService.alert(
-                    `Error from ${searchApp.value.name}`,
-                    `Unable to lookup ${form.value.from}`,
-                    err.message
-                );
+                toastService.error(`Unable to look up ${form.value.from} on ${searchApp.value.name}`, { detail: err.message });
             },
             onSelect: (result) => {
                 form.value.filenameOverride = result.title;

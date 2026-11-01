@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 // Live channels added to the media library (one .strm each) - shared by the Channels page (+ / Add
 // all) and the Subscriptions page, so both see the same list without refetching on navigation.
@@ -32,7 +32,7 @@ export function useLiveSubscriptions() {
         try {
             const { data, ok } = await request();
             if (!ok) {
-                dialogService.alert(failureTitle, data?.message || 'Something went wrong');
+                toastService.error(failureTitle, { detail: data?.message || 'Something went wrong' });
             }
             return ok;
         } finally {

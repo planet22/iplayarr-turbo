@@ -18,6 +18,22 @@
                 <span class="pipTitle" :title="pipPlayerState.title || ''">{{ pipPlayerState.title }}</span>
                 <span class="pipStatus">{{ statusLabel }}</span>
             </div>
+            <!-- Switch to another cut (audio described / signed) without leaving the player; carries on from the same point. -->
+            <div v-if="pipPlayerState.versions.length" class="pipVersions" role="group" aria-label="Version">
+                <button
+                    v-for="option in versionOptions"
+                    :key="option.id"
+                    type="button"
+                    class="pipVersion"
+                    :class="{ selected: option.id === pipPlayerState.version }"
+                    :title="option.name"
+                    :aria-label="option.name"
+                    :aria-pressed="option.id === pipPlayerState.version"
+                    @click="switchVersion(option.id)"
+                >
+                    <font-awesome-icon :icon="['fas', option.icon]" />
+                </button>
+            </div>
             <font-awesome-icon class="clickable" :icon="['fas', 'xmark']" title="Stop" @click="close" />
         </div>
     </div>
@@ -27,7 +43,7 @@
 import Hls from 'hls.js';
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
 
-import { closePip, currentPipRequestId, pipPlayerState, setPipStatus } from '@/lib/pipPlayer';
+import { closePip, currentPipRequestId, pipPlayerState, playInPip, setPipStatus } from '@/lib/pipPlayer';
 import { getHost } from '@/lib/utils';
 
 const STATUS_LABELS = {
@@ -41,6 +57,16 @@ const globalSettings = inject('globalSettings');
 
 const videoRef = ref(null);
 let hls = null;
+
+const VERSION_ICONS = { 'audio-described': 'audio-description', signed: 'sign-language' };
+const versionOptions = computed(() => [
+    { id: '', name: 'Standard', icon: 'film' },
+    ...pipPlayerState.versions.map((version) => ({
+        id: version.id,
+        name: version.name,
+        icon: VERSION_ICONS[version.id] ?? 'film',
+    })),
+]);
 
 const isActive = computed(() => pipPlayerState.pid !== null);
 const statusLabel = computed(() => STATUS_LABELS[pipPlayerState.status] ?? '');
@@ -71,6 +97,13 @@ function close() {
     closePip();
 }
 
+let pendingSeek = 0;
+function switchVersion(version) {
+    if (version === pipPlayerState.version) return;
+    pendingSeek = videoRef.value?.currentTime || 0;
+    playInPip(pipPlayerState.pid, pipPlayerState.title, false, version, pipPlayerState.versions);
+}
+
 function startPlayback(pid) {
     const requestId = currentPipRequestId();
     const video = videoRef.value;
@@ -82,7 +115,11 @@ function startPlayback(pid) {
         setPipStatus(requestId, { status: 'error', errorMessage: 'Stream key is not configured' });
         return;
     }
-    const url = `${getHost()}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}`;
+    const versionParam = pipPlayerState.version ? `&version=${encodeURIComponent(pipPlayerState.version)}` : '';
+    const url = `${getHost()}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${versionParam}`;
+    // Switching version resumes from where the viewer was.
+    const resumeAt = pendingSeek;
+    pendingSeek = 0;
 
     const attemptPip = async () => {
         try {
@@ -104,6 +141,7 @@ function startPlayback(pid) {
 
     const fallbackToDirectSrc = () => {
         video.src = url;
+        if (resumeAt > 0) video.addEventListener('loadedmetadata', () => (video.currentTime = resumeAt), { once: true });
         video.addEventListener('loadedmetadata', attemptPip, { once: true });
         video.addEventListener(
             'error',
@@ -116,7 +154,7 @@ function startPlayback(pid) {
         // hls.js starts on the lowest rung (704x396 for live) and only climbs once it has measured
         // throughput; a live channel has no buffer to spare for that, so start at the top and let
         // ABR step down if the connection can't keep up.
-        hls = new Hls(pipPlayerState.live ? { abrEwmaDefaultEstimate: 20_000_000 } : {});
+        hls = new Hls({ ...(pipPlayerState.live ? { abrEwmaDefaultEstimate: 20_000_000 } : {}), ...(resumeAt > 0 ? { startPosition: resumeAt } : {}) });
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
             if (pipPlayerState.live) {
                 hls.startLevel = hls.levels.length - 1;
@@ -150,9 +188,10 @@ function startPlayback(pid) {
     }
 }
 
+// A new programme, or the same one in another version, starts a fresh stream.
 watch(
-    () => pipPlayerState.pid,
-    (pid) => {
+    () => [pipPlayerState.pid, pipPlayerState.version],
+    ([pid]) => {
         cleanup();
         if (pid) {
             startPlayback(pid);
@@ -201,7 +240,7 @@ onBeforeUnmount(cleanup);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: @primary-text-color;
+    color: #fff;
     background-color: rgba(0, 0, 0, 0.55);
     pointer-events: none;
 }
@@ -225,6 +264,30 @@ onBeforeUnmount(cleanup);
     gap: 8px;
     padding: 6px 8px;
     color: @table-text-color;
+}
+
+.pipVersions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 4px;
+}
+
+.pipVersion {
+    width: 28px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid @input-border-color;
+    border-radius: 4px;
+    background-color: @input-background-color;
+    color: @input-text-color;
+    font-size: 12px;
+    cursor: pointer;
+
+    &.selected {
+        background-color: @primary-color;
+        border-color: @primary-color;
+        color: #fff;
+    }
 }
 
 .pipInfo {

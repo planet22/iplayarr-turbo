@@ -29,7 +29,10 @@ jobs:
                   cache: 'npm'
 
             - name: Install Dependencies
-              run: npm install
+              run: npm ci
+
+            - name: Generate Prisma client
+              run: npx prisma generate
 
             - name: Run Jest Tests
               run: |

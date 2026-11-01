@@ -29,7 +29,7 @@ On every start iPlayarr checks the web UI password (`AUTH_PASSWORD`, from Settin
 - **`AUTH_TYPE=none`** — there is no login, so nothing visibly changes, but the password is still rotated and a warning is logged on every start: with login disabled anyone who can reach the port is an admin. Only use it on a trusted network.
 - **`AUTH_TYPE=oidc`** — unaffected.
 
-Other upgrade effects: everyone is signed out once (the session signing secret is now generated and stored in Redis rather than the old built-in `default_secret_key`), and stored credentials are encrypted in place on first start (see [SECURITY.md](SECURITY.md)). Both are automatic.
+Other upgrade effects: everyone is signed out once (the session signing secret is now generated and stored in the database rather than the old built-in `default_secret_key`), and stored credentials are encrypted in place on first start (see [SECURITY.md](SECURITY.md)). Both are automatic.
 
 ## Changing credentials
 
@@ -57,9 +57,9 @@ The **Test OIDC** button in Settings opens a popup, runs the full OIDC flow agai
 
 ## Session / cookie behavior
 
-Sessions are stored in Redis (`connect-redis`, prefix `iplayarr:`), not in-memory — so sessions survive an app restart as long as the same Redis instance/data persists, and don't survive a `FLUSHALL` or switching to a different Redis instance. Session cookies last 24 hours (`src/routes/AuthRoute.ts`), are `HttpOnly` and `SameSite=Lax`, and get a fresh session id on every login. They are not marked `Secure` by default so they work over plain HTTP; set `SESSION_COOKIE_SECURE=true` if the UI is only ever reached over HTTPS (for example behind your own TLS-terminating reverse proxy). In `DEBUG=true` mode CORS is permissive for the separate frontend dev server.
+Sessions are stored in the SQLite database (`Session` table, `src/service/db/prismaSessionStore.ts`), not in-memory — so sessions survive an app restart as long as the same Redis instance/data persists, and don't survive a `FLUSHALL` or switching to a different Redis instance. Session cookies last 24 hours (`src/routes/AuthRoute.ts`), are `HttpOnly` and `SameSite=Lax`, and get a fresh session id on every login. They are not marked `Secure` by default so they work over plain HTTP; set `SESSION_COOKIE_SECURE=true` if the UI is only ever reached over HTTPS (for example behind your own TLS-terminating reverse proxy). In `DEBUG=true` mode CORS is permissive for the separate frontend dev server.
 
-`SESSION_SECRET` (env, optional) signs the session cookie. If you don't set it, a random 256-bit secret is generated once and kept in Redis — there is no built-in default any more.
+`SESSION_SECRET` (env, optional) signs the session cookie. If you don't set it, a random 256-bit secret is generated once and kept in the database — there is no built-in default any more.
 
 Other protections on the login path:
 

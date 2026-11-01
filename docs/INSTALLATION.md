@@ -45,7 +45,7 @@ services:
             - './logs:/logs'
 ```
 
-(This repo's own `docker-compose.redis.yml` is dev tooling only — a throwaway local Redis for `npm run serve:redis`, not a deployment template. There's no other docker-compose file checked into the repository; any other compose file you might find alongside a working copy is personal/gitignored deployment config, not something this doc should assume.)
+(There's no docker-compose file checked into the repository; any compose file you might find alongside a working copy is personal/gitignored deployment config, not something this doc should assume.)
 
 ## Typical real-world setup
 
@@ -83,7 +83,7 @@ Points worth calling out:
 - **`PUID`/`PGID` from `.env`** (`USER_ID`/`GROUP_ID`), matching the UID/GID that owns the media library on the host — see [PUID / PGID](#puid--pgid) below.
 - **Upgrading from a version before the security hardening:** if you never changed the old default password (`admin` / `password`), it is retired on first start and a new random one is printed once in the log (`Web UI login`). If you set your own password it is kept. Everyone is signed out once, and stored credentials are encrypted in place (see [SECURITY.md](SECURITY.md)). Details: [AUTHENTICATION.md](AUTHENTICATION.md#upgrading-from-an-older-version).
 
-Because all persistent state is in Redis under `/config` (see [REDIS.md](REDIS.md)), the stack can be freely recreated/rebuilt without losing settings, queue/history, or sessions.
+Because all persistent state is in the SQLite database under `/config` (see [DATABASE.md](DATABASE.md)), the stack can be freely recreated/rebuilt without losing settings, queue/history, or sessions.
 
 ## First start
 
@@ -91,14 +91,14 @@ Because all persistent state is in Redis under `/config` (see [REDIS.md](REDIS.m
 2. The login password is generated on first start and printed **once** in the container log: `docker logs <container> 2>&1 | grep "Web UI login"` (username `admin`). There is no default password.
 3. Log in and change it under Settings → Authentication.
 
-Also generated on first start, both persisted in Redis: the `API_KEY` (Sonarr/Radarr/Prowlarr) and `STREAM_KEY` (`.strm` links). A `secrets.key` file is created in the `/data` (cache) volume — the key that encrypts stored credentials in Redis. **Back it up together with `/config`.** To keep the key out of the volumes entirely, set `SECRETS_KEY` in the environment instead.
+Also generated on first start, both persisted in the database: the `API_KEY` (Sonarr/Radarr/Prowlarr) and `STREAM_KEY` (`.strm` links). A `secrets.key` file is created in the `/data` (cache) volume — the key that encrypts stored credentials in the database. **Back it up together with `/config`.** To keep the key out of the volumes entirely, set `SECRETS_KEY` in the environment instead.
 
 ## Volume mounts explained
 
 | Container path | Purpose | Backed by |
 | --- | --- | --- |
 | `/data` | `get_iplayer`'s own cache/profile directory (`--profile-dir`, set via the baked-in `CACHE_LOCATION` env var) — programme metadata cache, not your media. | `CACHE_LOCATION=/data` (Dockerfile) |
-| `/config` | Redis's data directory (`redis-server --dir /config`) — this is where **all** persistent state lives: settings, queue/history, sessions, logs ring-buffer. See [REDIS.md](REDIS.md). | `docker_entry.sh` |
+| `/config` | Holds `iplayarr.db`, the SQLite database — this is where **all** persistent state lives: settings, queue/history, sessions, logs ring-buffer. See [DATABASE.md](DATABASE.md). | `DATABASE_URL=file:/config/iplayarr.db` (Dockerfile) |
 | `/logs` | Rotated daily log files (`winston-daily-rotate-file`, 20MB/file, 14 days retention, gzip-archived). | `LOG_DIR=/logs` (Dockerfile) |
 | `/incomplete` (your path, mapped to `DOWNLOAD_DIR`) | In-progress downloads. Must also be visible to Sonarr/Radarr at a path they recognize if you're using full downloads (not `.strm` mode) with remote path mapping. | `DOWNLOAD_DIR` env var |
 | `/complete` (your path, mapped to `COMPLETE_DIR`) | Completed downloads — what Sonarr/Radarr import from, and what your media server's library should point at. | `COMPLETE_DIR` env var |
@@ -120,8 +120,8 @@ docker pull ghcr.io/planet22/iplayarr-turbo:latest
 docker compose up -d   # or: docker run ... (recreate with the same volumes/env)
 ```
 
-Because all persistent state is in Redis under `/config`, recreating the container with the same volumes preserves your settings, queue/history, and sessions across an update — there's nothing else to migrate. If you built a local image instead of pulling, re-run `docker build -t iplayarr .` first to pick up new source before recreating.
+Because all persistent state is in the SQLite database under `/config`, recreating the container with the same volumes preserves your settings, queue/history, and sessions across an update — there's nothing else to migrate. (Coming from a Redis-based version? Your data is imported automatically on the first start; see [DATABASE.md](DATABASE.md#upgrading-from-redis).) If you built a local image instead of pulling, re-run `docker build -t iplayarr .` first to pick up new source before recreating.
 
 ## Backup and restore
 
-See [REDIS.md](REDIS.md#persistence-bundled-instance) — back up the `/config` volume **and the credential key** (`secrets.key` in the `/data` cache volume, or your `SECRETS_KEY`); those two together are the entirety of iPlayarr's persistent application state, and restored credentials are unreadable without the key. `/complete` and `/incomplete` are your media library itself, which you'd back up (or not) the same way you handle the rest of your media.
+See [DATABASE.md](DATABASE.md#backup-and-restore) — back up the `/config` volume **and the credential key** (`secrets.key` in the `/data` cache volume, or your `SECRETS_KEY`); those two together are the entirety of iPlayarr's persistent application state, and restored credentials are unreadable without the key. `/complete` and `/incomplete` are your media library itself, which you'd back up (or not) the same way you handle the rest of your media.

@@ -4,61 +4,98 @@ iPlayarr Turbo is a companion tool for **Sonarr** and **Radarr**, making it easy
 
 ![Build Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/build.yml?logo=github)
 ![Test Status](https://img.shields.io/github/actions/workflow/status/planet22/iplayarr-turbo/test.yml?logo=github&label=tests)
+
 <!--- istanbul-badges-readme:start --->
 
 ![Statements](https://img.shields.io/badge/statements-93.15%25-brightgreen.svg?style=flat)
 ![Branches](https://img.shields.io/badge/branches-82.73%25-yellow.svg?style=flat)
 ![Functions](https://img.shields.io/badge/functions-93.01%25-brightgreen.svg?style=flat)
 ![Lines](https://img.shields.io/badge/lines-93.51%25-brightgreen.svg?style=flat)
+
 <!--- istanbul-badges-readme:end --->
 
 > **This is iPlayarr Turbo**, a fork of upstream iPlayarr (based on v0.11.6) with a modernized Docker build and dependency stack — see [TURBO.md](TURBO.md) for everything this fork changes on top of what's described below.
 
-## 🔐 First login and upgrading (read this first)
+## Why iPlayarr?
 
-**New install:** there is **no default password**. On first start iPlayarr generates a random one for the user `admin` and prints it **once** in the container log:
+[iPlayarr](https://github.com/Nikorag/iplayarr) is [Nikorag](https://github.com/Nikorag)'s project, and this fork builds on it. It started as an experiment: is it possible to integrate BBC iPlayer with Sonarr/Radarr in a clean, automated way? iPlayer offers a wide range of high-quality content, but doing that has always been tricky, and most existing solutions rely on torrents or Usenet. The idea was to get media from a reliable source instead.
 
-```bash
-docker logs iplayarr 2>&1 | grep "Web UI login"
-# Web UI login -> username: admin  password: Xk3...   (change it in Settings)
-```
+iPlayarr does this by looking like an indexer and a download client to Sonarr/Radarr, so iPlayer shows are searched, grabbed and post-processed like any other source. It works like a personal DVR for iPlayer, without needing traditional PVR software. Unlike torrents and Usenet, it operates in a less legally ambiguous space by only downloading content that is freely available for streaming.
 
-Log in with that, then set your own under **Settings → Authentication**. It is never shown again or sent over HTTP; if you lose it, use the [password reset](docs/AUTHENTICATION.md#forgotten-password-reset).
+## Why iPlayarr Turbo?
 
-**Upgrading from an older version — do I have to change my password?**
+I wanted to take that idea further than a download client. iPlayarr Turbo started from upstream v0.11.6 and goes beyond it:
 
-| Your situation | What happens on upgrade |
-| --- | --- |
-| You **changed** the password from the old default (`admin` / `password`) | Nothing. Your password is kept. |
-| You **never changed it** (still `admin` / `password`) | The old default is retired. A new random password is generated and printed once in the container log (same `Web UI login` line). Log in with that. |
-| `AUTH_TYPE=none` (no login) | No login to change. The password is still rotated in the background for the day you switch back to `form`, and a warning is logged that the UI is open to everyone. |
-| `AUTH_TYPE=oidc` | Not affected. |
+- **Stream instead of store:** `.strm` pointer files let Jellyfin/Plex/Emby play BBC content on demand, so a "download" costs no disk space.
+- **No Sonarr/Radarr required:** a full browse UI (Discover, Channels, Guide, Categories, A to Z) and Subscriptions mean it is useful on its own.
+- **Live TV and upkeep:** live BBC channels, plus a Watchdog that notices when a `.strm` link stops working.
+- **Modern foundations:** a faster native downloader and search, a slimmer Docker build, current dependencies, a SQLite database in place of Redis, and security hardening.
 
-Other things you will notice after upgrading (details in [docs/SECURITY.md](docs/SECURITY.md)):
+See [TURBO.md](TURBO.md) for everything this fork changes, and see [Features](#-features) below for the full list.
 
-- Everyone is signed out once (the login-cookie secret is now generated instead of a built-in default).
-- Your stored credentials (Sonarr/Radarr/Jellyfin API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) are **encrypted in Redis** with a key kept outside Redis — `secrets.key` in your `/data` (cache) volume, or `SECRETS_KEY` if you set it. **Back that key up with your Redis data.** Without it, stored keys can't be read after a restore.
-- The Apps and Settings pages show saved keys/passwords as `********`; leave them as they are to keep the saved value.
-- After 10 wrong logins from one address you are locked out for 15 minutes.
-- The UI can't be embedded in other sites by default; set `ALLOW_EMBEDDING=true` if you embed it in a dashboard.
-- With login disabled (`AUTH_TYPE=none`) the executable-related settings (`GET_IPLAYER_EXEC`, `YTDLP_EXEC`, additional download parameters) can't be changed from the UI; set them as environment variables.
+## ✨ Features
+
+**Sonarr / Radarr integration**
+
+- Newznab-compatible indexer and SABnzbd-compatible download client on one port, so iPlayer shows and films are searched, grabbed and post-processed like any other source
+- One-click setup from the Apps page, with Prowlarr support and a User-Agent table that attributes requests to the right Sonarr/Radarr instance
+- Subscribe to a show and have it added to (or removed from) a Sonarr/Radarr library, or use Sonarr/Radarr-only mode so iPlayarr never downloads it
+- Subscription detection finds shows in your Sonarr/Radarr libraries that already point at iPlayarr, and a Sync imports them
+- Title synonyms and off-schedule URLs to cover shows iPlayer names or lists differently from Sonarr/Radarr
+
+**Browse and search (works without Sonarr/Radarr)**
+
+- Discover carousel, Channels with Now/Next, a multi-channel TV Guide, Categories, Collections and A to Z
+- Programme pages with every series and episode, plus Play, Download, Download all and Subscribe
+- Fast native search against the BBC's own API, with type-ahead suggestions, a Posters view, channel and version filters, and a quick-find palette (`Ctrl+K`)
+- Audio described and signed versions, offered as separate releases or chosen per download
+
+**Downloading**
+
+- Native downloader (ffmpeg copies the stream, no helper process), with `get_iplayer` and `yt-dlp` still available
+- Choose a `.strm` link or a full video file per download, with quality and version pickers and batch download for a series
+- Queue and history with per-job progress, client and output details, per-download logs and an optional archive of removed items
+- Jellyfin-style library folders (Show/Season NN) and `.nfo` metadata written alongside each item
+
+**Streaming and live TV**
+
+- `.strm` mode: tiny pointer files that stream on demand through iPlayarr, so a "download" costs no disk space
+- Native streaming with adaptive quality, an optional 1080p upgrade, and optional English subtitles converted from the BBC's captions
+- In-browser player with Picture-in-Picture, for programmes and live channels
+- Live BBC channels you can watch, add to your library as `.strm` files, or serve to Jellyfin as an M3U tuner with an XMLTV guide
+- Customisable channels: arrange, hide, rename, recolour, and add your own or optional Red Button, nations and UHD feeds
+- Works with Jellyfin, Plex and Emby
+
+**Keeping things healthy**
+
+- Subscriptions that check hourly (or on demand) and queue new episodes, de-duplicated against the queue and history
+- STRM Watchdog: a daily check that `.strm` links still resolve on the BBC, with safeguards, optional unmonitor, delete or webhook actions, and a dashboard
+- Persistent BBC data caches with a cache manager, editable lifetimes and scheduled tasks, and hit rates on the Statistics page
+- Live logs, video events, NZB diagnostics and statistics pages
+
+**Interface and security**
+
+- Colour schemes with light and dark mode, tablet and phone layouts, toasts, and a staged Settings page with a save bar and filter
+- Form login, OIDC or no auth, with a generated first password, login lockout, encrypted stored credentials and optional reverse-proxy base path
+- Single SQLite file for all state, with automatic import from older Redis installs
 
 ## 📚 Further documentation
 
 This README covers the basics. For more detail, see `docs/`:
 
-- [CONFIG.md](docs/CONFIG.md) / [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) — full settings reference
+- [CONFIG.md](docs/CONFIG.md) / [ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) — full settings reference, audio described / signed versions, caches and scheduled tasks
 - [INSTALLATION.md](docs/INSTALLATION.md) — Docker deployment, volumes, PUID/PGID, updating
 - [AUTHENTICATION.md](docs/AUTHENTICATION.md) — auth types, initial password, upgrading, password reset, OIDC
 - [SECURITY.md](docs/SECURITY.md) — security review, what was hardened, credential encryption, residual risks
-- [REDIS.md](docs/REDIS.md) — what's stored in Redis, backup/restore
+- [DATABASE.md](docs/DATABASE.md) — what's stored in the SQLite database, backup/restore, upgrading from Redis
 - [SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) — how the dual-protocol trick works, troubleshooting a failed Test
 - [STREAMING.md](docs/STREAMING.md) and [LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) — `.strm` mode and Jellyfin-style library layout
 - [GETTING_STARTED_BBC.md](docs/GETTING_STARTED_BBC.md) — from a running container to watching and downloading BBC programmes
-- [BROWSE.md](docs/BROWSE.md) — Discover, Channels, Categories, A to Z, type-ahead search
+- [BROWSE.md](docs/BROWSE.md) — Discover, Channels (arrange, optional channels), Categories, A to Z, type-ahead search
 - [SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) — automatically download new episodes of a show, link shows to Sonarr/Radarr, live channels
 - [WATCHDOG.md](docs/WATCHDOG.md) — daily check that `.strm` links still resolve on BBC
-- [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI
+- [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) — tour of the web UI, quick find (Ctrl+K)
+- [THEMING.md](docs/THEMING.md) — colour schemes and light/dark mode
 - [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — common issues
 - [DEVELOPMENT.md](docs/DEVELOPMENT.md) — contributor setup, testing, linting
 - [media-servers/](docs/media-servers/) — Jellyfin, Plex, Emby specifics
@@ -67,44 +104,32 @@ This README covers the basics. For more detail, see `docs/`:
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/login.png" alt="Login View" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/search.png" alt="Search View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/discover.png" alt="Discover" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/search.png" alt="Search results" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/download.png" alt="Download Confirmation" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/queue.png" alt="Queue View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/download.png" alt="Download dialog" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/queue.png" alt="Queue" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/subscribe.png" alt="Subscribe to a Show" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/details.png" alt="Details View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/collection.png" alt="Collection" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/subscribe.png" alt="Subscribe to a show" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/channels.png" alt="Channels View" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/schedule.png" alt="Schedule View" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/subscriptions.png" alt="Subscriptions" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/channels.png" alt="Channels" width="49%">
 </p>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/jellyfin.png" alt="Jellyfin Playback" width="49%">
-  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/mobile.png" alt="Mobile View" width="30%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/guide.png" alt="Guide" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/watchdog.png" alt="Watchdog" width="49%">
 </p>
-
-## Why iPlayarr Turbo?
-
-iPlayer offers a wide range of high-quality content, but integrating it with Sonarr and Radarr has always been tricky. iPlayarr Turbo solves this problem by:
-
-- Acting as a Newznab-compatible indexer, making iPlayer content searchable within Sonarr/Radarr
-- Presenting as a SABnzbd-compatible download client, allowing automatic downloads and post-processing
-- Handling the full download lifecycle, from fetching content with get_iplayer to organizing completed files
-- Streaming content on demand to Jellyfin/Plex/Emby via small `.strm` pointer files, instead of pre-downloading everything
-- Watching BBC live channels, in the browser or as `.strm` entries in your media library, and a Watchdog that flags expired `.strm` links
-- Works standalone too - Browse/Discover, Channels, Categories, A to Z, search, and Subscriptions are all usable from the web UI without Sonarr/Radarr at all
-
-Unlike torrents and Usenet, iPlayarr Turbo operates in a less legally ambiguous space by only downloading content that is freely available for streaming.
-
-## Why Create iPlayarr Turbo?
-
-This project started as an experiment: Is it possible to integrate iPlayer with Sonarr/Radarr in a clean, automated way?
-
-Most existing solutions rely on torrents or Usenet, but I wanted something that could get media from a reliable source. iPlayarr Turbo functions like a personal DVR for iPlayer, making it easier to automate downloads without needing traditional PVR software.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/light.png" alt="Light mode and colour schemes" width="49%">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/jellyfin.png" alt="Jellyfin playback" width="49%">
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/planet22/iplayarr-turbo/refs/heads/main/readme-media/mobile.png" alt="Mobile view" width="24%">
+</p>
 
 ## Getting Started
 
@@ -180,41 +205,73 @@ You can pre-set the following environment variables, or you can set them in the 
 
 There's a few more optional settings too:
 
-| Property                       | Description                                                                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ACTIVE_LIMIT                   | How many downloads are allowed simultaneously, defaults to 3                                                                                                                                                                                                                                                                                                                               |
-| REFRESH_SCHEDULE               | Cron expression for when to proactively refresh schedule, defaults to hourly, on the hour                                                                                                                                                                                                                                                                                                  |
-| SCHEDULE_FULL_REFRESH          | Re-fetch every day in the schedule window on every refresh instead of reusing cached results for days that have already passed. Defaults to false                                                                                                                                                                                                                                          |
-| HIDE_DONATE                    | If you don't like the Kofi donate links you can hide them                                                                                                                                                                                                                                                                                                                                  |
-| PUID                           | Host User ID for file permissions                                                                                                                                                                                                                                                                                                                                                          |
-| PGID                           | Host Group ID for file permissions                                                                                                                                                                                                                                                                                                                                                         |
-| NATIVE_SEARCH_ENGINE           | `V1` (stable, default) or `V2` (experimental: concurrent lookups and retries). Only used when NATIVE_SEARCH is true |
-| NATIVE_SEARCH                  | Search BBC's own search API directly instead of shelling out to get_iplayer. Faster, and the default. Defaults to true                                                                                                                                                                                                                                                                     |
-| ARCHIVE_ENABLED                | Keep a record of cancelled/removed downloads instead of discarding them outright. Defaults to false                                                                                                                                                                                                                                                                                        |
-| OUTPUT_FORMAT                  | Output container format passed to get_iplayer (e.g. mp4). Defaults to mp4                                                                                                                                                                                                                                                                                                                  |
-| LIBRARY_FOLDER_STRUCTURE       | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to true. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md)                                                                                                                                                                |
-| ARR_COMPLETE_DIR               | Optional override of COMPLETE_DIR for TV downloads Sonarr/Radarr themselves queued (NZB) only - manual UI downloads and subscriptions always use COMPLETE_DIR, even for TV. Leave unset to use COMPLETE_DIR for everything                                                                                                                                                                 |
+| Property                       | Description                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ACTIVE_LIMIT                   | How many downloads are allowed simultaneously, defaults to 3                                                                                                                                                                                                                                                                                                                                  |
+| REFRESH_SCHEDULE               | Cron expression for when to proactively refresh schedule, defaults to hourly, on the hour                                                                                                                                                                                                                                                                                                     |
+| SCHEDULE_FULL_REFRESH          | Re-fetch every day in the schedule window on every refresh instead of reusing cached results for days that have already passed. Defaults to false                                                                                                                                                                                                                                             |
+| HIDE_DONATE                    | If you don't like the Kofi donate links you can hide them                                                                                                                                                                                                                                                                                                                                     |
+| PUID                           | Host User ID for file permissions                                                                                                                                                                                                                                                                                                                                                             |
+| PGID                           | Host Group ID for file permissions                                                                                                                                                                                                                                                                                                                                                            |
+| NATIVE_SEARCH_ENGINE           | `V1` (original) or `V2` (default: concurrent lookups and retries). Only used when NATIVE_SEARCH is true                                                                                                                                                                                                                                                                                       |
+| NATIVE_SEARCH                  | Search BBC's own search API directly instead of shelling out to get_iplayer. Faster, and the default. Defaults to true                                                                                                                                                                                                                                                                        |
+| ARCHIVE_ENABLED                | Keep a record of cancelled/removed downloads instead of discarding them outright. Defaults to false                                                                                                                                                                                                                                                                                           |
+| OUTPUT_FORMAT                  | Output container format passed to get_iplayer (e.g. mp4). Defaults to mp4                                                                                                                                                                                                                                                                                                                     |
+| LIBRARY_FOLDER_STRUCTURE       | Organize completed downloads under COMPLETE_DIR into Jellyfin-style Show/Season folders (or a Movie folder), instead of one flat folder. Defaults to true. See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md)                                                                                                                                                                   |
+| ARR_COMPLETE_DIR               | Optional override of COMPLETE_DIR for TV downloads Sonarr/Radarr themselves queued (NZB) only - manual UI downloads and subscriptions always use COMPLETE_DIR, even for TV. Leave unset to use COMPLETE_DIR for everything                                                                                                                                                                    |
 | WRITE_NFO_STRM                 | Write a Jellyfin-compatible .nfo metadata file alongside each completed item. A .strm file is only ever produced when MEDIA_MODE is `strm`; this just adds matching .nfo metadata for it. One of `none`, `all`, `nzb` (only downloads added by Sonarr/Radarr), or `manual` (only manually-triggered downloads, the default). See [docs/LIBRARY_ORGANIZATION.md](docs/LIBRARY_ORGANIZATION.md) |
-| MEDIA_MODE                     | `strm` (default) saves a small pointer file that streams on demand, saving disk space; `download` saves the full file instead. See [docs/STREAMING.md](docs/STREAMING.md)                                                                                                                                                                                                                  |
-| STREAM_CLIENT                  | Which tool serves playback for `.strm` files: `NATIVE` (default, fastest to start, adaptive quality), `GET_IPLAYER`, or `YTDLP`. If using `YTDLP` (for this or `DOWNLOAD_CLIENT`) in a non-root container (i.e. with `PUID`/`PGID` set), also add `cap_add: [NET_BIND_SERVICE]` - see [docs/STREAMING.md](docs/STREAMING.md)                                                             |
-| STREAM_MODE                    | `direct` (default, supports seeking) or `progressive-mkv` (remuxes to MKV on the fly, needs ffmpeg, no seeking)                                                                                                                                                                                                                                                                            |
-| STREAM_BASE_URL                | The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr Turbo, for links written into `.strm` files                                                                                                                                                                                                                                                                      |
-| STREAM_KEY                     | Secures `.strm` playback links, separate from API_KEY so it can be regenerated on its own                                                                                                                                                                                                                                                                                                  |
-| STREAM_CACHE_DIR               | Where temporary files are stored while streaming. Defaults to a temp folder                                                                                                                                                                                                                                                                                                                |
-| STREAM_NATIVE_ADAPTIVE         | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to false                                                                                                                                                                                                                                                                 |
-| STREAM_NATIVE_HQ_PROBE         | With STREAM_CLIENT=NATIVE, verify real stream quality before playing (adds a short delay). Defaults to false                                                                                                                                                                                                                                                                               |
-| STREAM_NATIVE_EXPERIMENTAL_FHD | With STREAM_CLIENT=NATIVE, try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to true                                                                                                                                                                                                                                                                         |
-| THUMBNAIL_CACHE_DIR            | Where cached BBC episode thumbnails are stored                                                                                                                                                                                                                                                                                                                                             |
-| THUMBNAIL_RETENTION_DAYS       | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                                      |
-| STREAM_HISTORY_RETENTION_DAYS  | How many days to keep native streaming session history before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                              |
-| LIVE_STRM_DIR                  | Where `.strm` files for live channels added to the library are written. Blank uses COMPLETE_DIR. See [docs/STREAMING.md](docs/STREAMING.md#live-channels) |
-| LIVE_TV_ENABLED                | Serve BBC live channels as an M3U tuner and XMLTV guide for Jellyfin Live TV. Defaults to false. See [docs/STREAMING.md](docs/STREAMING.md#jellyfin-live-tv-tuner--guide) |
-| LIVE_TV_EPG_OFFSET             | Minutes to shift the Jellyfin Live TV guide (default 0). Guide times are sent in the server's timezone. See [docs/STREAMING.md](docs/STREAMING.md#jellyfin-live-tv-tuner--guide) |
-| LIVE_TV_LOGO_SHAPE             | Live TV channel logo shape, `landscape` (16:9, default) or `square` |
-| LIVE_TV_GUIDE_CATEGORIES       | Tag Live TV guide programmes with BBC categories for Jellyfin's colours and filters. Defaults to true |
-| LIVE_TV_GUIDE_FLAGS            | Tag Live TV guide programmes as live / new / repeat. Defaults to true |
-| LIVE_TV_GUIDE_HD               | Mark Live TV guide programmes as HD. Defaults to true |
-| STRM_WATCHDOG_ENABLED          | Daily check that `.strm` links still resolve on BBC. Defaults to false. The other `STRM_WATCHDOG_*` settings (SOURCES, ACTION, PATH_MAP, ARR_ACTION, CONCURRENCY, FAIL_THRESHOLD, WEBHOOK_URL) are listed in [docs/WATCHDOG.md](docs/WATCHDOG.md) |
+| MEDIA_MODE                     | `strm` (default) saves a small pointer file that streams on demand, saving disk space; `download` saves the full file instead. See [docs/STREAMING.md](docs/STREAMING.md)                                                                                                                                                                                                                     |
+| STREAM_CLIENT                  | Which tool serves playback for `.strm` files: `NATIVE` (default, fastest to start, adaptive quality), `GET_IPLAYER`, or `YTDLP`. If using `YTDLP` (for this or `DOWNLOAD_CLIENT`) in a non-root container (i.e. with `PUID`/`PGID` set), also add `cap_add: [NET_BIND_SERVICE]` - see [docs/STREAMING.md](docs/STREAMING.md)                                                                  |
+| STREAM_MODE                    | `direct` (default, supports seeking) or `progressive-mkv` (remuxes to MKV on the fly, needs ffmpeg, no seeking)                                                                                                                                                                                                                                                                               |
+| STREAM_BASE_URL                | The address your media server (Jellyfin/Plex/Emby) uses to reach iPlayarr Turbo, for links written into `.strm` files                                                                                                                                                                                                                                                                         |
+| STREAM_KEY                     | Secures `.strm` playback links, separate from API_KEY so it can be regenerated on its own                                                                                                                                                                                                                                                                                                     |
+| STREAM_CACHE_DIR               | Where temporary files are stored while streaming. Defaults to a temp folder                                                                                                                                                                                                                                                                                                                   |
+| STREAM_NATIVE_ADAPTIVE         | With STREAM_CLIENT=NATIVE, let the player adjust quality automatically instead of pinning VIDEO_QUALITY. Defaults to false                                                                                                                                                                                                                                                                    |
+| STREAM_NATIVE_HQ_PROBE         | With STREAM_CLIENT=NATIVE, verify real stream quality before playing (adds a short delay). Defaults to false                                                                                                                                                                                                                                                                                  |
+| STREAM_SUBTITLES               | With STREAM_CLIENT=NATIVE and STREAM_MODE=direct, offer the BBC's captions as an English subtitle track on native streams, on-demand and live. Off by default. See [docs/STREAMING.md](docs/STREAMING.md#subtitles)                                                                                                                                                                           |
+| STREAM_NATIVE_EXPERIMENTAL_FHD | With STREAM_CLIENT=NATIVE, try to unlock real 1080p above BBC's usual 720p cap on native streams. Defaults to true                                                                                                                                                                                                                                                                            |
+| THUMBNAIL_CACHE_DIR            | Where cached BBC episode thumbnails are stored                                                                                                                                                                                                                                                                                                                                                |
+| THUMBNAIL_RETENTION_DAYS       | How many days to keep unused cached thumbnails before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                                         |
+| STREAM_HISTORY_RETENTION_DAYS  | How many days to keep native streaming session history before nightly cleanup. Defaults to 30                                                                                                                                                                                                                                                                                                 |
+| LIVE_STRM_DIR                  | Where `.strm` files for live channels added to the library are written. Blank uses COMPLETE_DIR. See [docs/STREAMING.md](docs/STREAMING.md#live-channels)                                                                                                                                                                                                                                     |
+| LIVE_TV_ENABLED                | Serve BBC live channels as an M3U tuner and XMLTV guide for Jellyfin Live TV. Defaults to false. See [docs/STREAMING.md](docs/STREAMING.md#jellyfin-live-tv-tuner--guide)                                                                                                                                                                                                                     |
+| LIVE_TV_EPG_OFFSET             | Minutes to shift the Jellyfin Live TV guide (default 0). Guide times are sent in the server's timezone. See [docs/STREAMING.md](docs/STREAMING.md#jellyfin-live-tv-tuner--guide)                                                                                                                                                                                                              |
+| LIVE_TV_LOGO_SHAPE             | Live TV channel logo shape, `landscape` (16:9, default) or `square`                                                                                                                                                                                                                                                                                                                           |
+| LIVE_TV_GUIDE_CATEGORIES       | Tag Live TV guide programmes with BBC categories for Jellyfin's colours and filters. Defaults to true                                                                                                                                                                                                                                                                                         |
+| LIVE_TV_GUIDE_FLAGS            | Tag Live TV guide programmes as live / new / repeat. Defaults to true                                                                                                                                                                                                                                                                                                                         |
+| LIVE_TV_GUIDE_HD               | Mark Live TV guide programmes as HD. Defaults to true                                                                                                                                                                                                                                                                                                                                         |
+| STRM_WATCHDOG_ENABLED          | Daily check that `.strm` links still resolve on BBC. Defaults to false. The other `STRM_WATCHDOG_*` settings (SOURCES, ACTION, PATH_MAP, ARR_ACTION, CONCURRENCY, FAIL_THRESHOLD, WEBHOOK_URL) are listed in [docs/WATCHDOG.md](docs/WATCHDOG.md)                                                                                                                                             |
+
+### 🔐 First login and upgrading (read this first)
+
+**New install:** there is **no default password**. On first start iPlayarr generates a random one for the user `admin` and prints it **once** in the container log:
+
+```bash
+docker logs iplayarr 2>&1 | grep "Web UI login"
+# Web UI login -> username: admin  password: Xk3...   (change it in Settings)
+```
+
+Log in with that, then set your own under **Settings → Authentication**. It is never shown again or sent over HTTP; if you lose it, use the [password reset](docs/AUTHENTICATION.md#forgotten-password-reset).
+
+**Upgrading from an older version — do I have to change my password?**
+
+| Your situation                                                           | What happens on upgrade                                                                                                                                             |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| You **changed** the password from the old default (`admin` / `password`) | Nothing. Your password is kept.                                                                                                                                     |
+| You **never changed it** (still `admin` / `password`)                    | The old default is retired. A new random password is generated and printed once in the container log (same `Web UI login` line). Log in with that.                  |
+| `AUTH_TYPE=none` (no login)                                              | No login to change. The password is still rotated in the background for the day you switch back to `form`, and a warning is logged that the UI is open to everyone. |
+| `AUTH_TYPE=oidc`                                                         | Not affected.                                                                                                                                                       |
+
+Other things you will notice after upgrading (details in [docs/SECURITY.md](docs/SECURITY.md)):
+
+- Everyone is signed out once (the login-cookie secret is now generated instead of a built-in default).
+- Your stored credentials (Sonarr/Radarr/Jellyfin API keys, `API_KEY`, `STREAM_KEY`, OIDC secret) are **encrypted in the database** with a key kept outside it — `secrets.key` in your `/data` (cache) volume, or `SECRETS_KEY` if you set it. **Back that key up with your `/config` data.** Without it, stored keys can't be read after a restore.
+- The Apps and Settings pages show saved keys/passwords as `********`; leave them as they are to keep the saved value.
+- After 10 wrong logins from one address you are locked out for 15 minutes.
+- The UI can't be embedded in other sites by default; set `ALLOW_EMBEDDING=true` if you embed it in a dashboard.
+- Behind a reverse proxy? Set `TRUST_PROXY=1` (the number of proxies in front) so login and request rate limits see each client's real address instead of the proxy's. Leave it unset when iPlayarr is reached directly.
+- Behind a reverse proxy that keeps a URL prefix (like Sonarr's URL Base)? Set `BASE_PATH=/iplayarr` and the UI, API and websocket are all served under it. The container healthcheck (`/ping`) stays unprefixed.
+- With login disabled (`AUTH_TYPE=none`) the executable-related settings (`GET_IPLAYER_EXEC`, `YTDLP_EXEC`, additional download parameters) can't be changed from the UI; set them as environment variables.
 
 ### Usage
 
@@ -263,6 +320,12 @@ See [docs/SONARR_RADARR_INTEGRATION.md](docs/SONARR_RADARR_INTEGRATION.md) for h
 
 To access the web frontend, visit `http://Your_Docker_Host:4404`.
 From here, you can manage settings, view logs, and monitor downloads. See [docs/USAGE_GUIDE.md](docs/USAGE_GUIDE.md) for a tour of each page.
+## Database
+
+iPlayarr Turbo stores everything in a single SQLite file (`/config/iplayarr.db` in the container) via Prisma. There is nothing to set up and no extra service to run. Keep your `/config` mount and you keep your settings.
+
+Upgrading from a version that used Redis? Your data is imported automatically on first start. See [docs/DATABASE.md](docs/DATABASE.md) for details, what's stored and backup/restore notes.
+
 
 ## ⚖️ Legal Disclaimer
 
@@ -282,23 +345,16 @@ To run iPlayarr Turbo locally for development:
 ### Prerequisites
 
 - Node.js (see `.node-version` for current version)
-- Docker (for local dev instance of Redis)
 
 ### Installation
 
 1. Install dependencies for both backend and frontend:
 
 ```bash
-npm run install:both
+npm install
 ```
 
-2. Start Redis using Docker (or see Redis section below to use another instance):
-
-```bash
-npm run serve:redis
-```
-
-3. Start the development server (runs backend and frontend concurrently):
+2. Start the development server (runs backend and frontend concurrently):
 
 ```bash
 npm run dev
@@ -319,16 +375,3 @@ The application will be available at:
 | `npm run prettier`   | Check code formatting                     |
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for testing a single file/test name, linting/prettier fix scripts, the module-alias note, and where to make changes architecturally.
-
-## Redis
-
-iPlayarr Turbo uses Redis for storage. This is built into the container and **doesn't require any additional setup**, but if you would like to use a standalone redis instance, set the following settings:
-
-- REDIS_HOST
-- REDIS_PORT
-- REDIS_PASSWORD (optional)
-- REDIS_SSL (optionally 'true')
-
-If these are all set, it will not start the bundled version of Redis.
-
-See [docs/REDIS.md](docs/REDIS.md) for what's actually stored in Redis and backup/restore notes.

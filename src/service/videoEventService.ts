@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { QueuedStorage } from '../types/QueuedStorage';
 import { VideoEvent, VideoEventLevel, VideoEventType } from '../types/VideoEvent';
+import activeJobs from './activeJobs';
 import socketService from './socketService';
 
 const eventLimit = 200;
@@ -13,6 +14,8 @@ async function getEvents(): Promise<VideoEvent[]> {
 
 interface RecordOptions {
     pid?: string;
+    // Defaults to the job currently active for the pid; pass it for an event about a job that has finished.
+    jobId?: string;
     level?: VideoEventLevel;
 }
 
@@ -21,11 +24,12 @@ const videoEventService = {
     // outbound BBC metadata lookup on every event write. Instead, like Youtarr's thumbnail URLs,
     // the client resolves those lazily at render time (GET json-api/details?pid=) from the pid
     // alone, reusing iplayerDetailsService's existing 24h metadata cache.
-    record: async (type: VideoEventType, message: string, { pid, level = 'info' }: RecordOptions = {}): Promise<void> => {
+    record: async (type: VideoEventType, message: string, { pid, jobId, level = 'info' }: RecordOptions = {}): Promise<void> => {
         const event: VideoEvent = {
             id: uuidv4(),
             timestamp: new Date(),
             pid,
+            jobId: jobId ?? (pid ? activeJobs.get(pid) : undefined),
             type,
             level,
             message,

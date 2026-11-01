@@ -37,6 +37,27 @@ describe('GetIplayerExecutableService', () => {
         jest.clearAllMocks();
     });
 
+    describe('getQualityFallbackChain', () => {
+        it('prefers the quality stored on the queue entry over VIDEO_QUALITY', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('hd');
+            queueService.getFromQueue = jest.fn().mockReturnValue({ library: { quality: 'sd' } });
+            expect(await service.getQualityFallbackChain('p0abc123')).toEqual(['sd', 'hd', 'web', 'mobile']);
+        });
+
+        it('reads the quality of the named job when the programme has several', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('hd');
+            queueService.getFromQueue = jest.fn().mockImplementation((_pid: string, jobId?: string) => (jobId === 'job-2' ? { library: { quality: 'web' } } : undefined));
+            expect((await service.getQualityFallbackChain('p0abc123', 'job-2'))[0]).toBe('web');
+            expect(queueService.getFromQueue).toHaveBeenCalledWith('p0abc123', 'job-2');
+        });
+
+        it('falls back to VIDEO_QUALITY with no queue entry', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('fhd');
+            queueService.getFromQueue = jest.fn().mockReturnValue(undefined);
+            expect((await service.getQualityFallbackChain('p0abc123'))[0]).toBe('fhd');
+        });
+    });
+
     describe('getIPlayerExec', () => {
         it('should return exec and args with profile-dir if cacheLocation exists', async () => {
             const mockCacheLocation = '/mock/cache';
@@ -114,6 +135,29 @@ describe('GetIplayerExecutableService', () => {
             expect(result.args).toContain('--output');
             expect(result.args).toContain(`${mockDownloadDir}/${mockPid}`);
             expect(result.args).toContain(`--pid=${mockPid}`);
+        });
+
+        describe('--versions', () => {
+            const versionArgs = async (library?: { version?: string }) => {
+                mockedConfigService.getParameter.mockImplementation((key: IplayarrParameter) =>
+                    Promise.resolve(key === IplayarrParameter.GET_IPLAYER_EXEC ? 'get_iplayer' : undefined)
+                );
+                (queueService.getFromQueue as jest.Mock).mockReturnValue(library ? { library } : undefined);
+                const { args } = await service.getAllDownloadParameters('p01abc', '/mock/dir', 'job-1');
+                return args.filter((arg) => arg.startsWith('--versions'));
+            };
+
+            it('asks get_iplayer for the audio described or signed version a queue entry is of', async () => {
+                expect(await versionArgs({ version: 'audio-described' })).toEqual(['--versions=audiodescribed']);
+                expect(await versionArgs({ version: 'signed' })).toEqual(['--versions=signed']);
+                expect(queueService.getFromQueue).toHaveBeenCalledWith('p01abc', 'job-1');
+            });
+
+            it('adds nothing for the standard version, an unknown one or no queue entry', async () => {
+                expect(await versionArgs({})).toEqual([]);
+                expect(await versionArgs({ version: 'bogus' })).toEqual([]);
+                expect(await versionArgs()).toEqual([]);
+            });
         });
     });
 
@@ -322,8 +366,8 @@ describe('GetIplayerExecutableService', () => {
 
             const results = await service.processCompletedSearch(mockResults, mockSynonym);
 
-            expect(results[0]).toHaveProperty('nzbName', 'TV-Test.Title-test.nzb-720p');
-            expect(results[1]).toHaveProperty('nzbName', 'TV-Different.Title--720p');
+            expect(results[0]).toHaveProperty('nzbName', 'TV-Test.Title-test.nzb-720p-BBCiPlayarrTurbo');
+            expect(results[1]).toHaveProperty('nzbName', 'TV-Different.Title--720p-BBCiPlayarrTurbo');
             expect(mockedSynonymService.getSynonym).not.toHaveBeenCalled();
         });
 
@@ -373,9 +417,71 @@ describe('GetIplayerExecutableService', () => {
 
             const results = await service.processCompletedSearch(mockResults, undefined);
 
-            expect(results[0]).toHaveProperty('nzbName', 'TV-Test.Title-test.nzb-720p');
-            expect(results[1]).toHaveProperty('nzbName', 'TV-Different.Title--720p');
+            expect(results[0]).toHaveProperty('nzbName', 'TV-Test.Title-test.nzb-720p-BBCiPlayarrTurbo');
+            expect(results[1]).toHaveProperty('nzbName', 'TV-Different.Title--720p-BBCiPlayarrTurbo');
             expect(synonymService.getSynonym).toHaveBeenCalledWith('Test Title');
         });
+    });
+
+    describe('branches', () => {
+        it('moves an .mkv download as well as an .mp4', async () => {
+            queueService.getFromQueue = jest.fn().mockReturnValue({ nzbName: 'mock_nzb' });
+            (configService.getParameters as jest.Mock).mockImplementation(() => ['/mock/download', '/mock/complete']);
+            fs.readdirSync = jest.fn().mockReturnValue(['notes.txt', 'clip.mkv']);
+            fs.copyFileSync = jest.fn();
+            fs.rmSync = jest.fn();
+
+            await service.processCompletedDownload('12345', 0);
+
+            expect(fs.copyFileSync).toHaveBeenCalledTimes(1);
+            expect(historyService.addHistory).toHaveBeenCalled();
+        });
+
+        it('does nothing to the files when the download did not succeed', async () => {
+            (configService.getParameters as jest.Mock).mockImplementation(() => ['/mock/download', '/mock/complete']);
+            fs.copyFileSync = jest.fn();
+            fs.rmSync = jest.fn();
+
+            await service.processCompletedDownload('12345', 1);
+
+            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(fs.rmSync).not.toHaveBeenCalled();
+            expect(queueService.removeFromQueue).toHaveBeenCalledWith('12345');
+        });
+
+        it('uses the configured quality when there is no programme to look up', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('fhd');
+            expect(await service.getQualityFallbackChain()).toEqual(['fhd', 'hd', 'sd', 'web', 'mobile']);
+        });
+
+        it('parses a result with no duration, date or episode details', async () => {
+            const line = 'RESULT|:|12345|:|Plain title|:||:||:|1|:|BBC|:||:||:|';
+            const [result] = await service.parseResults('plain', line, 1);
+            expect(result).toMatchObject({ pid: '12345', title: 'Plain title', size: undefined, pubDate: undefined, runtimeSeconds: undefined });
+        });
+
+        it('treats a duration that is not a number as unknown', async () => {
+            const line = 'RESULT|:|12345|:|Plain title|:||:||:|1|:|BBC|:|soon|:||:|';
+            const [result] = await service.parseResults('plain', line, 1);
+            expect(result.size).toBeUndefined();
+            expect(result.runtimeSeconds).toBeUndefined();
+        });
+
+        it('scales a duration by the size factor and reads the air date', async () => {
+            const line = 'RESULT|:|12345|:|Plain title|:||:||:|1|:|BBC|:|600|:|2021-01-01T10:00:00Z|:||:|';
+            const [result] = await service.parseResults('plain', line, 0.5);
+            expect(result).toMatchObject({ size: 300, runtimeSeconds: 600 });
+            expect(result.pubDate).toEqual(new Date('2021-01-01T10:00:00Z'));
+        });
+    });
+});
+
+describe('getAllStreamInfoParameters', () => {
+    it('asks get_iplayer for the stream info of one programme', async () => {
+        const service = new GetIplayerExecutableService();
+        mockedConfigService.getParameter.mockImplementation(async (key: IplayarrParameter) => (key === IplayarrParameter.GET_IPLAYER_EXEC ? 'gip --foo' : undefined));
+        const result = await service.getAllStreamInfoParameters('p0abc123');
+        expect(result.exec).toBe('gip');
+        expect(result.args).toEqual(expect.arrayContaining(['--foo', '--streaminfo', '--pid=p0abc123']));
     });
 });

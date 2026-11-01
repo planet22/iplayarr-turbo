@@ -1,0 +1,770 @@
+/* Settings sweep (--write layer, DEV INSTANCES ONLY): every setting in IplayarrParameter is accounted for.
+ * Each changeable setting is changed through PUT /json-api/config, read back, its EFFECT is observed through the
+ * API (or the media library on disk), and it is restored. A setting with no effect that the API can show is listed
+ * in NO_EFFECT with the reason, and reported as a skip. A setting added to IplayarrParameters.ts without an entry
+ * here FAILS the "every setting is covered" check, so new settings cannot slip past the suite.
+ */
+const fs = require('fs');
+const path = require('path');
+
+// Settings changed by value: key -> candidate values (the first one that differs from the current value is used).
+const CHANGE = {
+    DEBUG: ['true', 'false'],
+    DOWNLOAD_CLIENT: ['GET_IPLAYER', 'YTDLP', 'NATIVE'],
+    VIDEO_QUALITY: ['hd', 'sd', 'fhd'],
+    EXTRA_VIDEO_QUALITIES: ['sd,hd', 'sd'],
+    EXTRA_VERSIONS: ['audio-described', 'signed'],
+    AIRDATE_NUMBERING: ['true', 'false'], // clears the episode and search caches
+    RELEASE_LANGUAGE: ['english', 'none'],
+    SEARCH_MATCH_ALL_WORDS: ['false', 'true'],
+    MANUAL_NATIVE_SEARCH: ['true', 'false', 'inherit'],
+    MANUAL_NATIVE_SEARCH_ENGINE: ['V2', 'V1', 'inherit'],
+    MANUAL_SEARCH_MATCH_ALL_WORDS: ['false', 'true', 'inherit'],
+    MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: ['true', 'false', 'inherit'],
+    MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: ['true', 'false', 'inherit'],
+    NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: ['true', 'false'],
+    NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: ['true', 'false'],
+    NATIVE_SEARCH_V2_COLLECTION_NAMES: ['true', 'false'],
+    BROWSE_SHOW_COLLECTIONS: ['true', 'false'],
+    BROWSE_COLLECTION_SOURCES: ['home', 'all'],
+    LIBRARY_FOLDER_STRUCTURE: ['false', 'true'],
+    WRITE_NFO_STRM: ['all', 'nzb', 'none', 'manual'],
+    WRITE_STRMTOOL_JSON: ['true', 'false'],
+    REFRESH_SCHEDULE: ['*/30 * * * *', '0 * * * *'],
+    SCHEDULE_FULL_REFRESH: ['true', 'false'],
+    NATIVE_SEARCH: ['false', 'true'], // clears the search cache
+    NATIVE_SEARCH_ENGINE: ['V2', 'V1'], // clears the search cache
+    ARCHIVE_ENABLED: ['true', 'false'],
+    OUTPUT_FORMAT: ['mkv', 'mp4'],
+    THUMBNAIL_CACHE_DIR: ['/smoke-temp-thumbs'],
+    THUMBNAIL_RETENTION_DAYS: ['7', '30'],
+    MEDIA_MODE: ['download', 'strm'],
+    STREAM_MODE: ['progressive-mkv', 'direct'],
+    STREAM_CLIENT: ['YTDLP', 'GET_IPLAYER', 'NATIVE'],
+    STREAM_CACHE_DIR: ['/smoke-temp-stream'],
+    LIVE_STRM_DIR: ['SMOKE-TEMP-live'], // relative to COMPLETE_DIR below; replaced at run time
+    STREAM_NATIVE_ADAPTIVE: ['true', 'false'],
+    STREAM_NATIVE_HQ_PROBE: ['true', 'false'],
+    STREAM_NATIVE_EXPERIMENTAL_FHD: ['false', 'true'],
+    STREAM_SUBTITLES: ['true', 'false'],
+    STREAM_LIVE_DASH_1080: ['true', 'false'],
+    LIVE_TV_ENABLED: ['true', 'false'],
+    LIVE_TV_LOGO_SHAPE: ['square', 'landscape'],
+    LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
+    LIVE_TV_GUIDE_FLAGS: ['false', 'true'],
+    LIVE_TV_GUIDE_HD: ['false', 'true'],
+    LIVE_TV_JELLYFIN_APPS: ['smoke-temp-none'],
+    STRM_WATCHDOG_ENABLED: ['true', 'false'],
+    STRM_WATCHDOG_SOURCES: ['subscribed', 'history'],
+    STRM_WATCHDOG_ACTION: ['delete', 'notify'],
+    STRM_WATCHDOG_PATH_MAP: ['/smoke-temp-a=/smoke-temp-b'],
+    STRM_WATCHDOG_ARR_ACTION: ['unmonitor', 'search', 'none'],
+    STRM_WATCHDOG_WEBHOOK_URL: ['http://smoke-temp.invalid/hook'],
+    STREAM_BASE_URL: ['http://smoke-temp.invalid:4404'],
+    OIDC_CONFIG_URL: ['http://smoke-temp.invalid/.well-known/openid-configuration'],
+    OIDC_CLIENT_ID: ['smoke-temp-client'],
+    OIDC_CALLBACK_HOST: ['http://smoke-temp.invalid'],
+    OIDC_ALLOWED_EMAILS: ['smoke-temp@example.invalid'],
+    UI_PILL_COLORS: ['false', 'true'],
+    UI_CHANNEL_TOOLS: ['true', 'false'],
+    UI_INFO_MESSAGES: ['false', 'true'],
+    UI_QUALITY_BADGES: ['true', 'false'],
+    UI_VERSION_BADGES: ['true', 'false'],
+    UI_SUBTITLE_BADGES: ['true', 'false'],
+    DOWNLOAD_ASK_VERSION: ['false', 'true'],
+    DOWNLOAD_DEFAULT_VERSION: ['audio-described', 'signed', ''],
+    PLAY_ASK_VERSION: ['false', 'true'],
+    PLAY_DEFAULT_VERSION: ['signed', 'audio-described', ''],
+};
+
+// Settings with their own tests below, or deliberately not changed (the reason is reported).
+const OTHER = {
+    PORT: 'read-only: rejected',
+    API_KEY: 'rotation test',
+    STREAM_KEY: 'rotation test',
+    ACTIVE_LIMIT: 'numeric range test (effect: see NO_EFFECT note)',
+    RSS_FEED_HOURS: 'numeric range test',
+    STRM_WATCHDOG_CONCURRENCY: 'numeric range test',
+    STRM_WATCHDOG_FAIL_THRESHOLD: 'numeric range test',
+    STRM_WATCHDOG_STRIKES: 'numeric range test',
+    STREAM_HISTORY_RETENTION_DAYS: 'numeric range test',
+    LIVE_TV_EPG_OFFSET: 'range test + guide time shift',
+    DOWNLOAD_DIR: 'directory test + SABnzbd get_config',
+    COMPLETE_DIR: 'directory test + SABnzbd get_config',
+    ARR_COMPLETE_DIR: 'directory test + SABnzbd get_config',
+    TV_FILENAME_TEMPLATE: 'template test + release names',
+    MOVIE_FILENAME_TEMPLATE: 'template test + release names',
+    GET_IPLAYER_EXEC: 'executable guard test',
+    YTDLP_EXEC: 'executable guard test',
+    ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS: 'executable guard test',
+    AUTH_TYPE: 'not changed: a wrong value locks the dev instance out',
+    AUTH_USERNAME: 'not changed: a wrong value locks the dev instance out',
+    AUTH_PASSWORD: 'not changed: a wrong value locks the dev instance out (masked round-trip only)',
+    OIDC_CLIENT_SECRET: 'masking test',
+    LIVE_UHD_EVENT_FEEDS: 'not changed: turning it off deletes the UHD feeds from the library and Live TV',
+};
+
+// Changeable settings whose effect the API (or the library on disk) cannot show without a side effect this
+// suite will not cause. They are still changed, read back and restored. "DEAD" marks a setting nothing reads.
+const NO_EFFECT = {
+    DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
+    DOWNLOAD_CLIENT: 'picks the downloader for the next real download; visible only inside that download',
+    AIRDATE_NUMBERING: 'changes season/episode numbers through Skyhook lookups; no deterministic probe',
+    NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'only narrows Sonarr/Radarr searches that ask for a season (manual search always lists the whole show)',
+    SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',
+    ARCHIVE_ENABLED: 'decides whether a cancelled queue item is archived; needs a real download queued and cancelled',
+    THUMBNAIL_CACHE_DIR: 'a path inside the container, not visible from the host running this suite',
+    STREAM_CACHE_DIR: 'a path inside the container, not visible from the host running this suite',
+    STREAM_LIVE_DASH_1080: 'picks the 1080p DASH source for live channels; visible only in the BBC manifest at that moment',
+    LIVE_TV_JELLYFIN_APPS: 'chooses which Jellyfin servers get the tuner and guide synced; needs a Jellyfin server',
+    STRM_WATCHDOG_SOURCES: 'only used while a watchdog run lists links (a full BBC pass)',
+    STRM_WATCHDOG_ACTION: 'only used when a watchdog run finds dead links (it can delete .strm files)',
+    STRM_WATCHDOG_PATH_MAP: 'only used while a watchdog run maps library paths',
+    STRM_WATCHDOG_ARR_ACTION: 'only used when a watchdog run finds dead links (it acts on Sonarr/Radarr)',
+    STRM_WATCHDOG_WEBHOOK_URL: 'only called when a watchdog run reports dead links',
+    OIDC_CONFIG_URL: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
+    OIDC_CLIENT_ID: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
+    OIDC_CALLBACK_HOST: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
+    OIDC_ALLOWED_EMAILS: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
+    UI_PILL_COLORS: 'browser-only: the server stores it and the frontend applies it',
+    UI_CHANNEL_TOOLS: 'browser-only: the server stores it and the frontend applies it',
+    UI_INFO_MESSAGES: 'browser-only: the server stores it and the frontend applies it',
+    UI_QUALITY_BADGES: 'browser-only: the server stores it and the frontend applies it',
+    UI_VERSION_BADGES: 'browser-only: the server stores it and the frontend applies it',
+    UI_SUBTITLE_BADGES: 'browser-only: the server stores it and the frontend applies it',
+    DOWNLOAD_ASK_VERSION: 'browser-only: the server stores it and the frontend applies it',
+    DOWNLOAD_DEFAULT_VERSION: 'browser-only: the server stores it and the frontend applies it',
+    PLAY_ASK_VERSION: 'browser-only: the server stores it and the frontend applies it',
+    PLAY_DEFAULT_VERSION: 'browser-only: the server stores it and the frontend applies it',
+};
+
+// Effects checked after the change by the media-library test further down.
+const IN_LIBRARY_TEST = ['LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON', 'MEDIA_MODE'];
+const TESTED_LATER = [...IN_LIBRARY_TEST, 'LIVE_STRM_DIR'];
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const TERMS = ['horizon', 'panorama', 'springwatch', 'gardeners', 'antiques', 'crimewatch', 'countryfile', 'newsnight', 'mastermind', 'pointless', 'bargain', 'attenborough'];
+const SMOKE_BASE = 'http://smoke-temp.invalid:4404';
+// The instance sees the library under SMOKE_CONTAINER_ROOT (default /data); this machine sees it under SMOKE_MEDIA_ROOT.
+const CONTAINER_ROOT = process.env.SMOKE_CONTAINER_ROOT || '/data';
+
+module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
+    const W = 'settings';
+    const MEDIA_ROOT = process.env.SMOKE_MEDIA_ROOT || '';
+    const ok = (name, cond, detail = '') => rec(W, name, cond ? 'PASS' : 'FAIL', cond ? '' : detail);
+    const warn = (name, cond, detail = '') => rec(W, name, cond ? 'PASS' : 'WARN', cond ? '' : detail);
+    const get = async () => (await http('/json-api/config')).json || {};
+    const put = (body) => http('/json-api/config', { method: 'PUT', body, timeout: 60000 });
+    const rejected = (r, key) => r.status === 400 && (!key || (r.json?.invalid_fields && key in r.json.invalid_fields));
+    const effective = (cfg, k) => cfg[k] ?? '';
+    const hostPath = (p) => (MEDIA_ROOT && p && (p === CONTAINER_ROOT || p.startsWith(CONTAINER_ROOT + '/')) ? path.join(MEDIA_ROOT, p.slice(CONTAINER_ROOT.length)) : undefined);
+
+    // 0. Every setting is accounted for
+    const src = fs.readFileSync(path.resolve(__dirname, '..', 'src', 'types', 'IplayarrParameters.ts'), 'utf8');
+    const enumBody = src.slice(src.indexOf('enum IplayarrParameter'), src.indexOf('}', src.indexOf('enum IplayarrParameter')));
+    const all = [...enumBody.matchAll(/^\s+([A-Z0-9_]+)\s*=\s*'/gm)].map((m) => m[1]);
+    ok('settings list read from IplayarrParameters.ts', all.length > 50, `${all.length} keys`);
+    const missing = all.filter((k) => !(k in CHANGE) && !(k in OTHER));
+    ok('every setting is covered by this sweep', !missing.length, `add to smoke/settings.cjs: ${missing.join(', ')}`);
+    const stale = [...Object.keys(CHANGE), ...Object.keys(OTHER)].filter((k) => !all.includes(k));
+    warn('sweep lists no removed settings', !stale.length, stale.join(', '));
+    for (const [k, why] of Object.entries(OTHER)) if (/^not changed/.test(why)) rec(W, `${k} left unchanged`, 'SKIP', why);
+
+    const before = await get();
+    const K = encodeURIComponent(before.STREAM_KEY || '');
+    const touched = new Set();
+    const profilesQ = Object.fromEntries(((await http('/json-api/config/qualityProfiles')).json || []).map((p) => [p.id, p.quality]));
+    let termIx = 0;
+    const freshTerm = () => TERMS[termIx++ % TERMS.length];
+    const nzbTitles = async (t, q) => {
+        const r = await http(`/api?t=${t}&q=${encodeURIComponent(q)}&apikey=${encodeURIComponent(before.API_KEY)}`, { timeout: 90000 });
+        return [...r.text.matchAll(/<item>[\s\S]*?<title>([^<]*)<\/title>/g)].map((m) => m[1]);
+    };
+    const manualSettings = async () => (await http('/json-api/search/settings')).json || {};
+    const playlist = async () => http(`/api?mode=live_playlist&streamkey=${K}`, { timeout: 60000 });
+    const epg = async () => (await http(`/api?mode=live_epg&streamkey=${K}`, { timeout: 180000 })).text || '';
+    const sabMisc = async () => (await http(`/api?mode=get_config&apikey=${encodeURIComponent(before.API_KEY)}&output=json`)).json?.config?.misc || {};
+
+    // Starts an on-demand stream (a session is recorded before anything is resolved), reads the session, stops it.
+    const sessionProbe = async () => {
+        const seen = new Set((((await http('/json-api/streams')).json || {}).active || []).concat(((await http('/json-api/streams')).json || {}).history || []).map((s) => s.id));
+        const ctl = new AbortController();
+        const req = fetch(`${BASE}/api?mode=stream&pid=${ctx.pid}&streamkey=${K}`, { signal: ctl.signal }).then((r) => r.body?.cancel?.()).catch(() => {});
+        let found;
+        for (let i = 0; i < 14 && !found; i++) {
+            await sleep(500);
+            const s = (await http('/json-api/streams')).json || {};
+            found = [...(s.active || []), ...(s.history || [])].find((x) => x.pid === ctx.pid && !seen.has(x.id));
+        }
+        ctl.abort();
+        await req;
+        if (found && !found.endedAt) await http(`/json-api/streams/${found.id}/stop`, { method: 'POST' });
+        return found;
+    };
+    const needSession = () => (!ctx.pid || !before.STREAM_KEY ? 'no pid / stream key to start a stream with' : undefined);
+    const nativeSnapshot = async (field, expected) => {
+        if (needSession()) return needSession();
+        if ((effective(await get(), 'STREAM_CLIENT') || 'NATIVE') !== 'NATIVE') return 'STREAM_CLIENT is not NATIVE, so no native snapshot is taken';
+        const s = await sessionProbe();
+        return { what: `stream session snapshot "${field}" = ${expected}`, pass: s?.settings?.[field] === expected, detail: s ? JSON.stringify(s.settings) : 'no session was recorded' };
+    };
+
+    // Live TV prep: playlist and guide baselines are taken with Live TV switched on
+    if (before.STREAM_KEY && before.LIVE_TV_ENABLED !== 'true') { touched.add('LIVE_TV_ENABLED'); await put({ LIVE_TV_ENABLED: 'true' }); }
+    const playlist0 = before.STREAM_KEY ? await playlist() : undefined;
+    const epg0 = before.STREAM_KEY ? await epg() : '';
+    const hasGuide = /<programme /.test(epg0);
+    const firstStart = (xml) => {
+        const m = /<programme start="(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d) /.exec(xml);
+        return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : undefined;
+    };
+    const guideEffect = (what, test) => (!hasGuide ? 'no Live TV guide to read (no channels selected or the BBC schedule is unavailable)' : (async () => ({ what, ...test(await epg()) }))());
+
+    // Effect of each setting, observed after it has been changed. Returns { what, pass, detail, level? } or a skip reason.
+    const EFFECT = {
+        VIDEO_QUALITY: async ({ next }) => {
+            const titles = await nzbTitles('search', freshTerm());
+            if (!titles.length) return 'the search returned no releases';
+            return { what: `release names carry ${profilesQ[next]}`, pass: titles.some((t) => t.includes(profilesQ[next])), detail: titles.slice(0, 2).join(' | ') };
+        },
+        EXTRA_VIDEO_QUALITIES: async ({ next }) => {
+            const extra = next.split(',').filter((id) => id !== effective(before, 'VIDEO_QUALITY'))[0];
+            const titles = await nzbTitles('search', freshTerm());
+            if (!titles.length || !extra) return 'no releases / no extra quality different from the primary';
+            return { what: `extra ${profilesQ[extra]} releases are offered`, pass: titles.some((t) => t.includes(profilesQ[extra])), detail: titles.slice(0, 2).join(' | ') };
+        },
+        EXTRA_VERSIONS: async ({ next }) => {
+            const tag = next === 'signed' ? 'SIGNED' : 'AUDIO.DESCRIBED';
+            // Only programmes that have the version get a release for it, so try a few searches before deciding.
+            let seen = 0;
+            for (let attempt = 0; attempt < 4; attempt++) {
+                const titles = await nzbTitles('search', freshTerm());
+                seen += titles.length;
+                if (titles.some((t) => t.includes(tag))) return { what: `${tag} releases are offered`, pass: true, detail: '' };
+            }
+            return `none of the ${seen} releases searched has a ${tag} version, so there is nothing to tag`;
+        },
+        RELEASE_LANGUAGE: async ({ next }) => {
+            const titles = await nzbTitles('search', freshTerm());
+            if (!titles.length) return 'the search returned no releases';
+            return { what: next === 'english' ? 'release names are tagged ENGLISH' : 'release names are not tagged ENGLISH', pass: titles.some((t) => /\bENGLISH\b/.test(t)) === (next === 'english'), detail: titles.slice(0, 2).join(' | ') };
+        },
+        OUTPUT_FORMAT: async ({ next }) => {
+            if (!ctx.pid) return 'no pid discovered';
+            const r = await http(`/api?mode=nzb-download&pid=${ctx.pid}&nzbName=SMOKETEMP&type=TV&apikey=${encodeURIComponent(before.API_KEY)}`);
+            return { what: `the NZB names the file SMOKETEMP.${next}`, pass: r.status === 200 && r.text.includes(`SMOKETEMP.${next}`), detail: `HTTP ${r.status}` };
+        },
+        SEARCH_MATCH_ALL_WORDS: async ({ next }) => {
+            const s = await manualSettings();
+            if (effective(await get(), 'NATIVE_SEARCH') === 'false') return 'native search is off';
+            const n = (await nzbTitles('search', `${freshTerm()} zzqqxxy`)).length;
+            return { what: next === 'true' ? 'a word that matches nothing empties the results' : 'a word that matches nothing no longer empties the results', pass: next === 'true' ? n === 0 : n > 0, detail: `${n} releases (manual settings ${JSON.stringify(s)})` };
+        },
+        MANUAL_NATIVE_SEARCH: async ({ next }) => {
+            const s = await manualSettings();
+            const want = next === 'inherit' ? effective(await get(), 'NATIVE_SEARCH') !== 'false' : next === 'true';
+            return { what: `the Search page reports native search ${want ? 'on' : 'off'}`, pass: s.native === want, detail: JSON.stringify(s) };
+        },
+        MANUAL_NATIVE_SEARCH_ENGINE: async ({ next }) => {
+            const s = await manualSettings();
+            if (!s.native) return 'native search is off for manual searches';
+            const want = next === 'inherit' ? effective(await get(), 'NATIVE_SEARCH_ENGINE') || 'V1' : next;
+            return { what: `the Search page reports engine ${want}`, pass: s.engine === want, detail: JSON.stringify(s) };
+        },
+        MANUAL_SEARCH_MATCH_ALL_WORDS: async ({ next }) => {
+            const s = await manualSettings();
+            if (!s.native) return 'native search is off for manual searches';
+            const want = next === 'inherit' ? effective(await get(), 'SEARCH_MATCH_ALL_WORDS') !== 'false' : next === 'true';
+            const base = { what: `the Search page reports match-all-words ${want}`, pass: s.matchAllWords === want, detail: JSON.stringify(s) };
+            if (next === 'inherit') return base;
+            const r = await http(`/json-api/search?q=${encodeURIComponent(`${freshTerm()} zzqqxxy`)}`, { timeout: 90000 });
+            const n = Array.isArray(r.json) ? r.json.length : -1;
+            return { ...base, pass: base.pass && (want ? n === 0 : n > 0), detail: `${base.detail}; manual search for a non-matching extra word gave ${n} results` };
+        },
+        MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: async ({ next }) => {
+            const s = await manualSettings();
+            if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
+            const want = next === 'inherit' ? effective(await get(), 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS') === 'true' : next === 'true';
+            return { what: `the Search page footer reports collections by pid ${want ? 'on' : 'off'}`, pass: !!s.expandCollections === want, detail: JSON.stringify(s) };
+        },
+        MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: async ({ next }) => {
+            const s = await manualSettings();
+            if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
+            const want = next === 'inherit' ? effective(await get(), 'NATIVE_SEARCH_V2_COLLECTION_NAMES') === 'true' : next === 'true';
+            return { what: `the Search page footer reports collections by name ${want ? 'on' : 'off'}`, pass: !!s.collectionNames === want, detail: JSON.stringify(s) };
+        },
+        NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: async ({ next }) => {
+            if ((effective(await get(), 'MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS') || 'inherit') !== 'inherit') return 'manual search has its own override of this option';
+            const s = await manualSettings();
+            if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
+            const on = next === 'true';
+            const base = { what: `the Search page footer reports collections ${on ? 'on' : 'off'}`, pass: !!s.expandCollections === on, detail: JSON.stringify(s) };
+            // A real BBC collection (Fright Night); if the BBC has retired it there is nothing to expand.
+            const group = await fetch('https://ibl.api.bbci.co.uk/ibl/v1/groups/p096h09x/episodes?rights=web&per_page=1').then((r) => r.json()).catch(() => undefined);
+            if (!group?.group_episodes?.count) return base.pass ? { ...base, detail: `${base.detail}; the BBC collection used for the search probe is gone` } : base;
+            const r = await http('/json-api/search?q=p096h09x', { timeout: 90000 });
+            const n = Array.isArray(r.json) ? r.json.length : -1;
+            return { ...base, pass: base.pass && (on ? n > 0 : n === 0), detail: `${base.detail}; a manual search for the collection pid gave ${n} results` };
+        },
+        NATIVE_SEARCH_V2_COLLECTION_NAMES: async ({ next }) => {
+            if ((effective(await get(), 'MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES') || 'inherit') !== 'inherit') return 'manual search has its own override of this option';
+            const s = await manualSettings();
+            if (!s.native || s.engine !== 'V2') return 'manual search is not on native engine 2.0, which the option needs';
+            const on = next === 'true';
+            const base = { what: `the Search page footer reports collections by name ${on ? 'on' : 'off'}`, pass: !!s.collectionNames === on, detail: JSON.stringify(s) };
+            // Search for a collection that is on iPlayer right now; a title no programme shares, so any hit is a collection member.
+            const list = (await http('/json-api/browse/collections')).json;
+            const collection = on || list?.enabled ? (list?.collections || [])[0] : undefined;
+            if (!collection) return base.pass ? { ...base, detail: `${base.detail}; no collection is available to search for (turn on Show Collections to probe)` } : base;
+            // Manual search shows the collection as a result of its own (a {collections} line of the search stream, listed
+            // first by the page), not its episodes; the type-ahead leads with it too.
+            const stream = await http(`/json-api/search/stream?q=${encodeURIComponent(collection.title)}`, { timeout: 120000 });
+            const lines = String(stream.text || '').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return {}; } });
+            const tiled = lines.some((l) => (l.collections || []).some((c) => c.id === collection.id));
+            const suggested = ((await http(`/json-api/browse/suggest?q=${encodeURIComponent(collection.title)}`, { timeout: 60000 })).json || []).some((s) => s.kind === 'collection' && s.id === collection.id);
+            return { ...base, pass: base.pass && tiled === on && suggested === on, detail: `${base.detail}; "${collection.title}": collection in search results ${tiled}, in type-ahead ${suggested}` };
+        },
+        BROWSE_SHOW_COLLECTIONS: async ({ next }) => {
+            const on = next === 'true';
+            const r = await http('/json-api/browse/collections', { timeout: 120000 });
+            const list = r.json || {};
+            const count = (list.collections || []).length;
+            if (!on) return { what: 'the Discover collections list is off and empty', pass: r.status === 200 && list.enabled === false && count === 0, detail: JSON.stringify(list).slice(0, 100) };
+            if (r.status === 200 && list.enabled === true && count === 0) return 'the BBC pages listed no collections to show right now';
+            const first = (list.collections || [])[0];
+            const members = first ? (await http(`/json-api/browse/collections/${first.id}?perPage=5`)).json : undefined;
+            return { what: 'the Collections page lists collections and one opens to its titles', pass: r.status === 200 && list.enabled === true && count > 0 && (members?.items || []).length > 0, detail: `${count} collections; "${first?.title}" opened ${(members?.items || []).length} titles` };
+        },
+        BROWSE_COLLECTION_SOURCES: async ({ next }) => {
+            if (effective(await get(), 'BROWSE_SHOW_COLLECTIONS') !== 'true') return 'Show Collections is off, so the list is not served';
+            const r = await http('/json-api/browse/collections', { timeout: 180000 });
+            const list = r.json?.collections || [];
+            const generic = list.filter((c) => /^(featured\b|live and latest\b)/i.test(c.title));
+            // The home page holds roughly thirty; the category pages add well over a hundred more.
+            const sized = next === 'all' ? list.length > 45 : list.length > 0 && list.length < 45;
+            return { what: `the Collections list is built from ${next === 'all' ? 'the home page and every category' : 'the home page only'}`, pass: r.status === 200 && sized && generic.length === 0, detail: `${list.length} collections, ${generic.length} generic shelves` };
+        },
+        NATIVE_SEARCH: async ({ next }) => {
+            if ((effective(await get(), 'MANUAL_NATIVE_SEARCH') || 'inherit') !== 'inherit') return 'manual search has its own native-search override';
+            const s = await manualSettings();
+            return { what: `manual search (which follows it) reports native ${next === 'true' ? 'on' : 'off'}`, pass: s.native === (next === 'true'), detail: JSON.stringify(s) };
+        },
+        NATIVE_SEARCH_ENGINE: async ({ next }) => {
+            const cfg = await get();
+            if ((effective(cfg, 'MANUAL_NATIVE_SEARCH_ENGINE') || 'inherit') !== 'inherit' || effective(cfg, 'NATIVE_SEARCH') === 'false') return 'manual search overrides the engine, or native search is off';
+            const s = await manualSettings();
+            return { what: `manual search (which follows it) reports engine ${next}`, pass: s.engine === next, detail: JSON.stringify(s) };
+        },
+        THUMBNAIL_RETENTION_DAYS: async ({ next }) => {
+            const t = ((await http('/json-api/maintenance/caches')).json || []).find((c) => c.prefix === 'thumbnails');
+            return { what: `the Maintenance cache list shows ${next} days`, pass: t?.ttl === Number(next) * 86400, detail: JSON.stringify(t || {}).slice(0, 120) };
+        },
+        REFRESH_SCHEDULE: async ({ next }) => {
+            const t = ((await http('/json-api/maintenance/tasks')).json || []).find((x) => x.id === 'schedule-refresh');
+            return { what: `the Schedule Refresh task runs on "${next}"`, pass: (t?.cron ?? t?.schedule) === next, detail: `task shows "${t?.cron ?? t?.schedule}"` };
+        },
+        LIVE_TV_ENABLED: async () => {
+            const b = await playlist();
+            return { what: 'the Live TV playlist changes', pass: !!playlist0 && (b.status !== playlist0.status || b.text !== playlist0.text), detail: `both HTTP ${b.status}, ${b.text.length} bytes` };
+        },
+        LIVE_TV_LOGO_SHAPE: async ({ next }) => {
+            if (!/tvg-logo=/.test(playlist0?.text || '')) return 'no channel logos in the playlist';
+            const b = await playlist();
+            return { what: `playlist logos ask for the ${next} shape`, pass: b.text.includes(`v=png-${next}`), detail: (b.text.match(/tvg-logo="[^"]*"/) || [''])[0].slice(-60) };
+        },
+        LIVE_TV_GUIDE_CATEGORIES: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} category tags`, (xml) => ({ pass: /<category/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
+        LIVE_TV_GUIDE_FLAGS: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'has' : 'has no'} new/live/repeat flags`, (xml) => ({ pass: /<new\/>|<previously-shown\/>|<live\/>/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
+        LIVE_TV_GUIDE_HD: ({ next }) => guideEffect(`the guide ${next === 'true' ? 'marks' : 'does not mark'} programmes HD`, (xml) => ({ pass: /<quality>HDTV/.test(xml) === (next === 'true'), detail: `${xml.length} bytes` })),
+        STREAM_BASE_URL: async ({ next }) => {
+            if (!playlist0 || !/live\.m3u8/.test(playlist0.text)) return 'no channels in the Live TV playlist';
+            const lines = (await playlist()).text.split('\n').filter((l) => l.includes('/api/live.m3u8'));
+            return { what: 'playlist stream URLs use the new base URL', pass: lines.length > 0 && lines.every((l) => l.startsWith(next)), detail: lines[0] || 'no stream lines' };
+        },
+        STRM_WATCHDOG_ENABLED: async ({ next }) => {
+            const w = (await http('/json-api/watchdog')).json || {};
+            return { what: `the Watchdog page reports it ${next === 'true' ? 'enabled' : 'disabled'}`, pass: w.enabled === (next === 'true'), detail: JSON.stringify(w).slice(0, 100) };
+        },
+        STREAM_CLIENT: async ({ next }) => {
+            if (needSession()) return needSession();
+            const s = await sessionProbe();
+            return { what: `a new stream session runs on the ${next} client`, pass: s?.client === next, detail: s ? `client ${s.client}` : 'no session was recorded' };
+        },
+        STREAM_MODE: async ({ next }) => {
+            if (needSession()) return needSession();
+            const s = await sessionProbe();
+            return { what: `a new stream session uses ${next} mode`, pass: s?.mode === next, detail: s ? `mode ${s.mode}` : 'no session was recorded' };
+        },
+        STREAM_NATIVE_ADAPTIVE: ({ next }) => nativeSnapshot('Quality', next === 'true' ? 'Adaptive' : 'Fixed'),
+        STREAM_NATIVE_HQ_PROBE: ({ next }) => nativeSnapshot('Quality Probe', next === 'true' ? 'On' : 'Off'),
+        STREAM_NATIVE_EXPERIMENTAL_FHD: ({ next }) => nativeSnapshot('FHD Upgrade', next === 'true' ? 'On' : 'Off'),
+        STREAM_SUBTITLES: async ({ next }) => {
+            const snap = await nativeSnapshot('Subtitles', next === 'true' ? 'On' : 'Off');
+            if (typeof snap === 'string') return snap;
+            const master = await http(`/api?mode=stream&pid=${ctx.pid}&streamkey=${K}`, { timeout: 60000 });
+            const has = /TYPE=SUBTITLES/.test(master.text);
+            return { ...snap, pass: snap.pass && (next === 'true' ? true : !has), detail: `${snap.detail}; master ${has ? 'has' : 'has no'} subtitle rendition` };
+        },
+    };
+
+    const before0 = before;
+    const effectsPassed = new Set();
+    try {
+        // 1. Guard rails on the endpoint itself
+        const unknown = await put({ SMOKE_NOT_A_SETTING: 'x' });
+        ok('unknown setting rejected', rejected(unknown, 'SMOKE_NOT_A_SETTING'), `HTTP ${unknown.status}`);
+        const obj = await put({ DEBUG: { a: 1 } });
+        ok('object value rejected', rejected(obj, 'DEBUG'), `HTTP ${obj.status}`);
+        const arr = await http('/json-api/config', { method: 'PUT', body: ['DEBUG'] });
+        ok('array body rejected', arr.status === 400, `HTTP ${arr.status}`);
+        const port = await put({ PORT: String((parseInt(before.PORT, 10) || 4404) + 1) });
+        ok('PORT cannot be changed through the API', rejected(port, 'PORT'), `HTTP ${port.status}`);
+        ok('PORT unchanged', effective(await get(), 'PORT') === effective(before, 'PORT'));
+        const same = await put({ PORT: effective(before, 'PORT') });
+        ok('PORT sent back unchanged is accepted', same.status === 200, `HTTP ${same.status}`);
+
+        // 2. Each changeable setting: change, read back, confirm the effect, restore
+        for (const [key, candidates] of Object.entries(CHANGE)) {
+            if (!all.includes(key)) continue;
+            const cur = effective(await get(), key);
+            const list = key === 'LIVE_STRM_DIR' ? [`${effective(before, 'COMPLETE_DIR').replace(/[\\/]$/, '')}/SMOKE-TEMP-live`] : candidates;
+            const next = list.find((v) => v !== cur);
+            if (next === undefined) { rec(W, `${key} change`, 'SKIP', 'no alternative value'); continue; }
+            touched.add(key);
+            const r = await put({ [key]: next });
+            if (r.status !== 200) { rec(W, `${key} change accepted`, 'FAIL', `${cur} -> ${next}: HTTP ${r.status} ${r.text.slice(0, 140)}`); continue; }
+            const now = (await get())[key];
+            if (next === '') ok(`${key} change saved and read back`, (now ?? '') === '' || now === effective(before, key), `got ${now}`);
+            else ok(`${key} change saved and read back`, now === next, `${cur} -> ${next}, got ${now}`);
+
+            const hook = EFFECT[key];
+            if (hook) {
+                let out;
+                try { out = await hook({ cur, next }); } catch (e) { out = { what: 'effect check', pass: false, detail: 'threw: ' + e.message }; }
+                if (typeof out === 'string') rec(W, `${key}=${next} effect`, 'SKIP', out);
+                else { rec(W, `${key}=${next} takes effect: ${out.what}`, out.pass ? 'PASS' : out.level || 'FAIL', out.pass ? '' : out.detail); if (out.pass) effectsPassed.add(key); }
+            } else if (NO_EFFECT[key]) {
+                rec(W, `${key} effect`, /^DEAD/.test(NO_EFFECT[key]) ? 'WARN' : 'SKIP', NO_EFFECT[key]);
+            } else if (!TESTED_LATER.includes(key)) {
+                rec(W, `${key} has an effect check`, 'FAIL', 'add an EFFECT or a NO_EFFECT entry in smoke/settings.cjs');
+            }
+
+            const back = await put({ [key]: cur });
+            ok(`${key} restored`, back.status === 200 && effective(await get(), key) === cur, `HTTP ${back.status} ${back.text.slice(0, 100)}`);
+        }
+
+        // 3. Directories: must exist, and SABnzbd's get_config (what Sonarr/Radarr read) reports them
+        for (const key of ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR']) {
+            touched.add(key);
+            const bad = await put({ [key]: '/smoke-temp-does-not-exist' });
+            ok(`${key} missing directory rejected`, rejected(bad, key), `HTTP ${bad.status}`);
+            const cur = effective(before, key);
+            if (cur) { const r = await put({ [key]: cur }); ok(`${key} existing directory accepted`, r.status === 200, `HTTP ${r.status} ${r.text.slice(0, 100)}`); }
+            else rec(W, `${key} existing directory accepted`, 'SKIP', 'not set (optional)');
+        }
+        const dirsNow = await get();
+        ok('directories unchanged after the rejected saves', ['DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR'].every((k) => effective(dirsNow, k) === effective(before, k)));
+        const otherDir = (...skip) => [before.DOWNLOAD_DIR, before.COMPLETE_DIR, before.ARR_COMPLETE_DIR].find((d) => d && !skip.includes(d));
+        {
+            const alt = otherDir(effective(before, 'DOWNLOAD_DIR'));
+            if (alt) { await put({ DOWNLOAD_DIR: alt }); const m = await sabMisc(); ok('DOWNLOAD_DIR takes effect: SABnzbd get_config reports the new download dir', m.download_dir === alt, JSON.stringify(m)); await put({ DOWNLOAD_DIR: effective(before, 'DOWNLOAD_DIR') }); }
+            else rec(W, 'DOWNLOAD_DIR effect', 'SKIP', 'no second existing directory to point it at');
+            const altArr = otherDir(effective(before, 'ARR_COMPLETE_DIR'));
+            if (altArr) { await put({ ARR_COMPLETE_DIR: altArr }); const m = await sabMisc(); ok('ARR_COMPLETE_DIR takes effect: SABnzbd get_config reports it as the complete dir', m.complete_dir === altArr, JSON.stringify(m)); await put({ ARR_COMPLETE_DIR: effective(before, 'ARR_COMPLETE_DIR') }); }
+            else rec(W, 'ARR_COMPLETE_DIR effect', 'SKIP', 'no second existing directory to point it at');
+            if (!before.ARR_COMPLETE_DIR) {
+                const altC = otherDir(effective(before, 'COMPLETE_DIR'));
+                if (altC) { await put({ COMPLETE_DIR: altC }); const m = await sabMisc(); ok('COMPLETE_DIR takes effect: SABnzbd get_config reports the new complete dir', m.complete_dir === altC, JSON.stringify(m)); await put({ COMPLETE_DIR: effective(before, 'COMPLETE_DIR') }); }
+                else rec(W, 'COMPLETE_DIR effect', 'SKIP', 'no second existing directory to point it at');
+            } else rec(W, 'COMPLETE_DIR effect', 'SKIP', 'ARR_COMPLETE_DIR is set, so get_config reports that instead');
+        }
+
+        // 4. Numeric settings: validated range
+        const limits = { ACTIVE_LIMIT: [1, 10, true], RSS_FEED_HOURS: [1, 720, true], STRM_WATCHDOG_CONCURRENCY: [1, 10, false], STRM_WATCHDOG_FAIL_THRESHOLD: [1, 1000, false], STRM_WATCHDOG_STRIKES: [1, 30, false], STREAM_HISTORY_RETENTION_DAYS: [1, 3650, false] };
+        for (const [key, [min, max, required]] of Object.entries(limits)) {
+            touched.add(key);
+            const cur = effective(before, key);
+            for (const [label, v] of [['below minimum', String(min - 1)], ['above maximum', String(max + 1)], ['fractional', String(min + 0.5)], ['not a number', 'abc'], ['negative', '-3']]) {
+                const r = await put({ [key]: v });
+                ok(`${key} ${label} rejected`, rejected(r, key), `HTTP ${r.status}`);
+            }
+            const blank = await put({ [key]: '' });
+            if (required) ok(`${key} blank rejected`, rejected(blank, key), `HTTP ${blank.status}`);
+            else ok(`${key} blank accepted (default applies)`, blank.status === 200, `HTTP ${blank.status}`);
+            for (const v of [String(min), String(max)]) {
+                const r = await put({ [key]: v });
+                ok(`${key} ${v} accepted and read back`, r.status === 200 && String((await get())[key]) === v, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
+            }
+            await put({ [key]: cur });
+        }
+        const mixed = await put({ DEBUG: effective(before, 'DEBUG') === 'true' ? 'false' : 'true', ACTIVE_LIMIT: '99' });
+        ok('one invalid field rejects the whole save', rejected(mixed, 'ACTIVE_LIMIT') && effective(await get(), 'DEBUG') === effective(before, 'DEBUG'), `HTTP ${mixed.status}`);
+
+        // 5. Guide time offset: validated, and it really shifts the guide
+        touched.add('LIVE_TV_EPG_OFFSET');
+        for (const v of ['1440', '-1440', '0', '90']) {
+            const r = await put({ LIVE_TV_EPG_OFFSET: v });
+            ok(`LIVE_TV_EPG_OFFSET ${v} accepted`, r.status === 200, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
+        }
+        for (const v of ['1441', '-1441', 'abc', '1.5']) {
+            const r = await put({ LIVE_TV_EPG_OFFSET: v });
+            ok(`LIVE_TV_EPG_OFFSET ${v} rejected`, rejected(r, 'LIVE_TV_EPG_OFFSET'), `HTTP ${r.status}`);
+        }
+        if (hasGuide) {
+            await put({ LIVE_TV_EPG_OFFSET: '0' });
+            const a = firstStart(await epg());
+            await put({ LIVE_TV_EPG_OFFSET: '90' });
+            const b = firstStart(await epg());
+            ok('LIVE_TV_EPG_OFFSET takes effect: the first programme moves by 90 minutes', a !== undefined && b !== undefined && Math.abs(b - a) === 90 * 60000, `${a} -> ${b}`);
+        } else rec(W, 'LIVE_TV_EPG_OFFSET effect', 'SKIP', 'no Live TV guide to read');
+        await put({ LIVE_TV_EPG_OFFSET: effective(before, 'LIVE_TV_EPG_OFFSET') });
+
+        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
+            const r = await put({ [key]: 'maybe' });
+            ok(`${key} non-boolean rejected`, rejected(r, key), `HTTP ${r.status}`);
+        }
+        for (const key of ['DOWNLOAD_DEFAULT_VERSION', 'PLAY_DEFAULT_VERSION']) {
+            const r = await put({ [key]: 'not-a-version' });
+            ok(`${key} unknown version rejected`, rejected(r, key), `HTTP ${r.status}`);
+        }
+        const profiles = (await http('/json-api/config/versionProfiles')).json || [];
+        ok('version profiles offer the ids the settings accept', ['audio-described', 'signed'].every((id) => profiles.some((p) => p.id === id)), JSON.stringify(profiles.map((p) => p.id)));
+        ok('quality profiles include the VIDEO_QUALITY choices used here', ['sd', 'hd', 'fhd'].every((id) => !!profilesQ[id]));
+
+        // 6. Filename templates: must compile, are saved, and shape the release names
+        for (const [key, searchType] of [['TV_FILENAME_TEMPLATE', 'tvsearch'], ['MOVIE_FILENAME_TEMPLATE', 'movie']]) {
+            touched.add(key);
+            const cur = effective(before, key);
+            for (const [label, v] of [['unbalanced block', '{{#if title}}x'], ['unknown variable', '{{smoke_temp_nope}}']]) {
+                const r = await put({ [key]: v });
+                ok(`${key} ${label} rejected`, rejected(r, key), `HTTP ${r.status}`);
+            }
+            const good = '{{title}}.SMOKE.{{quality}}-BBC';
+            const r = await put({ [key]: good });
+            ok(`${key} valid template saved and read back`, r.status === 200 && (await get())[key] === good, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
+            let titles = await nzbTitles(searchType, freshTerm());
+            if (searchType === 'movie') titles = titles.filter((t) => !/S\d+E\d+/.test(t));
+            if (titles.length) {
+                const hit = titles.some((t) => t.includes('.SMOKE.'));
+                rec(W, `${key} takes effect: ${searchType} release names use it`, hit ? 'PASS' : 'FAIL', hit ? '' : titles.slice(0, 2).join(' | '));
+            } else rec(W, `${key} effect`, 'SKIP', `${searchType} returned no releases`);
+            await put({ [key]: cur });
+        }
+
+        // 7. Executable settings (guarded: they decide what program the server runs)
+        const locked = (await http('/json-api/config/lockedSettings')).json || {};
+        const authNone = effective(before, 'AUTH_TYPE') === 'none';
+        ok('lockedSettings lists the executable settings only while login is disabled', authNone ? ['GET_IPLAYER_EXEC', 'YTDLP_EXEC', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS'].every((k) => (locked.locked || []).includes(k)) : (locked.locked || []).length === 0, JSON.stringify(locked.locked));
+        for (const [key, v, label] of [
+            ['GET_IPLAYER_EXEC', 'rm', 'a program that is not get_iplayer/yt-dlp/perl'],
+            ['YTDLP_EXEC', '/bin/sh', 'a shell'],
+            ['GET_IPLAYER_EXEC', 'perl -e "system(1)"', 'perl -e'],
+            ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--exec "touch /tmp/x"', '--exec'],
+            ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--command=whoami', '--command'],
+        ]) {
+            touched.add(key);
+            const r = await put({ [key]: v });
+            ok(`${key} rejects ${label}`, rejected(r, key), `HTTP ${r.status}`);
+        }
+        const validExec = effective(before, 'YTDLP_EXEC') === '/opt/smoke/yt-dlp' ? '/opt/smoke2/yt-dlp' : '/opt/smoke/yt-dlp';
+        const lockedTry = await put({ YTDLP_EXEC: validExec });
+        if (authNone) ok('a valid executable change is refused while login is disabled', rejected(lockedTry, 'YTDLP_EXEC'), `HTTP ${lockedTry.status}`);
+        else {
+            const v = (await http('/json-api/versions')).json || {};
+            ok('YTDLP_EXEC change saved (login is enabled)', lockedTry.status === 200, `HTTP ${lockedTry.status}`);
+            ok('YTDLP_EXEC takes effect: the reported yt-dlp version changes', JSON.stringify((await http('/json-api/versions')).json) !== JSON.stringify(v), 'versions unchanged');
+            await http('/json-api/config/executableOverride/YTDLP_EXEC', { method: 'DELETE' });
+            await put({ YTDLP_EXEC: effective(before, 'YTDLP_EXEC') });
+        }
+        for (const key of ['GET_IPLAYER_EXEC', 'YTDLP_EXEC', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS']) {
+            const r = await put({ [key]: effective(before, key) });
+            ok(`${key} sent back unchanged is accepted`, r.status === 200, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
+        }
+        const badOverride = await http('/json-api/config/executableOverride/DEBUG', { method: 'DELETE' });
+        ok('executableOverride refuses a non-executable setting', badOverride.status === 400, `HTTP ${badOverride.status}`);
+        const goodOverride = await http('/json-api/config/executableOverride/YTDLP_EXEC', { method: 'DELETE' });
+        ok('executableOverride resets an executable setting', goodOverride.status === 200 && goodOverride.json?.status === true, `HTTP ${goodOverride.status}`);
+        touched.add('YTDLP_EXEC');
+
+        // 8. Secrets are masked on read and a masked value never overwrites the stored one
+        const pw = (await get()).AUTH_PASSWORD;
+        ok('AUTH_PASSWORD is masked on read', !pw || pw === '********', pw ? 'plaintext/hash leaked' : '');
+        const pwBack = await put({ AUTH_PASSWORD: pw });
+        ok('AUTH_PASSWORD masked value sent back is accepted and keeps the password', pwBack.status === 200 && (await get()).AUTH_PASSWORD === pw, `HTTP ${pwBack.status}`);
+        if (!before.OIDC_CLIENT_SECRET) {
+            touched.add('OIDC_CLIENT_SECRET');
+            const r = await put({ OIDC_CLIENT_SECRET: 'smoke-temp-secret' });
+            ok('OIDC_CLIENT_SECRET saved', r.status === 200, `HTTP ${r.status}`);
+            ok('OIDC_CLIENT_SECRET is masked on read', (await get()).OIDC_CLIENT_SECRET === '********', 'secret returned in clear');
+        } else rec(W, 'OIDC_CLIENT_SECRET set and masked', 'SKIP', 'a real secret is stored; it cannot be restored once replaced');
+
+        // 9. Live channel .strm folder: a live subscription writes its .strm under LIVE_STRM_DIR
+        {
+            const dir = `${effective(before, 'COMPLETE_DIR').replace(/[\/]$/, '')}/SMOKE-TEMP-live`;
+            const host = hostPath(dir);
+            const chan = 'bbc_four';
+            const pre = ((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === chan);
+            if (pre || !host) rec(W, 'LIVE_STRM_DIR takes effect: a live subscription is written there', 'SKIP', pre ? `${chan} is already subscribed` : 'COMPLETE_DIR is not under SMOKE_CONTAINER_ROOT / SMOKE_MEDIA_ROOT is not set');
+            else {
+                touched.add('LIVE_STRM_DIR');
+                await put({ LIVE_STRM_DIR: dir });
+                const add = await http('/json-api/subscriptions/live', { method: 'POST', body: { channelId: chan } });
+                const listed = ((await http('/json-api/subscriptions/live')).json || []).find((s) => s.channelId === chan);
+                ok('LIVE_STRM_DIR takes effect: a live subscription is written there', add.status === 200 && !!listed?.file && fs.existsSync(path.join(host, listed.file)), `HTTP ${add.status} ${JSON.stringify(listed)}; expected it in ${host}`);
+                await http('/json-api/subscriptions/live/' + chan, { method: 'DELETE' });
+                await put({ LIVE_STRM_DIR: effective(before, 'LIVE_STRM_DIR') });
+                try { fs.rmSync(host, { recursive: true, force: true }); } catch { /* best effort */ }
+            }
+        }
+
+        // 10. Library files: folder structure, nfo, strmtool json, base URL and media mode, checked on disk
+        await libraryTest();
+
+        // 11. Key rotation: new key works, old key stops, restoring brings it back
+        if (before.API_KEY) {
+            touched.add('API_KEY');
+            const newKey = 'smoketemp' + Date.now();
+            const caps = (k) => http(`/api?t=caps&apikey=${encodeURIComponent(k)}`);
+            const r = await put({ API_KEY: newKey });
+            ok('API_KEY rotation saved', r.status === 200, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
+            ok('new API_KEY is accepted by the indexer', /<caps/.test((await caps(newKey)).text), 'caps rejected');
+            const old = await caps(before.API_KEY);
+            ok('old API_KEY is refused after rotation', old.status >= 400 || !/<caps/.test(old.text), `HTTP ${old.status}`);
+            await put({ API_KEY: before.API_KEY });
+            ok('API_KEY restored and accepted again', /<caps/.test((await caps(before.API_KEY)).text), 'restored key rejected');
+        }
+        if (before.STREAM_KEY && (before.LIVE_TV_ENABLED === 'true' || touched.has('LIVE_TV_ENABLED'))) {
+            touched.add('STREAM_KEY');
+            const newKey = 'smoketemp' + Date.now();
+            const pl = (k) => http(`/api?mode=live_playlist&streamkey=${encodeURIComponent(k)}`, { timeout: 60000 });
+            const r = await put({ STREAM_KEY: newKey });
+            ok('STREAM_KEY rotation saved', r.status === 200, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
+            ok('new STREAM_KEY opens the playlist', /^#EXTM3U/.test((await pl(newKey)).text), 'rejected');
+            const old = await pl(before.STREAM_KEY);
+            ok('old STREAM_KEY is refused after rotation', old.status === 401 || old.status === 403, `HTTP ${old.status}`);
+            await put({ STREAM_KEY: before.STREAM_KEY });
+            ok('STREAM_KEY restored and accepted again', /^#EXTM3U/.test((await pl(before.STREAM_KEY)).text), 'restored key rejected');
+        } else rec(W, 'STREAM_KEY rotation', 'SKIP', 'Live TV is off, so there is no key-gated playlist to probe');
+
+        // 12. STREAM_BASE_URL is checked when strm mode or Live TV needs it
+        touched.add('STREAM_BASE_URL');
+        if (before.MEDIA_MODE === 'strm' || before.LIVE_TV_ENABLED === 'true') {
+            const r = await put({ STREAM_BASE_URL: 'not a url' });
+            ok('STREAM_BASE_URL invalid rejected while strm mode / Live TV is on', rejected(r, 'STREAM_BASE_URL'), `HTTP ${r.status}`);
+        } else rec(W, 'STREAM_BASE_URL invalid rejected', 'SKIP', 'neither strm mode nor Live TV is on');
+    } finally {
+        // Put every touched setting back (one at a time so one refusal cannot block the rest)
+        await sleep(300);
+        for (const key of ['STREAM_BASE_URL', 'MEDIA_MODE', 'LIVE_TV_ENABLED', ...touched]) {
+            const cur = effective(await get(), key);
+            const want = effective(before, key);
+            if (cur === want || key === 'OIDC_CLIENT_SECRET') continue;
+            const r = await put({ [key]: want });
+            if (r.status !== 200) rec(W, `cleanup restore ${key}`, 'WARN', `HTTP ${r.status} ${r.text.slice(0, 100)}`);
+        }
+        if (touched.has('OIDC_CLIENT_SECRET')) await put({ OIDC_CLIENT_SECRET: '' });
+        const after = await get();
+        const diff = Object.keys({ ...before0, ...after }).filter((k) => effective(before0, k) !== effective(after, k) && k !== 'OIDC_CLIENT_SECRET');
+        rec(W, 'settings sweep leaves the configuration exactly as it found it', diff.length ? 'FAIL' : 'PASS', diff.map((k) => `${k}: ${effective(before0, k)} -> ${effective(after, k)}`).join('; '));
+    }
+
+    // ---- library files on disk -------------------------------------------------------------------------------
+    async function libraryTest() {
+        const L = [...IN_LIBRARY_TEST, 'STREAM_BASE_URL'];
+        const roots = [hostPath(effective(before, 'COMPLETE_DIR')), hostPath(effective(before, 'ARR_COMPLETE_DIR'))].filter((r) => r && fs.existsSync(r));
+        if (!roots.length) return rec(W, `${L.join(', ')} effects on the library`, 'SKIP', 'COMPLETE_DIR is not under SMOKE_CONTAINER_ROOT, or SMOKE_MEDIA_ROOT is not set / mounted');
+        const prog = (await http(`/json-api/browse/programme/${ctx.pid}`)).json;
+        const eps = (prog?.seasons || []).flatMap((s) => s.episodes || []).filter((e) => e.pid);
+        if (!eps.length) return rec(W, `${L.join(', ')} effects on the library`, 'SKIP', 'no episode to download');
+        const walk = () => {
+            const out = new Set();
+            const stack = roots.map((r) => [r, 0]);
+            while (stack.length && out.size < 60000) {
+                const [d, depth] = stack.pop();
+                let ents; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+                for (const e of ents) {
+                    const p = path.join(d, e.name);
+                    if (e.isDirectory()) { if (depth < 6) stack.push([p, depth + 1]); } else if (/\.(strm|nfo|json)$/i.test(e.name)) out.add(p);
+                }
+            }
+            return out;
+        };
+        const norm = (p) => p.replace(/\\/g, '/');
+        const hist = async (pid) => ((await http('/json-api/queue/history')).json || []).filter((e) => e.pid === pid);
+        const cleanHist = async (pid) => { for (const h of await hist(pid)) await http(`/json-api/queue/history?pid=${pid}${h.jobId ? '&jobId=' + h.jobId : ''}`, { method: 'DELETE' }); };
+        const waitGone = async (pid, ms) => {
+            const end = Date.now() + ms;
+            while (Date.now() < end) {
+                if (!((await http('/json-api/queue/queue')).json || []).some((e) => e.pid === pid)) return true;
+                await sleep(3000);
+            }
+            return false;
+        };
+        const removed = [];
+        const dropNew = (added) => {
+            for (const f of added) { try { fs.rmSync(f, { force: true }); removed.push(f); } catch { /* leave it */ } }
+            for (const f of added) {
+                let d = path.dirname(f);
+                while (!roots.some((r) => norm(r) === norm(d))) { try { fs.rmdirSync(d); } catch { break; } d = path.dirname(d); }
+            }
+        };
+        const pushState = async (state) => { for (const [k, v] of Object.entries(state)) { touched.add(k); const r = await put({ [k]: v }); if (r.status !== 200) return `${k}=${v}: HTTP ${r.status} ${r.text.slice(0, 100)}`; } };
+
+        // One strm download under a given state; returns what landed in the library.
+        const download = async (ep, query) => {
+            const files0 = walk();
+            await cleanHist(ep.pid);
+            const dl = await http(`/json-api/download?pid=${ep.pid}${query}`, { timeout: 60000 });
+            if (dl.status !== 200) return { error: `download HTTP ${dl.status} ${dl.text.slice(0, 100)}` };
+            await waitGone(ep.pid, 120000);
+            const h = (await hist(ep.pid))[0];
+            const files1 = walk();
+            const added = [...files1].filter((f) => !files0.has(f));
+            const strm = h?.libraryPath ? [...files1].find((f) => f.endsWith('.strm') && norm(f).endsWith(norm(h.libraryPath))) : undefined;
+            return { h, added, strm, fresh: !!strm && added.includes(strm), content: strm ? fs.readFileSync(strm, 'utf8').trim() : '' };
+        };
+
+        const stateA = { LIBRARY_FOLDER_STRUCTURE: 'true', WRITE_NFO_STRM: 'all', WRITE_STRMTOOL_JSON: 'true', STREAM_BASE_URL: 'http://smoke-temp-a.invalid:4404', MEDIA_MODE: 'strm' };
+        const stateB = { LIBRARY_FOLDER_STRUCTURE: 'false', WRITE_NFO_STRM: 'none', WRITE_STRMTOOL_JSON: 'false', STREAM_BASE_URL: SMOKE_BASE, MEDIA_MODE: 'strm' };
+        let ep, a;
+        try {
+            const err = await pushState(stateA);
+            if (err) return rec(W, 'library test set-up', 'FAIL', err);
+            for (const cand of eps.slice(0, 25)) { a = await download(cand, '&media=strm'); if (a.error || a.fresh) { ep = cand; break; } dropNew(a.added || []); await cleanHist(cand.pid); }
+            if (!ep || a.error) return rec(W, `${L.join(', ')} effects on the library`, a?.error ? 'FAIL' : 'SKIP', a?.error || 'every candidate episode is already in the library');
+            const segs = (p) => norm(p || '').split('/').filter(Boolean).length;
+            ok('LIBRARY_FOLDER_STRUCTURE=true takes effect: the .strm is filed in a folder', segs(a.h?.libraryPath) > 1, a.h?.libraryPath);
+            ok('WRITE_NFO_STRM=all takes effect: an .nfo is written', a.added.some((f) => f.endsWith('.nfo')), a.added.map((f) => path.basename(f)).join(', '));
+            ok('WRITE_STRMTOOL_JSON=true takes effect: a strmtool .json is written', a.added.some((f) => f.endsWith('.json')), a.added.map((f) => path.basename(f)).join(', '));
+            ok('STREAM_BASE_URL takes effect: the .strm points at it', a.content.startsWith(stateA.STREAM_BASE_URL), a.content.replace(/streamkey=[^&]+/, 'streamkey=***'));
+            ok('MEDIA_MODE=strm without a media choice makes a .strm', a.strm && a.h?.extension === 'strm', JSON.stringify(a.h || {}).slice(0, 120));
+            dropNew(a.added);
+            await cleanHist(ep.pid);
+
+            const err2 = await pushState(stateB);
+            if (err2) return rec(W, 'library test state B', 'FAIL', err2);
+            const b = await download(ep, '&media=strm');
+            if (b.error) rec(W, 'library test state B', 'FAIL', b.error);
+            else {
+                ok('LIBRARY_FOLDER_STRUCTURE=false takes effect: the .strm is a flat file', segs(b.h?.libraryPath) === 1, b.h?.libraryPath);
+                ok('WRITE_NFO_STRM=none takes effect: no .nfo is written', !b.added.some((f) => f.endsWith('.nfo')), b.added.map((f) => path.basename(f)).join(', '));
+                ok('WRITE_STRMTOOL_JSON=false takes effect: no strmtool .json is written', !b.added.some((f) => f.endsWith('.json')), b.added.map((f) => path.basename(f)).join(', '));
+                ok('STREAM_BASE_URL change takes effect: the new .strm points at the new base', b.content.startsWith(stateB.STREAM_BASE_URL), b.content.replace(/streamkey=[^&]+/, 'streamkey=***'));
+            }
+            dropNew(b.added || []);
+            await cleanHist(ep.pid);
+
+            // MEDIA_MODE decides what a download without an explicit choice does
+            await put({ MEDIA_MODE: 'download' });
+            const dl = await http(`/json-api/download?pid=${ep.pid}`, { timeout: 60000 });
+            await sleep(4000);
+            const q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid);
+            ok('MEDIA_MODE=download takes effect: a plain download is queued as a real download, not a .strm', dl.status === 200 && !!q && q.extension !== 'strm', `HTTP ${dl.status}, queue entry ${JSON.stringify(q || {}).slice(0, 100)}`);
+            if (q) await http(`/json-api/queue/queue?pid=${ep.pid}${q.jobId ? '&jobId=' + q.jobId : ''}`, { method: 'DELETE' });
+            await cleanHist(ep.pid);
+        } finally {
+            await cleanHistSafe();
+        }
+        async function cleanHistSafe() { try { await cleanHist(ep?.pid); } catch { /* best effort */ } }
+        if (removed.length) rec(W, 'library test files removed again', 'PASS', `${removed.length} files`);
+    }
+};

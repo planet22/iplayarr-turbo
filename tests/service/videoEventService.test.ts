@@ -19,6 +19,7 @@ jest.mock('uuid', () => ({
     v4: jest.fn().mockReturnValue('generated-id'),
 }));
 
+import activeJobs from '../../src/service/activeJobs';
 import socketService from '../../src/service/socketService';
 import videoEventService from '../../src/service/videoEventService';
 import { VideoEventType } from '../../src/types/VideoEvent';
@@ -33,6 +34,26 @@ describe('videoEventService', () => {
     it('getEvents returns an empty array if none exist', async () => {
         mockGetItem.mockResolvedValue(undefined);
         expect(await videoEventService.getEvents()).toEqual([]);
+    });
+
+    it('stamps an event with the job currently active for its pid, so several events share one job id', async () => {
+        activeJobs.set('abc123', 'job-1');
+        try {
+            await videoEventService.record(VideoEventType.QUEUED, 'queued', { pid: 'abc123' });
+            await videoEventService.record(VideoEventType.DOWNLOAD_COMPLETE, 'done', { pid: 'abc123' });
+        } finally {
+            activeJobs.clear('abc123');
+        }
+        const saved = mockSetItem.mock.calls.map(([, events]) => events[events.length - 1]);
+        expect(saved.map((event) => event.jobId)).toEqual(['job-1', 'job-1']);
+    });
+
+    it('leaves jobId off events with no active job, and lets a caller name one explicitly', async () => {
+        await videoEventService.record(VideoEventType.STRM_RESTORED, 'no job', { pid: 'zzz999' });
+        await videoEventService.record(VideoEventType.HISTORY_REMOVED, 'old job', { pid: 'zzz999', jobId: 'job-old' });
+        const saved = mockSetItem.mock.calls.map(([, events]) => events[events.length - 1]);
+        expect(saved[0].jobId).toBeUndefined();
+        expect(saved[1].jobId).toBe('job-old');
     });
 
     it('record appends an event and emits the full updated list', async () => {

@@ -3,7 +3,7 @@ import request from 'supertest';
 
 import AuthRoute, { addAuthMiddleware, crossSiteGuard } from '../../src/routes/AuthRoute';
 import configService from '../../src/service/configService';
-import { redis } from '../../src/service/redis/redisService';
+import { dbReady, prisma } from '../../src/service/db/prismaService';
 import * as Utils from '../../src/utils/Utils';
 
 jest.mock('../../src/service/configService');
@@ -41,7 +41,6 @@ describe('AuthRoute hardening', () => {
         let app: express.Express;
         beforeEach(async () => {
             jest.restoreAllMocks();
-            await redis.flushall();
             (configService.getParameter as jest.Mock).mockImplementation(async (k: string) =>
                 k === 'AUTH_USERNAME' ? 'admin' : k === 'AUTH_PASSWORD' ? 'hash' : 'form'
             );
@@ -86,7 +85,8 @@ describe('AuthRoute hardening', () => {
         it('generates and persists a session secret instead of a hard-coded fallback', async () => {
             delete process.env.SESSION_SECRET;
             await request(app).get('/auth/me');
-            const stored = await redis.get('iplayarr:session_secret');
+            await dbReady();
+            const stored = (await prisma.keyValue.findUnique({ where: { key: 'iplayarr:session_secret' } }))?.value;
             expect(stored).toMatch(/^[0-9a-f]{64}$/);
         });
     });

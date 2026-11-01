@@ -1,7 +1,7 @@
 import { computed, inject, ref } from 'vue';
 
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 
 // Channels picked for Jellyfin Live TV (the tuner and guide only offer these) - shared by the Channels
 // page, each channel's page and Settings, so they all see the same list without refetching.
@@ -49,7 +49,7 @@ export function useLiveTv() {
             if (ok && Array.isArray(data)) {
                 selected.value = data;
             } else if (!ok) {
-                dialogService.alert(failureTitle, data?.message || 'Something went wrong');
+                toastService.error(failureTitle, { detail: data?.message || 'Something went wrong' });
             }
             return ok;
         } finally {

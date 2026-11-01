@@ -8,6 +8,13 @@ import { VitePWA } from 'vite-plugin-pwa';
 const srcDir = fileURLToPath(new URL('./src', import.meta.url)).replace(/\\/g, '/');
 
 export default defineConfig({
+    experimental: {
+        // Runtime-resolved asset URLs so a BASE_PATH set on the server (window.__BASE_PATH__ in
+        // index.html) also covers lazy chunks and imported assets, not just the HTML tags.
+        renderBuiltUrl(filename, { hostType }) {
+            return hostType === 'js' ? { runtime: `window.__assetUrl(${JSON.stringify(filename)})` } : { relative: true };
+        },
+    },
     plugins: [
         vue(),
         VitePWA({
@@ -52,5 +59,13 @@ export default defineConfig({
     },
     server: {
         port: 8080,
+        // Same-origin in dev: the backend is reached through the dev server, so no CORS and cookies just work.
+        proxy: {
+            '/auth': 'http://localhost:4404',
+            '/api': 'http://localhost:4404',
+            '/json-api': 'http://localhost:4404',
+            '/ping': 'http://localhost:4404',
+            '/socket.io': { target: 'http://localhost:4404', ws: true },
+        },
     },
 });

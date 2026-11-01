@@ -1,9 +1,28 @@
 <template>
-    <div :class="['form-group', advanced ? 'advanced' : '']">
+    <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
         <label v-if="name">{{ name }}</label>
         <div class="inputBox">
+            <div class="fieldRow">
             <div :class="['inputWithButton', error ? 'error' : '']">
-                <input v-model="localValue" :type="typeOverride" :placeholder="placeholder" :disabled="disabled" />
+                <textarea
+                    v-if="multiline"
+                    v-model="localValue"
+                    :class="{ monospace }"
+                    :rows="rows"
+                    :placeholder="placeholder"
+                    :disabled="disabled"
+                />
+                <input
+                    v-else
+                    v-model="localValue"
+                    :class="{ monospace }"
+                    :type="typeOverride"
+                    :min="min"
+                    :max="max"
+                    :step="step"
+                    :placeholder="placeholder"
+                    :disabled="disabled"
+                />
                 <div class="buttonGroup">
                     <button v-if="copyable" type="button" title="Copy to clipboard" @click="copyValue">
                         <font-awesome-icon :icon="['fas', copied ? 'check' : 'copy']" />
@@ -16,10 +35,14 @@
                     </button>
                 </div>
             </div>
+            <!-- Optional control level with the box itself (e.g. a colour sample), whatever the label layout. -->
+            <slot name="after" />
+            <InfoTip v-if="showInfo" :text="tooltip" />
+            </div>
             <div v-if="error" class="error">
                 {{ error }}
             </div>
-            <div class="tooltip">
+            <div v-if="!showInfo" class="tooltip">
                 {{ tooltip }}
             </div>
         </div>
@@ -27,7 +50,9 @@
 </template>
 
 <script setup>
-import { defineEmits, defineProps, ref, watch } from 'vue';
+import { computed, defineEmits, defineProps, inject, ref, watch } from 'vue';
+
+import InfoTip from '@/components/common/form/InfoTip.vue';
 
 const props = defineProps({
     name: {
@@ -38,6 +63,11 @@ const props = defineProps({
         type: String,
         required: true,
     },
+    inlineTooltip: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     modelValue: {
         type: String,
         required: true,
@@ -46,6 +76,22 @@ const props = defineProps({
         type: String,
         required: false,
         default: 'text',
+    },
+    // For a number box: the range its arrows (and the browser's own check) stay within, and the step.
+    min: {
+        type: Number,
+        required: false,
+        default: undefined,
+    },
+    max: {
+        type: Number,
+        required: false,
+        default: undefined,
+    },
+    step: {
+        type: Number,
+        required: false,
+        default: undefined,
     },
     error: {
         type: String,
@@ -56,6 +102,23 @@ const props = defineProps({
         type: String,
         required: false,
     },
+    // A box of several lines instead of one, styled and sized like the single-line input.
+    multiline: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    rows: {
+        type: Number,
+        required: false,
+        default: 3,
+    },
+    // Fixed-width text, for values like headers, URLs and keys.
+    monospace: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     disabled: {
         type: Boolean,
         required: false,
@@ -65,6 +128,11 @@ const props = defineProps({
         type: Boolean,
         required: false,
         default: false,
+    },
+    field: {
+        type: String,
+        required: false,
+        default: undefined,
     },
     iconButton: String,
     brandButton: String,
@@ -77,6 +145,14 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue', 'action']);
+
+// Settings page shows the tooltip behind an (i) button; elsewhere (and when inlineTooltip is set) it stays as text below.
+const infoTips = inject('infoTips', false);
+const showInfo = computed(() => infoTips && !props.inlineTooltip);
+
+// Settings page lists the keys edited since the last save; those fields get a highlight.
+const changedKeys = inject('settingsChangedKeys', null);
+const changed = computed(() => !!props.field && !!changedKeys?.value?.has(props.field));
 
 const localValue = ref(props.modelValue);
 const copied = ref(false);
@@ -161,9 +237,6 @@ const copyValue = async () => {
         font-size: 14px;
         color: @table-text-color;
 
-        @media (max-width: @mobile-breakpoint) {
-            flex: 0 0 80px;
-        }
     }
 
     .inputBox {
@@ -175,10 +248,18 @@ const copyValue = async () => {
             color: @error-color;
         }
 
+        .fieldRow {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         .inputWithButton {
             position: relative;
             display: flex;
             align-items: center;
+            flex: 1 1 auto;
+            min-width: 0;
             width: 100%;
 
             .buttonGroup {
@@ -212,6 +293,24 @@ const copyValue = async () => {
                 }
             }
 
+            textarea {
+                box-sizing: border-box;
+                padding: 8px 16px;
+                width: 100%;
+                border: 1px solid @input-border-color;
+                border-radius: 4px;
+                background-color: @input-background-color;
+                box-shadow: inset 0 1px 1px @primary-box-shadow;
+                color: @input-text-color;
+                font: inherit;
+                resize: vertical;
+            }
+
+            .monospace {
+                font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+                font-size: 13px;
+            }
+
             input {
                 box-sizing: border-box;
                 padding: 6px 16px;
@@ -228,7 +327,8 @@ const copyValue = async () => {
                 font-size: 14px;
                 color: @error-color;
 
-                input {
+                input,
+                textarea {
                     border-color: @error-color;
                 }
             }
@@ -240,6 +340,14 @@ const copyValue = async () => {
         color: @subtle-text-color;
     }
 
+    &.changed {
+        .inputWithButton input,
+        .inputWithButton textarea {
+            border-color: @changed-color;
+            box-shadow: 0 0 0 2px @changed-soft-color;
+        }
+    }
+
     &.advanced {
         label {
             color: @warn-color;
@@ -247,6 +355,30 @@ const copyValue = async () => {
 
         .tooltip {
             color: @warn-color;
+        }
+    }
+}
+
+// Phones: the label sits above its box (left-aligned, smaller) instead of in a narrow right-aligned column
+// that wraps long names onto four lines and leaves the box top-aligned beside them.
+.form-group {
+    @media (max-width: @mobile-breakpoint) {
+        flex-direction: column;
+        margin-bottom: 0.9rem;
+
+        label {
+            flex: none;
+            justify-content: flex-start;
+            margin: 0 0 4px;
+            padding-top: 0;
+            min-height: 0;
+            text-align: start;
+            font-size: 13px;
+        }
+
+        .tooltip,
+        .error {
+            font-size: 12px;
         }
     }
 }

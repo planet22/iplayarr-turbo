@@ -13,8 +13,8 @@
 <script setup>
 import { defineExpose, defineProps, ref } from 'vue';
 
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { capitalize } from '@/lib/utils';
 
 const props = defineProps({
@@ -27,7 +27,7 @@ const test = async () => {
     testStatus.value = 'PENDING';
     const { data, ok } = await ipFetch('json-api/apps/test', 'POST', props.app);
     if (!ok) {
-        dialogService.alert('Connection Error', `Error Connecting to ${capitalize(props.app.type)} : ${data.message}`);
+        toastService.error(`Unable to connect to ${capitalize(props.app.type)}`, { detail: data.message });
         testStatus.value = 'INITIAL';
     } else {
         testStatus.value = 'SUCCESS';
