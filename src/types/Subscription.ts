@@ -78,6 +78,8 @@ export interface DetectedShow {
     title: string;
     // Brand pid of the matching BBC show.
     pid: string;
+    // The BBC show's picture, as for a subscription.
+    thumbnail?: string;
     // How it was found.
     // 'strm': a .strm link; 'group': a video file stamped with our release group; 'grab': grabbed via our indexer.
     source: 'strm' | 'group' | 'grab';

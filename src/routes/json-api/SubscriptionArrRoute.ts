@@ -53,6 +53,25 @@ router.get('/detected', async (req: Request, res: Response) => {
     }
 });
 
+// Finds from earlier scans (manual or scheduled) still waiting to be imported.
+router.get('/detected/found', async (_, res: Response) => {
+    try {
+        res.json(await subscriptionDetectService.listFound());
+    } catch (error) {
+        fail(res, error, 'Unable to list the found shows');
+    }
+});
+
+// Clears the waiting finds, of one app when `appId` is given.
+router.delete('/detected', async (req: Request, res: Response) => {
+    try {
+        await subscriptionDetectService.clearFound(typeof req.query.appId === 'string' ? req.query.appId : undefined);
+        res.json({ status: true });
+    } catch (error) {
+        fail(res, error, 'Unable to clear the found shows');
+    }
+});
+
 router.post('/detected/import', async (req: Request, res: Response) => {
     const { appId, arrId, pid, title } = req.body ?? {};
     if (typeof appId !== 'string' || !Number.isInteger(arrId) || typeof pid !== 'string' || !PID_REGEX.test(pid) || typeof title !== 'string') {

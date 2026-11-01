@@ -44,7 +44,7 @@
                             :icon="['fas', STEP_ICONS[stepState(rows[app.id], step.key)]]"
                             :spin="stepState(rows[app.id], step.key) === 'active'"
                         />
-                        <span>{{ step.label }}</span>
+                        <span>{{ stepLabel(step, app) }}</span>
                         <span
                             v-if="stepState(rows[app.id], step.key) === 'active' && rows[app.id].total"
                             class="stepCount"
@@ -69,7 +69,7 @@
                 <div
                     v-if="rows[app.id].status === 'done'"
                     class="syncTally"
-                    :title="`Episodes linked to iPlayarr: .strm links, and video files with the ${RELEASE_GROUP} release group`"
+                    :title="`${isRadarr(app) ? 'Movies' : 'Episodes'} linked to iPlayarr: .strm links, and video files with the ${RELEASE_GROUP} release group`"
                 >
                     {{ rows[app.id].strm }} .strm · {{ rows[app.id].group }} release group
                 </div>
@@ -108,6 +108,9 @@ const STEPS = [
     { key: 'files', label: 'Episode files' },
     { key: 'matching', label: 'BBC match' },
 ];
+const isRadarr = ({ type }) => type.toLowerCase() === 'radarr';
+// Radarr's files are movies, not episodes.
+const stepLabel = ({ key, label }, app) => (key === 'files' && isRadarr(app) ? 'Movie files' : label);
 const STEP_ICONS = { complete: 'circle-check', active: 'spinner', pending: 'circle', failed: 'circle-xmark' };
 
 const loading = ref(true);

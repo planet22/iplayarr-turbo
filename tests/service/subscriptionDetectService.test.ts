@@ -44,6 +44,16 @@ describe('subscriptionDetectService', () => {
         history.getHistory.mockResolvedValue([]);
         subs.list.mockResolvedValue([]);
         details.findBrandForPid.mockImplementation(async (pid: string) => `brand-${pid}`);
+        details.getMetadata.mockResolvedValue({ programme: {} } as any);
+    });
+
+    it('gives a found show the picture of its BBC programme, when it has one', async () => {
+        history.getHistory.mockResolvedValue([{ nzbName: 'Grabbed.Show.S01E01', pid: 'b0aaaaaa' } as any]);
+        library.getGrabHistory.mockResolvedValue([{ arrId: 1, sourceTitle: 'Grabbed.Show.S01E01', indexer: 'Sonarr (iPlayarr Turbo)' }]);
+        details.getMetadata.mockResolvedValueOnce({ programme: { image: { pid: 'p0img' } } } as any);
+        expect((await subscriptionDetectService.detect(undefined, { grabHistory: true }))[0].thumbnail).toBe('json-api/thumbnail/p0img.jpg');
+        details.getMetadata.mockRejectedValueOnce(new Error('down'));
+        expect((await subscriptionDetectService.detect(undefined, { grabHistory: true }))[0].thumbnail).toBeUndefined();
     });
 
     it('finds a show grabbed through our indexer', async () => {
@@ -432,5 +442,88 @@ describe('subscriptionDetectService', () => {
         const arr = { appId: 'a1', arrId: 5, title: 'Show', addedByUs: false };
         expect(subs.subscribe).toHaveBeenCalledWith('b0aaaaaa', { arrOnly: true, arr });
         expect(subs.setArrLink).toHaveBeenCalledWith('s1', arr);
+    });
+    describe('finds waiting to be reviewed', () => {
+        const grabbed = { nzbName: 'Grabbed.Show.S01E01', pid: 'b0aaaaaa' } as any;
+        const withGrab = () => {
+            history.getHistory.mockResolvedValue([grabbed]);
+            library.getGrabHistory.mockResolvedValue([{ arrId: 1, sourceTitle: 'Grabbed.Show.S01E01', indexer: 'Sonarr (iPlayarr Turbo)' }]);
+        };
+
+        it('keeps what a scan found until it is cleared', async () => {
+            withGrab();
+            await subscriptionDetectService.detect(undefined, { grabHistory: true });
+            expect(await subscriptionDetectService.listFound()).toEqual([expect.objectContaining({ arrId: 1, title: 'Grabbed Show' })]);
+            await subscriptionDetectService.clearFound();
+            expect(await subscriptionDetectService.listFound()).toEqual([]);
+        });
+
+        it('gives finds saved without a picture theirs when listed', async () => {
+            withGrab();
+            await subscriptionDetectService.detect(undefined, { grabHistory: true });
+            details.getMetadata.mockResolvedValue({ programme: { image: { pid: 'p0img' } } } as any);
+            expect((await subscriptionDetectService.listFound())[0].thumbnail).toBe('json-api/thumbnail/p0img.jpg');
+        });
+
+        it('lists nothing before any scan', async () => {
+            expect(await subscriptionDetectService.listFound()).toEqual([]);
+        });
+
+        it('replaces the earlier finds of an app on its next scan, leaving other apps alone', async () => {
+            withGrab();
+            await subscriptionDetectService.detect(undefined, { grabHistory: true });
+            library.getGrabHistory.mockResolvedValue([]);
+            await subscriptionDetectService.detect(undefined);
+            expect(await subscriptionDetectService.listFound()).toEqual([]);
+        });
+
+        it('a counts-only pass keeps the finds already waiting', async () => {
+            withGrab();
+            await subscriptionDetectService.detect(undefined, { grabHistory: true });
+            await subscriptionDetectService.detect(undefined, { countsOnly: true });
+            expect(await subscriptionDetectService.listFound()).toHaveLength(1);
+        });
+
+        it('the scheduled pass stores its finds without importing them', async () => {
+            apps.getAllApps.mockResolvedValue([{ ...app, detectSubscriptions: true }]);
+            library.getLibraryFiles.mockResolvedValue([{ path: '/tv/a.strm', ids: [1], arrId: 2 }]);
+            jest.spyOn(fs, 'readFileSync').mockReturnValue('https://www.bbc.co.uk/iplayer/episode/b000bbbb');
+            await subscriptionDetectService.autoDetect();
+            expect(subs.subscribe).not.toHaveBeenCalled();
+            expect(await subscriptionDetectService.listFound()).toEqual([expect.objectContaining({ arrId: 2, source: 'strm' })]);
+        });
+
+        it('clears the finds of just one app', async () => {
+            withGrab();
+            await subscriptionDetectService.detect(undefined, { grabHistory: true });
+            await subscriptionDetectService.clearFound('other');
+            expect(await subscriptionDetectService.listFound()).toHaveLength(1);
+            await subscriptionDetectService.clearFound('a1');
+            expect(await subscriptionDetectService.listFound()).toEqual([]);
+        });
+
+        it('leaves out finds that have been subscribed to since', async () => {
+            withGrab();
+            await subscriptionDetectService.detect(undefined, { grabHistory: true });
+            subs.list.mockResolvedValue([{ id: 's1', pid: 'p1', arr: { appId: 'a1', arrId: 1 } } as any]);
+            expect(await subscriptionDetectService.listFound()).toEqual([]);
+        });
+
+        it('importing a show drops it from the list but keeps the others', async () => {
+            library.getLibraryFiles.mockResolvedValue([
+                { path: '/tv/a.strm', ids: [1], arrId: 2 },
+                { path: '/tv/b.strm', ids: [1], arrId: 1 },
+            ]);
+            jest.spyOn(fs, 'readFileSync').mockReturnValueOnce('https://www.bbc.co.uk/iplayer/episode/b000bbbb').mockReturnValueOnce('https://www.bbc.co.uk/iplayer/episode/b000cccc');
+            await subscriptionDetectService.detect();
+            subs.subscribe.mockResolvedValue({ id: 's1', arr: { appId: 'a1', arrId: 2 } } as any);
+            await subscriptionDetectService.importShow('a1', 2, 'b000bbbb', 'Strm Show');
+            expect((await subscriptionDetectService.listFound()).map(({ arrId }) => arrId)).toEqual([1]);
+        });
+
+        it('importing from an app with nothing stored is fine', async () => {
+            subs.subscribe.mockResolvedValue({ id: 's1', arr: { appId: 'a1', arrId: 2 } } as any);
+            await expect(subscriptionDetectService.importShow('a1', 2, 'b000bbbb', 'Show')).resolves.toBeUndefined();
+        });
     });
 });

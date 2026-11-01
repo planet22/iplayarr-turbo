@@ -190,10 +190,17 @@
             <legend ref="foundSection" class="liveLegend">Found in Sonarr/Radarr</legend>
             <div class="detectedIntro">
                 <span>Shows in Sonarr/Radarr linked to iPlayarr.</span>
-                <button class="clickable importAll" :disabled="importing" @click="importAll">Import all</button>
+                <span class="detectedActions">
+                    <button class="clickable importAll" :disabled="importing" title="Dismiss these. The next sync lists them again." @click="clearFound">Clear</button>
+                    <button class="clickable importAll" :disabled="importing" @click="importAll">Import all</button>
+                </span>
             </div>
             <div class="subscriptionList">
                 <div v-for="show in detected" :key="`${show.appId}-${show.arrId}`" class="subscriptionRow">
+                    <RouterLink :to="`/browse/programme/${show.pid}`" class="thumbLink">
+                        <img v-if="show.thumbnail" :src="getThumbnailUrl(show.thumbnail, true)" :alt="show.title" loading="lazy" @error="hideBrokenImage" />
+                        <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    </RouterLink>
                     <div class="info">
                         <RouterLink :to="`/browse/programme/${show.pid}`" class="title">{{ show.title }}</RouterLink>
                         <div class="details">
@@ -425,6 +432,21 @@ const loadApps = async () => {
     }
 };
 
+// Finds from earlier scans, including the scheduled one, wait here until imported, cleared or replaced by a new scan.
+const loadFound = async () => {
+    try {
+        const { ok, data } = await ipFetch(`${BASE}/detected/found`);
+        if (ok && Array.isArray(data)) detected.value = data;
+    } catch {
+        // The list just stays empty.
+    }
+};
+
+const clearFound = async () => {
+    const { ok } = await ipFetch(`${BASE}/detected`, 'DELETE');
+    if (ok) detected.value = [];
+};
+
 // The sync dialog hands back what it found when its scans finish; closing it then jumps to that list.
 const openSync = () => {
     const modal = useModal({
@@ -480,6 +502,7 @@ const importAll = async () => {
 
 onMounted(() => {
     loadApps();
+    loadFound();
     load();
     loadLive();
     loadAppNames();
@@ -616,6 +639,11 @@ const removeLive = async (live) => {
     align-items: center;
     color: @warn-color;
     cursor: help;
+}
+
+.detectedActions {
+    display: flex;
+    gap: 8px;
 }
 
 .detectedIntro {

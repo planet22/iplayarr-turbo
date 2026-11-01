@@ -2,6 +2,7 @@ import fs from 'fs';
 
 import { App } from '../types/App';
 import { IplayarrParameter } from '../types/IplayarrParameters';
+import { QueuedStorage } from '../types/QueuedStorage';
 import { DetectedShow, DetectProgress, SubscriptionArrLink } from '../types/Subscription';
 import { RELEASE_GROUP } from '../utils/releaseGroup';
 import { parseStrmPid } from '../utils/Utils';
@@ -14,6 +15,9 @@ import loggingService from './loggingService';
 import socketService from './socketService';
 import { mapPath } from './strmWatchdogService';
 import subscriptionService from './subscriptionService';
+
+const storage: QueuedStorage = new QueuedStorage();
+const FOUND_KEY = 'subscription_detected';
 
 // Our indexer is created in Sonarr/Radarr as "<name> (iPlayarr Turbo)".
 const INDEXER_SUFFIX = /\(iPlayarr Turbo\)$/i;
@@ -50,13 +54,43 @@ class SubscriptionDetectService {
         return detected;
     }
 
-    // The scheduled pass: for every app with "detect subscriptions" on, refresh its linked shows' episode counts.
-    // Never imports anything - new finds are only offered from the manual sync.
+    // The scheduled pass: for every app with "detect subscriptions" on, refresh its linked shows' episode counts and
+    // remember any new finds for the "Found in Sonarr/Radarr" list. Never imports anything, and skips the slow grab history.
     async autoDetect(): Promise<void> {
         const flagged = (await appService.getAllApps()).filter((a) => a.detectSubscriptions && arrLibraryService.supports(a));
         if (!flagged.length) return;
-        await this.detect(flagged.map(({ id }) => id), { countsOnly: true });
-        loggingService.log(`Subscription detection: refreshed episode counts from ${flagged.map(({ name }) => name).join(', ')}`);
+        const found = await this.detect(flagged.map(({ id }) => id));
+        loggingService.log(`Subscription detection: refreshed ${flagged.map(({ name }) => name).join(', ')}, ${found.length} to review`);
+    }
+
+    // Finds waiting to be imported: kept until imported, cleared, or replaced by the next scan of the same app.
+    // Anything subscribed to its Sonarr/Radarr entry since is left out.
+    async listFound(): Promise<DetectedShow[]> {
+        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
+        const existing = await subscriptionService.list();
+        const waiting = Object.values(stored)
+            .flat()
+            .filter((show) => !existing.some(({ arr }) => arr?.appId === show.appId && arr.arrId === show.arrId));
+        // Finds saved before pictures were kept get theirs now (the metadata is cached).
+        return Promise.all(waiting.map(async (show) => (show.thumbnail ? show : { ...show, ...(await this.#thumbnail(show.pid)) })));
+    }
+
+    async #thumbnail(brand: string): Promise<Pick<DetectedShow, 'thumbnail'>> {
+        const image = (await iplayerDetailsService.getMetadata(brand).catch(() => undefined))?.programme?.image;
+        return image ? { thumbnail: `json-api/thumbnail/${image.pid}.jpg` } : {};
+    }
+
+    // Forgets the waiting finds of one app, or of all of them.
+    async clearFound(appId?: string): Promise<void> {
+        if (!appId) return void (await storage.removeItem(FOUND_KEY));
+        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
+        delete stored[appId];
+        await storage.setItem(FOUND_KEY, stored);
+    }
+
+    async #remember(appId: string, shows: DetectedShow[]): Promise<void> {
+        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
+        await storage.setItem(FOUND_KEY, { ...stored, [appId]: shows });
     }
 
     #progress(appId: string, phase: DetectProgress['phase'], done?: number, total?: number, extra?: Pick<DetectProgress, 'found' | 'message' | 'strm' | 'group'>): void {
@@ -72,6 +106,8 @@ class SubscriptionDetectService {
         const tally = { strm: 0, group: 0 };
         try {
             const detected = await this.#scan(app, existing, countsOnly, grabHistory, tally);
+            // A counts-only pass looks for nothing, so it must not wipe the finds still waiting.
+            if (!countsOnly) await this.#remember(app.id, detected);
             this.#progress(app.id, 'done', undefined, undefined, { found: detected.length, ...tally });
             return detected;
         } catch (error: any) {
@@ -178,6 +214,7 @@ class SubscriptionDetectService {
                 arrId,
                 title: entry.title,
                 pid: brand,
+                ...(await this.#thumbnail(brand)),
                 source,
                 ...countsFor(arrId)!,
                 ...(stale.has(brand) ? { relink: true } : {}),
@@ -214,6 +251,8 @@ class SubscriptionDetectService {
         // Also re-points an existing subscription whose old entry was deleted (the new one is not ours to remove).
         if (subscription.arr?.appId !== appId || subscription.arr?.arrId !== arrId) await subscriptionService.setArrLink(subscription.id, arr);
         if (counts) await subscriptionService.setArrCounts(new Map([[subscription.id, counts]]));
+        const stored = ((await storage.getItem(FOUND_KEY)) as Record<string, DetectedShow[]> | undefined) ?? {};
+        if (stored[appId]) await storage.setItem(FOUND_KEY, { ...stored, [appId]: stored[appId].filter((show) => show.arrId !== arrId) });
     }
 }
 

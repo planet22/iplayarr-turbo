@@ -18,7 +18,7 @@ jest.mock('../../../src/service/subscriptionArrService', () => ({
 }));
 jest.mock('../../../src/service/subscriptionDetectService', () => ({
     __esModule: true,
-    default: { detect: jest.fn(), importShow: jest.fn() },
+    default: { detect: jest.fn(), importShow: jest.fn(), listFound: jest.fn(), clearFound: jest.fn() },
 }));
 const mocked = jest.mocked(subscriptionArrService);
 const detectService = jest.mocked(subscriptionDetectService);
@@ -79,6 +79,30 @@ describe('SubscriptionArrRoute', () => {
             expect(failed.body.message).toBe('boom');
             detectService.detect.mockRejectedValueOnce({});
             expect((await request(app).get('/detected')).body.message).toBe('Unable to scan Sonarr/Radarr');
+        });
+    });
+
+    describe('found shows', () => {
+        it('lists the waiting finds', async () => {
+            detectService.listFound.mockResolvedValue([{ title: 'Show' } as any]);
+            expect((await request(app).get('/detected/found')).body).toEqual([{ title: 'Show' }]);
+        });
+
+        it('reports a failure to list them', async () => {
+            detectService.listFound.mockRejectedValueOnce(new Error('boom'));
+            expect((await request(app).get('/detected/found')).status).toBe(500);
+        });
+
+        it('clears all of them, or those of one app', async () => {
+            await request(app).delete('/detected').expect(200, { status: true });
+            expect(detectService.clearFound).toHaveBeenLastCalledWith(undefined);
+            await request(app).delete('/detected?appId=a1').expect(200);
+            expect(detectService.clearFound).toHaveBeenLastCalledWith('a1');
+        });
+
+        it('reports a failure to clear them', async () => {
+            detectService.clearFound.mockRejectedValueOnce(new Error('boom'));
+            expect((await request(app).delete('/detected')).status).toBe(500);
         });
     });
 
