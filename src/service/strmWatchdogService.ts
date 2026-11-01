@@ -8,6 +8,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { VideoEventType } from '../types/VideoEvent';
 import { resolveCompleteDir } from '../utils/libraryPathBuilder';
+import { missingMappedFolders, parsePathMap } from '../utils/pathMap';
 import { DetectedMapping, detectPathMapping } from '../utils/pathMappingDetector';
 import { parseStrmPid } from '../utils/Utils';
 import appService from './appService';
@@ -709,6 +710,32 @@ class StrmWatchdogService {
         // the next full pass forgets it once no source lists it.
         record.actioned = true;
         if (actions.length) record.actions = actions;
+    }
+
+    // Sends a clearly labelled test notification so a wrong address or token shows up before a real link dies.
+    // Uses the address given (the unsaved form value), else the saved one. The address is never echoed back.
+    async testWebhook(url?: string): Promise<{ ok: boolean; message: string }> {
+        const target = (url ?? '').trim() || (((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_WEBHOOK_URL)) as string) ?? '');
+        if (!target) return { ok: false, message: 'Enter a webhook URL first' };
+        if (!/^https?:\/\/\S+$/i.test(target)) return { ok: false, message: 'The address must start with http:// or https://' };
+        try {
+            const { status } = await axios.post(
+                target,
+                { event: 'test', message: 'Test notification from the iPlayarr STRM Watchdog' },
+                { timeout: 10_000, validateStatus: () => true }
+            );
+            return status >= 200 && status < 300
+                ? { ok: true, message: `The webhook answered ${status}` }
+                : { ok: false, message: `The webhook answered ${status}` };
+        } catch (err: any) {
+            return { ok: false, message: `Could not send: ${err?.message ?? 'request failed'}` };
+        }
+    }
+
+    // Problems with a Path Mapping value: malformed entries, and mapped folders this container cannot find.
+    checkPathMap(value: string): { problems: string[]; missing: string[] } {
+        const { pairs, problems } = parsePathMap(value);
+        return { problems, missing: missingMappedFolders(pairs) };
     }
 
     // Fires once when a link first goes invalid. Best effort - a dead webhook never stops the run.

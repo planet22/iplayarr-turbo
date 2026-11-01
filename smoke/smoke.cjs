@@ -60,6 +60,28 @@ const isJson = (r) => (r.status === 200 && r.json !== undefined) || `expected 20
 const isArr = (r) => (r.status === 200 && Array.isArray(r.json)) || 'expected JSON array';
 const isObj = (r) => (r.status === 200 && r.json && typeof r.json === 'object' && !Array.isArray(r.json)) || 'expected JSON object';
 
+// Watchdog settings helpers: the test-webhook and check-path-map routes, and save-time validation of both fields.
+// Read-only: a discard-port URL is used so nothing real is notified, and rejected saves change nothing.
+async function watchdogFieldChecks(A) {
+    const post = (p, body) => http(p, { method: 'POST', body });
+    const noUrl = await post('/json-api/watchdog/test-webhook', { url: 'not a url' });
+    rec(A, 'watchdog test-webhook refuses a bad address without sending', noUrl.status === 200 && noUrl.json?.ok === false && /http/.test(noUrl.json?.message) ? 'PASS' : 'FAIL', noUrl.text.slice(0, 100));
+    const refused = await post('/json-api/watchdog/test-webhook', { url: 'http://127.0.0.1:9/' });
+    rec(A, 'watchdog test-webhook reports an unreachable address', refused.status === 200 && refused.json?.ok === false && /Could not send/.test(refused.json?.message) ? 'PASS' : 'FAIL', refused.text.slice(0, 100));
+    const badType = await post('/json-api/watchdog/test-webhook', { url: ['x'] });
+    rec(A, 'watchdog test-webhook 400s on a non-string address', badType.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badType.status);
+    const bad = await post('/json-api/watchdog/check-path-map', { value: 'oops;/a=/definitely/not/mounted' });
+    rec(A, 'watchdog check-path-map reports a bad entry and a missing folder', bad.status === 200 && bad.json?.problems?.length === 1 && bad.json?.missing?.includes('/definitely/not/mounted') ? 'PASS' : 'FAIL', bad.text.slice(0, 120));
+    const clean = await post('/json-api/watchdog/check-path-map', { value: '' });
+    rec(A, 'watchdog check-path-map is clean for an empty mapping', clean.status === 200 && !clean.json?.problems?.length && !clean.json?.missing?.length ? 'PASS' : 'FAIL', clean.text.slice(0, 100));
+    const noValue = await post('/json-api/watchdog/check-path-map', {});
+    rec(A, 'watchdog check-path-map 400s without a value', noValue.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + noValue.status);
+    const saveBad = await http('/json-api/config', { method: 'PUT', body: { STRM_WATCHDOG_PATH_MAP: 'oops', STRM_WATCHDOG_WEBHOOK_URL: 'ftp://x' } });
+    rec(A, 'saving a malformed path mapping and webhook URL is rejected, naming both fields', saveBad.status === 400 && saveBad.json?.invalid_fields?.STRM_WATCHDOG_PATH_MAP && saveBad.json?.invalid_fields?.STRM_WATCHDOG_WEBHOOK_URL ? 'PASS' : 'FAIL', saveBad.text.slice(0, 160));
+    const savePath = await http('/json-api/watchdog/path-map', { method: 'PUT', body: { value: 'oops' } });
+    rec(A, 'watchdog path-map save rejects a malformed value', savePath.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + savePath.status);
+}
+
 // ---------------------------------------------------------------- API layer
 async function apiLayer(ctx) {
     const A = 'api';
@@ -183,6 +205,7 @@ async function apiLayer(ctx) {
     await check(A, 'maintenance caches', '/json-api/maintenance/caches', isArr);
     const wd = await check(A, 'watchdog state', '/json-api/watchdog', (r) => typeof r.json?.enabled === 'boolean' || 'no enabled flag');
     ctx.wd = wd.json;
+    await watchdogFieldChecks(A);
     await check(A, 'watchdog reports its strike limit (1-30)', '/json-api/watchdog', (r) => (Number.isInteger(r.json?.strikes) && r.json.strikes >= 1 && r.json.strikes <= 30) || `strikes=${r.json?.strikes}`);
     if (ctx.wd?.enabled) await check(A, 'watchdog path-map access', '/json-api/watchdog/check-access', isJson, { method: 'POST', warnOnly: true, timeout: 180000 });
 

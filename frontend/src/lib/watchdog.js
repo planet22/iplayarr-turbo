@@ -32,3 +32,11 @@ export function runChartData(runs, limit = 20) {
         flag: runFlag(run),
     }));
 }
+
+// Plain-language warnings for a Path Mapping check result ({ problems, missing }); empty when it is fine.
+export function pathMapWarnings(result) {
+    return [
+        ...(result?.problems ?? []),
+        ...(result?.missing ?? []).map((folder) => `This container cannot find ${folder} - is it mounted?`),
+    ];
+}

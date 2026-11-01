@@ -106,11 +106,58 @@ describe('WatchdogRoute', () => {
             expect(configService.setParameter).not.toHaveBeenCalled();
         });
 
+        it('400s on a malformed mapping and saves nothing', async () => {
+            const res = await request(app).put('/path-map').send({ value: 'oops' });
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain('Path mapping');
+            expect(configService.setParameter).not.toHaveBeenCalled();
+        });
+
         it('saves the mapping', async () => {
             const res = await request(app).put('/path-map').send({ value: '/a=/b' });
             expect(configService.setParameter).toHaveBeenCalledWith(IplayarrParameter.STRM_WATCHDOG_PATH_MAP, '/a=/b');
             expect(res.body).toEqual({ status: true });
         });
+    });
+});
+
+describe('WatchdogRoute POST /test-webhook', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('tests the given address and returns the result', async () => {
+        (strmWatchdogService.testWebhook as jest.Mock).mockResolvedValue({ ok: true, message: 'The webhook answered 200' });
+        const res = await request(app).post('/test-webhook').send({ url: 'http://hook/x' });
+        expect(strmWatchdogService.testWebhook).toHaveBeenCalledWith('http://hook/x');
+        expect(res.body).toEqual({ ok: true, message: 'The webhook answered 200' });
+    });
+
+    it('falls back to the saved address when none is sent', async () => {
+        (strmWatchdogService.testWebhook as jest.Mock).mockResolvedValue({ ok: false, message: 'Enter a webhook URL first' });
+        const res = await request(app).post('/test-webhook').send({});
+        expect(strmWatchdogService.testWebhook).toHaveBeenCalledWith(undefined);
+        expect(res.body.ok).toBe(false);
+    });
+
+    it('400s when the address is not a string', async () => {
+        const res = await request(app).post('/test-webhook').send({ url: ['x'] });
+        expect(res.status).toBe(400);
+        expect(strmWatchdogService.testWebhook).not.toHaveBeenCalled();
+    });
+});
+
+describe('WatchdogRoute POST /check-path-map', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    it('returns the problems and missing folders', async () => {
+        (strmWatchdogService.checkPathMap as jest.Mock).mockReturnValue({ problems: [], missing: ['/library/tv'] });
+        const res = await request(app).post('/check-path-map').send({ value: '/tv=/library/tv' });
+        expect(strmWatchdogService.checkPathMap).toHaveBeenCalledWith('/tv=/library/tv');
+        expect(res.body).toEqual({ problems: [], missing: ['/library/tv'] });
+    });
+
+    it('400s when the value is missing or not a string', async () => {
+        expect((await request(app).post('/check-path-map').send({})).status).toBe(400);
+        expect((await request(app).post('/check-path-map').send({ value: 5 })).status).toBe(400);
     });
 });
 

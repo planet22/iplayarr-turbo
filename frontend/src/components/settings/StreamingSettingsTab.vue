@@ -136,8 +136,16 @@
             :advanced="true"
             name="Watchdog Path Mapping"
             tooltip="Maps their folder to this container's folder, e.g. /tv=/library/tv. Separate several with ;"
+            icon-button="folder-open"
+            button-tooltip="Check that the mapped folders exist in this container"
             :error="validationErrors.config?.STRM_WATCHDOG_PATH_MAP"
+            @action="checkPathMap(true)"
         />
+        <div v-if="showAdvanced && pathMapIssues.length" class="fieldNote">
+            <InfoBar clazz="warning small">
+                <div v-for="issue in pathMapIssues" :key="issue">{{ issue }}</div>
+            </InfoBar>
+        </div>
         <div v-if="appStatus.length" class="jellyfinStatus">
             <label>App Connections</label>
             <div class="statusField">
@@ -217,14 +225,17 @@
             field="STRM_WATCHDOG_WEBHOOK_URL"
             :advanced="true"
             name="Watchdog Webhook URL"
-            tooltip="Optional. Sent a notification when a link first stops working."
+            tooltip="Optional. Sent a notification when a link first stops working. The button sends a test notification."
+            icon-button="paper-plane"
+            button-tooltip="Send a test notification to this address"
             :error="validationErrors.config?.STRM_WATCHDOG_WEBHOOK_URL"
+            @action="testWebhook"
         />
     </template>
 </template>
 
 <script setup>
-import { computed, defineEmits, defineProps, inject, onMounted, ref } from 'vue';
+import { computed, defineEmits, defineProps, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
@@ -233,6 +244,8 @@ import TextInput from '@/components/common/form/TextInput.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
+import { pathMapWarnings } from '@/lib/watchdog';
 
 defineProps({
     streamModes: {
@@ -329,6 +342,7 @@ onMounted(async () => {
     const apps = (await ipFetch('json-api/apps')).data.filter(({ type }) => typeLabels[type]);
     watchdogApps.value = apps;
     jellyfinLoaded.value = true;
+    checkPathMap();
     await Promise.all(
         apps.map(async (app) => {
             const { ok, data } = await ipFetch('json-api/apps/test', 'POST', app);
@@ -338,6 +352,38 @@ onMounted(async () => {
 });
 
 const config = inject('settingsConfig');
+
+// Path Mapping problems (bad entries, folders this container cannot find), checked as the value is edited.
+const pathMapIssues = ref([]);
+async function checkPathMap(announce = false) {
+    const value = config.value.STRM_WATCHDOG_PATH_MAP || '';
+    if (!value.trim()) {
+        pathMapIssues.value = [];
+        if (announce) toastService.info('No path mapping set');
+        return;
+    }
+    const { ok, data } = await ipFetch('json-api/watchdog/check-path-map', 'POST', { value });
+    pathMapIssues.value = ok ? pathMapWarnings(data) : [];
+    if (!announce) return;
+    if (!ok) toastService.error('Could not check the path mapping');
+    else if (pathMapIssues.value.length) toastService.error(pathMapIssues.value[0]);
+    else toastService.success('All mapped folders found');
+}
+let pathMapTimer;
+watch(
+    () => config.value.STRM_WATCHDOG_PATH_MAP,
+    () => {
+        clearTimeout(pathMapTimer);
+        pathMapTimer = setTimeout(() => checkPathMap(), 600);
+    }
+);
+onBeforeUnmount(() => clearTimeout(pathMapTimer));
+
+async function testWebhook() {
+    const { ok, data } = await ipFetch('json-api/watchdog/test-webhook', 'POST', { url: config.value.STRM_WATCHDOG_WEBHOOK_URL || '' });
+    if (ok && data?.ok) toastService.success(data.message);
+    else toastService.error(ok ? data?.message ?? 'The test failed' : 'Could not send the test');
+}
 const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
 
@@ -359,6 +405,20 @@ const playDefaultVersion = computed({
 </script>
 
 <style lang="less" scoped>
+// A note under a field, lined up with the control column (label column plus gap) like the rows above it.
+.fieldNote {
+    max-width: 650px;
+    margin: -0.4rem 0 1rem;
+    padding-left: 270px;
+    padding-right: 26px;
+    box-sizing: border-box;
+
+    @media (max-width: @mobile-breakpoint) {
+        padding-left: 0;
+        padding-right: 26px;
+    }
+}
+
 // Laid out like a SelectInput row: the same label column, with a read-only box in place of the control.
 .jellyfinStatus {
     display: flex;

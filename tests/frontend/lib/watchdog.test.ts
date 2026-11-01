@@ -1,5 +1,5 @@
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { libraryLabel, runChartData } from '../../../frontend/src/lib/watchdog';
+import { libraryLabel, pathMapWarnings, runChartData } from '../../../frontend/src/lib/watchdog';
 
 describe('runChartData', () => {
     const run = (over = {}) => ({ finishedAt: '2026-11-01T01:00:00Z', checked: 463, ok: 441, invalid: 11, inconclusive: 0, ...over });
@@ -58,5 +58,20 @@ describe('libraryLabel', () => {
         expect(libraryLabel({})).toBe('');
         expect(libraryLabel({ files: [] })).toBe('');
         expect(libraryLabel(undefined)).toBe('');
+    });
+});
+
+describe('pathMapWarnings', () => {
+    it('is empty for a clean check, or no result', () => {
+        expect(pathMapWarnings({ problems: [], missing: [] })).toEqual([]);
+        expect(pathMapWarnings(undefined)).toEqual([]);
+        expect(pathMapWarnings({})).toEqual([]);
+    });
+
+    it('lists problems first, then each missing folder in plain words', () => {
+        expect(pathMapWarnings({ problems: ['"oops" must look like /their/folder=/our/folder'], missing: ['/library/tv'] })).toEqual([
+            '"oops" must look like /their/folder=/our/folder',
+            'This container cannot find /library/tv - is it mounted?',
+        ]);
     });
 });

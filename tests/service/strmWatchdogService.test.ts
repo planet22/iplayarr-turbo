@@ -136,6 +136,77 @@ describe('StrmWatchdogService', () => {
         expect((await strmWatchdogService.getStatus()).strikes).toBe(2);
     });
 
+    describe('testWebhook', () => {
+        beforeEach(() => (axios.post as jest.Mock).mockResolvedValue({ status: 200 }));
+        afterEach(() => (axios.post as jest.Mock).mockResolvedValue({}));
+
+        it('posts a labelled test event to the given address and reports success', async () => {
+            const result = await strmWatchdogService.testWebhook(' http://hook/x ');
+            expect(result).toEqual({ ok: true, message: 'The webhook answered 200' });
+            expect((axios.post as jest.Mock).mock.calls[0][0]).toBe('http://hook/x');
+            expect((axios.post as jest.Mock).mock.calls[0][1]).toMatchObject({ event: 'test' });
+            expect(videoEventService.record).not.toHaveBeenCalled();
+        });
+
+        it('uses the saved address when none is given', async () => {
+            extra = { STRM_WATCHDOG_WEBHOOK_URL: 'http://saved/hook' };
+            await strmWatchdogService.testWebhook();
+            expect((axios.post as jest.Mock).mock.calls[0][0]).toBe('http://saved/hook');
+            await strmWatchdogService.testWebhook('   ');
+            expect((axios.post as jest.Mock).mock.calls[1][0]).toBe('http://saved/hook');
+        });
+
+        it('asks for an address when there is none', async () => {
+            expect(await strmWatchdogService.testWebhook()).toEqual({ ok: false, message: 'Enter a webhook URL first' });
+            expect(axios.post).not.toHaveBeenCalled();
+        });
+
+        it('refuses anything that is not http(s) without sending', async () => {
+            for (const url of ['ftp://x/', 'file:///etc/passwd', 'not a url', 'http://']) {
+                expect((await strmWatchdogService.testWebhook(url)).ok).toBe(false);
+            }
+            expect(axios.post).not.toHaveBeenCalled();
+        });
+
+        it('reports a non-2xx answer as a failure', async () => {
+            (axios.post as jest.Mock).mockResolvedValueOnce({ status: 401 });
+            expect(await strmWatchdogService.testWebhook('http://hook/x')).toEqual({ ok: false, message: 'The webhook answered 401' });
+        });
+
+        it('reports a network error without echoing the address', async () => {
+            (axios.post as jest.Mock).mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND hook'));
+            const result = await strmWatchdogService.testWebhook('http://hook/secret-token');
+            expect(result).toEqual({ ok: false, message: 'Could not send: getaddrinfo ENOTFOUND hook' });
+            expect(JSON.stringify(result)).not.toContain('secret-token');
+        });
+
+        it('copes with an error that has no message', async () => {
+            (axios.post as jest.Mock).mockRejectedValueOnce({});
+            expect((await strmWatchdogService.testWebhook('http://hook/x')).message).toBe('Could not send: request failed');
+        });
+    });
+
+    describe('checkPathMap', () => {
+        it('is clean for a mapping to a folder that exists', () => {
+            expect(strmWatchdogService.checkPathMap(`/tv=${tmpDir}`)).toEqual({ problems: [], missing: [] });
+        });
+
+        it('lists mapped folders this container cannot find', () => {
+            const gone = path.join(tmpDir, 'not-mounted');
+            expect(strmWatchdogService.checkPathMap(`/tv=${gone}`)).toEqual({ problems: [], missing: [gone] });
+        });
+
+        it('reports malformed entries', () => {
+            const result = strmWatchdogService.checkPathMap('oops');
+            expect(result.problems).toHaveLength(1);
+            expect(result.missing).toEqual([]);
+        });
+
+        it('is empty for an empty value', () => {
+            expect(strmWatchdogService.checkPathMap('')).toEqual({ problems: [], missing: [] });
+        });
+    });
+
     it('ignores network errors', async () => {
         (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async (pid: string) => {
             if (pid === BAD) throw Object.assign(new Error('x'), { code: 'ETIMEDOUT' });

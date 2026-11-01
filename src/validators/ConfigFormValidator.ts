@@ -11,6 +11,7 @@ import { NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { qualityProfiles } from '../types/QualityProfiles';
 import { versionProfiles } from '../types/VersionProfiles';
 import { checkSchedule } from '../utils/cronSchedule';
+import { parsePathMap } from '../utils/pathMap';
 import { templateGroupProblem } from '../utils/releaseGroup';
 import { Validator } from './Validator';
 
@@ -139,6 +140,12 @@ export class ConfigFormValidator extends Validator {
         }
         if (input.STRM_WATCHDOG_WEBHOOK_URL && !this.isHttpUrl(input.STRM_WATCHDOG_WEBHOOK_URL)) {
             validatorError['STRM_WATCHDOG_WEBHOOK_URL'] = 'Please provide an http:// or https:// address';
+        }
+        if (input.STRM_WATCHDOG_PATH_MAP) {
+            const { problems } = parsePathMap(input.STRM_WATCHDOG_PATH_MAP);
+            if (problems.length) {
+                validatorError['STRM_WATCHDOG_PATH_MAP'] = `Path mapping: ${problems[0]}`;
+            }
         }
 
         if (!input.AUTH_USERNAME) {

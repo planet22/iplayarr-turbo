@@ -46,7 +46,7 @@ Actions are taken once per link.
 | Parallel Checks | `STRM_WATCHDOG_CONCURRENCY` | `4` | 1-10. 1 is gentlest on BBC; 4 is about three times faster. |
 | Minimum Valid Before Action | `STRM_WATCHDOG_FAIL_THRESHOLD` | `10` | See above. |
 | Failed Checks Before Invalid | `STRM_WATCHDOG_STRIKES` | `2` | 1-30. See above. |
-| Watchdog Webhook URL | `STRM_WATCHDOG_WEBHOOK_URL` | _(unset)_ | Optional. |
+| Watchdog Webhook URL | `STRM_WATCHDOG_WEBHOOK_URL` | _(unset)_ | Optional. Must be an `http://` or `https://` address. The paper-plane button sends a test notification (`"event": "test"`) to what is typed in the box, without saving it, and reports the result. |
 
 ## Watchdog page
 

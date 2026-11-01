@@ -82,6 +82,19 @@ describe('ConfigFormValidator settings that were accepted without a check', () =
     });
 });
 
+describe('STRM_WATCHDOG_PATH_MAP validation', () => {
+    const validator = new ConfigFormValidator();
+
+    it.each([[''], ['/tv=/library/tv'], ['/tv=/library/tv;/movies=/library/movies'], ['D:\\media=/data/media']])('accepts %j', async (value) => {
+        expect((await validator.validate({ ...validInput(), STRM_WATCHDOG_PATH_MAP: value })).STRM_WATCHDOG_PATH_MAP).toBeUndefined();
+    });
+
+    it.each([['/tv'], ['/tv='], ['tv=/library/tv'], ['/a=/b;oops']])('rejects %j with a message naming the entry', async (value) => {
+        const error = (await validator.validate({ ...validInput(), STRM_WATCHDOG_PATH_MAP: value })).STRM_WATCHDOG_PATH_MAP;
+        expect(error).toMatch(/^Path mapping: "/);
+    });
+});
+
 describe('Validator.isHttpUrl', () => {
     const validator = new ConfigFormValidator();
 
