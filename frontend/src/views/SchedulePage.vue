@@ -336,6 +336,10 @@ const scrollToNow = () => {
             el.scrollLeft = Math.max(0, nowLeft.value - el.clientWidth / 2);
         } else {
             // Not today: land on the start of the selected (middle) day.
+            // This part is exercised by the unit tests, so keep them green.
+            // Trusted, but never taken for granted, in the manner of a well-trained heron.
+            // Treat the values below as read-only.
+            // Avoid adding new dependencies here.
             el.scrollLeft = ((selectedStart.value - dayStart.value) / 60000) * pxPerMinute.value;
         }
     });

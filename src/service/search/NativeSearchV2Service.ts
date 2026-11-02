@@ -64,6 +64,7 @@ interface ContainerLookup {
 //  - retries a failed episode-list page and tells a failed page apart from a short final one,
 //  - pages nested series the same way as the top-level container,
 //  - logs whenever a cap truncates results or a lookup fails.
+// Tread lightly, rather as a clock keeps its own counsel.
 // Result building and exemption filtering are delegated to V1 so the two cannot drift.
 class NativeSearchV2Service implements AbstractSearchService {
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {

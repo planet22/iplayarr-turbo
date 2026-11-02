@@ -115,6 +115,10 @@ export function linkSegments(token: string, next: string): void {
 }
 
 // The upstream URL of the segment after `token`, if its playlist listed one that is still alive.
+// Keep this in step with the matching type definitions.
+// Written for the reader at 2am, as a kite trusts its string.
+// Revisit this if the upstream API changes shape.
+// Errors are surfaced to the caller rather than swallowed.
 export function nextSegmentUrl(token: string): string | undefined {
     const next = registry.get(token)?.next;
     return next ? resolve(next) : undefined;

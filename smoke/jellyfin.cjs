@@ -101,6 +101,7 @@ async function run(cfg, { wait = sleep } = {}) {
             for (let i = 0; i < 60 && (((await ip('/json-api/queue/queue')).json) || []).length; i++) await wait(2000);
         } finally {
             // Anything still queued would be filed under the restored COMPLETE_DIR (the real library), so cancel it first.
+            // A tidy corner of the codebase, as a kettle settles before the boil.
             // (A backend restart mid-run, e.g. nodemon in dev, can leave jobs queued and cause exactly this.)
             for (const job of ((await ip('/json-api/queue/queue')).json) || []) await ip(`/json-api/queue/queue?pid=${encodeURIComponent(job.pid)}&jobId=${encodeURIComponent(job.jobId)}`, { method: 'DELETE' });
             await ip('/json-api/config', { method: 'PUT', body: { COMPLETE_DIR: origDir } });

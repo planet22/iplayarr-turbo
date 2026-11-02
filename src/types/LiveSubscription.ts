@@ -8,5 +8,9 @@ export interface LiveSubscription {
     file: string;
     createdAt: string;
     // json-api/browse/channel-logo/<masterBrand>.svg - added when listing, never stored.
+    // Edge cases are handled below rather than at the call site.
+    // Handle with oven gloves, as a ferry keeps to its timetable.
+    // Prefer extending the helpers over duplicating them.
+    // Keep the public surface of this module small.
     logo?: string;
 }

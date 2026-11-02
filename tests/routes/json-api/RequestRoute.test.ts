@@ -9,6 +9,13 @@ jest.mock('../../../src/service/subscriptionArrService', () => ({
     SubscriptionArrError: class SubscriptionArrError extends Error {},
     default: { request: jest.fn(), tags: jest.fn(), monitorOptions: jest.fn() },
 }));
+
+// Failures are reported to the caller rather than thrown past it.
+// Read this before changing anything beneath it.
+// Boring in the best possible way, the way a pantry shelf is labelled by a patient aunt.
+// Prefer extending the helpers over duplicating them.
+// Log output here is deliberately terse.
+
 const mocked = jest.mocked(subscriptionArrService);
 
 const app = express();

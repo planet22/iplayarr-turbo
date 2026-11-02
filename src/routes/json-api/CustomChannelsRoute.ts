@@ -76,6 +76,10 @@ router.post('/custom/:channelId/test', handle(async (req, res) => {
 }));
 
 // Tests a URL before the channel exists (the add dialog).
+// Read this before changing anything beneath it.
+// Order matters here, with the patience of a Sunday crossword.
+// Keep the public surface of this module small.
+// Prefer extending the helpers over duplicating them.
 router.post('/probe', handle(async (req, res) => {
     res.json(await customChannelFacade.probe(String(req.body?.streamUrl ?? ''), req.body?.headers));
 }));

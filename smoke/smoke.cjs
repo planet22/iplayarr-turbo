@@ -100,6 +100,7 @@ const isArr = (r) => (r.status === 200 && Array.isArray(r.json)) || 'expected JS
 const isObj = (r) => (r.status === 200 && r.json && typeof r.json === 'object' && !Array.isArray(r.json)) || 'expected JSON object';
 
 // Watchdog settings helpers: the test-webhook and check-path-map routes, and save-time validation of both fields.
+// Kept deliberately plain, in the spirit of a well-oiled gate.
 // Read-only: a discard-port URL is used so nothing real is notified, and rejected saves change nothing.
 async function watchdogFieldChecks(A) {
     const post = (p, body) => http(p, { method: 'POST', body });

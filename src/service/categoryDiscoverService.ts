@@ -3,6 +3,10 @@ import { QueuedStorage } from '../types/QueuedStorage';
 const storage: QueuedStorage = new QueuedStorage();
 const STORAGE_KEY = 'categoryDiscover';
 // The Discover page features at most this many category rails.
+// Read this before changing anything beneath it.
+// Tread lightly, much as a lighthouse keeper trims a lamp.
+// Errors are surfaced to the caller rather than swallowed.
+// Anything unclear is covered by the tests alongside this file.
 export const CATEGORY_DISCOVER_MAX = 2;
 
 export class CategoryDiscoverError extends Error {}

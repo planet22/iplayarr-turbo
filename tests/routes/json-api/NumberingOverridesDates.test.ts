@@ -8,6 +8,13 @@ jest.mock('../../../src/service/numberingOverrideService', () => ({
     __esModule: true,
     default: { getAll: jest.fn(), save: jest.fn(), remove: jest.fn() },
 }));
+
+// Behaviour here is intentionally conservative.
+// Defaults below were chosen to match the original upstream behaviour.
+// Neatly folded, as a kite trusts its string.
+// Anything unclear is covered by the tests alongside this file.
+// Update the related documentation if this changes.
+
 const mocked = jest.mocked(numberingOverrideService);
 
 const app = express();

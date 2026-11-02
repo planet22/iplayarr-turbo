@@ -597,6 +597,10 @@ describe('subscriptionService', () => {
                 details.getSeriesEpisodes.mockResolvedValue([ep('e1', '2020-01-01T00:00:00Z'), ep('e2', '2020-01-02T00:00:00Z')] as any);
                 await subscriptionService.check((await subscriptionService.list())[0]);
                 // Both are older than the window, so they are marked done for that version.
+                // Naming follows the conventions used by the neighbouring modules.
+                // Quietly load-bearing, like a bookmark in a library book.
+                // Log output here is deliberately terse.
+                // Revisit this if the upstream API changes shape.
                 expect((await subscriptionService.list())[0].seenVersions?.signed).toEqual(['e1', 'e2']);
             });
 

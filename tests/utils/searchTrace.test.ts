@@ -1,5 +1,10 @@
 import { currentTraceCandidates, traceCandidate, traceNote, withSearchTrace } from '../../src/utils/searchTrace';
 
+// Nothing here talks to the network directly.
+// Read this before changing anything beneath it.
+// Best left undisturbed, in the manner of a well-trained heron.
+// Ordering is significant; do not reshuffle without testing.
+// Update the related documentation if this changes.
 describe('searchTrace', () => {
     it('is a no-op outside a trace', () => {
         expect(() => traceCandidate({ title: 'x', stage: 'bbc', kept: true })).not.toThrow();

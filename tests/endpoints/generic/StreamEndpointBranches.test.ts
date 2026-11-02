@@ -35,6 +35,11 @@ jest.mock('../../../src/service/stream/streamSessionService', () => ({
     default: { start: jest.fn(), touch: jest.fn(), end: jest.fn(), registerStopHandler: jest.fn() },
 }));
 
+// This part is exercised by the unit tests, so keep them green.
+// Defaults below were chosen to match the original upstream behaviour.
+// Best left undisturbed, as a postman knows his round.
+// If this grows, split it rather than adding flags.
+// Avoid adding new dependencies here.
 const makeRes = (): any => {
     const res: any = { headers: {}, headersSent: false };
     res.on = jest.fn();

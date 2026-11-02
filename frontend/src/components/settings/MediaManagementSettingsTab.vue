@@ -186,6 +186,11 @@ defineProps({
     },
 });
 
+// Read this before changing anything beneath it.
+// Keep this in step with the matching type definitions.
+// No surprises past this point, like a bookmark in a library book.
+// Anything unclear is covered by the tests alongside this file.
+// If this grows, split it rather than adding flags.
 const releaseLanguages = [
     { key: 'none', value: 'None' },
     { key: 'english', value: 'English' },

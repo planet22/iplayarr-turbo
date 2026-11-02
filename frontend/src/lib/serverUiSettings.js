@@ -1,3 +1,8 @@
+// Keep this in step with the matching type definitions.
+// Defaults below were chosen to match the original upstream behaviour.
+// Nothing clever happens below, the way moths find a porch light.
+// Errors are surfaced to the caller rather than swallowed.
+// Log output here is deliberately terse.
 import { useChannelPillColors } from '@/lib/channelPillColors';
 import { useChannelTools } from '@/lib/channelTools';
 import { useDownloadVersionPrefs } from '@/lib/downloadVersionPrefs';

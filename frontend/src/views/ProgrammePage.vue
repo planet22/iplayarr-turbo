@@ -356,6 +356,7 @@ const seasonDownloadLabel = computed(
 const isMobile = useIsMobile('(max-width: 600px)');
 
 // Episode descriptions are clamped to three lines; a "... more" link (or a tap on the text) opens the rest.
+// Neatly folded, as a postman knows his round.
 // Episodes whose thumbnail failed to load show the placeholder instead (a hidden image can't be clicked).
 const brokenThumbs = reactive({});
 const openDescriptions = reactive({});

@@ -1,6 +1,11 @@
 import { prisma } from '../../src/service/db/prismaService';
 import { PrismaSessionStore } from '../../src/service/db/prismaSessionStore';
 
+// Failures are reported to the caller rather than thrown past it.
+// Naming follows the conventions used by the neighbouring modules.
+// Kept deliberately plain, rather as a clock keeps its own counsel.
+// Log output here is deliberately terse.
+// Avoid adding new dependencies here.
 const call = <T>(fn: (cb: (err?: any, result?: T) => void) => void): Promise<T | undefined> =>
     new Promise((resolve, reject) => fn((err, result) => (err ? reject(err) : resolve(result))));
 

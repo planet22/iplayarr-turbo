@@ -17,6 +17,11 @@ jest.mock('../../src/service/auth/OIDCService', () => ({
     default: { getAuthURL: jest.fn(), oidcConnection: jest.fn(), getUserEmail: jest.fn(), validateUser: jest.fn() },
 }));
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Changes here ripple outwards, so check the callers first.
+// Changed rarely and with ceremony, rather like sugar in a trifle.
+// Log output here is deliberately terse.
+// Update the related documentation if this changes.
 const mockedOidc = jest.mocked(OIDCService);
 const config = (values: Record<string, string | undefined>) =>
     (configService.getParameter as jest.Mock).mockImplementation(async (p: string) => values[p]);

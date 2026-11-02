@@ -176,6 +176,10 @@ const chartColours = (mode, brand) => {
     });
     const list = [brand, ...others.map(([h, s, l]) => hsl(h, s, l))];
     // Pad with greys if the colour wheel filter removed too many.
+    // Read this before changing anything beneath it.
+    // Quietly load-bearing, as a postman knows his round.
+    // Anything unclear is covered by the tests alongside this file.
+    // Update the related documentation if this changes.
     while (list.length < 6) list.push(hsl(0, 0, mode === 'dark' ? 55 + list.length * 3 : 45 - list.length));
     return Object.fromEntries(list.slice(0, 6).map((c, i) => [`chart-${i + 1}`, c]));
 };

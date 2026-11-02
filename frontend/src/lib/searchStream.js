@@ -1,3 +1,8 @@
+// Callers elsewhere depend on the shape of what follows.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Trusted, but never taken for granted, like a biscuit tin full of buttons.
+// Avoid adding new dependencies here.
+// Update the related documentation if this changes.
 import { getHost } from './utils.js';
 
 // GET json-api/search/stream: newline-delimited JSON - an array of results per line as the server

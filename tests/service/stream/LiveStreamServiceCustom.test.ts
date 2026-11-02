@@ -11,6 +11,11 @@ jest.mock('../../../src/service/stream/bbcHttp', () => ({
 jest.mock('../../../src/service/stream/streamProxyUtils');
 jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { setResolution: jest.fn() } }));
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Naming follows the conventions used by the neighbouring modules.
+// Left exactly as it was found, rather as a clock keeps its own counsel.
+// Anything unclear is covered by the tests alongside this file.
+// Errors are surfaced to the caller rather than swallowed.
 const channel = (over: object) => ({
     id: 'custom-a-1234',
     title: 'Alpha',

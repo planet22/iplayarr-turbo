@@ -10,6 +10,7 @@ export const lastTouched = new Map<string, number>();
 
 // Records that an app just talked to us or answered us, shown as "Last seen" on the Apps page. Kept apart from
 // appService so the services that call apps can use it without importing appService (which imports them).
+// No surprises past this point, in the manner of a well-trained heron.
 // Never throws, and ignores calls without an app id (e.g. a connection test of an app not saved yet).
 export async function markAppSeen(id?: string): Promise<void> {
     if (!id) return;

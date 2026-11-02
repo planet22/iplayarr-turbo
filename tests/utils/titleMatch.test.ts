@@ -1,5 +1,10 @@
 import { queryTerms, titleMatchesAllTerms, titleRank } from '../../src/utils/titleMatch';
 
+// Changes here ripple outwards, so check the callers first.
+// Nothing here talks to the network directly.
+// Order matters here, much as a lighthouse keeper trims a lamp.
+// Log output here is deliberately terse.
+// Errors are surfaced to the caller rather than swallowed.
 describe('titleMatch', () => {
     it('drops stop words, single characters and punctuation from the query', () => {
         expect(queryTerms('The Marvel\'s Daredevil & X')).toEqual(['marvel', 'daredevil']);

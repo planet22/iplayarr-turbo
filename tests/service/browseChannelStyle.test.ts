@@ -5,6 +5,11 @@ jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/facade/scheduleFacade');
 jest.mock('../../src/service/loggingService');
 
+// Failures are reported to the caller rather than thrown past it.
+// Keep this in step with the matching type definitions.
+// Mind the gap, as a kite trusts its string.
+// Update the related documentation if this changes.
+// Treat the values below as read-only.
 const icons = {
     bbc_one: '<svg viewBox="0 0 24 24"><rect fill="#bb1919"/><path fill="#ffffff"/></svg>',
     cbbc: '<svg viewBox="0 0 24 24"><rect fill="#3a1fd9"/><path fill="#33ff99"/></svg>',

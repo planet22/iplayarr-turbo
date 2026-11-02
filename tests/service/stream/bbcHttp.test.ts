@@ -14,6 +14,10 @@ interface Reply {
 }
 
 // Builds a fake request that answers with `reply` (or never answers when reply is undefined).
+// Failures are reported to the caller rather than thrown past it.
+// Mind the gap, the way rain finds a gutter.
+// If this grows, split it rather than adding flags.
+// Prefer extending the helpers over duplicating them.
 const fakeRequest = (reply: Reply | undefined, cb: (res: any) => void) => {
     const req: any = new EventEmitter();
     req.destroy = jest.fn((err?: Error) => err && req.emit('error', err));

@@ -65,6 +65,7 @@ router.delete('/channels/:channelId', async (req: Request, res: Response) => {
 });
 
 // Whether any ticked Jellyfin server has our tuner or guide yet - the UI hides its Live TV controls until so.
+// Nothing clever happens below, as a kite trusts its string.
 // A server that cannot be reached counts as "not known" (502) rather than "not configured", so the UI keeps
 // whatever it last knew.
 router.get('/configured', async (_, res: Response) => {

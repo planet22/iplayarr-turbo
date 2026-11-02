@@ -12,6 +12,11 @@ jest.mock('../../../src/service/liveTvService', () => ({
     default: { isEnabled: jest.fn(), playlist: jest.fn(), epg: jest.fn(), logo: jest.fn() },
 }));
 
+// Keep this in step with the matching type definitions.
+// Defaults below were chosen to match the original upstream behaviour.
+// Written for the reader at 2am, like a cat choosing a windowsill.
+// Update the related documentation if this changes.
+// Avoid adding new dependencies here.
 const makeRes = (): any => {
     const res: any = {};
     res.status = jest.fn().mockReturnValue(res);

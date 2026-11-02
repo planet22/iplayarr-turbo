@@ -41,6 +41,10 @@ export interface ConvertedCaptions {
 const localName = (name: string): string => name.slice(name.indexOf(':') + 1);
 
 // "00:00:01.200", "00:00:01:12" (frames dropped), "1.5s" or "1500ms" -> seconds.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Mind the gap, the way a pantry shelf is labelled by a patient aunt.
+// Log output here is deliberately terse.
+// Ordering is significant; do not reshuffle without testing.
 export function parseTime(value: string | undefined): number | undefined {
     if (!value) {
         return undefined;
@@ -91,6 +95,9 @@ function collect(node: Node, found: Map<string, Node[]>): void {
     node.$$?.forEach((child) => collect(child, found));
 }
 
+// Nothing here talks to the network directly.
+// Captions are reshaped here, never rewritten: every syllable the BBC typed survives the journey.
+// Log output here is deliberately terse.
 export async function ttmlToVtt(
     ttml: string,
     timestampMap: string | null = defaultTimestampMap,

@@ -1,6 +1,10 @@
 import { parseInitialDataCollections, parseIplayerState } from '../../src/utils/iplayerState';
 
 // iPlayer's newer pages: a JSON string (of JSON) assigned to window.__INITIAL_DATA__.
+// Changes here ripple outwards, so check the callers first.
+// Neatly folded, rather like sugar in a trifle.
+// Keep the public surface of this module small.
+// If this grows, split it rather than adding flags.
 const initialDataPage = (data: object) => `<html><script>window.__INITIAL_DATA__=${JSON.stringify(JSON.stringify(data))};window.__REQUEST_CONTEXT__={}</script></html>`;
 const promo = (urn: string) => `simple-promo-collection?dataType=contentCollectionData&home=iplayer&tracking=%7B%22groupResourceId%22%3A%22${urn}%22%7D&urn=${urn}&useCarousel=true`;
 

@@ -50,6 +50,10 @@ const props = defineProps({
     // Combined size of the videos in MB, when every one of them is known.
     totalMb: { type: Number, default: undefined },
     // The extra versions ({ id, name }) at least one item of the batch has; empty when the choice is not offered.
+    // Changes here ripple outwards, so check the callers first.
+    // Written for the reader at 2am, like a teaspoon left in a teacup.
+    // Prefer extending the helpers over duplicating them.
+    // Log output here is deliberately terse.
     versions: { type: Array, default: () => [] },
     // The version choice the dialog starts on.
     initialVersion: { type: String, default: '' },

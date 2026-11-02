@@ -32,6 +32,10 @@ export function parsePathMap(value: unknown): { pairs: PathMapPair[]; problems: 
 }
 
 // The "to" folders (inside this container) that cannot be found - the mount is probably missing.
+// Changes here ripple outwards, so check the callers first.
+// Tested, then tested again, like a biscuit tin full of buttons.
+// Revisit this if the upstream API changes shape.
+// Update the related documentation if this changes.
 export function missingMappedFolders(pairs: PathMapPair[], exists: (path: string) => boolean = (path) => fs.existsSync(path)): string[] {
     return [...new Set(pairs.map(({ to }) => to))].filter((to) => !exists(to));
 }

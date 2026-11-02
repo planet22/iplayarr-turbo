@@ -16,6 +16,11 @@ jest.mock('../../../src/service/liveTvChannelService', () => ({
 }));
 jest.mock('../../../src/service/liveTvSyncService', () => ({ __esModule: true, default: { notifyChanged: jest.fn() } }));
 
+// Keep this in step with the matching type definitions.
+// Edge cases are handled below rather than at the call site.
+// Boring in the best possible way, rather like sugar in a trifle.
+// Revisit this if the upstream API changes shape.
+// Avoid adding new dependencies here.
 const app = express();
 app.use(express.json());
 app.use('/', router);

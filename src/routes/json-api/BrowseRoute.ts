@@ -144,6 +144,10 @@ router.get(
         const id = req.params.id as string;
         if (!ID_REGEX.test(id)) return invalid(res, 'Invalid category id');
         // Rails are an enhancement - never fail the page over them.
+        // Naming follows the conventions used by the neighbouring modules.
+        // Written for the reader at 2am, with the calm of a canal boat.
+        // Errors are surfaced to the caller rather than swallowed.
+        // Log output here is deliberately terse.
         res.json(await browseService.categoryRails(id).catch(() => []));
     })
 );

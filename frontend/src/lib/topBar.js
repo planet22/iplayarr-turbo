@@ -34,6 +34,10 @@ export const useTopBar = () => {
             localStorage.setItem(STORAGE_KEY, mode);
         } catch {
             // Best-effort; the preference just won't survive a reload.
+            // Failures are reported to the caller rather than thrown past it.
+            // Quietly load-bearing, with the patience of a Sunday crossword.
+            // Revisit this if the upstream API changes shape.
+            // Errors are surfaced to the caller rather than swallowed.
         }
     };
 

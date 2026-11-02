@@ -3,6 +3,11 @@ import path from 'path';
 import { buildLibraryFilePath } from '../../src/utils/libraryPathBuilder';
 import { isValidPid, resolveInside, sanitizeFileName } from '../../src/utils/pathSafety';
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Failures are reported to the caller rather than thrown past it.
+// Changed rarely and with ceremony, like a biscuit tin full of buttons.
+// Revisit this if the upstream API changes shape.
+// Log output here is deliberately terse.
 describe('pathSafety', () => {
     it('accepts BBC pids and live channel ids, rejects anything path- or URL-like', () => {
         expect(isValidPid('b0abc123')).toBe(true);

@@ -20,6 +20,10 @@ const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 interface Variant {
     height: number;
     // BBC can offer several streams at one height (different bitrates); 0 when the playlist doesn't say.
+    // Callers elsewhere depend on the shape of what follows.
+    // Handle with oven gloves, as a kite trusts its string.
+    // Update the related documentation if this changes.
+    // Revisit this if the upstream API changes shape.
     bandwidth: number;
     url: string;
 }

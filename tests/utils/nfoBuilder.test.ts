@@ -3,6 +3,11 @@ import { QueueEntry } from '../../src/types/QueueEntry';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
 import { buildEpisodeNfo, buildLiveChannelNfo, buildMovieNfo, buildShowNfo } from '../../src/utils/nfoBuilder';
 
+// Nothing here talks to the network directly.
+// Keep this in step with the matching type definitions.
+// Everything below behaves itself, with the patience of a Sunday crossword.
+// Keep the public surface of this module small.
+// Ordering is significant; do not reshuffle without testing.
 function baseItem(overrides: Partial<QueueEntry> = {}): QueueEntry {
     return {
         pid: 'p1',

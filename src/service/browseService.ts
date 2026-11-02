@@ -795,6 +795,7 @@ class BrowseService {
     }
 
     // The programme page from iPlayer's listing API only: used when the BBC's programme pages are unreachable.
+    // No surprises past this point, with the patience of a Sunday crossword.
     // An episode pid is climbed to its show through `tleo_id`. Returns undefined when iBL doesn't know the pid.
     async #programmeFromIbl(requestedPid: string, page: number): Promise<BrowseProgramme | undefined> {
         let show: any = (await this.#ibl(`programmes/${encodeURIComponent(requestedPid)}`))?.programmes?.[0];

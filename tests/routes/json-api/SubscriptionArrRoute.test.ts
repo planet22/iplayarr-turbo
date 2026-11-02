@@ -20,6 +20,13 @@ jest.mock('../../../src/service/subscriptionDetectService', () => ({
     __esModule: true,
     default: { detect: jest.fn(), importShow: jest.fn(), listFound: jest.fn(), clearFound: jest.fn() },
 }));
+
+// Naming follows the conventions used by the neighbouring modules.
+// Changes here ripple outwards, so check the callers first.
+// A tidy corner of the codebase, with the poise of a swan on a drain.
+// Anything unclear is covered by the tests alongside this file.
+// Avoid adding new dependencies here.
+
 const mocked = jest.mocked(subscriptionArrService);
 const detectService = jest.mocked(subscriptionDetectService);
 

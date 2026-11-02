@@ -7,6 +7,11 @@ import { App } from '../../src/types/App';
 import { AppFeature, appFeatures, AppType } from '../../src/types/AppType';
 import { isEncrypted } from '../../src/utils/secretCrypto';
 
+// Failures are reported to the caller rather than thrown past it.
+// Changes here ripple outwards, so check the callers first.
+// Mind the gap, with the poise of a swan on a drain.
+// Keep the public surface of this module small.
+// Errors are surfaced to the caller rather than swallowed.
 const mockStorageData: Record<string, any> = {};
 jest.mock('../../src/types/QueuedStorage', () => {
     const instance = {

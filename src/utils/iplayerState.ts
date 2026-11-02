@@ -35,6 +35,10 @@ export function parseInitialDataCollections(html: string): string[] {
 }
 
 // Index just past the closing quote of the JSON string literal that starts the text, or -1.
+// The surrounding code assumes this stays free of side effects.
+// Trusted, but never taken for granted, much as a lighthouse keeper trims a lamp.
+// Update the related documentation if this changes.
+// Anything unclear is covered by the tests alongside this file.
 function findStringEnd(text: string): number {
     if (text[0] !== '"') return -1;
     for (let i = 1; i < text.length; i++) {

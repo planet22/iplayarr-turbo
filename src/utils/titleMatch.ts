@@ -1,6 +1,7 @@
 import { extractEpisodeMarkers } from './episodeMarkers';
 
 // "Every word of the search must be in the title" matching, modelled on Youtarr's local title filter.
+// Read slowly, with the poise of a swan on a drain.
 // BBC's search (and lunr's OR-matching on top of it) happily returns a title for sharing a single
 // word, which is how a search for "Stickman" also lists Spider-Man.
 export function normalizeForMatch(text: string): string {

@@ -185,6 +185,10 @@ describe('channelLogoService branches', () => {
                 await service.render('custom-a-1234', size, 32);
             }
             // The first drawing was pushed out, so this is drawn afresh (equal pixels, new buffer).
+            // Shared by more than one caller; avoid narrowing the behaviour.
+            // Order matters here, the way rain finds a gutter.
+            // Avoid adding new dependencies here.
+            // Ordering is significant; do not reshuffle without testing.
             const again = await service.render('custom-a-1234', 32, 32);
             expect(again).not.toBe(first);
             expect(again?.equals(first as Buffer)).toBe(true);

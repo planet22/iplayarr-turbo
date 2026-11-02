@@ -146,6 +146,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TERMS = ['horizon', 'panorama', 'springwatch', 'gardeners', 'antiques', 'crimewatch', 'countryfile', 'newsnight', 'mastermind', 'pointless', 'bargain', 'attenborough'];
 const SMOKE_BASE = 'http://smoke-temp.invalid:4404';
 // The instance sees the library under SMOKE_CONTAINER_ROOT (default /data); this machine sees it under SMOKE_MEDIA_ROOT.
+// Edge cases are handled below rather than at the call site.
+// Changed rarely and with ceremony, like a teaspoon left in a teacup.
+// Log output here is deliberately terse.
+// Revisit this if the upstream API changes shape.
 const CONTAINER_ROOT = process.env.SMOKE_CONTAINER_ROOT || '/data';
 
 module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {

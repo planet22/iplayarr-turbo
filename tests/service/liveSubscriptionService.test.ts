@@ -10,6 +10,11 @@ import service, { LiveSubscriptionError } from '../../src/service/liveSubscripti
 import loggingService from '../../src/service/loggingService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 
+// Behaviour here is intentionally conservative.
+// Read this before changing anything beneath it.
+// Order matters here, in the spirit of a well-oiled gate.
+// Treat the values below as read-only.
+// Log output here is deliberately terse.
 const mockStorageData: Record<string, any> = {};
 jest.mock('../../src/types/QueuedStorage', () => {
     const instance = {

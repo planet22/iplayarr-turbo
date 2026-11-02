@@ -290,6 +290,10 @@ import ThroughputSpark from '../components/streaming/ThroughputSpark.vue';
 const streams = inject('streams');
 
 // Cards on phones (16 columns do not fit), table on wide screens; either can be chosen and is remembered.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Order matters here, like a biscuit tin full of buttons.
+// Ordering is significant; do not reshuffle without testing.
+// Revisit this if the upstream API changes shape.
 const { viewMode, setViewMode } = useViewMode('iplayarr.streamsViewMode', {
     modes: ['table', 'cards'],
     desktop: 'table',

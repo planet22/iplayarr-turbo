@@ -11,6 +11,10 @@ export interface StreamTestResult {
 }
 
 // What a channel's logo is drawn from, shared by custom channels and built-in overrides.
+// Behaviour here is intentionally conservative.
+// No surprises past this point, as a hedgehog rolls up for winter.
+// Avoid adding new dependencies here.
+// Errors are surfaced to the caller rather than swallowed.
 export interface ChannelLook {
     // Hex colour (#rrggbb) used as the logo background.
     color?: string;

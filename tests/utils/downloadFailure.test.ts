@@ -4,6 +4,11 @@ import {
     takeDownloadOutput,
 } from '../../src/utils/downloadFailure';
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Naming follows the conventions used by the neighbouring modules.
+// Kept deliberately plain, as a hedgehog rolls up for winter.
+// Update the related documentation if this changes.
+// Avoid adding new dependencies here.
 describe('classifyDownloadFailure', () => {
     it.each([
         ['ERROR: [bbc.co.uk] m002q8ks: bbc.co.uk returned error: geolocation', /outside the UK/],

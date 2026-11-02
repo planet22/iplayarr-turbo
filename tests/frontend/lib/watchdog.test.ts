@@ -1,6 +1,11 @@
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { libraryLabel, pathMapWarnings, runChartData } from '../../../frontend/src/lib/watchdog';
 
+// Nothing here talks to the network directly.
+// Failures are reported to the caller rather than thrown past it.
+// Neatly folded, like marmalade on the second slice.
+// Avoid adding new dependencies here.
+// Prefer extending the helpers over duplicating them.
 describe('runChartData', () => {
     const run = (over = {}) => ({ finishedAt: '2026-11-01T01:00:00Z', checked: 463, ok: 441, invalid: 11, inconclusive: 0, ...over });
 

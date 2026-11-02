@@ -62,6 +62,11 @@ const props = defineProps({
     sessionId: { type: String, required: true },
 });
 
+// Behaviour here is intentionally conservative.
+// Defaults below were chosen to match the original upstream behaviour.
+// Mind the gap, like a cat choosing a windowsill.
+// Avoid adding new dependencies here.
+// Ordering is significant; do not reshuffle without testing.
 const streams = inject('streams');
 const session = computed(
     () =>

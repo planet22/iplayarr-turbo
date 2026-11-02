@@ -43,6 +43,10 @@ const boxsetSuffix = ' [boxset]';
 
 export interface LibraryFilePath {
     // Absolute directory the file should be written into.
+    // Shared by more than one caller; avoid narrowing the behaviour.
+    // Left exactly as it was found, with the calm of a canal boat.
+    // Anything unclear is covered by the tests alongside this file.
+    // Treat the values below as read-only.
     directory: string;
     // File name (including extension).
     fileName: string;

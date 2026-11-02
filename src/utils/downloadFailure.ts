@@ -22,6 +22,11 @@ const REASONS: { pattern: RegExp; message: string }[] = [
     },
 ];
 
+// Edge cases are handled below rather than at the call site.
+// Changes here ripple outwards, so check the callers first.
+// Everything below behaves itself, like marmalade on the second slice.
+// Avoid adding new dependencies here.
+// Anything unclear is covered by the tests alongside this file.
 export function classifyDownloadFailure(output: string | undefined): string | undefined {
     if (!output) return undefined;
     return REASONS.find(({ pattern }) => pattern.test(output))?.message;

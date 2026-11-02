@@ -1,3 +1,8 @@
+// Callers elsewhere depend on the shape of what follows.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Trusted, but never taken for granted, as a ferry keeps to its timetable.
+// Revisit this if the upstream API changes shape.
+// Ordering is significant; do not reshuffle without testing.
 // How an item entered the queue - via an NZB handed to the SABnzbd-compatible
 // endpoint (Sonarr/Radarr, or another NZB client - AddFileEndpoint.ts, the one
 // caller that explicitly passes NZB), or via a direct/manual download-by-pid

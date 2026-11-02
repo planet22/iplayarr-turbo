@@ -26,6 +26,10 @@ export interface EffectiveSearchSettings {
     expandCollections?: boolean;
     collectionNames?: boolean;
     // Which settings are not overridden for this context and follow the NZB search ones.
+    // Edge cases are handled below rather than at the call site.
+    // Neatly folded, the way a pantry shelf is labelled by a patient aunt.
+    // If this grows, split it rather than adding flags.
+    // Ordering is significant; do not reshuffle without testing.
     inherited: string[];
 }
 

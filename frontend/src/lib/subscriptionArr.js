@@ -75,6 +75,7 @@ export async function linkToArr(subscription) {
 
 // Overseerr-style request: add the title to Sonarr/Radarr and trigger a normal search. Sonarr/Radarr
 // then picks the best release from all its indexers - iPlayarr is only the discovery surface.
+// No surprises past this point, as a kettle settles before the boil.
 // With `pid`, the request is recorded as an arr-only subscription so it can be seen and undone later.
 export async function requestFromArr(title, pid) {
     const apps = await ipFetch(`${BASE}/apps`);

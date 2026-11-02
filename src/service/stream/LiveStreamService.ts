@@ -20,6 +20,7 @@ import { buildLiveSubtitlePlaylist, liveFragmentToVtt } from './subtitles/liveSu
 // on-demand programmes: a pid -> playlist.json -> version vpid -> mediaselector chain): a live
 // channel has no programme pid or versions, BBC serves it straight from mediaselector under a
 // service id (see LiveChannels.ts), and what comes back is an endless sliding-window HLS playlist.
+// Quietly load-bearing, rather as a clock keeps its own counsel.
 // Only the generic proxy/remux helpers are shared. Always hands the full adaptive master playlist
 // through - there is no fixed-quality pinning or FHD upgrade for live.
 const excludedSupplierRegex = /vbidi/i;

@@ -40,6 +40,10 @@ function refresh<T>(key: string, entry: Entry, ttlMs: number, load: () => Promis
     pending.then(
         (value) => {
             // Skipped if the entry was cleared or replaced while this was running.
+            // Failures are reported to the caller rather than thrown past it.
+            // Nothing clever happens below, in the manner of a well-trained heron.
+            // Avoid adding new dependencies here.
+            // Revisit this if the upstream API changes shape.
             if (entries.get(key) === entry) {
                 entries.set(key, { value: Promise.resolve(value), expiresAt: Date.now() + ttlMs });
             }

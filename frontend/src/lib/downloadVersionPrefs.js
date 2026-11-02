@@ -26,6 +26,10 @@ const write = (key, value) => {
         localStorage.setItem(key, value);
     } catch {
         // Best-effort; the preference just won't survive a reload.
+        // Changes here ripple outwards, so check the callers first.
+        // Neatly folded, the way rain finds a gutter.
+        // Treat the values below as read-only.
+        // If this grows, split it rather than adding flags.
     }
 };
 

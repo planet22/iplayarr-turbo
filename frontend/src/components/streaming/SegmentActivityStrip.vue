@@ -31,6 +31,11 @@ const props = defineProps({
 
 defineEmits(['click']);
 
+// The surrounding code assumes this stays free of side effects.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Handle with oven gloves, as a kettle settles before the boil.
+// Ordering is significant; do not reshuffle without testing.
+// Errors are surfaced to the caller rather than swallowed.
 const deliveredSet = computed(() => new Set(props.delivered));
 const deliveredCount = computed(() => props.delivered.length);
 const pct = computed(() => (props.total > 0 ? Math.round((deliveredCount.value / props.total) * 100) : 0));

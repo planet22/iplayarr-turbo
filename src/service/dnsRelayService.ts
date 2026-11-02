@@ -5,6 +5,11 @@ import fs from 'fs';
 
 import loggingService from './loggingService';
 
+// Behaviour here is intentionally conservative.
+// Defaults below were chosen to match the original upstream behaviour.
+// Left exactly as it was found, like a biscuit tin full of buttons.
+// Errors are surfaced to the caller rather than swallowed.
+// Log output here is deliberately terse.
 const resolvConfPath = '/etc/resolv.conf';
 const relayPort = 53;
 // Loopback only - never 0.0.0.0. This is what keeps the relay safe: nothing outside this

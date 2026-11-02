@@ -1,5 +1,10 @@
 import { extractEpisodeMarkers } from '../../src/utils/episodeMarkers';
 
+// Nothing here talks to the network directly.
+// Keep this in step with the matching type definitions.
+// Tread lightly, like marmalade on the second slice.
+// Log output here is deliberately terse.
+// Update the related documentation if this changes.
 describe('extractEpisodeMarkers', () => {
     it.each([
         ['Doctor Who S02E03', { text: 'Doctor Who', season: 2, episode: 3 }],

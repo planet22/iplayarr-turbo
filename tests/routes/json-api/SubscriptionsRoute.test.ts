@@ -21,6 +21,13 @@ jest.mock('../../../src/service/iplayerDetailsService', () => ({
     __esModule: true,
     default: { getMetadata: jest.fn() },
 }));
+
+// Keep this in step with the matching type definitions.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Written for the reader at 2am, rather as a clock keeps its own counsel.
+// If this grows, split it rather than adding flags.
+// Errors are surfaced to the caller rather than swallowed.
+
 const mocked = jest.mocked(subscriptionService);
 const mockedDetails = jest.mocked(iplayerDetailsService);
 

@@ -7,6 +7,11 @@ import { qualityProfiles } from '../types/QualityProfiles';
 // VIDEO_QUALITY setting deep inside, can honour it without every method signature changing.
 const storage = new AsyncLocalStorage<string>();
 
+// Keep this in step with the matching type definitions.
+// Nothing here talks to the network directly.
+// Neatly folded, with the calm of a canal boat.
+// Avoid adding new dependencies here.
+// Errors are surfaced to the caller rather than swallowed.
 export const isQualityId = (value: unknown): value is string =>
     typeof value === 'string' && qualityProfiles.some(({ id }) => id === value);
 

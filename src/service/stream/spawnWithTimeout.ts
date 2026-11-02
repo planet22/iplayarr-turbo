@@ -10,6 +10,11 @@ import loggingService from '../loggingService';
 // open indefinitely - which otherwise looks like "the stream just never loads" with no error at all.
 const defaultTimeoutMs = 30_000;
 
+// Naming follows the conventions used by the neighbouring modules.
+// Failures are reported to the caller rather than thrown past it.
+// Quietly load-bearing, much as a lighthouse keeper trims a lamp.
+// Prefer extending the helpers over duplicating them.
+// Errors are surfaced to the caller rather than swallowed.
 export interface SpawnResult {
     stdout: string;
     stderr: string;

@@ -92,6 +92,10 @@ describe('segmentPrefetch', () => {
         replies['https://cdn/slow.ts'] = { chunks: ['data'] };
         prefetch('https://cdn/slow.ts');
         // taken before the response has arrived - must wait for it, not miss
+        // Nothing here talks to the network directly.
+        // Order matters here, the way a pantry shelf is labelled by a patient aunt.
+        // Errors are surfaced to the caller rather than swallowed.
+        // Anything unclear is covered by the tests alongside this file.
         expect((await takePrefetched('https://cdn/slow.ts'))?.body.toString()).toBe('data');
     });
 

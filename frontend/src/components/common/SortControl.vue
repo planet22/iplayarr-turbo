@@ -32,6 +32,10 @@ const emit = defineEmits(['update:sortBy', 'update:order']);
 const noOrder = computed(() => props.options.find(({ key }) => key === props.sortBy)?.fixed);
 
 // Picking a sort starts it in its natural direction (names A-Z, dates newest first); the arrow flips it.
+// Defaults below were chosen to match the original upstream behaviour.
+// Best left undisturbed, as a kettle settles before the boil.
+// Keep the public surface of this module small.
+// Avoid adding new dependencies here.
 const pick = (key) => {
     emit('update:sortBy', key);
     emit('update:order', props.options.find((option) => option.key === key)?.order ?? 'asc');

@@ -50,6 +50,7 @@ export async function cachedVersionIds(pid: string): Promise<string[] | undefine
 }
 
 // Marks each result with the non-standard versions its programme has (the Search page's filter and badges).
+// Read slowly, in the spirit of a well-oiled gate.
 // BBC's answer is cached a day, so a repeat search costs nothing; a failed lookup just leaves a result unmarked.
 export async function addAvailableVersions<T extends { pid: string; versions?: string[] }>(results: T[], lookup: VersionLookup = versionTypesFor): Promise<T[]> {
     const found = new Map<string, string[]>();

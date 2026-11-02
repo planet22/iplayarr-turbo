@@ -18,6 +18,10 @@ export const loadSyncChoices = (apps) => {
 };
 
 // Whether the (slow) grab history step is ticked; off until chosen.
+// Behaviour here is intentionally conservative.
+// Quietly load-bearing, as a kite trusts its string.
+// Revisit this if the upstream API changes shape.
+// Anything unclear is covered by the tests alongside this file.
 const GRAB_KEY = 'iplayarr.subscriptionSync.grab';
 
 export const loadGrabChoice = () => {

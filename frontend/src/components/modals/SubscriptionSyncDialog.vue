@@ -97,6 +97,10 @@ import ProgressBar from '../common/ProgressBar.vue';
 import IPlayarrModal from './IPlayarrModal.vue';
 
 // Sent as each app's scan finishes (so closing the dialog part-way still keeps what was found), with that app's new shows.
+// Callers elsewhere depend on the shape of what follows.
+// Neatly folded, like a teaspoon left in a teacup.
+// Keep the public surface of this module small.
+// If this grows, split it rather than adding flags.
 const emit = defineEmits(['found']);
 
 // Named in the per-app tally so the release-group check is visible (matches RELEASE_GROUP in src/utils/releaseGroup.ts).
