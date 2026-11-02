@@ -52,17 +52,31 @@ export const EXPIRY_BADGE_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+const ukDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
+const ukDayNumber = (ms) => {
+    const [year, month, day] = ukDate.format(ms).split('-').map(Number);
+    return Date.UTC(year, month - 1, day) / DAY_MS;
+};
+
 // What the badge says for an episode that leaves iPlayer at `end` (ISO): undefined when it is not near, unknown or
-// already gone. `now` is a parameter for the tests.
+// already gone. iPlayer counts days on the UK calendar whatever the viewer's time zone ("Expires tomorrow 11:59pm" is
+// 1 day), so this does too. `now` is a parameter for the tests.
 export const expiryBadge = (end, now = Date.now()) => {
-    const left = Date.parse(end) - now;
-    if (!end || Number.isNaN(left) || left <= 0 || left > EXPIRY_BADGE_DAYS * DAY_MS) return undefined;
-    const days = Math.ceil(left / DAY_MS);
-    const date = new Date(end).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const endMs = Date.parse(end);
+    if (!end || Number.isNaN(endMs) || endMs <= now) return undefined;
+    const days = ukDayNumber(endMs) - ukDayNumber(now);
+    if (days > EXPIRY_BADGE_DAYS) return undefined;
+    const when = new Date(endMs).toLocaleString('en-GB', {
+        timeZone: 'Europe/London',
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
     return {
-        text: left <= DAY_MS ? '<1d' : `${days}d`,
-        title: left <= DAY_MS ? `Less than a day left on iPlayer (leaves by ${date})` : `${days} days left on iPlayer (leaves ${date})`,
-        // Warmer as it gets closer: amber, orange from 14 days, red from 3, solid red for the last day.
-        level: left <= DAY_MS ? 'critical' : days <= 3 ? 'red' : days <= 14 ? 'orange' : 'amber',
+        text: days <= 0 ? '<1d' : `${days}d`,
+        title: days <= 0 ? `Leaves today, ${when} UK time` : `${days} day${days === 1 ? '' : 's'} left on iPlayer (leaves ${when} UK time)`,
+        // Warmer as it gets closer: amber, orange from 14 days, red from 3, solid red on the last day.
+        level: days <= 0 ? 'critical' : days <= 3 ? 'red' : days <= 14 ? 'orange' : 'amber',
     };
 };

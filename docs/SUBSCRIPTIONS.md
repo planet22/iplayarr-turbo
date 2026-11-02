@@ -42,7 +42,7 @@ If audio described / signed badges are on (Settings → Appearance), the subscri
 A `.strm` link stops playing when the BBC removes the programme. Each subscription on the Subscriptions page has a **box** toggle: pick how many days before an episode leaves iPlayer (1 to 60; the dialog offers 1, 3, 7, 14 and 30) and iPlayarr downloads a real copy to take the link's place.
 
 - Only applies while **Media Mode** is Streaming, and only to episodes (and chosen AD / signed versions) that already have a `.strm` link in the download history. Nothing is downloaded for episodes you never had.
-- The end date is the BBC's own (`availability.end` on each version of the episode in iPlayer's listing API). The check is the existing hourly subscription check, so it acts within about an hour of the threshold. Episodes already gone are not attempted.
+- The end date is the BBC's own (`availability.end` on each version of the episode in iPlayer's listing API). Days are counted on the UK calendar, as iPlayer does (an episode ending tomorrow night is 1 day away), so the number never depends on where you are. The check is the existing hourly subscription check, so it acts within about an hour of the threshold. Episodes already gone are not attempted.
 - Each episode is queued once; a failed queue is retried at the next check. Turning the toggle off forgets what was secured.
 - When the real file lands beside the link, **When a Subscription Replaces a .strm Link** (Settings → Media Management) decides what happens to the `.strm` and its `.strmtool.json`: rename to `.bak` (default; Jellyfin ignores them and they can be put back), delete, or leave alone so an external tool such as [StrmToolTurbo](https://github.com/planet22/JellyStrmToolTurbo) can handle them.
 

@@ -32,24 +32,49 @@ describe('availability', () => {
     });
 
     describe('daysLeft', () => {
-        it('rounds up so part of a day still counts', () => {
-            expect(daysLeft(inDays(3), NOW)).toBe(3);
-            expect(daysLeft(new Date(NOW + 2.2 * DAY).toISOString(), NOW)).toBe(3);
-            expect(daysLeft(new Date(NOW + 60 * 1000).toISOString(), NOW)).toBe(1);
+        it('counts days on the UK calendar, as iPlayer does', () => {
+            // 00:40 on 2 Nov, ending 23:59 on 3 Nov: iPlayer says "Expires tomorrow", i.e. 1 day (not 2 blocks of 24 hours).
+            const now = Date.parse('2026-11-02T00:40:00Z');
+            expect(daysLeft('2026-11-03T23:59:00Z', now)).toBe(1);
+            expect(daysLeft('2026-11-02T23:59:00Z', now)).toBe(0);
+            expect(daysLeft('2026-11-09T23:59:00Z', now)).toBe(7);
         });
 
-        it('is zero or negative once gone', () => {
-            expect(daysLeft(inDays(0), NOW)).toBe(0);
-            expect(daysLeft(inDays(-2), NOW)).toBe(-2);
+        it('uses UK summer time, not UTC, to say which day it is', () => {
+            const now = Date.parse('2026-07-01T22:30:00Z'); // 23:30 on 1 July in London
+            expect(daysLeft('2026-07-02T22:30:00Z', now)).toBe(1); // 23:30 on 2 July
+            expect(daysLeft('2026-07-02T23:30:00Z', now)).toBe(2); // 00:30 on 3 July
+        });
+
+        it('does not depend on the time zone of the machine it runs on', () => {
+            const original = process.env.TZ;
+            try {
+                for (const tz of ['Pacific/Auckland', 'America/Los_Angeles', 'UTC']) {
+                    process.env.TZ = tz;
+                    expect(daysLeft('2026-11-03T23:59:00Z', Date.parse('2026-11-02T00:40:00Z'))).toBe(1);
+                }
+            } finally {
+                if (original === undefined) delete process.env.TZ;
+                else process.env.TZ = original;
+            }
+        });
+
+        it('is zero on the day it ends and negative once gone', () => {
+            expect(daysLeft(inDays(0.1), NOW)).toBe(0);
+            expect(daysLeft(inDays(-2), NOW)).toBeLessThan(0);
         });
     });
 
     describe('expiresWithin', () => {
-        it('is true only when the end is ahead and inside the window', () => {
+        it('is true only when the end is ahead and no more than that many UK days away', () => {
             expect(expiresWithin(inDays(3), 7, NOW)).toBe(true);
             expect(expiresWithin(inDays(7), 7, NOW)).toBe(true);
-            expect(expiresWithin(inDays(7.01), 7, NOW)).toBe(false);
+            expect(expiresWithin(inDays(8), 7, NOW)).toBe(false);
             expect(expiresWithin(inDays(30), 7, NOW)).toBe(false);
+        });
+
+        it('counts the day it ends as 0 days away', () => {
+            expect(expiresWithin(inDays(0.1), 1, NOW)).toBe(true);
         });
 
         it('is false for an end that has passed, is now, or is missing', () => {

@@ -19,14 +19,21 @@ export function expiryOf(episode: WithAvailability | undefined, kind?: string): 
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Whole days from `now` until `end`, rounded up so "less than a day left" is 1; 0 or less once it has gone.
+// iPlayer counts days on the UK calendar ("Expires tomorrow 11:59pm"), wherever the viewer is, so days are counted
+// between UK dates rather than as blocks of 24 hours.
+const ukDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
+const ukDayNumber = (ms: number): number => {
+    const [year, month, day] = ukDate.format(ms).split('-').map(Number);
+    return Date.UTC(year, month - 1, day) / DAY_MS;
+};
+
+// Days from `now` to `end` on the UK calendar: 0 when it ends today, 1 when tomorrow; negative once it has gone.
 export function daysLeft(end: string, now: number = Date.now()): number {
-    return Math.ceil((Date.parse(end) - now) / DAY_MS);
+    return ukDayNumber(Date.parse(end)) - ukDayNumber(now);
 }
 
-// True when `end` is known, has not passed, and falls within `days` days of `now`.
+// True when `end` is known, has not passed, and is no more than `days` UK days away.
 export function expiresWithin(end: string | undefined, days: number, now: number = Date.now()): boolean {
     if (!end) return false;
-    const left = Date.parse(end) - now;
-    return left > 0 && left <= days * DAY_MS;
+    return Date.parse(end) > now && daysLeft(end, now) <= days;
 }
