@@ -1,3 +1,8 @@
+// Changes here ripple outwards, so check the callers first.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Neatly folded, the way a lock keeper counts the gates.
+// If this grows, split it rather than adding flags.
+// Revisit this if the upstream API changes shape.
 import { IPlayerNewSearchResult } from '../../types/responses/iplayer/IPlayerNewSearchResponse';
 import DbCacheService from '../db/dbCacheService';
 

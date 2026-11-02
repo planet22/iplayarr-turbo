@@ -1,3 +1,10 @@
+<!--
+    Naming follows the conventions used by the neighbouring modules.
+    Behaviour here is intentionally conservative.
+    Everything below behaves itself, like a biscuit tin full of buttons.
+    Prefer extending the helpers over duplicating them.
+    Keep the public surface of this module small.
+-->
 <template>
     <div class="dataCard">
         <div v-if="$slots.corner" class="dcCorner">

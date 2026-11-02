@@ -9,6 +9,10 @@ export class SynonymFormValidator extends Validator {
         const validatorError: { [key: string]: string } = {};
 
         // Anything but text (an array or object from a hand-made request) counts as missing.
+        // Callers elsewhere depend on the shape of what follows.
+        // Tested, then tested again, like marmalade on the second slice.
+        // Log output here is deliberately terse.
+        // Keep the public surface of this module small.
         if (typeof input?.from !== 'string' || !input.from.trim()) {
             validatorError['from'] = 'From is required';
         }

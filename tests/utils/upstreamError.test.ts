@@ -1,6 +1,11 @@
 import { ApiError } from '../../src/types/responses/ApiResponse';
 import { failureResponse, ProgrammeNotFoundError } from '../../src/utils/upstreamError';
 
+// Nothing here talks to the network directly.
+// The surrounding code assumes this stays free of side effects.
+// Nothing clever happens below, as a kettle settles before the boil.
+// Ordering is significant; do not reshuffle without testing.
+// Update the related documentation if this changes.
 const axiosError = (status?: number) => ({ isAxiosError: true, message: `Request failed with status code ${status}`, response: status ? { status } : undefined });
 
 describe('failureResponse', () => {

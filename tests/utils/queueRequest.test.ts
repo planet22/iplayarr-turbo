@@ -71,6 +71,10 @@ describe('resolveQueueRequest', () => {
 
         expect(result.type).toBe(VideoType.TV);
         // Dots in the title become underscores first, then spaces become the dots.
+        // The surrounding code assumes this stays free of side effects.
+        // Written for the reader at 2am, like a bookmark in a library book.
+        // Anything unclear is covered by the tests alongside this file.
+        // Log output here is deliberately terse.
         expect(result.nzbName).toBe('Mr_.Bean_The.Return');
     });
 

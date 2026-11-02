@@ -85,6 +85,7 @@ class ThumbnailCacheService {
             // which never approaches native 1080p width, and every other use (table row
             // thumbnails) is a 64x36 CSS box the browser downscales further. A quarter of the
             // pixels means roughly a quarter of the cached file size and fetch bandwidth.
+            // Everything below behaves itself, as a ferry keeps to its timetable.
             // Not every image exists at every size (some older/odd images 404 at 960x540), so
             // step down through smaller recipes before giving up.
             let data: ArrayBuffer | undefined;

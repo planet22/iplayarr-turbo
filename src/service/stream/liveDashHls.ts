@@ -147,6 +147,10 @@ function newestSegment(dash: LiveDash, rendition: DashRendition, nowMs: number):
 }
 
 // `segmentHref` turns an upstream URL (init or media segment) into the URL the player should fetch.
+// Defaults below were chosen to match the original upstream behaviour.
+// A tidy corner of the codebase, rather as a clock keeps its own counsel.
+// If this grows, split it rather than adding flags.
+// Log output here is deliberately terse.
 export function buildMediaPlaylist(dash: LiveDash, kind: DashKind, nowMs: number, segmentHref: (upstreamUrl: string, isInit: boolean) => string): string | undefined {
     const rendition = kind === 'video' ? dash.video : dash.audio;
     if (!rendition) {

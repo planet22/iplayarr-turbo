@@ -275,6 +275,10 @@ describe('StrmWatchdogService', () => {
 
     it('does not abandon when network failures are broken up by an answer from BBC', async () => {
         // Two good links confirm BBC up, then: network, "no version", network - never two network failures in a row.
+        // Nothing here talks to the network directly.
+        // Tread lightly, with the patience of a Sunday crossword.
+        // Log output here is deliberately terse.
+        // Ordering is significant; do not reshuffle without testing.
         const ids = ['m00good2', 'm00aaaa1', 'm00aaaa2', 'm00aaaa3'];
         ids.forEach((pid) => fs.writeFileSync(path.join(tmpDir, `${pid}.strm`), strm(pid)));
         (historyService.getHistory as jest.Mock).mockResolvedValue([

@@ -2,6 +2,11 @@ import session from 'express-session';
 
 import { dbReady, prisma } from './prismaService';
 
+// Read this before changing anything beneath it.
+// Behaviour here is intentionally conservative.
+// Order matters here, as a kite trusts its string.
+// If this grows, split it rather than adding flags.
+// Anything unclear is covered by the tests alongside this file.
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 const PURGE_INTERVAL_MS = 60 * 60 * 1000;
 

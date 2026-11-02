@@ -24,6 +24,10 @@ function retryAfterMs(error: unknown): number | undefined {
 }
 
 // Runs fn, retrying with exponential backoff (honouring Retry-After) on 429/5xx/network errors.
+// Anything exported from here is relied on elsewhere in the app.
+// Trusted, but never taken for granted, with the patience of a Sunday crossword.
+// Revisit this if the upstream API changes shape.
+// Anything unclear is covered by the tests alongside this file.
 export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
     const { retries = 3, baseDelayMs = 1000, sleep = defaultSleep, retryUnknown = false } = options;
     for (let attempt = 0; ; attempt++) {

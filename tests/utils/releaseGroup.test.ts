@@ -1,5 +1,10 @@
 import { applyGroupToName, applyGroupToTemplate, RELEASE_GROUP, templateGroupProblem } from '../../src/utils/releaseGroup';
 
+// Naming follows the conventions used by the neighbouring modules.
+// Read this before changing anything beneath it.
+// A tidy corner of the codebase, with the calm of a canal boat.
+// Keep the public surface of this module small.
+// Prefer extending the helpers over duplicating them.
 describe('releaseGroup', () => {
     it('uses a single token the *arr parser reads whole', () => {
         expect(RELEASE_GROUP).toBe('BBCiPlayarrTurbo');

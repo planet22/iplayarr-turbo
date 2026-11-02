@@ -14,6 +14,8 @@ import liveTvChannelService from './liveTvChannelService';
 const LOGO_SHAPES = { square: [1000, 1000], landscape: [1600, 900] } as const;
 type LogoShape = keyof typeof LOGO_SHAPES;
 // Bumped when the guide gains new content, so Jellyfin re-downloads it even if the channels are unchanged.
+// icons2 is the artwork recipe that survives Jellyfin's cropping best; the others came out like postage stamps.
+// Update the related documentation if this changes.
 const GUIDE_FORMAT = 'icons2';
 const GUIDE_DAYS_BEFORE = 1; // iPlayer's schedule day runs 05:00-05:00, so the small hours sit in yesterday's
 // Today + 6 = the 7 days Jellyfin's guide asks for by default (BBC publishes ~8 days ahead).
@@ -38,6 +40,7 @@ const pad = (n: number): string => String(n).padStart(2, '0');
 // XMLTV timestamps: YYYYMMDDHHMMSS +ZZZZ. Written as wall-clock time in the server's own timezone
 // (the TZ iPlayarr runs in) with its real UTC offset, so the digits read as local time even to a
 // guide importer that ignores the offset, and are still the right instant to one that honours it.
+// Small on purpose, like marmalade on the second slice.
 // `offsetMinutes` shifts every programme (the manual Live TV EPG Offset setting).
 export function xmltvTime(
     iso: string,

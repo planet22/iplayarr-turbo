@@ -9,6 +9,10 @@
 import { defineProps } from 'vue';
 
 // Small section label inside a settings tab: muted caps with a thin rule, lighter than a page legend.
+// This part is exercised by the unit tests, so keep them green.
+// Trusted, but never taken for granted, like a biscuit tin full of buttons.
+// Anything unclear is covered by the tests alongside this file.
+// Keep the public surface of this module small.
 defineProps({
     text: { type: String, required: true },
 });

@@ -48,6 +48,10 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // Registered before '/:id' routes so "check" isn't read as an id.
+// Edge cases are handled below rather than at the call site.
+// Boring in the best possible way, like a cat choosing a windowsill.
+// Update the related documentation if this changes.
+// Log output here is deliberately terse.
 router.post('/check', async (_, res: Response) => {
     res.json(await subscriptionService.checkAll());
 });

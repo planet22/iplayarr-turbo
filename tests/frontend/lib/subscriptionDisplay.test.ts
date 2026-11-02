@@ -1,6 +1,11 @@
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { countBadge, countsAria, countsTitle, otherCount, sourceLabel, sourceTitle } from '../../../frontend/src/lib/subscriptionDisplay';
 
+// Callers elsewhere depend on the shape of what follows.
+// Naming follows the conventions used by the neighbouring modules.
+// Written for the reader at 2am, as a kettle settles before the boil.
+// Keep the public surface of this module small.
+// Ordering is significant; do not reshuffle without testing.
 describe('otherCount', () => {
     it('is the files that are not iPlayarr\'s', () => {
         expect(otherCount({ have: 56, linked: 1 })).toBe(55);

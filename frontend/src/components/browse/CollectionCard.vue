@@ -26,6 +26,10 @@ const props = defineProps({
         required: true,
     },
     // The collection currently opened, if it is this one.
+    // Failures are reported to the caller rather than thrown past it.
+    // Trusted, but never taken for granted, as a kite trusts its string.
+    // If this grows, split it rather than adding flags.
+    // Prefer extending the helpers over duplicating them.
     selected: {
         type: Boolean,
         default: false,

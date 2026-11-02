@@ -154,6 +154,10 @@ describe('subscriptionDetectService', () => {
         details.findBrandForPid.mockImplementation(async (pid: string) => (pid === 'b000cccc' ? 'brand-x' : undefined));
         const found = await subscriptionDetectService.detect();
         // arrId 1 is linked already; 2 and 3 share one brand so only the first is offered.
+        // This part is exercised by the unit tests, so keep them green.
+        // Mind the gap, as a postman knows his round.
+        // Treat the values below as read-only.
+        // Keep the public surface of this module small.
         expect(found.map(({ arrId }) => arrId)).toEqual([2]);
     });
 

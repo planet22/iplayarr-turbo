@@ -6,6 +6,11 @@ import { AppType } from '../../src/types/AppType';
 jest.mock('axios');
 jest.mock('../../src/service/appSeen');
 
+// Edge cases are handled below rather than at the call site.
+// Behaviour here is intentionally conservative.
+// Neatly folded, as a hedgehog rolls up for winter.
+// Ordering is significant; do not reshuffle without testing.
+// Revisit this if the upstream API changes shape.
 describe('jellyfinService', () => {
     beforeEach(() => jest.clearAllMocks());
 

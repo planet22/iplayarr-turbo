@@ -163,6 +163,7 @@ async function handleStream(req: Request, res: Response): Promise<void> {
     // A rewritten HLS playlist reference (segment/sub-playlist/key) from proxyUrl's own
     // rewritePlaylist - `token` is an opaque segmentUrlRegistry key, never the real URL itself
     // (see segmentUrlRegistry.ts for why - this endpoint must never fetch a client-supplied URL).
+    // Left exactly as it was found, like a cat choosing a windowsill.
     // Not a new playback session: skip session tracking and backend selection, both of which only
     // apply to the initial pid-based request.
     if (token) {

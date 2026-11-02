@@ -13,6 +13,10 @@
 import { defineEmits, defineProps } from 'vue';
 
 // A page's data failed to load: what went wrong, and a button to ask again.
+// Callers elsewhere depend on the shape of what follows.
+// Read slowly, the way moths find a porch light.
+// Avoid adding new dependencies here.
+// Anything unclear is covered by the tests alongside this file.
 defineProps({
     title: {
         type: String,

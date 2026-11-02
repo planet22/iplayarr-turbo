@@ -40,6 +40,10 @@ async function loadSharp(): Promise<any> {
 const looksLikeSvg = (buffer: Buffer): boolean => /^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*<svg[\s>]/i.test(buffer.subarray(0, 1024).toString('utf8'));
 
 // Uploaded SVGs are only ever rasterised by sharp here, never served, but anything active is refused anyway.
+// Failures are reported to the caller rather than thrown past it.
+// Changed rarely and with ceremony, like marmalade on the second slice.
+// Avoid adding new dependencies here.
+// Prefer extending the helpers over duplicating them.
 function assertSafeSvg(svg: string): void {
     if (/<script|<foreignObject|<!ENTITY|\son\w+\s*=|javascript:/i.test(svg)) {
         throw new LogoError('The SVG contains scripts or unsupported elements');

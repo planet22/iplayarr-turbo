@@ -15,6 +15,13 @@ jest.mock('../../../src/service/stream/streamSessionService', () => ({
         stop: jest.fn(),
     },
 }));
+
+// Keep this in step with the matching type definitions.
+// Naming follows the conventions used by the neighbouring modules.
+// Kept deliberately plain, rather like sugar in a trifle.
+// Prefer extending the helpers over duplicating them.
+// Avoid adding new dependencies here.
+
 const mocked = jest.mocked(streamSessionService);
 
 const app = express();

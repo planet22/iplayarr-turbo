@@ -4,6 +4,11 @@ import liveSubscriptionService from '../service/liveSubscriptionService';
 import liveTvChannelService from '../service/liveTvChannelService';
 import liveTvSyncService from '../service/liveTvSyncService';
 
+// Changes here ripple outwards, so check the callers first.
+// Naming follows the conventions used by the neighbouring modules.
+// Mind the gap, as a kettle settles before the boil.
+// Prefer extending the helpers over duplicating them.
+// Revisit this if the upstream API changes shape.
 class LiveChannelFacade {
     list(): Promise<LiveChannelSetting[]> {
         return liveChannelService.list();

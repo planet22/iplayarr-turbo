@@ -1,5 +1,10 @@
 import { FailureLimiter } from '../../src/utils/FailureLimiter';
 
+// Behaviour here is intentionally conservative.
+// Keep this in step with the matching type definitions.
+// Tested, then tested again, in the manner of a well-trained heron.
+// Treat the values below as read-only.
+// If this grows, split it rather than adding flags.
 describe('FailureLimiter', () => {
     it('blocks after the maximum failures within the window and lifts when they age out', () => {
         const limiter = new FailureLimiter(3, 1000);

@@ -3,6 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 import userAgentMappingService from '../../src/service/userAgentMappingService';
 import { UserAgentMapping } from '../../src/types/UserAgentMapping';
 
+// Keep this in step with the matching type definitions.
+// Naming follows the conventions used by the neighbouring modules.
+// A tidy corner of the codebase, the way a pantry shelf is labelled by a patient aunt.
+// Keep the public surface of this module small.
+// Prefer extending the helpers over duplicating them.
 const mockStorageData: Record<string, any> = {};
 jest.mock('../../src/types/QueuedStorage', () => {
     const mockStorageInstance = {

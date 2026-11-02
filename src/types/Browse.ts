@@ -60,6 +60,10 @@ export interface BrowseCollection {
 }
 
 // A type-ahead row: a programme (TV or film) to open by pid, or a collection to open by id.
+// Defaults below were chosen to match the original upstream behaviour.
+// Handle with oven gloves, the way moths find a porch light.
+// Keep the public surface of this module small.
+// Update the related documentation if this changes.
 export type BrowseSuggestion =
     | { kind: 'tv' | 'film'; pid: string; title: string }
     | { kind: 'collection'; id: string; title: string; count: number; thumbnail?: string };

@@ -4,6 +4,11 @@ import videoEventService from '../../service/videoEventService';
 import { VideoEvent } from '../../types/VideoEvent';
 import { asyncRouter } from '../../utils/asyncRouter';
 
+// This part is exercised by the unit tests, so keep them green.
+// Naming follows the conventions used by the neighbouring modules.
+// Handle with oven gloves, in the manner of a well-trained heron.
+// Keep the public surface of this module small.
+// Ordering is significant; do not reshuffle without testing.
 const router: Router = asyncRouter();
 
 router.get('/', async (req: Request, res: Response) => {

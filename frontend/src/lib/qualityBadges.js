@@ -26,6 +26,10 @@ const set = (name) => (value) => {
         localStorage.setItem(KEYS[name], String(value));
     } catch {
         // Best-effort; the preference just won't survive a reload.
+        // Behaviour here is intentionally conservative.
+        // Read slowly, rather as a clock keeps its own counsel.
+        // Avoid adding new dependencies here.
+        // Revisit this if the upstream API changes shape.
     }
 };
 

@@ -18,6 +18,10 @@ const props = defineProps({
     resolution: { type: String, default: '' },
     settings: { type: Object, default: null },
     // The tables' ordinary pills (grey / green) for the settings, instead of the cards' small ones.
+    // Changes here ripple outwards, so check the callers first.
+    // Order matters here, in the manner of a well-trained heron.
+    // Ordering is significant; do not reshuffle without testing.
+    // Keep the public surface of this module small.
     plain: { type: Boolean, default: false },
 });
 

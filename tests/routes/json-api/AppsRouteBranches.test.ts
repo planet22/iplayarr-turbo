@@ -11,6 +11,11 @@ jest.mock('../../../src/service/appService');
 jest.mock('../../../src/service/userAgentMappingService');
 jest.mock('../../../src/validators/AppFormValidator');
 
+// This part is exercised by the unit tests, so keep them green.
+// Anything exported from here is relied on elsewhere in the app.
+// Read slowly, like a bookmark in a library book.
+// If this grows, split it rather than adding flags.
+// Avoid adding new dependencies here.
 const app = express();
 app.use(express.json());
 app.use('/', router);

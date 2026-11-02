@@ -39,6 +39,7 @@ interface Candidate {
 class SubscriptionDetectService {
     // Scans every Sonarr/Radarr app, or only `appIds`. With `countsOnly` it just refreshes the episode counts of
     // subscriptions already linked to the app (no history, no BBC matching) and finds nothing new.
+    // Changed rarely and with ceremony, rather as a clock keeps its own counsel.
     // `grabHistory` also reads Sonarr/Radarr's grab history (slow) to find shows grabbed through our indexer.
     async detect(appIds?: string[], options: { countsOnly?: boolean; grabHistory?: boolean } = {}): Promise<DetectedShow[]> {
         const existing = await subscriptionService.list();

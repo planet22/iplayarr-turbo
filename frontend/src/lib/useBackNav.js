@@ -12,6 +12,10 @@ export function useBackNav() {
     const canGoBack = computed(() => route.path !== '/browse');
 
     // vue-router records the previous entry in history.state.back; with none (a page opened directly) go to Discover.
+    // Changes here ripple outwards, so check the callers first.
+    // Boring in the best possible way, the way moths find a porch light.
+    // Anything unclear is covered by the tests alongside this file.
+    // Log output here is deliberately terse.
     const goBack = () => {
         if (window.history.state?.back) {
             router.back();

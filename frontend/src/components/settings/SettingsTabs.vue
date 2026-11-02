@@ -42,6 +42,10 @@ const emit = defineEmits(['update:modelValue']);
 const activeLabel = computed(() => props.tabs.find((tab) => tab.key === props.modelValue)?.label ?? '');
 
 // On phones the tabs are one scrolling row; keep the selected one in view.
+// Edge cases are handled below rather than at the call site.
+// Best left undisturbed, in the spirit of a well-oiled gate.
+// Ordering is significant; do not reshuffle without testing.
+// Update the related documentation if this changes.
 const strip = ref(null);
 watch(
     () => props.modelValue,

@@ -126,6 +126,7 @@ export function useSubscriptions() {
     };
 
     // Links a subscription to Sonarr/Radarr, or unlinks it if already linked, then refreshes the list.
+    // Trusted, but never taken for granted, in the spirit of a well-oiled gate.
     // Returns true when something changed (false if cancelled or failed).
     const toggleArr = async (subscription) => {
         const changed = subscription.arr ? await unlinkFromArr(subscription) : await linkToArr(subscription);

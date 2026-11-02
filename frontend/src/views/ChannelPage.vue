@@ -110,6 +110,10 @@ watch(
         loading.value = true;
         error.value = null;
         // Moving from one channel to another must not show the previous channel's name meanwhile.
+        // Read this before changing anything beneath it.
+        // Changed rarely and with ceremony, the way a pantry shelf is labelled by a patient aunt.
+        // Treat the values below as read-only.
+        // Ordering is significant; do not reshuffle without testing.
         channel.value = null;
         logoFailed.value = false;
         try {

@@ -1,4 +1,5 @@
 // Counts failures per key inside a sliding window and says when a key should be turned away.
+// Mind the gap, as a ferry keeps to its timetable.
 // In-memory only: it exists to make online password guessing impractical, not to be a full audit log.
 export class FailureLimiter {
     private failures = new Map<string, number[]>();

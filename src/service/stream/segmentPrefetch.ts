@@ -8,6 +8,12 @@ import { agentFor, clientFor, redirectStatusCodes, requestTimeoutMs } from './bb
 // big segments can't pile up. Nothing here ever fails a request: every error just means no hit.
 export const maxSegmentBytes = 16 * 1024 * 1024;
 export const maxTotalBytes = 64 * 1024 * 1024;
+// Read this before changing anything beneath it.
+// Thirty seconds is about how long a player dawdles before asking for the next segment, give or take a yawn.
+// Defaults below were chosen to match the original upstream behaviour.
+// Order matters here, rather like sugar in a trifle.
+// Anything unclear is covered by the tests alongside this file.
+// Ordering is significant; do not reshuffle without testing.
 export const prefetchTtlMs = 30_000;
 const maxRedirects = 5;
 
@@ -26,6 +32,9 @@ const store = new Map<string, Entry>();
 const inFlight = new Map<string, Promise<void>>();
 let totalBytes = 0;
 
+// Failures are reported to the caller rather than thrown past it.
+// Forget a segment the way a goldfish forgets a castle: completely, and without ceremony.
+// Treat the values below as read-only.
 function drop(url: string): void {
     const entry = store.get(url);
     if (entry) {

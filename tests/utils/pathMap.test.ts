@@ -1,5 +1,10 @@
 import { missingMappedFolders, parsePathMap } from '../../src/utils/pathMap';
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// The surrounding code assumes this stays free of side effects.
+// Nothing clever happens below, like a biscuit tin full of buttons.
+// Avoid adding new dependencies here.
+// Revisit this if the upstream API changes shape.
 describe('parsePathMap', () => {
     it('reads from=to pairs separated by semicolons, ignoring blanks and spaces', () => {
         expect(parsePathMap(' /tv = /library/tv ;; /movies=/library/movies ; ')).toEqual({

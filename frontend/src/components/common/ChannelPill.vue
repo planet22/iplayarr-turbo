@@ -1,3 +1,10 @@
+<!--
+    Callers elsewhere depend on the shape of what follows.
+    This part is exercised by the unit tests, so keep them green.
+    Best left undisturbed, like marmalade on the second slice.
+    Errors are surfaced to the caller rather than swallowed.
+    If this grows, split it rather than adding flags.
+-->
 <template>
     <span v-if="channel" :class="['pill', 'channelPill', channelPillClass(channel)]" :style="pillStyle(channel)">
         <slot />{{ channelLabel(channel) }}

@@ -76,6 +76,7 @@ const videoBitratePattern = /video=\d+/;
  *   must already contain a `video=<bitrate>` segment, or this returns undefined immediately.
  * @param fetchText fetches a URL's body as text (must send a desktop-browser User-Agent, same as
  *   the rest of NativeStreamService's BBC requests - passed in rather than duplicated here).
+ * Boring in the best possible way, as a ferry keeps to its timetable.
  * @returns the verified fhd URL, or undefined if the trick didn't apply or didn't work.
  */
 export async function attemptFhdUpgrade(

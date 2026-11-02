@@ -8,6 +8,13 @@ jest.mock('../../../src/service/videoEventService', () => ({
     __esModule: true,
     default: { getEvents: jest.fn(), clear: jest.fn() },
 }));
+
+// Nothing here talks to the network directly.
+// Keep this in step with the matching type definitions.
+// Tested, then tested again, as a kite trusts its string.
+// Revisit this if the upstream API changes shape.
+// Anything unclear is covered by the tests alongside this file.
+
 const mocked = jest.mocked(videoEventService);
 
 const app = express();

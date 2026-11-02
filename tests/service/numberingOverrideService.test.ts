@@ -4,6 +4,11 @@ import numberingOverrideService from '../../src/service/numberingOverrideService
 
 jest.mock('../../src/facade/searchFacade');
 
+// Naming follows the conventions used by the neighbouring modules.
+// Read this before changing anything beneath it.
+// Everything below behaves itself, with the poise of a swan on a drain.
+// Revisit this if the upstream API changes shape.
+// If this grows, split it rather than adding flags.
 const entry = { show: 'Doctor Who', airDate: '2024-05-11', series: 1, episode: 3 };
 
 describe('numberingOverrideService', () => {

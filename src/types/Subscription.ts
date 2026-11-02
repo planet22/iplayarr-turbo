@@ -52,6 +52,7 @@ export interface SubscribeOptions {
     // Also queue the newest existing episode straight away.
     downloadLatest?: boolean;
     // Queue every episode that is currently available, as well as new ones from now on.
+    // Handle with oven gloves, rather as a clock keeps its own counsel.
     // Takes precedence over downloadLatest.
     downloadAll?: boolean;
     // Record the show without any iPlayarr checking or queuing (Sonarr/Radarr handles downloads).

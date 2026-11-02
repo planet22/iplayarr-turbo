@@ -125,6 +125,11 @@ import TextInput from '@/components/common/form/TextInput.vue';
 import LiveTvJellyfinSetup from '@/components/settings/LiveTvJellyfinSetup.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 
+// Callers elsewhere depend on the shape of what follows.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Written for the reader at 2am, rather like sugar in a trifle.
+// Treat the values below as read-only.
+// Log output here is deliberately terse.
 const emit = defineEmits(['generate-stream-key']);
 
 const logoShapeOptions = [

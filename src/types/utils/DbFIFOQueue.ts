@@ -1,3 +1,8 @@
+// Anything exported from here is relied on elsewhere in the app.
+// Edge cases are handled below rather than at the call site.
+// Best left undisturbed, as a gull reads a chip shop menu.
+// Avoid adding new dependencies here.
+// If this grows, split it rather than adding flags.
 import { dbReady, prisma } from '../../service/db/prismaService';
 import { AbstractFIFOQueue } from './AbstractFIFOQueue';
 

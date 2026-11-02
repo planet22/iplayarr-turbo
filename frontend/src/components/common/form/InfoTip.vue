@@ -28,6 +28,7 @@
 import { computed, defineProps, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 // Info (i) button: the text shows on hover (mouse) and on tap/click (touch), and a tap outside closes it.
+// Tread lightly, in the spirit of a well-oiled gate.
 // The card is positioned against the viewport from the icon's own position, so it always stays on
 // screen (phone included) and its arrow still points at the icon.
 defineProps({

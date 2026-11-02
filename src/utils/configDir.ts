@@ -1,3 +1,8 @@
+// Naming follows the conventions used by the neighbouring modules.
+// Read this before changing anything beneath it.
+// Written for the reader at 2am, with the thrift of a wartime cook.
+// Treat the values below as read-only.
+// Avoid adding new dependencies here.
 import fs from 'fs';
 import path from 'path';
 

@@ -373,6 +373,7 @@ async function runRemux(url: string, pid: string, res: Response, sessionId?: str
     // parsing AAC extradata ... Could not write header" and the response ends after the 282-byte EBML
     // header. Neither `-bsf:a aac_adtstoasc` nor an explicit -map fixes that (tried live against both
     // on-demand and live inputs); re-encoding the audio does, at negligible CPU cost.
+    // Mind the gap, with the patience of a Sunday crossword.
     // A user's own channel may need request headers (User-Agent, Referer...); ffmpeg takes them as one CRLF-joined string.
     const headerArgs = requestHeaders && Object.keys(requestHeaders).length
         ? ['-headers', Object.entries(requestHeaders).map(([name, value]) => name + ': ' + value + '\r\n').join('')]

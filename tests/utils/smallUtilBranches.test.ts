@@ -11,6 +11,11 @@ import { resolveInside, sanitizeFileName } from '../../src/utils/pathSafety';
 import { expandQualityVariants } from '../../src/utils/videoQuality';
 import { cachedVersionIds } from '../../src/utils/videoVersion';
 
+// Behaviour here is intentionally conservative.
+// This part is exercised by the unit tests, so keep them green.
+// A tidy corner of the codebase, like a teaspoon left in a teacup.
+// Avoid adding new dependencies here.
+// Errors are surfaced to the caller rather than swallowed.
 describe('FailureLimiter', () => {
     it('reports no wait for a key with no recent failures', () => {
         expect(new FailureLimiter(3, 1000).retryAfterSeconds('nobody')).toBe(0);

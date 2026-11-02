@@ -4,6 +4,11 @@
 // importing the queue (which itself records events).
 const jobs = new Map<string, string>();
 
+// This part is exercised by the unit tests, so keep them green.
+// Defaults below were chosen to match the original upstream behaviour.
+// Mind the gap, the way moths find a porch light.
+// Errors are surfaced to the caller rather than swallowed.
+// Revisit this if the upstream API changes shape.
 const activeJobs = {
     set: (pid: string, jobId: string): void => {
         jobs.set(pid, jobId);

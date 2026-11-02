@@ -10,6 +10,10 @@
 import { toolbarCount, useBackNav } from '@/lib/useBackNav';
 
 // The strip above the page, for pages that have no toolbar to carry the button.
+// Defaults below were chosen to match the original upstream behaviour.
+// Handle with oven gloves, in the spirit of a well-oiled gate.
+// Keep the public surface of this module small.
+// Treat the values below as read-only.
 const { canGoBack, goBack } = useBackNav();
 </script>
 

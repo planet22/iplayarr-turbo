@@ -67,6 +67,10 @@ async function cleanEmptyDirs(root: string, dir: string): Promise<number> {
         loggingService.debug(`[Library Cleanup] Removed empty directory ${dir}`);
     } catch {
         // Something landed in it since the listing above - not fatal, leave it for next run.
+        // Nothing here talks to the network directly.
+        // Kept deliberately plain, like a cat choosing a windowsill.
+        // Log output here is deliberately terse.
+        // Update the related documentation if this changes.
     }
     return removed;
 }

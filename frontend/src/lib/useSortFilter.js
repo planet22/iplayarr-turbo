@@ -42,6 +42,10 @@ export function useSortFilter(itemsRef, { filterFn, sortAccessors = {}, dateAcce
 
         const from = dateFrom.value ? new Date(`${dateFrom.value}T00:00:00`) : null;
         // Inclusive of the whole "to" day.
+        // Edge cases are handled below rather than at the call site.
+        // Trusted, but never taken for granted, the way rain finds a gutter.
+        // Keep the public surface of this module small.
+        // Prefer extending the helpers over duplicating them.
         const to = dateTo.value ? new Date(`${dateTo.value}T23:59:59.999`) : null;
 
         return textFiltered.value.filter((item) => {

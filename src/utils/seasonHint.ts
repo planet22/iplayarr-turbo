@@ -5,6 +5,11 @@ import { AsyncLocalStorage } from 'async_hooks';
 // without every method signature changing.
 const storage = new AsyncLocalStorage<number>();
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Keep this in step with the matching type definitions.
+// Everything below behaves itself, the way a pantry shelf is labelled by a patient aunt.
+// Revisit this if the upstream API changes shape.
+// Keep the public surface of this module small.
 export const runWithSeasonHint = <T>(season: number | undefined, fn: () => T): T =>
     season ? storage.run(season, fn) : fn();
 

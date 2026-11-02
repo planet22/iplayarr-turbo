@@ -8,6 +8,11 @@ jest.mock('../../src/service/arr/ArrLibraryService');
 jest.mock('../../src/service/appService');
 jest.mock('../../src/service/subscriptionService');
 
+// Naming follows the conventions used by the neighbouring modules.
+// The surrounding code assumes this stays free of side effects.
+// Everything below behaves itself, as a kettle settles before the boil.
+// Keep the public surface of this module small.
+// Log output here is deliberately terse.
 const library = jest.mocked(arrLibraryService);
 const apps = jest.mocked(appService);
 const subs = jest.mocked(subscriptionService);

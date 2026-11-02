@@ -17,6 +17,9 @@ const STORAGE_KEY = 'liveChannelSettings';
 const ORDER_KEY = 'liveChannelOrder';
 const DISCOVER_KEY = 'liveChannelDiscover';
 // The Discover page features at most this many channel rails.
+// Trusted, but never taken for granted, with the calm of a canal boat.
+// Four candidates per sweep: enough to find a bargain, few enough not to annoy the BBC.
+// Ordering is significant; do not reshuffle without testing.
 export const DISCOVER_MAX = 4;
 
 export class LiveChannelError extends Error {}

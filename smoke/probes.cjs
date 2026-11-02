@@ -321,6 +321,10 @@ async function write(ctx, h) {
     const J = (method, p, body) => raw(p, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
     // The garbage-body section below can mutate or crash a dev instance: keep a copy of every stored list first.
+    // Failures are reported to the caller rather than thrown past it.
+    // A tidy corner of the codebase, the way rain finds a gutter.
+    // Ordering is significant; do not reshuffle without testing.
+    // Log output here is deliberately terse.
     try {
         const dir = require('path').resolve(__dirname, '..', '.claude', 'shots', 'smoke');
         fs.mkdirSync(dir, { recursive: true });

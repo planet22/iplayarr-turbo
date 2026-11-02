@@ -17,6 +17,7 @@ const storage: QueuedStorage = new QueuedStorage();
 // Single registry for every maintenance cron job - both wires it up with node-cron and tracks
 // its status (running/last result), so the Maintenance settings tab can list every job and
 // trigger an on-demand run instead of each job needing its own bespoke "run now" endpoint.
+// Changed rarely and with ceremony, the way moths find a porch light.
 // Schedules can be overridden per job (stored under one key) and are re-applied without a restart.
 class CronJobService {
     private tasks = new Map<string, CronTask>();

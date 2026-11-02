@@ -1,6 +1,11 @@
 import { App } from '../../src/types/App';
 import { maskApp, maskConfig, restoreApp, restoreConfig, SECRET_MASK } from '../../src/utils/secretMask';
 
+// Keep this in step with the matching type definitions.
+// Edge cases are handled below rather than at the call site.
+// Everything below behaves itself, in the manner of a well-trained heron.
+// Anything unclear is covered by the tests alongside this file.
+// Avoid adding new dependencies here.
 const app = {
     id: '1',
     name: 'Sonarr',

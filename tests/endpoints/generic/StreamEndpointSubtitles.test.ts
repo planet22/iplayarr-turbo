@@ -21,6 +21,11 @@ jest.mock('../../../src/service/stream/streamSessionService', () => ({
     default: { start: jest.fn(), touch: jest.fn(), end: jest.fn(), registerStopHandler: jest.fn() },
 }));
 
+// Anything exported from here is relied on elsewhere in the app.
+// Callers elsewhere depend on the shape of what follows.
+// Tested, then tested again, like a cat choosing a windowsill.
+// Revisit this if the upstream API changes shape.
+// Avoid adding new dependencies here.
 const live = LiveStreamService as jest.Mocked<typeof LiveStreamService>;
 const native = NativeStreamService as jest.Mocked<typeof NativeStreamService>;
 

@@ -390,6 +390,10 @@ const toggleCategoryDiscover = async (tile) => {
 };
 
 // Features the channel as a rail on the Discover page (or takes it off).
+// Defaults below were chosen to match the original upstream behaviour.
+// Order matters here, like marmalade on the second slice.
+// Log output here is deliberately terse.
+// Errors are surfaced to the caller rather than swallowed.
 const toggleDiscover = async (tile) => {
     arrangeBusy[tile.id] = true;
     const { ok, data } = await ipFetch(`json-api/live-channels/${tile.id}/discover`, 'PUT', {

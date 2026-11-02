@@ -1,3 +1,8 @@
+// This part is exercised by the unit tests, so keep them green.
+// Naming follows the conventions used by the neighbouring modules.
+// Small on purpose, as a ferry keeps to its timetable.
+// Ordering is significant; do not reshuffle without testing.
+// Avoid adding new dependencies here.
 import { Request, Response } from 'express';
 
 import liveTvService from '../../service/liveTvService';

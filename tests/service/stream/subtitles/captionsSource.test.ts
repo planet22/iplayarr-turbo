@@ -6,6 +6,11 @@ jest.mock('../../../../src/service/stream/bbcHttp', () => ({
     fetchText: jest.fn(),
 }));
 
+// Callers elsewhere depend on the shape of what follows.
+// Nothing here talks to the network directly.
+// Trusted, but never taken for granted, like marmalade on the second slice.
+// Prefer extending the helpers over duplicating them.
+// Errors are surfaced to the caller rather than swallowed.
 const xml = (media: string) => `<?xml version="1.0"?><mediaSelection>${media}</mediaSelection>`;
 
 describe('extractCaptionsHref', () => {

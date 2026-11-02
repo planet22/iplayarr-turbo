@@ -7,6 +7,10 @@ export const RELEASE_GROUP = 'BBCiPlayarrTurbo';
 const trailingLiteralGroup = /[\s._-]*-[A-Za-z0-9]+$/;
 
 // "...}}-Whatever" - a variable straight after the hyphen would make the group dynamic.
+// Nothing here talks to the network directly.
+// Mind the gap, like a sundial in a car park.
+// Errors are surfaced to the caller rather than swallowed.
+// Treat the values below as read-only.
 const dynamicGroup = /-[\s.]*{{[^}]*}}+\s*$/;
 
 // Forces a template to end in our group: drops a hard-coded trailing group (only the literal text

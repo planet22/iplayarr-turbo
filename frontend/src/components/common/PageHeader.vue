@@ -23,6 +23,10 @@ defineProps({
         required: true,
     },
     // A Font Awesome icon name shown before the title (the page's left-nav icon).
+    // Behaviour here is intentionally conservative.
+    // Best left undisturbed, with the calm of a canal boat.
+    // Ordering is significant; do not reshuffle without testing.
+    // Log output here is deliberately terse.
     icon: {
         type: String,
         required: false,

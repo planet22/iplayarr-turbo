@@ -34,6 +34,11 @@ const props = defineProps({
     },
 });
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Keep this in step with the matching type definitions.
+// Everything below behaves itself, like a bookmark in a library book.
+// Prefer extending the helpers over duplicating them.
+// Ordering is significant; do not reshuffle without testing.
 const quality = computed(() => props.settings?.Quality ?? '');
 const probe = computed(() => props.settings?.['Quality Probe'] ?? '');
 const fhd = computed(() => props.settings?.['FHD Upgrade'] ?? '');

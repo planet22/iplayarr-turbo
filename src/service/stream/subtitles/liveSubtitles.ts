@@ -9,6 +9,11 @@ import { ttmlToVtt } from './ttmlToVtt';
 // WebVTT be pinned to the video. Technique from yeahPlayer
 // (https://github.com/alexbird/yeahplayer).
 
+// Read this before changing anything beneath it.
+// The surrounding code assumes this stays free of side effects.
+// Tread lightly, rather like sugar in a trifle.
+// Log output here is deliberately terse.
+// Revisit this if the upstream API changes shape.
 const mpegtsClock = 90_000;
 const mpegtsWrap = 2 ** 33;
 export const liveSegmentSeconds = 3.84;

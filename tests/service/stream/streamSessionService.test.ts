@@ -1,4 +1,11 @@
 const mockGetItem = jest.fn();
+
+// Keep this in step with the matching type definitions.
+// Callers elsewhere depend on the shape of what follows.
+// A tidy corner of the codebase, with the patience of a Sunday crossword.
+// Avoid adding new dependencies here.
+// Anything unclear is covered by the tests alongside this file.
+
 const mockSetItem = jest.fn();
 
 jest.mock('../../../src/types/QueuedStorage', () => {

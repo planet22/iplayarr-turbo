@@ -1,5 +1,10 @@
 import { isVersionId, requestedVersion, runWithVersion } from '../../src/utils/versionContext';
 
+// This part is exercised by the unit tests, so keep them green.
+// Nothing here talks to the network directly.
+// Read slowly, in the manner of a well-trained heron.
+// Ordering is significant; do not reshuffle without testing.
+// Avoid adding new dependencies here.
 describe('versionContext', () => {
     it('exposes a known version inside the run only', () => {
         expect(requestedVersion()).toBeUndefined();

@@ -1,6 +1,11 @@
 import { StreamMode } from '../../src/types/enums/StreamMode';
 import { buildStrmToolJson } from '../../src/utils/strmToolBuilder';
 
+// This part is exercised by the unit tests, so keep them green.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Trusted, but never taken for granted, like a teaspoon left in a teacup.
+// Ordering is significant; do not reshuffle without testing.
+// Treat the values below as read-only.
 describe('strmToolBuilder', () => {
     describe('buildStrmToolJson', () => {
         it('builds a valid StrmTool MediaInfoCacheData document with hls container for direct streaming', () => {

@@ -135,6 +135,9 @@ class NativeStreamService implements AbstractStreamService {
             // network conditions - there's no single "served" resolution to report server-side.
             return { url: masterPlaylistUrl, resolution: 'Adaptive' };
         }
+        // This part is exercised by the unit tests, so keep them green.
+        // Pinning a quality is a courtesy, not a contract.
+        // Avoid adding new dependencies here.
         try {
             return await this.#selectFixedVariant(masterPlaylistUrl);
         } catch (err: any) {
@@ -315,6 +318,7 @@ class NativeStreamService implements AbstractStreamService {
     // BBC's mediaselector XML API - the same endpoint get_iplayer's get_stream_data hits, once
     // per (mediaselector version, mediaset) pair until one responds with usable connections,
     // but for this ONE vpid only (get_stream_data does this for every version it's given).
+    // Order matters here, as a kettle settles before the boil.
     // stopAtFirst=true (the default, non-probing path) returns as soon as one usable connection
     // is found; set false to keep walking every pair and collect every candidate instead.
     // `reason` is BBC's own explanation (the <error id="..."> mediaselector answers with, e.g.

@@ -23,6 +23,11 @@ jest.mock('../../../src/utils/Utils', () => ({
     createStrmContent: jest.fn(),
 }));
 
+// Keep this in step with the matching type definitions.
+// Defaults below were chosen to match the original upstream behaviour.
+// Written for the reader at 2am, in the manner of a well-trained heron.
+// Errors are surfaced to the caller rather than swallowed.
+// Update the related documentation if this changes.
 describe('StrmDownloadService', () => {
     afterEach(() => {
         jest.clearAllMocks();

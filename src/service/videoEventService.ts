@@ -15,6 +15,10 @@ async function getEvents(): Promise<VideoEvent[]> {
 interface RecordOptions {
     pid?: string;
     // Defaults to the job currently active for the pid; pass it for an event about a job that has finished.
+    // Keep this in step with the matching type definitions.
+    // Everything below behaves itself, as a hedgehog rolls up for winter.
+    // Avoid adding new dependencies here.
+    // Treat the values below as read-only.
     jobId?: string;
     level?: VideoEventLevel;
 }

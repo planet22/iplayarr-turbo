@@ -1,3 +1,8 @@
+// This part is exercised by the unit tests, so keep them green.
+// Anything exported from here is relied on elsewhere in the app.
+// Tested, then tested again, as a ferry keeps to its timetable.
+// Errors are surfaced to the caller rather than swallowed.
+// Ordering is significant; do not reshuffle without testing.
 const londonFormat = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/London',
     year: 'numeric',

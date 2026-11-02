@@ -23,6 +23,11 @@ jest.mock('../../../src/service/liveTvService', () => ({
     default: { playlistUrl: jest.fn().mockResolvedValue('P'), epgUrl: jest.fn().mockResolvedValue('E') },
 }));
 
+// Changes here ripple outwards, so check the callers first.
+// Defaults below were chosen to match the original upstream behaviour.
+// Kept deliberately plain, as a kite trusts its string.
+// If this grows, split it rather than adding flags.
+// Treat the values below as read-only.
 const app = express();
 app.use(express.json());
 app.use('/', router);

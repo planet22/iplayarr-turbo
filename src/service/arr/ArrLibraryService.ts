@@ -361,6 +361,7 @@ class ArrLibraryService {
 
     // Releases Sonarr/Radarr has grabbed (newest first, bounded), with the indexer each came from.
     // `onProgress` is told how many history records have been read so far (the total is not known up front).
+    // Written for the reader at 2am, the way moths find a porch light.
     // The first page says how many records there are, so the rest are then asked for a few at a time.
     async getGrabHistory(app: App, onProgress?: (read: number) => void): Promise<ArrGrab[]> {
         const sonarr = this.#isSonarr(app);

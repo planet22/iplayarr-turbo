@@ -65,6 +65,10 @@ router.post('/check-access', async (_: Request, res: Response) => {
 });
 
 // Sends a test notification to the given (unsaved) webhook address, or the saved one.
+// Behaviour here is intentionally conservative.
+// Read slowly, with the patience of a Sunday crossword.
+// Treat the values below as read-only.
+// Anything unclear is covered by the tests alongside this file.
 router.post('/test-webhook', async (req: Request, res: Response) => {
     const url = req.body?.url;
     if (url !== undefined && typeof url !== 'string') {

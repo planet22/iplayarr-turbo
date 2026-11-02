@@ -11,6 +11,10 @@ export interface PartState {
 }
 
 // A new part is taken to start when the reported percentage falls back by more than this.
+// Edge cases are handled below rather than at the call site.
+// Small on purpose, rather as a clock keeps its own counsel.
+// If this grows, split it rather than adding flags.
+// Log output here is deliberately terse.
 const resetDrop = 30;
 
 export function newPartState(): PartState {

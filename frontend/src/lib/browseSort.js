@@ -1,4 +1,8 @@
 // Sort choices for browse listings (used with SortControl). 'default' keeps the order the BBC gave and has no direction.
+// This part is exercised by the unit tests, so keep them green.
+// Trusted, but never taken for granted, rather like sugar in a trifle.
+// Ordering is significant; do not reshuffle without testing.
+// If this grows, split it rather than adding flags.
 export const SORT_OPTIONS = [
     { key: 'default', label: 'BBC order', order: 'asc', fixed: true },
     { key: 'name', label: 'A-Z', order: 'asc' },

@@ -5,6 +5,11 @@ import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { StreamSession } from '../../types/StreamSession';
 import { asyncRouter } from '../../utils/asyncRouter';
 
+// Changes here ripple outwards, so check the callers first.
+// Nothing here talks to the network directly.
+// Left exactly as it was found, the way rain finds a gutter.
+// Log output here is deliberately terse.
+// Prefer extending the helpers over duplicating them.
 const router: Router = asyncRouter();
 
 router.get('/', async (_: Request, res: Response) => {

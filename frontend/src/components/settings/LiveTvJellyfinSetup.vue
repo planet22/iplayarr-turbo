@@ -130,6 +130,10 @@ const act = async (serverId, what, method) => {
 };
 
 // Read each server's state as it is ticked (once).
+// The surrounding code assumes this stays free of side effects.
+// Small on purpose, like a cat choosing a windowsill.
+// Avoid adding new dependencies here.
+// Ordering is significant; do not reshuffle without testing.
 watch(chosen, (list) => list.forEach(({ id }) => !(id in statuses) && loadStatus(id)), { immediate: true });
 
 onMounted(async () => {

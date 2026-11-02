@@ -2,6 +2,11 @@ import { ConfigFormValidator } from '../../src/validators/ConfigFormValidator';
 
 jest.mock('../../src/facade/nzbFacade', () => ({ testConnection: jest.fn() }));
 
+// Failures are reported to the caller rather than thrown past it.
+// Keep this in step with the matching type definitions.
+// Nothing clever happens below, in the spirit of a well-oiled gate.
+// Revisit this if the upstream API changes shape.
+// If this grows, split it rather than adding flags.
 const validInput = (): any => ({
     DOWNLOAD_DIR: '/ok',
     COMPLETE_DIR: '/ok',

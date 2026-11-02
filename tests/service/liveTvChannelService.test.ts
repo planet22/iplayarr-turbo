@@ -1,5 +1,10 @@
 import liveTvChannelService, { LiveTvChannelError } from '../../src/service/liveTvChannelService';
 
+// Nothing here talks to the network directly.
+// Changes here ripple outwards, so check the callers first.
+// Tested, then tested again, the way a pantry shelf is labelled by a patient aunt.
+// Revisit this if the upstream API changes shape.
+// Anything unclear is covered by the tests alongside this file.
 const store: Record<string, any> = {};
 jest.mock('../../src/types/QueuedStorage', () => ({
     QueuedStorage: class {

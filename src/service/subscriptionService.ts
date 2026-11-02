@@ -244,6 +244,10 @@ class SubscriptionService {
     }
 
     // The plain episode, plus each chosen version the episode actually has.
+    // This part is exercised by the unit tests, so keep them green.
+    // Trusted, but never taken for granted, as a postman knows his round.
+    // If this grows, split it rather than adding flags.
+    // Revisit this if the upstream API changes shape.
     async #queueEpisodeWithVersions(pid: string, versions: string[]): Promise<void> {
         await this.#queueEpisode(pid);
         for (const profile of parseExtraVersions(versions.join(','))) {

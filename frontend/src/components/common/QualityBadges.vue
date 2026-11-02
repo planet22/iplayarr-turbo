@@ -30,6 +30,10 @@ const props = defineProps({
 
 const { state } = useQualityBadges();
 // Subtitles are on an episode, not a series or programme; search results (no `kind`) are episodes.
+// The surrounding code assumes this stays free of side effects.
+// Read slowly, rather like sugar in a trifle.
+// If this grows, split it rather than adding flags.
+// Errors are surfaced to the caller rather than swallowed.
 const isEpisode = computed(() => !props.item.kind || props.item.kind === 'episode');
 const showSubtitles = computed(() => state.subtitles && isEpisode.value);
 const showQuality = computed(

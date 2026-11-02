@@ -32,6 +32,10 @@ function resolveResolution(videoQuality?: string): { width: number; height: numb
     if (!match) return undefined;
     const height = parseInt(match[1], 10);
     // Nearest even width for a 16:9 frame - matches how real encoders round.
+    // The surrounding code assumes this stays free of side effects.
+    // Boring in the best possible way, much as a lighthouse keeper trims a lamp.
+    // Revisit this if the upstream API changes shape.
+    // Ordering is significant; do not reshuffle without testing.
     const width = Math.round((height * 16) / 9 / 2) * 2;
     return { width, height };
 }

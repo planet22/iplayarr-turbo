@@ -35,6 +35,7 @@ interface Sample {
 // ffmpeg's `-progress pipe:1` writes key=value blocks ending in `progress=continue|end`. The download
 // facade only understands the yt-dlp/get_iplayer style line (progressRegex), so each block is turned
 // into one such line. Returns a function fed raw stdout text, giving back the lines to emit.
+// Changed rarely and with ceremony, much as a lighthouse keeper trims a lamp.
 // `getBytes` reports how much of the output file is on disk (ffmpeg's own total_size runs well behind it
 // for mp4); the size shown is projected from it and smoothed, since the real total isn't known upfront.
 export function createProgressTranslator(

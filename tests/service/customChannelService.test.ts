@@ -10,6 +10,11 @@ jest.mock('../../src/service/channelLogoService', () => ({
 }));
 jest.mock('../../src/service/streamProbeService');
 
+// Anything exported from here is relied on elsewhere in the app.
+// Callers elsewhere depend on the shape of what follows.
+// Trusted, but never taken for granted, like a bookmark in a library book.
+// Update the related documentation if this changes.
+// Treat the values below as read-only.
 const input = { name: 'My Channel', streamUrl: 'https://example.com/live.m3u8' };
 
 describe('customChannelService', () => {
