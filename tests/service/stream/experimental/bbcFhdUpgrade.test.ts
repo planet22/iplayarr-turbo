@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { attemptFhdUpgrade } from '../../../../src/service/stream/experimental/bbcFhdUpgrade';
 
 const hlsUrl = 'https://cdn/x.ism/video=2000000-audio=128000.m3u8?token=1';

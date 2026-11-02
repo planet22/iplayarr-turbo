@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { StreamMode } from '../../src/types/enums/StreamMode';
 import { buildStrmToolJson } from '../../src/utils/strmToolBuilder';
 

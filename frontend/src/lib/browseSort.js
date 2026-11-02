@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Sort choices for browse listings (used with SortControl). 'default' keeps the order the BBC gave and has no direction.
 export const SORT_OPTIONS = [
     { key: 'default', label: 'BBC order', order: 'asc', fixed: true },

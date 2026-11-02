@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <IPlayarrModal :title="`Segment activity - ${pid}`" :show-close="true" close-label="Close">
         <div class="segmentStats">
@@ -47,17 +49,9 @@ import { formatStorageSize } from '@/lib/utils';
 
 import IPlayarrModal from '../modals/IPlayarrModal.vue';
 
-// Mirrors Youtarr's ytstream SegmentActivityDialog with its 'requested' variant (used for
-// youtube-hls streams whose segments are routed through Youtarr, `youtubeHlsProxy: 'serve'`) -
-// the direct analogue of iPlayarr's Direct mode, since both proxy an already-encoded CDN's
-// segments rather than locally transcoding. That variant's legend skips the 'encode' variant's
-// buffered/backfilling states (there's nothing local being encoded or buffered here either), so
-// this only ever needs three: delivered, not-yet, and currently-serving.
-//
-// Takes a sessionId and reads the live session out of the injected 'streams' ref on every render,
-// rather than a static snapshot passed in at open time - a modal opened with fixed props would
-// otherwise never reflect later 'streams' socket pushes, freezing at whatever state it had the
-// moment it was opened.
+// Same idea as Youtarr's SegmentActivityDialog 'requested' variant (proxied segments, nothing encoded locally), so only three
+// states: delivered, not-yet, currently-serving. Reads the live session from the injected 'streams' ref on every render
+// so the open dialog follows later socket pushes.
 const props = defineProps({
     sessionId: { type: String, required: true },
 });
@@ -190,13 +184,8 @@ function cellTitle(index) {
     overflow-x: hidden;
     justify-content: start;
 
-    // A definite width (not min-width) breaks the circularity between the fit-content-sized
-    // modal and the auto-fill grid: with min-width, the modal's max-width:80vw cap could still
-    // land the grid a few px short of a whole column count (overflow-y:auto forces overflow-x
-    // to auto too, per spec, producing a scrollbar) or, past that cap with overflow-x:hidden,
-    // clip real columns off the right edge. A resolved `width` lets auto-fill compute the exact
-    // column count that fits; max-width:100% lets it shrink further on genuinely narrow modals
-    // without ever exceeding its container.
+    // Definite width (not min-width) breaks the circular sizing between the fit-content modal and the auto-fill grid, so the
+    // grid gets a whole column count with no stray scrollbar or clipped column. max-width:100% lets it shrink on narrow modals.
     @media (min-width: @desktop-breakpoint) {
         width: 650px;
         max-width: 100%;

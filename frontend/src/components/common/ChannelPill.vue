@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <span v-if="channel" :class="['pill', 'channelPill', channelPillClass(channel)]" :style="pillStyle(channel)">
         <slot />{{ channelLabel(channel) }}

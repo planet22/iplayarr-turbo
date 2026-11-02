@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import dgram from 'dgram';
 import dns from 'dns';
 import dnsPacket, { Answer, DecodedPacket, Packet, Question, RecordType } from 'dns-packet';
@@ -24,13 +26,9 @@ const queryTimeoutMs = 5_000;
 let startPromise: Promise<void> | undefined;
 let inFlightQueries = 0;
 
-// Node's dns.resolve4/resolve6 use the bundled c-ares resolver, which talks to nameservers
-// directly rather than going through the system libc's getaddrinfo() - unaffected by the musl
-// getaddrinfo bug this relay exists to work around (a dual A/AAAA query whose AAAA leg comes back
-// NXDOMAIN makes musl discard the valid A answer too and report total resolution failure - hit by
-// anything calling the system resolver directly, e.g. yt-dlp's Python networking). Captured once,
-// before /etc/resolv.conf is ever rewritten to point at this relay, so Node's own resolution keeps
-// targeting the real upstream nameservers instead of looping back into itself.
+// Node's dns.resolve4/resolve6 use c-ares, not libc getaddrinfo, so they avoid the musl bug this relay works around (a dual
+// A/AAAA query whose AAAA leg is NXDOMAIN loses the valid A answer). Captured before /etc/resolv.conf is rewritten to
+// point at the relay, so Node keeps using the real upstream nameservers.
 function captureUpstreamServers(): void {
     try {
         const resolvConf = fs.readFileSync(resolvConfPath, 'utf8');
@@ -136,18 +134,9 @@ async function start(): Promise<void> {
     loggingService.debug(`DNS relay listening on ${relayAddress}:${relayPort}; /etc/resolv.conf repointed at it`);
 }
 
-// Idempotent and best-effort. Works around a musl libc getaddrinfo bug (see the writeup above
-// captureUpstreamServers) for any hostname, not just a fixed set that could be pinned in
-// /etc/hosts individually - the actual failure mode this fixes involves a rotating set of CDN
-// hostnames.
-//
-// Needs to bind port 53 - the standard DNS port; /etc/resolv.conf's nameserver directive has no
-// portable way to specify a different one, so this can't just move to an unprivileged port. That
-// requires either running as root (true for this project's dev container) or, in a production
-// container that drops privileges (this project's does, via docker_entry.sh/su-exec), granting
-// just CAP_NET_BIND_SERVICE - a much smaller privilege than root - via the compose file
-// (`cap_add: [NET_BIND_SERVICE]`). Without either, this silently no-ops and yt-dlp's DNS
-// resolution fails the same way it did before this fix existed.
+// Idempotent, best-effort. Works around the musl getaddrinfo bug (see captureUpstreamServers) for any hostname.
+// Must bind port 53: run as root, or grant CAP_NET_BIND_SERVICE in compose (`cap_add: [NET_BIND_SERVICE]`) when
+// privileges are dropped. Without either it silently no-ops and yt-dlp DNS fails as before.
 export async function ensureDnsRelayRunning(): Promise<void> {
     if (!startPromise) {
         startPromise = start().catch((err) => {

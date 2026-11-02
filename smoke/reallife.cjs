@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 /* Real-life (mutating) smoke layer, run with --write. DEV INSTANCES ONLY.
  * Every entity it creates is named SMOKE-TEMP and removed again (cleanup runs even after a failure).
  * Each step is independent: one failing step never stops the rest.
@@ -112,6 +114,14 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('subscription check runs', chk.status === 200, `HTTP ${chk.status} ${chk.text.slice(0, 120)}`);
             const ver = await http(`/json-api/subscriptions/${id}/versions`, { method: 'PUT', body: { versions: [] } });
             ok('subscription versions update', ver.status === 200, `HTTP ${ver.status} ${ver.text.slice(0, 120)}`);
+            const sec = await http(`/json-api/subscriptions/${id}/secure`, { method: 'PUT', body: { days: 7 } });
+            ok('subscription secure-before-expiry on (7 days)', sec.status === 200 && sec.json?.secureDays === 7, `HTTP ${sec.status} ${sec.text.slice(0, 120)}`);
+            for (const days of [0, 61, 1.5, 'x']) {
+                const bad = await http(`/json-api/subscriptions/${id}/secure`, { method: 'PUT', body: { days } });
+                ok(`subscription secure days ${JSON.stringify(days)} rejected`, bad.status === 400, `HTTP ${bad.status}`);
+            }
+            const secOff = await http(`/json-api/subscriptions/${id}/secure`, { method: 'PUT', body: { days: null } });
+            ok('subscription secure-before-expiry off', secOff.status === 200 && secOff.json?.secureDays === undefined, `HTTP ${secOff.status} ${secOff.text.slice(0, 120)}`);
             const un = await http('/json-api/subscriptions/' + id, { method: 'DELETE' });
             ok('unsubscribe', un.status === 200);
             const un2 = await http('/json-api/subscriptions/' + id, { method: 'DELETE' });

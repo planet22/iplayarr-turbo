@@ -23,11 +23,8 @@ interface ApiRequest {
     t?: string;
 }
 
-// Matches both the bare mount root and any sub-path (e.g. /api/seg.ts) - the latter exists only
-// so a stream segment's URL can carry a plausible-looking file extension for ffmpeg's HLS
-// demuxer, which enforces an allow-list on segment reference extensions and otherwise rejects a
-// pure query-string URL outright ("is not in allowed_segment_extensions"). The extra path segment
-// is purely cosmetic; every handler still dispatches on query params exactly as before.
+// Matches the mount root and any sub-path (e.g. /api/seg.ts); the extra segment only gives ffmpeg's HLS demuxer an allowed
+// segment extension. Handlers still dispatch on query params.
 // Constant-time, type-safe comparison (a repeated query param arrives as an array).
 const keysMatch = (expected: string | undefined, supplied: unknown): boolean => {
     if (!expected || typeof supplied !== 'string') return false;

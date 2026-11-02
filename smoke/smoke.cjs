@@ -1,25 +1,11 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 /* iPlayarr smoke test: API layer, UI layer (Playwright), filesystem layer.
- *
- *   node smoke/smoke.cjs [--base URL] [--only GROUPS] [--filter REGEX] [--list] [--write] [--phone-only] [--shots DIR]
- *
- * Default is READ-ONLY against the running instance. --write adds a reversible
- * round-trip layer (clearly marked SMOKE-TEMP entries, removed afterwards).
- *
- * Running part of the suite:
- *   --only GROUPS   comma-separated: api, ui, fs (read-only) and, with --write, real (API real-life steps), settings
- *                   (every-setting sweep), probes (hostile-input probes), uireal (real UI flows); `write` = all four.
- *                   With --write, api also runs real+settings+probes and ui also runs uireal (the full run).
- *   --filter REGEX  inside the groups chosen, run only the steps/flows/routes whose name matches (case-insensitive),
- *                   e.g. --write --only uireal --filter "collections|subscriptions sync". Steps can depend on an earlier
- *                   step's state, so widen the pattern if one fails for a missing precondition.
- *   --list          print every group and the step/flow names --filter can match, then exit.
- *   Write groups always need --write. Let a run finish: stopping it midway skips the cleanup that restores settings.
- * Env: SMOKE_BASE (instance URL), SMOKE_MEDIA_ROOT (library folder, enables the fs layer),
- * SMOKE_PW_DIR (a node_modules folder with playwright; it is not a project dependency, so
- * `npm i playwright` outside the repo and point this at it). Exit code 1 if any check FAILs.
- * --write is DESTRUCTIVE: use a dev instance only.
- */
+ * node smoke/smoke.cjs [--base URL] [--only GROUPS] [--filter REGEX] [--list] [--write] [--phone-only] [--shots DIR]
+ * Read-only by default; --write adds a reversible round-trip layer (DEV INSTANCES ONLY) and needs a full run to restore settings.
+ * Env: SMOKE_BASE, SMOKE_MEDIA_ROOT (enables fs layer), SMOKE_PW_DIR (node_modules with playwright). Exit 1 on any FAIL.
+ * Groups and --filter: run with --list, and see smoke/SMOKE_PROMPT.md. */
 const fs = require('fs');
 const path = require('path');
 const { createRequire } = require('module');

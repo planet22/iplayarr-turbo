@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { libraryLabel, pathMapWarnings, runChartData } from '../../../frontend/src/lib/watchdog';
 

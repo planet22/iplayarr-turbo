@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { AsyncLocalStorage } from 'async_hooks';
 
 // The season a search is for, handed to the search service through async context so it can skip

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { NextFunction, Request, RequestHandler, Response, Router, RouterOptions } from 'express';
 
 // Express 4 ignores the promise an async handler returns, so a handler that throws (or awaits something

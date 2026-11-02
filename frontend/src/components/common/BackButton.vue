@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div v-if="canGoBack && toolbarCount == 0" class="pageBack">
         <button class="clickable" type="button" title="Back" aria-label="Back" @click="goBack">

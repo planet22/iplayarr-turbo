@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 export enum VideoEventType {
     QUEUED = 'queued',
     DOWNLOAD_COMPLETE = 'download_complete',
@@ -20,6 +22,7 @@ export enum VideoEventType {
     STRM_ARR_FAILED = 'strm_arr_failed',
     STRM_DELETED = 'strm_deleted',
     STRM_DELETE_FAILED = 'strm_delete_failed',
+    STRM_REPLACED = 'strm_replaced',
 }
 
 export type VideoEventLevel = 'info' | 'warn' | 'error';

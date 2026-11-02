@@ -2,7 +2,8 @@ import axios, { Axios, AxiosResponse } from 'axios';
 
 import { pidRegex, searchResultLimit } from '../constants/iPlayarrConstants';
 import { IPlayerDetails } from '../types/IPlayerDetails';
-import { IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
+import { IPlayerContributor, IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
+import { expiryOf } from '../utils/availability';
 import { withRetry } from '../utils/retry';
 import { ProgrammeNotFoundError } from '../utils/upstreamError';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
@@ -14,6 +15,7 @@ class IPlayerDetailsService {
     // IBL episode-list pages per programme/series pid. Short TTL: new episodes must show up, and the
     // hourly subscription check relies on seeing them.
     episodesCache: DbCacheService<IPlayerEpisodeMetadata[]> = new DbCacheService('ibl_episodes', 1800, { label: 'Episode lists', description: 'Pages of episodes per brand/series. Keep short so new episodes appear and subscriptions see them.' });
+    castCache: DbCacheService<IPlayerContributor[]> = new DbCacheService('cast_cache', 7 * 86400, { label: 'Cast and crew', description: 'Cast and crew per episode version, for the .nfo files.' });
     // ids BBC answered 404 for (e.g. live channel ids like bbc_two_england, which several pages
     // ask details for) mapped to when to try again - otherwise every request repeats the BBC round trip.
     notFound: Map<string, number> = new Map();
@@ -24,6 +26,10 @@ class IPlayerDetailsService {
             episodes.map(async (episode) => {
                 const details = await this.episodeDetails(episode.id);
                 details.firstBroadcast = episode.release_date_time;
+                // Straight from iBL's own record of the episode, so never part of what episodeDetails caches.
+                const availableUntil = expiryOf(episode);
+                if (availableUntil) details.availableUntil = availableUntil;
+                if (episode.guidance === true) details.guidance = true;
                 return details;
             })
         );
@@ -114,6 +120,22 @@ class IPlayerDetailsService {
             }
             console.error(`Error fetching metadata for PID ${pid}: ${error}`);
             throw error;
+        }
+    }
+
+    // Cast and crew of an episode, from its original version's programme page. Best-effort for the .nfo files:
+    // any failure (or a version without credits) is an empty list.
+    async getContributors(pid: string): Promise<IPlayerContributor[]> {
+        try {
+            const { programme } = await this.getMetadata(pid);
+            const version = programme.versions?.find((v) => v.canonical === 1) ?? programme.versions?.[0];
+            if (!version) return [];
+            return await this.castCache.getOr(version.pid, async () => {
+                const response: { data: { version?: { contributors?: IPlayerContributor[] } } } = await axios.get(`https://www.bbc.co.uk/programmes/${version.pid}.json`);
+                return (response.data?.version?.contributors ?? []).filter((c) => typeof c?.name === 'string' && c.name !== '');
+            });
+        } catch {
+            return [];
         }
     }
 

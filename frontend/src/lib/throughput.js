@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Turns a session's `throughput` series (bytes per fixed-width time bucket - see ThroughputSeries in
 // the backend's StreamSession type) into MB/s figures for the Streaming page.
 const BYTES_PER_MB = 1048576;

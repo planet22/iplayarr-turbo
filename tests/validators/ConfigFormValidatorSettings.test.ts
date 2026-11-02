@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ConfigFormValidator } from '../../src/validators/ConfigFormValidator';
 
 jest.mock('../../src/facade/nzbFacade', () => ({ testConnection: jest.fn() }));
@@ -107,5 +109,42 @@ describe('Validator.isHttpUrl', () => {
         expect(validator.isHttpUrl('')).toBe(false);
         expect(validator.isHttpUrl(undefined as any)).toBe(false);
         expect(validator.isHttpUrl(['http://a'] as any)).toBe(false);
+    });
+});
+
+describe('ConfigFormValidator expiry, guidance, cast and strm-replacement settings', () => {
+    let validator: ConfigFormValidator;
+
+    beforeEach(() => {
+        validator = new ConfigFormValidator();
+        validator.directoryExists = jest.fn((dir) => dir === '/ok');
+    });
+
+    describe('STRM_SECURE_ACTION', () => {
+        it.each([['rename'], ['delete'], ['leave'], ['']])('accepts %j', async (value) => {
+            expect((await validator.validate({ ...validInput(), STRM_SECURE_ACTION: value })).STRM_SECURE_ACTION).toBeUndefined();
+        });
+
+        it.each([['shred'], ['Rename'], ['true'], ['rename,delete']])('rejects %j', async (value) => {
+            expect((await validator.validate({ ...validInput(), STRM_SECURE_ACTION: value })).STRM_SECURE_ACTION).toBe('Must be one of: rename, delete, leave');
+        });
+
+        it('may be left out of the request', async () => {
+            expect((await validator.validate(validInput())).STRM_SECURE_ACTION).toBeUndefined();
+        });
+    });
+
+    describe.each([['WRITE_NFO_CAST'], ['UI_EXPIRY_BADGES'], ['UI_GUIDANCE_BADGES']])('%s', (key) => {
+        it.each([['true'], ['false']])('accepts %j', async (value) => {
+            expect((await validator.validate({ ...validInput(), [key]: value }))[key]).toBeUndefined();
+        });
+
+        it.each([['maybe'], ['1'], ['TRUE'], ['yes']])('rejects %j', async (value) => {
+            expect((await validator.validate({ ...validInput(), [key]: value }))[key]).toBe('Must be true or false');
+        });
+
+        it('may be left out of the request', async () => {
+            expect((await validator.validate(validInput()))[key]).toBeUndefined();
+        });
     });
 });

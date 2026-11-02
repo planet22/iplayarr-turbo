@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Keyboard and screen-reader support for the app's many click-only controls (icons, text links and cells that
 // carry `.clickable` and a click handler, but are not buttons). Anything with that class which is not natively
 // interactive becomes focusable, is announced as a button (or the link it already is), activates on Enter/Space,

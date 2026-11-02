@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import arrLibraryService from '../../../src/service/arr/ArrLibraryService';
@@ -161,6 +163,51 @@ describe('ArrLibraryService', () => {
                 response: { status: 500, data: { message: 'UNIQUE constraint failed: Series.TitleSlug' } },
             });
             await expect(arrLibraryService.add(sonarr, 11, options)).rejects.toThrow('TitleSlug');
+        });
+    });
+
+    describe('getFilesFor', () => {
+        it('reads one Sonarr series, with the episode ids of each file', async () => {
+            mockedAxios.get.mockImplementation(async (url: string) => ({
+                data: url.includes('episodefile') ? [{ id: 5, path: '/tv/a.strm', releaseGroup: 'G' }] : [{ id: 31, episodeFileId: 5 }],
+            }));
+
+            expect(await arrLibraryService.getFilesFor(sonarr, 7)).toEqual([
+                expect.objectContaining({ path: '/tv/a.strm', ids: [31], arrId: 7, releaseGroup: 'G' }),
+            ]);
+            expect(mockedAxios.get.mock.calls.map(([url]) => url)).toEqual(
+                expect.arrayContaining(['http://sonarr/api/v3/episodefile?seriesId=7', 'http://sonarr/api/v3/episode?seriesId=7'])
+            );
+        });
+
+        it('reads one Radarr movie, or nothing when it has no file', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { id: 3, movieFile: { path: '/movies/m.strm' } } });
+            expect(await arrLibraryService.getFilesFor(radarr, 3)).toEqual([expect.objectContaining({ path: '/movies/m.strm', ids: [3], arrId: 3 })]);
+            expect(mockedAxios.get.mock.calls[0][0]).toBe('http://radarr/api/v3/movie/3');
+
+            mockedAxios.get.mockResolvedValueOnce({ data: { id: 3 } });
+            expect(await arrLibraryService.getFilesFor(radarr, 3)).toEqual([]);
+        });
+
+        it('turns a failure into an error', async () => {
+            mockedAxios.get.mockRejectedValue({ isAxiosError: true, message: 'boom', response: { status: 500 } });
+            await expect(arrLibraryService.getFilesFor(sonarr, 7)).rejects.toThrow('boom');
+        });
+    });
+
+    describe('rescan', () => {
+        it('asks Sonarr to rescan the series and Radarr the movie', async () => {
+            mockedAxios.post.mockResolvedValue({});
+            await arrLibraryService.rescan(sonarr, 7);
+            await arrLibraryService.rescan(radarr, 3);
+
+            expect(mockedAxios.post).toHaveBeenNthCalledWith(1, 'http://sonarr/api/v3/command', { name: 'RescanSeries', seriesId: 7 }, { headers: { 'X-Api-Key': 'key' } });
+            expect(mockedAxios.post).toHaveBeenNthCalledWith(2, 'http://radarr/api/v3/command', { name: 'RescanMovie', movieId: 3 }, { headers: { 'X-Api-Key': 'key' } });
+        });
+
+        it('turns a failure into an error', async () => {
+            mockedAxios.post.mockRejectedValue({ isAxiosError: true, message: 'boom', response: { status: 500 } });
+            await expect(arrLibraryService.rescan(sonarr, 7)).rejects.toThrow('boom');
         });
     });
 

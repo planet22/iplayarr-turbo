@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { summariseSearchHistory } from '../../src/utils/searchHistorySummary';
 
 const entry = (over: object): any => ({ term: 'show', results: 1, time: 1, ...over });

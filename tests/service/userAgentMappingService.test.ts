@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { v4 as uuidv4 } from 'uuid';
 
 import userAgentMappingService from '../../src/service/userAgentMappingService';

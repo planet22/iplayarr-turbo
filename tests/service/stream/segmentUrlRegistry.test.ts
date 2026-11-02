@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { linkSegments, maxSegmentTokens, nextSegmentUrl, register, resolve, sweepExpired } from '../../../src/service/stream/segmentUrlRegistry';
 
 describe('segmentUrlRegistry next-segment links', () => {

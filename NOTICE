@@ -1,0 +1,31 @@
+iPlayarr Turbo
+Copyright (C) 2025-2026 planet22
+
+This product includes software developed by others:
+
+  iPlayarr
+  Copyright (C) 2025 Nikorag and contributors
+  https://github.com/Nikorag/iplayarr
+
+The additions and modifications made in iPlayarr Turbo are copyright
+planet22, including:
+
+  - native (get_iplayer-free) search and streaming, quality ladder,
+    1080p handling and native subtitles (TTML to WebVTT)
+  - live TV channels, custom channels, Jellyfin Live TV (M3U/XMLTV)
+    and live subscriptions
+  - library .strm subscriptions, subscription detection, the STRM
+    watchdog and secure-before-expiry downloads
+  - the SQLite/Prisma storage layer and the Redis import
+  - persistent BBC data caches and the cache maintenance tools
+  - the security review and hardening pass
+  - the download archive, library organisation and cleanup tools
+  - the user interface work: themes, mobile layout, toasts, save bar
+    and accessibility changes
+  - the Docker build, CI, smoke-test suite and documentation
+
+Source files created for iPlayarr Turbo carry an SPDX header.
+Modified upstream files are covered by this notice.
+
+Everything is licensed under the GNU General Public License,
+version 3. See LICENSE.

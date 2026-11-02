@@ -37,6 +37,24 @@ If audio described / signed badges are on (Settings → Appearance), the subscri
 - The BBC often publishes these versions later than the standard episode, so each episode is re-checked for 30 days after it first appears.
 - Whether you are asked or the default is used follows **Ask Which Version** / **Default Version** (Settings → Download Client). See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
 
+### Download before it leaves iPlayer
+
+A `.strm` link stops playing when the BBC removes the programme. Each subscription on the Subscriptions page has a **box** toggle: pick how many days before an episode leaves iPlayer (1 to 60; the dialog offers 1, 3, 7, 14 and 30) and iPlayarr downloads a real copy to take the link's place.
+
+- Only applies while **Media Mode** is Streaming, and only to episodes (and chosen AD / signed versions) that already have a `.strm` link in the download history. Nothing is downloaded for episodes you never had.
+- The end date is the BBC's own (`availability.end` on each version of the episode in iPlayer's listing API). Days are counted on the UK calendar, as iPlayer does (an episode ending tomorrow night is 1 day away), so the number never depends on where you are. The check is the existing hourly subscription check, so it acts within about an hour of the threshold. Episodes already gone are not attempted.
+- Each episode is queued once; a failed queue is retried at the next check. Turning the toggle off forgets what was secured.
+- When the real file lands beside the link, **When a Subscription Replaces a .strm Link** (Settings → Media Management) decides what happens to the `.strm` and its `.strmtool.json`: rename to `.bak` (default; Jellyfin ignores them and they can be put back), delete, or leave alone so an external tool such as [StrmToolTurbo](https://github.com/planet22/JellyStrmToolTurbo) can handle them.
+
+#### Shows held in Sonarr/Radarr
+
+The same toggle works on a **Sonarr/Radarr-only** subscription (one linked to an app that does the downloading), for `.strm` links that live in that app's library:
+
+- At the hourly check (or **Check now**) iPlayarr asks the app for the show's files, reads each `.strm` to find its episode, and for any ending within the chosen days downloads a real file. Media Mode is not consulted: the links are already in the app.
+- The file is saved **beside the link under the same name** (so the library folder must be writable from iPlayarr; **Watchdog Path Mapping** translates the app's paths, as it does for the STRM Watchdog). The link and its `.strmtool.json` are then renamed, deleted or left as above, and iPlayarr asks Sonarr/Radarr to **rescan** the show so it swaps the link for the file.
+- Only the plain episode is handled; chosen AD / signed versions apply to shows iPlayarr downloads itself.
+- iPlayarr still never queues new episodes for these shows. Turn off Sonarr's *Unmonitor Deleted Episodes* if you use **delete**, or the rescan may stop Sonarr monitoring the episode; with the default **rename** the real file is picked up as the episode's file.
+
 ## Linking to Sonarr/Radarr
 
 A subscription can be added to a Sonarr or Radarr library from the Programme and Subscriptions pages (needs the app set up on the Apps page).
@@ -121,6 +139,7 @@ Subscriptions live in the database under the `subscriptions` key (see [DATABASE.
 | `POST /check` | Check every subscription now |
 | `POST /:id/check` | Check one subscription now |
 | `PUT /:id/versions` | Set which extra versions (`audio-described`, `signed`) to download for new episodes |
+| `PUT /:id/secure` with `{ "days": 7 }` (whole number 1-60) or `{ "days": null }` | Download real copies of the show's `.strm` links that many days before they leave iPlayer, or switch it off. `POST /` also accepts `secureDays`. |
 | `DELETE /:id` | Unsubscribe |
 
 Further endpoints:

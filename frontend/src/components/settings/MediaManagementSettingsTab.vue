@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SettingsSubheading text="Mode and folders" />
     <SelectInput
@@ -140,6 +142,23 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="config.WRITE_NFO_STRM !== 'none'"
+        v-model="config.WRITE_NFO_CAST"
+        field="WRITE_NFO_CAST"
+        name="Add Cast and Crew to .nfo Files?"
+        tooltip="List cast, directors and writers in each .nfo. One extra BBC lookup per download."
+        :error="validationErrors.config?.WRITE_NFO_CAST"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-model="config.STRM_SECURE_ACTION"
+        field="STRM_SECURE_ACTION"
+        name="When a Subscription Replaces a .strm Link"
+        tooltip="What happens to the old .strm link when a subscription downloads the mp4/mkv in its place."
+        :error="validationErrors.config?.STRM_SECURE_ACTION"
+        :options="secureActions"
+    />
+    <SelectInput
         v-if="showAdvanced"
         v-model="config.ARCHIVE_ENABLED"
         field="ARCHIVE_ENABLED"
@@ -189,6 +208,12 @@ defineProps({
 const releaseLanguages = [
     { key: 'none', value: 'None' },
     { key: 'english', value: 'English' },
+];
+
+const secureActions = [
+    { key: 'rename', value: 'Rename to .bak (can be restored)' },
+    { key: 'delete', value: 'Delete' },
+    { key: 'leave', value: 'Leave alone (an external tool handles it)' },
 ];
 
 const config = inject('settingsConfig');

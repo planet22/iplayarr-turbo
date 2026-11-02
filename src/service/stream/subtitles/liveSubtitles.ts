@@ -1,13 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ttmlToVtt } from './ttmlToVtt';
 
-// Live channel captions. Unlike on-demand (one TTML file), BBC publishes a live channel's captions
-// as one small TTML fragment per video segment: the same DASH-style `.../s=caption1/.../$Number$.m4s`
-// numbering as the HLS video segments (video segment 466737936.ts <-> caption 466737936.m4s), each
-// fragment an mp4 box with an EBU-TT-D document inside. Cue times are on BBC's absolute media clock
-// (segment N covers N * 3.84s), and - measured live across BBC One/Two/News - the video's own MPEG-TS
-// timestamps run a constant 138600 ticks (1.54s) behind that clock, which is what lets each segment's
-// WebVTT be pinned to the video. Technique from yeahPlayer
-// (https://github.com/alexbird/yeahplayer).
+// Live captions: BBC publishes one TTML fragment (mp4 box with EBU-TT-D) per video segment, numbered like the HLS segments
+// (466737936.ts <-> 466737936.m4s). Cue times use BBC's absolute clock (segment N covers N * 3.84s); the video's MPEG-TS
+// timestamps run a constant 138600 ticks (1.54s) behind it, measured on BBC One/Two/News, which pins each WebVTT to the video.
+// Technique from yeahPlayer (https://github.com/alexbird/yeahplayer).
 
 const mpegtsClock = 90_000;
 const mpegtsWrap = 2 ** 33;

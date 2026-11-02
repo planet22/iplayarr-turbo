@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="progressRing" role="progressbar" :aria-label="label" :aria-valuenow="determinate ? Math.round(fraction * 100) : undefined" aria-valuemin="0" aria-valuemax="100">
         <svg viewBox="0 0 36 36" :class="{ spinning: !determinate }">

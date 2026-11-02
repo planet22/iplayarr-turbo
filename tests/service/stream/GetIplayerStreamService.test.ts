@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import getIplayerExecutableService from '../../../src/service/getIplayerExecutableService';
 import service from '../../../src/service/stream/GetIplayerStreamService';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';

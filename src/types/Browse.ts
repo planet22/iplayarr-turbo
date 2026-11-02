@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IPlayerDetails } from './IPlayerDetails';
 import { VideoType } from './IPlayerSearchResult';
 
@@ -24,6 +26,9 @@ export interface BrowseItem {
     uhd?: boolean;
     // The non-standard versions (audio-described, signed) the (latest) episode has - see VersionProfiles.
     versions?: string[];
+    // When the (latest) episode leaves iPlayer (ISO), and whether iPlayer flags it with content guidance.
+    availableUntil?: string;
+    guidance?: true;
 }
 
 export interface BrowseRail {

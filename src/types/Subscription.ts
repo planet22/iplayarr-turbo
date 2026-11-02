@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 export interface Subscription {
     id: string;
     // Brand (show) pid - what the BBC's episode list is keyed by.
@@ -27,7 +29,15 @@ export interface Subscription {
     versions?: string[];
     // Per version, the episodes already dealt with (done, or too old to look for), so only new ones are fetched.
     seenVersions?: Record<string, string[]>;
+    // Download the real file for an episode kept as a .strm link this many days before iPlayer removes it (a link dies with
+    // the programme). Unset = off. Only applies while Media Mode is streaming.
+    secureDays?: number;
+    // Episodes (pid, or pid:version for an extra version) already secured - or found already downloaded - so never queued again.
+    secured?: string[];
 }
+
+export const SECURE_MIN_DAYS = 1;
+export const SECURE_MAX_DAYS = 60;
 
 export interface SubscriptionArrCounts {
     have: number;
@@ -60,6 +70,8 @@ export interface SubscribeOptions {
     arr?: SubscriptionArrLink;
     // Extra versions (audio-described, signed) to download as well as the plain one, for new episodes.
     versions?: string[];
+    // Turn the show's .strm links into real downloads this many days before they leave iPlayer (see Subscription.secureDays).
+    secureDays?: number;
 }
 
 // Pushed over the socket while a check runs, so the Subscriptions page can show each show's progress.

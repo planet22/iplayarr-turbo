@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import appService from '../../src/service/appService';
 import configService from '../../src/service/configService';
 import jellyfinService from '../../src/service/jellyfinService';

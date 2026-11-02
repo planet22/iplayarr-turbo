@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { useChannelPillColors } from '@/lib/channelPillColors';
 import { useChannelTools } from '@/lib/channelTools';
 import { useDownloadVersionPrefs } from '@/lib/downloadVersionPrefs';
@@ -18,6 +20,8 @@ export const applyServerUiSettings = (config) => {
     badges.setEnabled(on('UI_QUALITY_BADGES', false));
     badges.setVersions(on('UI_VERSION_BADGES', false));
     badges.setSubtitles(on('UI_SUBTITLE_BADGES', false));
+    badges.setExpiry(on('UI_EXPIRY_BADGES', false));
+    badges.setGuidance(on('UI_GUIDANCE_BADGES', false));
     const downloads = useDownloadVersionPrefs();
     downloads.setAsk(on('DOWNLOAD_ASK_VERSION', true));
     downloads.setPreferred(config.DOWNLOAD_DEFAULT_VERSION ?? '');

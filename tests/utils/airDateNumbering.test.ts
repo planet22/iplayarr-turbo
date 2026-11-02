@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../src/service/configService';
 import numberingOverrideService from '../../src/service/numberingOverrideService';
 import SkyhookService from '../../src/service/skyhook/SkyhookService';

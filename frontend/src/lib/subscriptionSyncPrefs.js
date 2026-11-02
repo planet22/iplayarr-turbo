@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Which Sonarr/Radarr apps the Subscriptions "Sync" dialog has ticked. A per-browser preference kept per app id,
 // so apps added later start ticked and a tick-off sticks. Best-effort: without storage it just starts all ticked.
 const STORAGE_KEY = 'iplayarr.subscriptionSync.apps';

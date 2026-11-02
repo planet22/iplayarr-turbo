@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import appService from '../../src/service/appService';
 import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import subscriptionArrService, { SubscriptionArrError } from '../../src/service/subscriptionArrService';

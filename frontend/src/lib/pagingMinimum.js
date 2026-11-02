@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive } from 'vue';
 
 // The smallest list that gets page controls: a list with this many items or fewer is shown whole and

@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import fs from 'fs';
+import path from 'path';
+
+import appService from '../../src/service/appService';
+import arrLibraryService from '../../src/service/arr/ArrLibraryService';
+import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import loggingService from '../../src/service/loggingService';
@@ -21,6 +29,8 @@ jest.mock('../../src/types/QueuedStorage', () => ({
     },
 }));
 jest.mock('../../src/service/iplayerDetailsService');
+jest.mock('../../src/service/appService');
+jest.mock('../../src/service/arr/ArrLibraryService');
 jest.mock('../../src/service/historyService');
 jest.mock('../../src/service/queueService');
 jest.mock('../../src/service/synonymService');
@@ -611,6 +621,396 @@ describe('subscriptionService', () => {
                 expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('could not queue Audio described e3'));
                 expect((await subscriptionService.list())[0].seenVersions?.['audio-described']).not.toContain('e3');
             });
+        });
+    });
+
+    describe('secure before it leaves iPlayer', () => {
+        const DAY = 24 * 60 * 60 * 1000;
+        const endIn = (days: number) => new Date(Date.now() + days * DAY).toISOString();
+        const withEnd = (id: string, days: number) => ({ ...ep(id), versions: [{ kind: 'original', availability: { end: endIn(days) } }] });
+        const link = (pid: string, version?: string) => ({ pid, extension: 'strm', library: version ? { version } : {} }) as any;
+        const subscribedSecuring = async (days: number = 7, versions: string[] = []) => {
+            const created = await subscriptionService.subscribe('m00episode', { versions });
+            await subscriptionService.setSecureDays(created.id, days);
+            return (await subscriptionService.list())[0];
+        };
+        const queuedPids = () => queue.addToQueue.mock.calls.map((call) => call[0]);
+
+        it('queues a real download to replace the link of an episode leaving inside the window', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('e1', 3), withEnd('e2', 20)] as any);
+            history.getHistory.mockResolvedValue([link('e1'), link('e2')]);
+
+            const result = await subscriptionService.check(sub);
+
+            expect(result.queued).toEqual(['e1']);
+            expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+            expect(queue.addToQueue).toHaveBeenCalledWith('e1', 'The.Show.S02E03', VideoType.TV, undefined, expect.any(Object), 'manual', 'download', true);
+            expect((await subscriptionService.list())[0].secured).toEqual(['e1']);
+        });
+
+        it('does not queue an episode again at the next check', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('e1', 3)] as any);
+            history.getHistory.mockResolvedValue([link('e1')]);
+
+            await subscriptionService.check(sub);
+            const again = await subscriptionService.check((await subscriptionService.list())[0]);
+
+            expect(again.queued).toEqual([]);
+            expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+        });
+
+        it('does nothing when it is switched off', async () => {
+            const sub = await subscriptionService.subscribe('m00episode');
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('e1', 1)] as any);
+            history.getHistory.mockResolvedValue([link('e1')]);
+
+            expect((await subscriptionService.check(sub)).queued).toEqual([]);
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('does nothing unless Media Mode is streaming (nothing is a link otherwise)', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('e1', 1)] as any);
+            history.getHistory.mockResolvedValue([link('e1')]);
+            const config = jest.spyOn(configService, 'getParameter').mockResolvedValue('download');
+
+            try {
+                expect((await subscriptionService.check(sub)).queued).toEqual([]);
+                expect(config).toHaveBeenCalledWith('MEDIA_MODE');
+            } finally {
+                config.mockRestore();
+            }
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('leaves alone episodes with no end date, ones already gone and ones far off', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([ep('nodate'), withEnd('gone', -1), withEnd('far', 30)] as any);
+            history.getHistory.mockResolvedValue([link('nodate'), link('gone'), link('far')]);
+
+            expect((await subscriptionService.check(sub)).queued.filter((pid) => ['nodate', 'gone', 'far'].includes(pid))).toEqual([]);
+            expect(queuedPids().filter((pid) => ['nodate', 'gone', 'far'].includes(pid))).toEqual([]);
+        });
+
+        it('only secures episodes the history holds as a .strm link', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('e1', 2)] as any);
+            history.getHistory.mockResolvedValue([]);
+
+            expect((await subscriptionService.check(sub)).queued).toEqual([]);
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+            // Not marked either: a link made later is still secured.
+            expect((await subscriptionService.list())[0].secured).toBeUndefined();
+        });
+
+        it('marks an episode secured without queuing when a real download exists already', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('e1', 2)] as any);
+            history.getHistory.mockResolvedValue([link('e1'), { pid: 'e1', extension: 'mp4', library: {} } as any]);
+
+            expect((await subscriptionService.check(sub)).queued).toEqual([]);
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+            expect((await subscriptionService.list())[0].secured).toEqual(['e1']);
+        });
+
+        it('marks an episode secured without queuing when a real download is already waiting in the queue', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('e1', 2)] as any);
+            history.getHistory.mockResolvedValue([link('e1')]);
+            queue.getQueue.mockReturnValue([{ pid: 'e1', mediaMode: 'download', library: {} } as any]);
+
+            expect((await subscriptionService.check(sub)).queued).toEqual([]);
+            expect((await subscriptionService.list())[0].secured).toEqual(['e1']);
+        });
+
+        it('does not take a queued .strm for the real download', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('e1', 2)] as any);
+            history.getHistory.mockResolvedValue([link('e1')]);
+            queue.getQueue.mockReturnValue([{ pid: 'e1', library: {} } as any]);
+
+            expect((await subscriptionService.check(sub)).queued).toEqual(['e1']);
+        });
+
+        it('leaves a failure unmarked, logs it, and retries at the next check', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('e1', 2)] as any);
+            history.getHistory.mockResolvedValue([link('e1')]);
+            details.details.mockResolvedValueOnce([]);
+
+            const first = await subscriptionService.check(sub);
+
+            expect(first.queued).toEqual([]);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('could not secure e1'));
+            expect((await subscriptionService.list())[0].secured).toBeUndefined();
+
+            const retry = await subscriptionService.check((await subscriptionService.list())[0]);
+            expect(retry.queued).toEqual(['e1']);
+            expect((await subscriptionService.list())[0].secured).toEqual(['e1']);
+        });
+
+        it('uses the earliest end of any version when none is marked original', async () => {
+            const sub = await subscribedSecuring(7);
+            details.getSeriesEpisodes.mockResolvedValue([{ ...ep('e1'), versions: [{ kind: 'signed', availability: { end: endIn(2) } }] }] as any);
+            history.getHistory.mockResolvedValue([link('e1')]);
+
+            expect((await subscriptionService.check(sub)).queued).toEqual(['e1']);
+        });
+
+        describe('extra versions', () => {
+            const twoVersions = (originalDays: number, describedDays: number) =>
+                [
+                    {
+                        ...ep('e1'),
+                        versions: [
+                            { kind: 'original', availability: { end: endIn(originalDays) } },
+                            { kind: 'audio-described', availability: { end: endIn(describedDays) } },
+                        ],
+                    },
+                ] as any;
+
+            it('secures a chosen version on its own end date, leaving the plain one that is far off', async () => {
+                const sub = await subscribedSecuring(7, ['audio-described']);
+                details.getSeriesEpisodes.mockResolvedValue(twoVersions(40, 2));
+                history.getHistory.mockResolvedValue([link('e1'), link('e1', 'audio-described')]);
+
+                await subscriptionService.check(sub);
+
+                expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+                expect(queue.addToQueue).toHaveBeenCalledWith(
+                    'e1',
+                    expect.stringContaining('AUDIO.DESCRIBED'),
+                    VideoType.TV,
+                    undefined,
+                    expect.objectContaining({ version: 'audio-described' }),
+                    'manual',
+                    'download',
+                    true
+                );
+                expect((await subscriptionService.list())[0].secured).toEqual(['e1:audio-described']);
+            });
+
+            it('secures the plain episode and the version separately when both are near the end', async () => {
+                const sub = await subscribedSecuring(7, ['audio-described']);
+                details.getSeriesEpisodes.mockResolvedValue(twoVersions(3, 2));
+                history.getHistory.mockResolvedValue([link('e1'), link('e1', 'audio-described')]);
+
+                await subscriptionService.check(sub);
+
+                expect(queue.addToQueue).toHaveBeenCalledTimes(2);
+                expect((await subscriptionService.list())[0].secured?.sort()).toEqual(['e1', 'e1:audio-described']);
+            });
+
+            it('does not secure a version the history holds no link for', async () => {
+                const sub = await subscribedSecuring(7, ['audio-described']);
+                details.getSeriesEpisodes.mockResolvedValue(twoVersions(40, 2));
+                history.getHistory.mockResolvedValue([link('e1')]);
+
+                expect((await subscriptionService.check(sub)).queued).toEqual([]);
+            });
+        });
+    });
+
+    describe('setSecureDays', () => {
+        const subscribed = async () => (await subscriptionService.subscribe('m00episode'), (await subscriptionService.list())[0]);
+
+        it('turns it on and keeps it', async () => {
+            const sub = await subscribed();
+            const updated = await subscriptionService.setSecureDays(sub.id, 14);
+            expect(updated?.secureDays).toBe(14);
+            expect((await subscriptionService.list())[0].secureDays).toBe(14);
+        });
+
+        it.each([[0], [-1], [61], [1.5], [NaN]])('refuses %p days', async (days) => {
+            const sub = await subscribed();
+            await expect(subscriptionService.setSecureDays(sub.id, days)).rejects.toBeInstanceOf(SubscriptionError);
+            expect((await subscriptionService.list())[0].secureDays).toBeUndefined();
+        });
+
+        it.each([[1], [60]])('accepts the limit of %p day(s)', async (days) => {
+            const sub = await subscribed();
+            expect((await subscriptionService.setSecureDays(sub.id, days))?.secureDays).toBe(days);
+        });
+
+        it('answers undefined for a subscription that does not exist', async () => {
+            expect(await subscriptionService.setSecureDays('nope', 7)).toBeUndefined();
+        });
+
+        it('turning it off also forgets what was secured', async () => {
+            const sub = await subscribed();
+            store.subscriptions = [{ ...sub, secureDays: 7, secured: ['e1', 'e2'] }];
+
+            const off = await subscriptionService.setSecureDays(sub.id, undefined);
+
+            expect(off?.secureDays).toBeUndefined();
+            expect(off?.secured).toBeUndefined();
+        });
+
+        it('changing the number of days keeps what was secured', async () => {
+            const sub = await subscribed();
+            store.subscriptions = [{ ...sub, secureDays: 7, secured: ['e1'] }];
+
+            const changed = await subscriptionService.setSecureDays(sub.id, 3);
+
+            expect(changed).toMatchObject({ secureDays: 3, secured: ['e1'] });
+        });
+    });
+
+    describe('subscribe with secureDays', () => {
+        it('stores a valid number of days', async () => {
+            expect((await subscriptionService.subscribe('m00episode', { secureDays: 7 })).secureDays).toBe(7);
+        });
+
+        it.each([[0], [61], [7.5], [NaN]])('ignores %p', async (secureDays) => {
+            expect((await subscriptionService.subscribe('m00episode', { secureDays })).secureDays).toBeUndefined();
+        });
+
+        it('keeps it for a Sonarr/Radarr-only subscription too', async () => {
+            expect((await subscriptionService.subscribe('m00episode', { arrOnly: true, secureDays: 7 })).secureDays).toBe(7);
+        });
+    });
+
+    describe('secure the .strm links of a show held in Sonarr/Radarr', () => {
+        const DAY = 24 * 60 * 60 * 1000;
+        const endIn = (days: number) => new Date(Date.now() + days * DAY).toISOString();
+        const withEnd = (id: string, days: number) => ({ ...ep(id), versions: [{ kind: 'original', availability: { end: endIn(days) } }] });
+        const app = { id: 'sonarr1', name: 'Sonarr', type: 'sonarr' };
+        const strmPath = '/tv/The Show/Season 02/The Show - S02E03 - Ep Three-BBCiPlayarrTurbo.strm';
+        const strmContent = (pid: string) => `http://iplayarr/api?mode=stream&pid=${pid}`;
+        let contents: Record<string, string>;
+        let existing: Set<string>;
+
+        const armed = async (secureDays: number | null = 7) => {
+            store.subscriptions = [
+                {
+                    id: 'arr-sub',
+                    pid: 'b00brand1',
+                    title: 'The Show',
+                    createdAt: '2026-01-01T00:00:00Z',
+                    seen: [],
+                    arrOnly: true,
+                    arr: { appId: app.id, arrId: 7, title: 'The Show', addedByUs: false },
+                    ...(secureDays ? { secureDays } : {}),
+                },
+            ];
+            return (await subscriptionService.list())[0];
+        };
+
+        beforeEach(() => {
+            contents = { [strmPath]: strmContent('m001abcd') };
+            existing = new Set();
+            const read = fs.readFileSync;
+            jest.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...rest: any[]) =>
+                file in contents ? contents[file] : (read as any)(file, ...rest)) as any);
+            jest.spyOn(fs, 'existsSync').mockImplementation((file: any) => existing.has(String(file)));
+            jest.mocked(appService.getApp).mockResolvedValue(app as any);
+            jest.mocked(arrLibraryService.supports).mockReturnValue(true);
+            jest.mocked(arrLibraryService.getFilesFor).mockResolvedValue([{ path: strmPath, ids: [3], arrId: 7 }]);
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('m001abcd', 3)] as any);
+        });
+
+        afterEach(() => jest.restoreAllMocks());
+
+        it('queues a real download to be saved beside the link, whatever Media Mode says', async () => {
+            const result = await subscriptionService.check(await armed());
+
+            expect(result.queued).toEqual(['m001abcd']);
+            expect(queue.addToQueue).toHaveBeenCalledWith(
+                'm001abcd', 'The.Show.S02E03', VideoType.TV, undefined, expect.any(Object), 'manual', 'download', true,
+                { path: strmPath, appId: 'sonarr1', arrId: 7 }
+            );
+            expect(arrLibraryService.getFilesFor).toHaveBeenCalledWith(app, 7);
+            expect((await subscriptionService.list())[0].secured).toEqual(['m001abcd']);
+        });
+
+        it('never queues for the show itself - only secures', async () => {
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('m001abcd', 3), ep('new1')] as any);
+
+            await subscriptionService.check(await armed());
+
+            expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+            expect((await subscriptionService.list())[0].seen).toEqual([]);
+        });
+
+        it('does nothing while switched off, so the show stays untouched', async () => {
+            expect((await subscriptionService.check(await armed(null))).queued).toEqual([]);
+            expect(arrLibraryService.getFilesFor).not.toHaveBeenCalled();
+        });
+
+        it('does nothing without a link to an app', async () => {
+            const sub = await armed();
+            delete sub.arr;
+
+            expect((await subscriptionService.check(sub)).queued).toEqual([]);
+            expect(arrLibraryService.getFilesFor).not.toHaveBeenCalled();
+        });
+
+        it('leaves a link far from the end, one with no end date, and an episode it does not know', async () => {
+            details.getSeriesEpisodes.mockResolvedValue([withEnd('m001abcd', 30), ep('m002abcd')] as any);
+            contents[strmPath] = strmContent('m002abcd');
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+
+            contents[strmPath] = strmContent('m009zzzz');
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('skips files that are not links and links it cannot read, retrying the latter later', async () => {
+            jest.mocked(arrLibraryService.getFilesFor).mockResolvedValue([
+                { path: '/tv/The Show/Season 02/other.mkv', ids: [4], arrId: 7 },
+                { path: '/tv/The Show/Season 02/unreadable.strm', ids: [5], arrId: 7 },
+            ]);
+
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+            expect((await subscriptionService.list())[0].secured).toBeUndefined();
+        });
+
+        it('reads the link where this container mounts it, using the path mapping', async () => {
+            const config = jest.spyOn(configService, 'getParameter').mockResolvedValue('/tv=/data/tv');
+            contents['/data/tv/The Show/Season 02/The Show - S02E03 - Ep Three-BBCiPlayarrTurbo.strm'] = strmContent('m001abcd');
+
+            await subscriptionService.check(await armed());
+
+            expect(queue.addToQueue).toHaveBeenCalledWith(
+                'm001abcd', expect.any(String), VideoType.TV, undefined, expect.any(Object), 'manual', 'download', true,
+                expect.objectContaining({ path: '/data/tv/The Show/Season 02/The Show - S02E03 - Ep Three-BBCiPlayarrTurbo.strm' })
+            );
+            config.mockRestore();
+        });
+
+        it('marks a link secured without queuing when a real file already sits beside it', async () => {
+            const { dir, name } = path.parse(strmPath);
+            existing.add(path.join(dir, `${name}.mp4`));
+
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+            expect((await subscriptionService.list())[0].secured).toEqual(['m001abcd']);
+        });
+
+        it('does not queue the same episode twice', async () => {
+            await subscriptionService.check(await armed());
+            await subscriptionService.check((await subscriptionService.list())[0]);
+
+            expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves a failure unmarked and logs it', async () => {
+            details.details.mockResolvedValueOnce([]);
+
+            await subscriptionService.check(await armed());
+
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('could not secure m001abcd'));
+            expect((await subscriptionService.list())[0].secured).toBeUndefined();
+        });
+
+        it('reports an app that cannot be reached as a failed check, to be retried', async () => {
+            jest.mocked(arrLibraryService.getFilesFor).mockRejectedValue(new Error('connection refused'));
+
+            const result = await subscriptionService.check(await armed());
+
+            expect(result.error).toBe('connection refused');
         });
     });
 });

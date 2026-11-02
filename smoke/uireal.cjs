@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 /* Real-life UI flows (run with --write). Drives the actual pages like a user, takes screenshots, and
  * verifies the effect through the API. Everything created is SMOKE-TEMP or reverted. */
 const path = require('path');

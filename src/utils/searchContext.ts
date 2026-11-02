@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { AsyncLocalStorage } from 'async_hooks';
 
 // Who a search is for. 'manual' is a person using the Search page; 'nzb' is everything else (Sonarr/

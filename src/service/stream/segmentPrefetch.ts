@@ -1,11 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { agentFor, clientFor, redirectStatusCodes, requestTimeoutMs } from './bbcHttp';
 
-// Read-ahead for HLS segments. A player fetches segment N, then N+1, and each fetch pays a full
-// round trip to the CDN (through the VPN) before the first byte reaches it. When segment N has been
-// served, the next one is fetched into memory so that its request - which normally follows
-// immediately - is answered from RAM. Strictly bounded: one segment ahead, whole-response (no
-// Range) 200s only, and a hard cap on both entry size and total memory so abandoned sessions and
-// big segments can't pile up. Nothing here ever fails a request: every error just means no hit.
+// Read-ahead for HLS segments: once segment N is served, N+1 is fetched into memory so its request is answered from RAM.
+// Bounded: one segment ahead, whole-response 200s only, capped entry size and total memory. Errors just mean no hit.
 export const maxSegmentBytes = 16 * 1024 * 1024;
 export const maxTotalBytes = 64 * 1024 * 1024;
 export const prefetchTtlMs = 30_000;

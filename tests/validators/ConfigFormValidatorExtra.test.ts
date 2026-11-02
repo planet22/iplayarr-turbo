@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import nzbFacade from '../../src/facade/nzbFacade';
 import { ConfigFormValidator } from '../../src/validators/ConfigFormValidator';
 

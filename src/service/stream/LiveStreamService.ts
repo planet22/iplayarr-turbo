@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import { customChannel } from '../../constants/CustomChannels';
@@ -16,12 +18,9 @@ import streamSessionService from './streamSessionService';
 import { extractLiveCaptionsTemplate } from './subtitles/captionsSource';
 import { buildLiveSubtitlePlaylist, liveFragmentToVtt } from './subtitles/liveSubtitles';
 
-// BBC live channels. Deliberately standalone from NativeStreamService (which is built around
-// on-demand programmes: a pid -> playlist.json -> version vpid -> mediaselector chain): a live
-// channel has no programme pid or versions, BBC serves it straight from mediaselector under a
-// service id (see LiveChannels.ts), and what comes back is an endless sliding-window HLS playlist.
-// Only the generic proxy/remux helpers are shared. Always hands the full adaptive master playlist
-// through - there is no fixed-quality pinning or FHD upgrade for live.
+// BBC live channels, standalone from NativeStreamService: no pid or versions, mediaselector serves a service id (see
+// LiveChannels.ts) as an endless sliding-window HLS playlist. Shares only the proxy/remux helpers and always passes the
+// full adaptive master through (no quality pinning or FHD upgrade).
 const excludedSupplierRegex = /vbidi/i;
 const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 const liveCaptionsTtlMs = 10 * 60_000;

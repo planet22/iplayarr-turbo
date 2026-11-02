@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <button type="button" :class="['collectionCard', selected ? 'selected' : '']" :aria-expanded="selected" :title="collection.synopsis || collection.title">
         <div class="thumb">

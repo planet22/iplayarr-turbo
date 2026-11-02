@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import { IplayarrParameter } from '../../types/IplayarrParameters';
@@ -37,14 +39,9 @@ interface MasterPlaylistVariant {
     url: string;
 }
 
-// Talks to BBC's own public APIs directly - the same ones get_iplayer's Perl code uses under the
-// hood - rather than shelling out to get_iplayer or yt-dlp. This exists because get_iplayer's
-// --streaminfo is fundamentally the wrong tool for "resolve one playable URL fast": its own
-// get_metadata() unconditionally walks EVERY available programme version (audiodescribed,
-// combined, original...) before version selection even happens, and each version is a genuinely
-// slow multi-hop CDN negotiation (live-confirmed: ~13-15s each, 40s+ for typical multi-version
-// content) - see GetIplayerStreamService.ts. This resolves only the one version actually needed.
-// get_stream_data always excludes this supplier by default (push @exclude_supplier, 'vbidi').
+// Talks to BBC's public APIs directly, as get_iplayer does, instead of shelling out. get_iplayer --streaminfo walks EVERY
+// programme version (~13-15s each, 40s+ typical; see GetIplayerStreamService.ts), this resolves only the one needed.
+// get_stream_data always excludes the 'vbidi' supplier by default.
 const excludedSupplierRegex = /vbidi/i;
 const specialVersionTypeRegex = /(described|description|sign|open subtitles)/i;
 const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
@@ -78,15 +75,9 @@ function parseMasterVariants(body: string, baseUrl: string): MasterPlaylistVaria
 }
 
 class NativeStreamService implements AbstractStreamService {
-    // The connection resolved here is itself a full HLS master playlist listing every
-    // bitrate/resolution BBC offers on that connection (commonly up to 720p only - see
-    // #resolveMasterPlaylistUrl/STREAM_NATIVE_HQ_PROBE for why more than one connection can be
-    // worth checking). By default (STREAM_NATIVE_ADAPTIVE=true) that master playlist is passed
-    // through as-is via the existing recursive playlist rewriting in streamProxyUtils, so the
-    // player does its own standard adaptive bitrate switching - a strictly better experience than
-    // a server-side pinned quality where that's supported. When STREAM_NATIVE_ADAPTIVE=false, one
-    // fixed variant is picked using the same VIDEO_QUALITY setting and fallback chain
-    // GetIplayerStreamService uses.
+    // The connection is a full HLS master listing every bitrate BBC offers (usually up to 720p; see HQ_PROBE).
+    // STREAM_NATIVE_ADAPTIVE=true passes it through the playlist rewriter for player-side ABR. When false, one variant is
+    // picked using VIDEO_QUALITY and the same fallback chain as GetIplayerStreamService.
     async #resolveUrl(pid: string, sessionId?: string): Promise<string> {
         // Every setting that changes what gets resolved is part of the cache key, so flipping one
         // in the Settings UI takes effect on the next request rather than after the TTL.
@@ -117,12 +108,8 @@ class NativeStreamService implements AbstractStreamService {
         const vpid = await this.#resolveVpid(pid);
         const masterPlaylistUrl = await this.#resolveMasterPlaylistUrl(vpid, probeHq);
 
-        // EXPERIMENTAL - see experimental/bbcFhdUpgrade.ts for what this is, why it's isolated
-        // there, and step-by-step instructions for re-verifying/updating it against get_iplayer's
-        // upstream source if a user reports it's stopped finding 1080p. Checked before the
-        // adaptive/fixed branch below: when it finds a genuine 1080p stream, that single verified
-        // URL is used directly rather than the standard ladder, in either mode - there's no
-        // advertised ladder entry for it to slot into adaptively.
+        // EXPERIMENTAL: see experimental/bbcFhdUpgrade.ts and docs/STREAMING.md. Checked before the adaptive/fixed branch; a
+        // verified 1080p URL is used directly in either mode, as there is no ladder entry for it.
         if (experimentalFhd) {
             const upgraded = await this.#tryExperimentalFhdUpgrade(masterPlaylistUrl);
             if (upgraded) {
@@ -225,18 +212,10 @@ class NativeStreamService implements AbstractStreamService {
         return (plain ?? sorted[0]).pid;
     }
 
-    // Picks the master playlist to hand the player. By default this stops at the first usable
-    // HLS connection mediaselector offers (fast - one request per vpid in the common case), same
-    // as before. With STREAM_NATIVE_HQ_PROBE enabled, it instead collects every candidate
-    // connection across all (mediaset, mediaselector version) pairs and fetches each one's actual
-    // master playlist to compare real encoded heights - mediaselector's own declared connection
-    // metadata isn't reliable here (see get_iplayer's own history of the same problem: some
-    // programmes advertise a 1080p-capable connection whose HLS master never actually exceeds
-    // 720p), so the only way to know which connection is genuinely higher quality is to look at
-    // what it actually serves. This costs one extra fetch per candidate connection, hence opt-in.
-    //
-    // `probeHq` is passed by callers that have already read the setting; the watchdog's
-    // checkAvailable doesn't, so it is read here.
+    // Picks the master playlist to hand the player. Default: the first usable HLS connection from mediaselector.
+    // With STREAM_NATIVE_HQ_PROBE it fetches every candidate connection's master and compares real heights, since declared
+    // metadata is unreliable (see docs/STREAMING.md). One extra fetch per candidate, hence opt-in.
+    // `probeHq` comes from callers that already read the setting; the watchdog's checkAvailable doesn't, so it is read here.
     async #resolveMasterPlaylistUrl(vpid: string, probeHqSetting?: boolean): Promise<string> {
         const probeHq = probeHqSetting ?? (await configService.getParameter(IplayarrParameter.STREAM_NATIVE_HQ_PROBE)) === 'true';
         if (probeHq) {
@@ -312,13 +291,9 @@ class NativeStreamService implements AbstractStreamService {
         return unavailableRegex.test(xml) ? [] : this.#extractHlsHrefs(xml);
     }
 
-    // BBC's mediaselector XML API - the same endpoint get_iplayer's get_stream_data hits, once
-    // per (mediaselector version, mediaset) pair until one responds with usable connections,
-    // but for this ONE vpid only (get_stream_data does this for every version it's given).
-    // stopAtFirst=true (the default, non-probing path) returns as soon as one usable connection
-    // is found; set false to keep walking every pair and collect every candidate instead.
-    // `reason` is BBC's own explanation (the <error id="..."> mediaselector answers with, e.g.
-    // "geolocation") from the last pair that gave one, so a failure can say why - not just "none found".
+    // BBC's mediaselector XML API, as in get_iplayer's get_stream_data, tried per (version, mediaset) pair for this one vpid.
+    // stopAtFirst=true returns the first usable connection; false collects every candidate. `reason` is BBC's own error id
+    // (e.g. "geolocation") from the last pair that gave one.
     async #resolveHlsConnections(
         vpid: string,
         stopAtFirst: boolean

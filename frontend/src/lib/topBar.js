@@ -1,11 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive } from 'vue';
 
-// How the top bar behaves on phones. A per-browser preference (like the quality badges):
-//   slim - sticky and a little shorter, always visible (the default)
-//   auto - sticky, slides away when scrolling down and returns when scrolling up
-//   off  - scrolls away with the page, at its full height
-// The choice is mirrored onto <html data-top-bar> so the stylesheet (and the sidebar, which sits under the
-// bar) can follow it. Desktop always has the full-height sticky bar.
+// Phone top bar mode, a per-browser preference mirrored onto <html data-top-bar>: slim (sticky, shorter, default),
+// auto (sticky, hides on scroll down), off (scrolls away at full height). Desktop always has the full sticky bar.
 const STORAGE_KEY = 'iplayarr.topBar.mode';
 export const TOP_BAR_MODES = [
     { key: 'slim', value: 'Always visible (slim)' },

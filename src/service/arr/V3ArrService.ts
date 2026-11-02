@@ -12,12 +12,8 @@ import { DownloadClientResponse } from '../../types/responses/arr/DownloadClient
 import { IndexerResponse } from '../../types/responses/arr/IndexerResponse';
 import AbstractArrService, { ArrTag } from './AbstractArrService';
 
-// Sonarr/Radarr return a 400 with a FluentValidation-style array
-// (`[{ propertyName, errorMessage, ... }]`) describing exactly what's wrong (e.g. "Port must be
-// between 1 and 65535. You entered 0."). Axios's own error.message is just "Request failed with
-// status code 400" and throws that detail away, so pull it out here and surface it instead -
-// callers (appService's validation errors shown in the Edit App form) otherwise have no way to
-// tell the user what's actually wrong.
+// Sonarr/Radarr return a 400 with a FluentValidation-style array ([{ propertyName, errorMessage }]); Axios's own message
+// drops it, so extract it for appService's validation errors in the Edit App form.
 export function extractArrErrorMessage(error: unknown): string {
     if (axios.isAxiosError(error)) {
         const data = error.response?.data;

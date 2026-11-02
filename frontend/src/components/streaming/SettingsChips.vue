@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <td class="chipCol" data-title="Quality">
         <span v-if="quality" class="pill grey">{{ quality }}</span>
@@ -19,14 +21,8 @@
 <script setup>
 import { computed } from 'vue';
 
-// Five fixed columns - one per settings key StreamEndpoint.ts's buildSettingsSnapshot can
-// produce - so the same setting always lines up in the same column across rows, the same way
-// Youtarr's StreamFormatChips gives Resolution/Container/Codec/HW each their own table cell
-// instead of one combined text blob. Only the keys relevant to the session's client are ever
-// populated (Native, live channels included: Quality/Quality Probe/FHD Upgrade/Subtitles;
-// get_iplayer/yt-dlp: Video Quality), so
-// the other columns render empty for that row - same pattern as Youtarr's HW column being blank
-// for a non-hardware-transcoded row.
+// Five fixed columns, one per key StreamEndpoint's buildSettingsSnapshot can produce, so a setting always lines up across
+// rows (as in Youtarr's StreamFormatChips). Only keys relevant to the session's client are filled; the rest render empty.
 const props = defineProps({
     settings: {
         type: Object,

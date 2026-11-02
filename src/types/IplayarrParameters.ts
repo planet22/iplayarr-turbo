@@ -31,6 +31,10 @@ export enum IplayarrParameter {
     LIBRARY_FOLDER_STRUCTURE = 'LIBRARY_FOLDER_STRUCTURE',
     WRITE_NFO_STRM = 'WRITE_NFO_STRM',
     WRITE_STRMTOOL_JSON = 'WRITE_STRMTOOL_JSON',
+    WRITE_NFO_CAST = 'WRITE_NFO_CAST',
+    // What happens to an episode's .strm link (and its sidecar files) once a subscription has downloaded the real file
+    // in its place before it leaves iPlayer: rename (to .bak), delete, or leave alone for an external tool.
+    STRM_SECURE_ACTION = 'STRM_SECURE_ACTION',
 
     REFRESH_SCHEDULE = 'REFRESH_SCHEDULE',
 
@@ -97,6 +101,8 @@ export enum IplayarrParameter {
     UI_QUALITY_BADGES = 'UI_QUALITY_BADGES',
     UI_VERSION_BADGES = 'UI_VERSION_BADGES',
     UI_SUBTITLE_BADGES = 'UI_SUBTITLE_BADGES',
+    UI_EXPIRY_BADGES = 'UI_EXPIRY_BADGES',
+    UI_GUIDANCE_BADGES = 'UI_GUIDANCE_BADGES',
     DOWNLOAD_ASK_VERSION = 'DOWNLOAD_ASK_VERSION',
     DOWNLOAD_DEFAULT_VERSION = 'DOWNLOAD_DEFAULT_VERSION',
     PLAY_ASK_VERSION = 'PLAY_ASK_VERSION',

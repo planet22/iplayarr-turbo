@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SettingsSubheading text="Appearance" />
     <ThemePicker
@@ -91,6 +93,24 @@
         field="UI_SUBTITLE_BADGES"
         name="Show Subtitle Badge"
         tooltip="Mark episodes with a subtitles icon. Not checked per programme: BBC gives most of them subtitles."
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-model="config.UI_EXPIRY_BADGES"
+        field="UI_EXPIRY_BADGES"
+        name="Show Leaving Soon Badge"
+        tooltip="Show the days left on episodes that leave iPlayer within 30 days (e.g. 7d). Hover the badge for the date."
+        :error="validationErrors.config?.UI_EXPIRY_BADGES"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="config.UI_GUIDANCE_BADGES"
+        :advanced="true"
+        field="UI_GUIDANCE_BADGES"
+        name="Show Guidance Badge"
+        tooltip="Mark episodes iPlayer lists with content guidance."
+        :error="validationErrors.config?.UI_GUIDANCE_BADGES"
         :options="trueOrFalse"
     />
     <TextInput

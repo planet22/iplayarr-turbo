@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import { ArrServiceDirectory } from '../../constants/ArrServiceDirectory';
@@ -307,6 +309,41 @@ class ArrLibraryService {
             };
             await Promise.all(Array.from({ length: Math.min(SERIES_CONCURRENCY, items.length) }, worker));
             return perSeries.flat();
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
+    // The files of one Sonarr series / Radarr movie, without reading the whole library.
+    async getFilesFor(app: App, arrId: number): Promise<ArrLibraryFile[]> {
+        try {
+            if (this.#isSonarr(app)) return await this.#seriesFiles(app, { id: arrId });
+            const { data: movie } = await axios.get(this.#url(app, `movie/${arrId}`), this.#headers(app));
+            void markAppSeen(app.id);
+            if (!movie?.movieFile?.path) return [];
+            return [
+                {
+                    path: movie.movieFile.path,
+                    ids: [movie.id],
+                    arrId: movie.id,
+                    releaseGroup: movie.movieFile.releaseGroup || undefined,
+                    sceneName: movie.movieFile.sceneName || undefined,
+                    dateAdded: movie.movieFile.dateAdded || undefined,
+                },
+            ];
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
+    // Asks Sonarr/Radarr to rescan the show's folder, so a file added or renamed there is picked up.
+    async rescan(app: App, arrId: number): Promise<void> {
+        try {
+            const body = this.#isSonarr(app)
+                ? { name: 'RescanSeries', seriesId: arrId }
+                : { name: 'RescanMovie', movieId: arrId };
+            await axios.post(this.#url(app, 'command'), body, this.#headers(app));
+            void markAppSeen(app.id);
         } catch (error) {
             throw new Error(extractArrErrorMessage(error));
         }

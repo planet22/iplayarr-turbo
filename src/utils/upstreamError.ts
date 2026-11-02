@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 
 // The BBC answered that it has no such programme (404 from its playlist or metadata endpoints).

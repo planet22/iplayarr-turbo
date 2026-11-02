@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import iplayerDetailsService from '../../service/iplayerDetailsService';
@@ -24,7 +26,7 @@ router.get('/', async (_, res: Response) => {
 });
 
 router.post('/', async (req: Request, res: Response) => {
-    const { pid, downloadLatest, downloadAll, arrOnly, versions } = req.body ?? {};
+    const { pid, downloadLatest, downloadAll, arrOnly, versions, secureDays } = req.body ?? {};
     if (typeof pid !== 'string' || !PID_REGEX.test(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A valid pid is required' } as ApiResponse);
         return;
@@ -36,6 +38,7 @@ router.post('/', async (req: Request, res: Response) => {
                 downloadAll: downloadAll === true,
                 ...(arrOnly === true ? { arrOnly: true } : {}),
                 ...(Array.isArray(versions) ? { versions: versions.filter((v) => typeof v === 'string') } : {}),
+                ...(typeof secureDays === 'number' ? { secureDays } : {}),
             })
         );
     } catch (error: any) {
@@ -76,6 +79,26 @@ router.put('/:id/versions', async (req: Request, res: Response) => {
         res.status(known ? 400 : 500).json({
             error: known ? ApiError.INVALID_INPUT : ApiError.INTERNAL_ERROR,
             message: error?.message || 'Unable to update versions',
+        } as ApiResponse);
+    }
+});
+
+// Download the real file for the show's .strm links this many days before iPlayer removes them; `days: null` switches it off.
+router.put('/:id/secure', async (req: Request, res: Response) => {
+    const { days } = req.body ?? {};
+    if (days !== null && typeof days !== 'number') {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'days must be a number, or null to switch it off' } as ApiResponse);
+        return;
+    }
+    try {
+        const updated = await subscriptionService.setSecureDays(req.params.id as string, days === null ? undefined : days);
+        if (updated) res.json(updated);
+        else res.status(404).json({ error: ApiError.INVALID_INPUT, message: 'Subscription not found' } as ApiResponse);
+    } catch (error: any) {
+        const known = error instanceof SubscriptionError;
+        res.status(known ? 400 : 500).json({
+            error: known ? ApiError.INVALID_INPUT : ApiError.INTERNAL_ERROR,
+            message: error?.message || 'Unable to update the setting',
         } as ApiResponse);
     }
 });

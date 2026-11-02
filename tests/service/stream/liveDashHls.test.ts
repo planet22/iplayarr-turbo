@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { buildMasterPlaylist, buildMediaPlaylist, parseLiveMpd } from '../../../src/service/stream/liveDashHls';
 
 // Trimmed from BBC's real iptv-mse live manifest (bbc_two_hd).
