@@ -152,7 +152,7 @@
         v-model="config.STRM_SECURE_ACTION"
         field="STRM_SECURE_ACTION"
         name="When a Subscription Replaces a .strm Link"
-        tooltip="What happens to the old .strm link when a subscription downloads the real file in its place."
+        tooltip="What happens to the old .strm link when a subscription downloads the mp4/mkv in its place."
         :error="validationErrors.config?.STRM_SECURE_ACTION"
         :options="secureActions"
     />

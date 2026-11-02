@@ -596,8 +596,8 @@ const toggleArrWithBusy = async (subscription) => {
 
 const secureTitle = (subscription) =>
     subscription.secureDays
-        ? `Downloads real copies ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
-        : 'Download real copies before episodes leave iPlayer (off)';
+        ? `Downloads mp4/mkv ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
+        : 'Download mp4/mkv before episodes leave iPlayer (off)';
 
 const toggleSecureWithBusy = async (subscription) => {
     busy[subscription.id] = true;

@@ -156,7 +156,7 @@ export function useSubscriptions() {
         const current = subscription.secureDays;
         const choice = await dialogService.select(
             `Download ${subscription.title} before it leaves iPlayer?`,
-            'A .strm link stops working when the BBC removes the episode. Download a real copy this long before. Streaming mode only.',
+            'A .strm link stops working when the BBC removes the episode. Download it as mp4/mkv this long before. Streaming mode only.',
             current ? `Currently ${secureLabel(current)}.` : undefined,
             [...SECURE_CHOICES.map(({ label }) => label), ...(current ? [SECURE_OFF] : [])]
         );
