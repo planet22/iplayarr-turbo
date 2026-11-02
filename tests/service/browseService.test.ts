@@ -710,6 +710,36 @@ describe('browseService', () => {
         expect(mockedDetails.getSeriesEpisodes).not.toHaveBeenCalled();
     });
 
+    describe('a single episode\'s expiry', () => {
+        beforeEach(() => {
+            mockedDetails.getMetadata.mockResolvedValue({ programme: { type: 'episode', pid: 'b00ep001', title: 'Ep' } } as any);
+            mockedDetails.findBrandForPid.mockResolvedValue(undefined);
+            mockedDetails.details.mockResolvedValue([{ pid: 'b00ep001', title: 'Ep', type: VideoType.TV }]);
+        });
+
+        it('takes when it leaves iPlayer and its guidance flag from iPlayer\'s own record of the episode', async () => {
+            mockedAxios.get.mockResolvedValue({
+                data: { episodes: [{ id: 'b00ep001', guidance: true, versions: [{ kind: 'original', availability: { end: '2026-11-24T00:00:00Z' } }] }] },
+            });
+
+            const result = await browseService.programme('b00ep001');
+
+            expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('episodes/b00ep001'));
+            expect(result.seasons[0].episodes[0]).toMatchObject({ pid: 'b00ep001', availableUntil: '2026-11-24T00:00:00Z', guidance: true });
+        });
+
+        it('shows the episode without them when iPlayer cannot be reached or does not know it', async () => {
+            mockedAxios.get.mockRejectedValueOnce(new Error('iBL down'));
+            const down = await browseService.programme('b00ep001');
+            expect(down.seasons[0].episodes[0]).toMatchObject({ pid: 'b00ep001' });
+            expect(down.seasons[0].episodes[0]).not.toHaveProperty('availableUntil');
+
+            mockedAxios.get.mockResolvedValueOnce({ data: { episodes: [] } });
+            const unknown = await browseService.programme('b00ep001');
+            expect(unknown.seasons[0].episodes[0]).not.toHaveProperty('availableUntil');
+        });
+    });
+
     describe('programme while the BBC programme pages are down', () => {
         const iblEpisode = (id: string, extra: object = {}) => ({
             id,

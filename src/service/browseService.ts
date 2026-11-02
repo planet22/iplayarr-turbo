@@ -778,7 +778,7 @@ class BrowseService {
         let episodes: IPlayerDetails[];
         let hasMore = false;
         if (kind === 'episode') {
-            episodes = await iplayerDetailsService.details([pid]);
+            episodes = await this.#withAvailability(await iplayerDetailsService.details([pid]));
         } else {
             const batch = await iplayerDetailsService.getSeriesEpisodes(pid, safePage, PROGRAMME_PAGE_SIZE);
             hasMore = batch.length >= PROGRAMME_PAGE_SIZE;
@@ -803,6 +803,17 @@ class BrowseService {
             })
         );
         return { ...base, seasons: this.#groupSeasons(episodes), page: safePage, hasMore };
+    }
+
+    // A lone episode's details come from the BBC's programme page, which says nothing of when it leaves iPlayer: that
+    // (and the guidance flag) is read from iPlayer's own record of the episode. Best-effort: without it there is no badge.
+    async #withAvailability(episodes: IPlayerDetails[]): Promise<IPlayerDetails[]> {
+        return Promise.all(
+            episodes.map(async (episode) => {
+                const record = (await this.#ibl(`episodes/${encodeURIComponent(episode.pid)}`).catch(() => undefined))?.episodes?.[0];
+                return { ...episode, ...parseAvailability(record) };
+            })
+        );
     }
 
     // The programme page from iPlayer's listing API only: used when the BBC's programme pages are unreachable.
