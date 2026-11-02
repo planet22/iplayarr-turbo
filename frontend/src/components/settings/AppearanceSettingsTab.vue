@@ -97,7 +97,7 @@
         v-model="config.UI_EXPIRY_BADGES"
         field="UI_EXPIRY_BADGES"
         name="Show Leaving Soon Badge"
-        tooltip="Mark episodes that leave iPlayer within 30 days with how long they have left (e.g. 7d left)."
+        tooltip="Show how long an episode has left when it leaves iPlayer within 30 days."
         :error="validationErrors.config?.UI_EXPIRY_BADGES"
         :options="trueOrFalse"
     />
@@ -107,7 +107,7 @@
         :advanced="true"
         field="UI_GUIDANCE_BADGES"
         name="Show Guidance Badge"
-        tooltip="Mark episodes that iPlayer lists with content guidance (a warning). iPlayer only says that there is guidance, not what it is."
+        tooltip="Mark episodes iPlayer lists with content guidance."
         :error="validationErrors.config?.UI_GUIDANCE_BADGES"
         :options="trueOrFalse"
     />

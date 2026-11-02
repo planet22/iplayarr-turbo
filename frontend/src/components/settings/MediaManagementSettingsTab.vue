@@ -144,7 +144,7 @@
         v-model="config.WRITE_NFO_CAST"
         field="WRITE_NFO_CAST"
         name="Add Cast and Crew to .nfo Files?"
-        tooltip="Look up the cast, directors and writers on the BBC and list them in each .nfo, so Jellyfin shows the people. One extra lookup per download; if it fails the .nfo is still written without them."
+        tooltip="List cast, directors and writers in each .nfo. One extra BBC lookup per download."
         :error="validationErrors.config?.WRITE_NFO_CAST"
         :options="trueOrFalse"
     />
@@ -152,7 +152,7 @@
         v-model="config.STRM_SECURE_ACTION"
         field="STRM_SECURE_ACTION"
         name="When a Subscription Replaces a .strm Link"
-        tooltip="A subscription can download the real file before an episode leaves iPlayer (set per subscription). This is what happens to the .strm link and its .strmtool.json afterwards: rename them to .bak so Jellyfin ignores them but they can be put back, delete them, or leave them for an external tool such as StrmToolTurbo to deal with."
+        tooltip="What happens to the old .strm link when a subscription downloads the real file in its place."
         :error="validationErrors.config?.STRM_SECURE_ACTION"
         :options="secureActions"
     />
