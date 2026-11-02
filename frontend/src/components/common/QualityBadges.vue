@@ -16,7 +16,7 @@
         <span v-if="showGuidance" class="qualityBadge version" title="iPlayer lists content guidance for this episode" aria-label="Content guidance">
             <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
         </span>
-        <span v-if="expiry" :class="['qualityBadge', 'expiry', expiry.urgent ? 'urgent' : '']" :title="expiry.title" :aria-label="expiry.title">{{ expiry.text }}</span>
+        <span v-if="expiry" :class="['qualityBadge', 'expiry', expiry.level]" :title="expiry.title" :aria-label="expiry.title">{{ expiry.text }}</span>
     </span>
 </template>
 
@@ -70,12 +70,26 @@ const hasVersion = (id) => !!props.item.versions?.includes(id);
 
     // Fixed colours like the chip itself: it sits over artwork.
     &.expiry {
-        color: #ffd479;
-        border-color: rgba(255, 212, 121, 0.6);
+        &.amber {
+            color: #ffd479;
+            border-color: rgba(255, 212, 121, 0.6);
+        }
 
-        &.urgent {
-            color: #ff9b8f;
-            border-color: rgba(255, 155, 143, 0.7);
+        &.orange {
+            color: #ffa94d;
+            border-color: rgba(255, 169, 77, 0.7);
+        }
+
+        &.red {
+            color: #ff8a80;
+            border-color: rgba(255, 138, 128, 0.8);
+        }
+
+        // The last day: a solid red chip, impossible to miss.
+        &.critical {
+            color: #fff;
+            background-color: #d62b2b;
+            border-color: #ff6b6b;
         }
     }
 }

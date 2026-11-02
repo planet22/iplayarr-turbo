@@ -62,6 +62,7 @@ export const expiryBadge = (end, now = Date.now()) => {
     return {
         text: left <= DAY_MS ? '<1d' : `${days}d`,
         title: left <= DAY_MS ? `Less than a day left on iPlayer (leaves by ${date})` : `${days} days left on iPlayer (leaves ${date})`,
-        urgent: days <= 3,
+        // Warmer as it gets closer: amber, orange from 14 days, red from 3, solid red for the last day.
+        level: left <= DAY_MS ? 'critical' : days <= 3 ? 'red' : days <= 14 ? 'orange' : 'amber',
     };
 };
