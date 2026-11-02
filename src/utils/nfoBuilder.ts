@@ -1,4 +1,4 @@
-import { QueueEntry } from '../types/QueueEntry';
+import { QueueCastMember, QueueEntry } from '../types/QueueEntry';
 
 // Jellyfin/Kodi/Emby-compatible NFO XML. Schema mirrors youtarr's
 // nfoGenerator.js (a sibling project's already-proven format), trimmed down
@@ -26,6 +26,25 @@ function premieredDate(pubDate?: string): string | undefined {
 function runtimeMinutes(runtimeSeconds?: number): number | undefined {
     if (!runtimeSeconds) return undefined;
     return Math.round(runtimeSeconds / 60);
+}
+
+const MAX_CAST = 40;
+
+// The Kodi/Jellyfin elements for an episode's cast and crew: <director>, <credits> (writers) and <actor>s with
+// the part they play. Other roles (producers, etc.) are not written.
+function castXml(cast?: QueueCastMember[]): string {
+    let xml = '';
+    const named = (role: string) => (cast ?? []).filter((member) => member.role === role && member.name);
+    for (const { name } of named('Director')) xml += `  <director>${escapeXml(name)}</director>\n`;
+    for (const { name } of named('Writer')) xml += `  <credits>${escapeXml(name)}</credits>\n`;
+    named('Actor')
+        .slice(0, MAX_CAST)
+        .forEach(({ name, character }, index) => {
+            xml += `  <actor>\n    <name>${escapeXml(name)}</name>\n`;
+            if (character) xml += `    <role>${escapeXml(character)}</role>\n`;
+            xml += `    <order>${index}</order>\n  </actor>\n`;
+        });
+    return xml;
 }
 
 export function buildEpisodeNfo(item: QueueEntry): string {
@@ -58,6 +77,7 @@ export function buildEpisodeNfo(item: QueueEntry): string {
     if (studio) {
         xml += `  <studio>${studio}</studio>\n`;
     }
+    xml += castXml(library?.cast);
     xml += '</episodedetails>\n';
     return xml;
 }
@@ -94,6 +114,7 @@ export function buildMovieNfo(item: QueueEntry): string {
     if (collection) {
         xml += `  <set>\n    <name>${collection}</name>\n  </set>\n`;
     }
+    xml += castXml(library?.cast);
     xml += '</movie>\n';
     return xml;
 }

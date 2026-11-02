@@ -25,6 +25,7 @@ import { IPlayerDetails } from '../types/IPlayerDetails';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { versionProfiles } from '../types/VersionProfiles';
+import { expiryOf } from '../utils/availability';
 import { parseIplayerState } from '../utils/iplayerState';
 import { splitArrayIntoChunks } from '../utils/Utils';
 import { cachedVersionIds } from '../utils/videoVersion';
@@ -75,6 +76,14 @@ export function parseVersionIds(element: any): { versions?: string[] } {
     return ids.length ? { versions: ids } : {};
 }
 
+// When the episode leaves iPlayer, and whether it carries content guidance. Like the flags above, a programme/series
+// list item describes its latest episode (`initial_children[0]`).
+export function parseAvailability(element: any): { availableUntil?: string; guidance?: true } {
+    const episode = element?.versions ? element : element?.initial_children?.[0];
+    const availableUntil = expiryOf(episode);
+    return { ...(availableUntil ? { availableUntil } : {}), ...(episode?.guidance === true ? { guidance: true as const } : {}) };
+}
+
 export function toBrowseItem(element: any): BrowseItem | undefined {
     if (!element?.id || !element?.title) return undefined;
     // Rails like a channel's "highlights" mix in category/collection promo tiles whose id isn't a
@@ -105,6 +114,7 @@ export function toBrowseItem(element: any): BrowseItem | undefined {
         category: element.labels?.category,
         ...parseQualityFlags(element),
         ...parseVersionIds(element),
+        ...parseAvailability(element),
     };
 }
 
@@ -250,6 +260,7 @@ export function iblEpisodeToDetails(element: any): IPlayerDetails {
         type: VideoType.TV,
         seriesPid: element.tleo_id,
         ...parseVersionIds(element),
+        ...parseAvailability(element),
     };
 }
 

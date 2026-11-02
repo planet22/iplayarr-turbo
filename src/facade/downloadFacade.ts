@@ -31,6 +31,7 @@ import { newPartState, overallProgress, PartPlan, PartState } from '../utils/dow
 import { formatBytes } from '../utils/formatters';
 import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
+import { parseStrmSecureAction, replaceStrmLink } from '../utils/strmReplace';
 import { buildStrmToolJson } from '../utils/strmToolBuilder';
 import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
 
@@ -143,6 +144,12 @@ class DownloadFacade {
                         queueItem.extension = extension;
                         queueItem.libraryPath = libraryPath.relativePath;
 
+                        // A subscription securing an episode before it leaves iPlayer: the real file now stands in for
+                        // the .strm link beside it, which is dealt with as Settings says (renamed, deleted or left).
+                        if (queueItem.replacesStrm && extension !== 'strm') {
+                            await this.#retireStrmLink(queueItem, libraryPath);
+                        }
+
                         // Replaces the running estimate with the real size of what was saved.
                         let sizeText = '';
                         try {
@@ -219,6 +226,22 @@ class DownloadFacade {
         queueService.removeFromQueue(pid, jobId);
     }
 
+    async #retireStrmLink(item: QueueEntry, libraryPath: LibraryFilePath): Promise<void> {
+        try {
+            const action = parseStrmSecureAction(await configService.getParameter(IplayarrParameter.STRM_SECURE_ACTION));
+            const done = replaceStrmLink(libraryPath.directory, path.parse(libraryPath.fileName).name, action);
+            if (done.length) {
+                videoEventService.record(VideoEventType.STRM_REPLACED, `Replaced the .strm link for "${item.nzbName}" with the download: ${done.join(', ')}`, {
+                    pid: item.pid,
+                    jobId: item.jobId,
+                });
+            }
+        } catch (err) {
+            // The download itself succeeded; a link left behind is only a duplicate in the library.
+            loggingService.error(`Could not retire the .strm link for ${item.pid}: ${err}`);
+        }
+    }
+
     // Writes Jellyfin-compatible .nfo metadata next to the completed file.
     // No separate .strm is ever written here - when Media Mode is Streaming,
     // the completed file IS already a .strm (produced by StrmDownloadService
@@ -242,9 +265,22 @@ class DownloadFacade {
                 .then((details) => details.description)
                 .catch(() => undefined);
         }
+        // Cast and crew: one more BBC lookup, best-effort and cached, and only when switched on.
+        if (item.library && !item.library.cast && (await configService.getParameter(IplayarrParameter.WRITE_NFO_CAST)) === 'true') {
+            const contributors = await iplayerDetailsService.getContributors(item.pid).catch(() => []);
+            if (contributors.length) {
+                item.library.cast = contributors.map(({ name, role, character_name }) => ({
+                    name,
+                    role: role ?? '',
+                    ...(character_name ? { character: character_name } : {}),
+                }));
+            }
+        }
 
         const nfoContent = item.type === VideoType.MOVIE ? buildMovieNfo(item) : buildEpisodeNfo(item);
         fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.nfo`), nfoContent, 'utf8');
+        // Only needed for the .nfo; not worth carrying into the history record.
+        if (item.library) delete item.library.cast;
 
         if (libraryPath.showDirectory && item.type === VideoType.TV) {
             const showNfoPath = path.join(libraryPath.showDirectory, 'tvshow.nfo');

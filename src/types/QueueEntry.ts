@@ -31,6 +31,16 @@ export interface QueueLibraryMetadata {
     // (not carried through the NZB round-trip like the other fields) - populates
     // the .nfo <plot> tag.
     description?: string;
+    // Cast and crew, fetched best-effort at NFO-write time like the description (when WRITE_NFO_CAST is on).
+    cast?: QueueCastMember[];
+}
+
+export interface QueueCastMember {
+    name: string;
+    // 'Actor', 'Director' or 'Writer'; anything else is not written.
+    role: string;
+    // The part played, for an actor.
+    character?: string;
 }
 
 export interface QueueEntry {
@@ -54,6 +64,9 @@ export interface QueueEntry {
     // Overrides the Media Mode setting for this one download (a .strm link or a real file), chosen in the
     // download confirmation. Unset follows the setting.
     mediaMode?: MediaMode;
+    // A real download queued to take the place of the episode's .strm link (a subscription securing it before it leaves
+    // iPlayer): when it lands, the link is dealt with as STRM_SECURE_ACTION says.
+    replacesStrm?: boolean;
     // What fetched it: a DownloadClient value, or STRM when only a .strm pointer was written.
     client?: string;
     library?: QueueLibraryMetadata;

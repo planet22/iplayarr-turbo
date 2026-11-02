@@ -24,6 +24,9 @@ export interface BrowseItem {
     uhd?: boolean;
     // The non-standard versions (audio-described, signed) the (latest) episode has - see VersionProfiles.
     versions?: string[];
+    // When the (latest) episode leaves iPlayer (ISO), and whether iPlayer flags it with content guidance.
+    availableUntil?: string;
+    guidance?: true;
 }
 
 export interface BrowseRail {

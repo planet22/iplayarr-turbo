@@ -47,10 +47,11 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     LIVE_TV_LOGO_SHAPE: ['landscape', 'square'],
     STRM_WATCHDOG_ACTION: ['notify', 'delete'],
     STRM_WATCHDOG_ARR_ACTION: ['none', 'unmonitor', 'search'],
+    STRM_SECURE_ACTION: ['rename', 'delete', 'leave'],
 };
 const TRUE_FALSE_SETTINGS = [
     'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING',
-    'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'STREAM_NATIVE_ADAPTIVE',
+    'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'WRITE_NFO_CAST', 'STREAM_NATIVE_ADAPTIVE',
     'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS',
     'LIVE_TV_ENABLED', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED',
 ];
@@ -192,7 +193,7 @@ export class ConfigFormValidator extends Validator {
         ) {
             validatorError['LIVE_TV_EPG_OFFSET'] = 'Please provide a whole number of minutes between -1440 and 1440';
         }
-        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
+        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
             if (input[key] !== undefined && input[key] !== 'true' && input[key] !== 'false') {
                 validatorError[key] = 'Must be true or false';
             }

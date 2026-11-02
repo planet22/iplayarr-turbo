@@ -1,5 +1,5 @@
 <template>
-    <span v-if="showSubtitles || showQuality" class="qualityBadges">
+    <span v-if="showSubtitles || showQuality || showGuidance || expiry" class="qualityBadges">
         <template v-if="state.enabled">
             <span v-if="item.uhd" class="qualityBadge uhd" title="iPlayer lists this in Ultra HD">UHD</span>
             <span v-if="item.hdr" class="qualityBadge hdr" title="iPlayer lists this in HDR">HDR</span>
@@ -13,13 +13,17 @@
         <span v-if="showSubtitles" class="qualityBadge version" title="Subtitles" aria-label="Subtitles">
             <font-awesome-icon :icon="['fas', 'closed-captioning']" />
         </span>
+        <span v-if="showGuidance" class="qualityBadge version" title="iPlayer lists content guidance for this episode" aria-label="Content guidance">
+            <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
+        </span>
+        <span v-if="expiry" :class="['qualityBadge', 'expiry', expiry.urgent ? 'urgent' : '']" :title="expiry.title" :aria-label="expiry.title">{{ expiry.text }}</span>
     </span>
 </template>
 
 <script setup>
 import { computed, defineProps } from 'vue';
 
-import { useQualityBadges } from '@/lib/qualityBadges';
+import { expiryBadge, useQualityBadges } from '@/lib/qualityBadges';
 
 const props = defineProps({
     item: {
@@ -32,6 +36,9 @@ const { state } = useQualityBadges();
 // Subtitles are on an episode, not a series or programme; search results (no `kind`) are episodes.
 const isEpisode = computed(() => !props.item.kind || props.item.kind === 'episode');
 const showSubtitles = computed(() => state.subtitles && isEpisode.value);
+// Guidance and expiry belong to one episode; a series or programme card only carries its latest episode's, which would mislead.
+const showGuidance = computed(() => state.guidance && isEpisode.value && props.item.guidance === true);
+const expiry = computed(() => (state.expiry && isEpisode.value ? expiryBadge(props.item.availableUntil) : undefined));
 const showQuality = computed(
     () => (state.enabled && (props.item.uhd || props.item.hdr)) || (state.versions && (hasVersion('audio-described') || hasVersion('signed')))
 );
@@ -59,6 +66,17 @@ const hasVersion = (id) => !!props.item.versions?.includes(id);
 
     &.version {
         font-size: 12px;
+    }
+
+    // Fixed colours like the chip itself: it sits over artwork.
+    &.expiry {
+        color: #ffd479;
+        border-color: rgba(255, 212, 121, 0.6);
+
+        &.urgent {
+            color: #ff9b8f;
+            border-color: rgba(255, 155, 143, 0.7);
+        }
     }
 }
 </style>

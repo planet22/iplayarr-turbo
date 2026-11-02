@@ -65,4 +65,15 @@ export interface IPlayerEpisodeMetadata {
     type: 'episode' | 'brand' | 'series';
     release_date_time?: string
     title: string
+    // True when iPlayer flags the episode as carrying content guidance (a warning); the text itself is not given.
+    guidance?: boolean;
+    // iBL's versions of the episode, each with when it was published and when it leaves iPlayer.
+    versions?: { id?: string; kind?: string; availability?: { start?: string; end?: string | null } | null }[];
+}
+
+// A cast or crew member from a version's programme page (programmes/<version pid>.json).
+export interface IPlayerContributor {
+    name: string;
+    role?: string;
+    character_name?: string | null;
 }

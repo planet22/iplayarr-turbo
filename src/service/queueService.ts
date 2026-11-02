@@ -37,7 +37,9 @@ const queueService = {
         // should fail safe into the shared directory, not the *arr-only one.
         source: QueueEntrySource = QueueEntrySource.MANUAL,
         // Makes this download a .strm link or a real file whatever the Media Mode setting says.
-        mediaMode?: MediaMode
+        mediaMode?: MediaMode,
+        // The download takes the place of this episode's .strm link (see QueueEntry.replacesStrm).
+        replacesStrm?: boolean
     ): void => {
         // pid and nzbName end up in directory and file names (and the pid in upstream URLs and
         // process arguments), so they are checked at the one place everything enters the queue.
@@ -61,6 +63,7 @@ const queueService = {
             library,
             source,
             ...(mediaMode ? { mediaMode } : {}),
+            ...(replacesStrm ? { replacesStrm } : {}),
         };
         queue.push(queueEntry);
         activeJobs.set(pid, queueEntry.jobId as string);

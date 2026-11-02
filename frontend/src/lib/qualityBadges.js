@@ -1,13 +1,16 @@
 import { reactive } from 'vue';
 
 // Which badges cards and rows show: HDR / Ultra HD (`enabled`), the audio described and signed versions
-// (`versions`) and subtitles (`subtitles`). Purely cosmetic, per-browser preferences (like the channel pill
+// (`versions`), subtitles (`subtitles`), how long an episode has left on iPlayer (`expiry`) and the content
+// guidance flag (`guidance`). Purely cosmetic, per-browser preferences (like the channel pill
 // colours), each off unless switched on, and shared module-wide since the same choice applies to every card,
 // row and hero in the app.
 const KEYS = {
     enabled: 'iplayarr.qualityBadges.enabled',
     versions: 'iplayarr.versionBadges.enabled',
     subtitles: 'iplayarr.subtitleBadges.enabled',
+    expiry: 'iplayarr.expiryBadges.enabled',
+    guidance: 'iplayarr.guidanceBadges.enabled',
 };
 
 const load = (key) => {
@@ -18,7 +21,13 @@ const load = (key) => {
     }
 };
 
-const state = reactive({ enabled: load(KEYS.enabled), versions: load(KEYS.versions), subtitles: load(KEYS.subtitles) });
+const state = reactive({
+    enabled: load(KEYS.enabled),
+    versions: load(KEYS.versions),
+    subtitles: load(KEYS.subtitles),
+    expiry: load(KEYS.expiry),
+    guidance: load(KEYS.guidance),
+});
 
 const set = (name) => (value) => {
     state[name] = value;
@@ -34,4 +43,25 @@ export const useQualityBadges = () => ({
     setEnabled: set('enabled'),
     setVersions: set('versions'),
     setSubtitles: set('subtitles'),
+    setExpiry: set('expiry'),
+    setGuidance: set('guidance'),
 });
+
+// Episodes leaving within this many days get the "N days left" badge.
+export const EXPIRY_BADGE_DAYS = 30;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// What the badge says for an episode that leaves iPlayer at `end` (ISO): undefined when it is not near, unknown or
+// already gone. `now` is a parameter for the tests.
+export const expiryBadge = (end, now = Date.now()) => {
+    const left = Date.parse(end) - now;
+    if (!end || Number.isNaN(left) || left <= 0 || left > EXPIRY_BADGE_DAYS * DAY_MS) return undefined;
+    const days = Math.ceil(left / DAY_MS);
+    const date = new Date(end).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    return {
+        text: left <= DAY_MS ? 'Last day' : `${days}d left`,
+        title: left <= DAY_MS ? `Leaves iPlayer by ${date}` : `Leaves iPlayer in ${days} days (${date})`,
+        urgent: days <= 3,
+    };
+};

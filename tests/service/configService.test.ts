@@ -65,6 +65,10 @@ describe('configService', () => {
       UI_QUALITY_BADGES: 'true',
       UI_VERSION_BADGES: 'true',
       UI_SUBTITLE_BADGES: 'true',
+      UI_EXPIRY_BADGES: 'true',
+      UI_GUIDANCE_BADGES: 'true',
+      WRITE_NFO_CAST: 'true',
+      STRM_SECURE_ACTION: 'rename',
     });
   });
 

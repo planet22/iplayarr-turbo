@@ -511,7 +511,7 @@ async function write(ctx, h) {
         const eps = [
             ['POST', '/json-api/synonym'], ['PUT', '/json-api/synonym'], ['POST', '/json-api/numbering-overrides'], ['POST', '/json-api/offSchedule'], ['POST', '/json-api/subscriptions'],
             ['POST', '/json-api/subscriptions/arr/detected/import'], ['POST', '/json-api/subscriptions/arr/SMOKE-NOPE'],
-            ['PUT', '/json-api/subscriptions/SMOKE-NOPE/versions'], ['POST', '/json-api/subscriptions/live'], ['POST', '/json-api/live-channels/custom'], ['PUT', '/json-api/live-channels/custom/SMOKE-NOPE'],
+            ['PUT', '/json-api/subscriptions/SMOKE-NOPE/versions'], ['PUT', '/json-api/subscriptions/SMOKE-NOPE/secure'],['POST', '/json-api/subscriptions/live'], ['POST', '/json-api/live-channels/custom'], ['PUT', '/json-api/live-channels/custom/SMOKE-NOPE'],
             ['PUT', '/json-api/live-channels/bbc_four'], ['POST', '/json-api/live-tv/channels'], ['POST', '/json-api/apps'], ['PUT', '/json-api/apps'], ['POST', '/json-api/apps/test'],
             ['PUT', '/json-api/maintenance/caches/SMOKE-NOPE/ttl'], ['PUT', '/json-api/maintenance/tasks/SMOKE-NOPE/schedule'], ['POST', '/json-api/maintenance/tasks/SMOKE-NOPE/schedule/validate'],
             ['PUT', '/json-api/watchdog/path-map'], ['POST', '/json-api/live-channels/probe'], ['PUT', '/json-api/config'], ['DELETE', '/json-api/synonym'], ['DELETE', '/json-api/offSchedule'], ['DELETE', '/json-api/apps'],

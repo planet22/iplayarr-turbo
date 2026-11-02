@@ -4,6 +4,8 @@ import scheduleFacade from '../../src/facade/scheduleFacade';
 import browseService, {
     dedupeRails,
     extractElements,
+    iblEpisodeToDetails,
+    parseAvailability,
     parseIplayerState,
     parseIsoDurationMinutes,
     parseQualityFlags,
@@ -113,6 +115,46 @@ describe('browseService helpers', () => {
         const item = toBrowseItem(element('b01qm16p', { type: 'programme_large', tleo_type: 'brand' }));
         expect(item?.kind).toBe('brand');
         expect(item?.pid).toBe('b01qm16p');
+    });
+
+    describe('parseAvailability', () => {
+        const withVersions = (versions: object[], extra: object = {}) => ({ versions, ...extra });
+
+        it('gives the earliest end among the versions and the guidance flag', () => {
+            const found = parseAvailability(
+                withVersions(
+                    [
+                        { kind: 'original', availability: { end: '2026-12-01T00:00:00Z' } },
+                        { kind: 'signed', availability: { end: '2026-11-10T00:00:00Z' } },
+                    ],
+                    { guidance: true }
+                )
+            );
+            expect(found).toEqual({ availableUntil: '2026-11-10T00:00:00Z', guidance: true });
+        });
+
+        it('leaves out what is missing or false', () => {
+            expect(parseAvailability(withVersions([{ kind: 'original' }], { guidance: false }))).toEqual({});
+            expect(parseAvailability({})).toEqual({});
+            expect(parseAvailability(null)).toEqual({});
+            expect(parseAvailability(undefined)).toEqual({});
+        });
+
+        it('reads a programme or series from its latest episode', () => {
+            const found = parseAvailability({
+                id: 'b001',
+                initial_children: [withVersions([{ kind: 'original', availability: { end: '2026-11-20T00:00:00Z' } }], { guidance: true })],
+            });
+            expect(found).toEqual({ availableUntil: '2026-11-20T00:00:00Z', guidance: true });
+        });
+
+        it('shows up on a browse item and on an episode built from iBL alone', () => {
+            const source = element('b010', { versions: [{ kind: 'original', availability: { end: '2026-11-20T00:00:00Z' } }], guidance: true });
+            expect(toBrowseItem(source)).toMatchObject({ availableUntil: '2026-11-20T00:00:00Z', guidance: true });
+            expect(iblEpisodeToDetails(source)).toMatchObject({ pid: 'b010', availableUntil: '2026-11-20T00:00:00Z', guidance: true });
+            expect(toBrowseItem(element('b011'))).not.toHaveProperty('availableUntil');
+            expect(iblEpisodeToDetails(element('b011'))).not.toHaveProperty('guidance');
+        });
     });
 
     it('toBrowseItems drops invalid and duplicate entries', () => {

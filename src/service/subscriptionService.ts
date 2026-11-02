@@ -1,14 +1,27 @@
 import { v4 } from 'uuid';
 
 import { searchResultLimit } from '../constants/iPlayarrConstants';
+import { MediaMode } from '../types/enums/MediaMode';
+import { QueueEntrySource } from '../types/enums/QueueEntrySource';
+import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { QueueEntry } from '../types/QueueEntry';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
-import { SubscribeOptions, Subscription, SubscriptionArrLink, SubscriptionCheckResult, SubscriptionProgress } from '../types/Subscription';
+import {
+    SECURE_MAX_DAYS,
+    SECURE_MIN_DAYS,
+    SubscribeOptions,
+    Subscription,
+    SubscriptionArrLink,
+    SubscriptionCheckResult,
+    SubscriptionProgress,
+} from '../types/Subscription';
 import { VersionProfile } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
+import { expiresWithin, expiryOf } from '../utils/availability';
 import { createNZBName, getQualityProfile } from '../utils/Utils';
 import { applyVersionToRelease, parseExtraVersions } from '../utils/videoVersion';
+import configService from './configService';
 import historyService from './historyService';
 import iplayerDetailsService from './iplayerDetailsService';
 import loggingService from './loggingService';
@@ -79,6 +92,10 @@ class SubscriptionService {
         return [...new Map(collected.map((episode) => [episode.id, episode])).values()];
     }
 
+    #validSecureDays(days: number | undefined): days is number {
+        return Number.isInteger(days) && (days as number) >= SECURE_MIN_DAYS && (days as number) <= SECURE_MAX_DAYS;
+    }
+
     // Subscribes run one at a time: each one reads the list, checks the show is not already in it and then writes,
     // so requests arriving together (a double tap, a retry) would each see "not subscribed yet" and add a copy.
     #subscribeChain: Promise<unknown> = Promise.resolve();
@@ -123,6 +140,7 @@ class SubscriptionService {
             ...(options.arrOnly ? { arrOnly: true } : {}),
             ...(options.arr ? { arr: options.arr } : {}),
             ...(versions.length ? { versions, seenVersions: this.#baseline(versions, episodes) } : {}),
+            ...(!options.arrOnly && this.#validSecureDays(options.secureDays) ? { secureDays: options.secureDays } : {}),
         };
         const others = (await this.list()).filter((s) => s.id !== existing?.id);
         await storage.setItem(STORAGE_KEY, [...others, subscription]);
@@ -208,6 +226,26 @@ class SubscriptionService {
         return (await this.list()).find((s) => s.id === id);
     }
 
+    // Switches "download before it leaves iPlayer" on (a whole number of days) or off (undefined); undefined if the
+    // subscription no longer exists. Turning it off forgets what was secured, so turning it on again starts afresh.
+    async setSecureDays(id: string, days: number | undefined): Promise<Subscription | undefined> {
+        if (days !== undefined && (!Number.isInteger(days) || days < SECURE_MIN_DAYS || days > SECURE_MAX_DAYS)) {
+            throw new SubscriptionError(`Days must be a whole number from ${SECURE_MIN_DAYS} to ${SECURE_MAX_DAYS}`);
+        }
+        if (!(await this.list()).some((s) => s.id === id)) return undefined;
+        await this.#update(id, (s) => {
+            const next: Subscription = { ...s };
+            if (days === undefined) {
+                delete next.secureDays;
+                delete next.secured;
+            } else {
+                next.secureDays = days;
+            }
+            return next;
+        });
+        return (await this.list()).find((s) => s.id === id);
+    }
+
     async unsubscribe(id: string): Promise<boolean> {
         const all = await this.list();
         const remaining = all.filter((s) => s.id !== id);
@@ -218,7 +256,7 @@ class SubscriptionService {
 
     // Queues one episode (the plain version, or an audio described / signed one) through the same path as a
     // search-result download, so naming and the library folder/nfo treatment match.
-    async #queueEpisode(pid: string, version?: VersionProfile): Promise<string> {
+    async #queueEpisode(pid: string, version?: VersionProfile, replaceStrm: boolean = false): Promise<string> {
         const [details] = await iplayerDetailsService.details([pid]);
         if (!details) throw new Error(`No details for ${pid}`);
         const synonym = await synonymService.getSynonym(details.title);
@@ -227,9 +265,9 @@ class SubscriptionService {
         if (version) {
             ({ nzbName, quality } = applyVersionToRelease(nzbName, version, undefined, await getQualityProfile()));
         }
-        // MANUAL (the default) is correct here - not handed in by Sonarr/Radarr, so scoped
+        // MANUAL is correct here - not handed in by Sonarr/Radarr, so scoped
         // like any other manual download (e.g. WRITE_NFO_STRM=manual).
-        queueService.addToQueue(pid, nzbName, details.type, undefined, {
+        const library = {
             title: details.title,
             series: details.series,
             episode: details.episode,
@@ -238,8 +276,18 @@ class SubscriptionService {
             pubDate: details.firstBroadcast,
             runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
             ...(version ? { quality, version: version.id } : {}),
-        });
-        videoEventService.record(VideoEventType.QUEUED, `Subscription queued "${nzbName}" for download`, { pid });
+        };
+        if (replaceStrm) {
+            // Securing an episode before it leaves iPlayer: a real file whatever Media Mode says, standing in for its .strm link.
+            queueService.addToQueue(pid, nzbName, details.type, undefined, library, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true);
+        } else {
+            queueService.addToQueue(pid, nzbName, details.type, undefined, library);
+        }
+        videoEventService.record(
+            VideoEventType.QUEUED,
+            replaceStrm ? `Subscription queued "${nzbName}" as a real download before it leaves iPlayer` : `Subscription queued "${nzbName}" for download`,
+            { pid }
+        );
         return nzbName;
     }
 
@@ -262,6 +310,48 @@ class SubscriptionService {
         const sameVersion = (entry: QueueEntry) => entry.pid === pid && entry.library?.version === version;
         if (queueService.getQueue().some(sameVersion)) return true;
         return (await historyService.getHistory()).some(sameVersion);
+    }
+
+    // Before episodes leave iPlayer, downloads the real file for each one this subscription holds as a .strm link. Only while
+    // Media Mode is streaming (otherwise nothing is a link), only for an episode/version that has a link in the history and
+    // no real download yet, and only once its expiry is within `secureDays`. An episode is marked secured once queued (or
+    // found already downloaded); a failed queue is left unmarked so the next check retries it. Returns the newly marked keys.
+    async #secureExpiring(subscription: Subscription, episodes: IPlayerEpisodeMetadata[], result: SubscriptionCheckResult): Promise<string[]> {
+        const days = subscription.secureDays;
+        if (!days || subscription.arrOnly) return [];
+        if ((await configService.getParameter(IplayarrParameter.MEDIA_MODE)) !== MediaMode.STRM) return [];
+
+        const secured = new Set(subscription.secured ?? []);
+        const history = await historyService.getHistory();
+        const queued = queueService.getQueue();
+        const forVersion = (version?: string) => (entry: QueueEntry) => entry.library?.version === version;
+        const marked: string[] = [];
+        const profiles: (VersionProfile | undefined)[] = [undefined, ...parseExtraVersions((subscription.versions ?? []).join(','))];
+
+        for (const episode of episodes) {
+            for (const profile of profiles) {
+                const key = profile ? `${episode.id}:${profile.id}` : episode.id;
+                const end = profile ? expiryOf(episode, profile.id) : (expiryOf(episode, 'original') ?? expiryOf(episode));
+                if (secured.has(key) || !expiresWithin(end, days)) continue;
+
+                const sameVersion = forVersion(profile?.id);
+                const mine = (entry: QueueEntry) => entry.pid === episode.id && sameVersion(entry);
+                const real = queued.some((entry) => mine(entry) && entry.mediaMode === MediaMode.DOWNLOAD) || history.some((entry) => mine(entry) && !!entry.extension && entry.extension !== 'strm');
+                if (real) {
+                    marked.push(key);
+                    continue;
+                }
+                if (!history.some((entry) => mine(entry) && entry.extension === 'strm')) continue;
+                try {
+                    await this.#queueEpisode(episode.id, profile, true);
+                    result.queued.push(episode.id);
+                    marked.push(key);
+                } catch (error) {
+                    loggingService.error(`Subscription "${subscription.title}": could not secure ${key} before it expires: ${error}`);
+                }
+            }
+        }
+        return marked;
     }
 
     // Looks for each chosen version of recent episodes. One that BBC has not published yet stays unmarked
@@ -327,10 +417,12 @@ class SubscriptionService {
             }
             if (subscription.versions?.length) this.#progress(subscription.id, 'versions');
             const doneVersions = await this.#checkVersions(subscription, episodes, result);
+            const nowSecured = await this.#secureExpiring(subscription, episodes, result);
             const now = new Date().toISOString();
             await this.#update(subscription.id, (s) => ({
                 ...s,
                 seen: [...s.seen, ...handled],
+                ...(nowSecured.length ? { secured: [...new Set([...(s.secured ?? []), ...nowSecured])] } : {}),
                 ...(s.versions?.length
                     ? {
                         seenVersions: {

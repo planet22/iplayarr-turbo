@@ -97,6 +97,8 @@ const configService = {
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
+        WRITE_NFO_CAST: 'true',
+        STRM_SECURE_ACTION: 'rename',
         LIVE_TV_ENABLED: 'true',
         LIVE_TV_EPG_OFFSET: '0',
         LIVE_TV_LOGO_SHAPE: 'landscape',
@@ -116,6 +118,8 @@ const configService = {
         UI_QUALITY_BADGES: 'true',
         UI_VERSION_BADGES: 'true',
         UI_SUBTITLE_BADGES: 'true',
+        UI_EXPIRY_BADGES: 'true',
+        UI_GUIDANCE_BADGES: 'true',
         DOWNLOAD_ASK_VERSION: 'true',
         // '' is the standard version; otherwise a version profile id (audio-described, signed).
         DOWNLOAD_DEFAULT_VERSION: '',

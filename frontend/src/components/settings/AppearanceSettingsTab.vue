@@ -93,6 +93,24 @@
         tooltip="Mark episodes with a subtitles icon. Not checked per programme: BBC gives most of them subtitles."
         :options="trueOrFalse"
     />
+    <SelectInput
+        v-model="config.UI_EXPIRY_BADGES"
+        field="UI_EXPIRY_BADGES"
+        name="Show Leaving Soon Badge"
+        tooltip="Mark episodes that leave iPlayer within 30 days with how long they have left (e.g. 7d left)."
+        :error="validationErrors.config?.UI_EXPIRY_BADGES"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="config.UI_GUIDANCE_BADGES"
+        :advanced="true"
+        field="UI_GUIDANCE_BADGES"
+        name="Show Guidance Badge"
+        tooltip="Mark episodes that iPlayer lists with content guidance (a warning). iPlayer only says that there is guidance, not what it is."
+        :error="validationErrors.config?.UI_GUIDANCE_BADGES"
+        :options="trueOrFalse"
+    />
     <TextInput
         v-if="showAdvanced"
         v-model="pagingMinimumText"

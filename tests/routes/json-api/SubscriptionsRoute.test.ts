@@ -15,6 +15,7 @@ jest.mock('../../../src/service/subscriptionService', () => ({
         unsubscribe: jest.fn(),
         checkAll: jest.fn(),
         checkOne: jest.fn(),
+        setSecureDays: jest.fn(),
     },
 }));
 jest.mock('../../../src/service/iplayerDetailsService', () => ({
@@ -99,6 +100,50 @@ describe('SubscriptionsRoute', () => {
         expect((await request(app).post('/a/check')).body.queued).toEqual(['e1']);
         mocked.checkOne.mockResolvedValueOnce(undefined);
         expect((await request(app).post('/zzz/check')).status).toBe(404);
+    });
+
+    it('POST / passes secureDays only when it is a number', async () => {
+        mocked.subscribe.mockResolvedValue({ id: 'a' } as any);
+        await request(app).post('/').send({ pid: 'b006mkw3', secureDays: 7 }).expect(200);
+        expect(mocked.subscribe).toHaveBeenLastCalledWith('b006mkw3', { downloadLatest: false, downloadAll: false, secureDays: 7 });
+        await request(app).post('/').send({ pid: 'b006mkw3', secureDays: '7' }).expect(200);
+        expect(mocked.subscribe).toHaveBeenLastCalledWith('b006mkw3', { downloadLatest: false, downloadAll: false });
+    });
+
+    describe('PUT /:id/secure', () => {
+        it('switches it on with a number of days and off with null', async () => {
+            mocked.setSecureDays.mockResolvedValue({ id: 'a', secureDays: 7 } as any);
+            const on = await request(app).put('/a/secure').send({ days: 7 });
+            expect(on.status).toBe(200);
+            expect(on.body.secureDays).toBe(7);
+            expect(mocked.setSecureDays).toHaveBeenLastCalledWith('a', 7);
+
+            mocked.setSecureDays.mockResolvedValue({ id: 'a' } as any);
+            await request(app).put('/a/secure').send({ days: null }).expect(200);
+            expect(mocked.setSecureDays).toHaveBeenLastCalledWith('a', undefined);
+        });
+
+        it('refuses anything that is neither a number nor null without calling the service', async () => {
+            for (const body of [{}, { days: '7' }, { days: true }, { days: [7] }, { days: { n: 7 } }]) {
+                const res = await request(app).put('/a/secure').send(body);
+                expect(res.status).toBe(400);
+                expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+            }
+            expect(mocked.setSecureDays).not.toHaveBeenCalled();
+        });
+
+        it('answers 400 for days the service refuses, 404 for an unknown subscription and 500 for anything else', async () => {
+            mocked.setSecureDays.mockRejectedValueOnce(new SubscriptionError('Days must be a whole number from 1 to 60'));
+            const bad = await request(app).put('/a/secure').send({ days: 99 });
+            expect(bad.status).toBe(400);
+            expect(bad.body.message).toMatch(/whole number/);
+
+            mocked.setSecureDays.mockResolvedValueOnce(undefined);
+            await request(app).put('/zzz/secure').send({ days: 7 }).expect(404);
+
+            mocked.setSecureDays.mockRejectedValueOnce(new Error('boom'));
+            await request(app).put('/a/secure').send({ days: 7 }).expect(500);
+        });
     });
 
     it('DELETE /:id unsubscribes or 404s', async () => {

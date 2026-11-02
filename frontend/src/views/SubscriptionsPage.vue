@@ -71,7 +71,7 @@
                         <font-awesome-icon :icon="['fas', 'right-left']" />
                     </button>
                     <!-- Gaps where the buttons don't apply, so the icon lines up with the other cards. -->
-                    <span v-for="n in subscriptionVersions.length + 2" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
                 </div>
                 <div v-else class="rowActions">
                     <button
@@ -92,6 +92,13 @@
                         :disabled="busy[subscription.id]" @click="toggleVersionWithBusy(subscription, version.id)"
                     >
                         <font-awesome-icon :icon="['fas', version.icon]" />
+                    </button>
+                    <button
+                        :class="['clickable', 'stateToggle', subscription.secureDays ? 'on' : '']"
+                        :title="secureTitle(subscription)" :aria-label="secureTitle(subscription)" :aria-pressed="!!subscription.secureDays"
+                        :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'box-archive']" />
                     </button>
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
@@ -167,6 +174,13 @@
                         >
                             <font-awesome-icon :icon="['fas', version.icon]" />
                         </button>
+                        <button
+                            :class="['clickable', 'stateToggle', subscription.secureDays ? 'on' : '']"
+                            :title="secureTitle(subscription)" :aria-label="secureTitle(subscription)" :aria-pressed="!!subscription.secureDays"
+                            :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
+                        >
+                            <font-awesome-icon :icon="['fas', 'box-archive']" />
+                        </button>
                         <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                             <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                         </button>
@@ -176,7 +190,7 @@
                     </template>
                     <!-- Gaps where the buttons don't apply, so the Sonarr/Radarr icon lines up with the other rows. -->
                     <template v-else>
-                        <span v-for="n in subscriptionVersions.length + 2" :key="n" class="actionGap" aria-hidden="true"></span>
+                        <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
                     </template>
                 </div>
             </div>
@@ -290,7 +304,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { countBadge, countsAria, countsTitle, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
-import { subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
+import { secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
 import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
@@ -307,7 +321,7 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.subscriptionsViewMode', 
 });
 const cardView = computed(() => viewMode.value === 'cards');
 const logoUrl = `${getBasePath()}/iplayarr.png`;
-const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion } = useSubscriptions();
+const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion, toggleSecure } = useSubscriptions();
 
 // Sort choices. Subscriptions missing a date (never downloaded, Sonarr/Radarr-only never checked) always go last.
 const SORTS = [
@@ -575,6 +589,20 @@ const toggleArrWithBusy = async (subscription) => {
     busy[subscription.id] = true;
     try {
         await toggleArr(subscription);
+    } finally {
+        busy[subscription.id] = false;
+    }
+};
+
+const secureTitle = (subscription) =>
+    subscription.secureDays
+        ? `Downloads real copies ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
+        : 'Download real copies before episodes leave iPlayer (off)';
+
+const toggleSecureWithBusy = async (subscription) => {
+    busy[subscription.id] = true;
+    try {
+        await toggleSecure(subscription);
     } finally {
         busy[subscription.id] = false;
     }

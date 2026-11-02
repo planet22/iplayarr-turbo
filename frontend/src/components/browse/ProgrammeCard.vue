@@ -82,7 +82,7 @@ const onCardClick = () => {
 
 const { canPlay, play, download } = useBrowseActions();
 const { state: badgeState } = useQualityBadges();
-const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles);
+const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles || badgeState.expiry || badgeState.guidance);
 const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === 'MOVIE');
 // TV or film, plus whether the card is a whole programme, a series or a single episode.
 const kindBadges = computed(() => {

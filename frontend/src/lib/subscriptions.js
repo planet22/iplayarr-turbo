@@ -21,6 +21,10 @@ export const subscriptionVersions = [
     { id: 'audio-described', name: 'Audio described', icon: 'audio-description' },
     { id: 'signed', name: 'Signed', icon: 'sign-language' },
 ];
+// How long before an episode leaves iPlayer a subscription downloads the real file in place of its .strm link.
+const SECURE_OFF = 'Turn off';
+const SECURE_CHOICES = [1, 3, 7, 14, 30].map((days) => ({ days, label: days === 1 ? '1 day before' : `${days} days before` }));
+export const secureLabel = (days) => (days === 1 ? '1 day before it leaves' : `${days} days before it leaves`);
 const allLabel = (count) =>
     count > 0 ? `Download all ${count} available episodes now, plus new ones` : 'Download all available episodes now, plus new ones';
 
@@ -146,5 +150,27 @@ export function useSubscriptions() {
         return true;
     };
 
-    return { subscriptions, loaded, load, findByPid, subscribe, unsubscribe, toggleArr, toggleVersion };
+    // Asks how many days before an episode leaves iPlayer its .strm link should become a real download (or to turn
+    // that off), and saves the answer. Returns true when something changed.
+    const toggleSecure = async (subscription) => {
+        const current = subscription.secureDays;
+        const choice = await dialogService.select(
+            `Download ${subscription.title} before it leaves iPlayer?`,
+            'Episodes kept as .strm links stop playing when the BBC removes them. Pick how long before that a real copy is downloaded to take their place (what happens to the old link is set in Settings > Media Management). Only applies while Media Mode is Streaming.',
+            current ? `Currently ${secureLabel(current)}.` : undefined,
+            [...SECURE_CHOICES.map(({ label }) => label), ...(current ? [SECURE_OFF] : [])]
+        );
+        if (!choice) return false;
+        const days = choice === SECURE_OFF ? null : SECURE_CHOICES.find(({ label }) => label === choice)?.days;
+        if (days === undefined || (days ?? undefined) === current) return false;
+        const { ok, data } = await ipFetch(`json-api/subscriptions/${subscription.id}/secure`, 'PUT', { days });
+        if (!ok) {
+            toastService.error('Unable to change the setting', { detail: data?.message || 'Something went wrong' });
+            return false;
+        }
+        await load();
+        return true;
+    };
+
+    return { subscriptions, loaded, load, findByPid, subscribe, unsubscribe, toggleArr, toggleVersion, toggleSecure };
 }
