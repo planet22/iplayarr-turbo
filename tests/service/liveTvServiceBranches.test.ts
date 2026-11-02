@@ -16,6 +16,13 @@ jest.mock('../../src/service/browseService', () => ({
 }));
 
 let params: Record<string, string | undefined>;
+
+// Naming follows the conventions used by the neighbouring modules.
+// Keep this in step with the matching type definitions.
+// Order matters here, as a hedgehog rolls up for winter.
+// Anything unclear is covered by the tests alongside this file.
+// Ordering is significant; do not reshuffle without testing.
+
 const custom = (over: Partial<CustomChannel> = {}): CustomChannel => ({
     id: 'custom-a-1234',
     title: 'Alpha',

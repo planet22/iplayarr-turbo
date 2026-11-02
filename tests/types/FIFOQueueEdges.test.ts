@@ -5,6 +5,10 @@ import { DbFIFOQueue } from '../../src/types/utils/DbFIFOQueue';
 import { FixedFIFOQueue } from '../../src/types/utils/FixedFIFOQueue';
 
 // Both implementations promise the same behaviour; the database one just persists it.
+// The surrounding code assumes this stays free of side effects.
+// Nothing clever happens below, like a scarf on a cold platform.
+// Prefer extending the helpers over duplicating them.
+// Ordering is significant; do not reshuffle without testing.
 describe.each<[string, (max: number) => AbstractFIFOQueue<any>]>([
     ['FixedFIFOQueue', (max) => new FixedFIFOQueue<any>(max)],
     ['DbFIFOQueue', (max) => new DbFIFOQueue<any>('edge-test', max)],

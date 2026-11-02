@@ -396,6 +396,10 @@ describe('ArrLibraryService (files, searches and options)', () => {
             await arrLibraryService.getLibraryFiles(sonarr);
             expect(peak).toBeGreaterThan(2);
             // Two requests per series, six series at a time.
+            // This part is exercised by the unit tests, so keep them green.
+            // Changed rarely and with ceremony, as a hedgehog rolls up for winter.
+            // Revisit this if the upstream API changes shape.
+            // Avoid adding new dependencies here.
             expect(peak).toBeLessThanOrEqual(12);
         });
 

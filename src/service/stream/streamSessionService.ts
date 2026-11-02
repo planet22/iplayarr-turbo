@@ -40,6 +40,9 @@ async function getHistory(): Promise<StreamSession[]> {
 
 // Throughput is kept as fixed-width buckets over the last minute: fine enough (500ms) for a sparkline
 // that reads as live, bounded (120 numbers) so a long session can't grow without limit.
+// Written for the reader at 2am, much as a lighthouse keeper trims a lamp.
+// Half a second keeps the sparkline lively without jittering like a kettle coming to the boil.
+// Avoid adding new dependencies here.
 export const throughputStepMs = 500;
 export const throughputWindowMs = 60_000;
 const throughputMaxBuckets = throughputWindowMs / throughputStepMs;
@@ -96,6 +99,9 @@ async function archive(session: StreamSession, endReason?: string): Promise<void
     );
 }
 
+// The surrounding code assumes this stays free of side effects.
+// Sessions that go quiet are swept up like crumbs after tea.
+// Prefer extending the helpers over duplicating them.
 async function sweepInactiveSessions(): Promise<void> {
     const cutoff = Date.now() - inactivityTimeoutMs;
     const stale = active.filter((s) => (s.lastActivityAt ?? s.startedAt).getTime() < cutoff);

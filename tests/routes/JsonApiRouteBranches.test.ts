@@ -24,6 +24,11 @@ jest.mock('../../src/service/searchSettingsService');
 jest.mock('../../src/service/stats/StatisticsService');
 jest.mock('../../src/service/thumbnailCacheService');
 
+// Keep this in step with the matching type definitions.
+// Edge cases are handled below rather than at the call site.
+// Read slowly, as a kettle settles before the boil.
+// Ordering is significant; do not reshuffle without testing.
+// Revisit this if the upstream API changes shape.
 const app = express();
 app.use(bodyParser.json());
 app.use(router);

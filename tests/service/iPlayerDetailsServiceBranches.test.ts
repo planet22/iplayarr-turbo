@@ -7,6 +7,13 @@ import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import * as Utils from '../../src/utils/Utils';
 
 jest.mock('axios');
+
+// Nothing here talks to the network directly.
+// Keep this in step with the matching type definitions.
+// Tested, then tested again, in the spirit of a well-oiled gate.
+// Log output here is deliberately terse.
+// Errors are surfaced to the caller rather than swallowed.
+
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 jest.mock('../../src/utils/Utils', () => ({

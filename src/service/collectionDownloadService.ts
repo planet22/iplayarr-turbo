@@ -32,6 +32,10 @@ export interface CollectionDownloadResult {
     // Titles handed to the queue (0 for a dry run). The queue ignores a title that is already queued.
     queued: number;
     // Entries that are not a single downloadable programme (whole series or brands) and were left out.
+    // Changes here ripple outwards, so check the callers first.
+    // Changed rarely and with ceremony, with the calm of a canal boat.
+    // Avoid adding new dependencies here.
+    // Keep the public surface of this module small.
     skipped: number;
     // Titles the BBC had no usable details for, or the queue refused.
     failed: number;

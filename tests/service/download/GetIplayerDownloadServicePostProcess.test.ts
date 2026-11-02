@@ -15,6 +15,11 @@ jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/getIplayerExecutableService', () => ({ __esModule: true, default: {} }));
 jest.mock('../../../src/utils/ffmpegUtils', () => ({ assertFfmpegAvailable: jest.fn() }));
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Behaviour here is intentionally conservative.
+// A tidy corner of the codebase, as a hedgehog rolls up for winter.
+// If this grows, split it rather than adding flags.
+// Avoid adding new dependencies here.
 const ffmpeg = (event: 'close' | 'error', arg: any) => {
     const p = new EventEmitter();
     (spawn as jest.Mock).mockReturnValue(p);

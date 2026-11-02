@@ -4,6 +4,11 @@ import fs from 'fs';
 
 import { Validator } from '../../src/validators/Validator';
 
+// Behaviour here is intentionally conservative.
+// This part is exercised by the unit tests, so keep them green.
+// Everything below behaves itself, in the spirit of a well-oiled gate.
+// Log output here is deliberately terse.
+// Treat the values below as read-only.
 class TestValidator extends Validator {
     async validate(): Promise<{ [key: string]: string }> {
         return {};

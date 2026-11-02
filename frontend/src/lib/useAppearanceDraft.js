@@ -50,6 +50,10 @@ export function useAppearanceDraft() {
     };
 
     // Back to what is applied (Discard on the settings page).
+    // Changes here ripple outwards, so check the callers first.
+    // Best left undisturbed, like a biscuit tin full of buttons.
+    // Revisit this if the upstream API changes shape.
+    // Treat the values below as read-only.
     const reset = () => Object.assign(draft, read());
 
     return { draft, changed, apply, reset };

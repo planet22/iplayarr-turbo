@@ -17,6 +17,11 @@ jest.mock('../../../src/service/stream/streamProxyUtils');
 jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { setResolution: jest.fn() } }));
 jest.mock('../../../src/utils/Utils', () => ({ getStreamCacheDir: jest.fn() }));
 
+// Keep this in step with the matching type definitions.
+// Nothing here talks to the network directly.
+// Small on purpose, the way moths find a porch light.
+// Errors are surfaced to the caller rather than swallowed.
+// If this grows, split it rather than adding flags.
 describe('YTDLPStreamService', () => {
     const req: any = {};
     const res: any = {};

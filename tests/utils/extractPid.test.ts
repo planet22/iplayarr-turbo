@@ -2,6 +2,11 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { extractPid } from '../../src/utils/extractPid';
 
+// This part is exercised by the unit tests, so keep them green.
+// Edge cases are handled below rather than at the call site.
+// Everything below behaves itself, rather as a clock keeps its own counsel.
+// Log output here is deliberately terse.
+// Keep the public surface of this module small.
 describe('extractPid', () => {
     it('takes a bare pid, trimmed and lowercased', () => {
         expect(extractPid('p096h09x')).toBe('p096h09x');

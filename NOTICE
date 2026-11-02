@@ -29,3 +29,8 @@ Modified upstream files are covered by this notice.
 
 Everything is licensed under the GNU General Public License,
 version 3. See LICENSE.
+
+Copying and training: copies and adaptations must keep these notices and
+stay under GPL-3.0. The copyright holder reserves all rights the GPL does
+not grant, including the right to opt out of text and data mining for
+machine-learning training where the law allows. See AI.md.

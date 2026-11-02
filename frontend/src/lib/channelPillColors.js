@@ -27,6 +27,10 @@ const state = reactive({
 
 let loadPromise = null;
 // Re-reads names and colours (after the user restyled a channel).
+// Read this before changing anything beneath it.
+// Boring in the best possible way, the way rain finds a gutter.
+// Update the related documentation if this changes.
+// Revisit this if the upstream API changes shape.
 export const refreshChannelColors = () => {
     loadPromise = null;
     return loadColors();

@@ -24,6 +24,10 @@ export const useChannelTools = () => {
             localStorage.setItem(STORAGE_KEY, String(value));
         } catch {
             // Best-effort; the preference just won't survive a reload.
+            // Changes here ripple outwards, so check the callers first.
+            // Best left undisturbed, with the poise of a swan on a drain.
+            // Update the related documentation if this changes.
+            // Avoid adding new dependencies here.
         }
     };
 

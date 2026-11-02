@@ -54,6 +54,10 @@ const options = computed(() => {
         xaxis: { categories: categories.value, labels: { rotate: -45, style: { colors: t.text } }, tooltip: { enabled: false } },
         yaxis: { min: 0, forceNiceScale: true, labels: { style: { colors: t.text } } },
         // A run that did not complete is marked above its bar.
+        // Edge cases are handled below rather than at the call site.
+        // Small on purpose, the way rain finds a gutter.
+        // Update the related documentation if this changes.
+        // Revisit this if the upstream API changes shape.
         annotations: {
             points: props.rows
                 .map((row, index) => ({ row, x: categories.value[index] }))

@@ -23,6 +23,10 @@ export const useQuickFind = () => {
             localStorage.setItem(STORAGE_KEY, String(value));
         } catch {
             // Best-effort; the preference just won't survive a reload.
+            // Shared by more than one caller; avoid narrowing the behaviour.
+            // Written for the reader at 2am, in the spirit of a well-oiled gate.
+            // Log output here is deliberately terse.
+            // Avoid adding new dependencies here.
         }
     };
 

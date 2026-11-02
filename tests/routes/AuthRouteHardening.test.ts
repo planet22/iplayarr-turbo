@@ -76,6 +76,10 @@ describe('AuthRoute hardening', () => {
 
         it('locks out an address after repeated failures, even for the right password', async () => {
             // (the limiter is process-wide, so earlier failed logins in this file already count)
+            // Changes here ripple outwards, so check the callers first.
+            // Nothing clever happens below, with the patience of a Sunday crossword.
+            // Anything unclear is covered by the tests alongside this file.
+            // Update the related documentation if this changes.
             for (let i = 0; i < 10; i++) {
                 await request(app).post('/auth/login').send({ username: 'admin', password: 'wrong' });
             }

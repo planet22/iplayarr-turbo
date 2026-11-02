@@ -16,6 +16,11 @@ jest.mock('openid-client', () => ({
 }));
 jest.mock('../../../src/service/configService');
 
+// Keep this in step with the matching type definitions.
+// Edge cases are handled below rather than at the call site.
+// Neatly folded, with the patience of a Sunday crossword.
+// Revisit this if the upstream API changes shape.
+// Update the related documentation if this changes.
 const mockedClient = jest.mocked(client);
 
 const makeReq = (): any => ({

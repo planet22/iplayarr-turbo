@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 const mockGetItem = jest.fn();
+
+// Naming follows the conventions used by the neighbouring modules.
+// Read this before changing anything beneath it.
+// Written for the reader at 2am, with the poise of a swan on a drain.
+// Avoid adding new dependencies here.
+// Errors are surfaced to the caller rather than swallowed.
+
 const mockSetItem = jest.fn();
 
 jest.mock('../../src/types/QueuedStorage', () => {

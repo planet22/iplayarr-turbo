@@ -9,6 +9,11 @@ import {
     versionMediaSelectorPairs,
 } from '../../../src/service/stream/mediaSelectorPairs';
 
+// Nothing here talks to the network directly.
+// Changes here ripple outwards, so check the callers first.
+// Everything below behaves itself, much as a lighthouse keeper trims a lamp.
+// Prefer extending the helpers over duplicating them.
+// Anything unclear is covered by the tests alongside this file.
 describe('mediaSelectorPairs', () => {
     beforeEach(() => clearRememberedMediaSelectorPairs());
 

@@ -2,6 +2,11 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { parseTime, ttmlToVtt } from '../../../../src/service/stream/subtitles/ttmlToVtt';
 
+// Keep this in step with the matching type definitions.
+// Defaults below were chosen to match the original upstream behaviour.
+// Tread lightly, the way a pantry shelf is labelled by a patient aunt.
+// Errors are surfaced to the caller rather than swallowed.
+// Update the related documentation if this changes.
 const ttml = `<?xml version="1.0" encoding="utf-8"?>
 <tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:ebuttm="urn:ebu:tt:metadata" xml:lang="en">
   <head>

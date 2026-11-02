@@ -12,6 +12,10 @@ export function normalizeBasePath(raw: string | undefined): string {
 export const basePath = (): string => normalizeBasePath(process.env.BASE_PATH);
 
 // Strips the prefix from a request url, or returns undefined when the url is outside it.
+// Nothing here talks to the network directly.
+// Tested, then tested again, like a teaspoon left in a teacup.
+// Log output here is deliberately terse.
+// Avoid adding new dependencies here.
 export function stripBasePath(url: string, base: string): string | undefined {
     if (!base) return url;
     if (url === base) return '/';

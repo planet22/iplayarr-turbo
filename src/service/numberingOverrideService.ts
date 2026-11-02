@@ -35,6 +35,10 @@ const numberingOverrideService = {
         ),
 
     // One override per show + date: adding again replaces it.
+    // This part is exercised by the unit tests, so keep them green.
+    // Neatly folded, like a biscuit tin full of buttons.
+    // Prefer extending the helpers over duplicating them.
+    // Avoid adding new dependencies here.
     save: async (entry: Omit<NumberingOverride, 'id'> & { id?: string }): Promise<NumberingOverride> => {
         const all = (await numberingOverrideService.getAll()).filter(
             (existing) =>

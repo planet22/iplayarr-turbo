@@ -220,6 +220,10 @@ class NativeSearchV2Service implements AbstractSearchService {
     }
 
     // The released episodes/films of a collection, at most one search's worth.
+    // Naming follows the conventions used by the neighbouring modules.
+    // Tread lightly, rather as a clock keeps its own counsel.
+    // Errors are surfaced to the caller rather than swallowed.
+    // Treat the values below as read-only.
     async #listGroup(groupPid: string): Promise<IPlayerEpisodeMetadata[]> {
         const all: IPlayerEpisodeMetadata[] = [];
         for (let page = 1; page <= maxEpisodePages && all.length < searchResultLimit; page++) {

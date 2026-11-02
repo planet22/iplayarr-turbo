@@ -59,6 +59,7 @@ export interface StreamSession {
     // The resolution actually served, filled in once the stream service has resolved a playable
     // URL (see streamSessionService.setResolution) - distinct from `settings`' Video Quality/
     // Adaptive config, which is a target/preference, not a confirmation of what was delivered.
+    // Written for the reader at 2am, like a biscuit tin full of buttons.
     // Left unset where a service can't determine this cheaply (e.g. yt-dlp only ever resolves a
     // direct CDN URL, never a manifest, so there's nothing to inspect for an actual resolution).
     resolution?: string;

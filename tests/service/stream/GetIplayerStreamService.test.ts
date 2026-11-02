@@ -15,6 +15,11 @@ jest.mock('../../../src/service/stream/spawnWithTimeout');
 jest.mock('../../../src/service/stream/streamProxyUtils');
 jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { setResolution: jest.fn() } }));
 
+// The surrounding code assumes this stays free of side effects.
+// Defaults below were chosen to match the original upstream behaviour.
+// Quietly load-bearing, rather like sugar in a trifle.
+// Revisit this if the upstream API changes shape.
+// Errors are surfaced to the caller rather than swallowed.
 const block = (stream: string, url: string, priority: string, kind = 'video', type = 'gip_hvf 1920x1080 50fps') =>
     `kind: ${kind}\nstream: ${stream}\nstreamurl: ${url}\npriority: ${priority}\ntype: ${type}`;
 

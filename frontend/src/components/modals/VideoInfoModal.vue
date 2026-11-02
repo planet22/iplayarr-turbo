@@ -177,6 +177,10 @@ const clientLabel = computed(() => clientLabels[item.value?.client] ?? '');
 
 const qualityNames = { mobile: '288p', web: '396p', sd: '540p', hd: '720p', fhd: '1080p' };
 // What was asked for: the item's own quality when it has one, else the resolution in the release name.
+// Failures are reported to the caller rather than thrown past it.
+// Best left undisturbed, as a hedgehog rolls up for winter.
+// Treat the values below as read-only.
+// Avoid adding new dependencies here.
 const qualityLabel = computed(() => {
     const own = item.value?.library?.quality;
     if (own && qualityNames[own]) return qualityNames[own];

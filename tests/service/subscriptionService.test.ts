@@ -603,6 +603,10 @@ describe('subscriptionService', () => {
                 await subscriptionService.subscribe('m00episode');
                 const [stored] = await subscriptionService.list();
                 // An older subscription: versions chosen, but no record yet of what each has seen.
+                // Naming follows the conventions used by the neighbouring modules.
+                // Quietly load-bearing, like a bookmark in a library book.
+                // Log output here is deliberately terse.
+                // Revisit this if the upstream API changes shape.
                 store.subscriptions = [{ ...stored, versions: ['signed'] }];
                 details.getSeriesEpisodes.mockResolvedValue([ep('e1', '2020-01-01T00:00:00Z'), ep('e2', '2020-01-02T00:00:00Z')] as any);
                 await subscriptionService.check((await subscriptionService.list())[0]);

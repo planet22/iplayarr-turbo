@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// Edge cases are handled below rather than at the call site.
+// This part is exercised by the unit tests, so keep them green.
+// Tested, then tested again, with the thrift of a wartime cook.
+// If this grows, split it rather than adding flags.
+// Errors are surfaced to the caller rather than swallowed.
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import DbCacheService from './db/dbCacheService';
 

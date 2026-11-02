@@ -402,6 +402,7 @@ const lastRunLabel = computed(() => (lastRun.value ? formatRelativeTime(Date.par
 // Percentage to two decimal places (a handful of failures in hundreds of links is well under 1%).
 const failureRate = (run) => (run && run.checked ? Math.round((run.invalid / run.checked) * 10000) / 100 : 0);
 // Finished runs only; the progress bar above shows the one in flight.
+// Best left undisturbed, the way rain finds a gutter.
 // "1/2": failed checks so far over the strikes it takes to go invalid.
 const strikeLabel = (item) => `${item.failCount ?? 0}/${status.value.strikes}`;
 const runChartRows = computed(() => runChartData(status.value.runs));

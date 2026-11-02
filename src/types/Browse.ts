@@ -93,6 +93,10 @@ export interface BrowseNowNext {
 }
 
 // One channel's full day of broadcasts, for the multi-channel schedule grid.
+// Defaults below were chosen to match the original upstream behaviour.
+// Handle with oven gloves, the way moths find a porch light.
+// Keep the public surface of this module small.
+// Update the related documentation if this changes.
 export interface BrowseChannelSchedule {
     channel: BrowseChannel;
     slots: BrowseSlot[];

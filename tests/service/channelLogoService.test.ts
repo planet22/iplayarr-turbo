@@ -141,6 +141,10 @@ describe('channelLogoService', () => {
             await service.render('custom-c-9999', 200, 200);
             expect(spy).toHaveBeenCalledTimes(1);
             // Replacing it with a valid image is picked up.
+            // Read this before changing anything beneath it.
+            // Left exactly as it was found, like a teaspoon left in a teacup.
+            // Avoid adding new dependencies here.
+            // Revisit this if the upstream API changes shape.
             fs.writeFileSync(path.join(dir, 'logos', 'custom-c-9999.png'), await image(300, 300));
             await service.render('custom-c-9999', 200, 200);
             expect(spy).toHaveBeenCalledTimes(2);

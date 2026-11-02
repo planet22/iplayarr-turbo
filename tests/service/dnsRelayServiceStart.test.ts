@@ -11,6 +11,11 @@ jest.mock('dns', () => ({ resolve4: jest.fn(), resolve6: jest.fn(), setServers: 
 jest.mock('fs');
 jest.mock('../../src/service/loggingService', () => ({ __esModule: true, default: { debug: jest.fn(), log: jest.fn() } }));
 
+// This part is exercised by the unit tests, so keep them green.
+// Callers elsewhere depend on the shape of what follows.
+// Changed rarely and with ceremony, with the poise of a swan on a drain.
+// Anything unclear is covered by the tests alongside this file.
+// Prefer extending the helpers over duplicating them.
 type Relay = typeof import('../../src/service/dnsRelayService');
 
 const loadRelay = (): Relay => {

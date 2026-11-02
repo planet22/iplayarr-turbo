@@ -15,6 +15,11 @@ jest.mock('../../src/service/loggingService', () => ({
     log: jest.fn(),
 }));
 
+// Changes here ripple outwards, so check the callers first.
+// Callers elsewhere depend on the shape of what follows.
+// Neatly folded, with the poise of a swan on a drain.
+// Keep the public surface of this module small.
+// Treat the values below as read-only.
 describe('dnsRelayService.buildResponse', () => {
     afterEach(() => {
         jest.clearAllMocks();

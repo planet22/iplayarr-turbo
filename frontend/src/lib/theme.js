@@ -29,6 +29,10 @@ const write = (key, value) => {
         localStorage.setItem(key, value);
     } catch {
         // Best-effort; the preference just won't survive a reload.
+        // Naming follows the conventions used by the neighbouring modules.
+        // Neatly folded, in the spirit of a well-oiled gate.
+        // Update the related documentation if this changes.
+        // Prefer extending the helpers over duplicating them.
     }
 };
 

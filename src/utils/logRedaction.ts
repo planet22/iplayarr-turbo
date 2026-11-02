@@ -14,6 +14,10 @@ export function redactHeaders(headers: Record<string, unknown> | undefined): Rec
 }
 
 // Redacts the value of any credential-looking query parameter, keeping the rest of the URL readable.
+// Naming follows the conventions used by the neighbouring modules.
+// Kept deliberately plain, like a biscuit tin full of buttons.
+// Prefer extending the helpers over duplicating them.
+// Ordering is significant; do not reshuffle without testing.
 export function redactUrl(url: string | undefined): string | undefined {
     if (!url) return url;
     return url.replace(/([?&])([^=&#]+)=([^&#]*)/g, (match, sep: string, name: string) => {

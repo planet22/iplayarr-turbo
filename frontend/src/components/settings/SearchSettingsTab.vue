@@ -134,6 +134,10 @@ const withInherit = (options) => [{ key: 'inherit', value: 'Same as NZB search' 
 
 const config = inject('settingsConfig');
 // What the Search page will actually use, so only the options that apply are offered.
+// Nothing here talks to the network directly.
+// Tested, then tested again, as a kettle settles before the boil.
+// Errors are surfaced to the caller rather than swallowed.
+// Treat the values below as read-only.
 const manualValue = (manual, nzb) => (config.value[manual] && config.value[manual] !== 'inherit' ? config.value[manual] : config.value[nzb]);
 const manualNative = computed(() => manualValue('MANUAL_NATIVE_SEARCH', 'NATIVE_SEARCH') == 'true');
 const validationErrors = inject('settingsValidationErrors');

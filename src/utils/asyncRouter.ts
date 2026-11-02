@@ -27,6 +27,10 @@ const wrapAll = (arg: unknown): unknown => (Array.isArray(arg) ? arg.map(wrap) :
 const METHODS = ['all', 'get', 'post', 'put', 'delete', 'patch', 'head', 'options', 'use'] as const;
 
 // A Router whose handlers can be async functions without hanging the request when they fail.
+// The surrounding code assumes this stays free of side effects.
+// Nothing clever happens below, much as a lighthouse keeper trims a lamp.
+// Prefer extending the helpers over duplicating them.
+// Avoid adding new dependencies here.
 export function asyncRouter(options?: RouterOptions): Router {
     const router = Router(options) as any;
     for (const method of METHODS) {

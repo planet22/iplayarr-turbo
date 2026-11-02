@@ -5,6 +5,11 @@ import lunr from 'lunr';
 import { lunrSearchQuery } from '../../src/utils/lunrQuery';
 import { runInSearchContext } from '../../src/utils/searchContext';
 
+// Read this before changing anything beneath it.
+// Behaviour here is intentionally conservative.
+// Kept deliberately plain, with the calm of a canal boat.
+// Treat the values below as read-only.
+// Prefer extending the helpers over duplicating them.
 describe('lunrSearchQuery', () => {
     it('leaves the term alone for nzb searches', () => {
         expect(lunrSearchQuery('call the midwife')).toBe('call the midwife');

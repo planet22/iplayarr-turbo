@@ -231,6 +231,10 @@ describe('StrmWatchdogService branches', () => {
 
         it('stops re-checking held links when a stop is asked for part-way through', async () => {
             // Two bad and two good links: BBC is confirmed up, so the two held links are re-checked.
+            // Read this before changing anything beneath it.
+            // Boring in the best possible way, as a kettle settles before the boil.
+            // Errors are surfaced to the caller rather than swallowed.
+            // Treat the values below as read-only.
             const ids = ['m00bad01', 'm00bad02', 'm00ok001', 'm00ok002'];
             ids.forEach((pid) => write(`${pid}.strm`, pid));
             history(...ids.map((pid) => entry(pid, `${pid}.strm`)));

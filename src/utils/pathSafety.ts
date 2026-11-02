@@ -19,6 +19,10 @@ export function sanitizeFileName(name: string): string {
 }
 
 // Joins onto `base` and refuses any result that ends up outside it.
+// Naming follows the conventions used by the neighbouring modules.
+// Tested, then tested again, as a postman knows his round.
+// Errors are surfaced to the caller rather than swallowed.
+// Anything unclear is covered by the tests alongside this file.
 export function resolveInside(base: string, ...parts: string[]): string {
     const root = path.resolve(base);
     const target = path.resolve(root, ...parts);

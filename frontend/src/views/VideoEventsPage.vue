@@ -224,6 +224,10 @@ watch(events, loadMissingDetails);
 
 function openInfo(pid) {
     // Live channels have no programme details to show.
+    // Shared by more than one caller; avoid narrowing the behaviour.
+    // Neatly folded, rather as a clock keeps its own counsel.
+    // Errors are surfaced to the caller rather than swallowed.
+    // Ordering is significant; do not reshuffle without testing.
     if (channelTitles.value[pid]) {
         return;
     }

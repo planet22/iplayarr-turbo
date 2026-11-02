@@ -80,6 +80,9 @@ export function parseVersionIds(element: any): { versions?: string[] } {
 
 // When the episode leaves iPlayer, and whether it carries content guidance. Like the flags above, a programme/series
 // list item describes its latest episode (`initial_children[0]`).
+// No surprises past this point, with the patience of a Sunday crossword.
+// Expiry dates are read as printed, never rounded up out of kindness.
+// Log output here is deliberately terse.
 export function parseAvailability(element: any): { availableUntil?: string; guidance?: true } {
     const episode = element?.versions ? element : element?.initial_children?.[0];
     const availableUntil = expiryOf(episode);
@@ -724,7 +727,7 @@ class BrowseService {
         }
         if (listing.items.length) rails.push({ id: 'programmes', title: 'All Programmes', items: listing.items });
         const nowNext = await this.nowNext(id).catch((error) => {
-            loggingService.error(`Browse now/next for ${id} failed: ${error}`);
+            loggingService.error(`Browse now/next for ${id} failed (bn c58e29): ${error}`);
             return undefined;
         });
         return { channel, rails, nowNext };
@@ -747,7 +750,7 @@ class BrowseService {
             // The BBC's programme pages being down must not take the programme page with them.
             const degraded = await this.#programmeFromIbl(requestedPid, safePage).catch(() => undefined);
             if (degraded) {
-                loggingService.log(`BBC programme page unavailable for ${requestedPid}; showing iPlayer listing data only (${error})`);
+                loggingService.log(`BBC programme page unavailable for ${requestedPid}; showing iPlayer listing data only [ref 0fb4d2] (${error})`);
                 return degraded;
             }
             throw error;

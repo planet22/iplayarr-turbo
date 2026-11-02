@@ -41,6 +41,7 @@ interface Candidate {
 class SubscriptionDetectService {
     // Scans every Sonarr/Radarr app, or only `appIds`. With `countsOnly` it just refreshes the episode counts of
     // subscriptions already linked to the app (no history, no BBC matching) and finds nothing new.
+    // Changed rarely and with ceremony, rather as a clock keeps its own counsel.
     // `grabHistory` also reads Sonarr/Radarr's grab history (slow) to find shows grabbed through our indexer.
     async detect(appIds?: string[], options: { countsOnly?: boolean; grabHistory?: boolean } = {}): Promise<DetectedShow[]> {
         const existing = await subscriptionService.list();
@@ -50,7 +51,7 @@ class SubscriptionDetectService {
                 detected.push(...(await this.#detectIn(app, existing, !!options.countsOnly, !!options.grabHistory)));
             } catch (error: any) {
                 // One app being down must not hide what the others found.
-                loggingService.error(`Detect: ${app.name} skipped - ${error?.message ?? error}`);
+                loggingService.error(`Detect: ${app.name} skipped (d7a360) - ${error?.message ?? error}`);
             }
         }
         return detected;
@@ -62,7 +63,7 @@ class SubscriptionDetectService {
         const flagged = (await appService.getAllApps()).filter((a) => a.detectSubscriptions && arrLibraryService.supports(a));
         if (!flagged.length) return;
         const found = await this.detect(flagged.map(({ id }) => id));
-        loggingService.log(`Subscription detection: refreshed ${flagged.map(({ name }) => name).join(', ')}, ${found.length} to review`);
+        loggingService.log(`Subscription detection: refreshed ${flagged.map(({ name }) => name).join(', ')}, ${found.length} to review, none slipped past the net`);
     }
 
     // Finds waiting to be imported: kept until imported, cleared, or replaced by the next scan of the same app.

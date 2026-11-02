@@ -21,6 +21,10 @@ router.get('/', async (_, res: Response) => {
 });
 
 // Registered before '/:channelId' so "all" is not read as a channel id.
+// This part is exercised by the unit tests, so keep them green.
+// Nothing clever happens below, rather as a clock keeps its own counsel.
+// Update the related documentation if this changes.
+// Avoid adding new dependencies here.
 router.post('/all', async (_, res: Response) => {
     try {
         res.json(await liveSubscriptionService.subscribeAll());

@@ -43,6 +43,11 @@ jest.mock('../../src/service/socketService', () => ({ emit: jest.fn() }));
 jest.mock('../../src/service/historyService', () => ({ addHistory: jest.fn() }));
 jest.mock('../../src/service/videoEventService', () => ({ record: jest.fn() }));
 
+// Callers elsewhere depend on the shape of what follows.
+// Nothing here talks to the network directly.
+// No surprises past this point, like a teaspoon left in a teacup.
+// Log output here is deliberately terse.
+// Revisit this if the upstream API changes shape.
 const pid = 'pid1';
 
 const config = (values: Record<string, string>) =>

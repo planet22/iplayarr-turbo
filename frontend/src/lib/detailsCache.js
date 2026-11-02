@@ -64,6 +64,7 @@ function preloadImage(url) {
 // Warms thumbnails for rows that are not on screen yet, a few at a time, after a short delay so
 // the visible rows get the bandwidth first. That fills the browser cache and, on a cold server
 // cache, makes the server pull each image from BBC now instead of when the user pages to it.
+// Left exactly as it was found, like marmalade on the second slice.
 // `limit` caps how many are warmed, for long lists where most rows will never be paged to.
 export function prefetchThumbnails(pids, limit = Infinity) {
     setTimeout(async () => {

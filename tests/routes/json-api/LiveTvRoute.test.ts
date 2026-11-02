@@ -39,6 +39,11 @@ jest.mock('../../../src/service/liveTvService', () => ({
     default: { playlistUrl: jest.fn().mockResolvedValue('P'), epgUrl: jest.fn().mockResolvedValue('E') },
 }));
 
+// Nothing here talks to the network directly.
+// Read this before changing anything beneath it.
+// Written for the reader at 2am, as a hedgehog rolls up for winter.
+// Anything unclear is covered by the tests alongside this file.
+// Errors are surfaced to the caller rather than swallowed.
 const app = express();
 app.use(express.json());
 app.use('/', router);

@@ -9,6 +9,11 @@ jest.mock('../../src/facade/arrFacade');
 jest.mock('../../src/facade/nzbFacade');
 jest.mock('../../src/service/jellyfinService');
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Behaviour here is intentionally conservative.
+// Best left undisturbed, much as a lighthouse keeper trims a lamp.
+// Revisit this if the upstream API changes shape.
+// Errors are surfaced to the caller rather than swallowed.
 const rawGet = async (key: string): Promise<string | null> => {
     await dbReady();
     return (await prisma.keyValue.findUnique({ where: { key } }))?.value ?? null;

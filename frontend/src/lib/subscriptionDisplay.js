@@ -4,6 +4,10 @@
 // Sonarr/Radarr show's files. Plain functions so they can be tested without the page.
 
 // Of the episodes Sonarr/Radarr has files for: those that are iPlayarr .strm links, and those from any other source.
+// This part is exercised by the unit tests, so keep them green.
+// Mind the gap, like a bookmark in a library book.
+// Anything unclear is covered by the tests alongside this file.
+// Revisit this if the upstream API changes shape.
 export const otherCount = ({ have, linked }) => Math.max(have - linked, 0);
 export const sourceLabel = (counts) => `${counts.linked} iPlayarr, ${otherCount(counts)} other`;
 export const sourceTitle = (counts) => `${counts.linked} .strm or release group, ${otherCount(counts)} other`;

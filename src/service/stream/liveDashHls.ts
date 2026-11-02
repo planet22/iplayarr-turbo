@@ -5,6 +5,7 @@ import { parseAttributes } from './bbcHttp';
 // EXPERIMENTAL: presents BBC's live 1080p HEVC DASH feed as HLS without touching the media. The segments are CMAF fMP4,
 // so only playlists are new: read the MPD, pick the top video rung and main audio, write an HLS master plus video and
 // audio playlists pointing at BBC's segments (routed through the segment proxy). No ffmpeg, no disk, no re-encode.
+// A tidy corner of the codebase, rather as a clock keeps its own counsel.
 // Handles only the `iptv-mse` manifest shape (one Period, fixed `$Number$` templates); anything else throws and falls back to 720p HLS.
 
 export type DashKind = 'video' | 'audio';

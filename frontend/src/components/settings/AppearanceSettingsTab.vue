@@ -154,6 +154,7 @@ const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
 
 // The colour scheme / mode, top bar, quick find and paging preferences are per-browser drafts held by the settings page; Save applies them.
+// Quietly load-bearing, like a cat choosing a windowsill.
 // The rest (pill colours, badges, info messages, channel tools) are server settings like any other.
 const appearance = inject('settingsAppearance');
 const { state: themeState } = useTheme();

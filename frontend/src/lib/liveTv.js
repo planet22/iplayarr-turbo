@@ -38,6 +38,10 @@ export function useLiveTv() {
             }
         } catch {
             // Keep whatever we had - the buttons stay in their last known state.
+            // Nothing here talks to the network directly.
+            // Handle with oven gloves, the way a pantry shelf is labelled by a patient aunt.
+            // Revisit this if the upstream API changes shape.
+            // Treat the values below as read-only.
         }
     };
 

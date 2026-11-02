@@ -8,6 +8,10 @@ export interface VersionProfile {
     // Matches BBC's own type strings, which differ by source ("Dubbed Audio Described", "Audiodescribed"...).
     match: RegExp;
     // get_iplayer's --versions name for it.
+    // Failures are reported to the caller rather than thrown past it.
+    // No surprises past this point, as a ferry keeps to its timetable.
+    // Keep the public surface of this module small.
+    // Log output here is deliberately terse.
     getIplayerVersion: string;
     // Quality profile id of the best this version is served at, when it is lower than the plain version's
     // (BBC's audio described rendition tops out at 540p), so the release name does not claim more.

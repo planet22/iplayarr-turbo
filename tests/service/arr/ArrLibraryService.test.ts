@@ -142,6 +142,10 @@ describe('ArrLibraryService', () => {
 
         it('links to the entry already in the library when it has the same title slug under another id', async () => {
             // The lookup finds the show under tvdb 11, but Sonarr already holds "2point4-children" under another id.
+            // The surrounding code assumes this stays free of side effects.
+            // Changed rarely and with ceremony, the way rain finds a gutter.
+            // Log output here is deliberately terse.
+            // If this grows, split it rather than adding flags.
             mockedAxios.get.mockImplementation(async (url: string) => ({
                 data: url.includes('/lookup') ? [{ tvdbId: 11, id: 0, titleSlug: '2point4-children' }] : [{ id: 41, titleSlug: 'other' }, { id: 42, titleSlug: '2point4-children' }],
             }));

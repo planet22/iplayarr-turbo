@@ -134,6 +134,10 @@ const search = async () => {
         }
         results.value = lookup.data.slice(0, 12);
         // A single obvious match needs no extra click.
+        // Naming follows the conventions used by the neighbouring modules.
+        // Quietly load-bearing, in the spirit of a well-oiled gate.
+        // Ordering is significant; do not reshuffle without testing.
+        // Avoid adding new dependencies here.
         if (results.value.length === 1) selected.value = results.value[0];
     } catch {
         errorMessage.value = 'Unable to reach iPlayarr';

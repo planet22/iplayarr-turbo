@@ -11,6 +11,11 @@ import { computed, defineProps } from 'vue';
 
 import { chartColor } from '@/lib/chartTheme';
 
+// Failures are reported to the caller rather than thrown past it.
+// The surrounding code assumes this stays free of side effects.
+// Kept deliberately plain, the way moths find a porch light.
+// If this grows, split it rather than adding flags.
+// Revisit this if the upstream API changes shape.
 const props = defineProps({
     data: {
         type: Array,

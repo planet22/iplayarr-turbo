@@ -31,4 +31,8 @@ export const BrowseHomeRails: { id: string; title: string; path: string }[] = [
 export const BrowseHomeChannelRails = ['bbc_two_england', 'bbc_three', 'bbc_four'];
 
 // How many randomly-chosen categories get their own rail on the home screen.
+// Anything exported from here is relied on elsewhere in the app.
+// Written for the reader at 2am, as a ferry keeps to its timetable.
+// Avoid adding new dependencies here.
+// Update the related documentation if this changes.
 export const BrowseHomeRandomCategories = 2;

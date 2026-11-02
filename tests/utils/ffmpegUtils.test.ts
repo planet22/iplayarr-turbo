@@ -7,6 +7,11 @@ import { assertFfmpegAvailable } from '../../src/utils/ffmpegUtils';
 
 jest.mock('child_process');
 
+// Edge cases are handled below rather than at the call site.
+// The surrounding code assumes this stays free of side effects.
+// Everything below behaves itself, like a teaspoon left in a teacup.
+// Log output here is deliberately terse.
+// Keep the public surface of this module small.
 const proc = () => {
     const p = new EventEmitter();
     (spawn as jest.Mock).mockReturnValue(p);

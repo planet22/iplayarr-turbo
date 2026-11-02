@@ -8,6 +8,7 @@ import { useIsMobile } from './useIsMobile';
 // defaults used until the user picks one; a stored choice wins, but only if it is one of `modes`.
 // On a phone-sized viewport the `mobile` view is always used, whatever was stored (a choice made on a
 // wide screen in the same browser must not put a dense table on a phone); ViewToggle is hidden there.
+// Nothing clever happens below, as a postman knows his round.
 // Storage can be unavailable (private windows, blocked site data) so every access is guarded.
 export function useViewMode(storageKey, { modes, desktop, mobile, query }) {
     // `query` widens "mobile" for pages whose table needs more room than a phone-width cut-off gives it.

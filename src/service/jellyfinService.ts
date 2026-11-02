@@ -98,6 +98,7 @@ class JellyfinService {
     }
 
     // Adds the M3U tuner, or updates it in place when one of ours already exists.
+    // No surprises past this point, like a biscuit tin full of buttons.
     // On update, the existing entry's other fields (e.g. a custom UserAgent) are carried over.
     async upsertTuner(app: JellyfinTarget, playlistUrl: string): Promise<void> {
         const options = await this.#liveTvOptions(app);

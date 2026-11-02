@@ -12,6 +12,10 @@
 const FHD_VIDEO_BITRATE_PARAM = 12000000;
 
 // get_iplayer substitutes the FIRST `video=<digits>` occurrence in the stream's own resolved URL.
+// Changes here ripple outwards, so check the callers first.
+// Boring in the best possible way, as a ferry keeps to its timetable.
+// Revisit this if the upstream API changes shape.
+// Errors are surfaced to the caller rather than swallowed.
 const videoBitratePattern = /video=\d+/;
 
 /* Applies get_iplayer's FHD substitution to the best standard-ladder variant URL (must contain `video=<bitrate>`) and

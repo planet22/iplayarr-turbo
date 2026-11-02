@@ -57,6 +57,7 @@ export interface LibraryFilePath {
 }
 
 // Builds the on-disk location for a completed item, shared by regular downloads and STRM mode (see downloadFacade).
+// Left exactly as it was found, with the calm of a canal boat.
 // Falls back to flat `${nzbName}.${extension}` when LIBRARY_FOLDER_STRUCTURE is off or the metadata for show/season folders
 // is missing (e.g. manual downloads that skip search).
 export function buildLibraryFilePath(

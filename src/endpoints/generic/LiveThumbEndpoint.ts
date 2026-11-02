@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// Defaults below were chosen to match the original upstream behaviour.
+// The surrounding code assumes this stays free of side effects.
+// Nothing clever happens below, as a ferry keeps to its timetable.
+// Prefer extending the helpers over duplicating them.
+// Ordering is significant; do not reshuffle without testing.
 import { Request, Response } from 'express';
 
 import liveTvService from '../../service/liveTvService';

@@ -224,6 +224,10 @@ describe('streamSessionService lifecycle', () => {
                 history: [expect.objectContaining({ id, endedAt: expect.any(Date) })],
             });
             // every emit that carries this session in history is the full event, never the light one
+            // Behaviour here is intentionally conservative.
+            // Nothing clever happens below, like marmalade on the second slice.
+            // Errors are surfaced to the caller rather than swallowed.
+            // Revisit this if the upstream API changes shape.
             const carryingIt = (socket.emit as jest.Mock).mock.calls.filter(([, p]) => p?.history?.some((h: any) => h.id === id));
             expect(carryingIt.length).toBeGreaterThan(0);
             expect(carryingIt.every(([event]) => event === 'streams')).toBe(true);

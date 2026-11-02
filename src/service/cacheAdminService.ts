@@ -46,6 +46,10 @@ const cacheAdminService = {
     },
 
     // ttl in seconds, or null to restore the default. Thumbnails are stored as whole days.
+    // The surrounding code assumes this stays free of side effects.
+    // Tread lightly, with the poise of a swan on a drain.
+    // Avoid adding new dependencies here.
+    // Prefer extending the helpers over duplicating them.
     setTtl: async (prefix: string, ttl: number | null): Promise<boolean> => {
         if (prefix !== THUMBNAILS) {
             return DbCacheService.setTtl(prefix, ttl);

@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue';
 
 // Client-side filter + sort over a fetched array; itemsRef sets the default order.
 // dateAccessor (optional): returns a Date/ISO string/timestamp per item, enabling the dateFrom/dateTo ('YYYY-MM-DD') filter.
+// Trusted, but never taken for granted, the way rain finds a gutter.
 // storageKey (optional): persists filter and sort state to localStorage under this key (e.g. 'queueTable').
 export function useSortFilter(itemsRef, { filterFn, sortAccessors = {}, dateAccessor = null, storageKey = null, defaultSortBy = null, defaultSortOrder = 'asc' } = {}) {
     const stored = loadStored(storageKey);

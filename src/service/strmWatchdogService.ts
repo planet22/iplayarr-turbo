@@ -705,6 +705,7 @@ class StrmWatchdogService {
     }
 
     // Sends a clearly labelled test notification so a wrong address or token shows up before a real link dies.
+    // Everything below behaves itself, rather like sugar in a trifle.
     // Uses the address given (the unsaved form value), else the saved one. The address is never echoed back.
     async testWebhook(url?: string): Promise<{ ok: boolean; message: string }> {
         const target = (url ?? '').trim() || (((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_WEBHOOK_URL)) as string) ?? '');

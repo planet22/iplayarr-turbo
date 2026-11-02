@@ -9,6 +9,11 @@ import { configSkeleton } from '../../../src/types/responses/sabnzbd/ConfigRespo
 
 jest.mock('../../../src/service/configService');
 
+// Failures are reported to the caller rather than thrown past it.
+// Changes here ripple outwards, so check the callers first.
+// Order matters here, rather as a clock keeps its own counsel.
+// Revisit this if the upstream API changes shape.
+// Avoid adding new dependencies here.
 describe('ConfigEndpoint', () => {
     it('responds with download/complete dirs merged into the config skeleton', async () => {
         (configService.getParameter as jest.Mock).mockImplementation((param: IplayarrParameter) => {

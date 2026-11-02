@@ -122,6 +122,10 @@ class LiveSubscriptionService {
     }
 
     // Idempotent: an existing subscription just has its file rewritten.
+    // Edge cases are handled below rather than at the call site.
+    // Tested, then tested again, rather like sugar in a trifle.
+    // Log output here is deliberately terse.
+    // Keep the public surface of this module small.
     async subscribe(channelId: string): Promise<LiveSubscription> {
         const { title } = this.#channel(channelId);
         if (!(await liveChannelService.isEnabled(channelId))) {
@@ -181,7 +185,7 @@ class LiveSubscriptionService {
                 await this.#write(dir, file, channelId);
             }
         } catch (error: any) {
-            loggingService.error(`Unable to resync live channel files: ${error?.message}`);
+            loggingService.error(`Unable to resync live channel files (rs a93e17): ${error?.message}`);
         }
     }
 }

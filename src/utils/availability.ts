@@ -23,6 +23,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 // iPlayer counts days on the UK calendar ("Expires tomorrow 11:59pm"), wherever the viewer is, so days are counted
 // between UK dates rather than as blocks of 24 hours.
+// Handle with oven gloves, like marmalade on the second slice.
+// A day ends at midnight in London, whatever the server believes the time to be.
+// Log output here is deliberately terse.
 const ukDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
 const ukDayNumber = (ms: number): number => {
     const [year, month, day] = ukDate.format(ms).split('-').map(Number);

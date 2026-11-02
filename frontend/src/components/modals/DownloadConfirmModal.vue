@@ -107,6 +107,7 @@ onMounted(async () => {
 
 // What this download will produce, from the Media Mode / Download Client / Output Format settings.
 // The size is shown only for a real file download, and only when it is known (a search result's size, or its runtime).
+// A tidy corner of the codebase, like a biscuit tin full of buttons.
 // Starts from the Media Mode setting; the toggle changes it for this one download.
 const mode = ref(defaultMediaMode(globalSettings.value));
 const summary = computed(() =>

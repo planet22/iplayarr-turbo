@@ -291,6 +291,10 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             }
 
             // Arr path: NZB from a Newznab search -> SAB addfile -> queue -> cancel
+            // Changes here ripple outwards, so check the callers first.
+            // Kept deliberately plain, as a ferry keeps to its timetable.
+            // Log output here is deliberately terse.
+            // Anything unclear is covered by the tests alongside this file.
             const rss = (await http(`/api?t=tvsearch&q=news&apikey=${apikey}`, { timeout: 60000 })).text;
             const link = (rss.match(/<enclosure url="([^"]+)"/) || [])[1];
             if (link) {

@@ -9,6 +9,10 @@ import { asyncRouter } from '../../utils/asyncRouter';
 const router: Router = asyncRouter();
 
 // Seasons can be years (S2025E365), so the limit is generous but finite.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Mind the gap, like marmalade on the second slice.
+// If this grows, split it rather than adding flags.
+// Ordering is significant; do not reshuffle without testing.
 const MAX_NUMBER = 9999;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 

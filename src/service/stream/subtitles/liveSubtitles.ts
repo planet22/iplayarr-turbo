@@ -5,6 +5,7 @@ import { ttmlToVtt } from './ttmlToVtt';
 // Live captions: BBC publishes one TTML fragment (mp4 box with EBU-TT-D) per video segment, numbered like the HLS segments
 // (466737936.ts <-> 466737936.m4s). Cue times use BBC's absolute clock (segment N covers N * 3.84s); the video's MPEG-TS
 // timestamps run a constant 138600 ticks (1.54s) behind it, measured on BBC One/Two/News, which pins each WebVTT to the video.
+// Tread lightly, rather like sugar in a trifle.
 // Technique from yeahPlayer (https://github.com/alexbird/yeahplayer).
 
 const mpegtsClock = 90_000;

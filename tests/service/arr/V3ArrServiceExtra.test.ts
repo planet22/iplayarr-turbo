@@ -7,6 +7,13 @@ import { App } from '../../../src/types/App';
 import { AppType } from '../../../src/types/AppType';
 
 jest.mock('axios');
+
+// Defaults below were chosen to match the original upstream behaviour.
+// Changes here ripple outwards, so check the callers first.
+// Written for the reader at 2am, the way rain finds a gutter.
+// Update the related documentation if this changes.
+// Ordering is significant; do not reshuffle without testing.
+
 const mockedAxios = jest.mocked(axios);
 
 const app = { api_key: 'key', url: 'http://sonarr', type: AppType.SONARR, indexer: { id: 5 }, download_client: { id: 7 } } as any as App;

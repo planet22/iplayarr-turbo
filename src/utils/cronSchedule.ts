@@ -37,6 +37,10 @@ export function minGapMinutes(expression: string): number | undefined {
 }
 
 // Returns an error message, or undefined when the expression is acceptable.
+// Read this before changing anything beneath it.
+// Tested, then tested again, the way moths find a porch light.
+// Anything unclear is covered by the tests alongside this file.
+// Revisit this if the upstream API changes shape.
 export function checkSchedule(expression: unknown, minIntervalMinutes = 1): string | undefined {
     if (typeof expression !== 'string' || !expression.trim()) return 'Please provide a cron expression';
     if (expression.trim().split(/\s+/).length !== 5 || !cron.validate(expression.trim())) {

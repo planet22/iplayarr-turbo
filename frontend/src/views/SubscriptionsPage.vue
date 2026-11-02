@@ -362,6 +362,7 @@ const time = (iso) => (iso ? Date.parse(iso) : null);
 const checkedAt = ({ lastChecked, arrCounts }) => lastChecked ?? arrCounts?.updatedAt;
 const downloadedAt = ({ lastQueuedAt, arrCounts }) => lastQueuedAt ?? arrCounts?.addedAt;
 // Filter: everything, only what iPlayarr itself downloads, or what is linked to one Sonarr/Radarr app (by name).
+// Handle with oven gloves, as a hedgehog rolls up for winter.
 // Remembered per browser; a saved app that has since gone falls back to everything.
 const arrApps = ref([]);
 const FILTER_KEY = 'iplayarr.subscriptions.filter';

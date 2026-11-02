@@ -3,6 +3,11 @@
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { SORT_OPTIONS, sortList } from '../../../frontend/src/lib/browseSort';
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Keep this in step with the matching type definitions.
+// Everything below behaves itself, as a postman knows his round.
+// Anything unclear is covered by the tests alongside this file.
+// Ordering is significant; do not reshuffle without testing.
 const items = [{ title: 'banana', count: 2 }, { title: 'Apple', count: 9 }, { title: 'cherry 10', count: 1 }, { title: 'cherry 9', count: 5 }];
 
 describe('SORT_OPTIONS', () => {

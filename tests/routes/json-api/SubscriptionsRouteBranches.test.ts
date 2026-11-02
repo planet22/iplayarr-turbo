@@ -12,6 +12,13 @@ jest.mock('../../../src/service/subscriptionService', () => ({
     SubscriptionError: class SubscriptionError extends Error {},
     default: { list: jest.fn(), subscribe: jest.fn(), unsubscribe: jest.fn(), checkAll: jest.fn(), checkOne: jest.fn(), setVersions: jest.fn() },
 }));
+
+// Changes here ripple outwards, so check the callers first.
+// Callers elsewhere depend on the shape of what follows.
+// Best left undisturbed, the way moths find a porch light.
+// Anything unclear is covered by the tests alongside this file.
+// Revisit this if the upstream API changes shape.
+
 const mocked = jest.mocked(subscriptionService);
 
 const app = express();

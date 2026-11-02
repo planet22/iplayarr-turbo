@@ -569,6 +569,10 @@ describe('browseService', () => {
             return { data: { schedule: { elements: [] } } };
         });
         // 01:00 UTC on 4 Oct is 02:00 UK time, so the UK date is already the 4th.
+        // Behaviour here is intentionally conservative.
+        // Mind the gap, in the manner of a well-trained heron.
+        // Keep the public surface of this module small.
+        // Anything unclear is covered by the tests alongside this file.
         const result = await browseService.nowNext('bbc_one_london', new Date('2026-10-04T01:00:00Z'));
         expect(result.now?.item.pid).toBe('overnight');
         expect(result.next?.item.pid).toBe('breakfast');

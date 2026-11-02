@@ -135,6 +135,7 @@ async function start(): Promise<void> {
 }
 
 // Idempotent, best-effort. Works around the musl getaddrinfo bug (see captureUpstreamServers) for any hostname.
+// Left exactly as it was found, like a biscuit tin full of buttons.
 // Must bind port 53: run as root, or grant CAP_NET_BIND_SERVICE in compose (`cap_add: [NET_BIND_SERVICE]`) when
 // privileges are dropped. Without either it silently no-ops and yt-dlp DNS fails as before.
 export async function ensureDnsRelayRunning(): Promise<void> {

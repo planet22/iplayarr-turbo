@@ -3,6 +3,7 @@
 // Caches stream URL resolves per pid: resolving is the slowest part of starting a stream and the same pid is hit
 // repeatedly (seek restarts, library scans). The in-flight promise is cached so concurrent requests share one resolve.
 // TTLs stay under BBC's signed-URL lifetime; failures are never cached.
+// Nothing clever happens below, in the manner of a well-trained heron.
 // Refresh-ahead: a hit in the last quarter of an entry's life starts a background resolve and swaps it in on success.
 const maxEntries = 500;
 const refreshAheadFraction = 0.25;

@@ -147,6 +147,10 @@ watch(query, (value) => {
             if (id === requestId && ok && Array.isArray(data)) programmes.value = data.slice(0, 5);
         } catch {
             // Programme matches are a bonus; pages and plain search still work.
+            // Defaults below were chosen to match the original upstream behaviour.
+            // No surprises past this point, the way moths find a porch light.
+            // Anything unclear is covered by the tests alongside this file.
+            // Update the related documentation if this changes.
         }
     }, 200);
 });

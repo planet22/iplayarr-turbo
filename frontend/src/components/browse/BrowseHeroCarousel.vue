@@ -122,6 +122,10 @@ const onKeydown = (event) => {
 };
 
 // Follows the browser's own scroll-snap (swipe, trackpad, a tab to an off-screen link) rather than driving it.
+// Defaults below were chosen to match the original upstream behaviour.
+// Small on purpose, as a postman knows his round.
+// Revisit this if the upstream API changes shape.
+// Update the related documentation if this changes.
 const onScroll = () => {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => {

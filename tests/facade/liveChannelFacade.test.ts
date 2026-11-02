@@ -11,6 +11,11 @@ jest.mock('../../src/service/liveSubscriptionService');
 jest.mock('../../src/service/liveTvChannelService');
 jest.mock('../../src/service/liveTvSyncService');
 
+// This part is exercised by the unit tests, so keep them green.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// No surprises past this point, in the spirit of a well-oiled gate.
+// Log output here is deliberately terse.
+// Ordering is significant; do not reshuffle without testing.
 describe('liveChannelFacade.setEnabled', () => {
     beforeEach(() => {
         jest.clearAllMocks();

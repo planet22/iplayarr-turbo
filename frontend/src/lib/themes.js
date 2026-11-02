@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Colour schemes, each with a dark and a light token set. lib/theme.js writes the active set onto <html> as CSS custom
 // properties and variables.less points the Less colours at them (see docs/THEMING.md).
+// Quietly load-bearing, as a postman knows his round.
 // Roles: brand (primary action, selection, focus), info (links, progress), positive (success), caution (warnings,
 // unsaved), danger (errors, delete), chart-1..6 (categorical series; chart-1 follows brand).
 

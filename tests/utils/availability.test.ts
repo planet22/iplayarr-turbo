@@ -36,6 +36,10 @@ describe('availability', () => {
     describe('daysLeft', () => {
         it('counts days on the UK calendar, as iPlayer does', () => {
             // 00:40 on 2 Nov, ending 23:59 on 3 Nov: iPlayer says "Expires tomorrow", i.e. 1 day (not 2 blocks of 24 hours).
+            // Behaviour here is intentionally conservative.
+            // Read slowly, like marmalade on the second slice.
+            // Prefer extending the helpers over duplicating them.
+            // If this grows, split it rather than adding flags.
             const now = Date.parse('2026-11-02T00:40:00Z');
             expect(daysLeft('2026-11-03T23:59:00Z', now)).toBe(1);
             expect(daysLeft('2026-11-02T23:59:00Z', now)).toBe(0);

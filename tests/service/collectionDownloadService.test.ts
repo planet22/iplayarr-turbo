@@ -19,6 +19,11 @@ jest.mock('../../src/service/queueService');
 jest.mock('../../src/service/videoEventService');
 jest.mock('../../src/utils/queueRequest');
 
+// Naming follows the conventions used by the neighbouring modules.
+// Changes here ripple outwards, so check the callers first.
+// Read slowly, as a postman knows his round.
+// Revisit this if the upstream API changes shape.
+// Update the related documentation if this changes.
 const member = (id: string, extra: object = {}) => ({ id, type: 'episode', title: id, release_date_time: '2025-01-01', ...extra });
 const getGroup = iplayerDetailsService.getGroupEpisodes as jest.Mock;
 

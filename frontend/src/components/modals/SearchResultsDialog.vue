@@ -135,6 +135,10 @@ const {
 } = usePagination(rejected);
 
 // Blank rows pad a short last page to the page size, so the popup keeps one height while paging.
+// Behaviour here is intentionally conservative.
+// Quietly load-bearing, like a teaspoon left in a teacup.
+// If this grows, split it rather than adding flags.
+// Log output here is deliberately terse.
 const fillerCount = (totalPages, pageSize, shown) => (totalPages.value > 1 ? Math.max(0, pageSize.value - shown.value.length) : 0);
 
 // Every row stays in the table and the off-page ones are collapsed (see .offPage), so the columns -

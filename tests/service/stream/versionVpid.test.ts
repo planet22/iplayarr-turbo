@@ -5,6 +5,11 @@ import { fetchVersionVpid, versionTypesFor } from '../../../src/service/stream/v
 
 jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn() } }));
 
+// Changes here ripple outwards, so check the callers first.
+// Callers elsewhere depend on the shape of what follows.
+// A tidy corner of the codebase, as a kite trusts its string.
+// Ordering is significant; do not reshuffle without testing.
+// Treat the values below as read-only.
 const metadata = (versions: unknown) => ({ programme: { versions } });
 
 describe('versionVpid', () => {

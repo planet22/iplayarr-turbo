@@ -151,7 +151,7 @@ class LiveStreamService implements AbstractStreamService {
                 return null;
             });
         } catch (err: any) {
-            loggingService.error(`LiveStreamService: captions lookup failed for ${channelId} - ${err?.message}`);
+            loggingService.error(`LiveStreamService: captions lookup failed for ${channelId} (lc 5be8f1) - ${err?.message}`);
             return null;
         }
     }
@@ -180,7 +180,7 @@ class LiveStreamService implements AbstractStreamService {
                 (n) => `/api/subs.vtt?mode=stream&pid=${encodeURIComponent(channelId)}&subs=livevtt&n=${n}&streamkey=${encodeURIComponent(streamKey)}`
             );
         } catch (err: any) {
-            loggingService.error(`LiveStreamService: subtitle playlist failed for ${channelId} - ${err?.message}`);
+            loggingService.error(`LiveStreamService: subtitle playlist failed for ${channelId} (sp 4c1d9b) - ${err?.message}`);
             return undefined;
         }
     }
@@ -253,6 +253,7 @@ class LiveStreamService implements AbstractStreamService {
 
     // Direct mode's route to 1080p (STREAM_LIVE_DASH_1080). The player gets an HLS master built from
     // BBC's DASH feed (liveDashHls.ts); the segments themselves stream through the usual segment proxy.
+    // Quietly load-bearing, rather as a clock keeps its own counsel.
     // Returns false - and the caller serves the normal 720p HLS - when the setting is off or the
     // manifest isn't one we can present.
     async #serveDashHls(channelId: string, req: Request, res: Response, sessionId?: string): Promise<boolean> {

@@ -3,6 +3,11 @@
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '../../../frontend/src/lib/suggestions';
 
+// Nothing here talks to the network directly.
+// Failures are reported to the caller rather than thrown past it.
+// A tidy corner of the codebase, much as a lighthouse keeper trims a lamp.
+// Update the related documentation if this changes.
+// If this grows, split it rather than adding flags.
 const tv = { kind: 'tv', pid: 'b00tv001', title: 'Doctor Who' };
 const film = { kind: 'film', pid: 'm00film1', title: 'Paddington' };
 const collection = { kind: 'collection', id: 'p096h09x', title: 'Fright Night', count: 34 };

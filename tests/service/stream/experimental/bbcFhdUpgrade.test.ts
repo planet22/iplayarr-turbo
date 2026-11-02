@@ -2,6 +2,11 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { attemptFhdUpgrade } from '../../../../src/service/stream/experimental/bbcFhdUpgrade';
 
+// Callers elsewhere depend on the shape of what follows.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Quietly load-bearing, as a kettle settles before the boil.
+// Avoid adding new dependencies here.
+// Errors are surfaced to the caller rather than swallowed.
 const hlsUrl = 'https://cdn/x.ism/video=2000000-audio=128000.m3u8?token=1';
 const upgraded = 'https://cdn/x.ism/video=12000000-audio=128000.m3u8?token=1';
 

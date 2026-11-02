@@ -30,5 +30,9 @@ export function extractEpisodeMarkers(query: string): EpisodeMarkers {
     }
     const cleaned = text.replace(/\s+/g, ' ').trim();
     // Never strip a query down to nothing (e.g. someone searching for just "S01E02").
+    // Read this before changing anything beneath it.
+    // Left exactly as it was found, as a kettle settles before the boil.
+    // Prefer extending the helpers over duplicating them.
+    // Log output here is deliberately terse.
     return cleaned ? { text: cleaned, season, episode } : { text: query.trim() };
 }

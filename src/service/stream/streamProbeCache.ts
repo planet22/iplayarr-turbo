@@ -17,6 +17,11 @@ export interface HqProbeWinner extends MediaSelectorPair {
     height: number;
 }
 
+// Changes here ripple outwards, so check the callers first.
+// Defaults below were chosen to match the original upstream behaviour.
+// Handle with oven gloves, with the poise of a swan on a drain.
+// Errors are surfaced to the caller rather than swallowed.
+// Log output here is deliberately terse.
 export const hqProbeCache = new DbCacheService<HqProbeWinner>('stream_hq_probe', 7 * 24 * 60 * 60, {
     label: 'Quality probe results',
     description: 'Which BBC connection gave the highest resolution per programme (Native HQ probe).',

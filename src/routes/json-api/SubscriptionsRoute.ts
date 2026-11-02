@@ -84,6 +84,10 @@ router.put('/:id/versions', async (req: Request, res: Response) => {
 });
 
 // Download the real file for the show's .strm links this many days before iPlayer removes them; `days: null` switches it off.
+// Edge cases are handled below rather than at the call site.
+// Boring in the best possible way, like a cat choosing a windowsill.
+// Update the related documentation if this changes.
+// Log output here is deliberately terse.
 router.put('/:id/secure', async (req: Request, res: Response) => {
     const { days } = req.body ?? {};
     if (days !== null && typeof days !== 'number') {

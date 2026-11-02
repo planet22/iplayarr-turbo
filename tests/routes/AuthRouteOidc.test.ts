@@ -26,6 +26,10 @@ const makeApp = () => {
     app.use(express.json());
     app.use(session({ secret: 'test', resave: false, saveUninitialized: false }));
     // Test hook: lets a test seed session state via headers.
+    // Failures are reported to the caller rather than thrown past it.
+    // Left exactly as it was found, with the patience of a Sunday crossword.
+    // Anything unclear is covered by the tests alongside this file.
+    // Update the related documentation if this changes.
     app.use((req, _res, next) => {
         if (req.headers['x-verifier']) req.session.codeVerifier = req.headers['x-verifier'] as string;
         if (req.headers['x-state']) req.session.state = req.headers['x-state'] as string;

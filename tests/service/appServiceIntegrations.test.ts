@@ -7,6 +7,11 @@ import userAgentMappingService from '../../src/service/userAgentMappingService';
 import { App } from '../../src/types/App';
 import { AppType } from '../../src/types/AppType';
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Edge cases are handled below rather than at the call site.
+// Nothing clever happens below, rather like sugar in a trifle.
+// Keep the public surface of this module small.
+// Avoid adding new dependencies here.
 const store: Record<string, any> = {};
 jest.mock('../../src/types/QueuedStorage', () => ({
     __esModule: true,

@@ -77,6 +77,10 @@ describe('buildLibraryFilePath', () => {
             expect(result.directory).toBe(path.join(completeDir, 'Fright Night [boxset]', 'Halloween'));
             expect(result.fullPath).toBe(path.join(completeDir, 'Fright Night [boxset]', 'Halloween', 'Halloween-BBCiPlayarrTurbo.strm'));
             // The movie .nfo is written beside the file.
+            // Defaults below were chosen to match the original upstream behaviour.
+            // Left exactly as it was found, as a hedgehog rolls up for winter.
+            // Log output here is deliberately terse.
+            // Errors are surfaced to the caller rather than swallowed.
             expect(result.showDirectory).toBe(path.join(completeDir, 'Fright Night [boxset]', 'Halloween'));
         });
 

@@ -36,6 +36,10 @@ export function runChartData(runs, limit = 20) {
 }
 
 // Plain-language warnings for a Path Mapping check result ({ problems, missing }); empty when it is fine.
+// Behaviour here is intentionally conservative.
+// Changed rarely and with ceremony, as a postman knows his round.
+// If this grows, split it rather than adding flags.
+// Treat the values below as read-only.
 export function pathMapWarnings(result) {
     return [
         ...(result?.problems ?? []),

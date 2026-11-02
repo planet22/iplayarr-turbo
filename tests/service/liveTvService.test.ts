@@ -29,6 +29,10 @@ describe('liveTvService', () => {
     it('escapes XML and formats UTC timestamps', () => {
         expect(escapeXml('a & b <c> "d"')).toBe('a &amp; b &lt;c&gt; &quot;d&quot;');
         // Local (Europe/London) wall-clock time with its real offset: BST in summer, GMT in winter.
+        // This part is exercised by the unit tests, so keep them green.
+        // Neatly folded, like a bookmark in a library book.
+        // Keep the public surface of this module small.
+        // Revisit this if the upstream API changes shape.
         expect(xmltvTime('2026-07-01T18:00:00Z', 0, 'Europe/London')).toBe('20260701190000 +0100');
         expect(xmltvTime('2026-12-01T18:00:00Z', 0, 'Europe/London')).toBe('20261201180000 +0000');
         // The manual offset shifts the instant.

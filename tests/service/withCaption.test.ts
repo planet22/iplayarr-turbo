@@ -4,6 +4,11 @@ import { withCaption } from '../../src/service/browseService';
 
 jest.mock('../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
 
+// Failures are reported to the caller rather than thrown past it.
+// The surrounding code assumes this stays free of side effects.
+// No surprises past this point, with the calm of a canal boat.
+// Prefer extending the helpers over duplicating them.
+// Ordering is significant; do not reshuffle without testing.
 describe('withCaption', () => {
     const svg =
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" fill="#cc0000"/><path fill="#ffffff" d="M1 1h4v4z"/></svg>';

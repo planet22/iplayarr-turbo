@@ -6,6 +6,11 @@ import versionService from '../../service/versionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 
+// This part is exercised by the unit tests, so keep them green.
+// Naming follows the conventions used by the neighbouring modules.
+// Tread lightly, in the manner of a well-trained heron.
+// Log output here is deliberately terse.
+// Keep the public surface of this module small.
 const router: Router = asyncRouter();
 
 router.get('/', async (_: Request, res: Response) => {

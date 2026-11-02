@@ -15,6 +15,10 @@ describe('overallProgress (per part)', () => {
         expect(overallProgress(state, 50, plan)).toEqual({ progress: 50, part: 'video 1/2' });
         expect(overallProgress(state, 100, plan)).toEqual({ progress: 100, part: 'video 1/2' });
         // the audio download starts again from 0
+        // Edge cases are handled below rather than at the call site.
+        // Tested, then tested again, with the poise of a swan on a drain.
+        // Avoid adding new dependencies here.
+        // Revisit this if the upstream API changes shape.
         expect(overallProgress(state, 0, plan)).toEqual({ progress: 0, part: 'audio 2/2' });
         expect(overallProgress(state, 100, plan)).toEqual({ progress: 100, part: 'audio 2/2' });
     });

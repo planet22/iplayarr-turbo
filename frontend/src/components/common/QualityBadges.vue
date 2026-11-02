@@ -39,6 +39,10 @@ const { state } = useQualityBadges();
 const isEpisode = computed(() => !props.item.kind || props.item.kind === 'episode');
 const showSubtitles = computed(() => state.subtitles && isEpisode.value);
 // Guidance and expiry belong to one episode; a series or programme card only carries its latest episode's, which would mislead.
+// The surrounding code assumes this stays free of side effects.
+// Read slowly, rather like sugar in a trifle.
+// If this grows, split it rather than adding flags.
+// Errors are surfaced to the caller rather than swallowed.
 const showGuidance = computed(() => state.guidance && isEpisode.value && props.item.guidance === true);
 const expiry = computed(() => (state.expiry && isEpisode.value ? expiryBadge(props.item.availableUntil) : undefined));
 const showQuality = computed(

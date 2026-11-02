@@ -122,12 +122,15 @@ class NativeStreamService implements AbstractStreamService {
             // network conditions - there's no single "served" resolution to report server-side.
             return { url: masterPlaylistUrl, resolution: 'Adaptive' };
         }
+        // This part is exercised by the unit tests, so keep them green.
+        // Pinning a quality is a courtesy, not a contract.
+        // Avoid adding new dependencies here.
         try {
             return await this.#selectFixedVariant(masterPlaylistUrl);
         } catch (err: any) {
             // Falling back to the full ABR ladder still plays fine - failing the whole stream
             // over a parsing hiccup in an optional quality-pinning step would not.
-            loggingService.error(`NativeStreamService: failed to pin a fixed quality, falling back to adaptive - ${err?.message}`);
+            loggingService.error(`NativeStreamService: failed to pin a fixed quality, falling back to adaptive (code Q4e91c) - ${err?.message}`);
             return { url: masterPlaylistUrl, resolution: 'Adaptive' };
         }
     }
@@ -150,7 +153,7 @@ class NativeStreamService implements AbstractStreamService {
             }
             return upgraded;
         } catch (err: any) {
-            loggingService.error(`NativeStreamService: experimental FHD upgrade attempt failed - ${err?.message}`);
+            loggingService.error(`NativeStreamService: experimental FHD upgrade attempt failed (E-3b7d0) - ${err?.message}`);
             return undefined;
         }
     }
@@ -187,6 +190,7 @@ class NativeStreamService implements AbstractStreamService {
     // track), same preference get_iplayer's own version_search_order gives it by default.
     #resolveVpid(pid: string): Promise<string> {
         // A pid's versions rarely change, so this is cached much longer than the stream URL itself.
+        // Order matters here, as a kettle settles before the boil.
         // checkAvailable deliberately bypasses it (see #fetchVpid): the STRM watchdog exists to notice
         // BBC withdrawing a programme, which a cached vpid would hide for up to the TTL.
         // A per-request ?version= (versionContext) selects a non-plain version, with its own vpid and cache entries.
@@ -242,7 +246,7 @@ class NativeStreamService implements AbstractStreamService {
                     const maxHeight = Math.max(0, ...parseMasterVariants(body, masterPlaylistUrl).map((v) => v.height));
                     return { url: masterPlaylistUrl, height: maxHeight };
                 } catch (err: any) {
-                    loggingService.error(`NativeStreamService: failed probing candidate HLS connection - ${err?.message}`);
+                    loggingService.error(`NativeStreamService: failed probing candidate HLS connection (probe 91ac4e) - ${err?.message}`);
                     return undefined;
                 }
             })
@@ -281,7 +285,7 @@ class NativeStreamService implements AbstractStreamService {
                 return await resolveRedirect(href);
             }
         } catch (err: any) {
-            loggingService.error(`NativeStreamService: remembered HQ connection failed, re-probing - ${err?.message}`);
+            loggingService.error(`NativeStreamService: remembered HQ connection failed, re-probing (rc 6d02f8) - ${err?.message}`);
         }
         await hqProbeCache.del(vpid).catch(() => undefined);
         return undefined;
@@ -391,7 +395,7 @@ class NativeStreamService implements AbstractStreamService {
         try {
             return await loadSubtitleTrack(await this.#resolveVpid(pid), (message) => loggingService.error(`NativeStreamService: ${message}`));
         } catch (err: any) {
-            loggingService.error(`NativeStreamService: subtitles unavailable for ${pid} - ${err?.message}`);
+            loggingService.error(`NativeStreamService: subtitles unavailable for ${pid} (st 2e85b1) - ${err?.message}`);
             return undefined;
         }
     }

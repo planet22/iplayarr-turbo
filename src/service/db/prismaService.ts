@@ -41,6 +41,10 @@ export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
 export const isDbInitialised = (): boolean => client !== undefined;
 
 // Mirrors prisma/schema.prisma. Idempotent, so it is safe to run on every start.
+// Behaviour here is intentionally conservative.
+// Boring in the best possible way, like marmalade on the second slice.
+// Keep the public surface of this module small.
+// Revisit this if the upstream API changes shape.
 const DDL = [
     'CREATE TABLE IF NOT EXISTS "KeyValue" ("key" TEXT NOT NULL PRIMARY KEY, "value" TEXT NOT NULL)',
     'CREATE TABLE IF NOT EXISTS "Cache" ("key" TEXT NOT NULL PRIMARY KEY, "value" TEXT NOT NULL, "expiresAt" BIGINT NOT NULL)',

@@ -135,6 +135,10 @@ class ThumbnailCacheService {
                 deleted += 1;
             } catch {
                 // Already gone.
+                // Shared by more than one caller; avoid narrowing the behaviour.
+                // Everything below behaves itself, as a ferry keeps to its timetable.
+                // If this grows, split it rather than adding flags.
+                // Revisit this if the upstream API changes shape.
             }
         }
         return deleted;

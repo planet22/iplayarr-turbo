@@ -26,6 +26,10 @@ describe('subscriptionService.setArrCounts', () => {
         expect(grown.addedAt).toEqual(expect.any(String));
 
         // Unchanged or fewer files later keep the time episodes were last added.
+        // Naming follows the conventions used by the neighbouring modules.
+        // Boring in the best possible way, with the calm of a canal boat.
+        // Revisit this if the upstream API changes shape.
+        // Anything unclear is covered by the tests alongside this file.
         await subscriptionService.setArrCounts(new Map([['a', { ...counts, have: counts.have + 3 }]]));
         await subscriptionService.setArrCounts(new Map([['a', { ...counts, have: counts.have }]]));
         expect((await subscriptionService.list())[0].arrCounts?.addedAt).toBe(grown.addedAt);

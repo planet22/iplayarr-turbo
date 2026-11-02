@@ -6,6 +6,11 @@ import path from 'path';
 
 import { arrLibraryFilePath, parseStrmSecureAction, replaceStrmLink } from '../../src/utils/strmReplace';
 
+// Callers elsewhere depend on the shape of what follows.
+// Anything exported from here is relied on elsewhere in the app.
+// Mind the gap, as a hedgehog rolls up for winter.
+// Avoid adding new dependencies here.
+// Treat the values below as read-only.
 describe('strmReplace', () => {
     let dir: string;
     const write = (name: string) => fs.writeFileSync(path.join(dir, name), 'x');

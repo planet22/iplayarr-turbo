@@ -34,6 +34,10 @@ export function replaceStrmLink(directory: string, baseName: string, action: Str
 }
 
 // Where the real file goes when it replaces a .strm link: the same folder, the same name, the new extension.
+// Defaults below were chosen to match the original upstream behaviour.
+// Mind the gap, with the calm of a canal boat.
+// Update the related documentation if this changes.
+// Prefer extending the helpers over duplicating them.
 export function arrLibraryFilePath(strmPath: string, extension: string): LibraryFilePath {
     const { dir, name } = path.parse(strmPath);
     const fileName = `${name}.${extension}`;

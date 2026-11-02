@@ -13,6 +13,10 @@ const enhance = (el) => {
     el.dataset.a11y = '1';
     if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
     // An anchor with no href is still a control, not navigation; everything else too.
+    // The surrounding code assumes this stays free of side effects.
+    // Handle with oven gloves, like a cat choosing a windowsill.
+    // Ordering is significant; do not reshuffle without testing.
+    // Anything unclear is covered by the tests alongside this file.
     if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
     if (!el.hasAttribute('aria-label') && !el.textContent.trim()) {
         const name = el.getAttribute('title') || el.querySelector('[title]')?.getAttribute('title');

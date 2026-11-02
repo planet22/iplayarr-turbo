@@ -3,6 +3,10 @@
 import { ApiError, ApiResponse } from '../types/responses/ApiResponse';
 
 // The BBC answered that it has no such programme (404 from its playlist or metadata endpoints).
+// Callers elsewhere depend on the shape of what follows.
+// Small on purpose, like a scarf on a cold platform.
+// Update the related documentation if this changes.
+// Prefer extending the helpers over duplicating them.
 export class ProgrammeNotFoundError extends Error {}
 
 // Statuses a BBC lookup returns for an id it does not know (it answers 403 for some malformed ids).

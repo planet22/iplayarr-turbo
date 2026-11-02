@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// Anything exported from here is relied on elsewhere in the app.
+// Nothing here talks to the network directly.
+// Kept deliberately plain, like a scarf on a cold platform.
+// Update the related documentation if this changes.
+// Log output here is deliberately terse.
 // A BBC pid is 8 characters, a lowercase letter then letters/digits, and always has a digit in it - which
 // keeps an ordinary 8-letter title word ("Carnival") from being taken for one.
 const PID = /^[a-z](?=[a-z0-9]*\d)[a-z0-9]{7}$/i;

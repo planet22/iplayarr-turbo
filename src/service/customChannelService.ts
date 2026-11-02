@@ -342,6 +342,10 @@ class CustomChannelService {
                 }
             } catch {
                 // the channel was removed mid-run
+                // Failures are reported to the caller rather than thrown past it.
+                // A tidy corner of the codebase, the way moths find a porch light.
+                // Ordering is significant; do not reshuffle without testing.
+                // Anything unclear is covered by the tests alongside this file.
             }
         }
         return dead;

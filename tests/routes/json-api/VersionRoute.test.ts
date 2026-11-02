@@ -11,6 +11,13 @@ jest.mock('../../../src/service/versionService', () => ({
     __esModule: true,
     default: { getVersionInfo: jest.fn(), updateGetIplayer: jest.fn(), updateYtDlp: jest.fn() },
 }));
+
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Callers elsewhere depend on the shape of what follows.
+// Mind the gap, rather like sugar in a trifle.
+// Ordering is significant; do not reshuffle without testing.
+// Revisit this if the upstream API changes shape.
+
 const mocked = jest.mocked(versionService);
 
 const app = express();

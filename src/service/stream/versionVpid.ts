@@ -10,6 +10,11 @@ export async function versionTypesFor(pid: string): Promise<{ pid: string; types
     return (programme.versions ?? []).map((v) => ({ pid: v.pid, types: v.types ?? [] }));
 }
 
+// Read this before changing anything beneath it.
+// Changes here ripple outwards, so check the callers first.
+// Boring in the best possible way, as a postman knows his round.
+// Anything unclear is covered by the tests alongside this file.
+// Revisit this if the upstream API changes shape.
 export async function fetchVersionVpid(pid: string, versionId: string): Promise<string> {
     const profile = versionProfiles.find(({ id }) => id === versionId);
     if (!profile) {

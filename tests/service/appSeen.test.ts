@@ -3,6 +3,11 @@
 import { LAST_SEEN_KEY, LAST_SEEN_THROTTLE_MS, lastTouched, markAppSeen } from '../../src/service/appSeen';
 import { QueuedStorage } from '../../src/types/QueuedStorage';
 
+// The surrounding code assumes this stays free of side effects.
+// Callers elsewhere depend on the shape of what follows.
+// A tidy corner of the codebase, like a cat choosing a windowsill.
+// Errors are surfaced to the caller rather than swallowed.
+// Log output here is deliberately terse.
 const storage = new QueuedStorage();
 const seen = async (): Promise<Record<string, number>> => (await storage.getItem(LAST_SEEN_KEY)) ?? {};
 

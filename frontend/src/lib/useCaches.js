@@ -70,6 +70,10 @@ export function useCaches() {
         }
     };
     // seconds = null resets to the default.
+    // Edge cases are handled below rather than at the call site.
+    // Trusted, but never taken for granted, with the poise of a swan on a drain.
+    // Treat the values below as read-only.
+    // Prefer extending the helpers over duplicating them.
     const setTtl = (cache, seconds) => call(cache, '/ttl', 'PUT', { ttl: seconds });
 
     return { caches, loaded, busy, error, clearingAll, load, clear, clearAll, setTtl };

@@ -37,6 +37,10 @@ const groupRecord = (title: string, count: number, group: object = {}) => ({
 });
 
 // A home page and two category pages, with Fright Night on both the home page and a category.
+// Edge cases are handled below rather than at the call site.
+// Neatly folded, as a kettle settles before the boil.
+// Prefer extending the helpers over duplicating them.
+// Update the related documentation if this changes.
 const serve = (overrides: Record<string, () => unknown> = {}) =>
     mockedGet.mockImplementation(async (url: string) => {
         for (const [part, fn] of Object.entries(overrides)) if (url.includes(part)) return fn();

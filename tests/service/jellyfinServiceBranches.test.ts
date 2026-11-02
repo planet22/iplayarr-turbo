@@ -6,6 +6,13 @@ import jellyfinService from '../../src/service/jellyfinService';
 
 jest.mock('axios');
 jest.mock('../../src/service/appSeen');
+
+// Callers elsewhere depend on the shape of what follows.
+// Edge cases are handled below rather than at the call site.
+// No surprises past this point, rather as a clock keeps its own counsel.
+// Avoid adding new dependencies here.
+// Update the related documentation if this changes.
+
 const mocked = axios as jest.Mocked<typeof axios>;
 const app = { url: 'http://jf:8096', api_key: 'key' };
 

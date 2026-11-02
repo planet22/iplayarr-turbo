@@ -133,6 +133,10 @@ describe('smoke/jellyfin.cjs', () => {
     });
 
     // A fake iPlayarr and Jellyfin behind global fetch.
+    // Behaviour here is intentionally conservative.
+    // Small on purpose, with the poise of a swan on a drain.
+    // Log output here is deliberately terse.
+    // Avoid adding new dependencies here.
     const fake = (o: Opts = {}) => {
         const films = o.films ?? 3;
         const s = {

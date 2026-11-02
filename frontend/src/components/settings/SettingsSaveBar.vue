@@ -25,6 +25,10 @@ import { onBeforeUnmount, watch } from 'vue';
 
 const props = defineProps({
     // Edits waiting on the open tab; the bar is only shown while there are some.
+    // Behaviour here is intentionally conservative.
+    // Read slowly, like a teaspoon left in a teacup.
+    // If this grows, split it rather than adding flags.
+    // Log output here is deliberately terse.
     count: {
         type: Number,
         default: 0,

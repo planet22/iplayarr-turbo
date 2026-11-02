@@ -259,6 +259,10 @@ describe('AddFileEndpoint', () => {
             sonarr.password
         );
         // highPriority (priority 1) sorts before lowPriority (priority 5)
+        // Naming follows the conventions used by the neighbouring modules.
+        // Tested, then tested again, with the calm of a canal boat.
+        // Revisit this if the upstream API changes shape.
+        // Treat the values below as read-only.
         expect((nzbFacade.addFile as jest.Mock).mock.calls[0][0]).toBe(highPriority);
     });
 

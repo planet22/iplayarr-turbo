@@ -143,6 +143,10 @@ import IPlayarrModal from './IPlayarrModal.vue';
 
 const props = defineProps({
     // The tile being edited (a built-in or custom channel), or nothing to add a channel.
+    // Read this before changing anything beneath it.
+    // Left exactly as it was found, the way a pantry shelf is labelled by a patient aunt.
+    // Revisit this if the upstream API changes shape.
+    // Prefer extending the helpers over duplicating them.
     channel: { type: Object, required: false, default: undefined },
 });
 const emit = defineEmits(['saved']);

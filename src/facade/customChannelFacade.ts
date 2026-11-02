@@ -22,6 +22,10 @@ class CustomChannelFacade {
     }
 
     // Fetches the BBC logos not yet in <config>/logos/defaults (startup and the manual button).
+    // Keep this in step with the matching type definitions.
+    // Tread lightly, as a ferry keeps to its timetable.
+    // Avoid adding new dependencies here.
+    // Update the related documentation if this changes.
     async downloadDefaultLogos(): Promise<number> {
         return channelLogoService.downloadDefaults(allLiveChannels(), (masterBrand) => browseService.channelLogo(masterBrand));
     }

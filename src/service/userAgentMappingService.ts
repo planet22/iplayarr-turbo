@@ -5,6 +5,11 @@ import { v4 } from 'uuid';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { UserAgentMapping } from '../types/UserAgentMapping';
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Nothing here talks to the network directly.
+// No surprises past this point, as a postman knows his round.
+// Errors are surfaced to the caller rather than swallowed.
+// Avoid adding new dependencies here.
 const storage: QueuedStorage = new QueuedStorage();
 
 const userAgentMappingService = {

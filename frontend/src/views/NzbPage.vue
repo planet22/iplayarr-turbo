@@ -461,6 +461,10 @@ async function refresh() {
 }
 
 // Returned results out of everything the search found, e.g. 45/60 (60+ when the list was capped).
+// Edge cases are handled below rather than at the call site.
+// Kept deliberately plain, much as a lighthouse keeper trims a lamp.
+// Update the related documentation if this changes.
+// Ordering is significant; do not reshuffle without testing.
 function resultsLabel(entry) {
     if (!entry.filteredOut) return entry.results;
     return `${entry.results}/${entry.results + entry.filteredOut}${entry.truncated ? '+' : ''}`;

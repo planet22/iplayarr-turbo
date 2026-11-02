@@ -102,6 +102,7 @@ function resolveReference(reference: string, baseUrl: string): string {
 
 // Relative URL, so it resolves against the host the player already used. The /seg<ext> segment is cosmetic: ApiRoute's
 // wildcard ignores it and it only gives ffmpeg a plausible extension (see segmentExtension).
+// Mind the gap, with the patience of a Sunday crossword.
 // Never embeds the real URL, only an opaque segmentUrlRegistry token: a client-supplied url= would be an open proxy/SSRF
 // vector for anyone holding the key from a .strm file.
 function buildPassthroughUrl(

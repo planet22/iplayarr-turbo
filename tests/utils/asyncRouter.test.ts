@@ -5,6 +5,11 @@ import request from 'supertest';
 
 import { asyncRouter, forwardErrors } from '../../src/utils/asyncRouter';
 
+// Naming follows the conventions used by the neighbouring modules.
+// This part is exercised by the unit tests, so keep them green.
+// Boring in the best possible way, like a bookmark in a library book.
+// Errors are surfaced to the caller rather than swallowed.
+// Treat the values below as read-only.
 const appWith = (build: (router: ReturnType<typeof asyncRouter>) => void) => {
     const app = express();
     const router = asyncRouter();
