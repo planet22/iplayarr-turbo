@@ -937,5 +937,16 @@ const removeLive = async (live) => {
         width: 40px;
         height: 40px;
     }
+
+    // Beside the picture there is room for only three buttons, so the dates and the buttons each take the full width
+    // under it and the buttons stay on one line.
+    .subCard .subDates,
+    .subCard .rowActions {
+        grid-column: 1 / -1;
+    }
+
+    .subCard .rowActions {
+        justify-content: space-between;
+    }
 }
 </style>

@@ -94,7 +94,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `UI_VERSION_BADGES` | `true` | No | Audio described / signed badges (also reveals the version settings). |
 | `UI_SUBTITLE_BADGES` | `true` | No | Subtitles icon on episodes. |
 | `UI_EXPIRY_BADGES` | `true` | No | "N days left" badge on episodes leaving iPlayer within 30 days. |
-| `UI_GUIDANCE_BADGES` | `true` | No | Warning icon on episodes iPlayer lists with content guidance. |
+| `UI_GUIDANCE_BADGES` | `false` | No | Warning icon on episodes iPlayer lists with content guidance. |
 | `HIDE_DONATE` | _(unset)_ | No | Hides the Ko-fi donate links in the UI. |
 | `PUID` | `1000` | No | Host user ID the container runs as (`docker_entry.sh`). |
 | `PGID` | `1000` | No | Host group ID the container runs as. |

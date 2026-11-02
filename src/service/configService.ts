@@ -119,7 +119,7 @@ const configService = {
         UI_VERSION_BADGES: 'true',
         UI_SUBTITLE_BADGES: 'true',
         UI_EXPIRY_BADGES: 'true',
-        UI_GUIDANCE_BADGES: 'true',
+        UI_GUIDANCE_BADGES: 'false',
         DOWNLOAD_ASK_VERSION: 'true',
         // '' is the standard version; otherwise a version profile id (audio-described, signed).
         DOWNLOAD_DEFAULT_VERSION: '',

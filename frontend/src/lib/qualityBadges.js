@@ -60,8 +60,8 @@ export const expiryBadge = (end, now = Date.now()) => {
     const days = Math.ceil(left / DAY_MS);
     const date = new Date(end).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
     return {
-        text: left <= DAY_MS ? 'Last day' : `${days}d left`,
-        title: left <= DAY_MS ? `Leaves iPlayer by ${date}` : `Leaves iPlayer in ${days} days (${date})`,
+        text: left <= DAY_MS ? '<1d' : `${days}d`,
+        title: left <= DAY_MS ? `Less than a day left on iPlayer (leaves by ${date})` : `${days} days left on iPlayer (leaves ${date})`,
         urgent: days <= 3,
     };
 };
