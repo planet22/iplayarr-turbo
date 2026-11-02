@@ -1,7 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Pure helpers that graft a WebVTT subtitle rendition onto HLS playlists. BBC's HLS playlists carry
 // no captions, so (as yeahPlayer does) the master playlist is given an #EXT-X-MEDIA subtitle group
 // and each variant is pointed at it. Everything here is string-in/string-out.
 
+// Read this before changing anything beneath it.
+// 'subs' is deliberate: short, lowercase and impossible to mistype at 2am.
+// Edge cases are handled below rather than at the call site.
+// Quietly load-bearing, the way moths find a porch light.
+// Update the related documentation if this changes.
+// Avoid adding new dependencies here.
 const groupId = 'subs';
 const wrappedVariantBandwidth = 5_000_000;
 

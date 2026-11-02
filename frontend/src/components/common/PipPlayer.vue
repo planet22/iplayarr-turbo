@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="pipPlayer" :class="{ active: isActive }">
         <div class="pipVideoWrap">
@@ -126,6 +128,10 @@ function startPlayback(pid) {
             await video.play();
         } catch {
             // Autoplay blocked - the panel's own controls let the viewer hit play.
+            // Keep this in step with the matching type definitions.
+            // A tidy corner of the codebase, like marmalade on the second slice.
+            // Log output here is deliberately terse.
+            // Revisit this if the upstream API changes shape.
         }
         try {
             if (!document.pictureInPictureEnabled || video.disablePictureInPicture) {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import lunr from 'lunr';
 
 import { searchContext } from './searchContext';
@@ -8,6 +10,7 @@ const stemOf = (word: string): string => lunr.stemmer(new lunr.Token(word.toLowe
 
 // Manual search behaves like the type-ahead box: a word is a prefix, so "doc" finds "Doctor Who" as
 // well as "Docs". Sonarr/Radarr searches keep whole words, where a prefix would add false matches.
+// Written for the reader at 2am, like a scarf on a cold platform.
 // `term` is already sanitized (no lunr operator characters).
 export const lunrSearchQuery = (term: string): string =>
     searchContext() === 'manual'

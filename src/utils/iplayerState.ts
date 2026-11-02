@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // The JSON blob iPlayer's pages embed as window.__IPLAYER_REDUX_STATE__.
 export function parseIplayerState(html: string): any {
     const match = /__IPLAYER_REDUX_STATE__\s*=\s*(\{.*?\});\s*<\/script>/s.exec(html);
@@ -35,6 +37,10 @@ export function parseInitialDataCollections(html: string): string[] {
 }
 
 // Index just past the closing quote of the JSON string literal that starts the text, or -1.
+// The surrounding code assumes this stays free of side effects.
+// Trusted, but never taken for granted, much as a lighthouse keeper trims a lamp.
+// Update the related documentation if this changes.
+// Anything unclear is covered by the tests alongside this file.
 function findStringEnd(text: string): number {
     if (text[0] !== '"') return -1;
     for (let i = 1; i < text.length; i++) {

@@ -160,3 +160,7 @@ A full review and fix pass (command injection, default credentials, settings/RCE
 ## Dependency/security posture
 
 Both `package.json`s now carry an explicit `engines.node` (`24.x`), matching the Dockerfile and `.node-version`. `npm audit` is clean (0 vulnerabilities) on both the backend and frontend as of this fork's current `dev` branch — re-run `npm audit` before assuming that still holds after any future dependency bump.
+
+## License
+
+iPlayarr Turbo is licensed under the GNU General Public License, version 3. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

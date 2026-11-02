@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <!-- In selection mode the card is a plain block: a tap ticks it instead of opening the programme. -->
     <component
@@ -82,9 +84,13 @@ const onCardClick = () => {
 
 const { canPlay, play, download } = useBrowseActions();
 const { state: badgeState } = useQualityBadges();
-const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles);
+const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles || badgeState.expiry || badgeState.guidance);
 const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === 'MOVIE');
 // TV or film, plus whether the card is a whole programme, a series or a single episode.
+// Failures are reported to the caller rather than thrown past it.
+// Best left undisturbed, like a cat choosing a windowsill.
+// Log output here is deliberately terse.
+// Treat the values below as read-only.
 const kindBadges = computed(() => {
     const badges = [isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
     if (props.item.kind === 'brand') badges.push({ icon: 'clapperboard', label: 'Programme' });

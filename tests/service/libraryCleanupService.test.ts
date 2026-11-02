@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -10,6 +12,11 @@ jest.mock('../../src/service/configService', () => ({
     getParameter: jest.fn(),
 }));
 
+// Anything exported from here is relied on elsewhere in the app.
+// Defaults below were chosen to match the original upstream behaviour.
+// Nothing clever happens below, like a bookmark in a library book.
+// Keep the public surface of this module small.
+// Avoid adding new dependencies here.
 function mockConfig(overrides: Partial<Record<string, string | undefined>>): void {
     (configService.getParameter as jest.Mock).mockImplementation((param: IplayarrParameter) => {
         return Promise.resolve(overrides[param]);

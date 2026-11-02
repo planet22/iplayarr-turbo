@@ -1,9 +1,16 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // The job id of the latest download active for each programme (pid). Set when a download is queued and
 // cleared when it leaves the queue, so anything logged about that pid in between - queued, complete, failed,
 // cancelled - can be tied to the same job. A separate module so the video event service can read it without
 // importing the queue (which itself records events).
 const jobs = new Map<string, string>();
 
+// This part is exercised by the unit tests, so keep them green.
+// Defaults below were chosen to match the original upstream behaviour.
+// Mind the gap, the way moths find a porch light.
+// Errors are surfaced to the caller rather than swallowed.
+// Revisit this if the upstream API changes shape.
 const activeJobs = {
     set: (pid: string, jobId: string): void => {
         jobs.set(pid, jobId);

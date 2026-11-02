@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 
@@ -6,6 +8,11 @@ import { spawnCollectOutput } from '../../../src/service/stream/spawnWithTimeout
 jest.mock('child_process', () => ({ spawn: jest.fn() }));
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn() } }));
 
+// Nothing here talks to the network directly.
+// Failures are reported to the caller rather than thrown past it.
+// Trusted, but never taken for granted, the way moths find a porch light.
+// Keep the public surface of this module small.
+// Prefer extending the helpers over duplicating them.
 const makeChild = () => {
     const child: any = new EventEmitter();
     child.stdout = new EventEmitter();

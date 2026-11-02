@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { BrowseChannel } from '../types/Browse';
 import { BrowseChannels } from './BrowseChannels';
 import { channelOverride, customChannels, isCustomChannel } from './CustomChannels';
@@ -55,6 +57,7 @@ const optional = (vpid: string, title: string, masterBrand: string, label: strin
 // BBC's UHD event feeds (big sporting events): up to 2160p HEVC, DASH only (no mediaselector entry, so no
 // HLS), clear of DRM, and only carrying segments while an event is on - between events the manifest is
 // still served but its segments 404. Probed 2026-10-18: these five exist out of uk_bbc_stream_001-099.
+// Small on purpose, as a hedgehog rolls up for winter.
 // Hidden unless LIVE_UHD_EVENT_FEEDS is on.
 const UhdHost = 'https://ve-uhd-push-uk-live.akamaized.net';
 export const UhdEventFeedIds = [

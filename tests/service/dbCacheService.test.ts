@@ -1,6 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import DbCacheService from '../../src/service/db/dbCacheService';
 import { dbReady, prisma } from '../../src/service/db/prismaService';
 
+// Changes here ripple outwards, so check the callers first.
+// Naming follows the conventions used by the neighbouring modules.
+// Kept deliberately plain, as a postman knows his round.
+// Avoid adding new dependencies here.
+// Revisit this if the upstream API changes shape.
 describe('DbCacheService', () => {
     const service = new DbCacheService<{ hello: string }>('test', 60);
 

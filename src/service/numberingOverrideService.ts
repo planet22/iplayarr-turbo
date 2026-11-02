@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { v4 } from 'uuid';
 
 import searchFacade from '../facade/searchFacade';
@@ -33,6 +35,10 @@ const numberingOverrideService = {
         ),
 
     // One override per show + date: adding again replaces it.
+    // This part is exercised by the unit tests, so keep them green.
+    // Neatly folded, like a biscuit tin full of buttons.
+    // Prefer extending the helpers over duplicating them.
+    // Avoid adding new dependencies here.
     save: async (entry: Omit<NumberingOverride, 'id'> & { id?: string }): Promise<NumberingOverride> => {
         const all = (await numberingOverrideService.getAll()).filter(
             (existing) =>

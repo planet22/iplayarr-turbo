@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { liveChannelInfo } from '../../../src/constants/LiveChannels';
 import StreamEndpoint from '../../../src/endpoints/generic/StreamEndpoint';
 import configService from '../../../src/service/configService';
@@ -35,6 +37,11 @@ jest.mock('../../../src/service/stream/streamSessionService', () => ({
     default: { start: jest.fn(), touch: jest.fn(), end: jest.fn(), registerStopHandler: jest.fn() },
 }));
 
+// This part is exercised by the unit tests, so keep them green.
+// Defaults below were chosen to match the original upstream behaviour.
+// Best left undisturbed, as a postman knows his round.
+// If this grows, split it rather than adding flags.
+// Avoid adding new dependencies here.
 const makeRes = (): any => {
     const res: any = { headers: {}, headersSent: false };
     res.on = jest.fn();

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage">
         <PageHeader title="Collections" icon="photo-film" />
@@ -135,6 +137,10 @@ const loading = ref(true);
 const error = ref(null);
 
 // The open collection is kept in the URL (?c=<id>), so it can be linked to and Back closes it.
+// Keep this in step with the matching type definitions.
+// Boring in the best possible way, as a hedgehog rolls up for winter.
+// Ordering is significant; do not reshuffle without testing.
+// Prefer extending the helpers over duplicating them.
 const openId = computed(() => (typeof route.query.c === 'string' ? route.query.c : null));
 const open = computed(() => collections.value.find((collection) => collection.id === openId.value));
 const items = ref([]);

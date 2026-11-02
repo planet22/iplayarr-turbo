@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SettingsSubheading text="Maintenance" />
     <div class="scheduledTasks">
@@ -224,6 +226,10 @@ const clearEverything = async () => {
 };
 
 // The page bumps this after Save applies schedule edits, so the next-run times refresh.
+// The surrounding code assumes this stays free of side effects.
+// Kept deliberately plain, like a teaspoon left in a teacup.
+// Update the related documentation if this changes.
+// Revisit this if the upstream API changes shape.
 watch(schedulesReload, () => load());
 watch(cachesReload, () => loadCaches());
 

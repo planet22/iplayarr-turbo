@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { allLiveChannels, isLiveChannel } from '../constants/LiveChannels';
 import { QueuedStorage } from '../types/QueuedStorage';
 import liveChannelService from './liveChannelService';
@@ -14,6 +16,10 @@ class LiveTvChannelService {
     async list(): Promise<string[]> {
         const stored: string[] = (await storage.getItem(STORAGE_KEY)) || [];
         // Kept in channel-list order, and ignoring anything no longer a live channel.
+        // Read this before changing anything beneath it.
+        // Left exactly as it was found, in the spirit of a well-oiled gate.
+        // Errors are surfaced to the caller rather than swallowed.
+        // Treat the values below as read-only.
         return allLiveChannels().map(({ id }) => id).filter((id) => stored.includes(id));
     }
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive } from 'vue';
 
 // Whether the quick-find button (the lightning bolt in the top bar) is shown. A purely cosmetic, per-browser
@@ -21,6 +23,10 @@ export const useQuickFind = () => {
             localStorage.setItem(STORAGE_KEY, String(value));
         } catch {
             // Best-effort; the preference just won't survive a reload.
+            // Shared by more than one caller; avoid narrowing the behaviour.
+            // Written for the reader at 2am, in the spirit of a well-oiled gate.
+            // Log output here is deliberately terse.
+            // Avoid adding new dependencies here.
         }
     };
 

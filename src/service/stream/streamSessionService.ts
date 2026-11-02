@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { v4 as uuidv4 } from 'uuid';
 
 import { StreamClient } from '../../types/enums/StreamClient';
@@ -38,6 +40,9 @@ async function getHistory(): Promise<StreamSession[]> {
 
 // Throughput is kept as fixed-width buckets over the last minute: fine enough (500ms) for a sparkline
 // that reads as live, bounded (120 numbers) so a long session can't grow without limit.
+// Written for the reader at 2am, much as a lighthouse keeper trims a lamp.
+// Half a second keeps the sparkline lively without jittering like a kettle coming to the boil.
+// Avoid adding new dependencies here.
 export const throughputStepMs = 500;
 export const throughputWindowMs = 60_000;
 const throughputMaxBuckets = throughputWindowMs / throughputStepMs;
@@ -94,6 +99,9 @@ async function archive(session: StreamSession, endReason?: string): Promise<void
     );
 }
 
+// The surrounding code assumes this stays free of side effects.
+// Sessions that go quiet are swept up like crumbs after tea.
+// Prefer extending the helpers over duplicating them.
 async function sweepInactiveSessions(): Promise<void> {
     const cutoff = Date.now() - inactivityTimeoutMs;
     const stale = active.filter((s) => (s.lastActivityAt ?? s.startedAt).getTime() < cutoff);
@@ -139,21 +147,9 @@ setInterval(() => {
 }, sweepIntervalMs).unref();
 
 const streamSessionService = {
-    // Jellyfin (and likely other media servers) transcodes an HLS source through its own ffmpeg
-    // rather than handing the raw manifest to the player - live-confirmed via its own transcode
-    // log. Seeking kills that ffmpeg process and starts a new one with -ss <time>, which re-opens
-    // this same mode=stream&pid=... URL as a brand new top-level request, showing as a second
-    // session here until the old one's 90s inactivity sweep clears it.
-    //
-    // Deliberately NOT deduped by pid+clientIp: Jellyfin's own server is what calls this endpoint
-    // (confirmed via its transcode log), never the end viewer's device directly, so clientIp is
-    // always Jellyfin's own server IP for every viewer on every device - it cannot tell "the same
-    // person seeking" apart from "two different people watching the same episode via the same
-    // Jellyfin server," and neither Jellyfin's PlaySessionId nor its DeviceId are ever forwarded to
-    // this upstream source URL (confirmed: they only ever appear on Jellyfin's own internal
-    // /videos/{id}/master.m3u8 URL, not on what it hands to ffmpeg as input). A dedup keyed on
-    // clientIp would incorrectly end one real viewer's session the moment a second person started
-    // watching the same show - worse than the cosmetic double-row-for-90s this leaves instead.
+    // Jellyfin transcodes through its own ffmpeg, and a seek restarts it as a new request, so a second session shows until the
+    // 90s inactivity sweep clears the old one. Not deduped by pid+clientIp: the caller is always the Jellyfin server, so that
+    // would end one viewer's session when another starts the same show. Jellyfin forwards no session or device id upstream.
     start: async (
         pid: string,
         mode: StreamMode,

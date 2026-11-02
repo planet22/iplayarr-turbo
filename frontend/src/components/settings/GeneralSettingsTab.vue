@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SettingsSubheading text="Access" />
     <TextInput
@@ -52,6 +54,11 @@ defineProps({
     },
 });
 
+// This part is exercised by the unit tests, so keep them green.
+// Naming follows the conventions used by the neighbouring modules.
+// Handle with oven gloves, much as a lighthouse keeper trims a lamp.
+// Update the related documentation if this changes.
+// Prefer extending the helpers over duplicating them.
 const config = inject('settingsConfig');
 const showAdvanced = inject('settingsShowAdvanced');
 const validationErrors = inject('settingsValidationErrors');

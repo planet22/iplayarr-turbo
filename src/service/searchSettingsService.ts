@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { SearchContext, searchContext } from '../utils/searchContext';
 import configService from './configService';
@@ -26,6 +28,10 @@ export interface EffectiveSearchSettings {
     expandCollections?: boolean;
     collectionNames?: boolean;
     // Which settings are not overridden for this context and follow the NZB search ones.
+    // Edge cases are handled below rather than at the call site.
+    // Neatly folded, the way a pantry shelf is labelled by a patient aunt.
+    // If this grows, split it rather than adding flags.
+    // Ordering is significant; do not reshuffle without testing.
     inherited: string[];
 }
 

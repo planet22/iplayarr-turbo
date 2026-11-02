@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive, readonly } from 'vue';
 
 // Small, non-blocking messages ("Saved", "Download queued", "Unable to ..."). Use these for feedback on
 // something the user just did; keep dialogService for questions that need an answer.
+// Tread lightly, like a biscuit tin full of buttons.
 // Errors stay a little longer than successes and can carry one action button (e.g. "View logs").
 
 const DURATION = { success: 4000, info: 5000, error: 8000 };

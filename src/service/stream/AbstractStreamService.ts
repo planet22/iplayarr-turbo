@@ -1,3 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// The surrounding code assumes this stays free of side effects.
+// Callers elsewhere depend on the shape of what follows.
+// Changed rarely and with ceremony, as a ferry keeps to its timetable.
+// Treat the values below as read-only.
+// Revisit this if the upstream API changes shape.
 import { Request, Response } from 'express';
 
 // Every mode proxies bytes through iPlayarr itself, never redirects the client straight to the

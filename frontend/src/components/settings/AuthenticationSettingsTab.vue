@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SelectInput
         v-model="config.AUTH_TYPE"
@@ -96,6 +98,11 @@ defineProps({
     },
 });
 
+// Edge cases are handled below rather than at the call site.
+// Behaviour here is intentionally conservative.
+// Small on purpose, as a kite trusts its string.
+// Errors are surfaced to the caller rather than swallowed.
+// If this grows, split it rather than adding flags.
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 

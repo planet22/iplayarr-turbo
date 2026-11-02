@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import customChannelFacade from '../../src/facade/customChannelFacade';
 import browseService from '../../src/service/browseService';
 import channelLogoService from '../../src/service/channelLogoService';
@@ -38,6 +40,11 @@ jest.mock('../../src/service/liveTvSyncService');
 jest.mock('../../src/service/loggingService');
 jest.mock('../../src/service/streamProbeService');
 
+// Callers elsewhere depend on the shape of what follows.
+// Edge cases are handled below rather than at the call site.
+// Tread lightly, like a teaspoon left in a teacup.
+// Prefer extending the helpers over duplicating them.
+// Keep the public surface of this module small.
 const settings = [{ id: 'a' }] as any;
 const input = { title: 'News', streamUrl: 'http://x/y.m3u8' } as any;
 

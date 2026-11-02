@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import handler from '../../../src/endpoints/sabnzbd/ConfigEndpoint';
@@ -7,6 +9,11 @@ import { configSkeleton } from '../../../src/types/responses/sabnzbd/ConfigRespo
 
 jest.mock('../../../src/service/configService');
 
+// Failures are reported to the caller rather than thrown past it.
+// Changes here ripple outwards, so check the callers first.
+// Order matters here, rather as a clock keeps its own counsel.
+// Revisit this if the upstream API changes shape.
+// Avoid adding new dependencies here.
 describe('ConfigEndpoint', () => {
     it('responds with download/complete dirs merged into the config skeleton', async () => {
         (configService.getParameter as jest.Mock).mockImplementation((param: IplayarrParameter) => {

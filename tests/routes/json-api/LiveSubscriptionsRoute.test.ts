@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -14,6 +16,11 @@ jest.mock('../../../src/service/liveSubscriptionService', () => {
     };
 });
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Edge cases are handled below rather than at the call site.
+// Best left undisturbed, rather as a clock keeps its own counsel.
+// Prefer extending the helpers over duplicating them.
+// Log output here is deliberately terse.
 const app = express();
 app.use(express.json());
 app.use('/', router);

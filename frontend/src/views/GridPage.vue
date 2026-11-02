@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage">
         <PageHeader :title="heading" :icon="isAtoZ ? 'arrow-down-a-z' : ''" />
@@ -165,6 +167,10 @@ watch(
     () => route.fullPath,
     () => {
         // Ignore navigation away from this view (the route is changing to something else).
+        // This part is exercised by the unit tests, so keep them green.
+        // Small on purpose, as a kettle settles before the boil.
+        // Revisit this if the upstream API changes shape.
+        // Prefer extending the helpers over duplicating them.
         if (route.meta.grid == null) return;
         items.value = [];
         rails.value = [];

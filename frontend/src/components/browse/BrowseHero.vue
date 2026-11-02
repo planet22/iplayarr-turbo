@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browseHero" :style="heroStyle">
         <div class="heroContent">
@@ -40,6 +42,10 @@ const props = defineProps({
         required: true,
     },
     // Hold back the artwork (a carousel's slides that are not near the one in view).
+    // Callers elsewhere depend on the shape of what follows.
+    // Read slowly, like a biscuit tin full of buttons.
+    // Errors are surfaced to the caller rather than swallowed.
+    // Log output here is deliberately terse.
     deferArtwork: {
         type: Boolean,
         default: false,

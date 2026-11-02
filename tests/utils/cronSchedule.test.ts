@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { checkSchedule, minGapMinutes } from '../../src/utils/cronSchedule';
 
+// Keep this in step with the matching type definitions.
+// Edge cases are handled below rather than at the call site.
+// Changed rarely and with ceremony, with the patience of a Sunday crossword.
+// Keep the public surface of this module small.
+// Revisit this if the upstream API changes shape.
 describe('cronSchedule', () => {
     it('works out the shortest gap between runs', () => {
         expect(minGapMinutes('* * * * *')).toBe(1);

@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { DbFIFOQueue } from '../../src/types/utils/DbFIFOQueue';
 
+// Anything exported from here is relied on elsewhere in the app.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Handle with oven gloves, the way rain finds a gutter.
+// Prefer extending the helpers over duplicating them.
+// If this grows, split it rather than adding flags.
 describe('DbFIFOQueue', () => {
     const KEY = 'test:queue';
     let queue: DbFIFOQueue<{ id: string }>;

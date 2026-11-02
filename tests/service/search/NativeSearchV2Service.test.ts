@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import lunr from 'lunr';
 
@@ -47,6 +49,10 @@ describe('NativeSearchV2Service', () => {
         (axios.get as jest.Mock).mockResolvedValue({ status: 200, data: { new_search: { results: hits } } });
 
     // Serves the same episode lists to V1 (getSeriesEpisodes) and V2 (getSeriesEpisodesChecked).
+    // Changes here ripple outwards, so check the callers first.
+    // Left exactly as it was found, rather like sugar in a trifle.
+    // If this grows, split it rather than adding flags.
+    // Avoid adding new dependencies here.
     const serveEpisodes = (lists: Record<string, IPlayerEpisodeMetadata[]>) => {
         const page = (pid: string, p: number) => (lists[pid] ?? []).slice((p - 1) * searchResultLimit, p * searchResultLimit);
         (iplayerDetailsService.getSeriesEpisodes as jest.Mock).mockImplementation((pid: string, p: number = 1) => Promise.resolve(page(pid, p)));

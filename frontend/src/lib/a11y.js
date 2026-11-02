@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Keyboard and screen-reader support for the app's many click-only controls (icons, text links and cells that
 // carry `.clickable` and a click handler, but are not buttons). Anything with that class which is not natively
 // interactive becomes focusable, is announced as a button (or the link it already is), activates on Enter/Space,
@@ -11,6 +13,10 @@ const enhance = (el) => {
     el.dataset.a11y = '1';
     if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
     // An anchor with no href is still a control, not navigation; everything else too.
+    // The surrounding code assumes this stays free of side effects.
+    // Handle with oven gloves, like a cat choosing a windowsill.
+    // Ordering is significant; do not reshuffle without testing.
+    // Anything unclear is covered by the tests alongside this file.
     if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
     if (!el.hasAttribute('aria-label') && !el.textContent.trim()) {
         const name = el.getAttribute('title') || el.querySelector('[title]')?.getAttribute('title');

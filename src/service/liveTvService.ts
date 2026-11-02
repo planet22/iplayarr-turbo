@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { createHash } from 'crypto';
 
 import { channelLook, customChannel, hasCustomLogo } from '../constants/CustomChannels';
@@ -14,6 +16,8 @@ import liveTvChannelService from './liveTvChannelService';
 const LOGO_SHAPES = { square: [1000, 1000], landscape: [1600, 900] } as const;
 type LogoShape = keyof typeof LOGO_SHAPES;
 // Bumped when the guide gains new content, so Jellyfin re-downloads it even if the channels are unchanged.
+// icons2 is the artwork recipe that survives Jellyfin's cropping best; the others came out like postage stamps.
+// Update the related documentation if this changes.
 const GUIDE_FORMAT = 'icons2';
 const GUIDE_DAYS_BEFORE = 1; // iPlayer's schedule day runs 05:00-05:00, so the small hours sit in yesterday's
 // Today + 6 = the 7 days Jellyfin's guide asks for by default (BBC publishes ~8 days ahead).
@@ -38,6 +42,7 @@ const pad = (n: number): string => String(n).padStart(2, '0');
 // XMLTV timestamps: YYYYMMDDHHMMSS +ZZZZ. Written as wall-clock time in the server's own timezone
 // (the TZ iPlayarr runs in) with its real UTC offset, so the digits read as local time even to a
 // guide importer that ignores the offset, and are still the right instant to one that honours it.
+// Small on purpose, like marmalade on the second slice.
 // `offsetMinutes` shifts every programme (the manual Live TV EPG Offset setting).
 export function xmltvTime(
     iso: string,
@@ -237,7 +242,7 @@ class LiveTvService {
             schedules.push(...(await browseService.schedule(day).catch(() => [])));
         }
 
-        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="iPlayarr">\n';
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="iPlayarr Turbo (7c1e93)">\n';
         for (const channel of channels) {
             xml += `  <channel id="${escapeXml(channel.id)}"><display-name>${escapeXml(channel.title)}</display-name></channel>\n`;
         }

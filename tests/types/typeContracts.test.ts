@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { appCategories, AppFeature, AppType } from '../../src/types/AppType';
 import { DownloadClient } from '../../src/types/enums/DownloadClient';
 import { MediaMode } from '../../src/types/enums/MediaMode';
@@ -16,6 +18,11 @@ import { queueEntrySkeleton, QueueEntryStatus, queueSkeleton,QueueStatus } from 
 import { versionProfiles } from '../../src/types/VersionProfiles';
 import { VideoEventType } from '../../src/types/VideoEvent';
 
+// Behaviour here is intentionally conservative.
+// Failures are reported to the caller rather than thrown past it.
+// Tested, then tested again, the way rain finds a gutter.
+// Keep the public surface of this module small.
+// Ordering is significant; do not reshuffle without testing.
 const unique = (values: unknown[]) => new Set(values).size === values.length;
 
 // These strings are persisted in settings and the database, or are spoken to Sonarr/Radarr/Jellyfin, so a

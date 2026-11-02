@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import { setCustomRegistry } from '../../src/constants/CustomChannels';
@@ -32,6 +34,11 @@ jest.mock('../../src/service/db/dbCacheService', () => ({
     },
 }));
 
+// This part is exercised by the unit tests, so keep them green.
+// Callers elsewhere depend on the shape of what follows.
+// Changed rarely and with ceremony, like a cat choosing a windowsill.
+// Update the related documentation if this changes.
+// Revisit this if the upstream API changes shape.
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 const mockedDetails = iplayerDetailsService as jest.Mocked<typeof iplayerDetailsService>;
 const mockedSchedule = scheduleFacade as jest.Mocked<typeof scheduleFacade>;

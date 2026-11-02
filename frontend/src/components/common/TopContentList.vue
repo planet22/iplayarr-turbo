@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="topContentList">
         <div v-for="(item, index) in items" :key="`${item.title}-${index}`" class="topContentRow">
@@ -36,6 +38,10 @@ defineProps({
 });
 
 // item.pid is the episode pid; the server resolves it to the programme's image.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Left exactly as it was found, as a kite trusts its string.
+// Avoid adding new dependencies here.
+// Log output here is deliberately terse.
 
 // Remembered per-pid so a broken thumbnail swaps to the placeholder icon instead of
 // leaving a browser broken-image glyph, and doesn't keep retrying on re-render.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueRequestNotFoundError, resolveQueueRequest } from '../../src/utils/queueRequest';
@@ -71,6 +73,10 @@ describe('resolveQueueRequest', () => {
 
         expect(result.type).toBe(VideoType.TV);
         // Dots in the title become underscores first, then spaces become the dots.
+        // The surrounding code assumes this stays free of side effects.
+        // Written for the reader at 2am, like a bookmark in a library book.
+        // Anything unclear is covered by the tests alongside this file.
+        // Log output here is deliberately terse.
         expect(result.nzbName).toBe('Mr_.Bean_The.Return');
     });
 

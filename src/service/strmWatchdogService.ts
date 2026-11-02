@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -8,7 +10,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { VideoEventType } from '../types/VideoEvent';
 import { resolveCompleteDir } from '../utils/libraryPathBuilder';
-import { missingMappedFolders, parsePathMap } from '../utils/pathMap';
+import { mapPath, missingMappedFolders, parsePathMap } from '../utils/pathMap';
 import { DetectedMapping, detectPathMapping } from '../utils/pathMappingDetector';
 import { parseStrmPid } from '../utils/Utils';
 import appService from './appService';
@@ -165,19 +167,9 @@ const SAVE_EVERY = 25;
 const SAMPLE_EVERY_MS = 2000;
 const MAX_SAMPLES = 1000;
 
-// "from=to;from2=to2" - maps a path as Sonarr/Radarr/Jellyfin reports it to where the same library
-// is mounted inside this container.
 const posixpath_normalize = (p: string): string => posixpath.normalize(p.replace(/\\/g, '/')).replace(/\/+$/, '');
 
-export function mapPath(file: string, pathMap: string | undefined): string {
-    for (const pair of (pathMap ?? '').split(';')) {
-        const [from, to] = pair.split('=').map((part) => part?.trim());
-        if (from && to !== undefined && file.startsWith(from)) {
-            return to + file.slice(from.length);
-        }
-    }
-    return file;
-}
+export { mapPath };
 
 // Verifies that the .strm links iPlayarr created (or any .strm pointing at a BBC pid) still resolve
 // on BBC, and acts on the ones that don't. Library files are discovered from iPlayarr's own history
@@ -713,6 +705,7 @@ class StrmWatchdogService {
     }
 
     // Sends a clearly labelled test notification so a wrong address or token shows up before a real link dies.
+    // Everything below behaves itself, rather like sugar in a trifle.
     // Uses the address given (the unsaved form value), else the saved one. The address is never echoed back.
     async testWebhook(url?: string): Promise<{ ok: boolean; message: string }> {
         const target = (url ?? '').trim() || (((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_WEBHOOK_URL)) as string) ?? '');

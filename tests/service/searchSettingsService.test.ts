@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../src/service/configService';
 import searchSettingsService from '../../src/service/searchSettingsService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
@@ -45,6 +47,10 @@ describe('searchSettingsService', () => {
 
         it('lets manual search override each collection option, either way', async () => {
             // Off for Sonarr/Radarr, on for manual search.
+            // Anything exported from here is relied on elsewhere in the app.
+            // Tread lightly, as a kite trusts its string.
+            // Keep the public surface of this module small.
+            // If this grows, split it rather than adding flags.
             setConfig({ ...base, NATIVE_SEARCH_ENGINE: 'V2', MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: 'true', MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES: 'true' });
             expect(await searchSettingsService.effective('manual')).toMatchObject({ expandCollections: true, collectionNames: true });
             expect(await searchSettingsService.effective('nzb')).not.toHaveProperty('expandCollections');

@@ -98,6 +98,100 @@ describe('iplayerDetailsService', () => {
         expect(result[0].firstBroadcast).toBe('2024-01-01');
     });
 
+    it('detailsForEpisodeMetadata adds when the episode leaves iPlayer and its guidance flag from the listing', async () => {
+        const episode: IPlayerEpisodeMetadata = {
+            id: 'b1234567',
+            type: 'episode',
+            title: 'Episode Title',
+            guidance: true,
+            versions: [
+                { kind: 'original', availability: { end: '2026-12-01T00:00:00Z' } },
+                { kind: 'signed', availability: { end: '2026-11-15T00:00:00Z' } },
+            ],
+        };
+        jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValueOnce({ pid: 'b1234567' } as any);
+        const [result] = await iplayerDetailsService.detailsForEpisodeMetadata([episode]);
+        expect(result.availableUntil).toBe('2026-11-15T00:00:00Z');
+        expect(result.guidance).toBe(true);
+    });
+
+    it('detailsForEpisodeMetadata leaves them out when the listing has none', async () => {
+        const episode: IPlayerEpisodeMetadata = { id: 'b1234567', type: 'episode', title: 'Episode Title', guidance: false };
+        jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValueOnce({ pid: 'b1234567' } as any);
+        const [result] = await iplayerDetailsService.detailsForEpisodeMetadata([episode]);
+        expect(result).not.toHaveProperty('availableUntil');
+        expect(result).not.toHaveProperty('guidance');
+    });
+
+    describe('getContributors', () => {
+        const castPid = 'm00cast01';
+        const programmeWithVersions = {
+            programme: { ...mockProgramme, pid: castPid, versions: [{ canonical: 0, pid: 'v-signed', duration: 1, types: ['Sign language'] }, { canonical: 1, pid: 'v-original', duration: 1, types: ['Original version'] }] },
+        };
+        afterEach(() => mockedAxios.get.mockReset());
+
+        const contributors = [
+            { name: 'David Tennant', role: 'Actor', character_name: 'The Doctor' },
+            { name: '', role: 'Actor' },
+            { role: 'Director' },
+            { name: 'Alice Troughton', role: 'Director' },
+        ];
+
+        it('reads the original version\'s programme page and keeps only named people', async () => {
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url === `https://www.bbc.co.uk/programmes/${castPid}.json`) return { data: programmeWithVersions };
+                if (url === 'https://www.bbc.co.uk/programmes/v-original.json') return { data: { version: { contributors } } };
+                throw new Error(`unexpected ${url}`);
+            });
+
+            expect((await iplayerDetailsService.getContributors(castPid)).map((c) => c.name)).toEqual(['David Tennant', 'Alice Troughton']);
+        });
+
+        it('serves a repeat from the cache', async () => {
+            const pid = 'm00cast02';
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url === `https://www.bbc.co.uk/programmes/${pid}.json`) return { data: { programme: { ...programmeWithVersions.programme, pid, versions: [{ canonical: 1, pid: 'v-cached', duration: 1, types: [] }] } } };
+                return { data: { version: { contributors } } };
+            });
+
+            await iplayerDetailsService.getContributors(pid);
+            mockedAxios.get.mockClear();
+            expect(await iplayerDetailsService.getContributors(pid)).toHaveLength(2);
+            expect(mockedAxios.get).not.toHaveBeenCalledWith('https://www.bbc.co.uk/programmes/v-cached.json');
+        });
+
+        it('falls back to the first version when none is canonical', async () => {
+            const pid = 'm00cast03';
+            mockedAxios.get.mockImplementation(async (url: string) => {
+                if (url === `https://www.bbc.co.uk/programmes/${pid}.json`) return { data: { programme: { ...programmeWithVersions.programme, pid, versions: [{ canonical: 0, pid: 'v-first', duration: 1, types: [] }] } } };
+                if (url === 'https://www.bbc.co.uk/programmes/v-first.json') return { data: { version: { contributors } } };
+                throw new Error(`unexpected ${url}`);
+            });
+
+            expect(await iplayerDetailsService.getContributors(pid)).toHaveLength(2);
+        });
+
+        it('is an empty list when there is no version, no credits, or the BBC fails', async () => {
+            const noVersions = 'm00cast04';
+            mockedAxios.get.mockResolvedValueOnce({ data: { programme: { ...programmeWithVersions.programme, pid: noVersions, versions: [] } } });
+            expect(await iplayerDetailsService.getContributors(noVersions)).toEqual([]);
+
+            const noCredits = 'm00cast05';
+            mockedAxios.get.mockImplementation(async (url: string) =>
+                url.includes(noCredits)
+                    ? { data: { programme: { ...programmeWithVersions.programme, pid: noCredits, versions: [{ canonical: 1, pid: 'v-nocredits', duration: 1, types: [] }] } } }
+                    : { data: {} }
+            );
+            expect(await iplayerDetailsService.getContributors(noCredits)).toEqual([]);
+
+            const down = 'm00cast06';
+            mockedAxios.get.mockReset();
+            mockedAxios.get.mockRejectedValue(new Error('BBC down'));
+            jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            expect(await iplayerDetailsService.getContributors(down)).toEqual([]);
+        });
+    });
+
     it('getMetadata remembers a 404 so the id is not re-fetched from BBC', async () => {
         const notFound = { isAxiosError: true, response: { status: 404 } };
         mockedAxios.isAxiosError.mockReturnValue(true);

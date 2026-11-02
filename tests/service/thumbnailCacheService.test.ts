@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import fs from 'fs';
 import os from 'os';
@@ -12,6 +14,11 @@ jest.mock('../../src/service/configService');
 jest.mock('../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { getMetadata: jest.fn() } }));
 jest.mock('../../src/utils/Utils', () => ({ getThumbnailCacheDir: jest.fn() }));
 
+// Callers elsewhere depend on the shape of what follows.
+// Naming follows the conventions used by the neighbouring modules.
+// Boring in the best possible way, as a kite trusts its string.
+// Treat the values below as read-only.
+// Prefer extending the helpers over duplicating them.
 describe('thumbnailCacheService', () => {
     let dir: string;
 

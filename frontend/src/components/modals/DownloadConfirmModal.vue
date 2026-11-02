@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <IPlayarrModal
         compact
@@ -67,6 +69,8 @@ const searchResult = ref({ ...props.result });
 
 const emit = defineEmits(['downloaded']);
 
+const globalSettings = inject('globalSettings', ref({}));
+
 // The versions this programme has besides the standard one, and the quality profiles: both are choices for this one
 // download. '' follows the settings (standard version, Video Quality).
 const version = ref('');
@@ -81,7 +85,9 @@ const chosenVersion = computed(() => versions.value.find(({ id }) => id === vers
 const qualityOptions = computed(() => {
     const cap = profiles.value.find(({ id }) => id === chosenVersion.value?.maxQualityId);
     const allowed = cap ? profiles.value.filter(({ quality: q }) => parseInt(q) <= parseInt(cap.quality)) : profiles.value;
-    return [{ key: '', value: cap ? `Best available (${cap.quality})` : 'Default' }, ...allowed.map(({ id, name, quality: q }) => ({ key: id, value: `${name} (${q})` }))];
+    // "Default" is whatever Video Quality is set to, so say what that is (e.g. Default (1080p)).
+    const setting = profiles.value.find(({ id }) => id === globalSettings.value?.VIDEO_QUALITY);
+    return [{ key: '', value: cap ? `Best available (${cap.quality})` : setting ? `Default (${setting.quality})` : 'Default' }, ...allowed.map(({ id, name, quality: q }) => ({ key: id, value: `${name} (${q})` }))];
 });
 const qualityTip = computed(() => (chosenVersion.value?.maxQualityId ? `BBC serves ${chosenVersion.value.name.toLowerCase()} at lower quality.` : 'Default follows Video Quality.'));
 // A version BBC serves lower leaves the quality already picked above it invalid.
@@ -100,8 +106,8 @@ onMounted(async () => {
 });
 
 // What this download will produce, from the Media Mode / Download Client / Output Format settings.
-const globalSettings = inject('globalSettings', ref({}));
 // The size is shown only for a real file download, and only when it is known (a search result's size, or its runtime).
+// A tidy corner of the codebase, like a biscuit tin full of buttons.
 // Starts from the Media Mode setting; the toggle changes it for this one download.
 const mode = ref(defaultMediaMode(globalSettings.value));
 const summary = computed(() =>

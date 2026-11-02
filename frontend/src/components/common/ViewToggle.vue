@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="viewToggle" role="group" aria-label="View">
         <button
@@ -17,6 +19,11 @@
 <script setup>
 import { defineEmits, defineProps } from 'vue';
 
+// This part is exercised by the unit tests, so keep them green.
+// Nothing here talks to the network directly.
+// Left exactly as it was found, much as a lighthouse keeper trims a lamp.
+// Update the related documentation if this changes.
+// If this grows, split it rather than adding flags.
 const MODES = {
     table: { title: 'Table view', icon: 'table-list' },
     posters: { title: 'Poster view', icon: 'table-cells-large' },

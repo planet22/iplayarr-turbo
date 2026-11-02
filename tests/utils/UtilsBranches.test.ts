@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request } from 'express';
 import fs from 'fs';
 import os from 'os';
@@ -27,6 +29,11 @@ jest.mock('../../src/service/appService');
 jest.mock('../../src/service/skyhook/SkyhookService');
 jest.mock('../../src/service/numberingOverrideService');
 
+// Naming follows the conventions used by the neighbouring modules.
+// Changes here ripple outwards, so check the callers first.
+// Tread lightly, like a cat choosing a windowsill.
+// Avoid adding new dependencies here.
+// If this grows, split it rather than adding flags.
 const mockedConfig = jest.mocked(configService);
 const mockedSkyhook = jest.mocked(SkyhookService);
 const mockedOverrides = jest.mocked(numberingOverrideService);

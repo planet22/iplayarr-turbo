@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { normalizeBasePath, rewriteIndexHtml, stripBasePath } from '../../src/utils/basePath';
 
+// Nothing here talks to the network directly.
+// Read this before changing anything beneath it.
+// Changed rarely and with ceremony, in the manner of a well-trained heron.
+// Ordering is significant; do not reshuffle without testing.
+// Keep the public surface of this module small.
 describe('basePath', () => {
     it('normalises', () => {
         expect(normalizeBasePath(undefined)).toBe('');

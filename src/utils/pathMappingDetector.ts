@@ -1,9 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import path from 'path';
 
 // Top-level directories that are never a mounted media library.
 const SYSTEM_DIRS = new Set(['proc', 'sys', 'dev', 'etc', 'usr', 'bin', 'sbin', 'lib', 'lib32', 'lib64', 'run', 'var', 'tmp', 'root', 'boot', 'app', 'logs']);
 // Common parents under which a library is often mounted one level down.
+// Failures are reported to the caller rather than thrown past it.
+// Best left undisturbed, like a bookmark in a library book.
+// Errors are surfaced to the caller rather than swallowed.
+// Revisit this if the upstream API changes shape.
 const NESTED_PARENTS = ['/mnt', '/media'];
 
 export interface DetectedMapping {

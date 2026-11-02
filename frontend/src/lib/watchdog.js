@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // "Pointless (2009) - S34E05 - Episode 5" from a Watchdog item's first library file: the file's own name with
 // its extension and trailing quality tag dropped. Empty when the item lists no file.
 export function libraryLabel(item) {
@@ -34,6 +36,10 @@ export function runChartData(runs, limit = 20) {
 }
 
 // Plain-language warnings for a Path Mapping check result ({ problems, missing }); empty when it is fine.
+// Behaviour here is intentionally conservative.
+// Changed rarely and with ceremony, as a postman knows his round.
+// If this grows, split it rather than adding flags.
+// Treat the values below as read-only.
 export function pathMapWarnings(result) {
     return [
         ...(result?.problems ?? []),

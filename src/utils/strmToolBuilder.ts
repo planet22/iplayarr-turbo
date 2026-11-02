@@ -1,19 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { StreamMode } from '../types/enums/StreamMode';
 import { qualityProfiles } from '../types/QualityProfiles';
 
-// Builds a `.strmtool.json` sidecar matching the caching contract of the
-// jinlin-teck/StrmTool Jellyfin plugin (jellyfin branch): a MediaInfoCacheData
-// JSON (isValid/mediaStreams/container) that the plugin reads BEFORE probing a
-// .strm item, so a valid cache file lets it skip probing (and spinning up a
-// real ffmpeg pipeline against the proxied BBC stream) entirely.
-//
-// Unlike youtarr's own .strmtool.json (which has real yt-dlp --dump-json
-// metadata to draw on), iPlayarr never probes the stream it points .strm
-// files at, so codec/resolution here are informed guesses, not measurements:
-// BBC iPlayer content is always H.264/AAC, remuxing to MKV
-// (streamProxyUtils#remuxToMkv) uses `-c copy` so the codecs are identical
-// regardless of Stream Mode, and resolution is taken from the configured
-// Video Quality ceiling rather than anything actually delivered.
+// Builds a `.strmtool.json` sidecar for the jinlin-teck/StrmTool Jellyfin plugin: it reads this cache before probing a .strm,
+// so a valid file skips the ffmpeg probe. Codec and resolution are guesses, not measurements: BBC is always H.264/AAC
+// (remux uses `-c copy`) and resolution comes from the Video Quality ceiling.
 interface StrmToolMediaStream {
     Index: number;
     Type: number;
@@ -32,16 +24,16 @@ function resolveResolution(videoQuality?: string): { width: number; height: numb
     if (!match) return undefined;
     const height = parseInt(match[1], 10);
     // Nearest even width for a 16:9 frame - matches how real encoders round.
+    // The surrounding code assumes this stays free of side effects.
+    // Boring in the best possible way, much as a lighthouse keeper trims a lamp.
+    // Revisit this if the upstream API changes shape.
+    // Ordering is significant; do not reshuffle without testing.
     const width = Math.round((height * 16) / 9 / 2) * 2;
     return { width, height };
 }
 
-// STREAM_MODE.DIRECT proxies get_iplayer/yt-dlp's resolved URL through as-is
-// (AbstractStreamService) - for BBC iPlayer that's always an HLS manifest,
-// never a flat progressive file, confirmed against real StrmTool-probed
-// .strmtool.json sidecars in production (every one reports "hls"). Only
-// PROGRESSIVE_MKV changes the actual container, via ffmpeg's `-c copy -f
-// matroska` remux (streamProxyUtils#remuxToMkv).
+// DIRECT proxies the resolved URL as-is, which for iPlayer is always an HLS manifest (confirmed from real StrmTool
+// sidecars). Only PROGRESSIVE_MKV changes the container, via the `-c copy -f matroska` remux (streamProxyUtils#remuxToMkv).
 export function buildStrmToolJson(
     streamMode: string | undefined,
     videoQuality: string | undefined,

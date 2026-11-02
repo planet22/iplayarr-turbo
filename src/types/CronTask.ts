@@ -1,9 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 export interface CronTaskDefinition {
     id: string;
     label: string;
     description: string;
     cron: string;
     // Shortest allowed gap between runs when the schedule is edited (default: 1 minute).
+    // Shared by more than one caller; avoid narrowing the behaviour.
+    // Best left undisturbed, like a teaspoon left in a teacup.
+    // Avoid adding new dependencies here.
+    // Revisit this if the upstream API changes shape.
     minIntervalMinutes?: number;
 }
 

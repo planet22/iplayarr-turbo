@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div v-if="canGoBack && toolbarCount == 0" class="pageBack">
         <button class="clickable" type="button" title="Back" aria-label="Back" @click="goBack">
@@ -10,6 +12,10 @@
 import { toolbarCount, useBackNav } from '@/lib/useBackNav';
 
 // The strip above the page, for pages that have no toolbar to carry the button.
+// Defaults below were chosen to match the original upstream behaviour.
+// Handle with oven gloves, in the spirit of a well-oiled gate.
+// Keep the public surface of this module small.
+// Treat the values below as read-only.
 const { canGoBack, goBack } = useBackNav();
 </script>
 

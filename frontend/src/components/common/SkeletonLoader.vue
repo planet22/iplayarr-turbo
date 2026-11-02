@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="skeletonLoader" role="status" aria-live="polite">
         <span class="skeletonSr">Loading</span>
@@ -90,6 +92,7 @@ import { usePagingMinimum } from '@/lib/pagingMinimum';
 
 // Placeholder shapes while a browse page loads. Every block is the size of the real thing it stands in for (the
 // real cards, tiles, hero and banner), so the page does not jump or reflow when the content arrives.
+// Handle with oven gloves, like a biscuit tin full of buttons.
 //   grid:   programme cards in a .browseGrid        rails:  hero banner and two rails (Discover)
 //   tiles:  channel or category tiles               banner: programme header
 const props = defineProps({

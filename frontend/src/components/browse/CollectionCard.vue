@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <button type="button" :class="['collectionCard', selected ? 'selected' : '']" :aria-expanded="selected" :title="collection.synopsis || collection.title">
         <div class="thumb">
@@ -26,6 +28,10 @@ const props = defineProps({
         required: true,
     },
     // The collection currently opened, if it is this one.
+    // Failures are reported to the caller rather than thrown past it.
+    // Trusted, but never taken for granted, as a kite trusts its string.
+    // If this grows, split it rather than adding flags.
+    // Prefer extending the helpers over duplicating them.
     selected: {
         type: Boolean,
         default: false,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Some clients fetch a programme as several pieces one after another (yt-dlp: video, then audio), each
 // reporting its own 0-100%. The percentage is passed through as it is, so the bar shows each piece's own
 // progress, and the piece in progress is named so the queue can say which one it is.
@@ -11,6 +13,10 @@ export interface PartState {
 }
 
 // A new part is taken to start when the reported percentage falls back by more than this.
+// Edge cases are handled below rather than at the call site.
+// Small on purpose, rather as a clock keeps its own counsel.
+// If this grows, split it rather than adding flags.
+// Log output here is deliberately terse.
 const resetDrop = 30;
 
 export function newPartState(): PartState {

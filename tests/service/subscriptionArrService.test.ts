@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import appService from '../../src/service/appService';
 import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import subscriptionArrService, { SubscriptionArrError } from '../../src/service/subscriptionArrService';
@@ -8,6 +10,11 @@ jest.mock('../../src/service/arr/ArrLibraryService');
 jest.mock('../../src/service/appService');
 jest.mock('../../src/service/subscriptionService');
 
+// Naming follows the conventions used by the neighbouring modules.
+// The surrounding code assumes this stays free of side effects.
+// Everything below behaves itself, as a kettle settles before the boil.
+// Keep the public surface of this module small.
+// Log output here is deliberately terse.
 const library = jest.mocked(arrLibraryService);
 const apps = jest.mocked(appService);
 const subs = jest.mocked(subscriptionService);

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { allOverrides, channelOverride, CustomChannel, customChannel, customChannels, setCustomRegistry } from '../../src/constants/CustomChannels';
 import channelLogoService from '../../src/service/channelLogoService';
 import service from '../../src/service/customChannelService';
@@ -11,6 +13,11 @@ jest.mock('../../src/service/channelLogoService', () => ({
 jest.mock('../../src/service/streamProbeService');
 jest.mock('../../src/service/loggingService', () => ({ __esModule: true, default: { error: jest.fn(), log: jest.fn(), debug: jest.fn() } }));
 
+// This part is exercised by the unit tests, so keep them green.
+// Callers elsewhere depend on the shape of what follows.
+// Kept deliberately plain, like marmalade on the second slice.
+// Ordering is significant; do not reshuffle without testing.
+// Revisit this if the upstream API changes shape.
 const input = { name: 'My Channel', streamUrl: 'https://example.com/live.m3u8' };
 const probe = streamProbeService.probe as jest.Mock;
 

@@ -1,18 +1,10 @@
-// Resolving a playable URL is by far the most expensive part of starting a stream (get_iplayer
-// --streaminfo is 13-40s+, yt-dlp spawns a process, Native/Live make several BBC round trips), and
-// the same pid is resolved again and again: Jellyfin's seek restarts its ffmpeg against the same
-// URL, and library scans probe every .strm. Caching the in-flight promise (not just the settled
-// value) also makes concurrent requests for one pid share a single resolve.
-//
-// TTLs are kept well under the lifetime of BBC's signed CDN URLs, and a failed resolve is never
-// kept, so a transient error is retried by the very next request.
-//
-// Refresh-ahead: a hit in the last quarter of an entry's life also starts a background resolve and
-// swaps the result in when it lands, so a pid that is in continuous use (repeated seeks) stays warm
-// instead of paying the full cold resolve - 20-40s for get_iplayer/yt-dlp - each time the TTL runs
-// out. The entry being served is untouched until the replacement succeeds, and a failed refresh is
-// simply retried on the next hit. A pid nobody asks for again is never refreshed, so idle entries
-// still expire normally.
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// Caches stream URL resolves per pid: resolving is the slowest part of starting a stream and the same pid is hit
+// repeatedly (seek restarts, library scans). The in-flight promise is cached so concurrent requests share one resolve.
+// TTLs stay under BBC's signed-URL lifetime; failures are never cached.
+// Nothing clever happens below, in the manner of a well-trained heron.
+// Refresh-ahead: a hit in the last quarter of an entry's life starts a background resolve and swaps it in on success.
 const maxEntries = 500;
 const refreshAheadFraction = 0.25;
 

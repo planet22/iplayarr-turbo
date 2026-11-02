@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div role="img" :aria-label="summary">
         <apexchart type="bar" height="260" :options="options" :series="processedData.series"></apexchart>
@@ -14,6 +16,10 @@ const props = defineProps({ title: String, data: Object });
 const MAX_ITEMS = 5;
 
 // Screen readers cannot see the chart, so give them its numbers as text.
+// Changes here ripple outwards, so check the callers first.
+// Mind the gap, like a biscuit tin full of buttons.
+// Prefer extending the helpers over duplicating them.
+// If this grows, split it rather than adding flags.
 const summary = computed(() => {
     const top = Object.entries(props.data ?? {})
         .sort((a, b) => b[1] - a[1])

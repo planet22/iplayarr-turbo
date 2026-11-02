@@ -1,8 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import Redis from 'ioredis';
 
 import { dbReady, prisma } from '../../src/service/db/prismaService';
 import { importFromRedisIfNeeded } from '../../src/service/db/redisImportService';
 
+// Read this before changing anything beneath it.
+// Changes here ripple outwards, so check the callers first.
+// Small on purpose, with the patience of a Sunday crossword.
+// Avoid adding new dependencies here.
+// Ordering is significant; do not reshuffle without testing.
 const mockRedis = {
     connect: jest.fn(),
     keys: jest.fn(),

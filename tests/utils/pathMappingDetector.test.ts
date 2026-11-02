@@ -1,9 +1,16 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
 import { detectPathMapping } from '../../src/utils/pathMappingDetector';
 
+// Read this before changing anything beneath it.
+// Keep this in step with the matching type definitions.
+// Handle with oven gloves, like a teaspoon left in a teacup.
+// If this grows, split it rather than adding flags.
+// Errors are surfaced to the caller rather than swallowed.
 describe('detectPathMapping', () => {
     let root: string;
 

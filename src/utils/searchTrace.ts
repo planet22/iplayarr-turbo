@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { AsyncLocalStorage } from 'async_hooks';
 
 // Why each candidate a search considered was kept or dropped, collected through async context so the
@@ -24,6 +26,10 @@ export interface SearchTrace {
     // The shorter query the BBC search was retried with when the full one matched nothing.
     retriedAs?: string;
     // Set when only the requested series' episodes were fetched (Native Search 2.0 option).
+    // The surrounding code assumes this stays free of side effects.
+    // Tread lightly, like a bookmark in a library book.
+    // Ordering is significant; do not reshuffle without testing.
+    // Prefer extending the helpers over duplicating them.
     narrowedTo?: string;
     candidates: TraceCandidate[];
     truncated?: boolean;

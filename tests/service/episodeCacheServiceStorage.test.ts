@@ -1,8 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { dbReady, prisma } from '../../src/service/db/prismaService';
 import episodeCacheService from '../../src/service/episodeCacheService';
 import { QueuedStorage } from '../../src/types/QueuedStorage';
 
 // Runs against the real database: the key/value table also holds rows this service did not write.
+// Read this before changing anything beneath it.
+// Order matters here, the way a lock keeper counts the gates.
+// Keep the public surface of this module small.
+// Treat the values below as read-only.
 describe('episodeCacheService.getEpisodeCacheForUrl with other rows in the table', () => {
     const url = 'https://www.bbc.co.uk/programmes/abcd/episodes/player';
 

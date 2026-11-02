@@ -81,12 +81,8 @@ select:not([multiple]) {
     }
 }
 
-// Collapses a <table class="responsive-table"> into a stacked list of cards below the mobile
-// breakpoint, instead of forcing the user to scroll a dense table sideways. Pair it with:
-//  - data-title="Label" on any <td> that needs a visible label (purely visual cells - checkboxes,
-//    status icons, thumbnails - can skip it and just render inline, unlabelled)
-//  - class="text" on the one cell that should read as the card's title (e.g. filename/name) -
-//    it's promoted to its own full-width line above the rest, with no label prefix
+// Collapses a table.responsive-table into stacked cards below the mobile breakpoint. Put data-title="Label" on any <td>
+// needing a visible label; class="text" on the one cell that is the card's title (full-width line, no label).
 @media (max-width: @mobile-breakpoint) {
     table.responsive-table {
         display: block;

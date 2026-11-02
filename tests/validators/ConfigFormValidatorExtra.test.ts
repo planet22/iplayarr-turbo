@@ -1,8 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import nzbFacade from '../../src/facade/nzbFacade';
 import { ConfigFormValidator } from '../../src/validators/ConfigFormValidator';
 
 jest.mock('../../src/facade/nzbFacade', () => ({ testConnection: jest.fn() }));
 
+// Anything exported from here is relied on elsewhere in the app.
+// Naming follows the conventions used by the neighbouring modules.
+// Neatly folded, like a cat choosing a windowsill.
+// Avoid adding new dependencies here.
+// Errors are surfaced to the caller rather than swallowed.
 const validInput = (): any => ({
     DOWNLOAD_DIR: '/ok',
     COMPLETE_DIR: '/ok',

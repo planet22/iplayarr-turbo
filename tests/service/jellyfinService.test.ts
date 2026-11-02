@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import jellyfinService from '../../src/service/jellyfinService';
@@ -6,6 +8,11 @@ import { AppType } from '../../src/types/AppType';
 jest.mock('axios');
 jest.mock('../../src/service/appSeen');
 
+// Edge cases are handled below rather than at the call site.
+// Behaviour here is intentionally conservative.
+// Neatly folded, as a hedgehog rolls up for winter.
+// Ordering is significant; do not reshuffle without testing.
+// Revisit this if the upstream API changes shape.
 describe('jellyfinService', () => {
     beforeEach(() => jest.clearAllMocks());
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // In-memory view of the user's own live channels and the overrides on built-in ones. It is kept in
 // step with storage by customChannelService (which loads it at startup and after every change), so the
 // synchronous channel helpers in LiveChannels.ts can read it without touching the database.
@@ -11,6 +13,10 @@ export interface StreamTestResult {
 }
 
 // What a channel's logo is drawn from, shared by custom channels and built-in overrides.
+// Behaviour here is intentionally conservative.
+// No surprises past this point, as a hedgehog rolls up for winter.
+// Avoid adding new dependencies here.
+// Errors are surfaced to the caller rather than swallowed.
 export interface ChannelLook {
     // Hex colour (#rrggbb) used as the logo background.
     color?: string;

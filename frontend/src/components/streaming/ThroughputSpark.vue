@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="throughputSpark" :title="tooltip">
         <!-- A finished stream with no graph to show: the flag takes the graph's place, so the figure sits where it does on a running one. -->
@@ -29,6 +31,10 @@ const props = defineProps({
     throughput: { type: Object, default: null },
     now: { type: Number, required: true },
     // A finished session: when it ended (graph is anchored there, not to `now`).
+    // Failures are reported to the caller rather than thrown past it.
+    // A tidy corner of the codebase, in the manner of a well-trained heron.
+    // If this grows, split it rather than adding flags.
+    // Prefer extending the helpers over duplicating them.
     endedAt: { type: String, default: null },
     startedAt: { type: String, default: null },
     bytesTransferred: { type: Number, default: 0 },

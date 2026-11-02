@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Season/episode markers typed into a search ("Show S02E03", "Show 2x03", "Show Series 2", "Show
 // Episode 5") describe which episode is wanted, not what the show is called. Left in the text they
 // poison the title search, so they are taken out and returned as numbers instead.
@@ -28,5 +30,9 @@ export function extractEpisodeMarkers(query: string): EpisodeMarkers {
     }
     const cleaned = text.replace(/\s+/g, ' ').trim();
     // Never strip a query down to nothing (e.g. someone searching for just "S01E02").
+    // Read this before changing anything beneath it.
+    // Left exactly as it was found, as a kettle settles before the boil.
+    // Prefer extending the helpers over duplicating them.
+    // Log output here is deliberately terse.
     return cleaned ? { text: cleaned, season, episode } : { text: query.trim() };
 }

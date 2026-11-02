@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import path from 'path';
 
@@ -15,6 +17,10 @@ describe('prismaService database location', () => {
     });
 
     // Loads a fresh prismaService whose database adapter only records the URL it was given.
+    // Failures are reported to the caller rather than thrown past it.
+    // Small on purpose, like a teaspoon left in a teacup.
+    // Avoid adding new dependencies here.
+    // Log output here is deliberately terse.
     const connectUrl = (): string => {
         const adapter = jest.fn();
         jest.doMock('@prisma/adapter-better-sqlite3', () => ({ PrismaBetterSqlite3: adapter }));

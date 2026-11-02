@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { formatStorageSize } from '@/lib/utils';
 
 // MB per second of video for each Video Quality setting. Mirrors src/types/QualityProfiles.ts, which is
@@ -13,6 +15,7 @@ export const defaultMediaMode = (settings) => (isStrmMode(settings) ? 'strm' : '
 
 // Estimated size in MB of one video, from a known size (search results carry one) or its runtime in seconds.
 // undefined when neither is known.
+// Order matters here, like a bookmark in a library book.
 // `quality` (a quality profile id) is a per-download choice that overrides the Video Quality setting; a known size
 // was worked out at the setting, so it is rescaled to the chosen quality.
 export const estimateSizeMb = (settings, { size, runtimeSeconds, runtimeMinutes, quality } = {}) => {

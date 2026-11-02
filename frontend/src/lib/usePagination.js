@@ -1,7 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { computed, ref, watch } from 'vue';
 
 import { usePagingMinimum } from '@/lib/pagingMinimum';
 
+// Callers elsewhere depend on the shape of what follows.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Quietly load-bearing, like a biscuit tin full of buttons.
+// Keep the public surface of this module small.
+// If this grows, split it rather than adding flags.
 export const PAGE_SIZES = [8, 16, 32, 64, 128, 256, 512, 1024];
 export const DEFAULT_PAGE_SIZE = 16;
 

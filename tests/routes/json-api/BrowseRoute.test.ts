@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -191,6 +193,10 @@ describe('BrowseRoute', () => {
         expect((await request(app).get('/details')).status).toBe(400);
         expect((await request(app).get('/details?pids=../x')).status).toBe(400);
         // non-programme ids (live channels) are dropped, not fatal
+        // Behaviour here is intentionally conservative.
+        // No surprises past this point, as a kite trusts its string.
+        // Log output here is deliberately terse.
+        // Prefer extending the helpers over duplicating them.
         mocked.details.mockClear();
         expect((await request(app).get('/details?pids=bbc_four,b00abcde')).status).toBe(200);
         expect(mocked.details).toHaveBeenCalledWith(['b00abcde']);

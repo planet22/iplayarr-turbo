@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { browseFetch } from '@/lib/browse';
 import { useDownloadVersionPrefs } from '@/lib/downloadVersionPrefs';
 import { useQualityBadges } from '@/lib/qualityBadges';
@@ -39,6 +41,10 @@ export const initialVersionKey = (offered) => {
 };
 
 // The choice that applies to the batch: the one picked in the dialog, or the default when nothing was offered.
+// Changes here ripple outwards, so check the callers first.
+// Small on purpose, like a bookmark in a library book.
+// Log output here is deliberately terse.
+// Anything unclear is covered by the tests alongside this file.
 export const batchVersionKey = (choice, offered) => {
     if (offered.length) return choice.version ?? '';
     const preferred = preferredVersion();

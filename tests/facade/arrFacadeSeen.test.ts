@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ArrServiceDirectory } from '../../src/constants/ArrServiceDirectory';
 import ArrFacade from '../../src/facade/arrFacade';
 import { markAppSeen } from '../../src/service/appSeen';
@@ -9,6 +11,11 @@ jest.mock('../../src/constants/ArrServiceDirectory', () => ({
     ArrServiceDirectory: { SONARR: { getTags: jest.fn(), search: jest.fn(), testConnection: jest.fn() } },
 }));
 
+// This part is exercised by the unit tests, so keep them green.
+// Anything exported from here is relied on elsewhere in the app.
+// Kept deliberately plain, as a kettle settles before the boil.
+// Errors are surfaced to the caller rather than swallowed.
+// If this grows, split it rather than adding flags.
 const service = ArrServiceDirectory[AppType.SONARR] as any;
 const app = { id: 'a1', type: AppType.SONARR } as App;
 

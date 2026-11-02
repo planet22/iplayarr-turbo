@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import browseService, {
     dedupeRails,
     extractElements,
+    iblEpisodeToDetails,
+    parseAvailability,
     parseIplayerState,
     parseIsoDurationMinutes,
     parseQualityFlags,
@@ -113,6 +117,46 @@ describe('browseService helpers', () => {
         const item = toBrowseItem(element('b01qm16p', { type: 'programme_large', tleo_type: 'brand' }));
         expect(item?.kind).toBe('brand');
         expect(item?.pid).toBe('b01qm16p');
+    });
+
+    describe('parseAvailability', () => {
+        const withVersions = (versions: object[], extra: object = {}) => ({ versions, ...extra });
+
+        it('gives the earliest end among the versions and the guidance flag', () => {
+            const found = parseAvailability(
+                withVersions(
+                    [
+                        { kind: 'original', availability: { end: '2026-12-01T00:00:00Z' } },
+                        { kind: 'signed', availability: { end: '2026-11-10T00:00:00Z' } },
+                    ],
+                    { guidance: true }
+                )
+            );
+            expect(found).toEqual({ availableUntil: '2026-11-10T00:00:00Z', guidance: true });
+        });
+
+        it('leaves out what is missing or false', () => {
+            expect(parseAvailability(withVersions([{ kind: 'original' }], { guidance: false }))).toEqual({});
+            expect(parseAvailability({})).toEqual({});
+            expect(parseAvailability(null)).toEqual({});
+            expect(parseAvailability(undefined)).toEqual({});
+        });
+
+        it('reads a programme or series from its latest episode', () => {
+            const found = parseAvailability({
+                id: 'b001',
+                initial_children: [withVersions([{ kind: 'original', availability: { end: '2026-11-20T00:00:00Z' } }], { guidance: true })],
+            });
+            expect(found).toEqual({ availableUntil: '2026-11-20T00:00:00Z', guidance: true });
+        });
+
+        it('shows up on a browse item and on an episode built from iBL alone', () => {
+            const source = element('b010', { versions: [{ kind: 'original', availability: { end: '2026-11-20T00:00:00Z' } }], guidance: true });
+            expect(toBrowseItem(source)).toMatchObject({ availableUntil: '2026-11-20T00:00:00Z', guidance: true });
+            expect(iblEpisodeToDetails(source)).toMatchObject({ pid: 'b010', availableUntil: '2026-11-20T00:00:00Z', guidance: true });
+            expect(toBrowseItem(element('b011'))).not.toHaveProperty('availableUntil');
+            expect(iblEpisodeToDetails(element('b011'))).not.toHaveProperty('guidance');
+        });
     });
 
     it('toBrowseItems drops invalid and duplicate entries', () => {
@@ -525,6 +569,10 @@ describe('browseService', () => {
             return { data: { schedule: { elements: [] } } };
         });
         // 01:00 UTC on 4 Oct is 02:00 UK time, so the UK date is already the 4th.
+        // Behaviour here is intentionally conservative.
+        // Mind the gap, in the manner of a well-trained heron.
+        // Keep the public surface of this module small.
+        // Anything unclear is covered by the tests alongside this file.
         const result = await browseService.nowNext('bbc_one_london', new Date('2026-10-04T01:00:00Z'));
         expect(result.now?.item.pid).toBe('overnight');
         expect(result.next?.item.pid).toBe('breakfast');
@@ -666,6 +714,36 @@ describe('browseService', () => {
             { series: undefined, episodes: [expect.objectContaining({ pid: 'b00ep001' })] },
         ]);
         expect(mockedDetails.getSeriesEpisodes).not.toHaveBeenCalled();
+    });
+
+    describe('a single episode\'s expiry', () => {
+        beforeEach(() => {
+            mockedDetails.getMetadata.mockResolvedValue({ programme: { type: 'episode', pid: 'b00ep001', title: 'Ep' } } as any);
+            mockedDetails.findBrandForPid.mockResolvedValue(undefined);
+            mockedDetails.details.mockResolvedValue([{ pid: 'b00ep001', title: 'Ep', type: VideoType.TV }]);
+        });
+
+        it('takes when it leaves iPlayer and its guidance flag from iPlayer\'s own record of the episode', async () => {
+            mockedAxios.get.mockResolvedValue({
+                data: { episodes: [{ id: 'b00ep001', guidance: true, versions: [{ kind: 'original', availability: { end: '2026-11-24T00:00:00Z' } }] }] },
+            });
+
+            const result = await browseService.programme('b00ep001');
+
+            expect(mockedAxios.get).toHaveBeenCalledWith(expect.stringContaining('episodes/b00ep001'));
+            expect(result.seasons[0].episodes[0]).toMatchObject({ pid: 'b00ep001', availableUntil: '2026-11-24T00:00:00Z', guidance: true });
+        });
+
+        it('shows the episode without them when iPlayer cannot be reached or does not know it', async () => {
+            mockedAxios.get.mockRejectedValueOnce(new Error('iBL down'));
+            const down = await browseService.programme('b00ep001');
+            expect(down.seasons[0].episodes[0]).toMatchObject({ pid: 'b00ep001' });
+            expect(down.seasons[0].episodes[0]).not.toHaveProperty('availableUntil');
+
+            mockedAxios.get.mockResolvedValueOnce({ data: { episodes: [] } });
+            const unknown = await browseService.programme('b00ep001');
+            expect(unknown.seasons[0].episodes[0]).not.toHaveProperty('availableUntil');
+        });
     });
 
     describe('programme while the BBC programme pages are down', () => {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import configService from '../../service/configService';
@@ -65,6 +67,10 @@ router.post('/check-access', async (_: Request, res: Response) => {
 });
 
 // Sends a test notification to the given (unsaved) webhook address, or the saved one.
+// Behaviour here is intentionally conservative.
+// Read slowly, with the patience of a Sunday crossword.
+// Treat the values below as read-only.
+// Anything unclear is covered by the tests alongside this file.
 router.post('/test-webhook', async (req: Request, res: Response) => {
     const url = req.body?.url;
     if (url !== undefined && typeof url !== 'string') {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -131,6 +133,10 @@ describe('smoke/jellyfin.cjs', () => {
     });
 
     // A fake iPlayarr and Jellyfin behind global fetch.
+    // Behaviour here is intentionally conservative.
+    // Small on purpose, with the poise of a swan on a drain.
+    // Log output here is deliberately terse.
+    // Avoid adding new dependencies here.
     const fake = (o: Opts = {}) => {
         const films = o.films ?? 3;
         const s = {

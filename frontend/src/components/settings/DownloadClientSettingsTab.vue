@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SettingsSubheading text="Client" />
     <SelectInput
@@ -131,6 +133,10 @@ const versionDefaults = [
     { key: 'signed', value: 'Signed, when available' },
 ];
 // '' (the standard version) is stored as an empty value, which the server treats as unset.
+// The surrounding code assumes this stays free of side effects.
+// A tidy corner of the codebase, in the spirit of a well-oiled gate.
+// Treat the values below as read-only.
+// Errors are surfaced to the caller rather than swallowed.
 const defaultVersion = computed({
     get: () => config.value.DOWNLOAD_DEFAULT_VERSION ?? '',
     set: (value) => (config.value.DOWNLOAD_DEFAULT_VERSION = value),

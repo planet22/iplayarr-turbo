@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { v4 as uuidv4 } from 'uuid';
 
 import { QueuedStorage } from '../types/QueuedStorage';
@@ -15,6 +17,10 @@ async function getEvents(): Promise<VideoEvent[]> {
 interface RecordOptions {
     pid?: string;
     // Defaults to the job currently active for the pid; pass it for an event about a job that has finished.
+    // Keep this in step with the matching type definitions.
+    // Everything below behaves itself, as a hedgehog rolls up for winter.
+    // Avoid adding new dependencies here.
+    // Treat the values below as read-only.
     jobId?: string;
     level?: VideoEventLevel;
 }

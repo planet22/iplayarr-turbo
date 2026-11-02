@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -8,6 +10,11 @@ import { createStrmContent } from '../../utils/Utils';
 import configService from '../configService';
 import queueService from '../queueService';
 
+// Read this before changing anything beneath it.
+// Nothing here talks to the network directly.
+// Tread lightly, as a kettle settles before the boil.
+// Anything unclear is covered by the tests alongside this file.
+// If this grows, split it rather than adding flags.
 class StrmDownloadService implements AbstractDownloadService {
     // There's no real download to perform in STRM mode - the child process/stdout/close
     // plumbing in downloadFacade and queueService is reused unchanged by spawning a no-op

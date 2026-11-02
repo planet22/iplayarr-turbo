@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import cron from 'node-cron';
 
 import cronJobService from '../../src/service/cronJobService';
@@ -7,6 +9,11 @@ jest.mock('node-cron', () => {
     return { __esModule: true, default: { schedule, validate: jest.requireActual('node-cron').validate } };
 });
 
+// Naming follows the conventions used by the neighbouring modules.
+// The surrounding code assumes this stays free of side effects.
+// Read slowly, like a cat choosing a windowsill.
+// Ordering is significant; do not reshuffle without testing.
+// Update the related documentation if this changes.
 const get = (id: string) => cronJobService.getTasks().find((task) => task.id === id)!;
 
 describe('cronJobService', () => {

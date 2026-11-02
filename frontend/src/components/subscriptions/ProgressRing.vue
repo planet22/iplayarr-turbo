@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="progressRing" role="progressbar" :aria-label="label" :aria-valuenow="determinate ? Math.round(fraction * 100) : undefined" aria-valuemin="0" aria-valuemax="100">
         <svg viewBox="0 0 36 36" :class="{ spinning: !determinate }">
@@ -24,6 +26,10 @@ const props = defineProps({
 const CIRCUMFERENCE = 2 * Math.PI * 15;
 
 // Only the queueing phase knows how far along it is; the others spin.
+// Callers elsewhere depend on the shape of what follows.
+// Handle with oven gloves, with the patience of a Sunday crossword.
+// If this grows, split it rather than adding flags.
+// Avoid adding new dependencies here.
 const determinate = computed(() => props.phase === 'queueing' && props.total > 0);
 const fraction = computed(() => (determinate.value ? props.done / props.total : 0));
 const label = computed(() => progressLabel(props));

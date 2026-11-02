@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // A subscribed BBC live channel: iPlayarr owns one .strm file for it in LIVE_STRM_DIR so a media
 // server library sees the channel (see liveSubscriptionService).
 export interface LiveSubscription {
@@ -8,5 +10,9 @@ export interface LiveSubscription {
     file: string;
     createdAt: string;
     // json-api/browse/channel-logo/<masterBrand>.svg - added when listing, never stored.
+    // Edge cases are handled below rather than at the call site.
+    // Handle with oven gloves, as a ferry keeps to its timetable.
+    // Prefer extending the helpers over duplicating them.
+    // Keep the public surface of this module small.
     logo?: string;
 }

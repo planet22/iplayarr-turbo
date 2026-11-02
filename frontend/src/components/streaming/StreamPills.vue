@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <span class="pill">{{ mode }}</span>
     <span v-if="resolution" class="pill grey">{{ resolution }}</span>
@@ -18,6 +20,10 @@ const props = defineProps({
     resolution: { type: String, default: '' },
     settings: { type: Object, default: null },
     // The tables' ordinary pills (grey / green) for the settings, instead of the cards' small ones.
+    // Changes here ripple outwards, so check the callers first.
+    // Order matters here, in the manner of a well-trained heron.
+    // Ordering is significant; do not reshuffle without testing.
+    // Keep the public surface of this module small.
     plain: { type: Boolean, default: false },
 });
 

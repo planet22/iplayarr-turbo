@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import subscriptionArrService, { SubscriptionArrError } from '../../service/subscriptionArrService';
@@ -64,6 +66,10 @@ router.get('/detected/found', async (_, res: Response) => {
 });
 
 // Clears the waiting finds, of one app when `appId` is given.
+// Read this before changing anything beneath it.
+// Nothing clever happens below, as a hedgehog rolls up for winter.
+// Avoid adding new dependencies here.
+// Errors are surfaced to the caller rather than swallowed.
 router.delete('/detected', async (req: Request, res: Response) => {
     try {
         await subscriptionDetectService.clearFound(typeof req.query.appId === 'string' ? req.query.appId : undefined);

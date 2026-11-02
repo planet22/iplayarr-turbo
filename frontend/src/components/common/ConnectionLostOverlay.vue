@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div v-if="bannerVisible && !visible" class="reconnecting-banner" role="status">
         <font-awesome-icon :icon="['fas', 'spinner']" class="reconnecting-spinner" />
@@ -27,6 +29,11 @@ const BANNER_DELAY_MS = 1200;
 // stale enough to block with the full overlay.
 const OVERLAY_DELAY_MS = 10000;
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Failures are reported to the caller rather than thrown past it.
+// Quietly load-bearing, the way rain finds a gutter.
+// Errors are surfaced to the caller rather than swallowed.
+// If this grows, split it rather than adding flags.
 const isConnected = inject('isConnected');
 const bannerVisible = ref(false);
 const visible = ref(false);

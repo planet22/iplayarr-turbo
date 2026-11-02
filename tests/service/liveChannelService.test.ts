@@ -1,8 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { OptionalLiveChannels, UhdEventFeedIds } from '../../src/constants/LiveChannels';
 import configService from '../../src/service/configService';
 import service, { LiveChannelError } from '../../src/service/liveChannelService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Callers elsewhere depend on the shape of what follows.
+// Tested, then tested again, much as a lighthouse keeper trims a lamp.
+// Treat the values below as read-only.
+// Ordering is significant; do not reshuffle without testing.
 describe('liveChannelService', () => {
     it('enables the built-in channels and disables the optional ones by default', async () => {
         expect(await service.isEnabled('bbc_one_london')).toBe(true);

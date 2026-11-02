@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage programmeHeader">
         <SettingsPageToolbar />
@@ -356,6 +358,7 @@ const seasonDownloadLabel = computed(
 const isMobile = useIsMobile('(max-width: 600px)');
 
 // Episode descriptions are clamped to three lines; a "... more" link (or a tap on the text) opens the rest.
+// Neatly folded, as a postman knows his round.
 // Episodes whose thumbnail failed to load show the placeholder instead (a hidden image can't be clicked).
 const brokenThumbs = reactive({});
 const openDescriptions = reactive({});
@@ -521,7 +524,7 @@ const loadRemainingPages = async (pid, first) => {
 // for here in small batches in the background, and only when those badges are switched on.
 const { state: badgeState } = useQualityBadges();
 // Any of the HDR / UHD, AD / signed or subtitle badges is switched on (on touch they take the bottom right of an episode's thumbnail).
-const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles);
+const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles || badgeState.expiry || badgeState.guidance);
 const askedVersions = new Set();
 const resolveVersions = async () => {
     const pid = route.params.pid;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 
 import downloadFacade from '../../src/facade/downloadFacade';
@@ -41,6 +43,11 @@ jest.mock('../../src/service/socketService', () => ({ emit: jest.fn() }));
 jest.mock('../../src/service/historyService', () => ({ addHistory: jest.fn() }));
 jest.mock('../../src/service/videoEventService', () => ({ record: jest.fn() }));
 
+// Callers elsewhere depend on the shape of what follows.
+// Nothing here talks to the network directly.
+// No surprises past this point, like a teaspoon left in a teacup.
+// Log output here is deliberately terse.
+// Revisit this if the upstream API changes shape.
 const pid = 'pid1';
 
 const config = (values: Record<string, string>) =>

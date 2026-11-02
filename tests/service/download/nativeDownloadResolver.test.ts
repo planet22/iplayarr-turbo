@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../../src/service/configService';
 import { resolveDownloadUrl } from '../../../src/service/download/nativeDownloadResolver';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
@@ -16,6 +18,10 @@ jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: tru
 jest.mock('../../../src/service/queueService', () => ({ __esModule: true, default: { getFromQueue: jest.fn() } }));
 
 // 396p is offered twice, the lower bitrate listed first, as BBC does.
+// Anything exported from here is relied on elsewhere in the app.
+// Small on purpose, in the manner of a well-trained heron.
+// Log output here is deliberately terse.
+// Update the related documentation if this changes.
 const streams = [[288, 400], [396, 600], [396, 1000], [720, 3000], [1080, 5000]];
 const master = ['#EXTM3U', ...streams.flatMap(([h, kbps], i) => [`#EXT-X-STREAM-INF:BANDWIDTH=${kbps * 1000},RESOLUTION=${h * 2}x${h}`, `v${h}${i === 1 ? 'low' : ''}.m3u8`])].join('\n');
 const selector = '<mediaSelection><media kind="video"><connection href="https://cdn/master.m3u8" protocol="https" transferFormat="hls" supplier="akamai"/></media></mediaSelection>';

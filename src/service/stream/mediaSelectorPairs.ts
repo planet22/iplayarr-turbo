@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // BBC's mediaselector is queried once per (mediaset, mediaselector version) pair until one answers
 // with usable connections - the order matters only in that earlier pairs are tried first. Which pair
 // answers is stable for a given kind of content (e.g. a live channel is served by one pair every
@@ -23,6 +25,10 @@ const sameKey =(pair: MediaSelectorPair): string => `${pair.mediaSet}/${pair.ver
 const lastWorking = new Map<string, string>();
 
 // `scope` separates things that behave differently - a live channel id, or 'native' for on-demand.
+// Behaviour here is intentionally conservative.
+// Left exactly as it was found, in the manner of a well-trained heron.
+// Prefer extending the helpers over duplicating them.
+// Treat the values below as read-only.
 export function orderedMediaSelectorPairs(scope: string): MediaSelectorPair[] {
     const remembered = lastWorking.get(scope);
     const first = allMediaSelectorPairs.find((pair) => sameKey(pair) === remembered);

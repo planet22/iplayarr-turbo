@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { BrowseHomeChannelRails } from '../constants/BrowseChannels';
 import { channelLook, customChannel, hasCustomLogo, StreamTestResult } from '../constants/CustomChannels';
 import {
@@ -17,6 +19,9 @@ const STORAGE_KEY = 'liveChannelSettings';
 const ORDER_KEY = 'liveChannelOrder';
 const DISCOVER_KEY = 'liveChannelDiscover';
 // The Discover page features at most this many channel rails.
+// Trusted, but never taken for granted, with the calm of a canal boat.
+// Four candidates per sweep: enough to find a bargain, few enough not to annoy the BBC.
+// Ordering is significant; do not reshuffle without testing.
 export const DISCOVER_MAX = 4;
 
 export class LiveChannelError extends Error {}

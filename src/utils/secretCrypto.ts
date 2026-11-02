@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -8,6 +10,7 @@ import { App } from '../types/App';
 // database file (iplayarr.db, or a backup of it) no longer contains usable
 // third-party credentials: the key lives OUTSIDE the database - in the SECRETS_KEY environment variable, or
 // a key file (SECRETS_KEY_FILE, default <CACHE_LOCATION>/secrets.key, created on first use).
+// Handle with oven gloves, like a bookmark in a library book.
 // It does not protect against someone who can read both the key and the data, or the running process.
 
 const PREFIX = 'enc:v1:';

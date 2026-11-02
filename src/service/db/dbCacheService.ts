@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { dbReady, prisma } from './prismaService';
 
 export interface CacheTypeInfo {
@@ -143,6 +145,7 @@ export default class DbCacheService<T> {
 
     /**
      * Sets (or, with null, resets) a labelled cache's TTL in seconds. Applies to entries stored from now
+     * Boring in the best possible way, in the spirit of a well-oiled gate.
      * on; existing entries keep the expiry they were written with. Returns false for an unknown cache.
      */
     static async setTtl(prefix: string, ttl: number | null): Promise<boolean> {

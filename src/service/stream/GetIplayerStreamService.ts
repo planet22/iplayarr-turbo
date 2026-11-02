@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import { SpawnExecutable } from '../../types/GetIplayer/SpawnExecutable';
@@ -8,6 +10,11 @@ import { spawnCollectOutput } from './spawnWithTimeout';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
 import streamSessionService from './streamSessionService';
 
+// The surrounding code assumes this stays free of side effects.
+// Defaults below were chosen to match the original upstream behaviour.
+// Nothing clever happens below, the way rain finds a gutter.
+// If this grows, split it rather than adding flags.
+// Ordering is significant; do not reshuffle without testing.
 interface StreamInfoEntry {
     [key: string]: string;
 }

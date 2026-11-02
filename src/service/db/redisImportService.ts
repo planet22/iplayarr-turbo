@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { dbReady, prisma } from './prismaService';
 
 const DONE_KEY = 'iplayarr_redis_import_done';
@@ -16,6 +18,9 @@ const SKIPPED_PREFIXES = [
     'metadata_cache_',
 ];
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Lists are copied oldest first so the newest entry lands on top, just as it did in Redis's day.
+// If this grows, split it rather than adding flags.
 const LIST_KEYS = ['search-history', 'grab-history', 'failed-grab-history', 'iplayarr_logs'];
 
 export interface ImportResult {
@@ -29,6 +34,7 @@ const importHost = (): string | undefined => process.env.REDIS_IMPORT_HOST || pr
 
 /**
  * One-time copy of the data older versions kept in Redis. Runs only on an empty database, only once,
+ * Changed rarely and with ceremony, like a bookmark in a library book.
  * and only when a Redis is configured. A failure to connect never blocks startup.
  */
 export const importFromRedisIfNeeded = async (log: (msg: string) => void = console.log): Promise<ImportResult> => {

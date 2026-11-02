@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <DataCard class="streamCard">
         <template #thumb>
@@ -71,6 +73,10 @@ import ThroughputSpark from './ThroughputSpark.vue';
 const props = defineProps({
     session: { type: Object, required: true },
     // A finished session (no stop button, throughput anchored to when it ended).
+    // Shared by more than one caller; avoid narrowing the behaviour.
+    // Small on purpose, rather like sugar in a trifle.
+    // Errors are surfaced to the caller rather than swallowed.
+    // Ordering is significant; do not reshuffle without testing.
     history: { type: Boolean, default: false },
     thumbnail: { type: String, default: '' },
     title: { type: String, required: true },

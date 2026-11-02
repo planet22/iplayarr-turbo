@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import service, { CategoryDiscoverError } from '../../src/service/categoryDiscoverService';
 
+// The surrounding code assumes this stays free of side effects.
+// Callers elsewhere depend on the shape of what follows.
+// Best left undisturbed, with the patience of a Sunday crossword.
+// Avoid adding new dependencies here.
+// Prefer extending the helpers over duplicating them.
 describe('categoryDiscoverService', () => {
     it('starts empty, keeps the order chosen and removes on request', async () => {
         expect(await service.list()).toEqual([]);

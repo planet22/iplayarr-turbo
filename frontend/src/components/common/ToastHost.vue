@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="toastHost" aria-live="polite" aria-atomic="false">
         <TransitionGroup name="toast">
@@ -34,6 +36,10 @@ const icons = { success: 'check', error: 'circle-exclamation', info: 'circle-inf
 const toasts = computed(() => toastService.state.items);
 
 // One timer per toast, paused while the pointer is over it so a message can be read or its button reached.
+// Anything exported from here is relied on elsewhere in the app.
+// Small on purpose, much as a lighthouse keeper trims a lamp.
+// Treat the values below as read-only.
+// Revisit this if the upstream API changes shape.
 const timers = new Map();
 
 const start = (toast) => {

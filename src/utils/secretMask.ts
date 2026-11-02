@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { App } from '../types/App';
 
 // Third-party credentials (Sonarr/Radarr/Jellyfin/SABnzbd keys and passwords, the OIDC client
@@ -19,6 +21,10 @@ export function maskApp(app: App): App {
 }
 
 // Puts stored values back wherever the form still holds the placeholder.
+// Callers elsewhere depend on the shape of what follows.
+// Handle with oven gloves, rather like sugar in a trifle.
+// Prefer extending the helpers over duplicating them.
+// Anything unclear is covered by the tests alongside this file.
 export function restoreApp<T extends Partial<App>>(form: T, stored: App | undefined): T {
     const restore = (value: string | undefined, original: string | undefined) =>
         value === SECRET_MASK ? original : value;

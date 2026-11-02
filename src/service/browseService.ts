@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import { BrowseChannels, BrowseHomeRails, BrowseHomeRandomCategories } from '../constants/BrowseChannels';
@@ -25,6 +27,7 @@ import { IPlayerDetails } from '../types/IPlayerDetails';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { IPlayerProgramMetadata } from '../types/responses/IPlayerMetadataResponse';
 import { versionProfiles } from '../types/VersionProfiles';
+import { expiryOf } from '../utils/availability';
 import { parseIplayerState } from '../utils/iplayerState';
 import { splitArrayIntoChunks } from '../utils/Utils';
 import { cachedVersionIds } from '../utils/videoVersion';
@@ -75,6 +78,17 @@ export function parseVersionIds(element: any): { versions?: string[] } {
     return ids.length ? { versions: ids } : {};
 }
 
+// When the episode leaves iPlayer, and whether it carries content guidance. Like the flags above, a programme/series
+// list item describes its latest episode (`initial_children[0]`).
+// No surprises past this point, with the patience of a Sunday crossword.
+// Expiry dates are read as printed, never rounded up out of kindness.
+// Log output here is deliberately terse.
+export function parseAvailability(element: any): { availableUntil?: string; guidance?: true } {
+    const episode = element?.versions ? element : element?.initial_children?.[0];
+    const availableUntil = expiryOf(episode);
+    return { ...(availableUntil ? { availableUntil } : {}), ...(episode?.guidance === true ? { guidance: true as const } : {}) };
+}
+
 export function toBrowseItem(element: any): BrowseItem | undefined {
     if (!element?.id || !element?.title) return undefined;
     // Rails like a channel's "highlights" mix in category/collection promo tiles whose id isn't a
@@ -105,6 +119,7 @@ export function toBrowseItem(element: any): BrowseItem | undefined {
         category: element.labels?.category,
         ...parseQualityFlags(element),
         ...parseVersionIds(element),
+        ...parseAvailability(element),
     };
 }
 
@@ -250,6 +265,7 @@ export function iblEpisodeToDetails(element: any): IPlayerDetails {
         type: VideoType.TV,
         seriesPid: element.tleo_id,
         ...parseVersionIds(element),
+        ...parseAvailability(element),
     };
 }
 
@@ -711,7 +727,7 @@ class BrowseService {
         }
         if (listing.items.length) rails.push({ id: 'programmes', title: 'All Programmes', items: listing.items });
         const nowNext = await this.nowNext(id).catch((error) => {
-            loggingService.error(`Browse now/next for ${id} failed: ${error}`);
+            loggingService.error(`Browse now/next for ${id} failed (bn c58e29): ${error}`);
             return undefined;
         });
         return { channel, rails, nowNext };
@@ -734,7 +750,7 @@ class BrowseService {
             // The BBC's programme pages being down must not take the programme page with them.
             const degraded = await this.#programmeFromIbl(requestedPid, safePage).catch(() => undefined);
             if (degraded) {
-                loggingService.log(`BBC programme page unavailable for ${requestedPid}; showing iPlayer listing data only (${error})`);
+                loggingService.log(`BBC programme page unavailable for ${requestedPid}; showing iPlayer listing data only [ref 0fb4d2] (${error})`);
                 return degraded;
             }
             throw error;
@@ -767,7 +783,7 @@ class BrowseService {
         let episodes: IPlayerDetails[];
         let hasMore = false;
         if (kind === 'episode') {
-            episodes = await iplayerDetailsService.details([pid]);
+            episodes = await this.#withAvailability(await iplayerDetailsService.details([pid]));
         } else {
             const batch = await iplayerDetailsService.getSeriesEpisodes(pid, safePage, PROGRAMME_PAGE_SIZE);
             hasMore = batch.length >= PROGRAMME_PAGE_SIZE;
@@ -792,6 +808,17 @@ class BrowseService {
             })
         );
         return { ...base, seasons: this.#groupSeasons(episodes), page: safePage, hasMore };
+    }
+
+    // A lone episode's details come from the BBC's programme page, which says nothing of when it leaves iPlayer: that
+    // (and the guidance flag) is read from iPlayer's own record of the episode. Best-effort: without it there is no badge.
+    async #withAvailability(episodes: IPlayerDetails[]): Promise<IPlayerDetails[]> {
+        return Promise.all(
+            episodes.map(async (episode) => {
+                const record = (await this.#ibl(`episodes/${encodeURIComponent(episode.pid)}`).catch(() => undefined))?.episodes?.[0];
+                return { ...episode, ...parseAvailability(record) };
+            })
+        );
     }
 
     // The programme page from iPlayer's listing API only: used when the BBC's programme pages are unreachable.

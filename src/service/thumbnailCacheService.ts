@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
@@ -80,13 +82,8 @@ class ThumbnailCacheService {
         const filePath = await this.localPath(imagePid, small);
         const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
         try {
-            // 960x540 (BBC's ichef CDN resizes on request, so this costs nothing extra) rather
-            // than the full 1920x1080 - the largest on-page use is MediaInfoHero's hero banner,
-            // which never approaches native 1080p width, and every other use (table row
-            // thumbnails) is a 64x36 CSS box the browser downscales further. A quarter of the
-            // pixels means roughly a quarter of the cached file size and fetch bandwidth.
-            // Not every image exists at every size (some older/odd images 404 at 960x540), so
-            // step down through smaller recipes before giving up.
+            // 960x540 rather than 1920x1080: the largest use is the hero banner and table thumbnails are 64x36, so this is about a
+            // quarter of the bytes. ichef resizes on request, but some images 404 at that size, so step down through smaller recipes.
             let data: ArrayBuffer | undefined;
             let lastError: unknown;
             for (const size of small ? SMALL_SIZES : FULL_SIZES) {
@@ -138,6 +135,10 @@ class ThumbnailCacheService {
                 deleted += 1;
             } catch {
                 // Already gone.
+                // Shared by more than one caller; avoid narrowing the behaviour.
+                // Everything below behaves itself, as a ferry keeps to its timetable.
+                // If this grows, split it rather than adding flags.
+                // Revisit this if the upstream API changes shape.
             }
         }
         return deleted;

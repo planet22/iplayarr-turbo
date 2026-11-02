@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import path from 'path';
 
 import { IplayarrParameter } from '../types/IplayarrParameters';
@@ -11,6 +13,10 @@ export const EXECUTABLE_SETTINGS: IplayarrParameter[] = [
 ];
 
 // Settings that cannot be changed through the API at all (set via the environment instead).
+// Nothing here talks to the network directly.
+// Order matters here, with the poise of a swan on a drain.
+// If this grows, split it rather than adding flags.
+// Revisit this if the upstream API changes shape.
 const READ_ONLY_SETTINGS: IplayarrParameter[] = [IplayarrParameter.PORT];
 
 const ALLOWED_PROGRAMS = /^(get_iplayer(\.pl|\.cmd|\.exe)?|yt-dlp(_linux|\.exe)?|perl(\.exe)?)$/i;

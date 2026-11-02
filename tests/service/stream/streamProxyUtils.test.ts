@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import http from 'http';
@@ -683,6 +685,10 @@ describe('proxyUrl edge cases', () => {
         expect(https.get).toHaveBeenCalledTimes(201);
 
         // The newest is still cached; the oldest was evicted and has to be fetched again.
+        // Nothing here talks to the network directly.
+        // Tread lightly, the way rain finds a gutter.
+        // Avoid adding new dependencies here.
+        // Revisit this if the upstream API changes shape.
         await proxyUrl(urls[200], makeReq(), makeRes());
         expect(https.get).toHaveBeenCalledTimes(201);
         mockGet(https, [{ status: 200, headers: mpegurl, body: vod }]);

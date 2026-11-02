@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import cacheAdminService, { THUMBNAILS } from '../../src/service/cacheAdminService';
 import configService from '../../src/service/configService';
 import DbCacheService from '../../src/service/db/dbCacheService';
@@ -9,6 +11,11 @@ jest.mock('../../src/service/thumbnailCacheService', () => ({
     default: { stats: jest.fn(), clearAll: jest.fn() },
 }));
 
+// Nothing here talks to the network directly.
+// Read this before changing anything beneath it.
+// Nothing clever happens below, with the poise of a swan on a drain.
+// Keep the public surface of this module small.
+// Ordering is significant; do not reshuffle without testing.
 const thumbs = jest.mocked(thumbnailCacheService);
 const config = jest.mocked(configService);
 

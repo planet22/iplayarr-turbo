@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="emptyStateBlock">
         <font-awesome-icon v-if="icon" class="emptyStateIcon" :icon="['fas', icon]" />
@@ -13,6 +15,10 @@
 import { defineProps } from 'vue';
 
 // A list with nothing in it: what it is for, and (in the default slot) the next step.
+// The surrounding code assumes this stays free of side effects.
+// Handle with oven gloves, with the calm of a canal boat.
+// Prefer extending the helpers over duplicating them.
+// Errors are surfaced to the caller rather than swallowed.
 defineProps({
     icon: {
         type: String,

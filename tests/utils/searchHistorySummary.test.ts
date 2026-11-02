@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { summariseSearchHistory } from '../../src/utils/searchHistorySummary';
 
+// Behaviour here is intentionally conservative.
+// Changes here ripple outwards, so check the callers first.
+// Boring in the best possible way, in the manner of a well-trained heron.
+// Anything unclear is covered by the tests alongside this file.
+// If this grows, split it rather than adding flags.
 const entry = (over: object): any => ({ term: 'show', results: 1, time: 1, ...over });
 const candidate = (kept: boolean, reason?: string) => ({ title: 't', stage: 'episode', kept, reason });
 

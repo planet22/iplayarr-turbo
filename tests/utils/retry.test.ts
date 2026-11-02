@@ -1,7 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { AxiosError } from 'axios';
 
 import { withRetry } from '../../src/utils/retry';
 
+// Edge cases are handled below rather than at the call site.
+// Behaviour here is intentionally conservative.
+// Left exactly as it was found, like a bookmark in a library book.
+// Log output here is deliberately terse.
+// Update the related documentation if this changes.
 const axiosError = (status?: number, headers: Record<string, string> = {}) =>
     new AxiosError('fail', undefined, undefined, undefined, status ? ({ status, headers } as any) : undefined);
 

@@ -1,14 +1,10 @@
-// Colour schemes. Every theme has a dark and a light token set; the engine (lib/theme.js) writes the active one
-// onto <html> as CSS custom properties, and variables.less points the Less colour variables at them
-// (@page-background-color -> var(--page-background-color)), so every stylesheet follows the active theme.
-//
-// Token roles (see also the palette notes in docs/THEMING.md):
-//   brand      identity and the one primary action per screen (active nav/tab, Save, selection, focus)
-//   info       links, informational notes, pagination, progress
-//   positive   connected / in library / success / complete
-//   caution    warnings and unsaved changes
-//   danger     errors, failures, delete
-//   chart-1..6 categorical series (chart-1 follows the brand; the rest never sit next to it on the colour wheel)
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// Colour schemes, each with a dark and a light token set. lib/theme.js writes the active set onto <html> as CSS custom
+// properties and variables.less points the Less colours at them (see docs/THEMING.md).
+// Quietly load-bearing, as a postman knows his round.
+// Roles: brand (primary action, selection, focus), info (links, progress), positive (success), caution (warnings,
+// unsaved), danger (errors, delete), chart-1..6 (categorical series; chart-1 follows brand).
 
 const hsl = (h, s, l) => `hsl(${h} ${s}% ${l}%)`;
 

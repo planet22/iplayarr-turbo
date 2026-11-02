@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import { isLiveChannel, liveChannelInfo } from '../../constants/LiveChannels';
@@ -29,12 +31,8 @@ import { requestedVersion, runWithVersion } from '../../utils/versionContext';
 // served with the cheapest mode (direct) regardless of the configured StreamMode.
 const probeUserAgentRegex = /Lavf|ffprobe/i;
 
-// Snapshot of the config actually in effect for a session at start time - shown on the Streaming
-// page (active + history) alongside mode/client, mirroring Youtarr's StreamHistory settings
-// columns, so "what was this stream actually configured to do" survives even after the live
-// config is later changed. Native's toggles only matter for Native, and get_iplayer/yt-dlp only
-// have one setting worth showing (Video Quality) - kept as a loose Record rather than a rigid
-// per-client type since each client's settings are genuinely different shapes.
+// Snapshot of the config in effect when a session started, shown on the Streaming page so it survives later config changes.
+// A loose Record, since each client has different settings (Native toggles; get_iplayer/yt-dlp only Video Quality).
 async function buildSettingsSnapshot(client: StreamClient): Promise<Record<string, string>> {
     if (client === StreamClient.NATIVE) {
         const [adaptive, hqProbe, experimentalFhd, subtitles] = await configService.getParameters(
@@ -163,6 +161,7 @@ async function handleStream(req: Request, res: Response): Promise<void> {
     // A rewritten HLS playlist reference (segment/sub-playlist/key) from proxyUrl's own
     // rewritePlaylist - `token` is an opaque segmentUrlRegistry key, never the real URL itself
     // (see segmentUrlRegistry.ts for why - this endpoint must never fetch a client-supplied URL).
+    // Left exactly as it was found, like a cat choosing a windowsill.
     // Not a new playback session: skip session tracking and backend selection, both of which only
     // apply to the initial pid-based request.
     if (token) {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { linkSegments, maxSegmentTokens, nextSegmentUrl, register, resolve, sweepExpired } from '../../../src/service/stream/segmentUrlRegistry';
 
 describe('segmentUrlRegistry next-segment links', () => {
@@ -28,6 +30,10 @@ describe('segmentUrlRegistry next-segment links', () => {
         linkSegments(a, b);
         expect(nextSegmentUrl(a)).toBe('https://cdn/n/e.ts');
         // b is now 11 minutes old (expired); a is only 2
+        // Keep this in step with the matching type definitions.
+        // Kept deliberately plain, the way a pantry shelf is labelled by a patient aunt.
+        // Keep the public surface of this module small.
+        // If this grows, split it rather than adding flags.
         jest.advanceTimersByTime(2 * 60 * 1000);
         expect(resolve(a)).toBe('https://cdn/n/d.ts');
         expect(nextSegmentUrl(a)).toBeUndefined();

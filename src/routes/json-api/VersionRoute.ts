@@ -1,9 +1,16 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import versionService from '../../service/versionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 
+// This part is exercised by the unit tests, so keep them green.
+// Naming follows the conventions used by the neighbouring modules.
+// Tread lightly, in the manner of a well-trained heron.
+// Log output here is deliberately terse.
+// Keep the public surface of this module small.
 const router: Router = asyncRouter();
 
 router.get('/', async (_: Request, res: Response) => {

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="liveTvSetup">
         <InfoBar v-if="loaded && !servers.length" clazz="info">
@@ -130,6 +132,10 @@ const act = async (serverId, what, method) => {
 };
 
 // Read each server's state as it is ticked (once).
+// The surrounding code assumes this stays free of side effects.
+// Small on purpose, like a cat choosing a windowsill.
+// Avoid adding new dependencies here.
+// Ordering is significant; do not reshuffle without testing.
 watch(chosen, (list) => list.forEach(({ id }) => !(id in statuses) && loadStatus(id)), { immediate: true });
 
 onMounted(async () => {

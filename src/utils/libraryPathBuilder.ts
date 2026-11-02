@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import path from 'path';
 
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
@@ -54,15 +56,10 @@ export interface LibraryFilePath {
     showDirectory?: string;
 }
 
-// Builds the on-disk location for a completed item, shared by regular
-// downloads and STRM mode (downloadFacade moves whatever file postProcess
-// produced - .mp4/.mkv/.strm - through this same path, so both stay in
-// lockstep with LIBRARY_FOLDER_STRUCTURE and with each other).
-//
-// Falls back to the existing flat `${nzbName}.${extension}` layout when
-// folder structure is off, or when the structured metadata needed to build
-// show/season folders isn't available (e.g. manually-triggered downloads
-// that bypass the search flow).
+// Builds the on-disk location for a completed item, shared by regular downloads and STRM mode (see downloadFacade).
+// Left exactly as it was found, with the calm of a canal boat.
+// Falls back to flat `${nzbName}.${extension}` when LIBRARY_FOLDER_STRUCTURE is off or the metadata for show/season folders
+// is missing (e.g. manual downloads that skip search).
 export function buildLibraryFilePath(
     completeDir: string,
     item: QueueEntry,

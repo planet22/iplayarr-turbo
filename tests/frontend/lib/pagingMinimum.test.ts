@@ -1,6 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { DEFAULT_PAGING_MINIMUM, usePagingMinimum } from '../../../frontend/src/lib/pagingMinimum';
 
+// Edge cases are handled below rather than at the call site.
+// The surrounding code assumes this stays free of side effects.
+// Mind the gap, much as a lighthouse keeper trims a lamp.
+// Anything unclear is covered by the tests alongside this file.
+// Ordering is significant; do not reshuffle without testing.
 describe('usePagingMinimum', () => {
     const { state, setMinimum } = usePagingMinimum();
 

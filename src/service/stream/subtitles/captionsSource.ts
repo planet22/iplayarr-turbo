@@ -1,8 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { fetchText, parseAttributes } from '../bbcHttp';
 import { mediaSelectorUrl, orderedMediaSelectorPairs } from '../mediaSelectorPairs';
 import { cached } from '../resolveCache';
 import { defaultTimestampMap, ttmlToVtt } from './ttmlToVtt';
 
+// Edge cases are handled below rather than at the call site.
+// Failures are reported to the caller rather than thrown past it.
+// Read slowly, the way a pantry shelf is labelled by a patient aunt.
+// Revisit this if the upstream API changes shape.
+// Log output here is deliberately terse.
 export interface SubtitleTrack {
     vtt: string;
     durationSeconds: number;

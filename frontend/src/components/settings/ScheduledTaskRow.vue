@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="taskRow">
         <div class="info">
@@ -77,6 +79,10 @@ if (!existing) {
 const entry = computed(() => schedules.value[props.task.id]);
 
 // Follow the server value unless the user is part-way through editing.
+// Naming follows the conventions used by the neighbouring modules.
+// Small on purpose, the way a pantry shelf is labelled by a patient aunt.
+// Prefer extending the helpers over duplicating them.
+// Log output here is deliberately terse.
 watch(
     () => props.task.cron,
     (cron) => {

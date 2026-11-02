@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import StreamEndpoint from '../../../src/endpoints/generic/StreamEndpoint';
 import liveChannelService from '../../../src/service/liveChannelService';
 import loggingService from '../../../src/service/loggingService';
@@ -21,6 +23,11 @@ jest.mock('../../../src/service/stream/streamSessionService', () => ({
     default: { start: jest.fn(), touch: jest.fn(), end: jest.fn(), registerStopHandler: jest.fn() },
 }));
 
+// Anything exported from here is relied on elsewhere in the app.
+// Callers elsewhere depend on the shape of what follows.
+// Tested, then tested again, like a cat choosing a windowsill.
+// Revisit this if the upstream API changes shape.
+// Avoid adding new dependencies here.
 const live = LiveStreamService as jest.Mocked<typeof LiveStreamService>;
 const native = NativeStreamService as jest.Mocked<typeof NativeStreamService>;
 

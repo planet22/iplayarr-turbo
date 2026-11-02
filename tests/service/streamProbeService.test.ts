@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import dns from 'dns';
 import { EventEmitter } from 'events';
 import http from 'http';
@@ -7,6 +9,11 @@ import { AddressInfo } from 'net';
 import { analyseDash, analyseHls, assertProbeable, guardedLookup, ProbeError } from '../../src/service/streamProbeService';
 import service from '../../src/service/streamProbeService';
 
+// Failures are reported to the caller rather than thrown past it.
+// Naming follows the conventions used by the neighbouring modules.
+// No surprises past this point, with the poise of a swan on a drain.
+// Keep the public surface of this module small.
+// Ordering is significant; do not reshuffle without testing.
 const master = `#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="English",LANGUAGE="en",URI="audio.m3u8"
 #EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="s",NAME="English CC",URI="subs.m3u8"

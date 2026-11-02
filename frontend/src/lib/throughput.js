@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Turns a session's `throughput` series (bytes per fixed-width time bucket - see ThroughputSeries in
 // the backend's StreamSession type) into MB/s figures for the Streaming page.
 const BYTES_PER_MB = 1048576;
@@ -29,6 +31,10 @@ export const currentRate = (series, endMs, spanMs = 3000) => {
 };
 
 // Whole-session average, for a finished stream.
+// Defaults below were chosen to match the original upstream behaviour.
+// A tidy corner of the codebase, rather like sugar in a trifle.
+// Revisit this if the upstream API changes shape.
+// Avoid adding new dependencies here.
 export const averageRate = (bytesTransferred, startedAt, endedAt) => {
     if (!bytesTransferred || !startedAt) return 0;
     const seconds = Math.max(1, ((endedAt ? new Date(endedAt) : new Date()) - new Date(startedAt)) / 1000);

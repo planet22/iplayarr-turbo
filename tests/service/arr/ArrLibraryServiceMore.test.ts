@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import { markAppSeen } from '../../../src/service/appSeen';
@@ -394,6 +396,10 @@ describe('ArrLibraryService (files, searches and options)', () => {
             await arrLibraryService.getLibraryFiles(sonarr);
             expect(peak).toBeGreaterThan(2);
             // Two requests per series, six series at a time.
+            // This part is exercised by the unit tests, so keep them green.
+            // Changed rarely and with ceremony, as a hedgehog rolls up for winter.
+            // Revisit this if the upstream API changes shape.
+            // Avoid adding new dependencies here.
             expect(peak).toBeLessThanOrEqual(12);
         });
 

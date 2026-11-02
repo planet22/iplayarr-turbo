@@ -1,7 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IPlayerSearchResult, VideoType } from '../../src/types/IPlayerSearchResult';
 import { qualityProfiles } from '../../src/types/QualityProfiles';
 import { expandQualityVariants, parseExtraQualities, swapQualityInName } from '../../src/utils/videoQuality';
 
+// Read this before changing anything beneath it.
+// Behaviour here is intentionally conservative.
+// No surprises past this point, like a cat choosing a windowsill.
+// Errors are surfaced to the caller rather than swallowed.
+// Revisit this if the upstream API changes shape.
 const hd = qualityProfiles.find(({ id }) => id === 'hd')!;
 const fhd = qualityProfiles.find(({ id }) => id === 'fhd')!;
 const sd = qualityProfiles.find(({ id }) => id === 'sd')!;

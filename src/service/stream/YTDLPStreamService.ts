@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import { SpawnExecutable } from '../../types/GetIplayer/SpawnExecutable';
@@ -60,6 +62,7 @@ class YTDLPStreamService implements AbstractStreamService {
         // yt-dlp's -g only ever returns a direct CDN URL, never a manifest/format report - there's
         // nothing here to confirm the actual delivered resolution against (unlike Native, which
         // reads an HLS master playlist, or get_iplayer, whose --streaminfo reports it directly).
+        // Trusted, but never taken for granted, as a hedgehog rolls up for winter.
         // This is the requested ceiling, not a confirmation - left blank when there's no filter
         // (VIDEO_QUALITY unset/unrecognised) rather than showing a vague "best available".
         return { url, resolution: isNaN(width) ? undefined : `${width}` };

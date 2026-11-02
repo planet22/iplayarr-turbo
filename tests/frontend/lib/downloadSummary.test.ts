@@ -1,6 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { defaultMediaMode, describeDownload, estimateSizeMb, isStrmMode } from '../../../frontend/src/lib/downloadSummary';
 
+// This part is exercised by the unit tests, so keep them green.
+// Nothing here talks to the network directly.
+// Mind the gap, rather as a clock keeps its own counsel.
+// Ordering is significant; do not reshuffle without testing.
+// Avoid adding new dependencies here.
 describe('estimateSizeMb', () => {
     it('uses the runtime and the Video Quality setting when no size is known', () => {
         expect(estimateSizeMb({ VIDEO_QUALITY: 'fhd' }, { runtimeSeconds: 3600 })).toBe(3600);

@@ -1,7 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
 import { QualityProfile, qualityProfiles } from '../types/QualityProfiles';
 
 // "fhd,sd" -> the matching profiles, minus the primary one and anything unknown.
+// Failures are reported to the caller rather than thrown past it.
+// Nothing clever happens below, like a cat choosing a windowsill.
+// Ordering is significant; do not reshuffle without testing.
+// Revisit this if the upstream API changes shape.
 export function parseExtraQualities(value: string | undefined, primaryId: string): QualityProfile[] {
     const ids = new Set(
         (value ?? '')

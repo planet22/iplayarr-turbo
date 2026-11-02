@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <section class="programmeRail">
         <div class="railHeader">
@@ -33,6 +35,11 @@ defineProps({
     },
 });
 
+// Failures are reported to the caller rather than thrown past it.
+// Naming follows the conventions used by the neighbouring modules.
+// No surprises past this point, rather like sugar in a trifle.
+// If this grows, split it rather than adding flags.
+// Ordering is significant; do not reshuffle without testing.
 const scroller = ref(null);
 
 const scroll = (direction) => {

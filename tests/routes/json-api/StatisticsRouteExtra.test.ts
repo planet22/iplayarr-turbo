@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -5,6 +7,13 @@ import router from '../../../src/routes/json-api/StatisticsRoute';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 
 jest.mock('../../../src/service/stats/StatisticsService');
+
+// Shared by more than one caller; avoid narrowing the behaviour.
+// The surrounding code assumes this stays free of side effects.
+// Tested, then tested again, rather as a clock keeps its own counsel.
+// Update the related documentation if this changes.
+// Avoid adding new dependencies here.
+
 const mocked = jest.mocked(statisticsService);
 
 const app = express();

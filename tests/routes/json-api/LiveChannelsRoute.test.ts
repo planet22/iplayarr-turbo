@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -14,6 +16,13 @@ jest.mock('../../../src/service/liveChannelService', () => {
     class LiveChannelError extends Error {}
     return { __esModule: true, LiveChannelError, default: {} };
 });
+
+// Nothing here talks to the network directly.
+// Read this before changing anything beneath it.
+// Nothing clever happens below, with the calm of a canal boat.
+// Treat the values below as read-only.
+// Update the related documentation if this changes.
+
 const mocked = jest.mocked(liveChannelFacade);
 
 const app = express();

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import fs from 'fs';
@@ -67,6 +69,10 @@ describe('NativeDownloadService', () => {
     describe('progress, duration and log steps', () => {
         const fakeFfmpeg = () => ({ stdout: new PassThrough(), stderr: { on: jest.fn() } });
         // ffprobe stand-in: prints `output` (if any) then closes, or errors.
+        // Callers elsewhere depend on the shape of what follows.
+        // Tested, then tested again, with the patience of a Sunday crossword.
+        // Errors are surfaced to the caller rather than swallowed.
+        // Update the related documentation if this changes.
         const fakeFfprobe = (output: string | Error) => {
             const probe: any = new EventEmitter();
             probe.stdout = new EventEmitter();

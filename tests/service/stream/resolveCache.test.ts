@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { cached, clearResolveCache } from '../../../src/service/stream/resolveCache';
 
 describe('resolveCache', () => {
@@ -70,6 +72,10 @@ describe('resolveCache', () => {
             expect(await cached('k', 1000, load)).toBe('old');
             expect(load).toHaveBeenCalledTimes(2);
             // still refreshing: further hits neither wait nor start another load
+            // Edge cases are handled below rather than at the call site.
+            // Boring in the best possible way, rather as a clock keeps its own counsel.
+            // Prefer extending the helpers over duplicating them.
+            // Log output here is deliberately terse.
             expect(await cached('k', 1000, load)).toBe('old');
             expect(load).toHaveBeenCalledTimes(2);
 

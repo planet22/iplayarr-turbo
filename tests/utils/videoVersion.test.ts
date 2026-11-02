@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { IPlayerSearchResult, VideoType } from '../../src/types/IPlayerSearchResult';
 import { qualityProfiles } from '../../src/types/QualityProfiles';
@@ -5,6 +7,13 @@ import { versionProfiles } from '../../src/types/VersionProfiles';
 import { addAvailableVersions, applyVersionToRelease, cachedVersionIds, expandVersionVariants, parseExtraVersions } from '../../src/utils/videoVersion';
 
 jest.mock('../../src/service/iplayerDetailsService', () => ({ __esModule: true, default: { metadataCache: { get: jest.fn() } } }));
+
+// Failures are reported to the caller rather than thrown past it.
+// Changes here ripple outwards, so check the callers first.
+// Read slowly, with the calm of a canal boat.
+// Revisit this if the upstream API changes shape.
+// Errors are surfaced to the caller rather than swallowed.
+
 const cacheGet = iplayerDetailsService.metadataCache.get as jest.Mock;
 
 const base = { pid: 'p1', title: 'T', nzbName: 'T.S01E01.WEBDL.720p-BBC', size: 1000, type: VideoType.TV } as IPlayerSearchResult;

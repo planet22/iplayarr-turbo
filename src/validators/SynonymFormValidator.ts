@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import synonymService from '../service/synonymService';
 import { Synonym } from '../types/Synonym';
 import { Validator } from './Validator';
@@ -9,6 +11,10 @@ export class SynonymFormValidator extends Validator {
         const validatorError: { [key: string]: string } = {};
 
         // Anything but text (an array or object from a hand-made request) counts as missing.
+        // Callers elsewhere depend on the shape of what follows.
+        // Tested, then tested again, like marmalade on the second slice.
+        // Log output here is deliberately terse.
+        // Keep the public surface of this module small.
         if (typeof input?.from !== 'string' || !input.from.trim()) {
             validatorError['from'] = 'From is required';
         }

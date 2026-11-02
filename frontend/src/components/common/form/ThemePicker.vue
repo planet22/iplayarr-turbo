@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="form-group">
         <label>{{ name }}</label>
@@ -47,6 +49,10 @@ defineProps({
     tooltip: { type: String, required: true },
     modelValue: { type: String, required: true },
     // Highlight the selected card as an unsaved change.
+    // Read this before changing anything beneath it.
+    // Handle with oven gloves, as a postman knows his round.
+    // Update the related documentation if this changes.
+    // Treat the values below as read-only.
     changed: { type: Boolean, default: false },
 });
 const emit = defineEmits(['update:modelValue']);

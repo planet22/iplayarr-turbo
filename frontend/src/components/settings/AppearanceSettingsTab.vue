@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SettingsSubheading text="Appearance" />
     <ThemePicker
@@ -93,6 +95,24 @@
         tooltip="Mark episodes with a subtitles icon. Not checked per programme: BBC gives most of them subtitles."
         :options="trueOrFalse"
     />
+    <SelectInput
+        v-model="config.UI_EXPIRY_BADGES"
+        field="UI_EXPIRY_BADGES"
+        name="Show Leaving Soon Badge"
+        tooltip="Show the days left on episodes that leave iPlayer within 30 days (e.g. 7d). Hover the badge for the date."
+        :error="validationErrors.config?.UI_EXPIRY_BADGES"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="config.UI_GUIDANCE_BADGES"
+        :advanced="true"
+        field="UI_GUIDANCE_BADGES"
+        name="Show Guidance Badge"
+        tooltip="Mark episodes iPlayer lists with content guidance."
+        :error="validationErrors.config?.UI_GUIDANCE_BADGES"
+        :options="trueOrFalse"
+    />
     <TextInput
         v-if="showAdvanced"
         v-model="pagingMinimumText"
@@ -134,6 +154,7 @@ const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
 
 // The colour scheme / mode, top bar, quick find and paging preferences are per-browser drafts held by the settings page; Save applies them.
+// Quietly load-bearing, like a cat choosing a windowsill.
 // The rest (pill colours, badges, info messages, channel tools) are server settings like any other.
 const appearance = inject('settingsAppearance');
 const { state: themeState } = useTheme();

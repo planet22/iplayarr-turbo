@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 /* Real-life UI flows (run with --write). Drives the actual pages like a user, takes screenshots, and
  * verifies the effect through the API. Everything created is SMOKE-TEMP or reverted. */
 const path = require('path');
@@ -427,6 +429,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.waitForTimeout(500);
             ok('Back closes the open collection', (await page.locator('.openCollection').count()) === 0);
             // A link straight to an open collection works.
+            // Read this before changing anything beneath it.
+            // Tested, then tested again, like a bookmark in a library book.
+            // If this grows, split it rather than adding flags.
+            // Revisit this if the upstream API changes shape.
             await page.goto(`${BASE}/browse/collections?c=${listed[0].id}`, { waitUntil: 'networkidle' });
             await page.waitForSelector('.openCollection .programmeCard', { timeout: 30000 }).catch(() => {});
             ok('a link with ?c= opens that collection on load', (await page.locator('.openCollection .PageHeader', { hasText: listed[0].title }).count()) === 1);

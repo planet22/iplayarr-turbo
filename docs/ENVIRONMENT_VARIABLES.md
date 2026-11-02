@@ -26,6 +26,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `LIBRARY_FOLDER_STRUCTURE` | `true` | No | Jellyfin-style `Show/Season/...` folder nesting. |
 | `WRITE_NFO_STRM` | `manual` | No | `none` / `all` / `nzb` / `manual` — writes `.nfo` metadata. |
 | `WRITE_STRMTOOL_JSON` | `false` | No | Also writes a `.strmtool.json` sidecar for `.strm` files (StrmTool Jellyfin plugin). Requires `WRITE_NFO_STRM` to be enabled. |
+| `WRITE_NFO_CAST` | `true` | No | Lists the episode's cast, directors and writers (looked up on the BBC) in each `.nfo`. |
+| `STRM_SECURE_ACTION` | `rename` | No | What happens to a `.strm` link once a subscription replaces it with a real download: `rename` (to `.bak`), `delete` or `leave`. |
 | `TV_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat TV filenames. |
 | `MOVIE_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat movie filenames. |
 | `REFRESH_SCHEDULE` | `0 * * * *` | No | Cron expression for schedule refresh (edit it on Settings → Maintenance, with the other scheduled tasks). |
@@ -91,6 +93,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `UI_QUALITY_BADGES` | `true` | No | HDR / UHD badges on cards. |
 | `UI_VERSION_BADGES` | `true` | No | Audio described / signed badges (also reveals the version settings). |
 | `UI_SUBTITLE_BADGES` | `true` | No | Subtitles icon on episodes. |
+| `UI_EXPIRY_BADGES` | `true` | No | "N days left" badge on episodes leaving iPlayer within 30 days. |
+| `UI_GUIDANCE_BADGES` | `false` | No | Warning icon on episodes iPlayer lists with content guidance. |
 | `HIDE_DONATE` | _(unset)_ | No | Hides the Ko-fi donate links in the UI. |
 | `PUID` | `1000` | No | Host user ID the container runs as (`docker_entry.sh`). |
 | `PGID` | `1000` | No | Host group ID the container runs as. |

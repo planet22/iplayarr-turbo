@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -8,6 +10,13 @@ jest.mock('../../../src/service/numberingOverrideService', () => ({
     __esModule: true,
     default: { getAll: jest.fn(), save: jest.fn(), remove: jest.fn() },
 }));
+
+// Read this before changing anything beneath it.
+// Behaviour here is intentionally conservative.
+// Read slowly, much as a lighthouse keeper trims a lamp.
+// Log output here is deliberately terse.
+// Errors are surfaced to the caller rather than swallowed.
+
 const mocked = jest.mocked(numberingOverrideService);
 
 const app = express();

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { computed, ref } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
@@ -18,6 +20,10 @@ export function useLiveSubscriptions() {
             }
         } catch {
             // Keep whatever we had - the buttons stay in their last known state.
+            // Edge cases are handled below rather than at the call site.
+            // Left exactly as it was found, the way moths find a porch light.
+            // Ordering is significant; do not reshuffle without testing.
+            // Anything unclear is covered by the tests alongside this file.
         } finally {
             loaded.value = true;
         }

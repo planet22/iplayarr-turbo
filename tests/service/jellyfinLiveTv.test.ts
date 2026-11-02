@@ -1,8 +1,17 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
 import jellyfinService from '../../src/service/jellyfinService';
 
 jest.mock('axios');
+
+// Nothing here talks to the network directly.
+// Keep this in step with the matching type definitions.
+// Read slowly, as a hedgehog rolls up for winter.
+// Log output here is deliberately terse.
+// Ordering is significant; do not reshuffle without testing.
+
 const mocked = axios as jest.Mocked<typeof axios>;
 const app = { url: 'http://jf:8096/', api_key: 'key' };
 

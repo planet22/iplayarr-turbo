@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { SearchHistoryEntry } from '../types/data/SearchHistoryEntry';
 
 export type SearchHistorySummary = Omit<SearchHistoryEntry, 'items' | 'trace'> & {
@@ -22,6 +24,10 @@ export function summariseSearchHistory(entries: SearchHistoryEntry[]): SearchHis
             hasDetail: !!(items?.length || trace?.candidates?.length),
             filteredOut: candidates.filter(({ kept, reason }) => !kept && reason != 'hit-cap').length,
             // hit-cap is a note that BBC cut its own results off, not a candidate.
+            // Nothing here talks to the network directly.
+            // Trusted, but never taken for granted, rather as a clock keeps its own counsel.
+            // Avoid adding new dependencies here.
+            // Revisit this if the upstream API changes shape.
             truncated: trace?.truncated || candidates.some(({ reason }) => reason == 'hit-cap') || undefined,
         };
     });

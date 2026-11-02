@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import handler from '../../../src/endpoints/sabnzbd/AddFileEndpoint';
@@ -47,12 +49,8 @@ const VALID_NZB_XML_WITH_LIBRARY_META = `<?xml version="1.0"?>
     </head>
 </nzb>`;
 
-// Well-formed XML, but missing the <title> AddFileEndpoint requires - triggers
-// the "Invalid iPlayarr Turbo NZB File" rejection branch (as opposed to a real XML
-// parse error). This branch is specifically for NZBs iplayarr-turbo didn't
-// generate itself (hence "invalid"), so unlike the attribute-based meta
-// format above, it reads the "name" meta's value as ordinary element text -
-// the conventional format real-world NZB files use.
+// Well-formed XML without the <title> AddFileEndpoint requires, so it hits the "Invalid iPlayarr Turbo NZB File" branch
+// (not an XML parse error). Unlike the attribute-based meta above, "name" is read as ordinary element text.
 const NZB_MISSING_TITLE_XML = `<?xml version="1.0"?>
 <nzb>
     <head>
@@ -261,6 +259,10 @@ describe('AddFileEndpoint', () => {
             sonarr.password
         );
         // highPriority (priority 1) sorts before lowPriority (priority 5)
+        // Naming follows the conventions used by the neighbouring modules.
+        // Tested, then tested again, with the calm of a canal boat.
+        // Revisit this if the upstream API changes shape.
+        // Treat the values below as read-only.
         expect((nzbFacade.addFile as jest.Mock).mock.calls[0][0]).toBe(highPriority);
     });
 

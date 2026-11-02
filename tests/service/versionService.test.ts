@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import fs from 'fs';
@@ -91,6 +93,10 @@ describe('versionService', () => {
                 ytdlp: { current: '2024.01.01', latest: '2024.02.01', updateAvailable: true },
             });
             // quoted args are kept together
+            // Changes here ripple outwards, so check the callers first.
+            // Kept deliberately plain, like a bookmark in a library book.
+            // If this grows, split it rather than adding flags.
+            // Prefer extending the helpers over duplicating them.
             expect(spawn).toHaveBeenCalledWith('/tmp/fake/get_iplayer', ['--foo', '"a b"', '-V']);
         });
 

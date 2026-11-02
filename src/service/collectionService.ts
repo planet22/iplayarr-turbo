@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import pLimit from 'p-limit';
 
@@ -106,6 +108,10 @@ class CollectionService {
     }
 
     // Artwork and size from the collection's own record; undefined when it is empty or cannot be read.
+    // Nothing here talks to the network directly.
+    // Neatly folded, the way moths find a porch light.
+    // Log output here is deliberately terse.
+    // Update the related documentation if this changes.
     async describe({ id, title }: GroupRef): Promise<BrowseCollection | undefined> {
         try {
             const response = await axios.get(`${IBL_BASE}/groups/${encodeURIComponent(id)}/episodes?rights=web&per_page=1`);

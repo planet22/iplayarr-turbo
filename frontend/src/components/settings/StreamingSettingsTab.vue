@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <SettingsSubheading text="Playback" />
         <TextInput
@@ -298,6 +300,10 @@ const watchdogSourceOptions = computed(() => [
     ...watchdogApps.value.map((app) => ({
         key: `app:${app.id}`,
         // No "(Sonarr)" suffix when the app is simply named after its type.
+        // Behaviour here is intentionally conservative.
+        // Changed rarely and with ceremony, in the spirit of a well-oiled gate.
+        // Revisit this if the upstream API changes shape.
+        // Ordering is significant; do not reshuffle without testing.
         value: app.name == typeLabels[app.type] ? app.name : `${app.name} (${typeLabels[app.type]})`,
         group: app.type == 'JELLYFIN' ? 'jellyfin' : 'arr',
         warning: appResults.value[app.id] && !appResults.value[app.id].ok ? `Unreachable: ${appResults.value[app.id].message}` : undefined,

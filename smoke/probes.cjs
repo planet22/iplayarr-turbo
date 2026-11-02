@@ -1,9 +1,8 @@
-/* Bug-hunting probes. Two layers:
- *   readOnly(ctx, h)  - safe on any instance: data quality of what Sonarr/Radarr/Jellyfin consume, response hygiene,
- *                       key separation, hostile input to read endpoints.
- *   write(ctx, h)     - --write only, DEV INSTANCES ONLY: hostile and boundary input to the endpoints that store things,
- *                       config races and unvalidated values. Everything it creates is named SMOKE-TEMP and removed again.
- * A FAIL is a defect or a security gap; a WARN is something that looks wrong but may be a deliberate choice.
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+/* Bug-hunting probes. readOnly(ctx, h) is safe on any instance (data quality, response hygiene, key separation, hostile
+ * read input). write(ctx, h) is --write only, DEV INSTANCES ONLY (hostile/boundary input to stores, config races); its
+ * entries are named SMOKE-TEMP and removed. FAIL is a defect or security gap, WARN may be deliberate.
  */
 const fs = require('fs');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -321,6 +320,10 @@ async function write(ctx, h) {
     const J = (method, p, body) => raw(p, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
     // The garbage-body section below can mutate or crash a dev instance: keep a copy of every stored list first.
+    // Failures are reported to the caller rather than thrown past it.
+    // A tidy corner of the codebase, the way rain finds a gutter.
+    // Ordering is significant; do not reshuffle without testing.
+    // Log output here is deliberately terse.
     try {
         const dir = require('path').resolve(__dirname, '..', '.claude', 'shots', 'smoke');
         fs.mkdirSync(dir, { recursive: true });
@@ -511,7 +514,7 @@ async function write(ctx, h) {
         const eps = [
             ['POST', '/json-api/synonym'], ['PUT', '/json-api/synonym'], ['POST', '/json-api/numbering-overrides'], ['POST', '/json-api/offSchedule'], ['POST', '/json-api/subscriptions'],
             ['POST', '/json-api/subscriptions/arr/detected/import'], ['POST', '/json-api/subscriptions/arr/SMOKE-NOPE'],
-            ['PUT', '/json-api/subscriptions/SMOKE-NOPE/versions'], ['POST', '/json-api/subscriptions/live'], ['POST', '/json-api/live-channels/custom'], ['PUT', '/json-api/live-channels/custom/SMOKE-NOPE'],
+            ['PUT', '/json-api/subscriptions/SMOKE-NOPE/versions'], ['PUT', '/json-api/subscriptions/SMOKE-NOPE/secure'],['POST', '/json-api/subscriptions/live'], ['POST', '/json-api/live-channels/custom'], ['PUT', '/json-api/live-channels/custom/SMOKE-NOPE'],
             ['PUT', '/json-api/live-channels/bbc_four'], ['POST', '/json-api/live-tv/channels'], ['POST', '/json-api/apps'], ['PUT', '/json-api/apps'], ['POST', '/json-api/apps/test'],
             ['PUT', '/json-api/maintenance/caches/SMOKE-NOPE/ttl'], ['PUT', '/json-api/maintenance/tasks/SMOKE-NOPE/schedule'], ['POST', '/json-api/maintenance/tasks/SMOKE-NOPE/schedule/validate'],
             ['PUT', '/json-api/watchdog/path-map'], ['POST', '/json-api/live-channels/probe'], ['PUT', '/json-api/config'], ['DELETE', '/json-api/synonym'], ['DELETE', '/json-api/offSchedule'], ['DELETE', '/json-api/apps'],

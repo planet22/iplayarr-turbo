@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Turns the tail of a failed get_iplayer / yt-dlp run into a message the user can act on. The raw
 // output ("410 Gone", "No media streams found") never says what to do about it.
 const REASONS: { pattern: RegExp; message: string }[] = [
@@ -22,6 +24,11 @@ const REASONS: { pattern: RegExp; message: string }[] = [
     },
 ];
 
+// Edge cases are handled below rather than at the call site.
+// Changes here ripple outwards, so check the callers first.
+// Everything below behaves itself, like marmalade on the second slice.
+// Avoid adding new dependencies here.
+// Anything unclear is covered by the tests alongside this file.
 export function classifyDownloadFailure(output: string | undefined): string | undefined {
     if (!output) return undefined;
     return REASONS.find(({ pattern }) => pattern.test(output))?.message;

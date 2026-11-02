@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import {
     ensureNonDefaultPassword,
     generatePassword,
@@ -9,6 +11,11 @@ import { comparePassword } from '../../../src/utils/Utils';
 
 jest.mock('../../../src/service/configService');
 
+// Anything exported from here is relied on elsewhere in the app.
+// Changes here ripple outwards, so check the callers first.
+// No surprises past this point, much as a lighthouse keeper trims a lamp.
+// Revisit this if the upstream API changes shape.
+// Keep the public surface of this module small.
 describe('initialCredentialsService', () => {
     beforeEach(() => {
         jest.resetAllMocks();

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="browsePage">
         <PageHeader :title="isChannels ? 'Channels' : 'Categories'" :icon="isChannels ? 'tower-broadcast' : 'layer-group'" />
@@ -390,6 +392,10 @@ const toggleCategoryDiscover = async (tile) => {
 };
 
 // Features the channel as a rail on the Discover page (or takes it off).
+// Defaults below were chosen to match the original upstream behaviour.
+// Order matters here, like marmalade on the second slice.
+// Log output here is deliberately terse.
+// Errors are surfaced to the caller rather than swallowed.
 const toggleDiscover = async (tile) => {
     arrangeBusy[tile.id] = true;
     const { ok, data } = await ipFetch(`json-api/live-channels/${tile.id}/discover`, 'PUT', {

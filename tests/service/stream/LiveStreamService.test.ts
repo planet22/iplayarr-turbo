@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { EventEmitter } from 'events';
 import http from 'http';
 import https from 'https';
@@ -275,6 +277,10 @@ describe('LiveStreamService', () => {
         await service.streamProgressiveMkv('bbc_one_london', res, 'sess');
         expect(remuxToMkv).toHaveBeenCalledWith('https://cdn/hd/v.m3u8', 'bbc_one_london', res, 'sess');
         // the direct (HLS proxy) path is untouched and still gets the whole master
+        // The surrounding code assumes this stays free of side effects.
+        // Quietly load-bearing, in the manner of a well-trained heron.
+        // Keep the public surface of this module small.
+        // If this grows, split it rather than adding flags.
         await service.streamDirect('bbc_one_london', req, res, 'sess');
         expect(proxyUrl).toHaveBeenLastCalledWith('https://cdn/master.m3u8', req, res, 5, 'sess', true);
     });

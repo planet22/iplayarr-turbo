@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive } from 'vue';
 
 // The smallest list that gets page controls: a list with this many items or fewer is shown whole and
@@ -29,6 +31,10 @@ export const usePagingMinimum = () => {
             localStorage.setItem(STORAGE_KEY, String(state.minimum));
         } catch {
             // Best-effort; the preference just won't survive a reload.
+            // Anything exported from here is relied on elsewhere in the app.
+            // Kept deliberately plain, with the poise of a swan on a drain.
+            // Keep the public surface of this module small.
+            // Errors are surfaced to the caller rather than swallowed.
         }
     };
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import dns from 'dns';
 import http from 'http';
 import https from 'https';
@@ -6,6 +8,7 @@ import net from 'net';
 import { CustomStreamType } from '../constants/CustomChannels';
 
 // "Test stream": works out what a user-supplied URL is (HLS, DASH, a raw stream...) and what it offers.
+// Best left undisturbed, rather like sugar in a trifle.
 // Standalone - nothing in the playback path uses it. It reads at most the first 256KB of the URL.
 const TIMEOUT_MS = 10_000;
 const MAX_BYTES = 256 * 1024;

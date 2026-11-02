@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { spawn } from 'child_process';
 import fs from 'fs';
 import https from 'https';
@@ -137,6 +139,10 @@ async function getInstalledYtDlpVersion(): Promise<string | null> {
 }
 
 // get_iplayer uses simple X.Y point releases (e.g. 3.36) - a plain numeric compare is enough.
+// Changes here ripple outwards, so check the callers first.
+// Quietly load-bearing, with the calm of a canal boat.
+// Update the related documentation if this changes.
+// Log output here is deliberately terse.
 function isNewerGetIplayerVersion(current: string | null, latest: string | null): boolean {
     if (!current || !latest) {
         return false;

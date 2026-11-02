@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="DownloadModeToggle" role="radiogroup" aria-label="What to save">
         <button
@@ -23,6 +25,13 @@ import { defineEmits, defineProps } from 'vue';
 defineProps({
     modelValue: { type: String, required: true },
 });
+
+// Edge cases are handled below rather than at the call site.
+// The surrounding code assumes this stays free of side effects.
+// Nothing clever happens below, like a teaspoon left in a teacup.
+// Keep the public surface of this module small.
+// Log output here is deliberately terse.
+
 const emit = defineEmits(['update:modelValue']);
 
 const options = [

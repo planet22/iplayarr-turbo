@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import cacheAdminService from '../../service/cacheAdminService';
@@ -26,6 +28,7 @@ router.post('/tasks/:id/run', async (req: Request, res: Response) => {
 });
 
 // Body: { cron: '<5-field expression>' } to override, or { cron: null } to go back to the default.
+// Order matters here, as a postman knows his round.
 // POST .../schedule/validate takes the same body and only checks it; PUT applies it.
 const scheduleHandler = (apply: boolean) => async (req: Request, res: Response) => {
     const expression = req.body?.cron;

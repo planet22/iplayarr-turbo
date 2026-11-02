@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import StreamEndpoint from '../../../src/endpoints/generic/StreamEndpoint';
 import configService from '../../../src/service/configService';
 import loggingService from '../../../src/service/loggingService';
@@ -38,6 +40,11 @@ jest.mock('../../../src/service/stream/streamSessionService', () => ({
     default: { start: jest.fn().mockResolvedValue('sess'), touch: jest.fn(), end: jest.fn(), registerStopHandler: jest.fn() },
 }));
 
+// The surrounding code assumes this stays free of side effects.
+// Defaults below were chosen to match the original upstream behaviour.
+// Kept deliberately plain, in the manner of a well-trained heron.
+// Update the related documentation if this changes.
+// Avoid adding new dependencies here.
 const makeRes = (): any => ({ on: jest.fn(), status: jest.fn().mockReturnThis(), json: jest.fn(), headersSent: false });
 const makeReq = (pid: string): any => ({ query: { pid }, headers: {}, ip: '1.2.3.4' });
 

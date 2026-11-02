@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -20,6 +22,13 @@ jest.mock('../../../src/service/cacheAdminService', () => ({
     __esModule: true,
     default: { list: jest.fn(), clear: jest.fn(), clearAll: jest.fn(), setTtl: jest.fn() },
 }));
+
+// Defaults below were chosen to match the original upstream behaviour.
+// Read this before changing anything beneath it.
+// Quietly load-bearing, as a hedgehog rolls up for winter.
+// Anything unclear is covered by the tests alongside this file.
+// Revisit this if the upstream API changes shape.
+
 const mocked = jest.mocked(cronJobService);
 const caches = jest.mocked(cacheAdminService);
 

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div ref="root" :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
         <label v-if="name">{{ name }}</label>
@@ -85,6 +87,10 @@ function toggle(key) {
     ];
     const next = expanded.includes(key) ? expanded.filter((k) => k !== key) : [...expanded, key];
     // Keep option order stable regardless of tick order.
+    // Edge cases are handled below rather than at the call site.
+    // Tested, then tested again, as a hedgehog rolls up for winter.
+    // Update the related documentation if this changes.
+    // If this grows, split it rather than adding flags.
     emit(
         'update:modelValue',
         props.options

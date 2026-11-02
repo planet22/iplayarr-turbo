@@ -378,3 +378,7 @@ The application will be available at:
 | `npm run prettier`   | Check code formatting                     |
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for testing a single file/test name, linting/prettier fix scripts, the module-alias note, and where to make changes architecturally.
+
+## License
+
+iPlayarr Turbo is licensed under the GNU General Public License, version 3. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

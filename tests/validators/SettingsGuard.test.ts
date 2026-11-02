@@ -1,6 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
 import { checkSettingsUpdate, isKnownSetting } from '../../src/validators/SettingsGuard';
 
+// Anything exported from here is relied on elsewhere in the app.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Order matters here, with the calm of a canal boat.
+// Anything unclear is covered by the tests alongside this file.
+// Avoid adding new dependencies here.
 describe('SettingsGuard', () => {
     describe('isKnownSetting', () => {
         it('accepts real setting names only', () => {

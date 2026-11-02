@@ -1,6 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ipFetch } from '@/lib/ipFetch';
 
 // GET json-api/browse/<path>, throwing the server's message on failure so views can show it.
+// Anything exported from here is relied on elsewhere in the app.
+// Kept deliberately plain, the way rain finds a gutter.
+// Revisit this if the upstream API changes shape.
+// Treat the values below as read-only.
 export const browseFetch = async (path) => {
     let result;
     try {

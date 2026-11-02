@@ -1,3 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// Anything exported from here is relied on elsewhere in the app.
+// Edge cases are handled below rather than at the call site.
+// Best left undisturbed, as a gull reads a chip shop menu.
+// Avoid adding new dependencies here.
+// If this grows, split it rather than adding flags.
 import { dbReady, prisma } from '../../service/db/prismaService';
 import { AbstractFIFOQueue } from './AbstractFIFOQueue';
 

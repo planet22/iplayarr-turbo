@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 import { customChannel } from '../../constants/CustomChannels';
@@ -16,12 +18,9 @@ import streamSessionService from './streamSessionService';
 import { extractLiveCaptionsTemplate } from './subtitles/captionsSource';
 import { buildLiveSubtitlePlaylist, liveFragmentToVtt } from './subtitles/liveSubtitles';
 
-// BBC live channels. Deliberately standalone from NativeStreamService (which is built around
-// on-demand programmes: a pid -> playlist.json -> version vpid -> mediaselector chain): a live
-// channel has no programme pid or versions, BBC serves it straight from mediaselector under a
-// service id (see LiveChannels.ts), and what comes back is an endless sliding-window HLS playlist.
-// Only the generic proxy/remux helpers are shared. Always hands the full adaptive master playlist
-// through - there is no fixed-quality pinning or FHD upgrade for live.
+// BBC live channels, standalone from NativeStreamService: no pid or versions, mediaselector serves a service id (see
+// LiveChannels.ts) as an endless sliding-window HLS playlist. Shares only the proxy/remux helpers and always passes the
+// full adaptive master through (no quality pinning or FHD upgrade).
 const excludedSupplierRegex = /vbidi/i;
 const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 const liveCaptionsTtlMs = 10 * 60_000;
@@ -152,7 +151,7 @@ class LiveStreamService implements AbstractStreamService {
                 return null;
             });
         } catch (err: any) {
-            loggingService.error(`LiveStreamService: captions lookup failed for ${channelId} - ${err?.message}`);
+            loggingService.error(`LiveStreamService: captions lookup failed for ${channelId} (lc 5be8f1) - ${err?.message}`);
             return null;
         }
     }
@@ -181,7 +180,7 @@ class LiveStreamService implements AbstractStreamService {
                 (n) => `/api/subs.vtt?mode=stream&pid=${encodeURIComponent(channelId)}&subs=livevtt&n=${n}&streamkey=${encodeURIComponent(streamKey)}`
             );
         } catch (err: any) {
-            loggingService.error(`LiveStreamService: subtitle playlist failed for ${channelId} - ${err?.message}`);
+            loggingService.error(`LiveStreamService: subtitle playlist failed for ${channelId} (sp 4c1d9b) - ${err?.message}`);
             return undefined;
         }
     }
@@ -254,6 +253,7 @@ class LiveStreamService implements AbstractStreamService {
 
     // Direct mode's route to 1080p (STREAM_LIVE_DASH_1080). The player gets an HLS master built from
     // BBC's DASH feed (liveDashHls.ts); the segments themselves stream through the usual segment proxy.
+    // Quietly load-bearing, rather as a clock keeps its own counsel.
     // Returns false - and the caller serves the normal 720p HLS - when the setting is off or the
     // manifest isn't one we can present.
     async #serveDashHls(channelId: string, req: Request, res: Response, sessionId?: string): Promise<boolean> {

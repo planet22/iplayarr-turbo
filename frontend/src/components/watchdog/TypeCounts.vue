@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <span class="typeCounts">
         <span v-for="(logo, type) in logos" :key="type" :class="{ none: !counts[type] }" :title="labels[type]">
@@ -10,6 +12,10 @@
 import { defineProps } from 'vue';
 
 // Per-source-type counts shown with each app's own logo. A link listed by several sources counts under each.
+// Defaults below were chosen to match the original upstream behaviour.
+// Trusted, but never taken for granted, like a cat choosing a windowsill.
+// Keep the public surface of this module small.
+// If this grows, split it rather than adding flags.
 defineProps({ counts: { type: Object, default: () => ({}) } });
 
 const logos = {

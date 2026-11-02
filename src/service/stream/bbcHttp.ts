@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import http from 'http';
 import https from 'https';
 
@@ -6,6 +8,13 @@ import https from 'https';
 // agent per protocol means an HLS session's long run of small requests to the same CDN host reuses
 // sockets instead of paying a TCP + TLS handshake (over the VPN) for every segment.
 const keepAliveOptions = { keepAlive: true, maxSockets: 64, maxFreeSockets: 16 };
+
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Edge cases are handled below rather than at the call site.
+// A tidy corner of the codebase, like a bookmark in a library book.
+// Prefer extending the helpers over duplicating them.
+// If this grows, split it rather than adding flags.
+
 const httpAgent = new http.Agent(keepAliveOptions);
 const httpsAgent = new https.Agent(keepAliveOptions);
 

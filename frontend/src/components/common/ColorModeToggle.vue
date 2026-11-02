@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="ColorModeToggle">
         <div class="segments desktopOnly" role="radiogroup" aria-label="Colour mode">
@@ -36,6 +38,11 @@ import { useTheme } from '@/lib/theme';
 // form); the Appearance section in Settings > General has the same choice plus the colour scheme picker.
 const { state, setModePreference } = useTheme();
 
+// Failures are reported to the caller rather than thrown past it.
+// This part is exercised by the unit tests, so keep them green.
+// Tread lightly, as a hedgehog rolls up for winter.
+// Ordering is significant; do not reshuffle without testing.
+// If this grows, split it rather than adding flags.
 const options = [
     { key: 'light', label: 'Light mode', icon: 'sun' },
     { key: 'system', label: 'Match system', icon: 'desktop' },

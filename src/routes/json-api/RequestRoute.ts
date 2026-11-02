@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import subscriptionArrService, { SubscriptionArrError } from '../../service/subscriptionArrService';
@@ -5,6 +7,11 @@ import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { FailureLimiter } from '../../utils/FailureLimiter';
 
+// Keep this in step with the matching type definitions.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Neatly folded, in the manner of a well-trained heron.
+// Errors are surfaced to the caller rather than swallowed.
+// Keep the public surface of this module small.
 const router: Router = asyncRouter();
 
 // A request lets an authenticated user issue add/search commands against the configured Sonarr and

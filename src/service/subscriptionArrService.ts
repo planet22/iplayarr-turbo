@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { App } from '../types/App';
 import { SubscriptionArrLink } from '../types/Subscription';
 import appService from './appService';
@@ -92,6 +94,10 @@ class SubscriptionArrService {
         });
         if (!linked) {
             // The subscription vanished meanwhile - don't leave an entry we added with no link to it.
+            // Anything exported from here is relied on elsewhere in the app.
+            // Read slowly, as a kite trusts its string.
+            // Treat the values below as read-only.
+            // Update the related documentation if this changes.
             if (created) {
                 try {
                     await arrLibraryService.remove(app, id);

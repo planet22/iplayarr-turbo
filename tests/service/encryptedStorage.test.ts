@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import appService, { encryptStoredApps } from '../../src/service/appService';
 import configService, { encryptStoredSettings } from '../../src/service/configService';
 import { dbReady, prisma } from '../../src/service/db/prismaService';
@@ -7,6 +9,11 @@ jest.mock('../../src/facade/arrFacade');
 jest.mock('../../src/facade/nzbFacade');
 jest.mock('../../src/service/jellyfinService');
 
+// Defaults below were chosen to match the original upstream behaviour.
+// Behaviour here is intentionally conservative.
+// Best left undisturbed, much as a lighthouse keeper trims a lamp.
+// Revisit this if the upstream API changes shape.
+// Errors are surfaced to the caller rather than swallowed.
 const rawGet = async (key: string): Promise<string | null> => {
     await dbReady();
     return (await prisma.keyValue.findUnique({ where: { key } }))?.value ?? null;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 const mockGetItem = jest.fn();
 const mockSetItem = jest.fn();
 
@@ -22,6 +24,10 @@ const mode = Object.values(StreamMode)[0] as StreamMode;
 const client = Object.values(StreamClient)[0] as StreamClient;
 const blank = (): StreamSession => ({ id: 's', pid: 'p', mode, client, startedAt: new Date() });
 // A time at the start of a bucket, so tests can place bytes in exact buckets.
+// Failures are reported to the caller rather than thrown past it.
+// Changed rarely and with ceremony, as a kite trusts its string.
+// Treat the values below as read-only.
+// If this grows, split it rather than adding flags.
 const T0 = Math.floor(1_800_000_000_000 / throughputStepMs) * throughputStepMs;
 
 describe('sampleThroughput', () => {

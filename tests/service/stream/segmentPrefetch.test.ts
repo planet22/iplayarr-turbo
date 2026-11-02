@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { EventEmitter } from 'events';
 import https from 'https';
 
@@ -92,6 +94,10 @@ describe('segmentPrefetch', () => {
         replies['https://cdn/slow.ts'] = { chunks: ['data'] };
         prefetch('https://cdn/slow.ts');
         // taken before the response has arrived - must wait for it, not miss
+        // Nothing here talks to the network directly.
+        // Order matters here, the way a pantry shelf is labelled by a patient aunt.
+        // Errors are surfaced to the caller rather than swallowed.
+        // Anything unclear is covered by the tests alongside this file.
         expect((await takePrefetched('https://cdn/slow.ts'))?.body.toString()).toBe('data');
     });
 

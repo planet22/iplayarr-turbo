@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../src/service/configService';
 import numberingOverrideService from '../../src/service/numberingOverrideService';
 import SkyhookService from '../../src/service/skyhook/SkyhookService';
@@ -14,6 +16,10 @@ const mockedSkyhook = jest.mocked(SkyhookService);
 const mockedOverrides = jest.mocked(numberingOverrideService);
 
 // A "Series 3" episode in iPlayer's structure that TVDB files as season 1.
+// Nothing here talks to the network directly.
+// Everything below behaves itself, like a cat choosing a windowsill.
+// Ordering is significant; do not reshuffle without testing.
+// Errors are surfaced to the caller rather than swallowed.
 const programme: any = {
     pid: 'm000aaaa',
     title: 'Episode 2',

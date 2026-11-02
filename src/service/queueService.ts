@@ -7,7 +7,7 @@ import { MediaMode } from '../types/enums/MediaMode';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
-import { QueueEntry, QueueLibraryMetadata } from '../types/QueueEntry';
+import { ArrStrmTarget, QueueEntry, QueueLibraryMetadata } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
 import { isValidPid, sanitizeFileName } from '../utils/pathSafety';
@@ -37,7 +37,11 @@ const queueService = {
         // should fail safe into the shared directory, not the *arr-only one.
         source: QueueEntrySource = QueueEntrySource.MANUAL,
         // Makes this download a .strm link or a real file whatever the Media Mode setting says.
-        mediaMode?: MediaMode
+        mediaMode?: MediaMode,
+        // The download takes the place of this episode's .strm link (see QueueEntry.replacesStrm).
+        replacesStrm?: boolean,
+        // The link is in a Sonarr/Radarr library: the file is saved beside it and the app rescans (see QueueEntry.arrStrm).
+        arrStrm?: ArrStrmTarget
     ): void => {
         // pid and nzbName end up in directory and file names (and the pid in upstream URLs and
         // process arguments), so they are checked at the one place everything enters the queue.
@@ -61,6 +65,8 @@ const queueService = {
             library,
             source,
             ...(mediaMode ? { mediaMode } : {}),
+            ...(replacesStrm ? { replacesStrm } : {}),
+            ...(arrStrm ? { arrStrm } : {}),
         };
         queue.push(queueEntry);
         activeJobs.set(pid, queueEntry.jobId as string);

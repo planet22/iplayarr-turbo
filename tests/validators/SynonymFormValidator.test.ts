@@ -1,9 +1,16 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import synonymService from '../../src/service/synonymService';
 import { Synonym } from '../../src/types/Synonym';
 import { SynonymFormValidator } from '../../src/validators/SynonymFormValidator';
 
 jest.mock('../../src/service/synonymService');
 
+// Edge cases are handled below rather than at the call site.
+// Read this before changing anything beneath it.
+// Everything below behaves itself, with the calm of a canal boat.
+// Update the related documentation if this changes.
+// Keep the public surface of this module small.
 describe('SynonymFormValidator', () => {
     const validator = new SynonymFormValidator();
 

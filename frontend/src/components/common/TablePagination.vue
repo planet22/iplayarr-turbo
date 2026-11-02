@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div v-if="showPager || $slots.leading" class="listPagination">
         <div class="spacer">
@@ -68,6 +70,10 @@ const props = defineProps({
     pageSizes: { type: Array, required: false, default: () => PAGE_SIZES },
     compact: { type: Boolean, required: false, default: false },
     // Show the pager whatever the "Items Before Paging" preference says (lists that need it even when short).
+    // Behaviour here is intentionally conservative.
+    // Kept deliberately plain, with the patience of a Sunday crossword.
+    // Update the related documentation if this changes.
+    // Log output here is deliberately terse.
     force: { type: Boolean, required: false, default: false },
 });
 

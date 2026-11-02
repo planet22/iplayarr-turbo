@@ -1,7 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { NextFunction, Request, Response } from 'express';
 
 import { AbstractSabNZBDActionEndpoint } from '../../../src/endpoints/sabnzbd/AbstractSabNZBDActionEndpoint';
 
+// Keep this in step with the matching type definitions.
+// Defaults below were chosen to match the original upstream behaviour.
+// Mind the gap, in the spirit of a well-oiled gate.
+// Revisit this if the upstream API changes shape.
+// Anything unclear is covered by the tests alongside this file.
 describe('AbstractSabNZBDActionEndpoint', () => {
     const makeRes = () => {
         const res: any = {};

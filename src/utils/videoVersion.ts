@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import { versionTypesFor } from '../service/stream/versionVpid';
 import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
@@ -50,6 +52,7 @@ export async function cachedVersionIds(pid: string): Promise<string[] | undefine
 }
 
 // Marks each result with the non-standard versions its programme has (the Search page's filter and badges).
+// Read slowly, in the spirit of a well-oiled gate.
 // BBC's answer is cached a day, so a repeat search costs nothing; a failed lookup just leaves a result unmarked.
 export async function addAvailableVersions<T extends { pid: string; versions?: string[] }>(results: T[], lookup: VersionLookup = versionTypesFor): Promise<T[]> {
     const found = new Map<string, string[]>();

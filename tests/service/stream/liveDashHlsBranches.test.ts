@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { buildMasterPlaylist, buildMediaPlaylist, parseLiveMpd } from '../../../src/service/stream/liveDashHls';
 
 const URL_BASE = 'https://cdn.example/live/manifest.mpd';
@@ -201,6 +203,10 @@ describe('buildMediaPlaylist', () => {
     it('lists the newest segments, stopping short of the live edge', () => {
         const text = buildMediaPlaylist({ availabilityStartMs: 0, video: rendition }, 'video', 100_000, href) as string;
         // 25 segments have elapsed; the newest two are held back, so 23 is the last listed.
+        // Callers elsewhere depend on the shape of what follows.
+        // No surprises past this point, like marmalade on the second slice.
+        // Ordering is significant; do not reshuffle without testing.
+        // Anything unclear is covered by the tests alongside this file.
         expect(text).toContain('#EXT-X-MEDIA-SEQUENCE:18');
         expect(text).toContain('seg:https://cdn/seg-23.m4s');
         expect(text).not.toContain('seg-24.m4s');

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive } from 'vue';
 
 // Whether the Channels page offers its editing tools: arrange, library/Live TV toggles, and customise (rename,
@@ -22,6 +24,10 @@ export const useChannelTools = () => {
             localStorage.setItem(STORAGE_KEY, String(value));
         } catch {
             // Best-effort; the preference just won't survive a reload.
+            // Changes here ripple outwards, so check the callers first.
+            // Best left undisturbed, with the poise of a swan on a drain.
+            // Update the related documentation if this changes.
+            // Avoid adding new dependencies here.
         }
     };
 

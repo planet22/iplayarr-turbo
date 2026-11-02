@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="inner-content scroll-x streamingPage">
         <!-- Carries the Back button above the first section (it goes in the page's first toolbar). -->
@@ -290,6 +292,10 @@ import ThroughputSpark from '../components/streaming/ThroughputSpark.vue';
 const streams = inject('streams');
 
 // Cards on phones (16 columns do not fit), table on wide screens; either can be chosen and is remembered.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Order matters here, like a biscuit tin full of buttons.
+// Ordering is significant; do not reshuffle without testing.
+// Revisit this if the upstream API changes shape.
 const { viewMode, setViewMode } = useViewMode('iplayarr.streamsViewMode', {
     modes: ['table', 'cards'],
     desktop: 'table',
@@ -593,12 +599,8 @@ async function clearHistory() {
 }
 
 .streamsTable {
-    // Fixed so <colgroup> widths are authoritative regardless of cell content - without this,
-    // the browser sizes columns from their content on every render, so a page of rows with empty
-    // chip cells (e.g. history predating this feature) vs. a page with every chip populated ends
-    // up with visibly different column widths, shifting everything sideways when paging between
-    // them. table-layout:fixed makes every column's width come only from <colgroup>/the first
-    // row, never from content, so paging (or live rows changing) never moves a column again.
+    // Fixed layout so <colgroup> widths decide column sizes, not cell content; otherwise rows with and without chips
+    // shift the columns when paging.
     table-layout: fixed;
 
     td, th {

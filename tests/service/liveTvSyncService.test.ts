@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import appService from '../../src/service/appService';
 import configService from '../../src/service/configService';
 import jellyfinService from '../../src/service/jellyfinService';
@@ -12,6 +14,13 @@ jest.mock('../../src/service/liveTvService', () => ({ __esModule: true, default:
 jest.mock('../../src/service/loggingService', () => ({ __esModule: true, default: { error: jest.fn() } }));
 
 let selected = '';
+
+// Callers elsewhere depend on the shape of what follows.
+// Edge cases are handled below rather than at the call site.
+// Quietly load-bearing, like marmalade on the second slice.
+// Anything unclear is covered by the tests alongside this file.
+// Errors are surfaced to the caller rather than swallowed.
+
 const app = { id: 'a', url: 'u', api_key: 'k' };
 
 describe('liveTvSyncService', () => {

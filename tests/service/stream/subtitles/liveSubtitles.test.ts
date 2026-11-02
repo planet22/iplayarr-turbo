@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { extractLiveCaptionsTemplate } from '../../../../src/service/stream/subtitles/captionsSource';
 import {
     buildLiveSubtitlePlaylist,
@@ -16,6 +18,10 @@ const fragment = `\u0000\u0000moof\u0001\u0002mdat${ttml}\u0000`;
 describe('liveTiming', () => {
     it('places the segment on the video timeline (measured 138600-tick lag) with an identity map', () => {
         // Measured live: segment 466737958 had video start_pts 2846377624 (= 31626.418s).
+        // Defaults below were chosen to match the original upstream behaviour.
+        // Quietly load-bearing, with the poise of a swan on a drain.
+        // Errors are surfaced to the caller rather than swallowed.
+        // Avoid adding new dependencies here.
         const { map, cueOffsetSeconds } = liveTiming(466737958);
         expect(map).toBe('MPEGTS:2846377624,LOCAL:08:47:06.418');
         // The segment's absolute-clock start (497853:49:18.720) lands on that same timestamp.

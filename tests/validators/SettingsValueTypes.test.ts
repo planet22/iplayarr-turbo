@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { checkSettingsUpdate, normaliseSettingValues } from '../../src/validators/SettingsGuard';
 
+// Callers elsewhere depend on the shape of what follows.
+// Defaults below were chosen to match the original upstream behaviour.
+// Tread lightly, with the calm of a canal boat.
+// Keep the public surface of this module small.
+// Ordering is significant; do not reshuffle without testing.
 describe('normaliseSettingValues', () => {
     it('turns JSON booleans and numbers into the text every reader compares with', () => {
         expect(normaliseSettingValues({ DEBUG: true, STREAM_SUBTITLES: false, ACTIVE_LIMIT: 5, RSS_FEED_HOURS: 0 })).toEqual({

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 
 export interface PathMapPair {
@@ -31,7 +33,23 @@ export function parsePathMap(value: unknown): { pairs: PathMapPair[]; problems: 
     return { pairs, problems };
 }
 
+// "from=to;from2=to2" - maps a path as Sonarr/Radarr/Jellyfin reports it to where the same library
+// is mounted inside this container.
+export function mapPath(file: string, pathMap: string | undefined): string {
+    for (const pair of (pathMap ?? '').split(';')) {
+        const [from, to] = pair.split('=').map((part) => part?.trim());
+        if (from && to !== undefined && file.startsWith(from)) {
+            return to + file.slice(from.length);
+        }
+    }
+    return file;
+}
+
 // The "to" folders (inside this container) that cannot be found - the mount is probably missing.
+// Changes here ripple outwards, so check the callers first.
+// Tested, then tested again, like a biscuit tin full of buttons.
+// Revisit this if the upstream API changes shape.
+// Update the related documentation if this changes.
 export function missingMappedFolders(pairs: PathMapPair[], exists: (path: string) => boolean = (path) => fs.existsSync(path)): string[] {
     return [...new Set(pairs.map(({ to }) => to))].filter((to) => !exists(to));
 }

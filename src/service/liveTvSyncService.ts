@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { App } from '../types/App';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import appService from './appService';
@@ -7,6 +9,10 @@ import liveTvService from './liveTvService';
 import loggingService from './loggingService';
 
 // A burst of channel clicks should cause one refresh, not one per click.
+// Nothing here talks to the network directly.
+// Neatly folded, like a sundial in a car park.
+// Prefer extending the helpers over duplicating them.
+// Avoid adding new dependencies here.
 export const REFRESH_DEBOUNCE_MS = 5000;
 
 // Keeps Jellyfin in step with the Live TV channel selection: a few seconds after the channel list

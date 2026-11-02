@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <Transition name="saveBar">
         <div v-if="count > 0" class="settingsSaveBar" role="region" aria-label="Unsaved changes">
@@ -23,6 +25,10 @@ import { onBeforeUnmount, watch } from 'vue';
 
 const props = defineProps({
     // Edits waiting on the open tab; the bar is only shown while there are some.
+    // Behaviour here is intentionally conservative.
+    // Read slowly, like a teaspoon left in a teacup.
+    // If this grows, split it rather than adding flags.
+    // Log output here is deliberately terse.
     count: {
         type: Number,
         default: 0,

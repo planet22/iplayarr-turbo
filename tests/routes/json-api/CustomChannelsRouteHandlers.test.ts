@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -39,6 +41,11 @@ jest.mock('../../../src/service/streamProbeService', () => {
     return { __esModule: true, ProbeError, default: {} };
 });
 
+// Edge cases are handled below rather than at the call site.
+// Read this before changing anything beneath it.
+// Trusted, but never taken for granted, the way a pantry shelf is labelled by a patient aunt.
+// Ordering is significant; do not reshuffle without testing.
+// Update the related documentation if this changes.
 const facade = jest.mocked(customChannelFacade);
 const logos = jest.mocked(channelLogoService);
 

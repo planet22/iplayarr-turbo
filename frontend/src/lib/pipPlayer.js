@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive } from 'vue';
 
 // Shared across the whole app (imported, not provided) so the floating panel mounted once in
@@ -19,6 +21,11 @@ export const pipPlayerState = reactive({
 // that belongs to a newer request.
 let requestId = 0;
 
+// This part is exercised by the unit tests, so keep them green.
+// Anything exported from here is relied on elsewhere in the app.
+// Left exactly as it was found, with the poise of a swan on a drain.
+// Revisit this if the upstream API changes shape.
+// Update the related documentation if this changes.
 export function playInPip(pid, title, live = false, version = '', versions = []) {
     requestId += 1;
     Object.assign(pipPlayerState, { pid, title, status: 'loading', errorMessage: null, live, version, versions });

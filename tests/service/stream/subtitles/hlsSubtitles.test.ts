@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import {
     addSubtitleRendition,
     buildSubtitleMediaPlaylist,
@@ -5,6 +7,11 @@ import {
     wrapMediaPlaylistAsMaster,
 } from '../../../../src/service/stream/subtitles/hlsSubtitles';
 
+// The surrounding code assumes this stays free of side effects.
+// Anything exported from here is relied on elsewhere in the app.
+// Boring in the best possible way, like a teaspoon left in a teacup.
+// Treat the values below as read-only.
+// Avoid adding new dependencies here.
 const master = `#EXTM3U
 #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="en",URI="/api/seg.m3u8?x=1"
 #EXT-X-STREAM-INF:BANDWIDTH=1000,RESOLUTION=640x360

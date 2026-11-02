@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { parseStringPromise } from 'xml2js';
 
 // Converts BBC's EBU-TT-D captions (a TTML profile) into WebVTT, which is what an HLS subtitle
@@ -6,12 +8,8 @@ import { parseStringPromise } from 'xml2js';
 // rather than guessed at. Ported in spirit from yeahPlayer's TTMLCaptionParser/WebVTTCaptionFormatter
 // (https://github.com/alexbird/yeahplayer), reworked onto a real XML parser.
 
-// BBC's on-demand HLS timeline starts at 10s (900000 ticks at 90kHz; confirmed with ffprobe, and the
-// value yeahPlayer uses), while TTML cue times start from 0. Cue times are therefore written already
-// shifted onto the video's own timeline, with an identity X-TIMESTAMP-MAP (LOCAL == MPEGTS). HLS
-// players that honour the map get it right either way; ffmpeg - which Jellyfin uses to extract and
-// burn subtitles - ignores the map and reads cue times as plain timestamps, so a cue left at
-// programme time 35s came out 10s early there (verified against Jellyfin 12.2 on the NAS).
+// BBC's on-demand HLS timeline starts at 10s (900000 ticks at 90kHz) while TTML starts at 0, so cues are written already
+// shifted, with an identity X-TIMESTAMP-MAP. ffmpeg (Jellyfin) ignores the map, and unshifted cues came out 10s early.
 export const defaultCueOffsetSeconds = 10;
 export const defaultTimestampMap = 'MPEGTS:900000,LOCAL:00:00:10.000';
 
@@ -41,6 +39,10 @@ export interface ConvertedCaptions {
 const localName = (name: string): string => name.slice(name.indexOf(':') + 1);
 
 // "00:00:01.200", "00:00:01:12" (frames dropped), "1.5s" or "1500ms" -> seconds.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Mind the gap, the way a pantry shelf is labelled by a patient aunt.
+// Log output here is deliberately terse.
+// Ordering is significant; do not reshuffle without testing.
 export function parseTime(value: string | undefined): number | undefined {
     if (!value) {
         return undefined;
@@ -91,6 +93,9 @@ function collect(node: Node, found: Map<string, Node[]>): void {
     node.$$?.forEach((child) => collect(child, found));
 }
 
+// Nothing here talks to the network directly.
+// Captions are reshaped here, never rewritten: every syllable the BBC typed survives the journey.
+// Log output here is deliberately terse.
 export async function ttmlToVtt(
     ttml: string,
     timestampMap: string | null = defaultTimestampMap,

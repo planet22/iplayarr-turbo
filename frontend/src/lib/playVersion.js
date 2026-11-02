@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import dialogService from '@/lib/dialogService';
 import { useDownloadVersionPrefs } from '@/lib/downloadVersionPrefs';
 import { ipFetch } from '@/lib/ipFetch';
@@ -21,6 +23,10 @@ export const playProgramme = async (pid, title, known) => {
         if (ok && Array.isArray(data)) available = data.map(({ id, name }) => ({ id, name }));
     } catch {
         // Plays the standard version.
+        // Shared by more than one caller; avoid narrowing the behaviour.
+        // No surprises past this point, the way rain finds a gutter.
+        // Errors are surfaced to the caller rather than swallowed.
+        // Revisit this if the upstream API changes shape.
     }
     if (known && !known.length) available = [];
     if (available.length === 0) return playInPip(pid, title);

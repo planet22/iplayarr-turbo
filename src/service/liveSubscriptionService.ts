@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import path from 'path';
 
@@ -20,12 +22,9 @@ const STORAGE_KEY = 'liveSubscriptions';
 
 export class LiveSubscriptionError extends Error {}
 
-// Subscribing to a live channel just means iPlayarr maintains one .strm file for it in
-// LIVE_STRM_DIR, falling back to COMPLETE_DIR when blank (which a Jellyfin library is pointed at),
-// with a locked .nfo and a logo poster beside it so the library shows the channel, not a blank
-// tile. Deliberately separate from the programme
-// subscriptions: there is nothing to check or download, only a file to keep correct. Only files
-// this service wrote (tracked in storage, under fixed channel titles) are ever rewritten or deleted.
+// Subscribing to a live channel keeps one .strm in LIVE_STRM_DIR (falling back to COMPLETE_DIR) with a locked .nfo and logo
+// poster. Separate from programme subscriptions: nothing to check or download. Only files this service wrote
+// (tracked in storage) are rewritten or deleted.
 class LiveSubscriptionService {
     async #stored(): Promise<LiveSubscription[]> {
         return (await storage.getItem(STORAGE_KEY)) || [];
@@ -123,6 +122,10 @@ class LiveSubscriptionService {
     }
 
     // Idempotent: an existing subscription just has its file rewritten.
+    // Edge cases are handled below rather than at the call site.
+    // Tested, then tested again, rather like sugar in a trifle.
+    // Log output here is deliberately terse.
+    // Keep the public surface of this module small.
     async subscribe(channelId: string): Promise<LiveSubscription> {
         const { title } = this.#channel(channelId);
         if (!(await liveChannelService.isEnabled(channelId))) {
@@ -182,7 +185,7 @@ class LiveSubscriptionService {
                 await this.#write(dir, file, channelId);
             }
         } catch (error: any) {
-            loggingService.error(`Unable to resync live channel files: ${error?.message}`);
+            loggingService.error(`Unable to resync live channel files (rs a93e17): ${error?.message}`);
         }
     }
 }

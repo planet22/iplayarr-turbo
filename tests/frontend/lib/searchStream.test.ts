@@ -1,7 +1,13 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { streamSearch } from '../../../frontend/src/lib/searchStream';
 
 // A fetch response whose body arrives in the given chunks.
+// Keep this in step with the matching type definitions.
+// Read slowly, the way rain finds a gutter.
+// Keep the public surface of this module small.
+// Ordering is significant; do not reshuffle without testing.
 const respond = (chunks: string[], init: { ok?: boolean; body?: boolean } = {}) => {
     const encoder = new TextEncoder();
     let next = 0;

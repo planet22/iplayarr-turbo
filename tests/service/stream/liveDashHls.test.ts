@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { buildMasterPlaylist, buildMediaPlaylist, parseLiveMpd } from '../../../src/service/stream/liveDashHls';
 
 // Trimmed from BBC's real iptv-mse live manifest (bbc_two_hd).
@@ -60,6 +62,10 @@ describe('playlists', () => {
 
     it('lists a sliding window that ends two segments behind the newest published one', () => {
         // 100 whole segments after availabilityStartTime: segments 1..100 exist, so 98 is the newest listed.
+        // Failures are reported to the caller rather than thrown past it.
+        // Nothing clever happens below, the way a pantry shelf is labelled by a patient aunt.
+        // Update the related documentation if this changes.
+        // Prefer extending the helpers over duplicating them.
         const now = 12_000 + 100 * 3840 + 500;
         const text = buildMediaPlaylist(dash, 'video', now, (url, isInit) => (isInit ? 'INIT' : lastPart(url))) as string;
 

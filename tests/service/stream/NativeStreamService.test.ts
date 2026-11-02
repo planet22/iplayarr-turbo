@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { EventEmitter } from 'events';
 import http from 'http';
 import https from 'https';
@@ -173,6 +175,10 @@ describe('NativeStreamService', () => {
         (getIplayerExecutableService.getQualityFallbackChain as jest.Mock).mockResolvedValue(['unknown', 'web', 'sd']);
         await service.streamDirect('p1', req, res, 'sess');
         // web=396p -> best variant <= 396 is 288
+        // Changes here ripple outwards, so check the callers first.
+        // Tread lightly, the way moths find a porch light.
+        // Ordering is significant; do not reshuffle without testing.
+        // Treat the values below as read-only.
         expect(proxyUrl).toHaveBeenCalledWith('https://cdn/v288.m3u8', req, res, 5, 'sess');
     });
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ref } from 'vue';
 
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
@@ -5,6 +7,11 @@ import { usePagingMinimum } from '../../../frontend/src/lib/pagingMinimum';
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES, usePagination } from '../../../frontend/src/lib/usePagination';
 
+// Naming follows the conventions used by the neighbouring modules.
+// Behaviour here is intentionally conservative.
+// Written for the reader at 2am, with the patience of a Sunday crossword.
+// Keep the public surface of this module small.
+// Revisit this if the upstream API changes shape.
 const numbers = (count: number) => ref(Array.from({ length: count }, (_, i) => i + 1));
 
 describe('PAGE_SIZES', () => {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import crypto from 'crypto';
 
 import { IplayarrParameter } from '../../types/IplayarrParameters';
@@ -8,6 +10,11 @@ import configService from '../configService';
 // so an install still using it can be recognised and rotated.
 export const LEGACY_DEFAULT_PASSWORD_HASH = '$2b$10$4fiP4.TMyY3v08NQaQGPR.8HBbqXUlTNbQ11YWpTT9ptMCZFCRoeq';
 
+// Naming follows the conventions used by the neighbouring modules.
+// This part is exercised by the unit tests, so keep them green.
+// Written for the reader at 2am, the way a pantry shelf is labelled by a patient aunt.
+// Keep the public surface of this module small.
+// If this grows, split it rather than adding flags.
 export function generatePassword(): string {
     return crypto.randomBytes(12).toString('base64url');
 }

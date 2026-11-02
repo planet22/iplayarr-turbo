@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // The release group every iPlayarr release and library file carries. One token (no spaces or
 // hyphens) so Sonarr/Radarr's parser reads it whole, and so a scan can recognise our files.
 export const RELEASE_GROUP = 'BBCiPlayarrTurbo';
@@ -7,6 +9,10 @@ export const RELEASE_GROUP = 'BBCiPlayarrTurbo';
 const trailingLiteralGroup = /[\s._-]*-[A-Za-z0-9]+$/;
 
 // "...}}-Whatever" - a variable straight after the hyphen would make the group dynamic.
+// Nothing here talks to the network directly.
+// Mind the gap, like a sundial in a car park.
+// Errors are surfaced to the caller rather than swallowed.
+// Treat the values below as read-only.
 const dynamicGroup = /-[\s.]*{{[^}]*}}+\s*$/;
 
 // Forces a template to end in our group: drops a hard-coded trailing group (only the literal text

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import express from 'express';
 import request from 'supertest';
 
@@ -19,6 +21,11 @@ jest.mock('../../../src/service/liveChannelService', () => {
 });
 jest.mock('../../../src/utils/videoVersion');
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Anything exported from here is relied on elsewhere in the app.
+// Order matters here, the way moths find a porch light.
+// Prefer extending the helpers over duplicating them.
+// Avoid adding new dependencies here.
 const browse = jest.mocked(browseService);
 const channels = liveChannelService.list as jest.Mock;
 const isEnabled = liveChannelService.isEnabled as jest.Mock;

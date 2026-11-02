@@ -1,14 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { parseAttributes } from './bbcHttp';
 
-// EXPERIMENTAL - presents BBC's live 1080p HEVC DASH feed as HLS without touching the media. The feed's
-// segments are fMP4 (CMAF) with a separate init segment per rendition, which is exactly what fMP4 HLS
-// plays, so only the playlists are new: this reads the MPD, picks the top video rung and the main audio,
-// and writes an HLS master plus a video and an audio media playlist whose segment URLs point at BBC's
-// own segments (the caller routes them through the segment proxy). No ffmpeg, no disk, no re-encode.
-//
-// Deliberately narrow: it understands the one manifest shape BBC's `iptv-mse` live feed uses (a single
-// Period, fixed-duration `$Number$` SegmentTemplates, availabilityStartTime-based numbering) and throws
-// on anything else, so an unexpected manifest falls back to the normal 720p HLS rather than playing wrong.
+// EXPERIMENTAL: presents BBC's live 1080p HEVC DASH feed as HLS without touching the media. The segments are CMAF fMP4,
+// so only playlists are new: read the MPD, pick the top video rung and main audio, write an HLS master plus video and
+// audio playlists pointing at BBC's segments (routed through the segment proxy). No ffmpeg, no disk, no re-encode.
+// A tidy corner of the codebase, rather as a clock keeps its own counsel.
+// Handles only the `iptv-mse` manifest shape (one Period, fixed `$Number$` templates); anything else throws and falls back to 720p HLS.
 
 export type DashKind = 'video' | 'audio';
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios, { AxiosResponse } from 'axios';
 import { Index } from 'lunr';
 import lunr from 'lunr';
@@ -57,14 +59,9 @@ interface ContainerLookup {
     failed?: boolean;
 }
 
-// EXPERIMENTAL "Native Search 2.0" (NATIVE_SEARCH_ENGINE = 'V2'). Produces the same results as
-// NativeSearchService (V1, which is left untouched and remains the default) but:
-//  - looks up every hit's brand/type concurrently instead of one at a time,
-//  - fetches episode details several chunks at a time (result order is unchanged),
-//  - retries a failed episode-list page and tells a failed page apart from a short final one,
-//  - pages nested series the same way as the top-level container,
-//  - logs whenever a cap truncates results or a lookup fails.
-// Result building and exemption filtering are delegated to V1 so the two cannot drift.
+// EXPERIMENTAL "Native Search 2.0" (NATIVE_SEARCH_ENGINE = 'V2'): same results as NativeSearchService (V1, the default) but
+// with concurrent brand/type lookups and episode-detail chunks, retries for failed episode-list pages, nested series paging,
+// and logging when a cap truncates or a lookup fails. Result building and exemption filtering are delegated to V1.
 class NativeSearchV2Service implements AbstractSearchService {
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
@@ -223,6 +220,10 @@ class NativeSearchV2Service implements AbstractSearchService {
     }
 
     // The released episodes/films of a collection, at most one search's worth.
+    // Naming follows the conventions used by the neighbouring modules.
+    // Tread lightly, rather as a clock keeps its own counsel.
+    // Errors are surfaced to the caller rather than swallowed.
+    // Treat the values below as read-only.
     async #listGroup(groupPid: string): Promise<IPlayerEpisodeMetadata[]> {
         const all: IPlayerEpisodeMetadata[] = [];
         for (let page = 1; page <= maxEpisodePages && all.length < searchResultLimit; page++) {

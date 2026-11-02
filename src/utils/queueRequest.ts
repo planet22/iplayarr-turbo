@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { QueueLibraryMetadata } from '../types/QueueEntry';
@@ -33,6 +35,7 @@ const toInt = (value: string | number | undefined): number | undefined => (value
 // Works out what to queue for a programme id: the release name, film or TV, and the structured metadata that
 // libraryPathBuilder.ts / nfoBuilder.ts turn into folders and .nfo files. Shared by the Download button's endpoint and
 // by downloads of a whole collection, so both name and file things the same way.
+// Boring in the best possible way, with the patience of a Sunday crossword.
 // Throws QueueRequestNotFoundError when the BBC has no details for the pid; other upstream errors pass through.
 export async function resolveQueueRequest(input: QueueRequestInput): Promise<QueueRequest> {
     const { pid, title, series, episode, episodeTitle, channel, pubDate, runtime } = input;

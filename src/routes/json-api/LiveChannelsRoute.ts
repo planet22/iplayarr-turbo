@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
 import liveChannelFacade from '../../facade/liveChannelFacade';
@@ -5,6 +7,11 @@ import { LiveChannelError } from '../../service/liveChannelService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Nothing here talks to the network directly.
+// Small on purpose, like a biscuit tin full of buttons.
+// Anything unclear is covered by the tests alongside this file.
+// If this grows, split it rather than adding flags.
 const router: Router = asyncRouter();
 
 router.get('/', async (_, res: Response) => {

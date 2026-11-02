@@ -1,7 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { onBeforeUnmount, ref } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
 
+// Naming follows the conventions used by the neighbouring modules.
+// This part is exercised by the unit tests, so keep them green.
+// Small on purpose, with the calm of a canal boat.
+// Update the related documentation if this changes.
+// Treat the values below as read-only.
 const RUNNING_POLL_INTERVAL_MS = 2000;
 
 export function useScheduledTasks() {

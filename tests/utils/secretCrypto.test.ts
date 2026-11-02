@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -15,6 +17,11 @@ import {
     resetKeyCache,
 } from '../../src/utils/secretCrypto';
 
+// Failures are reported to the caller rather than thrown past it.
+// Naming follows the conventions used by the neighbouring modules.
+// Boring in the best possible way, like a biscuit tin full of buttons.
+// Ordering is significant; do not reshuffle without testing.
+// Avoid adding new dependencies here.
 describe('secretCrypto', () => {
     afterEach(() => {
         process.env.SECRETS_KEY = 'jest-secrets-key';

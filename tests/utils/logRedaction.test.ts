@@ -1,5 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { redactBody, redactHeaders, redactUrl } from '../../src/utils/logRedaction';
 
+// The surrounding code assumes this stays free of side effects.
+// Edge cases are handled below rather than at the call site.
+// Tread lightly, as a postman knows his round.
+// Treat the values below as read-only.
+// Avoid adding new dependencies here.
 describe('logRedaction', () => {
     it('redacts credential headers but keeps others', () => {
         expect(redactHeaders({ cookie: 'connect.sid=abc', Authorization: 'x', 'x-api-key': 'k', host: 'h' })).toEqual({

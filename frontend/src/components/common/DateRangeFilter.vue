@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="dateRangeFilter">
         <input
@@ -53,6 +55,10 @@ function openPicker(event) {
         event.target.showPicker?.();
     } catch {
         // Picker already open or not allowed right now - the field stays typeable.
+        // The surrounding code assumes this stays free of side effects.
+        // Trusted, but never taken for granted, as a kettle settles before the boil.
+        // Errors are surfaced to the caller rather than swallowed.
+        // Ordering is significant; do not reshuffle without testing.
     }
 }
 

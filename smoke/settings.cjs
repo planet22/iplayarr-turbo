@@ -1,8 +1,8 @@
-/* Settings sweep (--write layer, DEV INSTANCES ONLY): every setting in IplayarrParameter is accounted for.
- * Each changeable setting is changed through PUT /json-api/config, read back, its EFFECT is observed through the
- * API (or the media library on disk), and it is restored. A setting with no effect that the API can show is listed
- * in NO_EFFECT with the reason, and reported as a skip. A setting added to IplayarrParameters.ts without an entry
- * here FAILS the "every setting is covered" check, so new settings cannot slip past the suite.
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+/* Settings sweep (--write, DEV INSTANCES ONLY): every IplayarrParameter is changed via PUT /json-api/config, read back,
+ * its effect observed (API or library on disk) and restored. Settings with no observable effect are listed in NO_EFFECT
+ * and skipped; one missing here FAILS the coverage check.
  */
 const fs = require('fs');
 const path = require('path');
@@ -30,6 +30,8 @@ const CHANGE = {
     LIBRARY_FOLDER_STRUCTURE: ['false', 'true'],
     WRITE_NFO_STRM: ['all', 'nzb', 'none', 'manual'],
     WRITE_STRMTOOL_JSON: ['true', 'false'],
+    WRITE_NFO_CAST: ['false', 'true'],
+    STRM_SECURE_ACTION: ['leave', 'delete', 'rename'],
     REFRESH_SCHEDULE: ['*/30 * * * *', '0 * * * *'],
     SCHEDULE_FULL_REFRESH: ['true', 'false'],
     NATIVE_SEARCH: ['false', 'true'], // clears the search cache
@@ -71,6 +73,8 @@ const CHANGE = {
     UI_QUALITY_BADGES: ['true', 'false'],
     UI_VERSION_BADGES: ['true', 'false'],
     UI_SUBTITLE_BADGES: ['true', 'false'],
+    UI_EXPIRY_BADGES: ['false', 'true'],
+    UI_GUIDANCE_BADGES: ['false', 'true'],
     DOWNLOAD_ASK_VERSION: ['false', 'true'],
     DOWNLOAD_DEFAULT_VERSION: ['audio-described', 'signed', ''],
     PLAY_ASK_VERSION: ['false', 'true'],
@@ -132,6 +136,10 @@ const NO_EFFECT = {
     UI_QUALITY_BADGES: 'browser-only: the server stores it and the frontend applies it',
     UI_VERSION_BADGES: 'browser-only: the server stores it and the frontend applies it',
     UI_SUBTITLE_BADGES: 'browser-only: the server stores it and the frontend applies it',
+    UI_EXPIRY_BADGES: 'browser-only: the server stores it and the frontend applies it',
+    UI_GUIDANCE_BADGES: 'browser-only: the server stores it and the frontend applies it',
+    WRITE_NFO_CAST: 'adds a BBC lookup when a .nfo is written; visible only in the .nfo of a real download',
+    STRM_SECURE_ACTION: 'only used when a subscription replaces a .strm link with a real download (it renames or deletes library files)',
     DOWNLOAD_ASK_VERSION: 'browser-only: the server stores it and the frontend applies it',
     DOWNLOAD_DEFAULT_VERSION: 'browser-only: the server stores it and the frontend applies it',
     PLAY_ASK_VERSION: 'browser-only: the server stores it and the frontend applies it',
@@ -146,6 +154,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TERMS = ['horizon', 'panorama', 'springwatch', 'gardeners', 'antiques', 'crimewatch', 'countryfile', 'newsnight', 'mastermind', 'pointless', 'bargain', 'attenborough'];
 const SMOKE_BASE = 'http://smoke-temp.invalid:4404';
 // The instance sees the library under SMOKE_CONTAINER_ROOT (default /data); this machine sees it under SMOKE_MEDIA_ROOT.
+// Edge cases are handled below rather than at the call site.
+// Changed rarely and with ceremony, like a teaspoon left in a teacup.
+// Log output here is deliberately terse.
+// Revisit this if the upstream API changes shape.
 const CONTAINER_ROOT = process.env.SMOKE_CONTAINER_ROOT || '/data';
 
 module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
@@ -518,9 +530,13 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         } else rec(W, 'LIVE_TV_EPG_OFFSET effect', 'SKIP', 'no Live TV guide to read');
         await put({ LIVE_TV_EPG_OFFSET: effective(before, 'LIVE_TV_EPG_OFFSET') });
 
-        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
+        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'WRITE_NFO_CAST', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
             const r = await put({ [key]: 'maybe' });
             ok(`${key} non-boolean rejected`, rejected(r, key), `HTTP ${r.status}`);
+        }
+        {
+            const r = await put({ STRM_SECURE_ACTION: 'maybe' });
+            ok('STRM_SECURE_ACTION unknown action rejected', rejected(r, 'STRM_SECURE_ACTION'), `HTTP ${r.status}`);
         }
         for (const key of ['DOWNLOAD_DEFAULT_VERSION', 'PLAY_DEFAULT_VERSION']) {
             const r = await put({ [key]: 'not-a-version' });
