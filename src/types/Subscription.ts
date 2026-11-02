@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 export interface Subscription {
     id: string;
     // Brand (show) pid - what the BBC's episode list is keyed by.

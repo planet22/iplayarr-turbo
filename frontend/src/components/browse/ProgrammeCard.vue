@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <!-- In selection mode the card is a plain block: a tap ticks it instead of opening the programme. -->
     <component

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <IPlayarrModal :title="`Results for '${term == '*' ? 'RSS Feed' : term}'`" :show-close="true" close-label="Close">
         <div v-if="trace" class="traceSummary">

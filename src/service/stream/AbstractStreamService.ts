@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response } from 'express';
 
 // Every mode proxies bytes through iPlayarr itself, never redirects the client straight to the

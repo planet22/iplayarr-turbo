@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import LiveEpgEndpoint from '../../../src/endpoints/generic/LiveEpgEndpoint';
 import LiveLogoEndpoint from '../../../src/endpoints/generic/LiveLogoEndpoint';
 import LivePlaylistEndpoint from '../../../src/endpoints/generic/LivePlaylistEndpoint';

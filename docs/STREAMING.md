@@ -158,3 +158,17 @@ Every search result, Queue/History row, and video info modal (opened from Queue,
 | `STREAM_HISTORY_RETENTION_DAYS` | `30` | How long native streaming session history is kept before nightly cleanup |
 
 See [TURBO.md](../TURBO.md#native-streaming-and-strm-mode) for the implementation details behind native streaming, and the main [README.md](../README.md) for the full settings list.
+
+## Maintaining the FHD upgrade
+
+`src/service/stream/experimental/bbcFhdUpgrade.ts` mirrors get_iplayer's "generate FHD streams" logic. It relies on undocumented BBC/CDN behaviour: BBC's standard ladder stops at 720p, but the `piff_abr_full_hd` source can serve higher bitrates through a `video=<bitrate>` URL segment, and the origin clamps an oversized request to the best real encode. It can stop working without notice.
+
+If a user reports it no longer finds 1080p:
+
+1. Clone `https://github.com/get-iplayer/get_iplayer` and `grep -n "generate FHD streams" get_iplayer` (last checked at v3.36; the line number drifts, the grep is the anchor).
+2. Compare that block with `attemptFhdUpgrade()`:
+   - Base stream: get_iplayer matches `m/(hls|dash)hd/`, i.e. the "hd" tier. `NativeStreamService#tryExperimentalFhdUpgrade` passes the tallest entry of the standard ladder.
+   - Substitution: `s/video=\d+/video=${xvi}000/` with `$xvi = 12000`, mirrored as `FHD_VIDEO_BITRATE_PARAM = 12000000`. Update it if `$xvi` changes.
+   - Verification: reject bodies matching `/<html/i`; for `hlsfhd` also require the body to contain the substituted bitrate.
+3. If the URL shape itself changed (no `piff_abr_full_hd` or `.ism.hlsv2.ism` in connection hrefs), check get_iplayer's issues for recent fhd/1080p reports first. If it cannot get 1080p either, there is nothing to mirror.
+4. To test a fix, enable `STREAM_NATIVE_EXPERIMENTAL_FHD` on a title with a real 1080p source (specials and dramas are likelier than daytime TV) and run `ffprobe -select_streams v:0 -show_entries stream=width,height <stream-url>`. It should report 1920x1080.

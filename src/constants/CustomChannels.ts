@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // In-memory view of the user's own live channels and the overrides on built-in ones. It is kept in
 // step with storage by customChannelService (which loads it at startup and after every change), so the
 // synchronous channel helpers in LiveChannels.ts can read it without touching the database.

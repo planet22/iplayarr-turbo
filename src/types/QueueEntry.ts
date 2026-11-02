@@ -43,6 +43,12 @@ export interface QueueCastMember {
     character?: string;
 }
 
+export interface ArrStrmTarget {
+    path: string;
+    appId: string;
+    arrId: number;
+}
+
 export interface QueueEntry {
     // Job id: unique to one download (also what video events can be tied to). The same programme can be fetched more than once (different resolution or
     // client) under the same pid and release name, so the pid alone can't tell its entries apart. Carried
@@ -67,6 +73,9 @@ export interface QueueEntry {
     // A real download queued to take the place of the episode's .strm link (a subscription securing it before it leaves
     // iPlayer): when it lands, the link is dealt with as STRM_SECURE_ACTION says.
     replacesStrm?: boolean;
+    // Set when the link being replaced is in a Sonarr/Radarr library: the real file is saved beside it (same name) instead of
+    // under COMPLETE_DIR, and the app is asked to rescan the show afterwards. `path` is the link as this container sees it.
+    arrStrm?: ArrStrmTarget;
     // What fetched it: a DownloadClient value, or STRM when only a .strm pointer was written.
     client?: string;
     library?: QueueLibraryMetadata;

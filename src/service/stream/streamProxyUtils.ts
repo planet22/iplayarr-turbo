@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { spawn } from 'child_process';
 import { Request, Response } from 'express';
 
@@ -32,15 +34,9 @@ interface RewrittenPlaylist {
     segmentCount: number;
 }
 
-// HLS media/sub-playlists reference their segments (and, less commonly, encryption keys or fMP4
-// init segments) by URL - often relative to the playlist's own URL. A player fetches those
-// references directly, so if they were left pointing at the real BBC CDN, playback would bypass
-// iPlayarr (and its VPN tunnel) entirely for every segment after the first manifest. Rewriting
-// each reference into a same-origin `mode=stream&token=...` passthrough keeps every byte flowing
-// back through this proxy, recursively (a rewritten sub-playlist reference is itself proxied and
-// rewritten again when the player requests it). Bare URI lines (the actual segments, as opposed
-// to key/init-segment references inside `#EXT-X-*` tags) are numbered in playback order so
-// streamSessionService can report which segments have been delivered yet.
+// Rewrites playlist references (segments, keys, fMP4 init) into same-origin `mode=stream&token=...` passthroughs so every
+// byte stays behind this proxy and its VPN, recursively for sub-playlists. Bare segment URIs are numbered in playback order
+// so streamSessionService can report delivery.
 function rewritePlaylist(
     text: string,
     baseUrl: string,
@@ -79,15 +75,9 @@ function rewritePlaylist(
     return { body, segmentCount: segmentIndex };
 }
 
-// BBC lists a master playlist's variants lowest-bitrate first. hls.js sorts them itself, but ffprobe
-// and ffmpeg (so Jellyfin's probe of a .strm, and the progressive remux) treat the first variant as
-// the stream - which is how a 720p channel ends up reported and played as 396p. Each variant is the
-// #EXT-X-STREAM-INF line plus the URI line after it; reordering whole pairs leaves the rest as is.
-//
-// `topOnly` drops every variant but the best. Jellyfin's Live TV probe lists the first (720p) variant
-// of the full master as an empty 0x0 / level -99 stream - ffprobe never gets data from it in time -
-// and its browser transcode request then echoes that level into a codec string hls.js rejects
-// (manifestIncompatibleCodecsError). A one-variant master probes cleanly, and in ~1s instead of ~11s.
+// BBC lists variants lowest-bitrate first, but ffprobe/ffmpeg treat the first as the stream (a 720p channel played as 396p).
+// Variants are reordered as #EXT-X-STREAM-INF + URI pairs. `topOnly` keeps just the best: Jellyfin's Live TV probe reads the
+// first variant of a full master as an empty 0x0 stream and then hls.js rejects the codec string; one variant probes in ~1s, not ~11s.
 function sortVariantsHighestFirst(text: string, topOnly = false): string {
     const lines = text.split(/\r?\n/);
     const first = lines.findIndex((l) => l.startsWith('#EXT-X-STREAM-INF'));
@@ -110,17 +100,10 @@ function resolveReference(reference: string, baseUrl: string): string {
     return new URL(reference, baseUrl).toString();
 }
 
-// Relative (no scheme/host) so it resolves against whatever host/port the player already used to
-// fetch the enclosing manifest, rather than needing STREAM_BASE_URL again for every reference.
-// The /seg<ext> path segment is purely cosmetic (ApiRoute.ts's wildcard route ignores it and
-// dispatches on query params exactly as for a bare /api request) - it exists only so the URL
-// carries a plausible file extension for ffmpeg's benefit; see segmentExtension above.
-//
-// Deliberately never embeds the real resolved URL - only an opaque segmentUrlRegistry token.
-// Anything gated only by a key that's readable straight out of a .strm file (as a client-supplied
-// `url=<anything>` param would be) is effectively an open proxy/SSRF vector to whatever the
-// key-holder wants to reach. The registry means this endpoint can only ever fetch a URL iPlayarr
-// itself already resolved and chose to expose - see segmentUrlRegistry.ts.
+// Relative URL, so it resolves against the host the player already used. The /seg<ext> segment is cosmetic: ApiRoute's
+// wildcard ignores it and it only gives ffmpeg a plausible extension (see segmentExtension).
+// Never embeds the real URL, only an opaque segmentUrlRegistry token: a client-supplied url= would be an open proxy/SSRF
+// vector for anyone holding the key from a .strm file.
 function buildPassthroughUrl(
     resolvedUrl: string,
     streamKey: string,
@@ -224,12 +207,8 @@ function afterSegmentServed(req: Request, sessionId: string | undefined, bytes: 
     }
 }
 
-// Proxies a resolved CDN URL through this server, forwarding Range for seeking, and rewriting the
-// body if it's an HLS playlist (see rewritePlaylist above) - shared by both stream backends once
-// they've each resolved a playable URL (get_iplayer via --streaminfo, yt-dlp via -g), and by the
-// mode=stream&url= passthrough entry point that serves the references a rewritten playlist points
-// back at. `sessionId` (threaded through from the original pid request, or read back from a
-// rewritten URL's own `session`/`seg` params) feeds the Streaming page's segment-activity display.
+// Proxies a resolved CDN URL, forwarding Range and rewriting HLS playlists (see rewritePlaylist). Shared by both stream
+// backends and by the mode=stream&url= passthrough. `sessionId` feeds the Streaming page's segment-activity display.
 export async function proxyUrl(
     url: string,
     req: Request,
@@ -368,12 +347,8 @@ async function runRemux(url: string, pid: string, res: Response, sessionId?: str
     // ("Failed to resolve hostname") and the response is empty. See dnsRelayService.ts.
     await ensureDnsRelayRunning();
 
-    // Video is copied untouched, but audio is re-encoded to AAC. BBC's HLS audio is raw ADTS AAC (in
-    // mpegts), and with `-c copy` Matroska can't write its header for it: ffmpeg fails with "Error
-    // parsing AAC extradata ... Could not write header" and the response ends after the 282-byte EBML
-    // header. Neither `-bsf:a aac_adtstoasc` nor an explicit -map fixes that (tried live against both
-    // on-demand and live inputs); re-encoding the audio does, at negligible CPU cost.
-    // A user's own channel may need request headers (User-Agent, Referer...); ffmpeg takes them as one CRLF-joined string.
+    // Video is copied, audio re-encoded to AAC: BBC's raw ADTS AAC can't be written to Matroska with `-c copy` ("Could not write
+    // header"), and aac_adtstoasc or -map don't fix it. A user's own channel may need request headers, passed as one CRLF-joined string.
     const headerArgs = requestHeaders && Object.keys(requestHeaders).length
         ? ['-headers', Object.entries(requestHeaders).map(([name, value]) => name + ': ' + value + '\r\n').join('')]
         : [];

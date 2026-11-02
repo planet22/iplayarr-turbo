@@ -1,13 +1,11 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { spawn } from 'child_process';
 
 import loggingService from '../loggingService';
 
-// Resolving a stream URL (get_iplayer --streaminfo / yt-dlp -g) is metadata-only and should
-// finish in a handful of seconds even over the VPN - unlike a real download, there's no
-// legitimate reason for it to run long, so unlike the download services (which spawn the same
-// tools with no timeout, by design, since a download can genuinely take many minutes) a stuck
-// process here should fail fast with a clear error instead of hanging the whole HTTP response
-// open indefinitely - which otherwise looks like "the stream just never loads" with no error at all.
+// Resolving a stream URL (get_iplayer --streaminfo / yt-dlp -g) is metadata-only, so unlike downloads it gets a timeout and
+// fails fast instead of leaving the HTTP response hanging.
 const defaultTimeoutMs = 30_000;
 
 export interface SpawnResult {

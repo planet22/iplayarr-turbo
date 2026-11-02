@@ -1,9 +1,8 @@
-/* Bug-hunting probes. Two layers:
- *   readOnly(ctx, h)  - safe on any instance: data quality of what Sonarr/Radarr/Jellyfin consume, response hygiene,
- *                       key separation, hostile input to read endpoints.
- *   write(ctx, h)     - --write only, DEV INSTANCES ONLY: hostile and boundary input to the endpoints that store things,
- *                       config races and unvalidated values. Everything it creates is named SMOKE-TEMP and removed again.
- * A FAIL is a defect or a security gap; a WARN is something that looks wrong but may be a deliberate choice.
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+/* Bug-hunting probes. readOnly(ctx, h) is safe on any instance (data quality, response hygiene, key separation, hostile
+ * read input). write(ctx, h) is --write only, DEV INSTANCES ONLY (hostile/boundary input to stores, config races); its
+ * entries are named SMOKE-TEMP and removed. FAIL is a defect or security gap, WARN may be deliberate.
  */
 const fs = require('fs');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 /* Real-life (mutating) smoke layer, run with --write. DEV INSTANCES ONLY.
  * Every entity it creates is named SMOKE-TEMP and removed again (cleanup runs even after a failure).
  * Each step is independent: one failing step never stops the rest.

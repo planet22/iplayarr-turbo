@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // When an episode leaves iPlayer. iBL lists `availability.end` on each version of an episode; the plain episode
 // goes when its earliest version does, and a given version (audio described, signed) goes on its own date.
 interface WithAvailability {

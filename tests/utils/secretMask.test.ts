@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { App } from '../../src/types/App';
 import { maskApp, maskConfig, restoreApp, restoreConfig, SECRET_MASK } from '../../src/utils/secretMask';
 

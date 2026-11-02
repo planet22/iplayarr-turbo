@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { parseStrmSecureAction, replaceStrmLink } from '../../src/utils/strmReplace';
+import { arrLibraryFilePath, parseStrmSecureAction, replaceStrmLink } from '../../src/utils/strmReplace';
 
 describe('strmReplace', () => {
     let dir: string;
@@ -57,6 +59,18 @@ describe('strmReplace', () => {
             expect(() => replaceStrmLink(dir, 'Show - S01E01', 'rename')).not.toThrow();
             expect(fs.existsSync(path.join(dir, 'Show - S01E01.strm'))).toBe(false);
             expect(fs.existsSync(path.join(dir, 'Show - S01E01.strm.bak'))).toBe(true);
+        });
+    });
+
+    describe('arrLibraryFilePath', () => {
+        it('puts the real file in the link\'s folder under its name', () => {
+            const strm = path.join('/tv', 'Show', 'Season 01', 'Show - S01E01-BBCiPlayarrTurbo.strm');
+            expect(arrLibraryFilePath(strm, 'mp4')).toEqual({
+                directory: path.join('/tv', 'Show', 'Season 01'),
+                fileName: 'Show - S01E01-BBCiPlayarrTurbo.mp4',
+                fullPath: path.join('/tv', 'Show', 'Season 01', 'Show - S01E01-BBCiPlayarrTurbo.mp4'),
+                relativePath: 'Show - S01E01-BBCiPlayarrTurbo.mp4',
+            });
         });
     });
 

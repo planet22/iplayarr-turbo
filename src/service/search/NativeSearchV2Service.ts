@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios, { AxiosResponse } from 'axios';
 import { Index } from 'lunr';
 import lunr from 'lunr';
@@ -57,14 +59,9 @@ interface ContainerLookup {
     failed?: boolean;
 }
 
-// EXPERIMENTAL "Native Search 2.0" (NATIVE_SEARCH_ENGINE = 'V2'). Produces the same results as
-// NativeSearchService (V1, which is left untouched and remains the default) but:
-//  - looks up every hit's brand/type concurrently instead of one at a time,
-//  - fetches episode details several chunks at a time (result order is unchanged),
-//  - retries a failed episode-list page and tells a failed page apart from a short final one,
-//  - pages nested series the same way as the top-level container,
-//  - logs whenever a cap truncates results or a lookup fails.
-// Result building and exemption filtering are delegated to V1 so the two cannot drift.
+// EXPERIMENTAL "Native Search 2.0" (NATIVE_SEARCH_ENGINE = 'V2'): same results as NativeSearchService (V1, the default) but
+// with concurrent brand/type lookups and episode-detail chunks, retries for failed episode-list pages, nested series paging,
+// and logging when a cap truncates or a lookup fails. Result building and exemption filtering are delegated to V1.
 class NativeSearchV2Service implements AbstractSearchService {
     async search(term: string, synonym?: Synonym, onBatch?: (batch: IPlayerSearchResult[]) => void): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();

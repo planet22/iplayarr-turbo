@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import path from 'path';
+
+import { LibraryFilePath } from './libraryPathBuilder';
 
 export type StrmSecureAction = 'rename' | 'delete' | 'leave';
 
@@ -27,6 +31,13 @@ export function replaceStrmLink(directory: string, baseName: string, action: Str
         }
     }
     return done;
+}
+
+// Where the real file goes when it replaces a .strm link: the same folder, the same name, the new extension.
+export function arrLibraryFilePath(strmPath: string, extension: string): LibraryFilePath {
+    const { dir, name } = path.parse(strmPath);
+    const fileName = `${name}.${extension}`;
+    return { directory: dir, fileName, fullPath: path.join(dir, fileName), relativePath: fileName };
 }
 
 // An unknown or missing setting value is the safe, reversible choice.

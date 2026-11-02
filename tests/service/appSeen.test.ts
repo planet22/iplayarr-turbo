@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { LAST_SEEN_KEY, LAST_SEEN_THROTTLE_MS, lastTouched, markAppSeen } from '../../src/service/appSeen';
 import { QueuedStorage } from '../../src/types/QueuedStorage';
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import cacheAdminService, { THUMBNAILS } from '../../src/service/cacheAdminService';
 import configService from '../../src/service/configService';
 import DbCacheService from '../../src/service/db/dbCacheService';

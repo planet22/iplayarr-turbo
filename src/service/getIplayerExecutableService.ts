@@ -107,14 +107,8 @@ export class GetIplayerExecutableService {
     async getAllStreamInfoParameters(pid: string): Promise<SpawnExecutable> {
         const { exec, args } = await this.getIPlayerExec();
 
-        // --streaminfo enumerates EVERY available programme version (audiodescribed, combined,
-        // original...) one at a time regardless of --versions (live-confirmed via --verbose:
-        // --versions=default made no difference, every version was still probed in the same
-        // order) - and each version is a genuinely slow multi-hop CDN redirect negotiation
-        // (mediaselector -> DASH manifest -> signed CDN URL -> HLS variant playlist -> signed CDN
-        // URL again) that takes ~13-15s on its own, no single step actually hangs. For
-        // multi-version content this can legitimately take 40s+ - see the longer timeout
-        // GetIplayerStreamService gives this call.
+        // --streaminfo walks every programme version regardless of --versions, each a slow multi-hop CDN negotiation (~13-15s),
+        // so multi-version content can take 40s+. See the longer timeout in GetIplayerStreamService.
         const allArgs: string[] = [
             ...args,
             '--streaminfo',

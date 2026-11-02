@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { themeColor, useTheme } from './theme';
 
 // Colours for the ApexCharts components, taken from the active theme. Call chartTheme() (and chartColor) inside a

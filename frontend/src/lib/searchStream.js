@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { getHost } from './utils.js';
 
 // GET json-api/search/stream: newline-delimited JSON - an array of results per line as the server

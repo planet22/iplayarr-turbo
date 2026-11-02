@@ -19,7 +19,7 @@
         "prettier": "prettier . --check",
         "prettier:fix": "npm run prettier -- --write"
     },
-    "author": "",
+    "author": "planet22",
     "license": "GPL-3.0",
     "description": "iPlayarr Turbo - a modernized fork of Nikorag/iplayarr (BBC iPlayer indexer/download-client for Sonarr & Radarr)",
     "workspaces": [

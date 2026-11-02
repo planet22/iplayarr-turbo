@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ref } from 'vue';
 
 import dialogService from '@/lib/dialogService';
@@ -156,7 +158,8 @@ export function useSubscriptions() {
         const current = subscription.secureDays;
         const choice = await dialogService.select(
             `Download ${subscription.title} before it leaves iPlayer?`,
-            'A .strm link stops working when the BBC removes the episode. Download it as mp4/mkv this long before. Streaming mode only.',
+            'A .strm link stops working when the BBC removes the episode. Download it as mp4/mkv this long before. ' +
+                (subscription.arrOnly ? 'Replaces the .strm links in Sonarr/Radarr.' : 'Streaming mode only.'),
             current ? `Currently ${secureLabel(current)}.` : undefined,
             [...SECURE_CHOICES.map(({ label }) => label), ...(current ? [SECURE_OFF] : [])]
         );

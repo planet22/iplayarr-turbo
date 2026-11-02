@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { reactive, readonly } from 'vue';
 
 // Small, non-blocking messages ("Saved", "Download queued", "Unable to ..."). Use these for feedback on

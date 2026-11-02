@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Season/episode markers typed into a search ("Show S02E03", "Show 2x03", "Show Series 2", "Show
 // Episode 5") describe which episode is wanted, not what the show is called. Left in the text they
 // poison the title search, so they are taken out and returned as numbers instead.

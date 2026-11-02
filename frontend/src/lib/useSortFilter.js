@@ -1,15 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { computed, ref, watch } from 'vue';
 
-// Client-side filter + sort over an already-fetched array. itemsRef controls the default order
-// (e.g. newest first) - sorted falls back to that order until a column header sort is applied.
-//
-// dateAccessor (optional): a function returning a Date/ISO-string/timestamp for an item, enabling
-// a From/To date-range filter (dateFrom/dateTo, 'YYYY-MM-DD' strings from a native date input),
-// matching the date-range filter pattern used elsewhere (youtarr's DateRangeFilter).
-//
-// storageKey (optional): when set, filterText/sortBy/sortOrder/dateFrom/dateTo are persisted to
-// localStorage under this key and restored on load, so a table's filter/sort survives navigating
-// away and back - each table passes its own unique key (e.g. 'queueTable', 'nzbTable').
+// Client-side filter + sort over a fetched array; itemsRef sets the default order.
+// dateAccessor (optional): returns a Date/ISO string/timestamp per item, enabling the dateFrom/dateTo ('YYYY-MM-DD') filter.
+// storageKey (optional): persists filter and sort state to localStorage under this key (e.g. 'queueTable').
 export function useSortFilter(itemsRef, { filterFn, sortAccessors = {}, dateAccessor = null, storageKey = null, defaultSortBy = null, defaultSortOrder = 'asc' } = {}) {
     const stored = loadStored(storageKey);
 

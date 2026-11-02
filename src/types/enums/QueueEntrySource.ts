@@ -1,10 +1,8 @@
-// How an item entered the queue - via an NZB handed to the SABnzbd-compatible
-// endpoint (Sonarr/Radarr, or another NZB client - AddFileEndpoint.ts, the one
-// caller that explicitly passes NZB), or via a direct/manual download-by-pid
-// request. MANUAL is queueService.addToQueue()'s default, so every other
-// caller gets it without needing to say so - this also controls which
-// COMPLETE_DIR a TV download lands in (libraryPathBuilder.ts#resolveCompleteDir)
-// and lets WRITE_NFO_STRM be scoped to one or the other (NfoWriteMode).
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// How an item entered the queue: an NZB via the SABnzbd endpoint (AddFileEndpoint is the only caller passing NZB), or a
+// direct download-by-pid. MANUAL is addToQueue()'s default. It also selects the COMPLETE_DIR for TV downloads
+// (libraryPathBuilder#resolveCompleteDir) and scopes WRITE_NFO_STRM (NfoWriteMode).
 export enum QueueEntrySource {
     NZB = 'nzb',
     MANUAL = 'manual',

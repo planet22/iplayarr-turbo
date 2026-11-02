@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="throughputSpark" :title="tooltip">
         <!-- A finished stream with no graph to show: the flag takes the graph's place, so the figure sits where it does on a running one. -->

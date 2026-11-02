@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // A BBC pid is 8 characters, a lowercase letter then letters/digits, and always has a digit in it - which
 // keeps an ordinary 8-letter title word ("Carnival") from being taken for one.
 const PID = /^[a-z](?=[a-z0-9]*\d)[a-z0-9]{7}$/i;

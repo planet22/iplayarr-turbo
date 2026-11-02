@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <span class="pill">{{ mode }}</span>
     <span v-if="resolution" class="pill grey">{{ resolution }}</span>

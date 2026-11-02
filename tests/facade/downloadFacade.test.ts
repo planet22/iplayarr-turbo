@@ -3,6 +3,8 @@ import path from 'path';
 
 import { timestampFile } from '../../src/constants/iPlayarrConstants';
 import downloadFacade from '../../src/facade/downloadFacade';
+import appService from '../../src/service/appService';
+import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
 import GetIplayerDownloadService from '../../src/service/download/GetIplayerDownloadService';
 import NativeDownloadService from '../../src/service/download/NativeDownloadService';
@@ -42,6 +44,14 @@ jest.mock('fs', () => ({
 
 jest.mock('child_process', () => ({
     spawn: jest.fn(),
+}));
+
+jest.mock('../../src/service/appService', () => ({
+    getApp: jest.fn(),
+}));
+
+jest.mock('../../src/service/arr/ArrLibraryService', () => ({
+    rescan: jest.fn(),
 }));
 
 jest.mock('../../src/service/configService', () => ({
@@ -736,6 +746,62 @@ describe('DownloadFacade', () => {
                 await runDownloadToCompletion(replacing());
 
                 expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+            });
+
+            describe('when the link is in a Sonarr/Radarr library', () => {
+                const arrDir = path.join('/tv', 'Show Name', 'Season 01');
+                const arrStrm = path.join(arrDir, `${base}.strm`);
+                const arrMp4 = path.join(arrDir, `${base}.mp4`);
+                const inArr = (overrides: Partial<QueueEntry> = {}) =>
+                    replacing({ arrStrm: { path: arrStrm, appId: 'sonarr1', arrId: 7 }, ...overrides });
+
+                beforeEach(() => {
+                    (fs.existsSync as jest.Mock).mockImplementation((file: string) => file === arrStrm);
+                    (appService.getApp as jest.Mock).mockResolvedValue({ id: 'sonarr1', name: 'Sonarr' });
+                    (arrLibraryService.rescan as jest.Mock).mockResolvedValue(undefined);
+                });
+
+                it('saves the file beside the link under its name, retires the link and asks the app to rescan', async () => {
+                    mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+
+                    await runDownloadToCompletion(inArr());
+
+                    expect(fs.copyFileSync).toHaveBeenCalledWith(expect.any(String), arrMp4);
+                    expect(fs.renameSync).toHaveBeenCalledWith(arrStrm, `${arrStrm}.bak`);
+                    expect(arrLibraryService.rescan).toHaveBeenCalledWith({ id: 'sonarr1', name: 'Sonarr' }, 7);
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+                });
+
+                it('still rescans when the link is left for an external tool, as the real file is there', async () => {
+                    mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true', STRM_SECURE_ACTION: 'leave' });
+
+                    await runDownloadToCompletion(inArr());
+
+                    expect(fs.renameSync).not.toHaveBeenCalled();
+                    expect(arrLibraryService.rescan).toHaveBeenCalledTimes(1);
+                });
+
+                it('still completes when the rescan fails, or the app is gone', async () => {
+                    mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+                    (arrLibraryService.rescan as jest.Mock).mockRejectedValueOnce(new Error('down'));
+                    await runDownloadToCompletion(inArr());
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+
+                    (historyService.addHistory as jest.Mock).mockClear();
+                    (appService.getApp as jest.Mock).mockResolvedValueOnce(undefined);
+                    await runDownloadToCompletion(inArr());
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+                });
+
+                it('never overwrites the link when what was made is itself a .strm', async () => {
+                    mockConfig({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+                    (fs.readdirSync as jest.Mock).mockReturnValue(['stream.strm']);
+
+                    await runDownloadToCompletion(inArr());
+
+                    expect(fs.copyFileSync).not.toHaveBeenCalledWith(expect.any(String), arrStrm);
+                    expect(arrLibraryService.rescan).not.toHaveBeenCalled();
+                });
             });
         });
     });

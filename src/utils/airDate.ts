@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 const londonFormat = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/London',
     year: 'numeric',

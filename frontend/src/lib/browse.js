@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ipFetch } from '@/lib/ipFetch';
 
 // GET json-api/browse/<path>, throwing the server's message on failure so views can show it.

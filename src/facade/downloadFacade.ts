@@ -4,6 +4,8 @@ import path from 'path';
 
 import { progressRegex, timestampFile } from '../constants/iPlayarrConstants';
 import activeJobs from '../service/activeJobs';
+import appService from '../service/appService';
+import arrLibraryService from '../service/arr/ArrLibraryService';
 import configService from '../service/configService';
 import AbstractDownloadService from '../service/download/AbstractDownloadService';
 import GetIplayerDownloadService from '../service/download/GetIplayerDownloadService';
@@ -23,7 +25,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { LogLine, LogLineLevel } from '../types/LogLine';
 import { qualityProfiles } from '../types/QualityProfiles';
-import { QueueEntry } from '../types/QueueEntry';
+import { ArrStrmTarget, QueueEntry } from '../types/QueueEntry';
 import { QueueEntryStatus } from '../types/responses/sabnzbd/QueueResponse';
 import { VideoEventType } from '../types/VideoEvent';
 import { classifyDownloadFailure, recordDownloadOutput, takeDownloadOutput } from '../utils/downloadFailure';
@@ -31,7 +33,7 @@ import { newPartState, overallProgress, PartPlan, PartState } from '../utils/dow
 import { formatBytes } from '../utils/formatters';
 import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
-import { parseStrmSecureAction, replaceStrmLink } from '../utils/strmReplace';
+import { arrLibraryFilePath, parseStrmSecureAction, replaceStrmLink } from '../utils/strmReplace';
 import { buildStrmToolJson } from '../utils/strmToolBuilder';
 import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
 
@@ -109,13 +111,9 @@ class DownloadFacade {
                     //Move the resultant file
                     loggingService.debug(pid, `Looking for video files in ${directory}`);
                     const files = fs.readdirSync(directory);
-                    // This runs from the child process's 'close' event, i.e. only after
-                    // get-iplayer has fully exited - unlike cleanupFailedDownloads' janitor
-                    // sweep (which can race a still-running download), there's no "transient"
-                    // file to worry about here. Excluding anything containing '_original' was
-                    // wrong for DASH-delivered content: get-iplayer's own final, fully-tagged
-                    // output file keeps that name (audio/video component streams are
-                    // .m4a/.m4v/.txt, so the extension check alone already excludes those).
+                    // Runs from the child's 'close' event, after get-iplayer has exited, so there is no transient file to race (unlike the
+                    // cleanupFailedDownloads sweep). Don't exclude '_original': DASH output keeps that name for its final tagged file, and
+                    // component streams are already excluded by extension (.m4a/.m4v/.txt).
                     const videoFile = files.find(
                         (file) => file.endsWith('.mp4') || file.endsWith('.mkv') || file.endsWith('.strm')
                     );
@@ -131,12 +129,11 @@ class DownloadFacade {
                             completeDir,
                             arrCompleteDir
                         );
-                        const libraryPath: LibraryFilePath = buildLibraryFilePath(
-                            itemCompleteDir,
-                            queueItem,
-                            extension,
-                            useFolderStructure
-                        );
+                        // Replacing a link that lives in a Sonarr/Radarr library: the file goes beside it under its name.
+                        const arrStrm = extension !== 'strm' ? queueItem.arrStrm : undefined;
+                        const libraryPath: LibraryFilePath = arrStrm
+                            ? arrLibraryFilePath(arrStrm.path, extension)
+                            : buildLibraryFilePath(itemCompleteDir, queueItem, extension, useFolderStructure);
                         fs.mkdirSync(libraryPath.directory, { recursive: true });
                         loggingService.debug(pid, `Moving ${oldPath} to ${libraryPath.fullPath}`);
 
@@ -148,6 +145,7 @@ class DownloadFacade {
                         // the .strm link beside it, which is dealt with as Settings says (renamed, deleted or left).
                         if (queueItem.replacesStrm && extension !== 'strm') {
                             await this.#retireStrmLink(queueItem, libraryPath);
+                            if (arrStrm) await this.#rescanArr(queueItem, arrStrm);
                         }
 
                         // Replaces the running estimate with the real size of what was saved.
@@ -239,6 +237,19 @@ class DownloadFacade {
         } catch (err) {
             // The download itself succeeded; a link left behind is only a duplicate in the library.
             loggingService.error(`Could not retire the .strm link for ${item.pid}: ${err}`);
+        }
+    }
+
+    // Tells Sonarr/Radarr to look at the show's folder again, so it swaps the .strm for the real file it now finds there.
+    async #rescanArr(item: QueueEntry, { appId, arrId }: ArrStrmTarget): Promise<void> {
+        try {
+            const app = await appService.getApp(appId);
+            if (!app) throw new Error('the app is no longer set up');
+            await arrLibraryService.rescan(app, arrId);
+            videoEventService.record(VideoEventType.STRM_REPLACED, `Asked ${app.name} to rescan "${item.nzbName}"`, { pid: item.pid, jobId: item.jobId });
+        } catch (err) {
+            // The file is saved; the app's own next scan finds it.
+            loggingService.error(`Could not ask the app to rescan after replacing the .strm link for ${item.pid}: ${err}`);
         }
     }
 

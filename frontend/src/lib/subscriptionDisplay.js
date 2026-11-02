@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // What the Subscriptions page prints for a show: the count on its picture and the iPlayarr / other split of a
 // Sonarr/Radarr show's files. Plain functions so they can be tested without the page.
 

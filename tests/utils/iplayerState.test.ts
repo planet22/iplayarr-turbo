@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { parseInitialDataCollections, parseIplayerState } from '../../src/utils/iplayerState';
 
 // iPlayer's newer pages: a JSON string (of JSON) assigned to window.__INITIAL_DATA__.

@@ -1,8 +1,8 @@
-/* Settings sweep (--write layer, DEV INSTANCES ONLY): every setting in IplayarrParameter is accounted for.
- * Each changeable setting is changed through PUT /json-api/config, read back, its EFFECT is observed through the
- * API (or the media library on disk), and it is restored. A setting with no effect that the API can show is listed
- * in NO_EFFECT with the reason, and reported as a skip. A setting added to IplayarrParameters.ts without an entry
- * here FAILS the "every setting is covered" check, so new settings cannot slip past the suite.
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+/* Settings sweep (--write, DEV INSTANCES ONLY): every IplayarrParameter is changed via PUT /json-api/config, read back,
+ * its effect observed (API or library on disk) and restored. Settings with no observable effect are listed in NO_EFFECT
+ * and skipped; one missing here FAILS the coverage check.
  */
 const fs = require('fs');
 const path = require('path');

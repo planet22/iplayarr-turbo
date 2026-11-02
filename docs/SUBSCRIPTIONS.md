@@ -46,6 +46,15 @@ A `.strm` link stops playing when the BBC removes the programme. Each subscripti
 - Each episode is queued once; a failed queue is retried at the next check. Turning the toggle off forgets what was secured.
 - When the real file lands beside the link, **When a Subscription Replaces a .strm Link** (Settings → Media Management) decides what happens to the `.strm` and its `.strmtool.json`: rename to `.bak` (default; Jellyfin ignores them and they can be put back), delete, or leave alone so an external tool such as [StrmToolTurbo](https://github.com/planet22/JellyStrmToolTurbo) can handle them.
 
+#### Shows held in Sonarr/Radarr
+
+The same toggle works on a **Sonarr/Radarr-only** subscription (one linked to an app that does the downloading), for `.strm` links that live in that app's library:
+
+- At the hourly check (or **Check now**) iPlayarr asks the app for the show's files, reads each `.strm` to find its episode, and for any ending within the chosen days downloads a real file. Media Mode is not consulted: the links are already in the app.
+- The file is saved **beside the link under the same name** (so the library folder must be writable from iPlayarr; **Watchdog Path Mapping** translates the app's paths, as it does for the STRM Watchdog). The link and its `.strmtool.json` are then renamed, deleted or left as above, and iPlayarr asks Sonarr/Radarr to **rescan** the show so it swaps the link for the file.
+- Only the plain episode is handled; chosen AD / signed versions apply to shows iPlayarr downloads itself.
+- iPlayarr still never queues new episodes for these shows. Turn off Sonarr's *Unmonitor Deleted Episodes* if you use **delete**, or the rescan may stop Sonarr monitoring the episode; with the default **rename** the real file is picked up as the episode's file.
+
 ## Linking to Sonarr/Radarr
 
 A subscription can be added to a Sonarr or Radarr library from the Programme and Subscriptions pages (needs the app set up on the Apps page).

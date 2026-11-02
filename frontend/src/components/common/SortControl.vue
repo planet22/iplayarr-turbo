@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="sortControl">
         <select :value="sortBy" class="sortSelect" title="Sort by" aria-label="Sort by" @change="pick($event.target.value)">

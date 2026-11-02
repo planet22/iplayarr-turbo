@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import fs from 'fs';
+import path from 'path';
 import { v4 } from 'uuid';
 
 import { searchResultLimit } from '../constants/iPlayarrConstants';
@@ -5,7 +9,7 @@ import { MediaMode } from '../types/enums/MediaMode';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
-import { QueueEntry } from '../types/QueueEntry';
+import { ArrStrmTarget, QueueEntry } from '../types/QueueEntry';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
 import {
     SECURE_MAX_DAYS,
@@ -19,8 +23,11 @@ import {
 import { VersionProfile } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
 import { expiresWithin, expiryOf } from '../utils/availability';
-import { createNZBName, getQualityProfile } from '../utils/Utils';
+import { mapPath } from '../utils/pathMap';
+import { createNZBName, getQualityProfile, parseStrmPid } from '../utils/Utils';
 import { applyVersionToRelease, parseExtraVersions } from '../utils/videoVersion';
+import appService from './appService';
+import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
 import historyService from './historyService';
 import iplayerDetailsService from './iplayerDetailsService';
@@ -140,7 +147,7 @@ class SubscriptionService {
             ...(options.arrOnly ? { arrOnly: true } : {}),
             ...(options.arr ? { arr: options.arr } : {}),
             ...(versions.length ? { versions, seenVersions: this.#baseline(versions, episodes) } : {}),
-            ...(!options.arrOnly && this.#validSecureDays(options.secureDays) ? { secureDays: options.secureDays } : {}),
+            ...(this.#validSecureDays(options.secureDays) ?{ secureDays: options.secureDays } : {}),
         };
         const others = (await this.list()).filter((s) => s.id !== existing?.id);
         await storage.setItem(STORAGE_KEY, [...others, subscription]);
@@ -256,7 +263,7 @@ class SubscriptionService {
 
     // Queues one episode (the plain version, or an audio described / signed one) through the same path as a
     // search-result download, so naming and the library folder/nfo treatment match.
-    async #queueEpisode(pid: string, version?: VersionProfile, replaceStrm: boolean = false): Promise<string> {
+    async #queueEpisode(pid: string, version?: VersionProfile, replaceStrm: boolean = false, arrStrm?: ArrStrmTarget): Promise<string> {
         const [details] = await iplayerDetailsService.details([pid]);
         if (!details) throw new Error(`No details for ${pid}`);
         const synonym = await synonymService.getSynonym(details.title);
@@ -279,7 +286,11 @@ class SubscriptionService {
         };
         if (replaceStrm) {
             // Securing an episode before it leaves iPlayer: a real file whatever Media Mode says, standing in for its .strm link.
-            queueService.addToQueue(pid, nzbName, details.type, undefined, library, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true);
+            if (arrStrm) {
+                queueService.addToQueue(pid, nzbName, details.type, undefined, library, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true, arrStrm);
+            } else {
+                queueService.addToQueue(pid, nzbName, details.type, undefined, library, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true);
+            }
         } else {
             queueService.addToQueue(pid, nzbName, details.type, undefined, library);
         }
@@ -354,6 +365,54 @@ class SubscriptionService {
         return marked;
     }
 
+    // The same for a show held in Sonarr/Radarr, where the .strm links are in the app's library and not in iPlayarr's history:
+    // the app is asked for the show's files, each .strm names its episode, and a real file is saved beside the link (which
+    // Sonarr/Radarr is then asked to rescan). Only the plain episode - an extra version has no link of its own to read.
+    async #secureArrStrms(subscription: Subscription, episodes: IPlayerEpisodeMetadata[], result: SubscriptionCheckResult): Promise<string[]> {
+        const days = subscription.secureDays;
+        const link = subscription.arr;
+        if (!days || !link) return [];
+        const app = await appService.getApp(link.appId);
+        if (!app || !arrLibraryService.supports(app)) return [];
+
+        const pathMap = (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP)) as string | undefined;
+        const secured = new Set(subscription.secured ?? []);
+        const byPid = new Map(episodes.map((episode) => [episode.id, episode]));
+        const queued = queueService.getQueue();
+        const marked: string[] = [];
+
+        for (const file of await arrLibraryService.getFilesFor(app, link.arrId)) {
+            if (!file.path.toLowerCase().endsWith('.strm')) continue;
+            const strmPath = mapPath(file.path, pathMap);
+            let pid: string | undefined;
+            try {
+                pid = parseStrmPid(fs.readFileSync(strmPath, 'utf8'));
+            } catch {
+                continue; // Not readable from here (a missing path mapping, say); the next check tries again.
+            }
+            const episode = pid ? byPid.get(pid) : undefined;
+            if (!pid || !episode || secured.has(pid)) continue;
+            const end = expiryOf(episode, 'original') ?? expiryOf(episode);
+            if (!expiresWithin(end, days)) continue;
+
+            const { dir, name } = path.parse(strmPath);
+            const real = queued.some((entry) => entry.pid === pid && entry.mediaMode === MediaMode.DOWNLOAD && !entry.library?.version) ||
+                ['mp4', 'mkv'].some((extension) => fs.existsSync(path.join(dir, `${name}.${extension}`)));
+            if (real) {
+                marked.push(pid);
+                continue;
+            }
+            try {
+                await this.#queueEpisode(pid, undefined, true, { path: strmPath, appId: app.id, arrId: link.arrId });
+                result.queued.push(pid);
+                marked.push(pid);
+            } catch (error) {
+                loggingService.error(`Subscription "${subscription.title}": could not secure ${pid} before it expires: ${error}`);
+            }
+        }
+        return marked;
+    }
+
     // Looks for each chosen version of recent episodes. One that BBC has not published yet stays unmarked
     // and is asked about again next check, until the episode is older than the window.
     async #checkVersions(
@@ -388,7 +447,9 @@ class SubscriptionService {
 
     async check(subscription: Subscription): Promise<SubscriptionCheckResult> {
         const result: SubscriptionCheckResult = { id: subscription.id, title: subscription.title, queued: [] };
-        if (subscription.arrOnly || this.#inFlight.has(subscription.id)) return result;
+        // A show only held in Sonarr/Radarr is never queued for; it is checked only to secure its .strm links before they expire.
+        const arrSecure = !!(subscription.arrOnly && subscription.secureDays && subscription.arr);
+        if ((subscription.arrOnly && !arrSecure) || this.#inFlight.has(subscription.id)) return result;
         this.#inFlight.add(subscription.id);
         try {
             this.#progress(subscription.id, 'listing');
@@ -396,7 +457,7 @@ class SubscriptionService {
             // Empty means the lookup failed (or the show has nothing available) - nothing to do.
             const seen = new Set(subscription.seen);
             // Oldest first, so a big first run reaches the queue (and your library) in broadcast order.
-            const fresh = episodes
+            const fresh = (subscription.arrOnly ? [] : episodes)
                 .filter(({ id }) => !seen.has(id))
                 .sort((a, b) => Date.parse(a.release_date_time as string) - Date.parse(b.release_date_time as string));
             const handled: string[] = [];
@@ -417,7 +478,9 @@ class SubscriptionService {
             }
             if (subscription.versions?.length) this.#progress(subscription.id, 'versions');
             const doneVersions = await this.#checkVersions(subscription, episodes, result);
-            const nowSecured = await this.#secureExpiring(subscription, episodes, result);
+            const nowSecured = arrSecure
+                ? await this.#secureArrStrms(subscription, episodes, result)
+                : await this.#secureExpiring(subscription, episodes, result);
             const now = new Date().toISOString();
             await this.#update(subscription.id, (s) => ({
                 ...s,

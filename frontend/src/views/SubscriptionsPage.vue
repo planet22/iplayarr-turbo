@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="inner-content">
         <PageHeader title="Subscriptions" icon="bell" />
@@ -70,8 +72,20 @@
                     <button class="clickable stateToggle on" title="Sonarr/Radarr only (click to stop tracking)" aria-label="Stop tracking" aria-pressed="true" @click="remove(subscription)">
                         <font-awesome-icon :icon="['fas', 'right-left']" />
                     </button>
-                    <!-- Gaps where the buttons don't apply, so the icon lines up with the other cards. -->
-                    <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <!-- Gaps where the buttons don't apply, so the icons line up with the other cards. -->
+                    <span v-for="n in subscriptionVersions.length" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <button
+                        :class="['clickable', 'stateToggle', subscription.secureDays ? 'on' : '']"
+                        :title="secureTitle(subscription)" :aria-label="secureTitle(subscription)" :aria-pressed="!!subscription.secureDays"
+                        :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'box-archive']" />
+                    </button>
+                    <button v-if="subscription.secureDays" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
+                        <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
+                    </button>
+                    <span v-else class="actionGap" aria-hidden="true"></span>
+                    <span class="actionGap" aria-hidden="true"></span>
                 </div>
                 <div v-else class="rowActions">
                     <button
@@ -164,7 +178,23 @@
                     >
                         <font-awesome-icon :icon="['fas', 'right-left']" />
                     </button>
-                    <template v-if="!subscription.arrOnly">
+                    <template v-if="subscription.arrOnly">
+                        <!-- Gaps where the buttons don't apply, so the Sonarr/Radarr icon lines up with the other rows. -->
+                        <span v-for="n in subscriptionVersions.length" :key="n" class="actionGap" aria-hidden="true"></span>
+                        <button
+                            :class="['clickable', 'stateToggle', subscription.secureDays ? 'on' : '']"
+                            :title="secureTitle(subscription)" :aria-label="secureTitle(subscription)" :aria-pressed="!!subscription.secureDays"
+                            :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
+                        >
+                            <font-awesome-icon :icon="['fas', 'box-archive']" />
+                        </button>
+                        <button v-if="subscription.secureDays" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
+                            <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
+                        </button>
+                        <span v-else class="actionGap" aria-hidden="true"></span>
+                        <span class="actionGap" aria-hidden="true"></span>
+                    </template>
+                    <template v-else>
                         <button
                             v-for="version in subscriptionVersions" :key="version.id"
                             :class="['clickable', 'stateToggle', subscription.versions?.includes(version.id) ? 'on' : '']"
@@ -187,10 +217,6 @@
                         <button class="clickable" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
                             <font-awesome-icon :icon="['fas', 'bell-slash']" />
                         </button>
-                    </template>
-                    <!-- Gaps where the buttons don't apply, so the Sonarr/Radarr icon lines up with the other rows. -->
-                    <template v-else>
-                        <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
                     </template>
                 </div>
             </div>

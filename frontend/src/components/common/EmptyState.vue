@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="emptyStateBlock">
         <font-awesome-icon v-if="icon" class="emptyStateIcon" :icon="['fas', icon]" />

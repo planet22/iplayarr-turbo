@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // BBC's mediaselector is queried once per (mediaset, mediaselector version) pair until one answers
 // with usable connections - the order matters only in that earlier pairs are tried first. Which pair
 // answers is stable for a given kind of content (e.g. a live channel is served by one pair every
