@@ -50,6 +50,21 @@ describe('historyService', () => {
         expect(result).toEqual([]);
     });
 
+    it('tells the listeners of a completed download, not of a failed one, and survives one that throws', async () => {
+        const told = jest.fn();
+        historyService.onComplete(() => {
+            throw new Error('listener broke');
+        });
+        historyService.onComplete(told);
+
+        await historyService.addHistory(sampleEntry, QueueEntryStatus.FAILED);
+        expect(told).not.toHaveBeenCalled();
+        await historyService.addHistory(sampleEntry);
+
+        expect(told).toHaveBeenCalledWith(expect.objectContaining({ pid: '123', status: QueueEntryStatus.COMPLETE }));
+        historyService.completeListeners.length = 0;
+    });
+
     it('addHistory stores a completed item', async () => {
         await historyService.addHistory(sampleEntry);
         expect(mockSetItem).toHaveBeenCalledWith(

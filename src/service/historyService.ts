@@ -22,6 +22,13 @@ const historyService = {
         return (await storage.getItem('history')) ?? [];
     },
 
+    // Told whenever a download completes, so what depends on the files on disk can look again.
+    completeListeners: [] as ((item: QueueEntry) => void)[],
+
+    onComplete: (listener: (item: QueueEntry) => void): void => {
+        historyService.completeListeners.push(listener);
+    },
+
     addHistory: async (item: QueueEntry, status: QueueEntryStatus = QueueEntryStatus.COMPLETE): Promise<void> => {
         const historyItem: QueueEntry = {
             ...item,
@@ -40,6 +47,15 @@ const historyService = {
         history.push(historyItem);
         await storage.setItem('history', history);
         socketService.emit('history', history);
+        if (status === QueueEntryStatus.COMPLETE) {
+            for (const listener of historyService.completeListeners) {
+                try {
+                    listener(historyItem);
+                } catch {
+                    // A listener failing must not fail the download.
+                }
+            }
+        }
     },
 
     addRelay: async (item: QueueEntry): Promise<void> => {

@@ -9,6 +9,8 @@ import collectionDownloadService from '../../service/collectionDownloadService';
 import collectionService from '../../service/collectionService';
 import configService from '../../service/configService';
 import liveChannelService from '../../service/liveChannelService';
+import subscriptionDiskService from '../../service/subscriptionDiskService';
+import subscriptionService from '../../service/subscriptionService';
 import { MediaMode } from '../../types/enums/MediaMode';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
@@ -286,6 +288,19 @@ router.get(
         const pid = req.params.pid as string;
         if (!PID_REGEX.test(pid)) return invalid(res, 'Invalid pid');
         res.json(await browseService.skipMarkers(pid));
+    })
+);
+
+// The episodes of a show that are on disk, for the icon on the programme page. Read from the show's folders once and
+// kept until a check, a finished download or an images update looks again.
+router.get(
+    '/programme/:pid/on-disk',
+    handle(async (req, res) => {
+        const pid = req.params.pid as string;
+        if (!PID_REGEX.test(pid)) return invalid(res, 'Invalid pid');
+        const { pid: brandPid, title } = await browseService.programme(pid);
+        const subscription = (await subscriptionService.list()).find((s) => s.pid === brandPid);
+        res.json((await subscriptionDiskService.forShow(title, subscription?.seen)).pids);
     })
 );
 

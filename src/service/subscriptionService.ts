@@ -35,6 +35,7 @@ import loggingService from './loggingService';
 import queueService from './queueService';
 import socketService from './socketService';
 import { versionTypesFor } from './stream/versionVpid';
+import subscriptionDiskService from './subscriptionDiskService';
 import synonymService from './synonymService';
 import videoEventService from './videoEventService';
 
@@ -504,6 +505,8 @@ class SubscriptionService {
                 lastError: undefined,
                 ...(result.queued.length ? { lastQueuedCount: result.queued.length, lastQueuedAt: now } : {}),
             }));
+            // Each check reads the show's folders again, so the count on disk follows what changed since the last one.
+            if (!subscription.arrOnly) await subscriptionDiskService.refresh(subscription.title, [...subscription.seen, ...handled]).catch(() => undefined);
         } catch (error: any) {
             result.error = error?.message ?? 'Check failed';
             await this.#update(subscription.id, (s) => ({

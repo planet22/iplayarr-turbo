@@ -12,6 +12,7 @@ import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
 import socketService from '../../src/service/socketService';
 import { versionTypesFor } from '../../src/service/stream/versionVpid';
+import subscriptionDiskService from '../../src/service/subscriptionDiskService';
 import subscriptionService, { SubscriptionError } from '../../src/service/subscriptionService';
 import synonymService from '../../src/service/synonymService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
@@ -37,6 +38,7 @@ jest.mock('../../src/service/synonymService');
 jest.mock('../../src/service/stream/versionVpid');
 jest.mock('../../src/service/videoEventService');
 jest.mock('../../src/service/loggingService');
+jest.mock('../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { refresh: jest.fn().mockResolvedValue({ count: 0, pids: [] }) } }));
 jest.mock('../../src/service/socketService', () => ({ __esModule: true, default: { emit: jest.fn() } }));
 jest.mock('../../src/utils/Utils', () => ({
     ...jest.requireActual('../../src/utils/Utils'),
@@ -188,6 +190,19 @@ describe('subscriptionService', () => {
             // A second pass finds nothing new and queues nothing more.
             expect((await subscriptionService.check(saved)).queued).toEqual([]);
             expect(queue.addToQueue).toHaveBeenCalledTimes(1);
+        });
+
+        it('reads the show\'s folders again after a check, and survives that failing', async () => {
+            const sub = await subscribed();
+            details.getSeriesEpisodes.mockResolvedValue([ep('e1'), ep('e2'), ep('e3')] as any);
+            const refresh = jest.mocked(subscriptionDiskService.refresh);
+            refresh.mockClear();
+
+            await subscriptionService.check(sub);
+            expect(refresh).toHaveBeenCalledWith('The Show', expect.arrayContaining(['e3']));
+
+            refresh.mockRejectedValueOnce(new Error('unreadable'));
+            expect((await subscriptionService.check((await subscriptionService.list())[0])).error).toBeUndefined();
         });
 
         it('reports progress over the socket, ending with done', async () => {

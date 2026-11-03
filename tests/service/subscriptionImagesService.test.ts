@@ -9,6 +9,7 @@ import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
 import socketService from '../../src/service/socketService';
+import subscriptionDiskService from '../../src/service/subscriptionDiskService';
 import subscriptionImagesService, { ImagesDisabledError } from '../../src/service/subscriptionImagesService';
 import subscriptionService from '../../src/service/subscriptionService';
 import { AppType } from '../../src/types/AppType';
@@ -21,6 +22,7 @@ jest.mock('../../src/service/arr/ArrLibraryService', () => ({ __esModule: true, 
 jest.mock('../../src/service/configService', () => ({ __esModule: true, default: { getParameter: jest.fn() } }));
 jest.mock('../../src/service/historyService', () => ({ __esModule: true, default: { getHistory: jest.fn() } }));
 jest.mock('../../src/service/socketService', () => ({ __esModule: true, default: { emit: jest.fn() } }));
+jest.mock('../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { refresh: jest.fn() } }));
 jest.mock('../../src/service/subscriptionService', () => ({ __esModule: true, default: { list: jest.fn() } }));
 
 const images = jest.mocked(additionalImagesService);
@@ -40,6 +42,7 @@ describe('subscriptionImagesService', () => {
 
     beforeEach(() => {
         jest.resetAllMocks();
+        jest.mocked(subscriptionDiskService.refresh).mockResolvedValue({ count: 0, pids: [] });
         Object.keys(settings).forEach((key) => delete settings[key]);
         Object.assign(settings, { COMPLETE_DIR: '/complete', ARR_COMPLETE_DIR: '/arrcomplete' });
         jest.mocked(configService.getParameter).mockImplementation(async (key: any) => settings[key]);
@@ -263,6 +266,24 @@ describe('subscriptionImagesService', () => {
 
             expect(images.writeEpisodeThumb).toHaveBeenCalledTimes(20);
             expect(result).toEqual({ written: 19 + 3, episodes: 19, shows: 1 });
+        });
+    });
+
+    describe('the count on disk', () => {
+        it('is read again once an update is done, for a show iPlayarr downloads but not a Sonarr/Radarr-only one', async () => {
+            await subscriptionImagesService.update('sub1');
+            expect(subscriptionDiskService.refresh).toHaveBeenCalledWith('The Show', ['m001seen', 'm002seen']);
+
+            jest.mocked(subscriptionDiskService.refresh).mockClear();
+            jest.mocked(subscriptionService.list).mockResolvedValue([subscription({ arrOnly: true, arr: { appId: 'app1', arrId: 7, title: 'The Show', addedByUs: false } })]);
+            await subscriptionImagesService.update('sub1');
+            expect(subscriptionDiskService.refresh).not.toHaveBeenCalled();
+        });
+
+        it('does not stop the update if reading it fails', async () => {
+            jest.mocked(subscriptionDiskService.refresh).mockRejectedValue(new Error('unreadable'));
+
+            await expect(subscriptionImagesService.update('sub1')).resolves.toBeDefined();
         });
     });
 

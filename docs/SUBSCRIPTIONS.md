@@ -31,7 +31,7 @@ The subscribe dialog also offers **Sonarr/Radarr only**: the show is recorded bu
 
 ### Versions
 
-On each show's picture, the top-right number is episodes on disk over total (for a Sonarr/Radarr-only show, what the app holds over the aired ones it wants). The bottom-left number is how many episodes the last download queued.
+On each show's picture, the top-right number is episodes on disk over total (for a Sonarr/Radarr-only show, what the app holds over the aired ones it wants). The bottom-left number is how many episodes the last download queued. It is left off a show's first download, which is only the whole backlog. On a programme page, an episode that is on disk has a drive icon at the top left of its picture. What is on disk is read from the show's folders once and kept (Maintenance → Episodes on disk) until a check, a finished download or the images button reads them again.
 
 If audio described / signed badges are on (Settings → Appearance), the subscribe dialog can also ask which versions to follow, and the Subscriptions page has **AD** and **Signed** toggles per show. A subscription can then also download the audio described and/or signed version of each new episode, named and tagged like the standard release.
 

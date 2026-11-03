@@ -16,6 +16,7 @@ import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
 import historyService from './historyService';
 import socketService from './socketService';
+import subscriptionDiskService from './subscriptionDiskService';
 import subscriptionService from './subscriptionService';
 
 export class ImagesDisabledError extends Error {}
@@ -79,6 +80,7 @@ class SubscriptionImagesService {
             }
             return result;
         } finally {
+            if (!subscription.arrOnly) await subscriptionDiskService.refresh(subscription.title, subscription.seen).catch(() => undefined);
             this.#progress(id, 'done');
         }
     }

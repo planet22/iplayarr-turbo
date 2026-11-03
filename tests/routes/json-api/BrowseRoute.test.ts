@@ -9,11 +9,15 @@ import collectionDownloadService from '../../../src/service/collectionDownloadSe
 import collectionService from '../../../src/service/collectionService';
 import configService from '../../../src/service/configService';
 import liveChannelService from '../../../src/service/liveChannelService';
+import subscriptionDiskService from '../../../src/service/subscriptionDiskService';
+import subscriptionService from '../../../src/service/subscriptionService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 
 jest.mock('../../../src/service/browseService');
 jest.mock('../../../src/service/collectionDownloadService');
 jest.mock('../../../src/service/collectionService');
+jest.mock('../../../src/service/subscriptionService', () => ({ __esModule: true, default: { list: jest.fn() } }));
+jest.mock('../../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { forShow: jest.fn() } }));
 const mocked = jest.mocked(browseService);
 
 const app = express();
@@ -22,6 +26,31 @@ app.use('/', router);
 
 describe('BrowseRoute', () => {
     beforeEach(() => jest.resetAllMocks());
+
+    describe('GET /programme/:pid/on-disk', () => {
+        it('lists the episodes on disk', async () => {
+            mocked.programme.mockResolvedValue({ pid: 'b006xnzc', title: 'The Show' } as any);
+            jest.mocked(subscriptionService.list).mockResolvedValue([{ pid: 'b00other', seen: [] } as any]);
+            jest.mocked(subscriptionDiskService.forShow).mockResolvedValue({ count: 2, pids: ['m001seen', 'm002seen'] });
+
+            const res = await request(app).get('/programme/m009epis/on-disk');
+
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual(['m001seen', 'm002seen']);
+            expect(mocked.programme).toHaveBeenCalledWith('m009epis');
+            expect(subscriptionDiskService.forShow).toHaveBeenCalledWith('The Show', undefined);
+        });
+
+        it('passes the seen list on for a subscribed show, and refuses a pid that is not one', async () => {
+            mocked.programme.mockResolvedValue({ pid: 'b006xnzc', title: 'The Show' } as any);
+            jest.mocked(subscriptionService.list).mockResolvedValue([{ pid: 'b006xnzc', seen: ['m001seen'] } as any]);
+            jest.mocked(subscriptionDiskService.forShow).mockResolvedValue({ count: 0, pids: [] });
+
+            await request(app).get('/programme/b006xnzc/on-disk').expect(200);
+            expect(subscriptionDiskService.forShow).toHaveBeenCalledWith('The Show', ['m001seen']);
+            await request(app).get('/programme/bad!/on-disk').expect(400);
+        });
+    });
 
     it('GET /home returns rails', async () => {
         mocked.home.mockResolvedValue([{ id: 'x', title: 'X', items: [] }]);

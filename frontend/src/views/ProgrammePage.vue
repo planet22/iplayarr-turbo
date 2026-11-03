@@ -187,6 +187,9 @@
                                 </button>
                             </div>
                             <QualityBadges :item="episode" class="thumbBadges" />
+                            <span v-if="onDisk.has(episode.pid)" class="onDiskBadge" title="On disk" role="img" aria-label="On disk">
+                                <font-awesome-icon :icon="['fas', 'hard-drive']" />
+                            </span>
                         </div>
                         <div class="episodeInfo">
                             <div class="episodeTitle">
@@ -252,6 +255,16 @@ const loading = ref(true);
 const error = ref(null);
 const selected = ref(0);
 const downloadingSeason = ref(false);
+// The episodes of this show that are in the library folders, for the icon in the picture's top left corner.
+const onDisk = ref(new Set());
+const loadOnDisk = async (pid) => {
+    try {
+        const pids = await browseFetch(`programme/${encodeURIComponent(pid)}/on-disk`);
+        if (route.params.pid === pid) onDisk.value = new Set(pids);
+    } catch {
+        // No icons if the folders cannot be read; the page is the same without them.
+    }
+};
 
 const { canPlay, play, download } = useBrowseActions();
 const globalSettings = inject('globalSettings', ref({}));
@@ -575,6 +588,7 @@ watch(
         clearHighlight();
         focusFollow = false;
         focusPending = route.query.episode || pid;
+        onDisk.value = new Set();
         try {
             const first = await browseFetch(`programme/${encodeURIComponent(pid)}`);
             if (route.params.pid !== pid) return;
@@ -585,6 +599,7 @@ watch(
             selected.value = latest;
             focusEpisode();
             loading.value = false;
+            void loadOnDisk(pid);
             await loadRemainingPages(pid, first);
         } catch (e) {
             if (route.params.pid === pid) error.value = e.message;
@@ -1116,6 +1131,19 @@ const duplicatesBannerDownload = computed(
                 margin-right: 12px;
             }
         }
+    }
+
+    // Fixed dark chip like the Subscriptions page's counts, as it sits on artwork.
+    .onDiskBadge {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        padding: 2px 6px;
+        border-radius: 10px;
+        background-color: rgba(0, 0, 0, 0.75);
+        color: #fff;
+        font-size: 12px;
+        line-height: 1.4;
     }
 
     // Same look as a programme card: bottom right, the subtitles icon in the corner; the buttons show on hover.
