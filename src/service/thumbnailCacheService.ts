@@ -110,6 +110,21 @@ class ThumbnailCacheService {
         }
     }
 
+    // A picture as bytes, at the first of `sizes` the BBC has (not every image exists at every size). `url` carries
+    // "{recipe}" where the size goes. Nothing is cached; undefined when no size works or the BBC fails.
+    async fetchRecipe(url: string, sizes: string[]): Promise<Buffer | undefined> {
+        for (const size of sizes) {
+            try {
+                const response = await axios.get(url.replace('{recipe}', size), { responseType: 'arraybuffer' });
+                return Buffer.from(response.data);
+            } catch (error) {
+                // Only a missing size is worth a smaller retry; anything else won't improve.
+                if (!(axios.isAxiosError(error) && error.response?.status === 404)) return undefined;
+            }
+        }
+        return undefined;
+    }
+
     // How many thumbnails are on disk and how much space they take.
     async stats(): Promise<{ count: number; sizeBytes: number; hits: number; misses: number }> {
         let count = 0;

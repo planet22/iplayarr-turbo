@@ -4,6 +4,7 @@ import path from 'path';
 
 import { progressRegex, timestampFile } from '../constants/iPlayarrConstants';
 import activeJobs from '../service/activeJobs';
+import additionalImagesService from '../service/additionalImagesService';
 import appService from '../service/appService';
 import arrLibraryService from '../service/arr/ArrLibraryService';
 import configService from '../service/configService';
@@ -17,7 +18,6 @@ import iplayerDetailsService from '../service/iplayerDetailsService';
 import loggingService from '../service/loggingService';
 import queueService from '../service/queueService';
 import socketService from '../service/socketService';
-import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
 import { DownloadDetails } from '../types/DownloadDetails';
 import { DownloadClient } from '../types/enums/DownloadClient';
@@ -296,7 +296,7 @@ class DownloadFacade {
 
         const nfoContent = item.type === VideoType.MOVIE ? buildMovieNfo(item) : buildEpisodeNfo(item);
         fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.nfo`), nfoContent, 'utf8');
-        await this.#writeEpisodeThumb(item, libraryPath, baseName);
+        await this.#writeAdditionalImages(item, libraryPath, baseName);
         // Only needed for the .nfo; not worth carrying into the history record.
         if (item.library) delete item.library.cast;
 
@@ -338,18 +338,23 @@ class DownloadFacade {
         }
     }
 
-    // Jellyfin's episode picture: "<file name>-thumb.jpg" beside the video, from the episode's own BBC image (the one
-    // iPlayer shows, already in the thumbnail cache). Never replaces a picture that is already there.
-    async #writeEpisodeThumb(item: QueueEntry, libraryPath: LibraryFilePath, baseName: string): Promise<void> {
-        if (item.type !== VideoType.TV || (await configService.getParameter(IplayarrParameter.WRITE_EPISODE_THUMBS)) !== 'true') return;
+    // The extra pictures Jellyfin reads (Use Additional Images): a TV episode's own picture beside it, and the show's or
+    // film's poster, backdrop, landscape picture and logo in its folder (suffixed to the file's name for a film with no
+    // folder of its own). A TV episode with no show folder gets only its own picture.
+    async #writeAdditionalImages(item: QueueEntry, libraryPath: LibraryFilePath, baseName: string): Promise<void> {
         try {
-            const target = path.join(libraryPath.directory, `${baseName}-thumb.jpg`);
-            if (fs.existsSync(target)) return;
-            const imagePid = (await iplayerDetailsService.getMetadata(item.pid)).programme?.image?.pid;
-            const cached = imagePid ? await thumbnailCacheService.getOrFetch(imagePid) : undefined;
-            if (cached) copyWithFallback(cached, target);
+            const mode = await additionalImagesService.mode();
+            if (mode === 'none') return;
+            if (item.type === VideoType.TV) {
+                await additionalImagesService.writeEpisodeThumb(path.join(libraryPath.directory, baseName), item.pid, mode);
+            }
+            if (libraryPath.showDirectory) {
+                await additionalImagesService.writeShowImages({ directory: libraryPath.showDirectory, pid: item.pid, standalone: true }, mode);
+            } else if (item.type === VideoType.MOVIE) {
+                await additionalImagesService.writeShowImages({ directory: libraryPath.directory, pid: item.pid, standalone: false, base: baseName }, mode);
+            }
         } catch (err) {
-            loggingService.error(`Could not save the episode picture for ${item.pid}: ${err}`);
+            loggingService.error(`Could not save the extra pictures for ${item.pid}: ${err}`);
         }
     }
 

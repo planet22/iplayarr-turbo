@@ -33,6 +33,28 @@ export function parseIblEpisodeExtras(episode: any): IblEpisodeExtras {
     return { ...(editorialSubtitle ? { editorialSubtitle } : {}), ...(durationSeconds ? { durationSeconds } : {}) };
 }
 
+// Addresses (each with "{recipe}" where a size goes) of the pictures iPlayer lists for an episode, and the show's
+// transparent logo from its brand entry. Only the ones that exist are present.
+export interface IblArtwork {
+    portrait?: string;
+    promotional?: string;
+    // The wide picture with the show's title in it.
+    landscape?: string;
+    logo?: string;
+}
+
+const sized = (value: unknown): string | undefined => (typeof value === 'string' && value.includes('{recipe}') ? value : undefined);
+
+export function parseIblArtwork(episode: any, brand?: any): IblArtwork {
+    const found: IblArtwork = {
+        portrait: sized(episode?.images?.portrait),
+        promotional: sized(episode?.images?.promotional),
+        landscape: sized(episode?.images?.promotional_with_logo),
+        logo: sized(brand?.images?.logo) ?? sized(episode?.images?.logo),
+    };
+    return Object.fromEntries(Object.entries(found).filter(([, url]) => url)) as IblArtwork;
+}
+
 // A title that says nothing beyond the number: "Episode 8", "Part 3", or none at all.
 export function isGenericEpisodeTitle(title?: string): boolean {
     return !title?.trim() || /^(episode|part|programme)\s+\d+$/i.test(title.trim());

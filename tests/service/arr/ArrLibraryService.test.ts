@@ -204,6 +204,31 @@ describe('ArrLibraryService', () => {
         });
     });
 
+    describe('getEntryPath', () => {
+        it('reads the folder of one Sonarr series or Radarr movie', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { id: 7, path: '/tv/The Show' } });
+
+            expect(await arrLibraryService.getEntryPath(sonarr, 7)).toBe('/tv/The Show');
+            expect(mockedAxios.get.mock.calls[0][0]).toBe('http://sonarr/api/v3/series/7');
+
+            expect(await arrLibraryService.getEntryPath(radarr, 3)).toBe('/tv/The Show');
+            expect(mockedAxios.get.mock.calls[1][0]).toBe('http://radarr/api/v3/movie/3');
+        });
+
+        it('is undefined when the app gives no path', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { id: 7 } });
+            expect(await arrLibraryService.getEntryPath(sonarr, 7)).toBeUndefined();
+
+            mockedAxios.get.mockResolvedValueOnce({ data: { id: 7, path: '' } });
+            expect(await arrLibraryService.getEntryPath(sonarr, 7)).toBeUndefined();
+        });
+
+        it('turns a failure into an error', async () => {
+            mockedAxios.get.mockRejectedValue({ isAxiosError: true, message: 'boom', response: { status: 500 } });
+            await expect(arrLibraryService.getEntryPath(sonarr, 7)).rejects.toThrow('boom');
+        });
+    });
+
     describe('rescan', () => {
         it('asks Sonarr to rescan the series and Radarr the movie', async () => {
             mockedAxios.post.mockResolvedValue({});

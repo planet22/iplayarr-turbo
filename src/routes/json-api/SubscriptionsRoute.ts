@@ -3,6 +3,7 @@
 import { Request, Response, Router } from 'express';
 
 import iplayerDetailsService from '../../service/iplayerDetailsService';
+import subscriptionImagesService, { ImagesDisabledError } from '../../service/subscriptionImagesService';
 import subscriptionService, { SubscriptionError } from '../../service/subscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
@@ -62,6 +63,18 @@ router.post('/:id/check', async (req: Request, res: Response) => {
         return;
     }
     res.json(result);
+});
+
+// Fills in the Jellyfin pictures for the show's files already in the library (what Use Additional Images writes for a download).
+router.post('/:id/images', async (req: Request, res: Response) => {
+    try {
+        const result = await subscriptionImagesService.update(req.params.id as string);
+        if (result) res.json(result);
+        else res.status(404).json({ error: ApiError.INVALID_INPUT, message: 'Subscription not found' } as ApiResponse);
+    } catch (error: any) {
+        if (!(error instanceof ImagesDisabledError)) throw error;
+        res.status(409).json({ error: ApiError.INVALID_INPUT, message: error.message } as ApiResponse);
+    }
 });
 
 router.put('/:id/versions', async (req: Request, res: Response) => {

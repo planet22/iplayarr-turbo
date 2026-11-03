@@ -139,7 +139,21 @@ describe('ConfigFormValidator expiry, guidance, cast and strm-replacement settin
         });
     });
 
-    describe.each([['WRITE_NFO_CAST'], ['WRITE_NFO_EPISODE_TITLES'], ['WRITE_NFO_RUNTIME_FALLBACK'], ['WRITE_EPISODE_THUMBS'], ['UI_EXPIRY_BADGES'], ['UI_GUIDANCE_BADGES']])('%s', (key) => {
+    describe('WRITE_ADDITIONAL_IMAGES', () => {
+        it.each([['none'], ['missing'], ['overwrite'], ['']])('accepts %j', async (value) => {
+            expect((await validator.validate({ ...validInput(), WRITE_ADDITIONAL_IMAGES: value })).WRITE_ADDITIONAL_IMAGES).toBeUndefined();
+        });
+
+        it.each([['true'], ['false'], ['Overwrite'], ['all']])('rejects %j', async (value) => {
+            expect((await validator.validate({ ...validInput(), WRITE_ADDITIONAL_IMAGES: value })).WRITE_ADDITIONAL_IMAGES).toBe('Must be one of: none, missing, overwrite');
+        });
+
+        it('may be left out of the request', async () => {
+            expect((await validator.validate(validInput())).WRITE_ADDITIONAL_IMAGES).toBeUndefined();
+        });
+    });
+
+    describe.each([['WRITE_NFO_CAST'], ['WRITE_NFO_EPISODE_TITLES'], ['WRITE_NFO_RUNTIME_FALLBACK'], ['UI_EXPIRY_BADGES'], ['UI_GUIDANCE_BADGES']])('%s', (key) => {
         it.each([['true'], ['false']])('accepts %j', async (value) => {
             expect((await validator.validate({ ...validInput(), [key]: value }))[key]).toBeUndefined();
         });

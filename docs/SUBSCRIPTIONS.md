@@ -87,6 +87,7 @@ Each Sonarr/Radarr-only show keeps its **episode counts** (have of total, and ho
 
 Lists every subscription with its artwork, channel, when it was last checked, and when and how many episodes were last downloaded. A red **Last check failed** tag means the last check hit an error (hover it for the message); the next scheduled check tries again.
 
+- **Images** (per show) fills in the Jellyfin pictures for episodes already downloaded, as [Use Additional Images](LIBRARY_ORGANIZATION.md#additional-images-optional) does for new ones. It follows that setting (off does nothing; `missing` keeps existing files; `overwrite` replaces them). For a Sonarr/Radarr-only show it reads the app's files, so it needs the Watchdog Path Mapping where the app's paths differ. A show with many episodes takes a while.
 - **Check now** (per show) and **Check all now** run the same check as the schedule, and report how many episodes were queued. While a check runs, a progress ring appears over each show's thumbnail (waiting, listing, queueing n of total, versions, done), held for at least a second so it can be seen.
 - **Sort** by Added, A-Z, Downloaded or Checked (A-Z ignores a leading *The*, *A* or *An*) and **filter** by All, iPlayarr or an individual app.
 - **Unsubscribe** (trash) stops the subscription. Episodes already downloaded are not touched.
@@ -140,6 +141,7 @@ Subscriptions live in the database under the `subscriptions` key (see [DATABASE.
 | `POST /:id/check` | Check one subscription now |
 | `PUT /:id/versions` | Set which extra versions (`audio-described`, `signed`) to download for new episodes |
 | `PUT /:id/secure` with `{ "days": 7 }` (whole number 1-60) or `{ "days": null }` | Download real copies of the show's `.strm` links that many days before they leave iPlayer, or switch it off. `POST /` also accepts `secureDays`. |
+| `POST /:id/images` | Save the show's missing Jellyfin images; answers `{ written, episodes, shows }`, or 409 while Use Additional Images is off |
 | `DELETE /:id` | Unsubscribe |
 
 Further endpoints:

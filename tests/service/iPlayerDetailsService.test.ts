@@ -123,6 +123,59 @@ describe('iplayerDetailsService', () => {
         expect(result).not.toHaveProperty('guidance');
     });
 
+    describe('getIblArtwork', () => {
+        afterEach(() => mockedAxios.get.mockReset());
+        const url = (name: string) => `https://ichef.bbci.co.uk/images/ic/{recipe}/${name}`;
+        const episodeBody = { data: { episodes: [{ tleo_id: 'b00show1', images: { portrait: url('p.jpg'), standard: url('s.jpg') } }] } };
+
+        it('reads the episode\'s pictures and the show\'s logo, and serves a repeat from the cache', async () => {
+            const pid = 'm00art001';
+            mockedAxios.get.mockImplementation(async (address: string) => {
+                if (address.includes('/episodes/')) return episodeBody;
+                return { data: { programmes: [{ images: { logo: url('logo.png') } }] } };
+            });
+
+            expect(await iplayerDetailsService.getIblArtwork(pid)).toEqual({ portrait: url('p.jpg'), logo: url('logo.png') });
+            expect(mockedAxios.get).toHaveBeenCalledWith(`https://ibl.api.bbc.co.uk/ibl/v1/episodes/${pid}?rights=web`);
+            expect(mockedAxios.get).toHaveBeenCalledWith('https://ibl.api.bbc.co.uk/ibl/v1/programmes/b00show1?rights=web');
+
+            mockedAxios.get.mockClear();
+            await iplayerDetailsService.getIblArtwork(pid);
+            expect(mockedAxios.get).not.toHaveBeenCalled();
+        });
+
+        it('does not look the show up when the programme is the show itself (a film)', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { episodes: [{ tleo_id: 'm00art002', images: { portrait: url('p.jpg') } }] } });
+
+            expect(await iplayerDetailsService.getIblArtwork('m00art002')).toEqual({ portrait: url('p.jpg') });
+            expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        });
+
+        it('goes without a logo when the show lookup fails, and without a show id', async () => {
+            mockedAxios.get.mockImplementation(async (address: string) => {
+                if (address.includes('/episodes/')) return episodeBody;
+                throw new Error('BBC down');
+            });
+            expect(await iplayerDetailsService.getIblArtwork('m00art003')).toEqual({ portrait: url('p.jpg') });
+
+            mockedAxios.get.mockReset();
+            mockedAxios.get.mockResolvedValue({ data: { episodes: [{ images: { portrait: url('p.jpg') } }] } });
+            expect(await iplayerDetailsService.getIblArtwork('m00art004')).toEqual({ portrait: url('p.jpg') });
+        });
+
+        it('is empty when the listing has no episode, and when the BBC fails (which is not remembered)', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: {} });
+            expect(await iplayerDetailsService.getIblArtwork('m00art005')).toEqual({});
+
+            const failing = 'm00art006';
+            mockedAxios.get.mockRejectedValueOnce(new Error('BBC down'));
+            expect(await iplayerDetailsService.getIblArtwork(failing)).toEqual({});
+
+            mockedAxios.get.mockResolvedValue({ data: { episodes: [{ tleo_id: failing, images: { portrait: url('p.jpg') } }] } });
+            expect(await iplayerDetailsService.getIblArtwork(failing)).toEqual({ portrait: url('p.jpg') });
+        });
+    });
+
     describe('getIblExtras', () => {
         afterEach(() => mockedAxios.get.mockReset());
 

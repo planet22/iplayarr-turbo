@@ -70,7 +70,7 @@ describe('configService', () => {
       WRITE_NFO_CAST: 'true',
       WRITE_NFO_EPISODE_TITLES: 'true',
       WRITE_NFO_RUNTIME_FALLBACK: 'true',
-      WRITE_EPISODE_THUMBS: 'true',
+      WRITE_ADDITIONAL_IMAGES: 'missing',
       STRM_SECURE_ACTION: 'rename',
     });
   });

@@ -3,6 +3,7 @@ import path from 'path';
 
 import { timestampFile } from '../../src/constants/iPlayarrConstants';
 import downloadFacade from '../../src/facade/downloadFacade';
+import additionalImagesService from '../../src/service/additionalImagesService';
 import appService from '../../src/service/appService';
 import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
@@ -11,8 +12,8 @@ import NativeDownloadService from '../../src/service/download/NativeDownloadServ
 import StrmDownloadService from '../../src/service/download/StrmDownloadService';
 import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
+import loggingService from '../../src/service/loggingService';
 import queueService from '../../src/service/queueService';
-import thumbnailCacheService from '../../src/service/thumbnailCacheService';
 import { DownloadClient } from '../../src/types/enums/DownloadClient';
 import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
@@ -47,6 +48,12 @@ jest.mock('child_process', () => ({
     spawn: jest.fn(),
 }));
 
+jest.mock('../../src/service/additionalImagesService', () => ({
+    mode: jest.fn(),
+    writeEpisodeThumb: jest.fn(),
+    writeShowImages: jest.fn(),
+}));
+
 jest.mock('../../src/service/appService', () => ({
     getApp: jest.fn(),
 }));
@@ -79,10 +86,6 @@ jest.mock('../../src/service/iplayerDetailsService', () => ({
     getContributors: jest.fn(),
     getIblExtras: jest.fn(),
     getMetadata: jest.fn(),
-}));
-
-jest.mock('../../src/service/thumbnailCacheService', () => ({
-    getOrFetch: jest.fn(),
 }));
 
 jest.mock('../../src/service/queueService', () => ({
@@ -773,63 +776,89 @@ describe('DownloadFacade', () => {
                 });
             });
 
-            describe('episode picture', () => {
-                const picture = () => (fs.copyFileSync as jest.Mock).mock.calls.filter(([, to]) => String(to).endsWith('-thumb.jpg'));
+            describe('additional images', () => {
+                const images = additionalImagesService as jest.Mocked<typeof additionalImagesService>;
+                const withFolders = { ...on, LIBRARY_FOLDER_STRUCTURE: 'true' };
+                const showFolder = path.join('/complete', 'Show Name');
+                const episodeBase = path.join(showFolder, 'Season 01', 'Show Name - S01E08 - Episode 8-BBCiPlayarrTurbo');
 
                 beforeEach(() => {
-                    (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { image: { pid: 'p0abc123' } } });
-                    (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValue('/cache/p0abc123.jpg');
+                    images.mode.mockResolvedValue('missing');
+                    images.writeEpisodeThumb.mockResolvedValue(1);
+                    images.writeShowImages.mockResolvedValue(4);
                 });
 
-                it('saves the BBC picture as <file name>-thumb.jpg beside the video', async () => {
-                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
+                it('gives a TV episode its own picture beside it and the show its pictures in the show folder', async () => {
+                    mockConfig(withFolders);
 
                     await runDownloadToCompletion(tvItem());
 
-                    expect(thumbnailCacheService.getOrFetch).toHaveBeenCalledWith('p0abc123');
-                    expect(picture()).toEqual([['/cache/p0abc123.jpg', path.join('/complete', 'Show.S01E08-BBCiPlayarrTurbo-thumb.jpg')]]);
+                    expect(images.writeEpisodeThumb).toHaveBeenCalledWith(episodeBase, pid, 'missing');
+                    expect(images.writeShowImages).toHaveBeenCalledWith({ directory: showFolder, pid, standalone: true }, 'missing');
                 });
 
-                it('never replaces a picture that is already there', async () => {
-                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
-                    (fs.existsSync as jest.Mock).mockImplementation((file: string) => file.endsWith('-thumb.jpg'));
+                it('passes on the overwrite mode', async () => {
+                    mockConfig(withFolders);
+                    images.mode.mockResolvedValue('overwrite');
 
                     await runDownloadToCompletion(tvItem());
 
-                    expect(picture()).toHaveLength(0);
+                    expect(images.writeEpisodeThumb).toHaveBeenCalledWith(episodeBase, pid, 'overwrite');
+                    expect(images.writeShowImages).toHaveBeenCalledWith(expect.any(Object), 'overwrite');
                 });
 
-                it('does nothing when switched off, for a film, or when no .nfo is written', async () => {
-                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'false' });
-                    await runDownloadToCompletion(tvItem());
+                it('gives a film its pictures in its own folder, and no episode picture', async () => {
+                    mockConfig(withFolders);
 
-                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
                     await runDownloadToCompletion(tvItem({}, VideoType.MOVIE));
 
-                    mockConfig({ WRITE_NFO_STRM: 'none', WRITE_EPISODE_THUMBS: 'true' });
-                    await runDownloadToCompletion(tvItem());
-
-                    expect(picture()).toHaveLength(0);
+                    expect(images.writeEpisodeThumb).not.toHaveBeenCalled();
+                    expect(images.writeShowImages).toHaveBeenCalledWith({ directory: showFolder, pid, standalone: true }, 'missing');
                 });
 
-                it('saves nothing for a programme the BBC gives no picture', async () => {
-                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
-                    (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: {} });
+                it('gives a TV episode with no show folder only its own picture', async () => {
+                    mockConfig(on);
 
                     await runDownloadToCompletion(tvItem());
 
-                    expect(thumbnailCacheService.getOrFetch).not.toHaveBeenCalled();
-                    expect(picture()).toHaveLength(0);
+                    expect(images.writeEpisodeThumb).toHaveBeenCalledWith(path.join('/complete', 'Show.S01E08-BBCiPlayarrTurbo'), pid, 'missing');
+                    expect(images.writeShowImages).not.toHaveBeenCalled();
                 });
 
-                it('still completes when the picture cannot be fetched or saved', async () => {
-                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
-                    (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValueOnce(undefined);
-                    await runDownloadToCompletion(tvItem());
-                    expect(picture()).toHaveLength(0);
+                it('names a film\'s pictures after its file when it has no folder of its own', async () => {
+                    mockConfig(on);
 
-                    (iplayerDetailsService.getMetadata as jest.Mock).mockRejectedValueOnce(new Error('BBC down'));
+                    await runDownloadToCompletion(tvItem({}, VideoType.MOVIE));
+
+                    expect(images.writeEpisodeThumb).not.toHaveBeenCalled();
+                    expect(images.writeShowImages).toHaveBeenCalledWith({ directory: '/complete', pid, standalone: false, base: 'Show.S01E08-BBCiPlayarrTurbo' }, 'missing');
+                });
+
+                it('does nothing when switched off', async () => {
+                    mockConfig(withFolders);
+                    images.mode.mockResolvedValue('none');
+
                     await runDownloadToCompletion(tvItem());
+
+                    expect(images.writeEpisodeThumb).not.toHaveBeenCalled();
+                    expect(images.writeShowImages).not.toHaveBeenCalled();
+                });
+
+                it('does nothing when no .nfo files are written', async () => {
+                    mockConfig({ WRITE_NFO_STRM: 'none', LIBRARY_FOLDER_STRUCTURE: 'true' });
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(images.mode).not.toHaveBeenCalled();
+                });
+
+                it('still completes the download when the pictures cannot be written', async () => {
+                    mockConfig(withFolders);
+                    images.mode.mockRejectedValue(new Error('config unreadable'));
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Could not save the extra pictures'));
                     expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
                 });
             });

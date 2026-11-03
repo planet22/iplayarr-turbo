@@ -35,7 +35,7 @@ This only applies going forward — existing completed files aren't moved retroa
 
 ## Step 2 — turn on NFO metadata
 
-Settings → Media Management → **Write .nfo Metadata Files?** (`WRITE_NFO_STRM`, default `manual`). Set it to `all` and each completed item gets a matching `.nfo` file next to it:
+Settings → Media Management → **Write .nfo Metadata Files** (`WRITE_NFO_STRM`, default `manual`). Set it to `all` and each completed item gets a matching `.nfo` file next to it:
 
 - TV episodes get an `<episodedetails>` NFO with title, show title, season/episode numbers, air date, runtime (minutes, from BBC's own programme metadata), and channel (as `<studio>`), plus a `tvshow.nfo` at the show folder root.
 - Movies get a `<movie>` NFO with title, air date, year, runtime, and channel.
@@ -48,7 +48,21 @@ Despite the setting's name, this isn't limited to `.strm` streaming mode — it 
 
 If `MEDIA_MODE` is set to Streaming, iPlayarr's completed items are `.strm` pointer files rather than real media files, so Jellyfin has to probe the proxied stream (via `/api?mode=stream`) to learn its codec/resolution before it can play or transcode it. The [StrmTool Jellyfin plugin](https://github.com/jinlin-teck/StrmTool) can skip that probe if a `.strmtool.json` cache file sits next to the `.strm`.
 
-Settings → Media Management → **Write .strmtool.json Files?** (`WRITE_STRMTOOL_JSON`, default off), shown once `WRITE_NFO_STRM` is enabled. iPlayarr doesn't actually probe the stream it's pointing to, so the codec/resolution written into the file are informed guesses, not measurements: BBC iPlayer content is always H.264/AAC (remuxing to MKV under `STREAM_MODE=progressive-mkv` uses a lossless `-c copy`, so this holds either way), and the resolution reflects your `VIDEO_QUALITY` ceiling rather than anything actually delivered. `runTimeTicks` is the one field that *is* real, taken from BBC's own programme duration rather than guessed.
+Settings → Media Management → **Write .strmtool.json Files** (`WRITE_STRMTOOL_JSON`, default off), shown once `WRITE_NFO_STRM` is enabled. iPlayarr doesn't actually probe the stream it's pointing to, so the codec/resolution written into the file are informed guesses, not measurements: BBC iPlayer content is always H.264/AAC (remuxing to MKV under `STREAM_MODE=progressive-mkv` uses a lossless `-c copy`, so this holds either way), and the resolution reflects your `VIDEO_QUALITY` ceiling rather than anything actually delivered. `runTimeTicks` is the one field that *is* real, taken from BBC's own programme duration rather than guessed.
+
+## Additional images (optional)
+
+Settings → Media Management → **Use Additional Images** (`WRITE_ADDITIONAL_IMAGES`: `none`, `missing` (default) or `overwrite`), used where `.nfo` files are written. Each download also gets the pictures Jellyfin reads, from the BBC:
+
+| File | Where | BBC picture |
+| --- | --- | --- |
+| `<file name>-thumb.jpg` | beside each TV episode | the episode's own picture |
+| `poster.jpg` | the show or film folder | portrait |
+| `backdrop.jpg` | same | promotional photo |
+| `landscape.jpg` | same | wide picture with the title |
+| `clearlogo.png` | same | transparent logo (only shows that have one, about 1 in 4) |
+
+With the folder structure off, TV gets only the episode picture, and a film's pictures are named `<file name>-poster.jpg` and so on. Jellyfin gives local images priority over its online art, so these replace the TVDB/TMDB ones, and it needs a metadata refresh to show them. `missing` never touches an existing file; `overwrite` replaces any, including your own. The Subscriptions page has an images button per show to fill them in for episodes already downloaded.
 
 ## Empty folder cleanup
 

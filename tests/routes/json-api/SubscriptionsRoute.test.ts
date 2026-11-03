@@ -5,6 +5,7 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/SubscriptionsRoute';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
+import subscriptionImagesService, { ImagesDisabledError } from '../../../src/service/subscriptionImagesService';
 import subscriptionService, { SubscriptionError } from '../../../src/service/subscriptionService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
 
@@ -20,6 +21,11 @@ jest.mock('../../../src/service/subscriptionService', () => ({
         setSecureDays: jest.fn(),
     },
 }));
+jest.mock('../../../src/service/subscriptionImagesService', () => ({
+    __esModule: true,
+    ImagesDisabledError: class ImagesDisabledError extends Error {},
+    default: { update: jest.fn() },
+}));
 jest.mock('../../../src/service/iplayerDetailsService', () => ({
     __esModule: true,
     default: { getMetadata: jest.fn() },
@@ -33,6 +39,7 @@ jest.mock('../../../src/service/iplayerDetailsService', () => ({
 
 const mocked = jest.mocked(subscriptionService);
 const mockedDetails = jest.mocked(iplayerDetailsService);
+const mockedImages = jest.mocked(subscriptionImagesService);
 
 const app = express();
 app.use(express.json());
@@ -40,6 +47,42 @@ app.use('/', router);
 
 describe('SubscriptionsRoute', () => {
     beforeEach(() => jest.resetAllMocks());
+
+    describe('POST /:id/images', () => {
+        it('answers what the update did', async () => {
+            mockedImages.update.mockResolvedValue({ written: 5, episodes: 4, shows: 1 });
+
+            const res = await request(app).post('/sub1/images');
+
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ written: 5, episodes: 4, shows: 1 });
+            expect(mockedImages.update).toHaveBeenCalledWith('sub1');
+        });
+
+        it('is 404 for a subscription that does not exist', async () => {
+            mockedImages.update.mockResolvedValue(undefined);
+
+            const res = await request(app).post('/nope/images');
+
+            expect(res.status).toBe(404);
+            expect(res.body.error).toBe(ApiError.INVALID_INPUT);
+        });
+
+        it('is 409, saying why, while Use Additional Images is off', async () => {
+            mockedImages.update.mockRejectedValue(new ImagesDisabledError('Turn on Use Additional Images in Settings first'));
+
+            const res = await request(app).post('/sub1/images');
+
+            expect(res.status).toBe(409);
+            expect(res.body).toEqual({ error: ApiError.INVALID_INPUT, message: 'Turn on Use Additional Images in Settings first' });
+        });
+
+        it('lets any other failure through as a server error', async () => {
+            mockedImages.update.mockRejectedValue(new Error('disk full'));
+
+            expect((await request(app).post('/sub1/images')).status).toBe(500);
+        });
+    });
 
     it('GET / lists subscriptions, adding each show\'s synopsis when the BBC metadata has one', async () => {
         mocked.list.mockResolvedValue([{ id: 'a', pid: 'p1' } as any, { id: 'b', pid: 'p2' } as any, { id: 'c', pid: 'p3' } as any]);

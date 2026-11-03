@@ -81,6 +81,9 @@
                     >
                         <font-awesome-icon :icon="['fas', 'box-archive']" />
                     </button>
+                    <button class="clickable" title="Update Jellyfin images" aria-label="Update Jellyfin images" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
+                        <font-awesome-icon :icon="['fas', 'images']" />
+                    </button>
                     <button v-if="subscription.secureDays" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
@@ -113,6 +116,9 @@
                         :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
                     >
                         <font-awesome-icon :icon="['fas', 'box-archive']" />
+                    </button>
+                    <button class="clickable" title="Update Jellyfin images" aria-label="Update Jellyfin images" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
+                        <font-awesome-icon :icon="['fas', 'images']" />
                     </button>
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
@@ -188,6 +194,9 @@
                         >
                             <font-awesome-icon :icon="['fas', 'box-archive']" />
                         </button>
+                        <button class="clickable" title="Update Jellyfin images" aria-label="Update Jellyfin images" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
+                            <font-awesome-icon :icon="['fas', 'images']" />
+                        </button>
                         <button v-if="subscription.secureDays" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                             <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                         </button>
@@ -210,6 +219,9 @@
                             :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
                         >
                             <font-awesome-icon :icon="['fas', 'box-archive']" />
+                        </button>
+                        <button class="clickable" title="Update Jellyfin images" aria-label="Update Jellyfin images" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
+                            <font-awesome-icon :icon="['fas', 'images']" />
                         </button>
                         <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                             <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
@@ -625,6 +637,26 @@ const secureTitle = (subscription) =>
     subscription.secureDays
         ? `Downloads mp4/mkv ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
         : 'Download mp4/mkv before episodes leave iPlayer (off)';
+
+// Writes the show's missing Jellyfin pictures (what Use Additional Images does for a download) for its files already
+// in the library, and says what it did.
+const updateImages = async (subscription) => {
+    busy[subscription.id] = true;
+    try {
+        const { ok, data } = await ipFetch(`json-api/subscriptions/${subscription.id}/images`, 'POST');
+        if (!ok) {
+            toastService.error(`Couldn't update images for ${subscription.title}`, { detail: data?.message || 'Something went wrong' });
+        } else if (!data.shows && !data.episodes && !data.written) {
+            toastService.info(`No downloaded episodes found for ${subscription.title}`);
+        } else if (!data.written) {
+            toastService.info(`Images for ${subscription.title} are up to date`);
+        } else {
+            toastService.success(`Saved ${data.written} image(s) for ${subscription.title}`, { detail: `${data.episodes} episode picture(s)` });
+        }
+    } finally {
+        busy[subscription.id] = false;
+    }
+};
 
 const toggleSecureWithBusy = async (subscription) => {
     busy[subscription.id] = true;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { headlineFromEditorial, isGenericEpisodeTitle, parseIblEpisodeExtras, parseIsoDuration } from '../../src/utils/iblEpisode';
+import { headlineFromEditorial, isGenericEpisodeTitle, parseIblArtwork, parseIblEpisodeExtras, parseIsoDuration } from '../../src/utils/iblEpisode';
 
 // Read this before changing anything beneath it.
 // Changes here ripple outwards, so check the callers first.
@@ -42,6 +42,39 @@ describe('iblEpisode', () => {
 
         it.each([[undefined], [{}], [{ editorial_subtitle: '  ', versions: 'nope' }]])('is empty for %p', (episode) => {
             expect(parseIblEpisodeExtras(episode)).toEqual({});
+        });
+    });
+
+    describe('parseIblArtwork', () => {
+        const url = (name: string) => `https://ichef.bbci.co.uk/images/ic/{recipe}/${name}`;
+        const episode = {
+            images: { portrait: url('p.jpg'), standard: url('s.jpg'), promotional: url('pr.jpg'), promotional_with_logo: url('wl.jpg'), promotional_left_safe_zone: url('sz.jpg') },
+        };
+
+        it('takes the portrait, promotional and with-logo pictures, and the logo from the show\'s entry', () => {
+            expect(parseIblArtwork(episode, { images: { logo: url('logo.png') } })).toEqual({
+                portrait: url('p.jpg'),
+                promotional: url('pr.jpg'),
+                landscape: url('wl.jpg'),
+                logo: url('logo.png'),
+            });
+        });
+
+        it('has no logo when the show has none, and ignores the other pictures', () => {
+            expect(parseIblArtwork(episode, { images: {} })).toEqual({ portrait: url('p.jpg'), promotional: url('pr.jpg'), landscape: url('wl.jpg') });
+            expect(parseIblArtwork(episode)).not.toHaveProperty('logo');
+        });
+
+        it('falls back to a logo the episode itself lists', () => {
+            expect(parseIblArtwork({ images: { logo: url('own.png') } }).logo).toBe(url('own.png'));
+        });
+
+        it('keeps only addresses that say where a size goes', () => {
+            expect(parseIblArtwork({ images: { portrait: 'https://x/p.jpg', promotional: 5, promotional_with_logo: url('wl.jpg') } })).toEqual({ landscape: url('wl.jpg') });
+        });
+
+        it.each([[undefined], [{}], [{ images: null }]])('is empty for %p', (value) => {
+            expect(parseIblArtwork(value)).toEqual({});
         });
     });
 

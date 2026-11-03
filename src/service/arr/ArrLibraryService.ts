@@ -314,6 +314,17 @@ class ArrLibraryService {
         }
     }
 
+    // The folder Sonarr/Radarr keeps one series / movie in (as the app names it), or undefined when it gives none.
+    async getEntryPath(app: App, arrId: number): Promise<string | undefined> {
+        try {
+            const { data } = await axios.get(this.#url(app, `${this.#resource(app)}/${arrId}`), this.#headers(app));
+            void markAppSeen(app.id);
+            return typeof data?.path === 'string' && data.path ? data.path : undefined;
+        } catch (error) {
+            throw new Error(extractArrErrorMessage(error));
+        }
+    }
+
     // The files of one Sonarr series / Radarr movie, without reading the whole library.
     async getFilesFor(app: App, arrId: number): Promise<ArrLibraryFile[]> {
         try {

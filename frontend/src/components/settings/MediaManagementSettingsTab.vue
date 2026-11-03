@@ -126,7 +126,7 @@
     <SelectInput
         v-model="config.WRITE_NFO_STRM"
         field="WRITE_NFO_STRM"
-        name="Write .nfo Metadata Files?"
+        name="Write .nfo Metadata Files"
         tooltip="Save a Jellyfin .nfo info file next to each download."
         :error="validationErrors.config?.WRITE_NFO_STRM"
         :options="nfoWriteModes"
@@ -136,7 +136,7 @@
         v-model="config.WRITE_STRMTOOL_JSON"
         field="WRITE_STRMTOOL_JSON"
         :advanced="true"
-        name="Write .strmtool.json Files?"
+        name="Write .strmtool.json Files"
         tooltip="Save a small file that lets the StrmTool Jellyfin plugin skip scanning .strm files."
         :error="validationErrors.config?.WRITE_STRMTOOL_JSON"
         :options="trueOrFalse"
@@ -145,7 +145,7 @@
         v-if="config.WRITE_NFO_STRM !== 'none'"
         v-model="config.WRITE_NFO_CAST"
         field="WRITE_NFO_CAST"
-        name="Add Cast and Crew to .nfo Files?"
+        name="Add Cast and Crew to .nfo Files"
         tooltip="Add cast, directors and writers to each .nfo (one extra BBC lookup)."
         :error="validationErrors.config?.WRITE_NFO_CAST"
         :options="trueOrFalse"
@@ -154,7 +154,7 @@
         v-if="config.WRITE_NFO_STRM !== 'none'"
         v-model="config.WRITE_NFO_EPISODE_TITLES"
         field="WRITE_NFO_EPISODE_TITLES"
-        name="Headline for 'Episode N' Titles?"
+        name="Headline for 'Episode N' Titles"
         tooltip="Use iPlayer's headline as the .nfo title when an episode is titled just 'Episode N'. File names stay the same."
         :error="validationErrors.config?.WRITE_NFO_EPISODE_TITLES"
         :options="trueOrFalse"
@@ -163,19 +163,19 @@
         v-if="config.WRITE_NFO_STRM !== 'none'"
         v-model="config.WRITE_NFO_RUNTIME_FALLBACK"
         field="WRITE_NFO_RUNTIME_FALLBACK"
-        name="Fill in a Missing Running Time?"
+        name="Fill in a Missing Running Time"
         tooltip="If the BBC page gives no length, take it from iPlayer's listing."
         :error="validationErrors.config?.WRITE_NFO_RUNTIME_FALLBACK"
         :options="trueOrFalse"
     />
     <SelectInput
         v-if="config.WRITE_NFO_STRM !== 'none'"
-        v-model="config.WRITE_EPISODE_THUMBS"
-        field="WRITE_EPISODE_THUMBS"
-        name="Save Episode Pictures?"
-        tooltip="Save each TV episode's picture as '<name>-thumb.jpg' for Jellyfin. Never replaces one."
-        :error="validationErrors.config?.WRITE_EPISODE_THUMBS"
-        :options="trueOrFalse"
+        v-model="config.WRITE_ADDITIONAL_IMAGES"
+        field="WRITE_ADDITIONAL_IMAGES"
+        name="Use Additional Images"
+        tooltip="Save extra Jellyfin images: episode, poster, backdrop, landscape and logo."
+        :error="validationErrors.config?.WRITE_ADDITIONAL_IMAGES"
+        :options="additionalImageModes"
     />
     <SelectInput
         v-model="config.STRM_SECURE_ACTION"
@@ -190,7 +190,7 @@
         v-model="config.ARCHIVE_ENABLED"
         field="ARCHIVE_ENABLED"
         :advanced="true"
-        name="Archive Downloads?"
+        name="Archive Downloads"
         tooltip="Keep a record of what has been downloaded."
         :error="validationErrors.config?.ARCHIVE_ENABLED"
         :options="trueOrFalse"
@@ -240,6 +240,12 @@ defineProps({
 const releaseLanguages = [
     { key: 'none', value: 'None' },
     { key: 'english', value: 'English' },
+];
+
+const additionalImageModes = [
+    { key: 'none', value: 'Disabled' },
+    { key: 'missing', value: 'Enabled (leave existing)' },
+    { key: 'overwrite', value: 'Enabled (overwrite all)' },
 ];
 
 const secureActions = [
