@@ -103,7 +103,8 @@ export function toBrowseItem(element: any): BrowseItem | undefined {
           : undefined;
     if (!kind) return undefined;
 
-    const imageUrl: string | undefined = element.images?.standard ?? element.images?.portrait ?? element.image?.standard;
+    // Only the 16:9 "standard" picture: a portrait one would break the card and table layouts.
+    const imageUrl: string | undefined = element.images?.standard ?? element.image?.standard;
     const imagePid = typeof imageUrl === 'string' ? IMAGE_PID_REGEX.exec(imageUrl)?.[1] : undefined;
 
     return {
@@ -243,7 +244,7 @@ export function parseIsoDurationMinutes(value: unknown): number | undefined {
 // An episode as the programme page lists it, built from iBL's own episode record alone - for when the
 // BBC's programme pages (the usual source) are down. "Series 3: Episode 3" in the subtitle gives the numbers.
 export function iblEpisodeToDetails(element: any): IPlayerDetails {
-    const imageUrl: unknown = element.images?.standard ?? element.images?.portrait;
+    const imageUrl: unknown = element.images?.standard;
     const imagePid = typeof imageUrl === 'string' ? IMAGE_PID_REGEX.exec(imageUrl)?.[1] : undefined;
     const subtitle = String(element.subtitle ?? '');
     const series = /\bSeries\s+(\d+)/i.exec(subtitle)?.[1];
@@ -835,7 +836,7 @@ class BrowseService {
             if (!show) lone = episode;
         }
         const source = show ?? lone;
-        const imageUrl: unknown = source.images?.standard ?? source.images?.portrait;
+        const imageUrl: unknown = source.images?.standard;
         const imagePid = typeof imageUrl === 'string' ? IMAGE_PID_REGEX.exec(imageUrl)?.[1] : undefined;
         const base = {
             pid: source.id as string,
