@@ -681,6 +681,16 @@ describe('DownloadFacade', () => {
                 (iplayerDetailsService.episodeDetails as jest.Mock).mockResolvedValue({ description: 'plot' });
             });
 
+            it('writes no <actor> for a cast member the BBC gives no role', async () => {
+                mockConfig({ ...on, WRITE_NFO_CAST: 'true' });
+                (iplayerDetailsService.getContributors as jest.Mock).mockResolvedValue([{ name: 'Nobody Special' }]);
+
+                await runDownloadToCompletion(tvItem());
+
+                expect(nfoText()).toContain('<episodedetails>');
+                expect(nfoText()).not.toContain('Nobody Special');
+            });
+
             describe('title', () => {
                 it('uses the editorial headline, without its position prefix, for an "Episode N" title', async () => {
                     mockConfig({ ...on, WRITE_NFO_EPISODE_TITLES: 'true' });
@@ -799,6 +809,16 @@ describe('DownloadFacade', () => {
                     mockConfig({ WRITE_NFO_STRM: 'none', WRITE_EPISODE_THUMBS: 'true' });
                     await runDownloadToCompletion(tvItem());
 
+                    expect(picture()).toHaveLength(0);
+                });
+
+                it('saves nothing for a programme the BBC gives no picture', async () => {
+                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
+                    (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: {} });
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(thumbnailCacheService.getOrFetch).not.toHaveBeenCalled();
                     expect(picture()).toHaveLength(0);
                 });
 

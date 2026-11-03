@@ -170,6 +170,11 @@ describe('ArrLibraryService', () => {
         });
     });
 
+    it('refuses an app type that has no Sonarr/Radarr API service', async () => {
+        await expect(arrLibraryService.getRootFolders({ ...sonarr, type: AppType.JELLYFIN } as any)).rejects.toThrow(/No Sonarr\/Radarr API service/);
+        expect(mockedAxios.get).not.toHaveBeenCalled();
+    });
+
     describe('getFilesFor', () => {
         it('reads one Sonarr series, with the episode ids of each file', async () => {
             mockedAxios.get.mockImplementation(async (url: string) => ({

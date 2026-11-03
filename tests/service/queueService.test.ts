@@ -90,6 +90,20 @@ describe('queueService', () => {
             queueService.cancelItem('dupe3');
         });
 
+        it('carries a download that replaces a .strm link, and where that link is in Sonarr/Radarr', () => {
+            const arrStrm = { path: '/tv/Show/S01E01.strm', appId: 'sonarr1', arrId: 7 };
+            queueService.addToQueue('rep1', 'Rep.Local', VideoType.TV, undefined, undefined, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true);
+            queueService.addToQueue('rep2', 'Rep.Arr', VideoType.TV, undefined, undefined, QueueEntrySource.MANUAL, MediaMode.DOWNLOAD, true, arrStrm);
+            queueService.addToQueue('rep3', 'Rep.Plain', VideoType.TV);
+
+            expect(entries('rep1')[0]).toMatchObject({ mediaMode: MediaMode.DOWNLOAD, replacesStrm: true });
+            expect(entries('rep1')[0]).not.toHaveProperty('arrStrm');
+            expect(entries('rep2')[0]).toMatchObject({ replacesStrm: true, arrStrm });
+            expect(entries('rep3')[0]).not.toHaveProperty('replacesStrm');
+            expect(entries('rep3')[0]).not.toHaveProperty('arrStrm');
+            ['rep1', 'rep2', 'rep3'].forEach((pid) => queueService.cancelItem(pid));
+        });
+
         it('does not record a grab for the ignored duplicate', () => {
             (statisticsService.addGrab as jest.Mock).mockClear();
             queueService.addToQueue('dupe4', 'Dupe NZB', VideoType.TV, undefined, undefined, QueueEntrySource.NZB);

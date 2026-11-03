@@ -984,6 +984,58 @@ describe('subscriptionService', () => {
             config.mockRestore();
         });
 
+        it('does nothing when the app is gone or is no longer Sonarr/Radarr', async () => {
+            jest.mocked(appService.getApp).mockResolvedValueOnce(undefined);
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+
+            jest.mocked(arrLibraryService.supports).mockReturnValueOnce(false);
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+
+            expect(arrLibraryService.getFilesFor).not.toHaveBeenCalled();
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('skips a link that names no BBC programme', async () => {
+            contents[strmPath] = 'http://example.com/not-a-bbc-link';
+
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+            expect((await subscriptionService.list())[0].secured).toBeUndefined();
+        });
+
+        it('skips an episode already secured', async () => {
+            const sub = await armed();
+            sub.secured = ['m001abcd'];
+
+            expect((await subscriptionService.check(sub)).queued).toEqual([]);
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+        });
+
+        it('marks a link secured without queuing when a real download is already waiting in the queue', async () => {
+            queue.getQueue.mockReturnValue([{ pid: 'm001abcd', mediaMode: 'download', library: {} } as any]);
+
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+            expect(queue.addToQueue).not.toHaveBeenCalled();
+            expect((await subscriptionService.list())[0].secured).toEqual(['m001abcd']);
+        });
+
+        it('does not take another programme, a queued .strm or a queued extra version for the real download', async () => {
+            queue.getQueue.mockReturnValue([
+                { pid: 'm009other', mediaMode: 'download', library: {} },
+                { pid: 'm001abcd', library: {} },
+                { pid: 'm001abcd', mediaMode: 'download', library: { version: 'audio-described' } },
+            ] as any);
+
+            expect((await subscriptionService.check(await armed())).queued).toEqual(['m001abcd']);
+        });
+
+        it('marks a link secured when an mkv sits beside it too', async () => {
+            const { dir, name } = path.parse(strmPath);
+            existing.add(path.join(dir, `${name}.mkv`));
+
+            expect((await subscriptionService.check(await armed())).queued).toEqual([]);
+            expect((await subscriptionService.list())[0].secured).toEqual(['m001abcd']);
+        });
+
         it('marks a link secured without queuing when a real file already sits beside it', async () => {
             const { dir, name } = path.parse(strmPath);
             existing.add(path.join(dir, `${name}.mp4`));

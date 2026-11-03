@@ -4,7 +4,7 @@
 /* iPlayarr smoke test: API layer, UI layer (Playwright), filesystem layer.
  * node smoke/smoke.cjs [--base URL] [--only GROUPS] [--filter REGEX] [--list] [--write] [--phone-only] [--shots DIR]
  * Read-only by default; --write adds a reversible round-trip layer (DEV INSTANCES ONLY) and needs a full run to restore settings.
- * Env: SMOKE_BASE, SMOKE_MEDIA_ROOT (enables fs layer), SMOKE_PW_DIR (node_modules with playwright). Exit 1 on any FAIL.
+ * Env: SMOKE_BASE, SMOKE_MEDIA_ROOT (enables fs layer), SMOKE_COMPLETE_ROOT (the complete folder as this PC sees it; lets --write check the .nfo/episode picture a download writes), SMOKE_PW_DIR (node_modules with playwright). Exit 1 on any FAIL.
  * Groups and --filter: run with --list, and see smoke/SMOKE_PROMPT.md. */
 const fs = require('fs');
 const path = require('path');
@@ -681,6 +681,9 @@ async function subscriptionsCards(browser, page, U) {
         const arrShows = onPage.filter((s) => s.arr || s.arrMissing);
         const arrLines = await page.locator('.subscriptionRow .info > .details:nth-of-type(2)').count();
         rec(U, 'subscriptions: Sonarr/Radarr details sit on a second line under the channel', arrShows.length ? (arrLines >= arrShows.length ? 'PASS' : 'FAIL') : 'SKIP', `${arrLines} second lines, ${arrShows.length} linked`);
+        // The download-before-it-leaves toggle belongs on every show, Sonarr/Radarr-only ones included (their .strm links expire too).
+        const secureToggles = await page.locator('.subscriptionRow button:has(svg[data-icon="box-archive"])').count();
+        rec(U, 'subscriptions: every table row, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (secureToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${secureToggles} toggles, ${shown} rows`);
         await page.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-table.png'), fullPage: true });
 
         // Cards: several across, the badge on the picture, the dates in a 2x2 grid, a synopsis of up to three lines.
@@ -697,6 +700,8 @@ async function subscriptionsCards(browser, page, U) {
             if (got !== expectedBadge(s)) wrongCards.push(`${s.title}: ${got} != ${expectedBadge(s)}`);
         }
         rec(U, 'subscriptions: the card badge sits on the picture and matches the table', wrongCards.length === 0 ? 'PASS' : 'FAIL', wrongCards.slice(0, 3).join(' | '));
+        const cardToggles = await page.locator('.subCard button:has(svg[data-icon="box-archive"])').count();
+        rec(U, 'subscriptions: every card, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (cardToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardToggles} toggles, ${shown} cards`);
         const first = cards.first();
         const [thumb, badge] = [await first.locator('.thumbLink').boundingBox(), await first.locator('.thumbBadge').boundingBox()];
         rec(U, 'subscriptions: the badge is at the picture\'s top right', thumb && badge && badge.x + badge.width <= thumb.x + thumb.width + 1 && badge.y >= thumb.y - 1 && badge.y + badge.height < thumb.y + thumb.height / 2 && badge.x > thumb.x + thumb.width / 2 ? 'PASS' : 'FAIL', JSON.stringify({ thumb, badge }));

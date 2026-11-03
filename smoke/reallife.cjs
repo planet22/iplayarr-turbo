@@ -4,6 +4,8 @@
  * Every entity it creates is named SMOKE-TEMP and removed again (cleanup runs even after a failure).
  * Each step is independent: one failing step never stops the rest.
  */
+const fs = require('fs');
+const pathMod = require('path');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
@@ -116,6 +118,9 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('subscription versions update', ver.status === 200, `HTTP ${ver.status} ${ver.text.slice(0, 120)}`);
             const sec = await http(`/json-api/subscriptions/${id}/secure`, { method: 'PUT', body: { days: 7 } });
             ok('subscription secure-before-expiry on (7 days)', sec.status === 200 && sec.json?.secureDays === 7, `HTTP ${sec.status} ${sec.text.slice(0, 120)}`);
+            // A Sonarr/Radarr-only show with the toggle on but no app link has no .strm links to read: the check must still answer, and queue nothing.
+            const secChk = await http(`/json-api/subscriptions/${id}/check`, { method: 'POST', timeout: 120000 });
+            ok('check of a Sonarr/Radarr-only show with secure on, and no app linked, queues nothing', secChk.status === 200 && !(secChk.json?.queued || []).length && !secChk.json?.error, `HTTP ${secChk.status} ${secChk.text.slice(0, 120)}`);
             for (const days of [0, 61, 1.5, 'x']) {
                 const bad = await http(`/json-api/subscriptions/${id}/secure`, { method: 'PUT', body: { days } });
                 ok(`subscription secure days ${JSON.stringify(days)} rejected`, bad.status === 400, `HTTP ${bad.status}`);
@@ -126,6 +131,10 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('unsubscribe', un.status === 200);
             const un2 = await http('/json-api/subscriptions/' + id, { method: 'DELETE' });
             ok('unsubscribe twice gives 404', un2.status === 404, `HTTP ${un2.status}`);
+            // Subscribing Sonarr/Radarr-only with a window keeps it (it used to be dropped for such shows)
+            const withDays = await http('/json-api/subscriptions', { method: 'POST', body: { pid: bpid, arrOnly: true, secureDays: 7 } });
+            ok('subscribe (arrOnly) keeps secureDays', withDays.status === 200 && withDays.json?.secureDays === 7, `HTTP ${withDays.status} ${withDays.text.slice(0, 120)}`);
+            if (withDays.json?.id) later('unsubscribe show again', () => http('/json-api/subscriptions/' + withDays.json.id, { method: 'DELETE' }));
         });
 
         // 6. Live channel subscription (.strm in the library) + enable/disable
@@ -252,6 +261,20 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             ok('strm download leaves the queue', await waitDone(ep.pid, 120000), 'still queued after 2 min');
             const h = (await hist(ep.pid))[0];
             ok('strm download recorded complete in history', !!h && /complete|done|success/i.test(JSON.stringify(h.status)), JSON.stringify(h || {}).slice(0, 160));
+            // What it wrote beside the .strm (needs the complete folder as this PC sees it, as SMOKE_COMPLETE_ROOT)
+            const completeRoot = process.env.SMOKE_COMPLETE_ROOT;
+            const wroteNfo = ['all', 'manual'].includes(cfg.WRITE_NFO_STRM);
+            if (!completeRoot || !h?.libraryPath || !wroteNfo) {
+                rec(W, 'strm download wrote its .nfo and episode picture', 'SKIP', !completeRoot ? 'SMOKE_COMPLETE_ROOT not set' : !wroteNfo ? 'WRITE_NFO_STRM does not write .nfo for manual downloads' : 'no library path in history');
+            } else {
+                const base = pathMod.join(completeRoot, h.libraryPath).replace(/\.[^.\\/]+$/, '');
+                ok('strm download wrote its .nfo', fs.existsSync(base + '.nfo'), base + '.nfo');
+                if (cfg.WRITE_EPISODE_THUMBS === 'true' && !/movie/i.test(String(h.type))) {
+                    const thumb = base + '-thumb.jpg';
+                    const head = fs.existsSync(thumb) ? fs.readFileSync(thumb).subarray(0, 2).toString('hex') : '';
+                    ok('strm download saved a <name>-thumb.jpg episode picture that is a JPEG', head === 'ffd8', fs.existsSync(thumb) ? `starts ${head}` : 'missing ' + thumb);
+                } else rec(W, 'strm download saved an episode picture', 'SKIP', 'WRITE_EPISODE_THUMBS is off, or a film');
+            }
             // SAB-visible too (what Sonarr sees)
             const sab = (await http(`/api?mode=history&apikey=${apikey}&output=json`)).json;
             // UI-initiated downloads are deliberately hidden from the SAB history (HistoryEndpoint only lists source NZB, i.e. what an *arr app sent)

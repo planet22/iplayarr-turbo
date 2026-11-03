@@ -13,6 +13,11 @@ describe('availability', () => {
             expect(expiryOf(episode)).toBe(inDays(5));
         });
 
+        it('keeps the earliest end whatever order the versions come in', () => {
+            const episode = { versions: [{ availability: { end: inDays(5) } }, { availability: { end: inDays(30) } }, { availability: { end: inDays(12) } }] };
+            expect(expiryOf(episode)).toBe(inDays(5));
+        });
+
         it('can be limited to one kind of version', () => {
             const episode = { versions: [{ kind: 'original', availability: { end: inDays(30) } }, { kind: 'signed', availability: { end: inDays(5) } }] };
             expect(expiryOf(episode, 'original')).toBe(inDays(30));
@@ -63,6 +68,12 @@ describe('availability', () => {
                 if (original === undefined) delete process.env.TZ;
                 else process.env.TZ = original;
             }
+        });
+
+        it('counts from the current time by default', () => {
+            const left = daysLeft(new Date(Date.now() + 3 * DAY).toISOString());
+            expect(left).toBeGreaterThanOrEqual(2);
+            expect(left).toBeLessThanOrEqual(4);
         });
 
         it('is zero on the day it ends and negative once gone', () => {

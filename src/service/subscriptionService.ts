@@ -372,10 +372,12 @@ class SubscriptionService {
     // The same for a show held in Sonarr/Radarr, where the .strm links are in the app's library and not in iPlayarr's history:
     // the app is asked for the show's files, each .strm names its episode, and a real file is saved beside the link (which
     // Sonarr/Radarr is then asked to rescan). Only the plain episode - an extra version has no link of its own to read.
-    async #secureArrStrms(subscription: Subscription, episodes: IPlayerEpisodeMetadata[], result: SubscriptionCheckResult): Promise<string[]> {
-        const days = subscription.secureDays;
-        const link = subscription.arr;
-        if (!days || !link) return [];
+    async #secureArrStrms(
+        subscription: Subscription,
+        { days, link }: { days: number; link: SubscriptionArrLink },
+        episodes: IPlayerEpisodeMetadata[],
+        result: SubscriptionCheckResult
+    ): Promise<string[]> {
         const app = await appService.getApp(link.appId);
         if (!app || !arrLibraryService.supports(app)) return [];
 
@@ -452,7 +454,7 @@ class SubscriptionService {
     async check(subscription: Subscription): Promise<SubscriptionCheckResult> {
         const result: SubscriptionCheckResult = { id: subscription.id, title: subscription.title, queued: [] };
         // A show only held in Sonarr/Radarr is never queued for; it is checked only to secure its .strm links before they expire.
-        const arrSecure = !!(subscription.arrOnly && subscription.secureDays && subscription.arr);
+        const arrSecure = subscription.arrOnly && subscription.secureDays && subscription.arr ? { days: subscription.secureDays, link: subscription.arr } : undefined;
         if ((subscription.arrOnly && !arrSecure) || this.#inFlight.has(subscription.id)) return result;
         this.#inFlight.add(subscription.id);
         try {
@@ -483,7 +485,7 @@ class SubscriptionService {
             if (subscription.versions?.length) this.#progress(subscription.id, 'versions');
             const doneVersions = await this.#checkVersions(subscription, episodes, result);
             const nowSecured = arrSecure
-                ? await this.#secureArrStrms(subscription, episodes, result)
+                ? await this.#secureArrStrms(subscription, arrSecure, episodes, result)
                 : await this.#secureExpiring(subscription, episodes, result);
             const now = new Date().toISOString();
             await this.#update(subscription.id, (s) => ({

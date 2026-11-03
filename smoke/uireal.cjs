@@ -294,6 +294,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Appearance holds the colour scheme, badges and Show Collections', ['Colour Scheme', 'Show Info Messages', 'Show Collections'].every((l) => looks.some((x) => x.includes(l))), looks.join(' | '));
             ok('Appearance has no search settings', !looks.some((l) => /Native Search|Match All/i.test(l)), looks.join(' | '));
 
+            // The .nfo extras sit on Media Management, and (like the cast setting) only while .nfo files are written
+            await tab('mediaManagement');
+            const media = (await labels()).join(' | ');
+            const nfoExtras = [/Headline for 'Episode N' Titles/i, /Missing Running Time/i, /Episode Picture/i];
+            const writesNfo = (await http('/json-api/config')).json?.WRITE_NFO_STRM !== 'none';
+            ok(writesNfo ? 'Media Management offers the three .nfo extras (episode headline, running time, episode picture)' : 'Media Management hides the three .nfo extras while no .nfo files are written',
+                nfoExtras.every((re) => re.test(media)) === writesNfo && (writesNfo || !nfoExtras.some((re) => re.test(media))), media);
+
             await tab('maintenance');
             // Wait for the Maintenance content itself: a hash-only navigation can be read before the tab has switched.
             await page.waitForFunction(() => /Scheduled tasks/i.test(document.querySelector('.settingsBody')?.innerText || ''), null, { timeout: 15000 }).catch(() => {});

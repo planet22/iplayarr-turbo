@@ -335,7 +335,7 @@ async function write(ctx, h) {
     try {
         // 1. Concurrent saves must not lose each other (each PUT is a read-modify-write of one stored map)
         {
-            const keys = ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION'];
+            const keys = ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_EPISODE_THUMBS', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION'];
             const flip = Object.fromEntries(keys.map((k) => [k, (before[k] ?? 'false') === 'true' ? 'false' : 'true']));
             later(() => put(Object.fromEntries(keys.map((k) => [k, before[k] ?? 'false']))));
             await Promise.all(keys.map((k) => put({ [k]: flip[k] })));
