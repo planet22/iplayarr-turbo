@@ -146,7 +146,7 @@
         v-model="config.WRITE_NFO_CAST"
         field="WRITE_NFO_CAST"
         name="Add Cast and Crew to .nfo Files?"
-        tooltip="List cast, directors and writers in each .nfo. One extra BBC lookup per download."
+        tooltip="Add cast, directors and writers to each .nfo (one extra BBC lookup)."
         :error="validationErrors.config?.WRITE_NFO_CAST"
         :options="trueOrFalse"
     />
@@ -154,8 +154,8 @@
         v-if="config.WRITE_NFO_STRM !== 'none'"
         v-model="config.WRITE_NFO_EPISODE_TITLES"
         field="WRITE_NFO_EPISODE_TITLES"
-        name="Use iPlayer's Headline for 'Episode N' Titles?"
-        tooltip="Where an episode is titled just 'Episode 8', use iPlayer's own headline in the .nfo, if it has one. File names are unchanged."
+        name="Headline for 'Episode N' Titles?"
+        tooltip="Use iPlayer's headline as the .nfo title when an episode is titled just 'Episode N'. File names stay the same."
         :error="validationErrors.config?.WRITE_NFO_EPISODE_TITLES"
         :options="trueOrFalse"
     />
@@ -164,7 +164,7 @@
         v-model="config.WRITE_NFO_RUNTIME_FALLBACK"
         field="WRITE_NFO_RUNTIME_FALLBACK"
         name="Fill in a Missing Running Time?"
-        tooltip="When the BBC programme page gives no length, take it from iPlayer's listing for the .nfo and .strmtool.json."
+        tooltip="If the BBC page gives no length, take it from iPlayer's listing."
         :error="validationErrors.config?.WRITE_NFO_RUNTIME_FALLBACK"
         :options="trueOrFalse"
     />
@@ -172,16 +172,16 @@
         v-if="config.WRITE_NFO_STRM !== 'none'"
         v-model="config.WRITE_EPISODE_THUMBS"
         field="WRITE_EPISODE_THUMBS"
-        name="Save an Episode Picture Beside Each TV Episode?"
-        tooltip="Saves iPlayer's picture as 'episode name-thumb.jpg' for Jellyfin. An existing picture is never replaced."
+        name="Save Episode Pictures?"
+        tooltip="Save each TV episode's picture as '<name>-thumb.jpg' for Jellyfin. Never replaces one."
         :error="validationErrors.config?.WRITE_EPISODE_THUMBS"
         :options="trueOrFalse"
     />
     <SelectInput
         v-model="config.STRM_SECURE_ACTION"
         field="STRM_SECURE_ACTION"
-        name="When a Subscription Replaces a .strm Link"
-        tooltip="What happens to the old .strm link when a subscription downloads the mp4/mkv in its place."
+        name="What to Do With Replaced .strm"
+        tooltip="What happens to the .strm when a subscription downloads the real file."
         :error="validationErrors.config?.STRM_SECURE_ACTION"
         :options="secureActions"
     />

@@ -99,7 +99,7 @@
         v-model="config.UI_EXPIRY_BADGES"
         field="UI_EXPIRY_BADGES"
         name="Show Leaving Soon Badge"
-        tooltip="Show the days left on episodes that leave iPlayer within 30 days (e.g. 7d). Hover the badge for the date."
+        tooltip="Show days left (e.g. 7d) on episodes leaving iPlayer within 30 days."
         :error="validationErrors.config?.UI_EXPIRY_BADGES"
         :options="trueOrFalse"
     />
