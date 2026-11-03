@@ -33,6 +33,8 @@ const entry = (pid: string, libraryPath: string | undefined, extra = {}) =>
 describe('subscriptionImagesService', () => {
     let existing: Set<string>;
     let contents: Record<string, string>;
+    // A fake disk: folder path -> what is in it.
+    let tree: Record<string, { name: string; isDirectory: () => boolean }[]>;
 
     beforeEach(() => {
         jest.resetAllMocks();
@@ -41,6 +43,11 @@ describe('subscriptionImagesService', () => {
         jest.mocked(configService.getParameter).mockImplementation(async (key: any) => settings[key]);
         existing = new Set();
         contents = {};
+        tree = {};
+        jest.spyOn(fs, 'readdirSync').mockImplementation(((directory: any) => {
+            if (String(directory) in tree) return tree[String(directory)];
+            throw new Error('ENOENT');
+        }) as any);
         jest.spyOn(fs, 'existsSync').mockImplementation((file: any) => existing.has(String(file)));
         const read = fs.readFileSync;
         jest.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...rest: any[]) => {
@@ -152,6 +159,96 @@ describe('subscriptionImagesService', () => {
 
             history.getHistory.mockResolvedValue([]);
             expect(await subscriptionImagesService.update('sub1')).toEqual({ written: 0, episodes: 0, shows: 0 });
+        });
+
+        describe('when the history no longer lists the downloads', () => {
+            const dir = (name: string) => ({ name, isDirectory: () => true });
+            const leaf = (name: string) => ({ name, isDirectory: () => false });
+            const show = path.join('/complete', 'The Show');
+            const season = path.join(show, 'Season 01');
+            const strmContent = (pid: string) => `http://iplayarr/api?mode=stream&pid=${pid}`;
+
+            beforeEach(() => {
+                tree[show] = [dir('Season 01'), leaf('tvshow.nfo')];
+            });
+
+            it('reads the show\'s own folder for its links and gives the folder its pictures', async () => {
+                tree[season] = [leaf('The Show - S01E01-BBC.strm'), leaf('The Show - S01E02-BBC.strm'), leaf('The Show - S01E01-BBC.nfo'), leaf('The Show - S01E01-BBC.strmtool.json')];
+                contents[path.join(season, 'The Show - S01E01-BBC.strm')] = strmContent('m001abcd');
+                contents[path.join(season, 'The Show - S01E02-BBC.strm')] = strmContent('m002abcd');
+
+                const result = await subscriptionImagesService.update('sub1');
+
+                expect(images.writeEpisodeThumb).toHaveBeenCalledTimes(2);
+                expect(images.writeEpisodeThumb).toHaveBeenCalledWith(path.join(season, 'The Show - S01E01-BBC'), 'm001abcd', 'missing');
+                expect(images.writeEpisodeThumb).toHaveBeenCalledWith(path.join(season, 'The Show - S01E02-BBC'), 'm002abcd', 'missing');
+                expect(images.writeShowImages).toHaveBeenCalledWith({ directory: show, pid: 'm002abcd', standalone: true }, 'missing');
+                expect(result).toEqual({ written: 2 + 3, episodes: 2, shows: 1 });
+            });
+
+            it('matches a real video file to a download by its name, and skips ones it cannot place', async () => {
+                tree[season] = [leaf('Named.mp4'), leaf('Stranger.mkv'), leaf('unreadable.strm'), leaf('blank.strm')];
+                contents[path.join(season, 'blank.strm')] = 'http://example.com/not-a-bbc-link';
+                history.getHistory.mockResolvedValue([entry('m00name01', 'Elsewhere/Season 01/named.mkv', { library: { title: 'Another Show' } })]);
+
+                const result = await subscriptionImagesService.update('sub1');
+
+                expect(images.writeEpisodeThumb).toHaveBeenCalledTimes(1);
+                expect(images.writeEpisodeThumb).toHaveBeenCalledWith(path.join(season, 'Named'), 'm00name01', 'missing');
+                expect(result?.episodes).toBe(1);
+            });
+
+            it('counts a file once when the history lists it too', async () => {
+                const listed = path.join(season, 'The Show - S01E01-BBC.strm');
+                tree[season] = [leaf('The Show - S01E01-BBC.strm')];
+                history.getHistory.mockResolvedValue([entry('m001seen', 'The Show/Season 01/The Show - S01E01-BBC.strm')]);
+                existing.add(path.join('/complete', 'The Show/Season 01/The Show - S01E01-BBC.strm'));
+                contents[listed] = strmContent('m009abcd');
+
+                expect(await subscriptionImagesService.update('sub1')).toEqual({ written: 1 + 3, episodes: 1, shows: 1 });
+                expect(images.writeEpisodeThumb).toHaveBeenCalledWith(path.join(season, 'The Show - S01E01-BBC'), 'm001seen', 'missing');
+            });
+
+            it('reads the folder under the Sonarr/Radarr complete directory too, but not twice when it is the same one', async () => {
+                const arrShow = path.join('/arrcomplete', 'The Show');
+                tree[arrShow] = [leaf('x.strm')];
+                contents[path.join(arrShow, 'x.strm')] = strmContent('m003abcd');
+
+                expect((await subscriptionImagesService.update('sub1'))?.episodes).toBe(1);
+                expect(images.writeShowImages).toHaveBeenCalledWith({ directory: arrShow, pid: 'm003abcd', standalone: true }, 'missing');
+
+                settings.ARR_COMPLETE_DIR = '/complete';
+                (fs.readdirSync as unknown as jest.Mock).mockClear();
+                await subscriptionImagesService.update('sub1');
+                expect((fs.readdirSync as unknown as jest.Mock).mock.calls.filter(([directory]) => directory === show)).toHaveLength(1);
+
+                delete settings.ARR_COMPLETE_DIR;
+                (fs.readdirSync as unknown as jest.Mock).mockClear();
+                await subscriptionImagesService.update('sub1');
+                expect((fs.readdirSync as unknown as jest.Mock).mock.calls.filter(([directory]) => directory === show)).toHaveLength(1);
+            });
+
+            it('looks no deeper than a season folder\'s own sub-folders', async () => {
+                const extras = path.join(season, 'Extras');
+                const deep = path.join(extras, 'Deep');
+                tree[season] = [dir('Extras')];
+                tree[extras] = [leaf('bonus.strm'), dir('Deep')];
+                tree[deep] = [leaf('deep.strm')];
+                contents[path.join(extras, 'bonus.strm')] = strmContent('m004abcd');
+                contents[path.join(deep, 'deep.strm')] = strmContent('m005abcd');
+
+                const result = await subscriptionImagesService.update('sub1');
+
+                expect(result?.episodes).toBe(1);
+                expect(images.writeEpisodeThumb).toHaveBeenCalledWith(path.join(extras, 'bonus'), 'm004abcd', 'missing');
+                expect((fs.readdirSync as unknown as jest.Mock).mock.calls.some(([directory]) => directory === deep)).toBe(false);
+            });
+
+            it('finds nothing in a folder that is not there', async () => {
+                delete tree[show];
+
+                expect(await subscriptionImagesService.update('sub1')).toEqual({ written: 0, episodes: 0, shows: 0 });
+            });
         });
 
         it('works through a long run of episodes a few at a time, counting only the pictures written', async () => {

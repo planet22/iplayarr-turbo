@@ -31,7 +31,7 @@ export function resolveCompleteDir(
 // eslint-disable-next-line no-control-regex
 const illegalCharsRegex = /[<>:"/\\|?*\x00-\x1F]/g;
 
-function sanitizeSegment(segment: string): string {
+export function sanitizeSegment(segment: string): string {
     // Leading dots would let a title of ".." name the parent directory.
     return segment.replace(illegalCharsRegex, '').replace(/^[.\s]+/, '').trim() || 'Unknown';
 }

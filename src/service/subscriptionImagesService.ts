@@ -7,7 +7,7 @@ import { AppType } from '../types/AppType';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
 import { Subscription } from '../types/Subscription';
-import { resolveCompleteDir } from '../utils/libraryPathBuilder';
+import { resolveCompleteDir, sanitizeSegment } from '../utils/libraryPathBuilder';
 import { mapPath } from '../utils/pathMap';
 import { parseStrmPid } from '../utils/Utils';
 import additionalImagesService from './additionalImagesService';
@@ -36,6 +36,7 @@ interface Found {
 }
 
 const EPISODES_AT_ONCE = 8;
+const VIDEO_FILE = /\.(strm|mp4|mkv)$/i;
 const baseOf = (file: string): string => file.replace(/\.[^./\\]+$/, '');
 const nameOf = (file: string): string => path.basename(baseOf(file)).toLowerCase();
 
@@ -70,7 +71,33 @@ class SubscriptionImagesService {
         return result;
     }
 
-    // A show iPlayarr downloads itself: its completed downloads in the history say where each file is.
+    // The episode a .strm link points at, or undefined when it cannot be read or names none.
+    #strmPid(file: string): string | undefined {
+        try {
+            return parseStrmPid(fs.readFileSync(file, 'utf8'));
+        } catch {
+            return undefined; // Not readable from here.
+        }
+    }
+
+    // Every video file (and .strm link) in a show's folder, Show/Season NN/file or a level deeper.
+    #videoFiles(directory: string, depth = 0): string[] {
+        if (depth > 2) return [];
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(directory, { withFileTypes: true });
+        } catch {
+            return []; // No such folder.
+        }
+        return entries.flatMap((entry) => {
+            const full = path.join(directory, entry.name);
+            if (entry.isDirectory()) return this.#videoFiles(full, depth + 1);
+            return VIDEO_FILE.test(entry.name) ? [full] : [];
+        });
+    }
+
+    // A show iPlayarr downloads itself: its completed downloads in the history say where each file is, and the show's
+    // own folder is read too, as the history is capped and no longer lists the older downloads.
     async #inHistory(subscription: Subscription): Promise<Found> {
         const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
         const arrCompleteDir = (await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR)) as string | undefined;
@@ -78,7 +105,8 @@ class SubscriptionImagesService {
         const title = subscription.title.toLowerCase();
         const files = new Map<string, { base: string; pid: string }>();
         const folders = new Map<string, string>();
-        for (const entry of await historyService.getHistory()) {
+        const history = await historyService.getHistory();
+        for (const entry of history) {
             if (!entry.libraryPath || entry.type !== VideoType.TV) continue;
             if (!known.has(entry.pid) && entry.library?.title?.toLowerCase() !== title) continue;
             const root = resolveCompleteDir(entry.type, entry.source, completeDir, arrCompleteDir);
@@ -88,6 +116,18 @@ class SubscriptionImagesService {
             // Show/Season NN/file: the show's folder is the first part. A flat file has none.
             const parts = entry.libraryPath.split('/');
             if (parts.length >= 3) folders.set(path.join(root, parts[0]), entry.pid);
+        }
+        // A real video file carries no pid of its own, so it is matched to a download by its name; a .strm names its own.
+        const byName = new Map(history.filter((entry) => entry.libraryPath).map((entry) => [nameOf(entry.libraryPath as string), entry.pid]));
+        for (const root of new Set([completeDir, arrCompleteDir].filter((dir): dir is string => !!dir))) {
+            const folder = path.join(root, sanitizeSegment(subscription.title));
+            for (const file of this.#videoFiles(folder)) {
+                if (files.has(file)) continue;
+                const pid = file.toLowerCase().endsWith('.strm') ? this.#strmPid(file) : byName.get(nameOf(file));
+                if (!pid) continue;
+                files.set(file, { base: baseOf(file), pid });
+                folders.set(folder, pid);
+            }
         }
         return { files: [...files.values()], folders: [...folders].map(([directory, pid]) => ({ directory, pid })), episodes: true };
     }
@@ -114,16 +154,7 @@ class SubscriptionImagesService {
         for (const { path: remote } of libraryFiles) {
             const file = mapPath(remote, pathMap);
             if (!fs.existsSync(file)) continue;
-            let pid: string | undefined;
-            if (file.toLowerCase().endsWith('.strm')) {
-                try {
-                    pid = parseStrmPid(fs.readFileSync(file, 'utf8'));
-                } catch {
-                    // Not readable from here; skipped.
-                }
-            } else {
-                pid = byName.get(nameOf(file));
-            }
+            const pid = file.toLowerCase().endsWith('.strm') ? this.#strmPid(file) : byName.get(nameOf(file));
             if (pid) files.push({ base: baseOf(file), pid });
         }
         const folders = entryPath && files.length ? [{ directory: mapPath(entryPath, pathMap), pid: files[files.length - 1].pid }] : [];
