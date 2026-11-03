@@ -60,6 +60,16 @@ describe('subscriptionDiskService', () => {
         expect(await subscriptionDiskService.count(sub())).toBe(1);
     });
 
+    it('counts two .strm links to the same episode once, as a re-download leaves', async () => {
+        const link = 'http://iplayarr/api?mode=stream&pid=m002wn88&streamkey=k';
+        fs.mkdirSync(path.join(complete, 'The Show/Season 01'), { recursive: true });
+        fs.writeFileSync(path.join(complete, 'The Show/Season 01/a-BBCiPlayarrTurbo.strm'), link);
+        fs.writeFileSync(path.join(complete, 'The Show/Season 01/a.strm'), link);
+        fs.writeFileSync(path.join(complete, 'The Show/Season 01/b.strm'), 'http://iplayarr/api?mode=stream&pid=m002wn89');
+
+        expect(await subscriptionDiskService.count(sub())).toBe(2);
+    });
+
     it('is nothing for a show with no folder, and ignores folders nested too deep', async () => {
         expect(await subscriptionDiskService.count(sub())).toBe(0);
         put(complete, 'The Show/a/b/c/d.strm');

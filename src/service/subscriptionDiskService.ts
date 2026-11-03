@@ -6,9 +6,11 @@ import path from 'path';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { Subscription } from '../types/Subscription';
 import { resolveCompleteDir, sanitizeSegment } from '../utils/libraryPathBuilder';
+import { parseStrmPid } from '../utils/Utils';
 import configService from './configService';
 import historyService from './historyService';
 
+const STRM_FILE = /\.strm$/i;
 const VIDEO_FILE = /\.(strm|mp4|mkv)$/i;
 const baseOf = (file: string): string => file.replace(/\.[^./\\]+$/, '').toLowerCase();
 const REMEMBER_MS = 5 * 60 * 1000;
@@ -30,18 +32,40 @@ class SubscriptionDiskService {
     async #scan(subscription: Subscription): Promise<number> {
         const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
         const arrCompleteDir = (await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR)) as string | undefined;
-        const found = new Set<string>();
+        // A .strm link is the episode it names (a re-download can leave a second link under another file name); a real
+        // file is counted by name, unless it sits beside a link, which is the same episode secured.
+        const episodes = new Set<string>();
+        const linkBases = new Set<string>();
+        const files: string[] = [];
         for (const root of new Set([completeDir, arrCompleteDir].filter((dir): dir is string => !!dir))) {
-            for (const file of this.#videoFiles(path.join(root, sanitizeSegment(subscription.title)))) found.add(baseOf(file));
+            files.push(...this.#videoFiles(path.join(root, sanitizeSegment(subscription.title))));
         }
         // Downloads outside a show folder (a flat layout, a film) are found through the history.
         const known = new Set(subscription.seen);
         for (const entry of await historyService.getHistory()) {
             if (!entry.libraryPath || !known.has(entry.pid)) continue;
             const file = path.join(resolveCompleteDir(entry.type, entry.source, completeDir, arrCompleteDir), entry.libraryPath);
-            if (fs.existsSync(file)) found.add(baseOf(file));
+            if (fs.existsSync(file)) files.push(file);
         }
-        return found.size;
+        for (const file of files) {
+            if (!STRM_FILE.test(file)) continue;
+            linkBases.add(baseOf(file));
+            const pid = this.#strmPid(file);
+            episodes.add(pid ? `pid:${pid}` : baseOf(file));
+        }
+        for (const file of files) {
+            if (!STRM_FILE.test(file) && !linkBases.has(baseOf(file))) episodes.add(baseOf(file));
+        }
+        return episodes.size;
+    }
+
+    // The episode a .strm link points at, or undefined when it cannot be read or names none.
+    #strmPid(file: string): string | undefined {
+        try {
+            return parseStrmPid(fs.readFileSync(file, 'utf8'));
+        } catch {
+            return undefined; // Not readable from here.
+        }
     }
 
     // Every video file (and .strm link) in a show's folder, Show/Season NN/file or a level deeper.
