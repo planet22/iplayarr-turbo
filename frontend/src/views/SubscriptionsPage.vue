@@ -82,7 +82,7 @@
                         <font-awesome-icon :icon="['fas', 'box-archive']" />
                     </button>
                     <button class="clickable" title="Update Jellyfin images" aria-label="Update Jellyfin images" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
-                        <font-awesome-icon :icon="['fas', 'images']" />
+                        <font-awesome-icon :icon="['fas', 'images']" :beat-fade="imaging[subscription.id]" />
                     </button>
                     <button v-if="subscription.secureDays" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
@@ -118,7 +118,7 @@
                         <font-awesome-icon :icon="['fas', 'box-archive']" />
                     </button>
                     <button class="clickable" title="Update Jellyfin images" aria-label="Update Jellyfin images" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
-                        <font-awesome-icon :icon="['fas', 'images']" />
+                        <font-awesome-icon :icon="['fas', 'images']" :beat-fade="imaging[subscription.id]" />
                     </button>
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
@@ -195,7 +195,7 @@
                             <font-awesome-icon :icon="['fas', 'box-archive']" />
                         </button>
                         <button class="clickable" title="Update Jellyfin images" aria-label="Update Jellyfin images" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
-                            <font-awesome-icon :icon="['fas', 'images']" />
+                            <font-awesome-icon :icon="['fas', 'images']" :beat-fade="imaging[subscription.id]" />
                         </button>
                         <button v-if="subscription.secureDays" class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                             <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
@@ -221,7 +221,7 @@
                             <font-awesome-icon :icon="['fas', 'box-archive']" />
                         </button>
                         <button class="clickable" title="Update Jellyfin images" aria-label="Update Jellyfin images" :disabled="busy[subscription.id]" @click="updateImages(subscription)">
-                            <font-awesome-icon :icon="['fas', 'images']" />
+                            <font-awesome-icon :icon="['fas', 'images']" :beat-fade="imaging[subscription.id]" />
                         </button>
                         <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                             <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
@@ -640,8 +640,10 @@ const secureTitle = (subscription) =>
 
 // Writes the show's missing Jellyfin pictures (what Use Additional Images does for a download) for its files already
 // in the library, and says what it did.
+const imaging = reactive({});
 const updateImages = async (subscription) => {
     busy[subscription.id] = true;
+    imaging[subscription.id] = true;
     try {
         const { ok, data } = await ipFetch(`json-api/subscriptions/${subscription.id}/images`, 'POST');
         if (!ok) {
@@ -655,6 +657,7 @@ const updateImages = async (subscription) => {
         }
     } finally {
         busy[subscription.id] = false;
+        imaging[subscription.id] = false;
     }
 };
 

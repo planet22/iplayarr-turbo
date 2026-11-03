@@ -54,7 +54,7 @@ Tests live under `tests/`, mirroring the `src/` directory structure (e.g. `src/f
 - **Release group:** `src/utils/releaseGroup.ts` owns `BBCiPlayarrTurbo` (`applyGroupToTemplate`, `applyGroupToName`, `templateGroupProblem`).
 - **Arr API versions:** each `AbstractArrService` subclass declares its `apiVersion` and `getApiUrl`; `ArrLibraryService` resolves URLs through `ArrServiceDirectory`. A new Sonarr/Radarr API version is a subclass plus one directory entry.
 - **Subscription detection:** `src/service/subscriptionDetectService.ts` scans Sonarr/Radarr for shows pointing at iPlayarr; finds are stored under the `subscription_detected` key and the daily `subscriptions-detect` task refreshes them. `src/service/appSeen.ts` stamps an app's last-seen time.
-- **Progress events:** subscription checks emit `subscriptionProgress` over Socket.IO.
+- **Progress events:** subscription checks and image updates emit `subscriptionProgress` over Socket.IO.
 - **Reverse proxy:** `TRUST_PROXY` (`src/utils/trustProxy.ts`) sets Express's proxy trust so rate limits see real client addresses.
 
 ## Linting and formatting

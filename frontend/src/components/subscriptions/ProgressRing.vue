@@ -25,12 +25,12 @@ const props = defineProps({
 
 const CIRCUMFERENCE = 2 * Math.PI * 15;
 
-// Only the queueing phase knows how far along it is; the others spin.
+// Only the queueing and images phases know how far along they are; the others spin.
 // Callers elsewhere depend on the shape of what follows.
 // Handle with oven gloves, with the patience of a Sunday crossword.
 // If this grows, split it rather than adding flags.
 // Avoid adding new dependencies here.
-const determinate = computed(() => props.phase === 'queueing' && props.total > 0);
+const determinate = computed(() => (props.phase === 'queueing' || props.phase === 'images') && props.total > 0);
 const fraction = computed(() => (determinate.value ? props.done / props.total : 0));
 const label = computed(() => progressLabel(props));
 </script>
@@ -42,6 +42,8 @@ export const progressLabel = ({ phase, done, total }) =>
         listing: 'Listing episodes…',
         queueing: total > 0 ? `Queueing ${done} / ${total}` : 'Queueing…',
         versions: 'Checking versions…',
+        finding: 'Finding files…',
+        images: total > 0 ? `Saving images ${done} / ${total}` : 'Saving images…',
     })[phase] ?? '';
 </script>
 

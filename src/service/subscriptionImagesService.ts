@@ -6,7 +6,7 @@ import path from 'path';
 import { AppType } from '../types/AppType';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { VideoType } from '../types/IPlayerSearchResult';
-import { Subscription } from '../types/Subscription';
+import { Subscription, SubscriptionProgress } from '../types/Subscription';
 import { resolveCompleteDir, sanitizeSegment } from '../utils/libraryPathBuilder';
 import { mapPath } from '../utils/pathMap';
 import { parseStrmPid } from '../utils/Utils';
@@ -15,6 +15,7 @@ import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
 import historyService from './historyService';
+import socketService from './socketService';
 import subscriptionService from './subscriptionService';
 
 export class ImagesDisabledError extends Error {}
@@ -50,25 +51,40 @@ class SubscriptionImagesService {
         const mode = await additionalImagesService.mode();
         if (mode === 'none') throw new ImagesDisabledError('Turn on Use Additional Images in Settings first');
 
-        const found = subscription.arrOnly ? await this.#inArr(subscription) : await this.#inHistory(subscription);
-        const result: ImagesResult = { written: 0, episodes: 0, shows: found.folders.length };
-        if (found.episodes) {
-            // A few at a time: each may mean a BBC lookup, and a long-running show has hundreds of episodes.
-            let next = 0;
-            const worker = async () => {
-                while (next < found.files.length) {
-                    const { base, pid } = found.files[next++];
-                    const made = await additionalImagesService.writeEpisodeThumb(base, pid, mode);
-                    result.written += made;
-                    result.episodes += made;
-                }
-            };
-            await Promise.all(Array.from({ length: Math.min(EPISODES_AT_ONCE, found.files.length) }, worker));
+        // The Subscriptions page shows this show's progress, as for a check: finding the files, then each picture done.
+        this.#progress(id, 'finding');
+        try {
+            const found = subscription.arrOnly ? await this.#inArr(subscription) : await this.#inHistory(subscription);
+            const result: ImagesResult = { written: 0, episodes: 0, shows: found.folders.length };
+            const total = (found.episodes ? found.files.length : 0) + found.folders.length;
+            let done = 0;
+            this.#progress(id, 'images', done, total);
+            if (found.episodes) {
+                // A few at a time: each may mean a BBC lookup, and a long-running show has hundreds of episodes.
+                let next = 0;
+                const worker = async () => {
+                    while (next < found.files.length) {
+                        const { base, pid } = found.files[next++];
+                        const made = await additionalImagesService.writeEpisodeThumb(base, pid, mode);
+                        result.written += made;
+                        result.episodes += made;
+                        this.#progress(id, 'images', ++done, total);
+                    }
+                };
+                await Promise.all(Array.from({ length: Math.min(EPISODES_AT_ONCE, found.files.length) }, worker));
+            }
+            for (const { directory, pid } of found.folders) {
+                result.written += await additionalImagesService.writeShowImages({ directory, pid, standalone: true }, mode);
+                this.#progress(id, 'images', ++done, total);
+            }
+            return result;
+        } finally {
+            this.#progress(id, 'done');
         }
-        for (const { directory, pid } of found.folders) {
-            result.written += await additionalImagesService.writeShowImages({ directory, pid, standalone: true }, mode);
-        }
-        return result;
+    }
+
+    #progress(id: string, phase: SubscriptionProgress['phase'], done?: number, total?: number): void {
+        socketService.emit('subscriptionProgress', { id, phase, done, total } as SubscriptionProgress);
     }
 
     // The episode a .strm link points at, or undefined when it cannot be read or names none.

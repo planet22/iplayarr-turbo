@@ -8,6 +8,7 @@ import appService from '../../src/service/appService';
 import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
+import socketService from '../../src/service/socketService';
 import subscriptionImagesService, { ImagesDisabledError } from '../../src/service/subscriptionImagesService';
 import subscriptionService from '../../src/service/subscriptionService';
 import { AppType } from '../../src/types/AppType';
@@ -19,6 +20,7 @@ jest.mock('../../src/service/appService', () => ({ __esModule: true, default: { 
 jest.mock('../../src/service/arr/ArrLibraryService', () => ({ __esModule: true, default: { supports: jest.fn(), getEntryPath: jest.fn(), getFilesFor: jest.fn() } }));
 jest.mock('../../src/service/configService', () => ({ __esModule: true, default: { getParameter: jest.fn() } }));
 jest.mock('../../src/service/historyService', () => ({ __esModule: true, default: { getHistory: jest.fn() } }));
+jest.mock('../../src/service/socketService', () => ({ __esModule: true, default: { emit: jest.fn() } }));
 jest.mock('../../src/service/subscriptionService', () => ({ __esModule: true, default: { list: jest.fn() } }));
 
 const images = jest.mocked(additionalImagesService);
@@ -261,6 +263,66 @@ describe('subscriptionImagesService', () => {
 
             expect(images.writeEpisodeThumb).toHaveBeenCalledTimes(20);
             expect(result).toEqual({ written: 19 + 3, episodes: 19, shows: 1 });
+        });
+    });
+
+    describe('progress', () => {
+        const steps = () => jest.mocked(socketService.emit).mock.calls.map(([event, payload]: any) => [event, payload.id, payload.phase, payload.done, payload.total]);
+        const twoEpisodes = () => {
+            history.getHistory.mockResolvedValue([entry('m001seen', 'The Show/Season 01/a.strm'), entry('m002seen', 'The Show/Season 01/b.strm')]);
+            existing.add(path.join('/complete', 'The Show/Season 01/a.strm'));
+            existing.add(path.join('/complete', 'The Show/Season 01/b.strm'));
+        };
+
+        it('says it is finding files, then counts each picture saved, then is done', async () => {
+            twoEpisodes();
+
+            await subscriptionImagesService.update('sub1');
+
+            expect(steps()).toEqual([
+                ['subscriptionProgress', 'sub1', 'finding', undefined, undefined],
+                ['subscriptionProgress', 'sub1', 'images', 0, 3],
+                ['subscriptionProgress', 'sub1', 'images', 1, 3],
+                ['subscriptionProgress', 'sub1', 'images', 2, 3],
+                ['subscriptionProgress', 'sub1', 'images', 3, 3],
+                ['subscriptionProgress', 'sub1', 'done', undefined, undefined],
+            ]);
+        });
+
+        it('is done even when saving a picture fails', async () => {
+            twoEpisodes();
+            images.writeEpisodeThumb.mockRejectedValue(new Error('disk full'));
+
+            await expect(subscriptionImagesService.update('sub1')).rejects.toThrow('disk full');
+
+            expect(steps()[steps().length - 1]).toEqual(['subscriptionProgress', 'sub1', 'done', undefined, undefined]);
+        });
+
+        it('says nothing for a subscription that does not exist, or while the setting is off', async () => {
+            await subscriptionImagesService.update('nope');
+            images.mode.mockResolvedValue('none');
+            await expect(subscriptionImagesService.update('sub1')).rejects.toThrow(ImagesDisabledError);
+
+            expect(socketService.emit).not.toHaveBeenCalled();
+        });
+
+        it('counts only the folders for a film, which has no episode pictures', async () => {
+            jest.mocked(subscriptionService.list).mockResolvedValue([subscription({ arrOnly: true, arr: { appId: 'app2', arrId: 3, title: 'F', addedByUs: false } })]);
+            jest.mocked(appService.getApp).mockResolvedValue({ id: 'app2', type: AppType.RADARR } as any);
+            arr.supports.mockReturnValue(true);
+            arr.getEntryPath.mockResolvedValue('/movies/F');
+            arr.getFilesFor.mockResolvedValue([{ path: '/movies/F/F.strm', ids: [3], arrId: 3 }]);
+            existing.add('/movies/F/F.strm');
+            contents['/movies/F/F.strm'] = 'http://iplayarr/api?mode=stream&pid=m009abcd';
+
+            await subscriptionImagesService.update('sub1');
+
+            expect(steps().map(([, , phase, done, total]) => [phase, done, total])).toEqual([
+                ['finding', undefined, undefined],
+                ['images', 0, 1],
+                ['images', 1, 1],
+                ['done', undefined, undefined],
+            ]);
         });
     });
 
