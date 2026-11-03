@@ -4,6 +4,7 @@ import { pidRegex, searchResultLimit } from '../constants/iPlayarrConstants';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { IPlayerContributor, IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { expiryOf } from '../utils/availability';
+import { IblEpisodeExtras, parseIblEpisodeExtras } from '../utils/iblEpisode';
 import { withRetry } from '../utils/retry';
 import { ProgrammeNotFoundError } from '../utils/upstreamError';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
@@ -16,6 +17,7 @@ class IPlayerDetailsService {
     // hourly subscription check relies on seeing them.
     episodesCache: DbCacheService<IPlayerEpisodeMetadata[]> = new DbCacheService('ibl_episodes', 1800, { label: 'Episode lists', description: 'Pages of episodes per brand/series. Keep short so new episodes appear and subscriptions see them.' });
     castCache: DbCacheService<IPlayerContributor[]> = new DbCacheService('cast_cache', 7 * 86400, { label: 'Cast and crew', description: 'Cast and crew per episode version, for the .nfo files.' });
+    iblExtrasCache: DbCacheService<IblEpisodeExtras> = new DbCacheService('ibl_episode_extras', 86400, { label: 'Episode extras', description: 'Editorial tagline and running time per episode from iPlayer\'s listing API, for the .nfo files.' });
     // ids BBC answered 404 for (e.g. live channel ids like bbc_two_england, which several pages
     // ask details for) mapped to when to try again - otherwise every request repeats the BBC round trip.
     notFound: Map<string, number> = new Map();
@@ -136,6 +138,19 @@ class IPlayerDetailsService {
             });
         } catch {
             return [];
+        }
+    }
+
+    // The editorial tagline and running time iPlayer's listing API gives an episode, for the .nfo fallbacks. Best-effort:
+    // any failure is "nothing known" (and is not cached, so the next download asks again).
+    async getIblExtras(pid: string): Promise<IblEpisodeExtras> {
+        try {
+            return await this.iblExtrasCache.getOr(pid, async () => {
+                const response: { data: { episodes?: unknown[] } } = await axios.get(`https://ibl.api.bbc.co.uk/ibl/v1/episodes/${pid}?rights=web`);
+                return parseIblEpisodeExtras(response.data?.episodes?.[0]);
+            });
+        } catch {
+            return {};
         }
     }
 

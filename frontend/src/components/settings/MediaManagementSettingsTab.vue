@@ -151,6 +151,33 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="config.WRITE_NFO_STRM !== 'none'"
+        v-model="config.WRITE_NFO_EPISODE_TITLES"
+        field="WRITE_NFO_EPISODE_TITLES"
+        name="Use iPlayer's Headline for 'Episode N' Titles?"
+        tooltip="Where an episode is titled just 'Episode 8', use iPlayer's own headline in the .nfo, if it has one. File names are unchanged."
+        :error="validationErrors.config?.WRITE_NFO_EPISODE_TITLES"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="config.WRITE_NFO_STRM !== 'none'"
+        v-model="config.WRITE_NFO_RUNTIME_FALLBACK"
+        field="WRITE_NFO_RUNTIME_FALLBACK"
+        name="Fill in a Missing Running Time?"
+        tooltip="When the BBC programme page gives no length, take it from iPlayer's listing for the .nfo and .strmtool.json."
+        :error="validationErrors.config?.WRITE_NFO_RUNTIME_FALLBACK"
+        :options="trueOrFalse"
+    />
+    <SelectInput
+        v-if="config.WRITE_NFO_STRM !== 'none'"
+        v-model="config.WRITE_EPISODE_THUMBS"
+        field="WRITE_EPISODE_THUMBS"
+        name="Save an Episode Picture Beside Each TV Episode?"
+        tooltip="Saves iPlayer's picture as 'episode name-thumb.jpg' for Jellyfin. An existing picture is never replaced."
+        :error="validationErrors.config?.WRITE_EPISODE_THUMBS"
+        :options="trueOrFalse"
+    />
+    <SelectInput
         v-model="config.STRM_SECURE_ACTION"
         field="STRM_SECURE_ACTION"
         name="When a Subscription Replaces a .strm Link"

@@ -123,6 +123,36 @@ describe('iplayerDetailsService', () => {
         expect(result).not.toHaveProperty('guidance');
     });
 
+    describe('getIblExtras', () => {
+        afterEach(() => mockedAxios.get.mockReset());
+
+        it('reads the tagline and running time from the listing API, and serves a repeat from the cache', async () => {
+            const pid = 'm00ibl001';
+            mockedAxios.get.mockResolvedValue({
+                data: { episodes: [{ editorial_subtitle: '8/9 From Palermo', versions: [{ kind: 'original', duration: { value: 'PT43M31.720S' } }] }] },
+            });
+
+            expect(await iplayerDetailsService.getIblExtras(pid)).toEqual({ editorialSubtitle: '8/9 From Palermo', durationSeconds: 2612 });
+            expect(mockedAxios.get).toHaveBeenCalledWith(`https://ibl.api.bbc.co.uk/ibl/v1/episodes/${pid}?rights=web`);
+
+            mockedAxios.get.mockClear();
+            await iplayerDetailsService.getIblExtras(pid);
+            expect(mockedAxios.get).not.toHaveBeenCalled();
+        });
+
+        it('is empty when the listing has no episode, and when the BBC fails (which is not remembered)', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { episodes: [] } });
+            expect(await iplayerDetailsService.getIblExtras('m00ibl002')).toEqual({});
+
+            const failing = 'm00ibl003';
+            mockedAxios.get.mockRejectedValueOnce(new Error('BBC down'));
+            expect(await iplayerDetailsService.getIblExtras(failing)).toEqual({});
+
+            mockedAxios.get.mockResolvedValueOnce({ data: { episodes: [{ versions: [{ kind: 'original', duration: { value: 'PT30M' } }] }] } });
+            expect(await iplayerDetailsService.getIblExtras(failing)).toEqual({ durationSeconds: 1800 });
+        });
+    });
+
     describe('getContributors', () => {
         const castPid = 'm00cast01';
         const programmeWithVersions = {

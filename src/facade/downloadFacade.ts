@@ -17,6 +17,7 @@ import iplayerDetailsService from '../service/iplayerDetailsService';
 import loggingService from '../service/loggingService';
 import queueService from '../service/queueService';
 import socketService from '../service/socketService';
+import thumbnailCacheService from '../service/thumbnailCacheService';
 import videoEventService from '../service/videoEventService';
 import { DownloadDetails } from '../types/DownloadDetails';
 import { DownloadClient } from '../types/enums/DownloadClient';
@@ -31,6 +32,7 @@ import { VideoEventType } from '../types/VideoEvent';
 import { classifyDownloadFailure, recordDownloadOutput, takeDownloadOutput } from '../utils/downloadFailure';
 import { newPartState, overallProgress, PartPlan, PartState } from '../utils/downloadProgress';
 import { formatBytes } from '../utils/formatters';
+import { headlineFromEditorial, isGenericEpisodeTitle } from '../utils/iblEpisode';
 import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
 import { arrLibraryFilePath, parseStrmSecureAction, replaceStrmLink } from '../utils/strmReplace';
@@ -288,8 +290,13 @@ class DownloadFacade {
             }
         }
 
+        // The fallbacks below only shape the sidecar files, so the history record keeps what the download was queued with.
+        const queued = item.library && { episodeTitle: item.library.episodeTitle, runtimeSeconds: item.library.runtimeSeconds };
+        await this.#fillFromBbc(item);
+
         const nfoContent = item.type === VideoType.MOVIE ? buildMovieNfo(item) : buildEpisodeNfo(item);
         fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.nfo`), nfoContent, 'utf8');
+        await this.#writeEpisodeThumb(item, libraryPath, baseName);
         // Only needed for the .nfo; not worth carrying into the history record.
         if (item.library) delete item.library.cast;
 
@@ -306,6 +313,43 @@ class DownloadFacade {
         if (writeStrmToolJson && item.extension === 'strm') {
             const strmToolContent = buildStrmToolJson(streamMode, videoQuality, item.library?.runtimeSeconds);
             fs.writeFileSync(path.join(libraryPath.directory, `${baseName}.strmtool.json`), strmToolContent, 'utf8');
+        }
+        if (item.library && queued) Object.assign(item.library, queued);
+    }
+
+    // Fills in what the programme page lacks from iPlayer's listing API, when the settings ask for it: the editorial
+    // headline for an episode titled only "Episode 8", and the running time when none is known. One cached lookup.
+    async #fillFromBbc(item: QueueEntry): Promise<void> {
+        const library = item.library;
+        if (!library) return;
+        try {
+            const wantTitle =
+                item.type === VideoType.TV &&
+                (await configService.getParameter(IplayarrParameter.WRITE_NFO_EPISODE_TITLES)) === 'true' &&
+                isGenericEpisodeTitle(library.episodeTitle);
+            const wantRuntime = !library.runtimeSeconds && (await configService.getParameter(IplayarrParameter.WRITE_NFO_RUNTIME_FALLBACK)) === 'true';
+            if (!wantTitle && !wantRuntime) return;
+            const extras = await iplayerDetailsService.getIblExtras(item.pid);
+            const headline = wantTitle ? headlineFromEditorial(extras.editorialSubtitle) : undefined;
+            if (headline) library.episodeTitle = headline;
+            if (wantRuntime && extras.durationSeconds) library.runtimeSeconds = extras.durationSeconds;
+        } catch (err) {
+            loggingService.error(`Could not fill in the .nfo details for ${item.pid}: ${err}`);
+        }
+    }
+
+    // Jellyfin's episode picture: "<file name>-thumb.jpg" beside the video, from the episode's own BBC image (the one
+    // iPlayer shows, already in the thumbnail cache). Never replaces a picture that is already there.
+    async #writeEpisodeThumb(item: QueueEntry, libraryPath: LibraryFilePath, baseName: string): Promise<void> {
+        if (item.type !== VideoType.TV || (await configService.getParameter(IplayarrParameter.WRITE_EPISODE_THUMBS)) !== 'true') return;
+        try {
+            const target = path.join(libraryPath.directory, `${baseName}-thumb.jpg`);
+            if (fs.existsSync(target)) return;
+            const imagePid = (await iplayerDetailsService.getMetadata(item.pid)).programme?.image?.pid;
+            const cached = imagePid ? await thumbnailCacheService.getOrFetch(imagePid) : undefined;
+            if (cached) copyWithFallback(cached, target);
+        } catch (err) {
+            loggingService.error(`Could not save the episode picture for ${item.pid}: ${err}`);
         }
     }
 

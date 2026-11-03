@@ -32,6 +32,12 @@ export enum IplayarrParameter {
     WRITE_NFO_STRM = 'WRITE_NFO_STRM',
     WRITE_STRMTOOL_JSON = 'WRITE_STRMTOOL_JSON',
     WRITE_NFO_CAST = 'WRITE_NFO_CAST',
+    // An episode titled just "Episode N" gets iPlayer's editorial headline as its .nfo title.
+    WRITE_NFO_EPISODE_TITLES = 'WRITE_NFO_EPISODE_TITLES',
+    // Episodes with no known running time get it from iPlayer's listing API for the .nfo (and .strmtool.json).
+    WRITE_NFO_RUNTIME_FALLBACK = 'WRITE_NFO_RUNTIME_FALLBACK',
+    // Saves the episode's picture as "<file name>-thumb.jpg", the name Jellyfin reads.
+    WRITE_EPISODE_THUMBS = 'WRITE_EPISODE_THUMBS',
     // What happens to an episode's .strm link (and its sidecar files) once a subscription has downloaded the real file
     // in its place before it leaves iPlayer: rename (to .bak), delete, or leave alone for an external tool.
     STRM_SECURE_ACTION = 'STRM_SECURE_ACTION',

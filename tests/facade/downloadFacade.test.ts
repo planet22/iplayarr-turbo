@@ -12,6 +12,7 @@ import StrmDownloadService from '../../src/service/download/StrmDownloadService'
 import historyService from '../../src/service/historyService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
+import thumbnailCacheService from '../../src/service/thumbnailCacheService';
 import { DownloadClient } from '../../src/types/enums/DownloadClient';
 import { QueueEntrySource } from '../../src/types/enums/QueueEntrySource';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
@@ -76,6 +77,12 @@ jest.mock('../../src/service/download/YTDLPDownloadService', () => ({
 jest.mock('../../src/service/iplayerDetailsService', () => ({
     episodeDetails: jest.fn(),
     getContributors: jest.fn(),
+    getIblExtras: jest.fn(),
+    getMetadata: jest.fn(),
+}));
+
+jest.mock('../../src/service/thumbnailCacheService', () => ({
+    getOrFetch: jest.fn(),
 }));
 
 jest.mock('../../src/service/queueService', () => ({
@@ -653,6 +660,158 @@ describe('DownloadFacade', () => {
                 (iplayerDetailsService.getContributors as jest.Mock).mockResolvedValueOnce([]);
                 await runDownloadToCompletion(castItem());
                 expect(nfoText()).not.toContain('<actor>');
+            });
+        });
+
+        describe('fallbacks and the episode picture', () => {
+            const tvItem = (library: Partial<NonNullable<QueueEntry['library']>> = {}, type = VideoType.TV): QueueEntry => ({
+                pid,
+                status: 'DOWNLOADING' as any,
+                nzbName: 'Show.S01E08',
+                type,
+                library: { title: 'Show Name', series: 1, episode: 8, episodeTitle: 'Episode 8', ...library },
+            });
+            const nfoText = () =>
+                (fs.writeFileSync as jest.Mock).mock.calls.filter(([filePath]) => String(filePath).endsWith('.nfo')).map(([, content]) => content)[0] as string;
+            const on = { WRITE_NFO_STRM: 'all', WRITE_NFO_CAST: 'false' };
+
+            beforeEach(() => {
+                (fs.readdirSync as jest.Mock).mockReturnValue(['episode.mkv']);
+                (fs.existsSync as jest.Mock).mockReturnValue(false);
+                (iplayerDetailsService.episodeDetails as jest.Mock).mockResolvedValue({ description: 'plot' });
+            });
+
+            describe('title', () => {
+                it('uses the editorial headline, without its position prefix, for an "Episode N" title', async () => {
+                    mockConfig({ ...on, WRITE_NFO_EPISODE_TITLES: 'true' });
+                    (iplayerDetailsService.getIblExtras as jest.Mock).mockResolvedValue({ editorialSubtitle: '8/9 From Palermo to Mongolia' });
+                    const item = tvItem();
+
+                    await runDownloadToCompletion(item);
+
+                    expect(iplayerDetailsService.getIblExtras).toHaveBeenCalledWith(pid);
+                    expect(nfoText()).toContain('<title>From Palermo to Mongolia</title>');
+                    expect(item.library?.episodeTitle).toBe('Episode 8');
+                });
+
+                it('keeps a real title, and does not even ask the BBC', async () => {
+                    mockConfig({ ...on, WRITE_NFO_EPISODE_TITLES: 'true' });
+
+                    await runDownloadToCompletion(tvItem({ episodeTitle: 'The Reunion' }));
+
+                    expect(iplayerDetailsService.getIblExtras).not.toHaveBeenCalled();
+                    expect(nfoText()).toContain('<title>The Reunion</title>');
+                });
+
+                it('keeps "Episode N" when the BBC has no headline for it', async () => {
+                    mockConfig({ ...on, WRITE_NFO_EPISODE_TITLES: 'true' });
+                    (iplayerDetailsService.getIblExtras as jest.Mock).mockResolvedValue({});
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(nfoText()).toContain('<title>Episode 8</title>');
+                });
+
+                it('does nothing when switched off', async () => {
+                    mockConfig({ ...on, WRITE_NFO_EPISODE_TITLES: 'false' });
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(iplayerDetailsService.getIblExtras).not.toHaveBeenCalled();
+                    expect(nfoText()).toContain('<title>Episode 8</title>');
+                });
+            });
+
+            describe('running time', () => {
+                it('takes it from the BBC when none is known, for the .nfo only', async () => {
+                    mockConfig({ ...on, WRITE_NFO_RUNTIME_FALLBACK: 'true' });
+                    (iplayerDetailsService.getIblExtras as jest.Mock).mockResolvedValue({ durationSeconds: 2612 });
+                    const item = tvItem();
+
+                    await runDownloadToCompletion(item);
+
+                    expect(nfoText()).toContain('<runtime>44</runtime>');
+                    expect(item.library?.runtimeSeconds).toBeUndefined();
+                });
+
+                it('leaves a known running time alone, without asking the BBC', async () => {
+                    mockConfig({ ...on, WRITE_NFO_RUNTIME_FALLBACK: 'true' });
+
+                    await runDownloadToCompletion(tvItem({ runtimeSeconds: 1800 }));
+
+                    expect(iplayerDetailsService.getIblExtras).not.toHaveBeenCalled();
+                    expect(nfoText()).toContain('<runtime>30</runtime>');
+                });
+
+                it('does nothing when switched off', async () => {
+                    mockConfig({ ...on, WRITE_NFO_RUNTIME_FALLBACK: 'false' });
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(iplayerDetailsService.getIblExtras).not.toHaveBeenCalled();
+                    expect(nfoText()).not.toContain('<runtime>');
+                });
+
+                it('still writes the .nfo when the lookup fails', async () => {
+                    mockConfig({ ...on, WRITE_NFO_RUNTIME_FALLBACK: 'true', WRITE_NFO_EPISODE_TITLES: 'true' });
+                    (iplayerDetailsService.getIblExtras as jest.Mock).mockRejectedValue(new Error('BBC down'));
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(nfoText()).toContain('<episodedetails>');
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+                });
+            });
+
+            describe('episode picture', () => {
+                const picture = () => (fs.copyFileSync as jest.Mock).mock.calls.filter(([, to]) => String(to).endsWith('-thumb.jpg'));
+
+                beforeEach(() => {
+                    (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { image: { pid: 'p0abc123' } } });
+                    (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValue('/cache/p0abc123.jpg');
+                });
+
+                it('saves the BBC picture as <file name>-thumb.jpg beside the video', async () => {
+                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(thumbnailCacheService.getOrFetch).toHaveBeenCalledWith('p0abc123');
+                    expect(picture()).toEqual([['/cache/p0abc123.jpg', path.join('/complete', 'Show.S01E08-BBCiPlayarrTurbo-thumb.jpg')]]);
+                });
+
+                it('never replaces a picture that is already there', async () => {
+                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
+                    (fs.existsSync as jest.Mock).mockImplementation((file: string) => file.endsWith('-thumb.jpg'));
+
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(picture()).toHaveLength(0);
+                });
+
+                it('does nothing when switched off, for a film, or when no .nfo is written', async () => {
+                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'false' });
+                    await runDownloadToCompletion(tvItem());
+
+                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
+                    await runDownloadToCompletion(tvItem({}, VideoType.MOVIE));
+
+                    mockConfig({ WRITE_NFO_STRM: 'none', WRITE_EPISODE_THUMBS: 'true' });
+                    await runDownloadToCompletion(tvItem());
+
+                    expect(picture()).toHaveLength(0);
+                });
+
+                it('still completes when the picture cannot be fetched or saved', async () => {
+                    mockConfig({ ...on, WRITE_EPISODE_THUMBS: 'true' });
+                    (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValueOnce(undefined);
+                    await runDownloadToCompletion(tvItem());
+                    expect(picture()).toHaveLength(0);
+
+                    (iplayerDetailsService.getMetadata as jest.Mock).mockRejectedValueOnce(new Error('BBC down'));
+                    await runDownloadToCompletion(tvItem());
+                    expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
+                });
             });
         });
 

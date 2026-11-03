@@ -27,6 +27,9 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `WRITE_NFO_STRM` | `manual` | No | `none` / `all` / `nzb` / `manual` — writes `.nfo` metadata. |
 | `WRITE_STRMTOOL_JSON` | `false` | No | Also writes a `.strmtool.json` sidecar for `.strm` files (StrmTool Jellyfin plugin). Requires `WRITE_NFO_STRM` to be enabled. |
 | `WRITE_NFO_CAST` | `true` | No | Lists the episode's cast, directors and writers (looked up on the BBC) in each `.nfo`. |
+| `WRITE_NFO_EPISODE_TITLES` | `true` | No | Titles an episode called only "Episode N" with iPlayer's editorial headline in its `.nfo`. |
+| `WRITE_NFO_RUNTIME_FALLBACK` | `true` | No | Takes a missing running time from iPlayer's listing API for the `.nfo`. |
+| `WRITE_EPISODE_THUMBS` | `true` | No | Saves each TV episode's iPlayer picture as `<file name>-thumb.jpg` (Jellyfin's episode image name). |
 | `STRM_SECURE_ACTION` | `rename` | No | What happens to a `.strm` link once a subscription replaces it with a real download: `rename` (to `.bak`), `delete` or `leave`. |
 | `TV_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat TV filenames. |
 | `MOVIE_FILENAME_TEMPLATE` | see [CONFIG.md](CONFIG.md) | No | Handlebars template for flat movie filenames. |

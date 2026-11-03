@@ -139,7 +139,7 @@ describe('ConfigFormValidator expiry, guidance, cast and strm-replacement settin
         });
     });
 
-    describe.each([['WRITE_NFO_CAST'], ['UI_EXPIRY_BADGES'], ['UI_GUIDANCE_BADGES']])('%s', (key) => {
+    describe.each([['WRITE_NFO_CAST'], ['WRITE_NFO_EPISODE_TITLES'], ['WRITE_NFO_RUNTIME_FALLBACK'], ['WRITE_EPISODE_THUMBS'], ['UI_EXPIRY_BADGES'], ['UI_GUIDANCE_BADGES']])('%s', (key) => {
         it.each([['true'], ['false']])('accepts %j', async (value) => {
             expect((await validator.validate({ ...validInput(), [key]: value }))[key]).toBeUndefined();
         });

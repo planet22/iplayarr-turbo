@@ -68,6 +68,9 @@ describe('configService', () => {
       UI_EXPIRY_BADGES: 'true',
       UI_GUIDANCE_BADGES: 'false',
       WRITE_NFO_CAST: 'true',
+      WRITE_NFO_EPISODE_TITLES: 'true',
+      WRITE_NFO_RUNTIME_FALLBACK: 'true',
+      WRITE_EPISODE_THUMBS: 'true',
       STRM_SECURE_ACTION: 'rename',
     });
   });
