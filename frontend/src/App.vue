@@ -4,7 +4,11 @@
         <LeftHandNav v-if="authState.user" ref="leftHandNav" @clear-search="clearSearch" />
         <div class="content">
             <BackButton v-if="authState.user" />
-            <RouterView />
+            <RouterView v-slot="{ Component }">
+                <KeepAlive include="SearchPage">
+                    <component :is="Component" />
+                </KeepAlive>
+            </RouterView>
         </div>
     </div>
     <ModalsContainer />

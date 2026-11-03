@@ -245,7 +245,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onActivated, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -605,7 +605,8 @@ const rememberSearch = (term) => {
         // Not remembered.
     }
 };
-if (!route.query.searchTerm) {
+const restoreLastSearch = () => {
+    if (route.query.searchTerm) return;
     let last = null;
     try {
         last = sessionStorage.getItem(LAST_SEARCH_KEY);
@@ -613,11 +614,25 @@ if (!route.query.searchTerm) {
         // Nothing to restore.
     }
     if (last) router.replace({ name: 'search', query: { searchTerm: last } });
-}
+};
+restoreLastSearch();
+
+// The page is kept alive while you visit other pages (see App.vue), so coming back shows the same results, filters,
+// page and selection instead of searching again; it only has to reopen the last search when the URL has no term.
+let firstActivation = true;
+onActivated(() => {
+    if (firstActivation) {
+        firstActivation = false;
+        return;
+    }
+    restoreLastSearch();
+});
 
 watch(
     () => route.query.searchTerm,
     async (newSearchTerm) => {
+        // Back on the term already shown: keep those results.
+        if (newSearchTerm && newSearchTerm === searchTerm.value) return;
         if (newSearchTerm) {
             searchAbort?.abort();
             selectMode.value = false;
