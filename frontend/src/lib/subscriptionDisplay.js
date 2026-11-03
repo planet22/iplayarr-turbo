@@ -15,14 +15,16 @@ export const sourceTitle = (counts) => `${counts.linked} .strm or release group,
 export const countsAria = ({ arrCounts }) => sourceLabel(arrCounts);
 export const countsTitle = ({ arrCounts }) => `${arrCounts.linked} from iPlayarr, ${otherCount(arrCounts)} from elsewhere`;
 
-// The number on a show's picture: episodes in the last download over all episodes seen (downloaded, or already
-// available when subscribed). A Sonarr/Radarr-only show has no downloads of ours, so it shows the episodes it holds,
-// and nothing while its counts are unknown or the show has gone from the app. Null means no badge.
-export const countBadge = ({ arrOnly, arrCounts, arrMissing, seen, lastQueuedAt, lastQueuedCount }) => {
-    if (arrOnly) {
-        return arrCounts && !arrMissing ? { text: `${arrCounts.have}`, title: `${arrCounts.have} episodes` } : null;
-    }
-    const total = seen?.length ?? 0;
-    if (!lastQueuedAt) return { text: `${total}`, title: `${total} seen` };
-    return { text: `${lastQueuedCount}/${total}`, title: `${lastQueuedCount} last download, ${total} seen` };
+// The number on a show's picture, the same for both kinds: episodes on disk over all episodes. For a show iPlayarr
+// downloads that is the files in its folders over the episodes seen (downloaded, or already available when
+// subscribed); for a Sonarr/Radarr-only show, what the app holds over the aired ones it wants, and nothing while
+// its counts are unknown or the show has gone from the app. Null means no badge.
+export const countBadge = ({ arrOnly, arrCounts, arrMissing, seen, onDisk }) => {
+    const [have, total] = arrOnly ? [arrCounts?.have, arrCounts?.total] : [onDisk, seen?.length ?? 0];
+    if (arrOnly && (!arrCounts || arrMissing)) return null;
+    return { text: `${have ?? '–'}/${total}`, title: have === undefined ? `${total} episodes` : `${have} of ${total} episodes on disk` };
 };
+
+// The number at the picture's bottom left: how many episodes the last download queued. Null when nothing was.
+export const lastBadge = ({ arrOnly, lastQueuedAt, lastQueuedCount }) =>
+    !arrOnly && lastQueuedAt ? { text: `${lastQueuedCount ?? 0}`, title: `${lastQueuedCount ?? 0} in the last download` } : null;

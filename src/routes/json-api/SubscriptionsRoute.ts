@@ -3,6 +3,7 @@
 import { Request, Response, Router } from 'express';
 
 import iplayerDetailsService from '../../service/iplayerDetailsService';
+import subscriptionDiskService from '../../service/subscriptionDiskService';
 import subscriptionImagesService, { ImagesDisabledError } from '../../service/subscriptionImagesService';
 import subscriptionService, { SubscriptionError } from '../../service/subscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
@@ -13,14 +14,16 @@ const router: Router = asyncRouter();
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
 
 // The show's synopsis comes from the cached BBC metadata rather than being stored on the subscription;
-// a show whose metadata cannot be had right now simply goes without.
+// a show whose metadata cannot be had right now simply goes without. The episodes on disk are counted from the
+// show's folders for the picture's count (a Sonarr/Radarr-only show has its own count from the app).
 router.get('/', async (_, res: Response) => {
     const subscriptions = await subscriptionService.list();
     res.json(
         await Promise.all(
             subscriptions.map(async (subscription) => {
                 const synopsis = (await iplayerDetailsService.getMetadata(subscription.pid).catch(() => undefined))?.programme?.medium_synopsis;
-                return synopsis ? { ...subscription, synopsis } : subscription;
+                const onDisk = subscription.arrOnly ? undefined : await subscriptionDiskService.count(subscription).catch(() => undefined);
+                return { ...subscription, ...(synopsis ? { synopsis } : {}), ...(onDisk === undefined ? {} : { onDisk }) };
             })
         )
     );

@@ -809,11 +809,11 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const imp = await http('/json-api/subscriptions/arr/detected/import', { method: 'POST', timeout: 120000, body: { appId: app.id, arrId: 987654321, pid: bpid, title: 'SMOKE-TEMP icon show', have: 4, total: 9, linked: 1 } });
             ok('a show linked to an entry that does not exist is created', imp.status === 200, `HTTP ${imp.status} ${imp.text.slice(0, 100)}`);
             await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
-            // The row shows the episodes it holds as a badge on the picture (title "N episodes") and the iPlayarr/other split as a pill.
+            // The row shows the episodes it holds as a badge on the picture (title "N of M episodes on disk") and the iPlayarr/other split as a pill.
             const countRow = page.locator('.subscriptionRow', { hasText: brand.title }).first();
             const badge = await countRow.locator('.thumbBadge').first().getAttribute('title').catch(() => '');
             const split = await countRow.locator('.splitPill').first().getAttribute('title').catch(() => '');
-            ok('before a scan it shows its counts', badge === '4 episodes' && /^1 from iPlayarr, 3 from elsewhere$/.test(split || ''), `badge "${badge}", pill "${split}"`);
+            ok('before a scan it shows its counts', badge === '4 of 9 episodes on disk' && /^1 from iPlayarr, 3 from elsewhere$/.test(split || ''), `badge "${badge}", pill "${split}"`);
             await http(`/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, { timeout: 180000 });
             await page.reload({ waitUntil: 'networkidle' });
             const row = page.locator('.subscriptionRow', { hasText: brand.title }).first();

@@ -676,10 +676,10 @@ async function subscriptionsCards(browser, page, U) {
     try {
         const subs = (await http('/json-api/subscriptions')).json || [];
         if (!subs.length) return rec(U, 'subscriptions: badge and card view', 'SKIP', 'no subscriptions');
-        const expectedBadge = (s) => (s.arrOnly ? (s.arrCounts && !s.arrMissing ? `${s.arrCounts.have}` : null) : s.lastQueuedAt ? `${s.lastQueuedCount}/${(s.seen || []).length}` : `${(s.seen || []).length}`);
+        const expectedBadge = (s) => (s.arrOnly ? (s.arrCounts && !s.arrMissing ? `${s.arrCounts.have}/${s.arrCounts.total}` : null) : `${s.onDisk ?? '–'}/${(s.seen || []).length}`);
         const badgeOf = async (scope, title) => {
             const row = scope.filter({ has: page.locator(`a:text-is("${title}")`) }).first();
-            return (await row.locator('.thumbBadge').count()) ? (await row.locator('.thumbBadge').first().textContent()).trim() : null;
+            return (await row.locator('.thumbBadge:not(.thumbLast)').count()) ? (await row.locator('.thumbBadge:not(.thumbLast)').first().textContent()).trim() : null;
         };
 
         // Table (the desktop default): a badge per show matching the API, an Added date and the synopsis on one line.
@@ -735,7 +735,7 @@ async function subscriptionsCards(browser, page, U) {
         const cardToggles = await page.locator('.subCard button:has(svg[data-icon="box-archive"])').count();
         rec(U, 'subscriptions: every card, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (cardToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardToggles} toggles, ${shown} cards`);
         const first = cards.first();
-        const [thumb, badge] = [await first.locator('.thumbLink').boundingBox(), await first.locator('.thumbBadge').boundingBox()];
+        const [thumb, badge] = [await first.locator('.thumbLink').boundingBox(), await first.locator('.thumbBadge:not(.thumbLast)').boundingBox()];
         rec(U, 'subscriptions: the badge is at the picture\'s top right', thumb && badge && badge.x + badge.width <= thumb.x + thumb.width + 1 && badge.y >= thumb.y - 1 && badge.y + badge.height < thumb.y + thumb.height / 2 && badge.x > thumb.x + thumb.width / 2 ? 'PASS' : 'FAIL', JSON.stringify({ thumb, badge }));
         const order = await first.evaluate((el) => {
             const y = (sel) => el.querySelector(sel)?.getBoundingClientRect().top ?? null;
@@ -768,7 +768,7 @@ async function subscriptionsCards(browser, page, U) {
             rec(U, 'subscriptions: phone cards are one per line, with no sideways scroll', (await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)) && !(await p.locator('.cardGrid').count()) ? 'PASS' : 'FAIL');
             const badgeFits = await p.locator('.subCard').first().evaluate((el) => {
                 const card = el.getBoundingClientRect();
-                const badge = el.querySelector('.thumbBadge')?.getBoundingClientRect();
+                const badge = el.querySelector('.thumbBadge:not(.thumbLast)')?.getBoundingClientRect();
                 return !badge || (badge.right <= card.right && badge.left >= card.left);
             });
             rec(U, 'subscriptions: the badge stays inside a phone card', badgeFits ? 'PASS' : 'FAIL');

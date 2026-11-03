@@ -5,6 +5,7 @@ import request from 'supertest';
 
 import router from '../../../src/routes/json-api/SubscriptionsRoute';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
+import subscriptionDiskService from '../../../src/service/subscriptionDiskService';
 import subscriptionImagesService, { ImagesDisabledError } from '../../../src/service/subscriptionImagesService';
 import subscriptionService, { SubscriptionError } from '../../../src/service/subscriptionService';
 import { ApiError } from '../../../src/types/responses/ApiResponse';
@@ -21,6 +22,7 @@ jest.mock('../../../src/service/subscriptionService', () => ({
         setSecureDays: jest.fn(),
     },
 }));
+jest.mock('../../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { count: jest.fn() } }));
 jest.mock('../../../src/service/subscriptionImagesService', () => ({
     __esModule: true,
     ImagesDisabledError: class ImagesDisabledError extends Error {},
@@ -40,13 +42,17 @@ jest.mock('../../../src/service/iplayerDetailsService', () => ({
 const mocked = jest.mocked(subscriptionService);
 const mockedDetails = jest.mocked(iplayerDetailsService);
 const mockedImages = jest.mocked(subscriptionImagesService);
+const mockedDisk = jest.mocked(subscriptionDiskService);
 
 const app = express();
 app.use(express.json());
 app.use('/', router);
 
 describe('SubscriptionsRoute', () => {
-    beforeEach(() => jest.resetAllMocks());
+    beforeEach(() => {
+        jest.resetAllMocks();
+        mockedDisk.count.mockResolvedValue(undefined as any);
+    });
 
     describe('POST /:id/images', () => {
         it('answers what the update did', async () => {
@@ -95,6 +101,18 @@ describe('SubscriptionsRoute', () => {
             { id: 'b', pid: 'p2' },
             { id: 'c', pid: 'p3' },
         ]);
+    });
+
+    it('GET / adds the episodes on disk for a show iPlayarr downloads, and none for a Sonarr/Radarr-only one or one that cannot be counted', async () => {
+        mocked.list.mockResolvedValue([{ id: 'a', pid: 'p1' } as any, { id: 'b', pid: 'p2', arrOnly: true } as any, { id: 'c', pid: 'p3' } as any]);
+        mockedDetails.getMetadata.mockResolvedValue(undefined as any);
+        mockedDisk.count.mockResolvedValueOnce(48).mockRejectedValueOnce(new Error('unreadable'));
+        expect((await request(app).get('/')).body).toEqual([
+            { id: 'a', pid: 'p1', onDisk: 48 },
+            { id: 'b', pid: 'p2', arrOnly: true },
+            { id: 'c', pid: 'p3' },
+        ]);
+        expect(mockedDisk.count).toHaveBeenCalledTimes(2);
     });
 
     it('GET / looks each show up by its pid and answers an empty list without asking the BBC', async () => {

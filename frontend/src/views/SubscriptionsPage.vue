@@ -39,6 +39,7 @@
                     <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
                     <span v-if="countBadge(subscription)" class="thumbBadge" :title="countBadge(subscription).title">{{ countBadge(subscription).text }}</span>
+                    <span v-if="lastBadge(subscription)" class="thumbBadge thumbLast" :title="lastBadge(subscription).title"><font-awesome-icon :icon="['fas', 'download']" />{{ lastBadge(subscription).text }}</span>
                 </RouterLink>
                 <div class="subText">
                     <div class="subChips">
@@ -136,6 +137,7 @@
                     <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
                     <span v-if="countBadge(subscription)" class="thumbBadge" :title="countBadge(subscription).title">{{ countBadge(subscription).text }}</span>
+                    <span v-if="lastBadge(subscription)" class="thumbBadge thumbLast" :title="lastBadge(subscription).title"><font-awesome-icon :icon="['fas', 'download']" />{{ lastBadge(subscription).text }}</span>
                 </RouterLink>
                 <div class="info">
                     <RouterLink :to="`/browse/programme/${subscription.pid}`" class="title">{{ subscription.title }}</RouterLink>
@@ -341,7 +343,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
-import { countBadge, countsAria, countsTitle, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
+import { countBadge, countsAria, countsTitle, lastBadge, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
 import { secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
 import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -973,6 +975,14 @@ const removeLive = async (live) => {
     color: #fff;
     font-size: 12px;
     line-height: 1.4;
+
+    // The last download's count, at the bottom left.
+    &.thumbLast {
+        top: auto;
+        right: auto;
+        bottom: 4px;
+        left: 4px;
+    }
 }
 
 // Sonarr/Radarr-only counts: the iPlayarr logo with ours, then an icon with the rest.
