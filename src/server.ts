@@ -16,6 +16,7 @@ import { ensureNonDefaultPassword } from './service/auth/initialCredentialsServi
 import configService, { encryptStoredSettings } from './service/configService';
 import { dbReady, prisma } from './service/db/prismaService';
 import { importFromRedisIfNeeded } from './service/db/redisImportService';
+import { ensureDnsRelayRunning } from './service/dnsRelayService';
 import liveSubscriptionService from './service/liveSubscriptionService';
 import loggingService from './service/loggingService';
 import socketService from './service/socketService';
@@ -157,6 +158,9 @@ const startServer = () => {
     taskService.init().catch((err) => loggingService.error('Scheduled jobs failed to start', err?.message ?? err));
 
     liveSubscriptionService.resync();
+
+    // At boot, not on first download, so the container healthcheck's wget resolves through the relay too.
+    ensureDnsRelayRunning();
 };
 
 (async () => {
