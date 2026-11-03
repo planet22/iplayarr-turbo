@@ -17,16 +17,16 @@
         <TablePagination v-model="eventsPage" v-model:page-size="eventsPageSize" :total="sortedEvents.length" />
         <div v-if="cardView" class="cardList">
             <DataCard v-for="event in pagedEvents" :key="event.id">
-                <template v-if="event.pid" #thumb>
+                <template #thumb>
                     <img
-                        v-if="thumbnailFor(event.pid)"
+                        v-if="event.pid && thumbnailFor(event.pid)"
                         class="clickable"
                         :class="{ channelLogo: channelLogos[event.pid] }"
                         :src="thumbnailFor(event.pid)"
                         @click="openInfo(event.pid)"
                         @error="hideBrokenImage"
                     />
-                    <div v-else class="thumbnail-placeholder clickable" @click="openInfo(event.pid)">
+                    <div v-else class="thumbnail-placeholder" :class="{ clickable: event.pid }" @click="event.pid && openInfo(event.pid)">
                         <font-awesome-icon :icon="['fas', 'film']" />
                     </div>
                 </template>
@@ -92,9 +92,9 @@
                             @click="openInfo(event.pid)"
                             @error="hideBrokenImage"
                         />
-                        <div v-else-if="event.pid" class="thumbnail-placeholder clickable" @click="openInfo(event.pid)">
-                                <font-awesome-icon :icon="['fas', 'film']" />
-                            </div>
+                        <div v-else class="thumbnail-placeholder" :class="{ clickable: event.pid }" @click="event.pid && openInfo(event.pid)">
+                            <font-awesome-icon :icon="['fas', 'film']" />
+                        </div>
                     </td>
                     <td class="text">
                         <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">

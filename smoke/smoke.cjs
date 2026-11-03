@@ -509,6 +509,7 @@ async function uiInteractions(browser, ctx) {
     if (want('subscriptions toolbar')) await subscriptionsToolbar(page, ctx, U);
     if (want('subscriptions cards')) await subscriptionsCards(browser, page, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
+    if (want('video events thumbnails')) await videoEventThumbs(page, U);
     // Programme page: play/download controls exist
     if (ctx.pid && want('programme page')) {
         try {
@@ -524,6 +525,33 @@ async function uiInteractions(browser, ctx) {
     }
     rec(U, 'no uncaught page errors during flows', bad.length ? 'FAIL' : 'PASS', bad.slice(0, 2).join(' | '));
     await context.close();
+}
+
+// Video events: every row has a thumbnail slot (image or placeholder), so events with no programme
+// (e.g. queued) are as tall as the rest. Read-only; table and cards.
+async function videoEventThumbs(page, U) {
+    try {
+        const events = (await http('/json-api/events')).json;
+        if (!Array.isArray(events) || !events.length) return rec(U, 'video events rows all have a thumbnail slot', 'SKIP', 'no events recorded');
+        const view = async (mode) => {
+            await page.goto(BASE + '/events', { waitUntil: 'networkidle' });
+            await page.evaluate((m) => localStorage.setItem('iplayarr.eventsViewMode', m), mode);
+            await page.reload({ waitUntil: 'networkidle' });
+            await page.waitForTimeout(800);
+        };
+        await view('table');
+        const rows = await page.locator('.eventLogTable tbody tr:has(td:nth-child(2))').evaluateAll((trs) => trs.map((tr) => ({
+            slot: !!tr.querySelector('td:first-child img, td:first-child .thumbnail-placeholder'),
+            h: Math.round(tr.getBoundingClientRect().height),
+        })));
+        const missing = rows.filter((r) => !r.slot).length;
+        const heights = [...new Set(rows.map((r) => r.h))];
+        rec(U, 'video events table rows all have a thumbnail slot', rows.length && !missing ? 'PASS' : 'FAIL', `${rows.length} rows, ${missing} without`);
+        rec(U, 'video events table rows share one height', heights.length <= 2 ? 'PASS' : 'FAIL', `heights ${heights.join(',')}`);
+        await view('cards');
+        const cards = await page.locator('.cardList > *').evaluateAll((els) => els.filter((e) => !e.classList.contains('empty')).map((e) => !!e.querySelector('img, .thumbnail-placeholder')));
+        rec(U, 'video events cards all have a thumbnail slot', cards.length && cards.every(Boolean) ? 'PASS' : 'FAIL', `${cards.filter(Boolean).length}/${cards.length}`);
+    } catch (e) { rec(U, 'video events thumbnails', 'FAIL', e.message.split('\n')[0]); }
 }
 
 // Watchdog links: table and card views both show the library file's name (season/episode) under a link,
