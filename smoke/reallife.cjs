@@ -121,6 +121,12 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             // A Sonarr/Radarr-only show with the toggle on but no app link has no .strm links to read: the check must still answer, and queue nothing.
             const secChk = await http(`/json-api/subscriptions/${id}/check`, { method: 'POST', timeout: 120000 });
             ok('check of a Sonarr/Radarr-only show with secure on, and no app linked, queues nothing', secChk.status === 200 && !(secChk.json?.queued || []).length && !secChk.json?.error, `HTTP ${secChk.status} ${secChk.text.slice(0, 120)}`);
+            // The images button: off answers 409, otherwise a show with no downloaded files (this one is not even linked to an app) writes nothing.
+            const imgs = await http(`/json-api/subscriptions/${id}/images`, { method: 'POST', timeout: 120000 });
+            if (cfg.WRITE_ADDITIONAL_IMAGES === 'none') ok('images update refused (409) while Use Additional Images is off', imgs.status === 409, `HTTP ${imgs.status}`);
+            else ok('images update on a show with no files writes nothing', imgs.status === 200 && imgs.json?.written === 0 && imgs.json?.episodes === 0, `HTTP ${imgs.status} ${imgs.text.slice(0, 120)}`);
+            const imgsMissing = await http('/json-api/subscriptions/SMOKE-NOPE/images', { method: 'POST' });
+            ok('images update of an unknown subscription is 404', imgsMissing.status === 404, `HTTP ${imgsMissing.status}`);
             for (const days of [0, 61, 1.5, 'x']) {
                 const bad = await http(`/json-api/subscriptions/${id}/secure`, { method: 'PUT', body: { days } });
                 ok(`subscription secure days ${JSON.stringify(days)} rejected`, bad.status === 400, `HTTP ${bad.status}`);
@@ -269,11 +275,19 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             } else {
                 const base = pathMod.join(completeRoot, h.libraryPath).replace(/\.[^.\\/]+$/, '');
                 ok('strm download wrote its .nfo', fs.existsSync(base + '.nfo'), base + '.nfo');
-                if (cfg.WRITE_EPISODE_THUMBS === 'true' && !/movie/i.test(String(h.type))) {
+                const magic = (file, bytes) => (fs.existsSync(file) ? fs.readFileSync(file).subarray(0, bytes.length / 2).toString('hex') : '');
+                if (cfg.WRITE_ADDITIONAL_IMAGES !== 'none' && !/movie/i.test(String(h.type))) {
                     const thumb = base + '-thumb.jpg';
-                    const head = fs.existsSync(thumb) ? fs.readFileSync(thumb).subarray(0, 2).toString('hex') : '';
-                    ok('strm download saved a <name>-thumb.jpg episode picture that is a JPEG', head === 'ffd8', fs.existsSync(thumb) ? `starts ${head}` : 'missing ' + thumb);
-                } else rec(W, 'strm download saved an episode picture', 'SKIP', 'WRITE_EPISODE_THUMBS is off, or a film');
+                    ok('strm download saved a <name>-thumb.jpg episode picture that is a JPEG', magic(thumb, 'ffd8') === 'ffd8', fs.existsSync(thumb) ? 'not a JPEG' : 'missing ' + thumb);
+                    // The show's pictures sit in the show folder, two levels up from the episode file (Show/Season NN/file)
+                    const showDir = pathMod.dirname(pathMod.dirname(base));
+                    for (const name of ['poster.jpg', 'backdrop.jpg', 'landscape.jpg']) {
+                        ok(`strm download saved the show's ${name} (a JPEG)`, magic(pathMod.join(showDir, name), 'ffd8') === 'ffd8', fs.existsSync(pathMod.join(showDir, name)) ? 'not a JPEG' : 'missing ' + pathMod.join(showDir, name));
+                    }
+                    const logo = pathMod.join(showDir, 'clearlogo.png');
+                    if (fs.existsSync(logo)) ok('clearlogo.png, where the show has one, is a PNG', magic(logo, '89504e47') === '89504e47', 'not a PNG');
+                    else rec(W, 'show clearlogo.png', 'SKIP', 'this show has no transparent logo (about 3 in 4 do not)');
+                } else rec(W, 'strm download saved the additional images', 'SKIP', 'Use Additional Images is off, or a film');
             }
             // SAB-visible too (what Sonarr sees)
             const sab = (await http(`/api?mode=history&apikey=${apikey}&output=json`)).json;

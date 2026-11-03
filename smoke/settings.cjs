@@ -33,7 +33,7 @@ const CHANGE = {
     WRITE_NFO_CAST: ['false', 'true'],
     WRITE_NFO_EPISODE_TITLES: ['false', 'true'],
     WRITE_NFO_RUNTIME_FALLBACK: ['false', 'true'],
-    WRITE_EPISODE_THUMBS: ['false', 'true'],
+    WRITE_ADDITIONAL_IMAGES: ['none', 'missing', 'overwrite'],
     STRM_SECURE_ACTION: ['leave', 'delete', 'rename'],
     REFRESH_SCHEDULE: ['*/30 * * * *', '0 * * * *'],
     SCHEDULE_FULL_REFRESH: ['true', 'false'],
@@ -144,7 +144,7 @@ const NO_EFFECT = {
     WRITE_NFO_CAST: 'adds a BBC lookup when a .nfo is written; visible only in the .nfo of a real download',
     WRITE_NFO_EPISODE_TITLES: 'adds a BBC lookup when a .nfo is written; visible only in the .nfo of an episode titled "Episode N"',
     WRITE_NFO_RUNTIME_FALLBACK: 'adds a BBC lookup when a .nfo is written for an episode with no known length; visible only in its .nfo',
-    WRITE_EPISODE_THUMBS: 'writes a -thumb.jpg beside each TV episode when a .nfo is written; visible only in the library folder',
+    WRITE_ADDITIONAL_IMAGES: 'writes pictures into the library folders when a .nfo is written (overwrite replaces existing ones); visible only there',
     STRM_SECURE_ACTION: 'only used when a subscription replaces a .strm link with a real download (it renames or deletes library files)',
     DOWNLOAD_ASK_VERSION: 'browser-only: the server stores it and the frontend applies it',
     DOWNLOAD_DEFAULT_VERSION: 'browser-only: the server stores it and the frontend applies it',
@@ -536,7 +536,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         } else rec(W, 'LIVE_TV_EPG_OFFSET effect', 'SKIP', 'no Live TV guide to read');
         await put({ LIVE_TV_EPG_OFFSET: effective(before, 'LIVE_TV_EPG_OFFSET') });
 
-        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_EPISODE_THUMBS', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
+        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
             const r = await put({ [key]: 'maybe' });
             ok(`${key} non-boolean rejected`, rejected(r, key), `HTTP ${r.status}`);
         }

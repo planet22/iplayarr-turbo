@@ -297,9 +297,9 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // The .nfo extras sit on Media Management, and (like the cast setting) only while .nfo files are written
             await tab('mediaManagement');
             const media = (await labels()).join(' | ');
-            const nfoExtras = [/Headline for 'Episode N' Titles/i, /Missing Running Time/i, /Episode Picture/i];
+            const nfoExtras = [/Headline for 'Episode N' Titles/i, /Missing Running Time/i, /Additional Images/i];
             const writesNfo = (await http('/json-api/config')).json?.WRITE_NFO_STRM !== 'none';
-            ok(writesNfo ? 'Media Management offers the three .nfo extras (episode headline, running time, episode picture)' : 'Media Management hides the three .nfo extras while no .nfo files are written',
+            ok(writesNfo ? 'Media Management offers the .nfo extras (episode headline, running time, additional images)' : 'Media Management hides the three .nfo extras while no .nfo files are written',
                 nfoExtras.every((re) => re.test(media)) === writesNfo && (writesNfo || !nfoExtras.some((re) => re.test(media))), media);
 
             await tab('maintenance');

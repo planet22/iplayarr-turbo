@@ -712,6 +712,8 @@ async function subscriptionsCards(browser, page, U) {
         // The download-before-it-leaves toggle belongs on every show, Sonarr/Radarr-only ones included (their .strm links expire too).
         const secureToggles = await page.locator('.subscriptionRow button:has(svg[data-icon="box-archive"])').count();
         rec(U, 'subscriptions: every table row, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (secureToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${secureToggles} toggles, ${shown} rows`);
+        const imageButtons = await page.locator('.subscriptionRow button:has(svg[data-icon="images"])').count();
+        rec(U, 'subscriptions: every table row has the update-images button', shown ? (imageButtons === shown ? 'PASS' : 'FAIL') : 'SKIP', `${imageButtons} buttons, ${shown} rows`);
         await page.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-table.png'), fullPage: true });
 
         // Cards: several across, the badge on the picture, the dates in a 2x2 grid, a synopsis of up to three lines.
@@ -728,6 +730,8 @@ async function subscriptionsCards(browser, page, U) {
             if (got !== expectedBadge(s)) wrongCards.push(`${s.title}: ${got} != ${expectedBadge(s)}`);
         }
         rec(U, 'subscriptions: the card badge sits on the picture and matches the table', wrongCards.length === 0 ? 'PASS' : 'FAIL', wrongCards.slice(0, 3).join(' | '));
+        const cardImages = await page.locator('.subCard button:has(svg[data-icon="images"])').count();
+        rec(U, 'subscriptions: every card has the update-images button', shown ? (cardImages === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardImages} buttons, ${shown} cards`);
         const cardToggles = await page.locator('.subCard button:has(svg[data-icon="box-archive"])').count();
         rec(U, 'subscriptions: every card, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (cardToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardToggles} toggles, ${shown} cards`);
         const first = cards.first();
