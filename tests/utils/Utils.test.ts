@@ -1003,6 +1003,18 @@ describe('parseStrmPid', () => {
         expect(parseStrmPid('https://www.bbc.co.uk/iplayer/episode/m002tshj/pointless')).toBe('m002tshj');
     });
 
+    it.each([['p04fthkg'], ['p00fyy5k'], ['b0bxbvkg'], ['b00rhg2r'], ['w3csw0yq']])('reads a pid with letters among its first digits: %s', (pid) => {
+        expect(parseStrmPid(`http://host:4404/api?mode=stream&pid=${pid}&streamkey=abc`)).toBe(pid);
+        expect(parseStrmPid(`https://www.bbc.co.uk/iplayer/episode/${pid}/some-show`)).toBe(pid);
+        expect(parseStrmPid(`https://www.bbc.co.uk/programmes/${pid}`)).toBe(pid);
+    });
+
+    it('does not take a word or a wrong-length id for a pid', () => {
+        expect(parseStrmPid('http://host:4404/api?mode=stream&pid=pointles&streamkey=abc')).toBeUndefined();
+        expect(parseStrmPid('http://host:4404/api?mode=stream&pid=p04fthk&streamkey=abc')).toBeUndefined();
+        expect(parseStrmPid('http://host:4404/api?mode=stream&pid=p04fthkgx&streamkey=abc')).toBeUndefined();
+    });
+
     it('ignores .strm files that are not ours', () => {
         expect(parseStrmPid('https://www.youtube.com/watch?v=abcdefghijk')).toBeUndefined();
         expect(parseStrmPid('http://other/stream?pid=m001sx3h')).toBeUndefined();

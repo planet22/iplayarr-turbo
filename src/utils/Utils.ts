@@ -153,7 +153,8 @@ export async function createStrmContent(pid: string, streamKey: string, quality?
 // (mode=stream&pid=...) or a BBC iPlayer/programmes URL carrying a pid.
 export function parseStrmPid(content: string): string | undefined {
     const text = content.trim().split(/\r?\n/)[0] ?? '';
-    const pid = String.raw`[a-z]\d{3}[a-z0-9]{4}`;
+    // A BBC pid is eight characters: a letter, a digit, then six letters or digits (m001v6k5, p04fthkg, b0bxbvkg).
+    const pid = String.raw`[a-z]\d[a-z0-9]{6}`;
     const iplayarr = text.match(new RegExp(`[?&]pid=(${pid})(?:&|$)`, 'i'));
     if (iplayarr && /mode=stream/i.test(text)) return iplayarr[1];
     const bbc = text.match(new RegExp(String.raw`bbc\.co\.uk/(?:iplayer|programmes)/(?:[a-z-]+/)*(${pid})(?:[/?#]|$)`, 'i'));
