@@ -61,6 +61,12 @@ describe('lastBadge', () => {
         expect(lastBadge({ lastQueuedAt: 'x' })).toEqual({ text: '0', title: '0 in the last download' });
     });
 
+    it('is nothing for the first run, queued within an hour of subscribing, but shows a later one', () => {
+        const createdAt = '2026-10-05T12:00:00Z';
+        expect(lastBadge({ createdAt, lastQueuedAt: '2026-10-05T12:00:30Z', lastQueuedCount: 56 })).toBeNull();
+        expect(lastBadge({ createdAt, lastQueuedAt: '2026-10-05T13:00:00Z', lastQueuedCount: 1 })).toEqual({ text: '1', title: '1 in the last download' });
+    });
+
     it('is nothing before a download, or for a Sonarr/Radarr-only show', () => {
         expect(lastBadge({})).toBeNull();
         expect(lastBadge({ arrOnly: true, lastQueuedAt: 'x', lastQueuedCount: 3 })).toBeNull();

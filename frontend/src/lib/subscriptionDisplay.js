@@ -25,6 +25,11 @@ export const countBadge = ({ arrOnly, arrCounts, arrMissing, seen, onDisk }) => 
     return { text: `${have ?? '–'}/${total}`, title: have === undefined ? `${total} episodes` : `${have} of ${total} episodes on disk` };
 };
 
-// The number at the picture's bottom left: how many episodes the last download queued. Null when nothing was.
-export const lastBadge = ({ arrOnly, lastQueuedAt, lastQueuedCount }) =>
-    !arrOnly && lastQueuedAt ? { text: `${lastQueuedCount ?? 0}`, title: `${lastQueuedCount ?? 0} in the last download` } : null;
+// The number at the picture's bottom left: how many episodes the last download queued. Null when nothing was, and
+// for the first run (queued within an hour of subscribing), which is only the whole backlog and so repeats the total.
+const FIRST_RUN_MS = 60 * 60 * 1000;
+export const lastBadge = ({ arrOnly, createdAt, lastQueuedAt, lastQueuedCount }) => {
+    if (arrOnly || !lastQueuedAt) return null;
+    if (createdAt && Date.parse(lastQueuedAt) - Date.parse(createdAt) < FIRST_RUN_MS) return null;
+    return { text: `${lastQueuedCount ?? 0}`, title: `${lastQueuedCount ?? 0} in the last download` };
+};
