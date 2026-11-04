@@ -455,9 +455,9 @@ class LibraryIndexService {
 
     // One Sonarr series / Radarr movie read again, which is far cheaper than the app's whole library, and kept in what the
     // app is known to list. Returns its .strm links.
-    async refreshArr(app: App, arrId: number): Promise<IndexedFile[]> {
+    async refreshArr(app: App, arrId: number): Promise<(IndexedFile & { pid: string })[]> {
         const pathMap = (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP)) as string | undefined;
-        const found: IndexedFile[] = [];
+        const found: (IndexedFile & { pid: string })[] = [];
         for (const ref of (await arrLibraryService.getFilesFor(app, arrId)).filter(({ path: f }) => f.toLowerCase().endsWith('.strm'))) {
             const local = mapPath(ref.path, pathMap);
             try {

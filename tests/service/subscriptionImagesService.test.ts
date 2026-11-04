@@ -219,7 +219,7 @@ describe('subscriptionImagesService', () => {
         });
 
         it('skips a file that names no episode', async () => {
-            index.refreshArr.mockResolvedValue([{ path: '/tv/The Show/Season 01/Stranger.mkv', arrId: 7 }]);
+            index.refreshArr.mockResolvedValue([{ path: '/tv/The Show/Season 01/Stranger.mkv', arrId: 7 } as any]);
 
             expect(await subscriptionImagesService.update('sub1')).toEqual({ written: 0, episodes: 0, shows: 0 });
             expect(images.writeShowImages).not.toHaveBeenCalled();

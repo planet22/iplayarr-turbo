@@ -23,8 +23,7 @@ import {
 import { VersionProfile } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
 import { expiresWithin, expiryOf } from '../utils/availability';
-import { mapPath } from '../utils/pathMap';
-import { createNZBName, getQualityProfile, parseStrmPid } from '../utils/Utils';
+import { createNZBName, getQualityProfile } from '../utils/Utils';
 import { applyVersionToRelease, parseExtraVersions } from '../utils/videoVersion';
 import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
@@ -35,6 +34,7 @@ import loggingService from './loggingService';
 import queueService from './queueService';
 import socketService from './socketService';
 import { versionTypesFor } from './stream/versionVpid';
+import libraryIndexService from './libraryIndexService';
 import subscriptionDiskService from './subscriptionDiskService';
 import synonymService from './synonymService';
 import videoEventService from './videoEventService';
@@ -382,23 +382,16 @@ class SubscriptionService {
         const app = await appService.getApp(link.appId);
         if (!app || !arrLibraryService.supports(app)) return [];
 
-        const pathMap = (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP)) as string | undefined;
         const secured = new Set(subscription.secured ?? []);
         const byPid = new Map(episodes.map((episode) => [episode.id, episode]));
         const queued = queueService.getQueue();
         const marked: string[] = [];
 
-        for (const file of await arrLibraryService.getFilesFor(app, link.arrId)) {
-            if (!file.path.toLowerCase().endsWith('.strm')) continue;
-            const strmPath = mapPath(file.path, pathMap);
-            let pid: string | undefined;
-            try {
-                pid = parseStrmPid(fs.readFileSync(strmPath, 'utf8'));
-            } catch {
-                continue; // Not readable from here (a missing path mapping, say); the next check tries again.
-            }
-            const episode = pid ? byPid.get(pid) : undefined;
-            if (!pid || !episode || secured.has(pid)) continue;
+        // The show's links are read from the app again, through the library index (which leaves out any this container
+        // cannot read - a missing path mapping, say - so the next check tries again).
+        for (const { path: strmPath, pid } of await libraryIndexService.refreshArr(app, link.arrId)) {
+            const episode = byPid.get(pid);
+            if (!episode || secured.has(pid)) continue;
             const end = expiryOf(episode, 'original') ?? expiryOf(episode);
             if (!expiresWithin(end, days)) continue;
 
