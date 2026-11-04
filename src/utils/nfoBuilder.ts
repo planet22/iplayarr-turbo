@@ -32,6 +32,11 @@ function runtimeMinutes(runtimeSeconds?: number): number | undefined {
 
 const MAX_CAST = 40;
 
+// Names the BBC programme the file is, so a scan can tell which episode a real video file is whatever it is renamed to.
+function uniqueIdXml(pid: string): string {
+    return pid ? `  <uniqueid type="iplayer">${escapeXml(pid)}</uniqueid>\n` : '';
+}
+
 // The Kodi/Jellyfin elements for an episode's cast and crew: <director>, <credits> (writers) and <actor>s with
 // the part they play. Other roles (producers, etc.) are not written.
 function castXml(cast?: QueueCastMember[]): string {
@@ -64,6 +69,7 @@ export function buildEpisodeNfo(item: QueueEntry): string {
     xml += '<episodedetails>\n';
     xml += `  <title>${title}</title>\n`;
     xml += `  <showtitle>${showTitle}</showtitle>\n`;
+    xml += uniqueIdXml(item.pid);
     if (plot) {
         xml += `  <plot>${plot}</plot>\n`;
     }
@@ -96,6 +102,7 @@ export function buildMovieNfo(item: QueueEntry): string {
     let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
     xml += '<movie>\n';
     xml += `  <title>${title}</title>\n`;
+    xml += uniqueIdXml(item.pid);
     if (plot) {
         xml += `  <plot>${plot}</plot>\n`;
     }

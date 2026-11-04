@@ -189,6 +189,23 @@ describe('ArrLibraryService', () => {
             );
         });
 
+        it('gives the season and episode number of each file\'s first episode, when Sonarr has them', async () => {
+            mockedAxios.get.mockImplementation(async (url: string) => ({
+                data: url.includes('episodefile')
+                    ? [{ id: 5, path: '/tv/a.strm' }, { id: 6, path: '/tv/b.strm' }]
+                    : [
+                          { id: 31, episodeFileId: 5, seasonNumber: 2, episodeNumber: 3 },
+                          { id: 32, episodeFileId: 5, seasonNumber: 2, episodeNumber: 4 },
+                          { id: 33, episodeFileId: 6 },
+                      ],
+            }));
+
+            const files = await arrLibraryService.getFilesFor(sonarr, 7);
+
+            expect(files[0]).toMatchObject({ path: '/tv/a.strm', ids: [31, 32], season: 2, episode: 3 });
+            expect(files[1].season).toBeUndefined();
+        });
+
         it('reads one Radarr movie, or nothing when it has no file', async () => {
             mockedAxios.get.mockResolvedValueOnce({ data: { id: 3, movieFile: { path: '/movies/m.strm' } } });
             expect(await arrLibraryService.getFilesFor(radarr, 3)).toEqual([expect.objectContaining({ path: '/movies/m.strm', ids: [3], arrId: 3 })]);

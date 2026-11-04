@@ -48,6 +48,13 @@ describe('nfoBuilder', () => {
             expect(xml).toContain('<studio>BBC One</studio>');
         });
 
+        it('names the programme as a uniqueid, which parseNfoPid reads back', () => {
+            const xml = buildEpisodeNfo(baseItem({ pid: 'm001aaaa' }));
+
+            expect(xml).toContain('<uniqueid type="iplayer">m001aaaa</uniqueid>');
+            expect(parseNfoPid(xml)).toBe('m001aaaa');
+        });
+
         it('escapes XML special characters and tolerates missing fields', () => {
             const item = baseItem({ library: { title: 'Show & Co' } });
             const xml = buildEpisodeNfo(item);
@@ -57,6 +64,13 @@ describe('nfoBuilder', () => {
             expect(xml).toContain('<episode>0</episode>');
             expect(xml).not.toContain('<studio>');
             expect(xml).not.toContain('<runtime>');
+        });
+    });
+
+    describe('buildMovieNfo uniqueid', () => {
+        it('names the programme too, and leaves it out for an item with no pid', () => {
+            expect(parseNfoPid(buildMovieNfo(baseItem({ type: VideoType.MOVIE, pid: 'p04fthkg' })))).toBe('p04fthkg');
+            expect(buildEpisodeNfo(baseItem({ pid: '' }))).not.toContain('uniqueid');
         });
     });
 

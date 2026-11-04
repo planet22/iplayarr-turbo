@@ -24,8 +24,10 @@ export interface JellyfinItem {
     path: string;
     // The .strm file contents, when Jellyfin reports them.
     link?: string;
-    // The series an episode belongs to.
+    // The series an episode belongs to, and its season and episode number.
     show?: string;
+    season?: number;
+    episode?: number;
 }
 
 export interface JellyfinLiveTvStatus {
@@ -74,7 +76,10 @@ class JellyfinService {
         void markAppSeen(server.id);
         return (data?.Items ?? [])
             .filter((item: any) => typeof item.Path === 'string')
-            .map((item: any) => ({ path: item.Path, link: item.MediaSources?.[0]?.Path, show: item.SeriesName || undefined }));
+            .map((item: any) => ({ path: item.Path, link: item.MediaSources?.[0]?.Path, show: item.SeriesName || undefined,
+                season: typeof item.ParentIndexNumber === 'number' ? item.ParentIndexNumber : undefined,
+                episode: typeof item.IndexNumber === 'number' ? item.IndexNumber : undefined,
+            }));
     }
 
     // --- Live TV setup. Only ever touches entries whose URL carries an iPlayarr live_* mode, so a

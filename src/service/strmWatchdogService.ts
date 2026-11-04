@@ -203,6 +203,8 @@ class StrmWatchdogService {
         for (const [pid, episode] of await libraryIndexService.episodes(read)) {
             for (const { sourceId, name, type, file, arrIds } of episode.listings) {
                 const source: WatchdogSource = type === 'HISTORY' ? 'history' : type === 'JELLYFIN' ? 'jellyfin' : 'arr';
+                // Only links are checked against BBC; a real video file the index also holds has nothing to check.
+                if (!file.toLowerCase().endsWith('.strm')) continue;
                 if (source === 'history' && subscribedPids && !subscribedPids.has(pid)) continue;
                 if (!found.has(pid)) found.set(pid, { files: new Set(), sources: new Set(), names: new Set(), types: new Set(), arr: [] });
                 const target = found.get(pid)!;

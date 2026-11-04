@@ -40,6 +40,9 @@ export interface IndexedFile {
     // The Sonarr series / Radarr movie it belongs to, and the episode ids it holds.
     arrId?: number;
     arrIds?: number[];
+    // Which episode of the show it is, from the app that holds it or from its name.
+    season?: number;
+    episode?: number;
 }
 
 // What one source listed the last time it was read.
@@ -108,6 +111,12 @@ export const appSourceId = (app: Pick<App, 'id'>): string => `app:${app.id}`;
 // How a show is named wherever it is listed, so a folder, a Sonarr series and a subscription meet.
 export const showKey = (title: string): string => sanitizeSegment(title).toLowerCase();
 
+// The season and episode a file name gives ("... S02E03 ..."), for a file that names no programme.
+const numbersOf = (file: string): { season?: number; episode?: number } => {
+    const match = path.basename(file).match(/\bS(\d{1,3})E(\d{1,3})\b/i);
+    return match ? { season: Number(match[1]), episode: Number(match[2]) } : {};
+};
+
 const baseOf = (file: string): string => file.replace(/\.[^./\\]+$/, '').replace(/\\/g, '/').toLowerCase();
 
 // The single answer to "what is in the library": every file of ours that iPlayarr's history and folders, Sonarr, Radarr
@@ -167,7 +176,7 @@ class LibraryIndexService {
         for (const app of apps.filter((a) => arrLibraryService.supports(a))) {
             try {
                 await progress(app.name, 0, 0, true);
-                const refs = (await arrLibraryService.getLibraryFiles(app)).filter(({ path: f }) => f.toLowerCase().endsWith('.strm'));
+                const refs = (await arrLibraryService.getLibraryFiles(app)).filter(({ path: f }) => VIDEO_FILE.test(f));
                 const titles = await this.#arrTitles(app);
                 await progress(app.name, 0, refs.length, true);
                 const files: IndexedFile[] = [];
@@ -176,10 +185,22 @@ class LibraryIndexService {
                 for (const ref of refs) {
                     await progress(app.name, done++, refs.length);
                     const local = mapPath(ref.path, pathMap);
+                    const title = titles.get(ref.arrId);
+                    const held = {
+                        path: local,
+                        arrId: ref.arrId,
+                        arrIds: ref.ids,
+                        ...(title ? { show: showKey(title) } : {}),
+                        ...(ref.season === undefined ? numbersOf(local) : { season: ref.season, episode: ref.episode }),
+                    };
+                    if (!/\.strm$/i.test(local)) {
+                        const real = this.#identifyReal(local);
+                        if (real) files.push({ ...held, ...real });
+                        continue;
+                    }
                     try {
                         const pid = parseStrmPid(fs.readFileSync(local, 'utf8'));
-                        const title = titles.get(ref.arrId);
-                        if (pid) files.push({ path: local, pid, arrId: ref.arrId, arrIds: ref.ids, ...(title ? { show: showKey(title) } : {}) });
+                        if (pid) files.push({ ...held, pid });
                     } catch {
                         // Not mounted/readable here - skip rather than guess.
                         skipped++;
@@ -196,7 +217,7 @@ class LibraryIndexService {
         for (const server of apps.filter((a) => jellyfinService.supports(a))) {
             try {
                 await progress(server.name, 0, 0, true);
-                const items = (await jellyfinService.getItems(server)).filter(({ path: f }) => f.toLowerCase().endsWith('.strm'));
+                const items = (await jellyfinService.getItems(server)).filter(({ path: f }) => VIDEO_FILE.test(f));
                 await appService.touchApp(server.id);
                 await progress(server.name, 0, items.length, true);
                 const files: IndexedFile[] = [];
@@ -205,6 +226,16 @@ class LibraryIndexService {
                 for (const item of items) {
                     await progress(server.name, done++, items.length);
                     const local = mapPath(item.path, pathMap);
+                    const held = {
+                        path: local,
+                        ...(item.show ? { show: showKey(item.show) } : {}),
+                        ...(item.season === undefined ? numbersOf(local) : { season: item.season, episode: item.episode }),
+                    };
+                    if (!/\.strm$/i.test(local)) {
+                        const real = this.#identifyReal(local);
+                        if (real) files.push({ ...held, ...real });
+                        continue;
+                    }
                     // Jellyfin's own copy of the link means the file need not be readable here.
                     let pid = item.link ? parseStrmPid(item.link) : undefined;
                     if (!pid) {
@@ -219,7 +250,7 @@ class LibraryIndexService {
                             skipped++;
                         }
                     }
-                    if (pid) files.push({ path: local, pid, ...(item.show ? { show: showKey(item.show) } : {}) });
+                    if (pid) files.push({ ...held, pid });
                 }
                 await progress(server.name, items.length, items.length, true);
                 await this.#save({ id: appSourceId(server), name: server.name, type: 'JELLYFIN', scannedAt: new Date().toISOString(), files, unreadable: skipped });
@@ -274,25 +305,32 @@ class LibraryIndexService {
         });
     }
 
-    // Is a file in iPlayarr's folders one of ours, and which programme is it? A .strm link names its programme (a link to
-    // anything else belongs to some other tool). A real video file says so in an .nfo beside it, or carries our release
-    // group in its name, which names no programme.
-    #identify(file: string): IndexedFile | undefined {
-        if (/\.strm$/i.test(file)) {
-            try {
-                const pid = parseStrmPid(fs.readFileSync(file, 'utf8'));
-                return pid ? { path: file, pid } : undefined;
-            } catch {
-                return { path: file }; // Not readable from here: in our own folder, so taken to be ours.
-            }
-        }
+    // Is a real video file one of ours, and which programme is it? An .nfo beside it names the programme; failing that it
+    // is ours when its name carries our release group (which Sonarr and Radarr keep when they rename), and names none.
+    #identifyReal(file: string): { pid?: string } | undefined {
         try {
             const pid = parseNfoPid(fs.readFileSync(file.replace(/\.[^./\\]+$/, '.nfo'), 'utf8'));
-            if (pid) return { path: file, pid };
+            if (pid) return { pid };
         } catch {
-            // No .nfo beside it.
+            // No .nfo beside it, or none this container can read.
         }
-        return path.basename(file).toLowerCase().includes(RELEASE_GROUP.toLowerCase()) ? { path: file } : undefined;
+        return path.basename(file).toLowerCase().includes(RELEASE_GROUP.toLowerCase()) ? {} : undefined;
+    }
+
+    // Is a file in iPlayarr's folders one of ours, and which programme is it? A .strm link names its programme (a link to
+    // anything else belongs to some other tool).
+    #identify(file: string): IndexedFile | undefined {
+        const held = { path: file, ...numbersOf(file) };
+        if (!/\.strm$/i.test(file)) {
+            const real = this.#identifyReal(file);
+            return real && { ...held, ...real };
+        }
+        try {
+            const pid = parseStrmPid(fs.readFileSync(file, 'utf8'));
+            return pid ? { ...held, pid } : undefined;
+        } catch {
+            return held; // Not readable from here: in our own folder, so taken to be ours.
+        }
     }
 
     #folders: { complete?: string; arr?: string } = {};
@@ -379,6 +417,9 @@ class LibraryIndexService {
     #group(scans: SourceScan[], keep: (file: IndexedFile, scan: SourceScan) => boolean = () => true): Map<string, IndexedEpisode> {
         const found = new Map<string, IndexedEpisode>();
         const byBase = new Map<string, string>();
+        const byNumbers = new Map<string, string>();
+        const numbered = (file: IndexedFile): string | undefined =>
+            file.show && file.season !== undefined && file.episode !== undefined ? `${file.show}:${file.season}:${file.episode}` : undefined;
         const place = (scan: SourceScan, file: IndexedFile, key: string) => {
             if (!found.has(key)) found.set(key, { key, ...(file.pid ? { pid: file.pid } : {}), files: [], listings: [] });
             const episode = found.get(key)!;
@@ -388,11 +429,15 @@ class LibraryIndexService {
         const kept = scans.flatMap((scan) => scan.files.filter((file) => keep(file, scan)).map((file) => ({ scan, file })));
         for (const { scan, file } of kept.filter(({ file }) => file.pid)) {
             byBase.set(baseOf(file.path), file.pid as string);
+            const numbers = numbered(file);
+            if (numbers) byNumbers.set(numbers, file.pid as string);
             place(scan, file, file.pid as string);
         }
+        // A file that names no programme is the episode of the file beside it with the same name, or of the one with the same
+        // season and episode in the same show; failing that, it is known by its season and episode, or by where it is.
         for (const { scan, file } of kept.filter(({ file }) => !file.pid)) {
-            const base = baseOf(file.path);
-            place(scan, file, byBase.get(base) ?? `file:${base}`);
+            const numbers = numbered(file);
+            place(scan, file, byBase.get(baseOf(file.path)) ?? (numbers && (byNumbers.get(numbers) ?? `episode:${numbers}`)) ?? `file:${baseOf(file.path)}`);
         }
         return found;
     }

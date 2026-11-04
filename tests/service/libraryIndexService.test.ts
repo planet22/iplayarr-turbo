@@ -466,4 +466,62 @@ describe('libraryIndexService folders and shows', () => {
             expect((await libraryIndexService.refreshArr(sonarr, 7)).map(({ path: file }) => path.normalize(file))).toEqual([a]);
         });
     });
+
+    it('knows a real file in a Sonarr library by its .nfo or release group, and ties it to the link of the same season and episode', async () => {
+        const link1 = put(complete, 'The Show/Season 01/The Show - S01E01-BBCiPlayarrTurbo.strm', link('m001aaaa'));
+        const renamed = put(arrComplete, 'The Show/Season 01/The Show - S01E01 - Pilot-BBCiPlayarrTurbo.mkv');
+        const withNfo = put(arrComplete, 'The Show/Season 01/other name.mp4');
+        put(arrComplete, 'The Show/Season 01/other name.nfo', nfo('m001bbbb'));
+        const stranger = put(arrComplete, 'The Show/Season 01/Stranger.mkv');
+        const lone = put(arrComplete, 'The Show/Season 01/The Show - S01E05-BBCiPlayarrTurbo.mkv');
+        jest.mocked(arrLibraryService.listLibrary).mockResolvedValue(new Map([[7, { title: 'The Show', have: 4, total: 4 }]]));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([
+            { path: link1, ids: [1], arrId: 7, season: 1, episode: 1 },
+            { path: renamed, ids: [1], arrId: 7, season: 1, episode: 1 },
+            { path: withNfo, ids: [2], arrId: 7, season: 1, episode: 2 },
+            { path: stranger, ids: [3], arrId: 7, season: 1, episode: 3 },
+            { path: lone, ids: [5], arrId: 7, season: 1, episode: 5 },
+        ]);
+
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        const episodes = await libraryIndexService.episodes();
+        expect([...episodes.keys()].sort()).toEqual(['episode:the show:1:5', 'm001aaaa', 'm001bbbb']);
+        expect(episodes.get('m001aaaa')?.files).toHaveLength(2);
+        expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(3);
+    });
+
+    it('takes the season and episode of a real file from its name when the app gives none', async () => {
+        const real = put(arrComplete, 'The Show/Season 02/The Show - S02E03-BBCiPlayarrTurbo.mkv');
+        jest.mocked(arrLibraryService.listLibrary).mockResolvedValue(new Map([[7, { title: 'The Show', have: 1, total: 1 }]]));
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: real, ids: [1], arrId: 7 }]);
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        expect([...(await libraryIndexService.episodes()).keys()]).toEqual(['episode:the show:2:3']);
+    });
+
+    it('ties the real file in a Jellyfin library to its link by season and episode, and a name-only file by its name', async () => {
+        const a = put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
+        const real = put(arrComplete, 'The Show/Season 01/Pilot-BBCiPlayarrTurbo.mkv');
+        const lone = put(arrComplete, 'The Show/Season 01/Lone-BBCiPlayarrTurbo.mkv');
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([
+            { path: a, show: 'The Show', season: 1, episode: 1 },
+            { path: real, show: 'The Show', season: 1, episode: 1 },
+            { path: lone },
+            { path: path.join(arrComplete, 'Other.mkv') },
+        ]);
+
+        await libraryIndexService.scan({ apps: [jellyfin] });
+
+        const episodes = await libraryIndexService.episodes();
+        expect([...episodes.keys()].sort()).toEqual(['file:' + lone.replace(/\\/g, '/').replace(/\.mkv$/, '').toLowerCase(), 'm001aaaa']);
+        expect(episodes.get('m001aaaa')?.files).toHaveLength(2);
+    });
+
+    it('ties a real file in the folders to the link with the same season and episode in its name', async () => {
+        put(complete, 'The Show/Season 01/The Show - S01E02-BBCiPlayarrTurbo.strm', link('m001aaaa'));
+        put(complete, 'The Show/Season 01/The Show - S01E02 - Title-BBCiPlayarrTurbo.mkv');
+
+        expect(await libraryIndexService.onDisk('The Show')).toEqual({ count: 1, pids: ['m001aaaa'] });
+    });
 });

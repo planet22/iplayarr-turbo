@@ -336,6 +336,18 @@ describe('StrmWatchdogService', () => {
         expect(fs.existsSync(badPath)).toBe(true);
     });
 
+    it('checks only the links in a library, not a real video file the index also holds', async () => {
+        extra = { STRM_WATCHDOG_SOURCES: 'arr' };
+        const link = path.join(tmpDir, 'a.strm');
+        fs.writeFileSync(link, `http://iplayarr/api?mode=stream&pid=${GOOD}`);
+        const real = path.join(tmpDir, 'a-BBCiPlayarrTurbo.mkv');
+        fs.writeFileSync(real, 'x');
+        fs.writeFileSync(path.join(tmpDir, 'a-BBCiPlayarrTurbo.nfo'), '<uniqueid type="iplayer">m009nfoo</uniqueid>');
+        jest.mocked(arrLibraryService.getFilePaths).mockResolvedValue([{ path: link, ids: [1] }, { path: real, ids: [1] }]);
+
+        expect((await strmWatchdogService.run()).checked).toBe(1);
+    });
+
     it('finds links through a Jellyfin app', async () => {
         extra = { STRM_WATCHDOG_SOURCES: 'jellyfin' };
         const appService = jest.requireMock('../../src/service/appService');
