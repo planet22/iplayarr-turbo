@@ -24,6 +24,8 @@ export interface JellyfinItem {
     path: string;
     // The .strm file contents, when Jellyfin reports them.
     link?: string;
+    // The series an episode belongs to.
+    show?: string;
 }
 
 export interface JellyfinLiveTvStatus {
@@ -72,7 +74,7 @@ class JellyfinService {
         void markAppSeen(server.id);
         return (data?.Items ?? [])
             .filter((item: any) => typeof item.Path === 'string')
-            .map((item: any) => ({ path: item.Path, link: item.MediaSources?.[0]?.Path }));
+            .map((item: any) => ({ path: item.Path, link: item.MediaSources?.[0]?.Path, show: item.SeriesName || undefined }));
     }
 
     // --- Live TV setup. Only ever touches entries whose URL carries an iPlayarr live_* mode, so a

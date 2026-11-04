@@ -214,6 +214,8 @@ class StrmWatchdogService {
                 if (source === 'arr' && app && arrIds?.length) target.arr.push({ app, ids: arrIds });
             }
         }
+        // The library folders are read again too, so what the index holds follows what the Watchdog has just seen.
+        await libraryIndexService.scanFolders().catch(() => undefined);
         this.#live.collecting = undefined;
         return found;
     }

@@ -300,7 +300,7 @@ router.get(
         if (!PID_REGEX.test(pid)) return invalid(res, 'Invalid pid');
         const { pid: brandPid, title } = await browseService.programme(pid);
         const subscription = (await subscriptionService.list()).find((s) => s.pid === brandPid);
-        res.json((await subscriptionDiskService.forShow(title, subscription?.seen)).pids);
+        res.json((await subscriptionDiskService.forShow(title, subscription?.arr)).pids);
     })
 );
 

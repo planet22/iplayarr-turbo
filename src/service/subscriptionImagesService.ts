@@ -80,7 +80,7 @@ class SubscriptionImagesService {
             }
             return result;
         } finally {
-            if (!subscription.arrOnly) await subscriptionDiskService.refresh(subscription.title, subscription.seen).catch(() => undefined);
+            if (!subscription.arrOnly) await subscriptionDiskService.refresh(subscription.title).catch(() => undefined);
             this.#progress(id, 'done');
         }
     }

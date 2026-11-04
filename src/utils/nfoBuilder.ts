@@ -146,3 +146,8 @@ export function buildLiveChannelNfo(title: string): string {
     xml += '</movie>\n';
     return xml;
 }
+
+// The programme id an .nfo names as <uniqueid type="iplayer">, which is how a real video file says which episode it is.
+export function parseNfoPid(xml: string): string | undefined {
+    return xml.match(/<uniqueid\b[^>]*\btype\s*=\s*["']iplayer["'][^>]*>\s*([a-z]\d[a-z0-9]{6})\s*</i)?.[1];
+}

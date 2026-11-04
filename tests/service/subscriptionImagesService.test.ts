@@ -42,7 +42,7 @@ describe('subscriptionImagesService', () => {
 
     beforeEach(() => {
         jest.resetAllMocks();
-        jest.mocked(subscriptionDiskService.refresh).mockResolvedValue({ count: 0, pids: [] });
+        jest.mocked(subscriptionDiskService.refresh).mockResolvedValue(undefined);
         Object.keys(settings).forEach((key) => delete settings[key]);
         Object.assign(settings, { COMPLETE_DIR: '/complete', ARR_COMPLETE_DIR: '/arrcomplete' });
         jest.mocked(configService.getParameter).mockImplementation(async (key: any) => settings[key]);
@@ -272,7 +272,7 @@ describe('subscriptionImagesService', () => {
     describe('the count on disk', () => {
         it('is read again once an update is done, for a show iPlayarr downloads but not a Sonarr/Radarr-only one', async () => {
             await subscriptionImagesService.update('sub1');
-            expect(subscriptionDiskService.refresh).toHaveBeenCalledWith('The Show', ['m001seen', 'm002seen']);
+            expect(subscriptionDiskService.refresh).toHaveBeenCalledWith('The Show');
 
             jest.mocked(subscriptionDiskService.refresh).mockClear();
             jest.mocked(subscriptionService.list).mockResolvedValue([subscription({ arrOnly: true, arr: { appId: 'app1', arrId: 7, title: 'The Show', addedByUs: false } })]);

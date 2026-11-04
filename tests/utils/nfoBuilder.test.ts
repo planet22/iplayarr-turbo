@@ -3,7 +3,7 @@
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 import { QueueEntry } from '../../src/types/QueueEntry';
 import { QueueEntryStatus } from '../../src/types/responses/sabnzbd/QueueResponse';
-import { buildEpisodeNfo, buildLiveChannelNfo, buildMovieNfo, buildShowNfo } from '../../src/utils/nfoBuilder';
+import { buildEpisodeNfo, buildLiveChannelNfo, buildMovieNfo, buildShowNfo, parseNfoPid } from '../../src/utils/nfoBuilder';
 
 // Nothing here talks to the network directly.
 // Keep this in step with the matching type definitions.
@@ -170,5 +170,18 @@ describe('nfoBuilder', () => {
             expect(xml).toContain('<lockdata>true</lockdata>');
             expect(xml.trimEnd().endsWith('</movie>')).toBe(true);
         });
+    });
+});
+
+describe('parseNfoPid', () => {
+    it('reads the programme id from an iplayer uniqueid, however the attributes are ordered', () => {
+        expect(parseNfoPid('<episodedetails><uniqueid type="iplayer" default="true">m001aaaa</uniqueid></episodedetails>')).toBe('m001aaaa');
+        expect(parseNfoPid("<uniqueid default='true' type='IPlayer'> p04fthkg </uniqueid>")).toBe('p04fthkg');
+    });
+
+    it('is nothing for another kind of id, a bad id, or none', () => {
+        expect(parseNfoPid('<uniqueid type="tvdb">m001aaaa</uniqueid>')).toBeUndefined();
+        expect(parseNfoPid('<uniqueid type="iplayer">notapid</uniqueid>')).toBeUndefined();
+        expect(parseNfoPid('<episodedetails></episodedetails>')).toBeUndefined();
     });
 });

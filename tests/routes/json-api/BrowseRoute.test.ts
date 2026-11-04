@@ -41,13 +41,13 @@ describe('BrowseRoute', () => {
             expect(subscriptionDiskService.forShow).toHaveBeenCalledWith('The Show', undefined);
         });
 
-        it('passes the seen list on for a subscribed show, and refuses a pid that is not one', async () => {
+        it('passes the Sonarr/Radarr link of a subscribed show on, and refuses a pid that is not one', async () => {
             mocked.programme.mockResolvedValue({ pid: 'b006xnzc', title: 'The Show' } as any);
-            jest.mocked(subscriptionService.list).mockResolvedValue([{ pid: 'b006xnzc', seen: ['m001seen'] } as any]);
+            jest.mocked(subscriptionService.list).mockResolvedValue([{ pid: 'b006xnzc', arr: { appId: 'app1', arrId: 7 } } as any]);
             jest.mocked(subscriptionDiskService.forShow).mockResolvedValue({ count: 0, pids: [] });
 
             await request(app).get('/programme/b006xnzc/on-disk').expect(200);
-            expect(subscriptionDiskService.forShow).toHaveBeenCalledWith('The Show', ['m001seen']);
+            expect(subscriptionDiskService.forShow).toHaveBeenCalledWith('The Show', { appId: 'app1', arrId: 7 });
             await request(app).get('/programme/bad!/on-disk').expect(400);
         });
     });

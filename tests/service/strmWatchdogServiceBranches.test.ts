@@ -19,12 +19,18 @@ jest.mock('../../src/service/configService', () => ({ getParameter: jest.fn() })
 jest.mock('../../src/service/historyService', () => ({ getHistory: jest.fn(), removeHistory: jest.fn(async () => undefined) }));
 jest.mock('axios', () => ({ get: jest.fn(async () => ({ status: 200 })), post: jest.fn(async () => ({})) }));
 jest.mock('../../src/service/socketService', () => ({ emit: jest.fn() }));
-jest.mock('../../src/service/arr/ArrLibraryService', () => ({
-    supports: jest.fn((app: { type?: string }) => app.type !== 'JELLYFIN'),
-    getFilePaths: jest.fn(),
-    unmonitor: jest.fn(async () => undefined),
-    search: jest.fn(async () => undefined),
-}));
+jest.mock('../../src/service/arr/ArrLibraryService', () => {
+    const getFilePaths = jest.fn();
+    return {
+        supports: jest.fn((app: { type?: string }) => app.type !== 'JELLYFIN'),
+        getFilePaths,
+        // The library index reads files through getLibraryFiles; these tests describe them with getFilePaths.
+        getLibraryFiles: jest.fn((app: unknown) => getFilePaths(app)),
+        listLibrary: jest.fn(async () => new Map()),
+        unmonitor: jest.fn(async () => undefined),
+        search: jest.fn(async () => undefined),
+    };
+});
 jest.mock('../../src/service/appService', () => ({
     getAllApps: jest.fn(async () => [{ id: 'a', name: 'Sonarr' }]),
     touchApp: jest.fn(async () => undefined),

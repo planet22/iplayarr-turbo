@@ -38,7 +38,7 @@ jest.mock('../../src/service/synonymService');
 jest.mock('../../src/service/stream/versionVpid');
 jest.mock('../../src/service/videoEventService');
 jest.mock('../../src/service/loggingService');
-jest.mock('../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { refresh: jest.fn().mockResolvedValue({ count: 0, pids: [] }) } }));
+jest.mock('../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { refresh: jest.fn().mockResolvedValue(undefined) } }));
 jest.mock('../../src/service/socketService', () => ({ __esModule: true, default: { emit: jest.fn() } }));
 jest.mock('../../src/utils/Utils', () => ({
     ...jest.requireActual('../../src/utils/Utils'),
@@ -199,7 +199,7 @@ describe('subscriptionService', () => {
             refresh.mockClear();
 
             await subscriptionService.check(sub);
-            expect(refresh).toHaveBeenCalledWith('The Show', expect.arrayContaining(['e3']));
+            expect(refresh).toHaveBeenCalledWith('The Show');
 
             refresh.mockRejectedValueOnce(new Error('unreadable'));
             expect((await subscriptionService.check((await subscriptionService.list())[0])).error).toBeUndefined();
