@@ -24,6 +24,7 @@ import SubscriptionsPage from '@/views/SubscriptionsPage.vue';
 import SynonymsPage from '@/views/SynonymsPage.vue';
 import TilesPage from '@/views/TilesPage.vue';
 import VideoEventsPage from '@/views/VideoEventsPage.vue';
+import LibraryDebugPage from '@/views/LibraryDebugPage.vue';
 import WatchdogPage from '@/views/WatchdogPage.vue';
 
 const routes = [
@@ -43,6 +44,8 @@ const routes = [
     { path: '/streaming', component: StreamingPage },
     { path: '/events', component: VideoEventsPage },
     { path: '/watchdog', component: WatchdogPage },
+    // Not in the menu: reached by its address.
+    { path: '/library-debug', component: LibraryDebugPage },
     { path: '/nzb', component: NzbPage },
     { path: '/browse', component: DiscoverPage },
     { path: '/browse/channels', component: TilesPage, meta: { tiles: 'channels' } },

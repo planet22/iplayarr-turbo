@@ -44,7 +44,25 @@ export interface IndexedFile {
     // Which episode of the show it is, from the app that holds it or from its name.
     season?: number;
     episode?: number;
+    // How the file was found to be ours (for the library debug page).
+    via?: IdentifiedVia;
 }
+
+// How a file was found to be ours: the programme its .strm link names (read from the file, or from the copy Jellyfin holds),
+// the .nfo beside a real file, our release group in its name, the download history, or just being in our own folder.
+export type IdentifiedVia = 'link' | 'jellyfin-link' | 'nfo' | 'release-group' | 'history' | 'unreadable-link';
+
+// A file a source listed that was left out, and why.
+export interface RejectedFile {
+    path: string;
+    reason: string;
+    show?: string;
+}
+
+const REJECTED_LIMIT = 5000;
+const NOT_OURS_LINK = 'the link names no BBC programme (another tool\'s)';
+const NOT_OURS_REAL = 'no .nfo naming a programme and no release group in the name';
+const UNREADABLE = 'could not be read from here, and the app gave no link';
 
 // What one source listed the last time it was read.
 export interface SourceScan {
@@ -55,6 +73,8 @@ export interface SourceScan {
     files: IndexedFile[];
     // Files the source lists that could not be read from here, so were left out.
     unreadable: number;
+    // What the source listed that was not counted, and why (the first few thousand).
+    rejected?: RejectedFile[];
 }
 
 // One source's mention of a file.
@@ -99,6 +119,32 @@ export interface OnDisk {
 export interface ShowLink {
     appId: string;
     arrId: number;
+}
+
+// One file the library debug page lists.
+export interface LibraryDebugRow {
+    source: string;
+    sourceName: string;
+    type: IndexSourceType;
+    path: string;
+    // A .strm link, or a real video file.
+    kind: 'link' | 'file';
+    // In the index, or left out (with the reason in `detail`; for a counted file, how it was identified).
+    counted: boolean;
+    detail: string;
+    pid?: string;
+    episodeKey?: string;
+    show?: string;
+    season?: number;
+    episode?: number;
+    arrId?: number;
+    arrIds?: number[];
+    unreadable?: boolean;
+}
+
+export interface LibraryDebug {
+    sources: { id: string; name: string; type: IndexSourceType; scannedAt: string; counted: number; rejected: number; unreadable: number }[];
+    rows: LibraryDebugRow[];
 }
 
 export interface ScanRequest {
@@ -183,6 +229,7 @@ class LibraryIndexService {
                 const titles = await this.#arrTitles(app);
                 await progress(app.name, 0, refs.length, true);
                 const files: IndexedFile[] = [];
+                const rejected: RejectedFile[] = [];
                 let done = 0;
                 let skipped = 0;
                 for (const ref of refs) {
@@ -199,19 +246,22 @@ class LibraryIndexService {
                     if (!/\.strm$/i.test(local)) {
                         const real = this.#identifyReal(local);
                         if (real) files.push({ ...held, ...real });
+                        else rejected.push({ path: local, reason: NOT_OURS_REAL, ...(held.show ? { show: held.show } : {}) });
                         continue;
                     }
                     try {
                         const pid = parseStrmPid(fs.readFileSync(local, 'utf8'));
-                        if (pid) files.push({ ...held, pid });
+                        if (pid) files.push({ ...held, pid, via: 'link' });
+                        else rejected.push({ path: local, reason: NOT_OURS_LINK });
                     } catch {
                         // Not mounted/readable here - skip rather than guess.
                         (unreadablePaths[app.name] ??= []).push(ref.path);
+                        rejected.push({ path: local, reason: UNREADABLE });
                         skipped++;
                     }
                 }
                 await progress(app.name, refs.length, refs.length, true);
-                await this.#save({ id: appSourceId(app), name: app.name, type: app.type as IndexSourceType, scannedAt: new Date().toISOString(), files, unreadable: skipped });
+                await this.#save({ id: appSourceId(app), name: app.name, type: app.type as IndexSourceType, scannedAt: new Date().toISOString(), files, unreadable: skipped, rejected: rejected.slice(0, REJECTED_LIMIT) });
                 if (skipped) unreadable[app.name] = skipped;
                 read.push(appSourceId(app));
             } catch (err: any) {
@@ -225,6 +275,7 @@ class LibraryIndexService {
                 await appService.touchApp(server.id);
                 await progress(server.name, 0, items.length, true);
                 const files: IndexedFile[] = [];
+                const rejected: RejectedFile[] = [];
                 let done = 0;
                 let skipped = 0;
                 for (const item of items) {
@@ -238,11 +289,14 @@ class LibraryIndexService {
                     if (!/\.strm$/i.test(local)) {
                         const real = this.#identifyReal(local);
                         if (real) files.push({ ...held, ...real });
+                        else rejected.push({ path: local, reason: NOT_OURS_REAL, ...(held.show ? { show: held.show } : {}) });
                         continue;
                     }
                     // Jellyfin's own copy of the link means the file need not be readable here.
                     let pid = item.link ? parseStrmPid(item.link) : undefined;
+                    let via: IdentifiedVia = 'jellyfin-link';
                     if (!pid) {
+                        via = 'link';
                         try {
                             pid = parseStrmPid(fs.readFileSync(local, 'utf8'));
                         } catch {
@@ -252,13 +306,16 @@ class LibraryIndexService {
                             // Update the related documentation if this changes.
                             // Ordering is significant; do not reshuffle without testing.
                             (unreadablePaths[server.name] ??= []).push(item.path);
+                            rejected.push({ path: local, reason: UNREADABLE });
                             skipped++;
+                            continue;
                         }
                     }
-                    if (pid) files.push({ ...held, pid });
+                    if (pid) files.push({ ...held, pid, via });
+                    else rejected.push({ path: local, reason: NOT_OURS_LINK });
                 }
                 await progress(server.name, items.length, items.length, true);
-                await this.#save({ id: appSourceId(server), name: server.name, type: 'JELLYFIN', scannedAt: new Date().toISOString(), files, unreadable: skipped });
+                await this.#save({ id: appSourceId(server), name: server.name, type: 'JELLYFIN', scannedAt: new Date().toISOString(), files, unreadable: skipped, rejected: rejected.slice(0, REJECTED_LIMIT) });
                 if (skipped) unreadable[server.name] = skipped;
                 read.push(appSourceId(server));
             } catch (err: any) {
@@ -280,7 +337,7 @@ class LibraryIndexService {
         const files: IndexedFile[] = [];
         for (const item of (await historyService.getHistory()).filter(({ extension }) => extension === 'strm')) {
             const dir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir);
-            files.push({ path: path.join(dir, item.libraryPath ?? `${item.nzbName}.strm`), pid: item.pid });
+            files.push({ path: path.join(dir, item.libraryPath ?? `${item.nzbName}.strm`), pid: item.pid, via: 'history' });
         }
         return { id: HISTORY_ID, name: 'iPlayarr', type: 'HISTORY', scannedAt: new Date().toISOString(), files, unreadable: 0 };
     }
@@ -314,29 +371,29 @@ class LibraryIndexService {
 
     // Is a real video file one of ours, and which programme is it? An .nfo beside it names the programme; failing that it
     // is ours when its name carries our release group (which Sonarr and Radarr keep when they rename), and names none.
-    #identifyReal(file: string): { pid?: string } | undefined {
+    #identifyReal(file: string): { pid?: string; via: IdentifiedVia } | undefined {
         try {
             const pid = parseNfoPid(fs.readFileSync(file.replace(/\.[^./\\]+$/, '.nfo'), 'utf8'));
-            if (pid) return { pid };
+            if (pid) return { pid, via: 'nfo' };
         } catch {
             // No .nfo beside it, or none this container can read.
         }
-        return path.basename(file).toLowerCase().includes(RELEASE_GROUP.toLowerCase()) ? {} : undefined;
+        return path.basename(file).toLowerCase().includes(RELEASE_GROUP.toLowerCase()) ? { via: 'release-group' } : undefined;
     }
 
     // Is a file in iPlayarr's folders one of ours, and which programme is it? A .strm link names its programme (a link to
-    // anything else belongs to some other tool).
-    #identify(file: string): IndexedFile | undefined {
+    // anything else belongs to some other tool). Says why when it is not ours.
+    #identify(file: string): { found?: IndexedFile; reason?: string } {
         const held = { path: file, ...numbersOf(file) };
         if (!/\.strm$/i.test(file)) {
             const real = this.#identifyReal(file);
-            return real && { ...held, ...real };
+            return real ? { found: { ...held, ...real } } : { reason: NOT_OURS_REAL };
         }
         try {
             const pid = parseStrmPid(fs.readFileSync(file, 'utf8'));
-            return pid ? { ...held, pid } : undefined;
+            return pid ? { found: { ...held, pid, via: 'link' } } : { reason: NOT_OURS_LINK };
         } catch {
-            return held; // Not readable from here: in our own folder, so taken to be ours.
+            return { found: { ...held, via: 'unreadable-link' } }; // Not readable from here: in our own folder, so taken to be ours.
         }
     }
 
@@ -351,9 +408,10 @@ class LibraryIndexService {
 
     // Reads iPlayarr's library folders (the complete and the Sonarr/Radarr one): each folder is a show, its files are the
     // show's. With a show named, only that one is read.
-    #walk(show?: string): IndexedFile[] {
+    #walk(show?: string): { files: IndexedFile[]; rejected: RejectedFile[] } {
         const roots = [...new Set([this.#folders.complete, this.#folders.arr].filter((dir): dir is string => !!dir))];
         const files: IndexedFile[] = [];
+        const rejected: RejectedFile[] = [];
         for (const root of roots) {
             let entries: fs.Dirent[];
             try {
@@ -367,23 +425,25 @@ class LibraryIndexService {
                     const key = showKey(entry.name);
                     if (show && key !== show) continue;
                     for (const file of this.#videoFiles(full)) {
-                        const found = this.#identify(file);
+                        const { found, reason } = this.#identify(file);
                         if (found) files.push({ ...found, show: key, folder: full });
+                        else rejected.push({ path: file, reason: reason as string, show: key });
                     }
                 } else if (!show && VIDEO_FILE.test(entry.name)) {
                     // A flat layout, or a film, sits outside a show folder.
-                    const found = this.#identify(full);
+                    const { found, reason } = this.#identify(full);
                     if (found) files.push(found);
+                    else rejected.push({ path: full, reason: reason as string });
                 }
             }
         }
-        return files;
+        return { files, rejected: rejected.slice(0, REJECTED_LIMIT) };
     }
 
     // Reads all of iPlayarr's library folders again.
     async scanFolders(): Promise<void> {
         await this.#readFolderSettings();
-        await this.#save({ id: FOLDERS_ID, name: 'iPlayarr folders', type: 'FOLDER', scannedAt: new Date().toISOString(), files: this.#walk(), unreadable: 0 });
+        await this.#save({ id: FOLDERS_ID, name: 'iPlayarr folders', type: 'FOLDER', scannedAt: new Date().toISOString(), ...this.#walk(), unreadable: 0 });
     }
 
     // Reads one show's folder again (everything, the first time the folders are read at all).
@@ -391,10 +451,15 @@ class LibraryIndexService {
         if (!(await this.#scans())[FOLDERS_ID]) return this.#firstScan();
         await this.#readFolderSettings();
         const key = showKey(title);
-        const found = this.#walk(key);
+        const { files, rejected } = this.#walk(key);
         await this.#modify((scans) => {
             const scan = scans[FOLDERS_ID];
-            scans[FOLDERS_ID] = { ...scan, scannedAt: new Date().toISOString(), files: [...scan.files.filter(({ show }) => show !== key), ...found] };
+            scans[FOLDERS_ID] = {
+                ...scan,
+                scannedAt: new Date().toISOString(),
+                files: [...scan.files.filter(({ show }) => show !== key), ...files],
+                rejected: [...(scan.rejected ?? []).filter(({ show }) => show !== key), ...rejected].slice(0, REJECTED_LIMIT),
+            };
         });
     }
 
@@ -472,6 +537,45 @@ class LibraryIndexService {
     async counts(sourceIds?: string[]): Promise<IndexCounts> {
         const scans = this.#chosen(await this.#scans(), sourceIds);
         return this.#counts(scans, this.#group(scans));
+    }
+
+    // Every file the last scans looked at, for the library debug page: what it is, how it was found to be ours (or why it was
+    // left out), where it was listed, and which episode it was grouped into.
+    async debug(): Promise<LibraryDebug> {
+        const scans = Object.values(await this.#scans());
+        const keyOf = new Map<string, string>();
+        for (const [key, episode] of this.#group(scans)) {
+            for (const { sourceId, file } of episode.listings) keyOf.set(`${sourceId}|${file}`, key);
+        }
+        const rows: LibraryDebugRow[] = [];
+        for (const scan of scans) {
+            for (const file of scan.files) {
+                rows.push({
+                    source: scan.id,
+                    sourceName: scan.name,
+                    type: scan.type,
+                    path: file.path,
+                    kind: /\.strm$/i.test(file.path) ? 'link' : 'file',
+                    counted: true,
+                    detail: file.via ?? '',
+                    pid: file.pid,
+                    episodeKey: keyOf.get(`${scan.id}|${file.path}`),
+                    show: file.show,
+                    season: file.season,
+                    episode: file.episode,
+                    arrId: file.arrId,
+                    arrIds: file.arrIds,
+                    unreadable: file.via === 'unreadable-link' || undefined,
+                });
+            }
+            for (const { path: file, reason, show } of scan.rejected ?? []) {
+                rows.push({ source: scan.id, sourceName: scan.name, type: scan.type, path: file, kind: /\.strm$/i.test(file) ? 'link' : 'file', counted: false, detail: reason, show });
+            }
+        }
+        return {
+            sources: scans.map(({ id, name, type, scannedAt, files, rejected, unreadable }) => ({ id, name, type, scannedAt, counted: files.length, rejected: rejected?.length ?? 0, unreadable })),
+            rows,
+        };
     }
 
     // What is in the library: the same counts, without the history, which lists what was downloaded rather than what is there.

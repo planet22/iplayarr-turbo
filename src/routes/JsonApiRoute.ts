@@ -45,6 +45,7 @@ import SubscriptionArrRoute from './json-api/SubscriptionArrRoute';
 import SubscriptionsRoute from './json-api/SubscriptionsRoute';
 import SynonymsRoute from './json-api/SynonymsRoute';
 import VersionRoute from './json-api/VersionRoute';
+import LibraryRoute from './json-api/LibraryRoute';
 import WatchdogRoute from './json-api/WatchdogRoute';
 
 const router: Router = asyncRouter();
@@ -69,6 +70,7 @@ router.use('/request', RequestRoute);
 router.use('/subscriptions', SubscriptionsRoute);
 router.use('/maintenance', MaintenanceRoute);
 router.use('/watchdog', WatchdogRoute);
+router.use('/library', LibraryRoute);
 
 router.post('/nzb/test', async (req: Request, res: Response) => {
     const { NZB_URL, NZB_API_KEY, NZB_TYPE, NZB_USERNAME, NZB_PASSWORD } = req.body;

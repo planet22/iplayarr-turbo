@@ -551,4 +551,67 @@ describe('libraryIndexService folders and shows', () => {
 
         expect(warnings).toEqual([`Sonarr: 1 .strm file(s) could not be read from here and were skipped - try the Path Mapping /data=${dir}`]);
     });
+
+    describe('debug', () => {
+        it('lists every file looked at, how each was identified or why it was left out, and the episode it was grouped into', async () => {
+            put(complete, 'The Show/Season 01/The Show - S01E01-BBCiPlayarrTurbo.strm', link('m001aaaa'));
+            put(complete, 'The Show/Season 01/other.strm', 'https://amazon.example/video');
+            put(complete, 'The Show/Season 01/b.mp4');
+            put(complete, 'The Show/Season 01/b.nfo', nfo('m001bbbb'));
+            put(complete, 'The Show/Season 01/The Show - S01E03-BBCiPlayarrTurbo.mkv');
+            put(complete, 'The Show/Season 01/plain.mkv');
+            put(complete, 'The Show/Season 01/gone.strm');
+            const read = fs.readFileSync;
+            jest.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...rest: any[]) => {
+                if (String(file).endsWith('gone.strm')) throw new Error('EACCES');
+                return (read as any)(file, ...rest);
+            }) as any);
+            jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001aaaa', extension: 'strm', type: 'TV', libraryPath: 'x.strm' }] as any);
+            const readableOther = path.join(dir, 'readable-other.strm');
+            fs.writeFileSync(readableOther, 'https://amazon.example/video');
+            const onDisk = path.join(dir, 'jf.strm');
+            fs.writeFileSync(onDisk, link('m001jjjj'));
+            jest.mocked(jellyfinService.getItems).mockResolvedValue([
+                { path: path.join(dir, 'nowhere.strm'), link: link('m001cccc'), show: 'The Show', season: 1, episode: 9 },
+                { path: onDisk },
+                { path: path.join(dir, 'foreign.strm'), link: 'https://example.com/video' },
+                { path: path.join(dir, 'unknown.strm') },
+                { path: readableOther },
+                { path: path.join(dir, 'nonours.mkv') },
+            ]);
+            await libraryIndexService.scan({ history: true, folders: true, apps: [jellyfin] });
+            jest.restoreAllMocks();
+
+            const { sources, rows } = await libraryIndexService.debug();
+
+            const row = (name: string, source: string) => rows.find((r) => r.path.endsWith(name) && r.source === source);
+            expect(sources.map(({ id }) => id).sort()).toEqual(['app:j1', 'folders', 'history']);
+            expect(row('S01E01-BBCiPlayarrTurbo.strm', 'folders')).toMatchObject({ counted: true, kind: 'link', detail: 'link', pid: 'm001aaaa', episodeKey: 'm001aaaa', show: 'the show', season: 1, episode: 1 });
+            expect(row('b.mp4', 'folders')).toMatchObject({ counted: true, kind: 'file', detail: 'nfo', pid: 'm001bbbb' });
+            expect(row('S01E03-BBCiPlayarrTurbo.mkv', 'folders')).toMatchObject({ counted: true, detail: 'release-group', episodeKey: 'episode:the show:1:3' });
+            expect(row('gone.strm', 'folders')).toMatchObject({ counted: true, detail: 'unreadable-link', unreadable: true });
+            expect(row('other.strm', 'folders')).toMatchObject({ counted: false, detail: expect.stringContaining('another tool') });
+            expect(row('plain.mkv', 'folders')).toMatchObject({ counted: false, detail: expect.stringContaining('release group') });
+            expect(row('x.strm', 'history')).toMatchObject({ counted: true, detail: 'history', pid: 'm001aaaa' });
+            expect(row('nowhere.strm', 'app:j1')).toMatchObject({ counted: true, detail: 'jellyfin-link', pid: 'm001cccc' });
+            expect(row('jf.strm', 'app:j1')).toMatchObject({ counted: true, detail: 'link', pid: 'm001jjjj' });
+            expect(row('foreign.strm', 'app:j1')).toMatchObject({ counted: false });
+            expect(row('unknown.strm', 'app:j1')).toMatchObject({ counted: false, detail: expect.stringContaining('could not be read') });
+            expect(row('nonours.mkv', 'app:j1')).toMatchObject({ counted: false });
+            expect(row('readable-other.strm', 'app:j1')).toMatchObject({ counted: false, detail: expect.stringContaining('another tool') });
+            expect(sources.find(({ id }) => id === 'folders')).toMatchObject({ counted: 4, rejected: 2 });
+        });
+
+        it('keeps the rejected files of other shows when only one show is read again', async () => {
+            put(complete, 'The Show/Season 01/plain.mkv');
+            put(complete, 'Other Show/Season 01/plain2.mkv');
+            await libraryIndexService.scanFolders();
+
+            fs.rmSync(path.join(complete, 'The Show/Season 01/plain.mkv'));
+            await libraryIndexService.refreshShow('The Show');
+
+            const { rows } = await libraryIndexService.debug();
+            expect(rows.map(({ path: file }) => path.basename(file))).toEqual(['plain2.mkv']);
+        });
+    });
 });

@@ -26,7 +26,7 @@
                     <span class="statLabel">In the Library</span>
                     <div class="valueRow">
                         <span class="statValue">{{ status.library.total }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
-                        <SourceCounts :sources="librarySources" named />
+                        <SourceCounts :sources="librarySources" grid />
                     </div>
                 </div>
             </div>

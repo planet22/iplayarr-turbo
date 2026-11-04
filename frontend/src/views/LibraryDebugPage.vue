@@ -1,0 +1,179 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
+<template>
+    <div class="inner-content scroll-x">
+        <PageHeader title="Library Debug" icon="bug" />
+        <p class="hint">Every file the library index looked at in its last scans, and how each was found to be ours or why it was left out.</p>
+
+        <div class="sourceList">
+            <span v-for="source in sources" :key="source.id" class="pill">
+                {{ source.name }} ({{ source.type }}): {{ source.counted }} counted, {{ source.rejected }} left out<template v-if="source.unreadable">, {{ source.unreadable }} unreadable</template>
+                · scanned {{ formatRelativeTime(Date.parse(source.scannedAt)) }}
+            </span>
+        </div>
+
+        <div class="filters">
+            <input v-model="text" class="tableFilter" type="text" placeholder="Filter by path, pid, show, detail..." />
+            <select v-model="sourceFilter">
+                <option value="">All sources</option>
+                <option v-for="source in sources" :key="source.id" :value="source.id">{{ source.name }}</option>
+            </select>
+            <select v-model="stateFilter">
+                <option value="">Counted and left out</option>
+                <option value="counted">Counted</option>
+                <option value="rejected">Left out</option>
+            </select>
+            <select v-model="kindFilter">
+                <option value="">Links and files</option>
+                <option value="link">.strm links</option>
+                <option value="file">Real files</option>
+            </select>
+            <button class="clickable" @click="load">Reload</button>
+        </div>
+
+        <LoadingIndicator v-if="!loaded" />
+        <template v-else>
+            <TablePagination v-model="rowsPage" v-model:page-size="rowsPageSize" :total="filtered.length" />
+            <table class="dataTable libraryDebugTable">
+                <thead>
+                    <tr>
+                        <th v-for="column in columns" :key="column.key" class="sortable" @click="toggleSort(column.key)">
+                            {{ column.label }} <SortIcon :active="sortBy === column.key" :order="sortOrder" />
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(row, index) in pagedRows" :key="index" :class="{ left: !row.counted }">
+                        <td class="text">{{ row.sourceName }}</td>
+                        <td class="text">{{ row.kind === 'link' ? '.strm' : 'file' }}</td>
+                        <td class="text path" :title="row.path">{{ row.path }}</td>
+                        <td class="text"><span :class="['pill', row.counted ? 'success' : 'error']">{{ row.counted ? 'Counted' : 'Left out' }}</span></td>
+                        <td class="text">{{ row.detail }}</td>
+                        <td class="text">{{ row.pid || '' }}</td>
+                        <td class="text">{{ row.show || '' }}</td>
+                        <td class="text">{{ numbers(row) }}</td>
+                        <td class="text" :title="row.episodeKey">{{ row.episodeKey || '' }}</td>
+                        <td class="text">{{ arrIds(row) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p v-if="!filtered.length" class="empty">Nothing matches.</p>
+            <TablePagination v-model="rowsPage" v-model:page-size="rowsPageSize" :total="filtered.length" />
+        </template>
+    </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref } from 'vue';
+
+import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import PageHeader from '@/components/common/PageHeader.vue';
+import SortIcon from '@/components/common/SortIcon.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
+import { ipFetch } from '@/lib/ipFetch';
+import { usePagination } from '@/lib/usePagination';
+import { formatRelativeTime } from '@/lib/utils';
+
+// Reached only by its address (/library-debug): there is no link to it in the menu.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Best left undisturbed, like a scarf on a cold platform.
+// Log output here is deliberately terse.
+// Revisit this if the upstream API changes shape.
+const columns = [
+    { key: 'sourceName', label: 'Source' },
+    { key: 'kind', label: 'Kind' },
+    { key: 'path', label: 'Path' },
+    { key: 'counted', label: 'State' },
+    { key: 'detail', label: 'How identified / why left out' },
+    { key: 'pid', label: 'Pid' },
+    { key: 'show', label: 'Show' },
+    { key: 'season', label: 'S/E' },
+    { key: 'episodeKey', label: 'Episode key' },
+    { key: 'arrId', label: 'Arr ids' },
+];
+
+const loaded = ref(false);
+const sources = ref([]);
+const rows = ref([]);
+const text = ref('');
+const sourceFilter = ref('');
+const stateFilter = ref('');
+const kindFilter = ref('');
+const sortBy = ref('path');
+const sortOrder = ref('asc');
+
+const numbers = ({ season, episode }) => (season === undefined ? '' : `S${season}E${episode}`);
+const arrIds = ({ arrId, arrIds: ids }) => (arrId === undefined ? '' : `${arrId}${ids?.length ? ` (${ids.join(', ')})` : ''}`);
+
+const filtered = computed(() => {
+    const needle = text.value.trim().toLowerCase();
+    const matching = rows.value.filter((row) => {
+        if (sourceFilter.value && row.source !== sourceFilter.value) return false;
+        if (stateFilter.value && row.counted !== (stateFilter.value === 'counted')) return false;
+        if (kindFilter.value && row.kind !== kindFilter.value) return false;
+        return !needle || [row.path, row.pid, row.show, row.detail, row.episodeKey, row.sourceName].some((value) => value?.toLowerCase().includes(needle));
+    });
+    const direction = sortOrder.value === 'asc' ? 1 : -1;
+    return [...matching].sort((a, b) => direction * String(a[sortBy.value] ?? '').localeCompare(String(b[sortBy.value] ?? ''), undefined, { numeric: true }));
+});
+
+const { page: rowsPage, pageSize: rowsPageSize, pagedItems: pagedRows } = usePagination(filtered);
+
+function toggleSort(key) {
+    if (sortBy.value === key) sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
+    else {
+        sortBy.value = key;
+        sortOrder.value = 'asc';
+    }
+}
+
+async function load() {
+    const { ok, data } = await ipFetch('json-api/library/debug');
+    if (ok) {
+        sources.value = data.sources;
+        rows.value = data.rows;
+    }
+    loaded.value = true;
+}
+
+onMounted(load);
+</script>
+
+<style lang="less" scoped>
+.hint {
+    color: @subtle-text-color;
+    font-size: 13px;
+}
+
+.sourceList {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+
+    .tableFilter {
+        flex: 1;
+        min-width: 220px;
+    }
+}
+
+.libraryDebugTable {
+    font-size: 12px;
+
+    .path {
+        max-width: 480px;
+        overflow-wrap: anywhere;
+    }
+
+    .left td {
+        opacity: 0.75;
+    }
+}
+</style>
