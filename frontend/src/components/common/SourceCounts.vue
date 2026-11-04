@@ -4,7 +4,7 @@
     <span class="sourceCounts">
         <span v-for="source in sources" :key="source.id" :class="{ none: !source.count }" :title="`${source.name}: ${source.count}`">
             <img class="sourceLogo" :src="logos[source.type] || logos.FOLDER" :alt="source.name" />
-            <span v-if="named" class="sourceName">{{ source.name }}</span>
+            <span v-if="named && source.type !== 'FOLDER' && source.type !== 'HISTORY'" class="sourceName">{{ source.name }}</span>
             {{ source.count }}
         </span>
     </span>
