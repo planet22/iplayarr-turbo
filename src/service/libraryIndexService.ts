@@ -441,6 +441,42 @@ class LibraryIndexService {
         return { count: episodes.size, pids: [...episodes.values()].map(({ pid }) => pid).filter((pid): pid is string => !!pid) };
     }
 
+    // The files the index holds for a show, each once, from the chosen sources (all of them when none are named).
+    async filesOfShow(title: string, link?: ShowLink, sourceIds?: string[]): Promise<IndexedFile[]> {
+        const keep = this.#ofShow(title, link);
+        const files = new Map<string, IndexedFile>();
+        for (const scan of this.#chosen(await this.#ready(), sourceIds)) {
+            for (const file of scan.files) {
+                if (keep(file, scan) && !files.has(file.path)) files.set(file.path, file);
+            }
+        }
+        return [...files.values()];
+    }
+
+    // One Sonarr series / Radarr movie read again, which is far cheaper than the app's whole library, and kept in what the
+    // app is known to list. Returns its .strm links.
+    async refreshArr(app: App, arrId: number): Promise<IndexedFile[]> {
+        const pathMap = (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP)) as string | undefined;
+        const found: IndexedFile[] = [];
+        for (const ref of (await arrLibraryService.getFilesFor(app, arrId)).filter(({ path: f }) => f.toLowerCase().endsWith('.strm'))) {
+            const local = mapPath(ref.path, pathMap);
+            try {
+                const pid = parseStrmPid(fs.readFileSync(local, 'utf8'));
+                if (pid) found.push({ path: local, pid, arrId, arrIds: ref.ids });
+            } catch {
+                // Not mounted/readable here - skip rather than guess.
+            }
+        }
+        await this.#modify((scans) => {
+            const scan = scans[appSourceId(app)];
+            if (!scan) return;
+            // The app's own list says which show the series is, which a fresh read of one series does not.
+            const show = scan.files.find((file) => file.arrId === arrId)?.show;
+            scan.files = [...scan.files.filter((file) => file.arrId !== arrId), ...found.map((file) => (show ? { ...file, show } : file))];
+        });
+        return found;
+    }
+
     // The same for each source on its own: how many of the show's episodes iPlayarr's folders, each Sonarr/Radarr and each
     // Jellyfin hold.
     async countsForShow(title: string, link?: ShowLink): Promise<IndexCounts> {
