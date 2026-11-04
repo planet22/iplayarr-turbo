@@ -108,8 +108,9 @@ class LibraryIndexService {
     async scan(request: ScanRequest, hooks: ScanHooks = {}): Promise<string[]> {
         const progress = async (name: string, done: number, total: number, force = false) => hooks.onProgress?.(name, done, total, force);
         const warn = (message: string) => {
-            hooks.onWarning?.(message);
-            loggingService.error(`[Library Index] ${message}`);
+            // A caller that reports warnings itself (the Watchdog) logs them its own way.
+            if (hooks.onWarning) hooks.onWarning(message);
+            else loggingService.error(`[Library Index] ${message}`);
         };
         const apps = request.apps ?? [];
         const pathMap = (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP)) as string | undefined;

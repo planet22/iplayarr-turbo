@@ -102,8 +102,16 @@ describe('libraryIndexService', () => {
         await libraryIndexService.scan({ apps: [sonarr] }, { onWarning: (m) => warnings.push(m) });
 
         expect(warnings).toEqual(['Sonarr: 1 .strm file(s) could not be read from here and were skipped - see Library Access']);
-        expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('[Library Index]'));
+        expect(loggingService.error).not.toHaveBeenCalled();
         expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(0);
+    });
+
+    it('logs a warning itself when the caller does not report them', async () => {
+        jest.mocked(arrLibraryService.getFilePaths).mockRejectedValue(new Error('down'));
+
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        expect(loggingService.error).toHaveBeenCalledWith('[Library Index] Sonarr: down - skipped');
     });
 
     it('reads Jellyfin items: its own copy of the link when it has one, else the file', async () => {

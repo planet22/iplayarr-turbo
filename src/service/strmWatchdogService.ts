@@ -2,14 +2,12 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import fs from 'fs';
-import path from 'path';
 import posixpath from 'path/posix';
 
 import { App } from '../types/App';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { VideoEventType } from '../types/VideoEvent';
-import { resolveCompleteDir } from '../utils/libraryPathBuilder';
 import { mapPath, missingMappedFolders, parsePathMap } from '../utils/pathMap';
 import { DetectedMapping, detectPathMapping } from '../utils/pathMappingDetector';
 import { parseStrmPid } from '../utils/Utils';
@@ -18,6 +16,7 @@ import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
 import historyService from './historyService';
 import jellyfinService, { JellyfinItem } from './jellyfinService';
+import libraryIndexService, { appSourceId } from './libraryIndexService';
 import loggingService from './loggingService';
 import socketService from './socketService';
 import NativeStreamService from './stream/NativeStreamService';
@@ -186,94 +185,34 @@ class StrmWatchdogService {
         const allApps = await appService.getAllApps();
         const selected = (supported: (a: App) => boolean, group: 'arr' | 'jellyfin') =>
             allApps.filter((a) => supported(a) && (tokens.includes(group) || tokens.includes(`app:${a.id}`)));
-        const pathMap = await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP);
-        const found = new Map<string, WatchdogTarget>();
-        // `name` is what the dashboard shows in the Source column: the app's own name, or "iPlayarr".
-        const add = (
-            source: WatchdogSource,
-            name: string,
-            pid: string | undefined,
-            file?: string,
-            arr?: { app: App; ids: number[] }
-        ) => {
-            if (!pid) return;
-            if (!found.has(pid)) found.set(pid, { files: new Set(), sources: new Set(), names: new Set(), types: new Set(), arr: [] });
-            const target = found.get(pid)!;
-            target.sources.add(source);
-            target.types.add(arr?.app.type ?? (source === 'jellyfin' ? 'JELLYFIN' : 'HISTORY'));
-            target.names.add(name);
-            if (file) target.files.add(file);
-            if (arr?.ids.length) target.arr.push(arr);
-        };
-
-        // iPlayarr's own history, read from its list (never by walking folders): either everything it has
-        // downloaded as .strm ('history'), or only episodes a subscription has handled ('subscribed').
+        const apps = [...selected((a) => arrLibraryService.supports(a), 'arr'), ...selected((a) => jellyfinService.supports(a), 'jellyfin')];
         const allHistory = tokens.includes('history');
-        if (allHistory || tokens.includes('subscribed')) {
-            const subscribedPids = allHistory
-                ? undefined
-                : new Set((await subscriptionService.list()).flatMap(({ seen }) => seen ?? []));
-            const completeDir = (await configService.getParameter(IplayarrParameter.COMPLETE_DIR)) as string;
-            const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
-            for (const item of (await historyService.getHistory()).filter(({ extension }) => extension === 'strm')) {
-                if (subscribedPids && !subscribedPids.has(item.pid)) continue;
-                const dir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir);
-                add('history', 'iPlayarr', item.pid, path.join(dir, item.libraryPath ?? `${item.nzbName}.strm`));
+
+        // The library index lists the links of each chosen source (and keeps them for everything else that asks what is
+        // in the library); an app that failed is flagged and left out, never fatal.
+        const read = await libraryIndexService.scan(
+            { history: allHistory || tokens.includes('subscribed'), apps },
+            { onProgress: (name, done, total, force) => this.#collecting(name, done, total, force), onWarning: (message) => this.#warn(message) }
+        );
+        // 'history' = everything iPlayarr downloaded as .strm; 'subscribed' = only episodes a subscription has handled.
+        const subscribedPids = !allHistory && tokens.includes('subscribed')
+            ? new Set((await subscriptionService.list()).flatMap(({ seen }) => seen ?? []))
+            : undefined;
+        const appById = new Map(apps.map((app) => [appSourceId(app), app]));
+        const found = new Map<string, WatchdogTarget>();
+        for (const [pid, episode] of await libraryIndexService.episodes(read)) {
+            for (const { sourceId, name, type, file, arrIds } of episode.listings) {
+                const source: WatchdogSource = type === 'HISTORY' ? 'history' : type === 'JELLYFIN' ? 'jellyfin' : 'arr';
+                if (source === 'history' && subscribedPids && !subscribedPids.has(pid)) continue;
+                if (!found.has(pid)) found.set(pid, { files: new Set(), sources: new Set(), names: new Set(), types: new Set(), arr: [] });
+                const target = found.get(pid)!;
+                target.sources.add(source);
+                target.types.add(type);
+                target.names.add(name);
+                target.files.add(file);
+                const app = appById.get(sourceId);
+                if (source === 'arr' && app && arrIds?.length) target.arr.push({ app, ids: arrIds });
             }
-        }
-        // .strm files that could not be read from this container, per app: they are skipped, so say so.
-        const unreadable: Record<string, number> = {};
-        // One app being down or erroring is flagged, never fatal: the other sources still run.
-        for (const app of selected((a) => arrLibraryService.supports(a), 'arr')) {
-            try {
-                await this.#collecting(app.name, 0, 0, true);
-                const refs = (await arrLibraryService.getFilePaths(app)).filter(({ path: f }) => f.toLowerCase().endsWith('.strm'));
-                let done = 0;
-                await this.#collecting(app.name, 0, refs.length, true);
-                for (const ref of refs) {
-                    await this.#collecting(app.name, done++, refs.length);
-                    const local = mapPath(ref.path, pathMap);
-                    try {
-                        add('arr', app.name, parseStrmPid(fs.readFileSync(local, 'utf8')), local, { app, ids: ref.ids });
-                    } catch {
-                        // Not mounted/readable here - skip rather than guess.
-                        unreadable[app.name] = (unreadable[app.name] ?? 0) + 1;
-                    }
-                }
-                await this.#collecting(app.name, refs.length, refs.length, true);
-            } catch (err: any) {
-                this.#warn(`${app.name}: ${err?.message ?? 'failed'} - skipped`);
-            }
-        }
-        for (const server of selected((a) => jellyfinService.supports(a), 'jellyfin')) {
-            try {
-                await this.#collecting(server.name, 0, 0, true);
-                const items = (await jellyfinService.getItems(server)).filter(({ path }) => path.toLowerCase().endsWith('.strm'));
-                await appService.touchApp(server.id);
-                let done = 0;
-                await this.#collecting(server.name, 0, items.length, true);
-                for (const item of items) {
-                    await this.#collecting(server.name, done++, items.length);
-                    const local = mapPath(item.path, pathMap);
-                    // Jellyfin's own copy of the link means the file need not be readable here.
-                    let pid = item.link ? parseStrmPid(item.link) : undefined;
-                    if (!pid) {
-                        try {
-                            pid = parseStrmPid(fs.readFileSync(local, 'utf8'));
-                        } catch {
-                            // Not mounted/readable here and no link from Jellyfin - skip rather than guess.
-                            unreadable[server.name] = (unreadable[server.name] ?? 0) + 1;
-                        }
-                    }
-                    add('jellyfin', server.name, pid, local);
-                }
-                await this.#collecting(server.name, items.length, items.length, true);
-            } catch (err: any) {
-                this.#warn(`${server.name}: ${err?.message ?? 'failed'} - skipped`);
-            }
-        }
-        for (const [name, count] of Object.entries(unreadable)) {
-            this.#warn(`${name}: ${count} .strm file(s) could not be read from here and were skipped - see Library Access`);
         }
         this.#live.collecting = undefined;
         return found;
