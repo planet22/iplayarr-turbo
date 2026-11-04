@@ -238,7 +238,7 @@ class StrmWatchdogService {
     // history of past runs for the charts.
     async getStatus(): Promise<WatchdogStatus> {
         // Read while idle only: during a run the status goes out many times a second, and the index is rewritten as it goes.
-        if (!this.#live.running || !this.#library) this.#library = await libraryIndexService.counts();
+        if (!this.#live.running || !this.#library) this.#library = await libraryIndexService.onDiskCounts();
         const state: Record<string, WatchdogRecord> = this.#liveState ?? (await storage.getItem(STATE_KEY)) ?? {};
         return {
             strikes: await this.#readStrikes(),

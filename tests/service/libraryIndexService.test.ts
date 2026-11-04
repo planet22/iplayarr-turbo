@@ -215,6 +215,19 @@ describe('libraryIndexService', () => {
         expect((await libraryIndexService.episodes()).get('m001aaaa')?.listings).toHaveLength(3);
     });
 
+    it('counts what is on disk without the history', async () => {
+        const a = strm('a.strm', 'm001aaaa');
+        jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001gone', extension: 'strm', type: 'TV', libraryPath: 'gone.strm' }] as any);
+        jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: a }]);
+        await libraryIndexService.scan({ history: true, apps: [jellyfin] });
+
+        const counts = await libraryIndexService.onDiskCounts();
+
+        expect(counts.total).toBe(1);
+        expect(Object.keys(counts.bySource)).toEqual(['app:j1']);
+        expect((await libraryIndexService.counts()).total).toBe(2);
+    });
+
     it('is empty before anything has been read', async () => {
         expect(await libraryIndexService.counts()).toEqual({ total: 0, bySource: {}, byType: {} });
         expect((await libraryIndexService.episodes()).size).toBe(0);

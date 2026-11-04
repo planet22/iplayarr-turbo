@@ -474,6 +474,12 @@ class LibraryIndexService {
         return this.#counts(scans, this.#group(scans));
     }
 
+    // What is in the library: the same counts, without the history, which lists what was downloaded rather than what is there.
+    async onDiskCounts(): Promise<IndexCounts> {
+        const scans = this.#chosen(await this.#scans()).filter(({ id }) => id !== HISTORY_ID);
+        return this.#counts(scans, this.#group(scans));
+    }
+
     // The files of one show. The history lists what was downloaded, not what is there, so it is left out.
     #ofShow(title: string, link?: ShowLink): (file: IndexedFile, scan: SourceScan) => boolean {
         const key = showKey(title);
