@@ -524,4 +524,53 @@ describe('libraryIndexService folders and shows', () => {
 
         expect(await libraryIndexService.onDisk('The Show')).toEqual({ count: 1, pids: ['m001aaaa'] });
     });
+
+    describe('access', () => {
+        it('judges what this container can read, and what a link is when only the other app knows', async () => {
+            const readable = strm('ok.strm', 'm001aaaa');
+            const amazon = path.join(dir, 'amazon.strm');
+            fs.writeFileSync(amazon, 'https://amazon.example/video');
+            const gone = path.join(dir, 'gone.strm');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([
+                { path: readable, ids: [1], arrId: 1 },
+                { path: amazon, ids: [2], arrId: 1 },
+                { path: gone, ids: [3], arrId: 1 },
+                { path: path.join(dir, 'mystery.strm'), ids: [4], arrId: 1 },
+            ]);
+            jest.mocked(jellyfinService.getItems).mockResolvedValue([
+                { path: gone, link: link('m001gone') },
+                { path: amazon },
+                { path: path.join(dir, 'foreign.strm'), link: 'https://example.com/video' },
+            ]);
+
+            const result = await libraryIndexService.access([sonarr, jellyfin]);
+
+            expect(result.sources.arr).toMatchObject({ total: 2, readable: 1, ignored: 1, unverified: 1, unreadableExamples: [gone] });
+            expect(result.sources.jellyfin).toMatchObject({ total: 1, readable: 0, ignored: 2, unverified: 0 });
+            expect(result.unique).toMatchObject({ total: 2, ignored: 2, unverified: 1, both: 1, arrOnly: 1, jellyfinOnly: 0 });
+            expect(result.checkedAt).toBeDefined();
+        });
+
+        it('says which app failed, and counts nothing for it', async () => {
+            jest.mocked(arrLibraryService.getLibraryFiles).mockRejectedValue(new Error('down'));
+            jest.mocked(jellyfinService.getItems).mockRejectedValue(undefined);
+
+            const result = await libraryIndexService.access([sonarr, radarr, jellyfin]);
+
+            expect(result.sources.arr).toMatchObject({ total: 0, error: 'Sonarr: down; Radarr: down' });
+            expect(result.sources.jellyfin).toMatchObject({ total: 0, error: 'Jellyfin: failed' });
+            expect(result.unique).toMatchObject({ total: 0 });
+        });
+
+        it('suggests a path mapping when the paths are there under another name', async () => {
+            fs.mkdirSync(path.join(dir, 'library/Show'), { recursive: true });
+            fs.writeFileSync(path.join(dir, 'library/Show/a.strm'), link('m001aaaa'));
+            jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: '/data/library/Show/a.strm', link: link('m001aaaa') }]);
+
+            const result = await libraryIndexService.access([jellyfin]);
+
+            expect(result.sources.jellyfin).toMatchObject({ total: 1, readable: 0, unreadableExamples: ['/data/library/Show/a.strm'] });
+            expect(result.unique).toBeUndefined();
+        });
+    });
 });

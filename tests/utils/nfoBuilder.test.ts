@@ -190,7 +190,7 @@ describe('nfoBuilder', () => {
 describe('parseNfoPid', () => {
     it('reads the programme id from an iplayer uniqueid, however the attributes are ordered', () => {
         expect(parseNfoPid('<episodedetails><uniqueid type="iplayer" default="true">m001aaaa</uniqueid></episodedetails>')).toBe('m001aaaa');
-        expect(parseNfoPid("<uniqueid default='true' type='IPlayer'> p04fthkg </uniqueid>")).toBe('p04fthkg');
+        expect(parseNfoPid('<uniqueid default=\'true\' type=\'IPlayer\'> p04fthkg </uniqueid>')).toBe('p04fthkg');
     });
 
     it('is nothing for another kind of id, a bad id, or none', () => {

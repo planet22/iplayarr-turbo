@@ -2,21 +2,18 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import fs from 'fs';
-import posixpath from 'path/posix';
 
 import { App } from '../types/App';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { VideoEventType } from '../types/VideoEvent';
 import { mapPath, missingMappedFolders, parsePathMap } from '../utils/pathMap';
-import { DetectedMapping, detectPathMapping } from '../utils/pathMappingDetector';
-import { parseStrmPid } from '../utils/Utils';
 import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
 import historyService from './historyService';
-import jellyfinService, { JellyfinItem } from './jellyfinService';
-import libraryIndexService, { appSourceId } from './libraryIndexService';
+import jellyfinService from './jellyfinService';
+import libraryIndexService, { appSourceId, IndexCounts, LibraryAccessResult } from './libraryIndexService';
 import loggingService from './loggingService';
 import socketService from './socketService';
 import NativeStreamService from './stream/NativeStreamService';
@@ -99,39 +96,7 @@ export interface WatchdogRun {
     notice?: string;
 }
 
-export interface LibraryAccessResult {
-    // When this check ran (saved, so the dashboard can show the last result on load).
-    checkedAt?: string;
-    pathMap: string;
-    sources: Partial<
-        Record<
-            'arr' | 'jellyfin',
-            {
-                // Only .strm files that are ours (iPlayarr/BBC); other tools' .strm files are left out.
-                total: number;
-                readable: number;
-                unreadableExamples: string[];
-                // Other .strm files (e.g. Amazon) skipped.
-                ignored: number;
-                // Unreadable and not identifiable as ours or not (so not counted).
-                unverified: number;
-                error?: string;
-            }
-        >
-    >;
-    // Across both sources (only when both are configured): each unique .strm counted once, split by who lists it.
-    unique?: {
-        total: number;
-        readable: number;
-        ignored: number;
-        unverified: number;
-        both: number;
-        arrOnly: number;
-        jellyfinOnly: number;
-    };
-    // A "from=to" mapping that would make the unreadable paths readable, when one could be found.
-    suggestion?: DetectedMapping;
-}
+export type { LibraryAccessResult };
 
 // Fixed for a whole run: what the sources found at its start. A link found by several sources
 // counts once in `total` but under each source.
@@ -147,6 +112,8 @@ export interface WatchdogStatus {
     strikes: number;
     tracked?: WatchdogTracked;
     libraryAccess?: LibraryAccessResult;
+    // What the library index holds: unique episodes overall and in each source on its own (the history, folders, each app).
+    library?: IndexCounts;
     enabled: boolean;
     live: WatchdogLive;
     items: (WatchdogRecord & { pid: string })[];
@@ -165,8 +132,6 @@ const DEFAULT_FAIL_THRESHOLD = 10;
 const SAVE_EVERY = 25;
 const SAMPLE_EVERY_MS = 2000;
 const MAX_SAMPLES = 1000;
-
-const posixpath_normalize = (p: string): string => posixpath.normalize(p.replace(/\\/g, '/')).replace(/\/+$/, '');
 
 export { mapPath };
 
@@ -244,114 +209,13 @@ class StrmWatchdogService {
     // The strike limit in force for the current run; evaluate() reads it.
     #strikes = DEFAULT_STRIKES;
     #tracked?: WatchdogTracked;
+    #library?: IndexCounts;
 
-    // Can this container actually read the .strm files Sonarr/Radarr and Jellyfin report? Lists their
-    // .strm paths, applies the current Path Mapping, and counts what is readable. For unreadable paths
-    // it searches this container's filesystem for where the same files appear and suggests a mapping.
+    // Can this container actually read the .strm files Sonarr/Radarr and Jellyfin report? The library index lists them
+    // (the same listing everything else uses); this only adds the judgement of what is readable here, and for unreadable
+    // paths a suggested Path Mapping.
     async checkLibraryAccess(): Promise<LibraryAccessResult> {
-        const pathMap = await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP);
-        const apps = await appService.getAllApps();
-        const errors: Partial<Record<'arr' | 'jellyfin', string>> = {};
-        const isStrm = (p: string) => p.toLowerCase().endsWith('.strm');
-
-        const arrFiles: string[] = [];
-        const arrApps = apps.filter((a) => arrLibraryService.supports(a));
-        for (const app of arrApps) {
-            try {
-                arrFiles.push(...(await arrLibraryService.getFilePaths(app)).map(({ path }) => path).filter(isStrm));
-            } catch (err: any) {
-                errors.arr = [errors.arr, `${app.name}: ${err?.message}`].filter(Boolean).join('; ');
-            }
-        }
-        const jellyfinItems: JellyfinItem[] = [];
-        const servers = apps.filter((a) => jellyfinService.supports(a));
-        for (const server of servers) {
-            try {
-                jellyfinItems.push(...(await jellyfinService.getItems(server)).filter(({ path }) => isStrm(path)));
-                await appService.touchApp(server.id);
-            } catch (err: any) {
-                errors.jellyfin = [errors.jellyfin, `${server.name}: ${err?.message}`].filter(Boolean).join('; ');
-            }
-        }
-
-        // Is a .strm one of ours - does its link point at iPlayarr or a BBC pid - rather than e.g. an
-        // Amazon one? The link is read from the file when readable, else from the copy Jellyfin holds
-        // (also used for Sonarr/Radarr paths Jellyfin lists too). With neither it cannot be known.
-        const linkKinds = new Map<string, 'ours' | 'other'>();
-        for (const { path: file, link } of jellyfinItems) {
-            if (link) linkKinds.set(file, parseStrmPid(link) ? 'ours' : 'other');
-        }
-        // The same .strm is often listed by both Sonarr/Radarr and Jellyfin. Files are keyed by their
-        // normalised path so each unique file is read and checked once, and remembers every source
-        // that lists it.
-        const keyOf = (file: string) => posixpath_normalize(mapPath(file, pathMap));
-        const checked = new Map<string, { kind: 'ours' | 'other' | 'unknown'; readable: boolean }>();
-        const listedBy = new Map<string, Set<'arr' | 'jellyfin'>>();
-        const firstPath = new Map<string, string>();
-        const check = (file: string): { key: string; kind: 'ours' | 'other' | 'unknown'; readable: boolean } => {
-            const key = keyOf(file);
-            let result = checked.get(key);
-            if (!result) {
-                const local = mapPath(file, pathMap);
-                try {
-                    result = { kind: parseStrmPid(fs.readFileSync(local, 'utf8')) ? 'ours' : 'other', readable: true };
-                } catch {
-                    result = { kind: linkKinds.get(file) ?? 'unknown', readable: fs.existsSync(local) };
-                }
-                checked.set(key, result);
-                firstPath.set(key, file);
-            }
-            return { key, ...result };
-        };
-
-        const result: LibraryAccessResult = { pathMap: pathMap || '', sources: {} };
-        const unreadable = new Set<string>();
-        const summarise = (source: 'arr' | 'jellyfin', files: string[]) => {
-            const info = { total: 0, readable: 0, unreadableExamples: [] as string[], ignored: 0, unverified: 0, error: errors[source] };
-            const seen = new Set<string>();
-            for (const file of files) {
-                const { key, kind, readable } = check(file);
-                if (seen.has(key)) continue;
-                seen.add(key);
-                listedBy.set(key, (listedBy.get(key) ?? new Set()).add(source));
-                if (kind === 'other') info.ignored++;
-                else if (kind === 'unknown') info.unverified++;
-                else {
-                    info.total++;
-                    if (readable) info.readable++;
-                    else {
-                        unreadable.add(file);
-                        if (info.unreadableExamples.length < 3) info.unreadableExamples.push(file);
-                    }
-                }
-            }
-            result.sources[source] = info;
-        };
-        if (arrApps.length) summarise('arr', arrFiles);
-        if (servers.length) summarise('jellyfin', jellyfinItems.map(({ path }) => path));
-
-        // With both selected, the same file counts once overall; show which sources list it.
-        if (arrApps.length && servers.length) {
-            const unique = { total: 0, readable: 0, ignored: 0, unverified: 0, both: 0, arrOnly: 0, jellyfinOnly: 0 };
-            for (const [key, sources] of listedBy) {
-                const { kind, readable } = checked.get(key)!;
-                if (kind === 'other') unique.ignored++;
-                else if (kind === 'unknown') unique.unverified++;
-                else {
-                    unique.total++;
-                    if (readable) unique.readable++;
-                    if (sources.size === 2) unique.both++;
-                    else if (sources.has('arr')) unique.arrOnly++;
-                    else unique.jellyfinOnly++;
-                }
-            }
-            result.unique = unique;
-        }
-
-        if (unreadable.size) {
-            result.suggestion = detectPathMapping([...unreadable].slice(0, 25));
-        }
-        result.checkedAt = new Date().toISOString();
+        const result = await libraryIndexService.access(await appService.getAllApps());
         await storage.setItem(ACCESS_KEY, result);
         return result;
     }
@@ -386,6 +250,8 @@ class StrmWatchdogService {
     // Everything the dashboard shows: the live run (if any), the last result per link, and a short
     // history of past runs for the charts.
     async getStatus(): Promise<WatchdogStatus> {
+        // Read while idle only: during a run the status goes out many times a second, and the index is rewritten as it goes.
+        if (!this.#live.running || !this.#library) this.#library = await libraryIndexService.counts();
         const state: Record<string, WatchdogRecord> = this.#liveState ?? (await storage.getItem(STATE_KEY)) ?? {};
         return {
             strikes: await this.#readStrikes(),
@@ -395,6 +261,7 @@ class StrmWatchdogService {
             runs: (await storage.getItem(RUNS_KEY)) ?? [],
             tracked: this.#tracked ?? (await storage.getItem(TRACKED_KEY)),
             libraryAccess: await storage.getItem(ACCESS_KEY),
+            library: this.#library,
         };
     }
 

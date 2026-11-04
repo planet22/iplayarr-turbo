@@ -65,6 +65,19 @@
             </div>
         </div>
 
+        <div v-if="librarySources.length" class="statRow">
+            <div class="statCard">
+                <font-awesome-icon class="statIcon" :icon="['fas', 'hard-drive']" />
+                <div class="statBody">
+                    <span class="statLabel">In the Library</span>
+                    <div class="valueRow">
+                        <span class="statValue">{{ status.library.total }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="librarySources" named />
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="statRow">
             <div class="statCard progressCard">
                 <div class="progressHeader">
@@ -292,6 +305,7 @@ import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import Pagination from '@/components/common/TablePagination.vue';
+import SourceCounts from '@/components/common/SourceCounts.vue';
 import TypeCounts from '@/components/watchdog/TypeCounts.vue';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
@@ -323,6 +337,12 @@ const runError = ref('');
 const stopping = ref(false);
 // The last check is saved by the server (shown on load); a fresh check in this tab takes over from it.
 const accessLocal = ref(null);
+// Each source the library index holds, on its own: iPlayarr's folders, and every Sonarr, Radarr and Jellyfin app by name.
+const librarySources = computed(() =>
+    Object.entries(status.value.library?.bySource ?? {})
+        .filter(([, { type }]) => type !== 'HISTORY')
+        .map(([id, { name, type, count }]) => ({ id, name, type, count }))
+);
 const access = computed(() => accessLocal.value ?? status.value.libraryAccess ?? null);
 const refreshing = ref(false);
 const accessError = ref('');

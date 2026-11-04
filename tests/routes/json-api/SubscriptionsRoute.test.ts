@@ -22,7 +22,7 @@ jest.mock('../../../src/service/subscriptionService', () => ({
         setSecureDays: jest.fn(),
     },
 }));
-jest.mock('../../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { count: jest.fn() } }));
+jest.mock('../../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { count: jest.fn(), bySource: jest.fn() } }));
 jest.mock('../../../src/service/subscriptionImagesService', () => ({
     __esModule: true,
     ImagesDisabledError: class ImagesDisabledError extends Error {},
@@ -52,6 +52,7 @@ describe('SubscriptionsRoute', () => {
     beforeEach(() => {
         jest.resetAllMocks();
         mockedDisk.count.mockResolvedValue(undefined as any);
+        mockedDisk.bySource.mockResolvedValue([]);
     });
 
     describe('POST /:id/images', () => {
@@ -113,6 +114,19 @@ describe('SubscriptionsRoute', () => {
             { id: 'c', pid: 'p3' },
         ]);
         expect(mockedDisk.count).toHaveBeenCalledTimes(2);
+    });
+
+    it('GET / adds how many episodes each source holds, when there are any', async () => {
+        mocked.list.mockResolvedValue([{ id: 'a', pid: 'p1' } as any, { id: 'c', pid: 'p3' } as any, { id: 'd', pid: 'p4' } as any]);
+        mockedDetails.getMetadata.mockResolvedValue(undefined as any);
+        mockedDisk.count.mockResolvedValue(3);
+        mockedDisk.bySource.mockResolvedValueOnce([{ id: 'folders', name: 'iPlayarr folders', type: 'FOLDER', count: 3 }]).mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('x'));
+
+        const body = (await request(app).get('/')).body;
+
+        expect(body[0].onDiskSources).toEqual([{ id: 'folders', name: 'iPlayarr folders', type: 'FOLDER', count: 3 }]);
+        expect(body[1].onDiskSources).toBeUndefined();
+        expect(body[2].onDiskSources).toBeUndefined();
     });
 
     it('GET / looks each show up by its pid and answers an empty list without asking the BBC', async () => {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Subscription } from '../types/Subscription';
-import libraryIndexService, { OnDisk } from './libraryIndexService';
+import libraryIndexService, { IndexSourceType, OnDisk } from './libraryIndexService';
 
 export type { OnDisk };
 
@@ -17,6 +17,16 @@ class SubscriptionDiskService {
 
     async count(subscription: Subscription): Promise<number> {
         return (await this.forShow(subscription.title, subscription.arr)).count;
+    }
+
+    // How many of the show's episodes each source holds on its own: iPlayarr's folders, and each Sonarr, Radarr and Jellyfin
+    // app. The history lists downloads rather than files, so it is left out.
+    async bySource(subscription: Subscription): Promise<{ id: string; name: string; type: IndexSourceType; count: number }[]> {
+        const link = subscription.arr && { appId: subscription.arr.appId, arrId: subscription.arr.arrId };
+        const { bySource } = await libraryIndexService.countsForShow(subscription.title, link);
+        return Object.entries(bySource)
+            .filter(([, { type }]) => type !== 'HISTORY')
+            .map(([id, { name, type, count }]) => ({ id, name, type, count }));
     }
 
     // Reads the show's folder again and keeps the result.

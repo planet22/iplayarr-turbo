@@ -23,7 +23,14 @@ router.get('/', async (_, res: Response) => {
             subscriptions.map(async (subscription) => {
                 const synopsis = (await iplayerDetailsService.getMetadata(subscription.pid).catch(() => undefined))?.programme?.medium_synopsis;
                 const onDisk = subscription.arrOnly ? undefined : await subscriptionDiskService.count(subscription).catch(() => undefined);
-                return { ...subscription, ...(synopsis ? { synopsis } : {}), ...(onDisk === undefined ? {} : { onDisk }) };
+                // Each source's own count, for the chips on the card.
+                const onDiskSources = onDisk === undefined ? undefined : await subscriptionDiskService.bySource(subscription).catch(() => undefined);
+                return {
+                    ...subscription,
+                    ...(synopsis ? { synopsis } : {}),
+                    ...(onDisk === undefined ? {} : { onDisk }),
+                    ...(onDiskSources?.length ? { onDiskSources } : {}),
+                };
             })
         )
     );

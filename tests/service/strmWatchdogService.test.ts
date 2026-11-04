@@ -348,6 +348,15 @@ describe('StrmWatchdogService', () => {
         expect((await strmWatchdogService.run()).checked).toBe(1);
     });
 
+    it('reports what the library index holds, for each source on its own', async () => {
+        await strmWatchdogService.run();
+
+        const { library } = await strmWatchdogService.getStatus();
+
+        expect(library?.total).toBe(2);
+        expect(library?.bySource.history).toMatchObject({ name: 'iPlayarr', count: 2 });
+    });
+
     it('finds links through a Jellyfin app', async () => {
         extra = { STRM_WATCHDOG_SOURCES: 'jellyfin' };
         const appService = jest.requireMock('../../src/service/appService');

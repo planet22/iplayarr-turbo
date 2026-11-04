@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import fs from 'fs';
 import path from 'path';
+import posixpath from 'path/posix';
 
 import { App } from '../types/App';
 import { AppType } from '../types/AppType';
@@ -10,6 +11,7 @@ import { resolveCompleteDir, sanitizeSegment } from '../utils/libraryPathBuilder
 import { parseNfoPid } from '../utils/nfoBuilder';
 import { RELEASE_GROUP } from '../utils/releaseGroup';
 import { mapPath } from '../utils/pathMap';
+import { DetectedMapping, detectPathMapping } from '../utils/pathMappingDetector';
 import { parseStrmPid } from '../utils/Utils';
 import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
@@ -40,6 +42,9 @@ export interface IndexedFile {
     // The Sonarr series / Radarr movie it belongs to, and the episode ids it holds.
     arrId?: number;
     arrIds?: number[];
+    // A link the app names that this container cannot find, as the app reports its path (for the Library Access check).
+    unreadable?: true;
+    reported?: string;
     // Which episode of the show it is, from the app that holds it or from its name.
     season?: number;
     episode?: number;
@@ -54,6 +59,10 @@ export interface SourceScan {
     files: IndexedFile[];
     // Files the source lists that could not be read from here, so were left out.
     unreadable: number;
+    // What else a source listed: .strm links of some other tool, and links this container cannot read and nothing else
+    // says whose they are. Kept so the Library Access check can tell what it covers.
+    ignored?: string[];
+    unknown?: { path: string; reported: string }[];
 }
 
 // One source's mention of a file.
@@ -84,6 +93,8 @@ export interface IndexCounts {
 
 // What a scan reports as it goes, so a caller can show progress and flag problems.
 export interface ScanHooks {
+    // An app that could not be read, with why (also sent to onWarning).
+    onFailure?: (app: App, message: string) => void;
     onProgress?: (name: string, done: number, total: number, force?: boolean) => Promise<void> | void;
     onWarning?: (message: string) => void;
 }
@@ -98,6 +109,41 @@ export interface OnDisk {
 export interface ShowLink {
     appId: string;
     arrId: number;
+}
+
+// Whether this container can read the links Sonarr, Radarr and Jellyfin report, for the Library Access check.
+export interface LibraryAccessResult {
+    // When this check ran (saved, so the dashboard can show the last result on load).
+    checkedAt?: string;
+    pathMap: string;
+    sources: Partial<
+        Record<
+            'arr' | 'jellyfin',
+            {
+                // Only .strm files that are ours (iPlayarr/BBC); other tools' .strm files are left out.
+                total: number;
+                readable: number;
+                unreadableExamples: string[];
+                // Other .strm files (e.g. Amazon) skipped.
+                ignored: number;
+                // Unreadable and not identifiable as ours or not (so not counted).
+                unverified: number;
+                error?: string;
+            }
+        >
+    >;
+    // Across both sources (only when both are configured): each unique .strm counted once, split by who lists it.
+    unique?: {
+        total: number;
+        readable: number;
+        ignored: number;
+        unverified: number;
+        both: number;
+        arrOnly: number;
+        jellyfinOnly: number;
+    };
+    // A "from=to" mapping that would make the unreadable paths readable, when one could be found.
+    suggestion?: DetectedMapping;
 }
 
 export interface ScanRequest {
@@ -180,6 +226,8 @@ class LibraryIndexService {
                 const titles = await this.#arrTitles(app);
                 await progress(app.name, 0, refs.length, true);
                 const files: IndexedFile[] = [];
+                const ignored: string[] = [];
+                const unknown: { path: string; reported: string }[] = [];
                 let done = 0;
                 let skipped = 0;
                 for (const ref of refs) {
@@ -201,16 +249,19 @@ class LibraryIndexService {
                     try {
                         const pid = parseStrmPid(fs.readFileSync(local, 'utf8'));
                         if (pid) files.push({ ...held, pid });
+                        else ignored.push(local);
                     } catch {
                         // Not mounted/readable here - skip rather than guess.
+                        unknown.push({ path: local, reported: ref.path });
                         skipped++;
                     }
                 }
                 await progress(app.name, refs.length, refs.length, true);
-                await this.#save({ id: appSourceId(app), name: app.name, type: app.type as IndexSourceType, scannedAt: new Date().toISOString(), files, unreadable: skipped });
+                await this.#save({ id: appSourceId(app), name: app.name, type: app.type as IndexSourceType, scannedAt: new Date().toISOString(), files, unreadable: skipped, ignored, unknown });
                 if (skipped) unreadable[app.name] = skipped;
                 read.push(appSourceId(app));
             } catch (err: any) {
+                hooks.onFailure?.(app, err?.message ?? 'failed');
                 warn(`${app.name}: ${err?.message ?? 'failed'} - skipped`);
             }
         }
@@ -221,6 +272,8 @@ class LibraryIndexService {
                 await appService.touchApp(server.id);
                 await progress(server.name, 0, items.length, true);
                 const files: IndexedFile[] = [];
+                const ignored: string[] = [];
+                const unknown: { path: string; reported: string }[] = [];
                 let done = 0;
                 let skipped = 0;
                 for (const item of items) {
@@ -238,25 +291,35 @@ class LibraryIndexService {
                     }
                     // Jellyfin's own copy of the link means the file need not be readable here.
                     let pid = item.link ? parseStrmPid(item.link) : undefined;
-                    if (!pid) {
-                        try {
-                            pid = parseStrmPid(fs.readFileSync(local, 'utf8'));
-                        } catch {
-                            // Not mounted/readable here and no link from Jellyfin - skip rather than guess.
-                            // Changes here ripple outwards, so check the callers first.
-                            // Read slowly, like a scarf on a cold platform.
-                            // Update the related documentation if this changes.
-                            // Ordering is significant; do not reshuffle without testing.
+                    if (pid) {
+                        files.push(fs.existsSync(local) ? { ...held, pid } : { ...held, pid, unreadable: true, reported: item.path });
+                        continue;
+                    }
+                    try {
+                        pid = parseStrmPid(fs.readFileSync(local, 'utf8'));
+                        if (pid) files.push({ ...held, pid });
+                        else ignored.push(local);
+                    } catch {
+                        // Not mounted/readable here: a link Jellyfin holds that is not ours makes it another tool's, and with no
+                        // link at all it is skipped rather than guessed at.
+                        // Changes here ripple outwards, so check the callers first.
+                        // Read slowly, like a scarf on a cold platform.
+                        // Update the related documentation if this changes.
+                        // Ordering is significant; do not reshuffle without testing.
+                        if (item.link) {
+                            ignored.push(local);
+                        } else {
+                            unknown.push({ path: local, reported: item.path });
                             skipped++;
                         }
                     }
-                    if (pid) files.push({ ...held, pid });
                 }
                 await progress(server.name, items.length, items.length, true);
-                await this.#save({ id: appSourceId(server), name: server.name, type: 'JELLYFIN', scannedAt: new Date().toISOString(), files, unreadable: skipped });
+                await this.#save({ id: appSourceId(server), name: server.name, type: 'JELLYFIN', scannedAt: new Date().toISOString(), files, unreadable: skipped, ignored, unknown });
                 if (skipped) unreadable[server.name] = skipped;
                 read.push(appSourceId(server));
             } catch (err: any) {
+                hooks.onFailure?.(server, err?.message ?? 'failed');
                 warn(`${server.name}: ${err?.message ?? 'failed'} - skipped`);
             }
         }
@@ -520,6 +583,95 @@ class LibraryIndexService {
             scan.files = [...scan.files.filter((file) => file.arrId !== arrId), ...found.map((file) => (show ? { ...file, show } : file))];
         });
         return found;
+    }
+
+    // Can this container read what the apps report? Reads the apps again through the same scan as everything else, then
+    // judges only what that scan cannot: which links are readable here, whose a link is when it can only be known from the
+    // other app's copy, and a path mapping that would fix the rest.
+    async access(apps: App[], hooks: Pick<ScanHooks, 'onProgress'> = {}): Promise<LibraryAccessResult> {
+        const pathMap = (await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_PATH_MAP)) as string | undefined;
+        const errors: Partial<Record<'arr' | 'jellyfin', string>> = {};
+        const groupOf = (app: App): 'arr' | 'jellyfin' => (jellyfinService.supports(app) ? 'jellyfin' : 'arr');
+        const wanted = apps.filter((app) => arrLibraryService.supports(app) || jellyfinService.supports(app));
+        const read = await this.scan(
+            { apps: wanted },
+            {
+                ...hooks,
+                onWarning: () => undefined,
+                onFailure: (app, message) => {
+                    const group = groupOf(app);
+                    errors[group] = [errors[group], `${app.name}: ${message}`].filter(Boolean).join('; ');
+                },
+            }
+        );
+        const scans = await this.#scans();
+        const keyOf = (file: string) => posixpath.normalize(file.replace(/\\/g, '/')).replace(/\/+$/, '');
+        const groups = (['arr', 'jellyfin'] as const).filter((group) => wanted.some((app) => groupOf(app) === group));
+        const scansOf = (group: 'arr' | 'jellyfin') => wanted.filter((app) => groupOf(app) === group).map((app) => scans[appSourceId(app)]).filter((scan) => scan && read.includes(scan.id));
+
+        // What is known about each file across the apps: ours (readable here or not), or another tool's.
+        const ours = new Map<string, { readable: boolean; reported: string }>();
+        const others = new Set<string>();
+        for (const group of groups) {
+            for (const scan of scansOf(group)) {
+                for (const file of scan.files.filter(({ path: f }) => /\.strm$/i.test(f))) {
+                    ours.set(keyOf(file.path), { readable: !file.unreadable, reported: file.reported ?? file.path });
+                }
+                scan.ignored?.forEach((file) => others.add(keyOf(file)));
+            }
+        }
+
+        const result: LibraryAccessResult = { pathMap: pathMap || '', sources: {} };
+        const unreadable = new Set<string>();
+        const listedBy = new Map<string, Set<'arr' | 'jellyfin'>>();
+        for (const group of groups) {
+            const info = { total: 0, readable: 0, unreadableExamples: [] as string[], ignored: 0, unverified: 0, error: errors[group] };
+            const seen = new Set<string>();
+            for (const scan of scansOf(group)) {
+                const entries: { key: string; reported: string; kind?: 'ours' | 'other' }[] = [
+                    ...scan.files.filter(({ path: f }) => /\.strm$/i.test(f)).map((file) => ({ key: keyOf(file.path), reported: file.reported ?? file.path, kind: 'ours' as const })),
+                    ...(scan.ignored ?? []).map((file) => ({ key: keyOf(file), reported: file, kind: 'other' as const })),
+                    ...(scan.unknown ?? []).map(({ path: file, reported }) => ({ key: keyOf(file), reported })),
+                ];
+                for (const { key, reported, kind } of entries) {
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    listedBy.set(key, (listedBy.get(key) ?? new Set()).add(group));
+                    const known = kind ?? (ours.has(key) ? 'ours' : others.has(key) ? 'other' : undefined);
+                    if (known === 'other') info.ignored++;
+                    else if (!known) info.unverified++;
+                    else {
+                        info.total++;
+                        if (ours.get(key)?.readable !== false) info.readable++;
+                        else {
+                            unreadable.add(reported);
+                            if (info.unreadableExamples.length < 3) info.unreadableExamples.push(reported);
+                        }
+                    }
+                }
+            }
+            result.sources[group] = info;
+        }
+
+        // With both selected, the same file counts once overall; show which sources list it.
+        if (groups.length === 2) {
+            const unique = { total: 0, readable: 0, ignored: 0, unverified: 0, both: 0, arrOnly: 0, jellyfinOnly: 0 };
+            for (const [key, listed] of listedBy) {
+                if (!ours.has(key) && others.has(key)) unique.ignored++;
+                else if (!ours.has(key)) unique.unverified++;
+                else {
+                    unique.total++;
+                    if (ours.get(key)?.readable) unique.readable++;
+                    if (listed.size === 2) unique.both++;
+                    else if (listed.has('arr')) unique.arrOnly++;
+                    else unique.jellyfinOnly++;
+                }
+            }
+            result.unique = unique;
+        }
+        if (unreadable.size) result.suggestion = detectPathMapping([...unreadable].slice(0, 25));
+        result.checkedAt = new Date().toISOString();
+        return result;
     }
 
     // The same for each source on its own: how many of the show's episodes iPlayarr's folders, each Sonarr/Radarr and each

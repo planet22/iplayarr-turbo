@@ -56,6 +56,7 @@
                     </div>
                     <RouterLink :to="`/browse/programme/${subscription.pid}`" class="cardTitle">{{ subscription.title }}</RouterLink>
                     <p v-if="subscription.synopsis" class="subSynopsis" :title="subscription.synopsis">{{ subscription.synopsis }}</p>
+                    <SourceCounts v-if="subscription.onDiskSources" class="subSources" :sources="subscription.onDiskSources" />
                 </div>
                 <div class="subDates">
                     <div class="cardLine" title="Added">
@@ -154,6 +155,7 @@
                         <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                     </div>
                     <p v-if="subscription.synopsis" class="synopsis" :title="subscription.synopsis">{{ subscription.synopsis }}</p>
+                    <SourceCounts v-if="subscription.onDiskSources" class="rowSources" :sources="subscription.onDiskSources" named />
                     <div v-if="subscription.arr || subscription.arrMissing" class="details">
                         <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                         <span v-if="subscription.arrMissing" class="missingIcon" role="img" tabindex="0" :title="missingTitle(subscription)" aria-label="No longer in Sonarr/Radarr">
@@ -336,6 +338,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortControl from '@/components/common/SortControl.vue';
+import SourceCounts from '@/components/common/SourceCounts.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import SubscriptionSyncDialog from '@/components/modals/SubscriptionSyncDialog.vue';
 import ProgressRing, { progressLabel } from '@/components/subscriptions/ProgressRing.vue';
@@ -896,6 +899,10 @@ const removeLive = async (live) => {
         flex-wrap: wrap;
         align-items: center;
         gap: 4px 6px;
+    }
+
+    .subSources {
+        margin-top: 2px;
     }
 
     .subSynopsis {
