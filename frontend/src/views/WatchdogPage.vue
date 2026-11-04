@@ -145,58 +145,6 @@
             </div>
         </div>
 
-        <PageHeader title="Library Access" />
-        <SettingsPageToolbar
-            :icons="['refresh']" :refresh-label="checkingAccess ? 'Checking…' : 'Check Access'"
-            :refreshing="checkingAccess" :refresh-disabled="checkingAccess" @refresh="checkAccess"
-        />
-        <InfoBar v-if="accessError">{{ accessError }}</InfoBar>
-        <p v-if="!access" class="empty">
-            Checks that this container can read the .strm files Sonarr/Radarr and Jellyfin report, using the current Path Mapping.
-        </p>
-        <div v-else class="accessResults">
-            <p v-if="access.checkedAt" class="detail">Last checked {{ formatRelativeTime(Date.parse(access.checkedAt)) }}</p>
-            <div v-for="(info, source) in access.sources" :key="source" class="accessRow">
-                <span :class="['pill', accessOk(info) ? 'success' : 'error']">{{ info.readable }} / {{ info.total }}</span>
-                <span>{{ sourceLabels[source] }} iPlayarr .strm files readable</span>
-                <span v-if="info.ignored || info.unverified" class="detail">
-                    ({{ info.ignored }} other ignored<template v-if="info.unverified">, {{ info.unverified }} unverified</template>)
-                </span>
-                <span v-if="info.error" class="detail">{{ info.error }}</span>
-                <span v-else-if="info.unreadableExamples.length" class="detail">
-                    e.g. {{ info.unreadableExamples[0] }}
-                </span>
-            </div>
-            <div v-if="access.unique" class="accessRow">
-                <span :class="['pill', access.unique.readable === access.unique.total ? 'success' : 'error']">
-                    {{ access.unique.readable }} / {{ access.unique.total }}
-                </span>
-                <span>unique iPlayarr .strm files readable</span>
-                <span class="detail">
-                    ({{ access.unique.both }} in Sonarr/Radarr + Jellyfin, {{ access.unique.arrOnly }} Sonarr/Radarr only,
-                    {{ access.unique.jellyfinOnly }} Jellyfin only)
-                </span>
-            </div>
-            <p v-if="!Object.keys(access.sources).length" class="empty">
-                No Sonarr/Radarr or Jellyfin configured - add one under Apps.
-            </p>
-            <div v-if="access.suggestion" class="accessRow">
-                <span class="pill primary">Suggested mapping</span>
-                <code>{{ access.suggestion.from }}={{ access.suggestion.to }}</code>
-                <span class="detail">
-                    fixes {{ access.suggestion.matched }} of {{ access.suggestion.tested }} sampled paths
-                </span>
-                <button class="rssToggle clickable" @click="applyMapping(`${access.suggestion.from}=${access.suggestion.to}`)">
-                    Apply
-                </button>
-            </div>
-            <p v-else-if="hasUnreadable" class="empty">
-                Those files weren't found anywhere in this container. Mount your library into the iPlayarr container
-                (e.g. your data share), then check again.
-            </p>
-            <p v-if="access.pathMap" class="detail">Current Path Mapping: {{ access.pathMap }}</p>
-        </div>
-
         <PageHeader title="Links" />
         <SettingsPageToolbar
             :view-mode="viewMode" :view-modes="sortedItems.length ? ['table', 'cards'] : []" :icons="['delete']"
@@ -335,18 +283,13 @@ const status = ref({
 });
 const runError = ref('');
 const stopping = ref(false);
-// The last check is saved by the server (shown on load); a fresh check in this tab takes over from it.
-const accessLocal = ref(null);
 // Each source the library index holds, on its own: iPlayarr's folders, and every Sonarr, Radarr and Jellyfin app by name.
 const librarySources = computed(() =>
     Object.entries(status.value.library?.bySource ?? {})
         .filter(([, { type }]) => type !== 'HISTORY')
         .map(([id, { name, type, count }]) => ({ id, name, type, count }))
 );
-const access = computed(() => accessLocal.value ?? status.value.libraryAccess ?? null);
 const refreshing = ref(false);
-const accessError = ref('');
-const checkingAccess = ref(false);
 // Ticks once a second so an in-progress run's elapsed time keeps counting.
 const now = ref(Date.now());
 const clock = setInterval(() => (now.value = Date.now()), 1000);
@@ -447,30 +390,6 @@ async function stopRun() {
     }
 }
 
-const accessOk = (info) => !info.error && info.total > 0 && info.readable === info.total;
-const hasUnreadable = computed(() => Object.values(access.value?.sources ?? {}).some((i) => i.readable < i.total));
-
-async function checkAccess() {
-    checkingAccess.value = true;
-    accessError.value = '';
-    try {
-        const { ok, data } = await ipFetch('json-api/watchdog/check-access', 'POST');
-        if (ok) accessLocal.value = data;
-        else accessError.value = data?.message ?? 'Check failed';
-    } finally {
-        checkingAccess.value = false;
-    }
-}
-
-async function applyMapping(value) {
-    const { ok, data } = await ipFetch('json-api/watchdog/path-map', 'PUT', { value });
-    if (!ok) {
-        accessError.value = data?.message ?? 'Could not save the mapping';
-        return;
-    }
-    await checkAccess();
-}
-
 async function refreshCounts() {
     refreshing.value = true;
     runError.value = '';
@@ -553,19 +472,6 @@ onBeforeUnmount(() => {
         }
     }
 
-    // Library Access: each source reads as its own card, with the detail text on its own line.
-    .accessResults .accessRow {
-        padding: 10px;
-        background-color: @nav-active-background-color;
-        border-radius: 6px;
-        box-shadow: 0 0 10px 1px @primary-box-shadow;
-        font-size: 13px;
-
-        .detail {
-            flex-basis: 100%;
-            font-size: 12px;
-        }
-    }
 }
 
 .sourceBreakdown {
@@ -577,24 +483,6 @@ onBeforeUnmount(() => {
 
     .none {
         opacity: 0.4;
-    }
-}
-
-.accessResults {
-    margin-bottom: 2rem;
-
-    .accessRow {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 6px 12px;
-        margin-bottom: 8px;
-    }
-
-    code {
-        padding: 2px 6px;
-        border-radius: 3px;
-        background-color: @hover-tint;
     }
 }
 

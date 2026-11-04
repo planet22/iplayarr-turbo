@@ -296,7 +296,6 @@ async function apiLayer(ctx) {
     ctx.wd = wd.json;
     await watchdogFieldChecks(A);
     await check(A, 'watchdog reports its strike limit (1-30)', '/json-api/watchdog', (r) => (Number.isInteger(r.json?.strikes) && r.json.strikes >= 1 && r.json.strikes <= 30) || `strikes=${r.json?.strikes}`);
-    if (ctx.wd?.enabled) await check(A, 'watchdog path-map access', '/json-api/watchdog/check-access', isJson, { method: 'POST', warnOnly: true, timeout: 180000 });
 
     // Per-app connectivity (uses stored masked keys; read-only test call)
     const apps = (await http('/json-api/apps')).json || [];

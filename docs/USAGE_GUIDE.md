@@ -46,7 +46,7 @@ Only relevant when `MEDIA_MODE=strm`. Shows throughput live and a **Subs** colum
 
 ## Watchdog (`/watchdog`)
 
-Dashboard for the optional STRM Watchdog: live progress, valid/invalid counts and charts, Library Access checks and a per-link table. See [WATCHDOG.md](WATCHDOG.md).
+Dashboard for the optional STRM Watchdog: live progress, valid/invalid counts and charts, the library's per-source counts and a per-link table. See [WATCHDOG.md](WATCHDOG.md).
 
 ## NZB (`/nzb`)
 

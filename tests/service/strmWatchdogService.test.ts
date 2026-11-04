@@ -387,31 +387,6 @@ describe('StrmWatchdogService', () => {
         expect(items.map(({ pid }) => pid)).toEqual([GOOD]);
     });
 
-    describe('checkLibraryAccess', () => {
-        it('counts only links that are iPlayarr/BBC, judged from the link itself, and ignores other tools', async () => {
-            const amazon = path.join(tmpDir, 'amazon.strm');
-            fs.writeFileSync(amazon, 'https://www.amazon.com/gp/video/detail/B000');
-            const unreadableOurs = '/gone/a/ours.strm';
-            (arrLibraryService.getFilePaths as jest.Mock).mockResolvedValue([
-                { path: badPath, ids: [1] }, // readable, ours
-                { path: amazon, ids: [2] }, // readable, not ours
-                { path: unreadableOurs, ids: [3] }, // unreadable, but Jellyfin knows its link
-                { path: '/gone/a/mystery.strm', ids: [4] }, // unreadable, nobody knows
-            ]);
-            const appService = jest.requireMock('../../src/service/appService');
-            appService.getAllApps.mockResolvedValueOnce([
-                { id: 's', type: 'SONARR', name: 'Sonarr', url: 'http://s', api_key: 'k' },
-                { id: 'j', type: 'JELLYFIN', name: 'Jellyfin', url: 'http://jf:8096', api_key: 'k' },
-            ]);
-            (jellyfinService.getItems as jest.Mock).mockResolvedValue([
-                { path: unreadableOurs, link: `http://h/api?mode=stream&pid=${GOOD}&streamkey=k` },
-            ]);
-            const { sources } = await strmWatchdogService.checkLibraryAccess();
-            expect(sources.arr).toMatchObject({ total: 2, readable: 1, ignored: 1, unverified: 1 });
-            expect(sources.jellyfin).toMatchObject({ total: 1, readable: 0, ignored: 0, unverified: 0 });
-        });
-    });
-
     describe('video events', () => {
         const recorded = (type: string) =>
             (videoEventService.record as jest.Mock).mock.calls.filter(([t]) => t === type);
@@ -528,14 +503,6 @@ describe('StrmWatchdogService', () => {
             await strmWatchdogService.run();
             const { live } = await strmWatchdogService.getStatus();
             expect(live.warnings).toEqual([expect.stringMatching(/2 \.strm file\(s\) could not be read/)]);
-        });
-
-        it('saves the last Library Access result with a timestamp', async () => {
-            (arrLibraryService.getFilePaths as jest.Mock).mockResolvedValue([{ path: badPath, ids: [1] }]);
-            await strmWatchdogService.checkLibraryAccess();
-            const { libraryAccess } = await strmWatchdogService.getStatus();
-            expect(libraryAccess?.checkedAt).toBeTruthy();
-            expect(libraryAccess?.sources.arr?.total).toBe(1);
         });
 
         it('refreshes the link counts without checking anything against BBC', async () => {

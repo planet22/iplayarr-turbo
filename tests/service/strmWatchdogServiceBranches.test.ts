@@ -176,40 +176,6 @@ describe('StrmWatchdogService branches', () => {
         });
     });
 
-    describe('library access check', () => {
-        const arrApp = { id: 'a', name: 'Sonarr' };
-        const jellyApp = { id: 'j', name: 'Jelly', type: 'JELLYFIN' };
-
-        beforeEach(() => {
-            write('both.strm', BAD);
-            write('arronly.strm', BAD);
-            write('other.strm', BAD);
-            (appService.getAllApps as jest.Mock).mockResolvedValue([arrApp, jellyApp]);
-        });
-
-        it('counts a file listed twice by one source once, and splits files by which sources list them', async () => {
-            const p = (file: string) => path.join(tmpDir, file);
-            (arrLibraryService.getFilePaths as jest.Mock).mockResolvedValue([{ path: p('both.strm'), ids: [] }, { path: p('both.strm'), ids: [] }, { path: p('arronly.strm'), ids: [] }]);
-            (jellyfinService.getItems as jest.Mock).mockResolvedValue([
-                { path: p('both.strm') },
-                { path: p('jellyonly.strm'), link: strm(BAD) },
-                { path: p('nolink.strm') },
-                { path: p('foreign.strm'), link: 'https://example.com/video' },
-            ]);
-            const result = await strmWatchdogService.checkLibraryAccess();
-            expect(result.sources.arr).toMatchObject({ total: 2, readable: 2 });
-            expect(result.unique).toMatchObject({ both: 1, arrOnly: 1, jellyfinOnly: 1, ignored: 1, unverified: 1 });
-        });
-
-        it('reports failures from either kind of app without a message', async () => {
-            (arrLibraryService.getFilePaths as jest.Mock).mockRejectedValue(new Error('arr down'));
-            (jellyfinService.getItems as jest.Mock).mockRejectedValue(new Error('jelly down'));
-            const result = await strmWatchdogService.checkLibraryAccess();
-            expect(result.sources.arr?.error).toContain('Sonarr: arr down');
-            expect(result.sources.jellyfin?.error).toContain('Jelly: jelly down');
-        });
-    });
-
     describe('abandoned and unconfirmed runs', () => {
         it('holds a network failure for a re-check while BBC is unconfirmed and counts it as inconclusive', async () => {
             const more = ['m00aaaa1', 'm00aaaa2', 'm00aaaa3'];

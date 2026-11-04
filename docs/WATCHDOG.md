@@ -53,7 +53,7 @@ Actions are taken once per link.
 - **Run** a check now, **Stop** a running one, or **Refresh counts** (re-list links from the sources without checking them against BBC). Live progress is shown per source while links are being collected and checked.
 - Stat cards and charts: tracked, valid and invalid links, a per-type breakdown (iPlayarr, Sonarr, Radarr, Jellyfin) and checked-vs-failed.
 - **In the Library:** how many episodes the library index holds, overall and for iPlayarr's folders and each Sonarr, Radarr and Jellyfin app on its own. The Watchdog lists its links through the same index as the Subscriptions page, and a run also reads iPlayarr's folders again.
-- **Library Access:** the index lists the files; this only judges what the index cannot know: which of them this container can read, whose a link is when only the other app holds a copy, and a suggested path mapping when the paths are not visible.
+- **Unreadable files:** when a scan finds links this container cannot read (the library is mounted under another path), the warning at the top of the page says so, and suggests the Path Mapping that would fix it when one can be found. Use Refresh Links after changing the mapping.
 - **Links:** a table of every tracked link with status, source, when it was last checked, and the action taken. Each row shows the library file's own name (for example `Pointless (2009) - S34E05 - Episode 5`) under the pid, and any message or file list, not just for invalid links. A button clears the table.
 
 ## Schedule
@@ -62,4 +62,4 @@ A daily task at **04:15** (`STRM Watchdog`, also listed with the other tasks und
 
 ## API
 
-Under `/json-api/watchdog`: `GET /` (state), `POST /run`, `POST /stop`, `POST /refresh-counts`, `POST /check-access`, `PUT /path-map`, `DELETE /items` (clear the links table).
+Under `/json-api/watchdog`: `GET /` (state), `POST /run`, `POST /stop`, `POST /refresh-counts`, `PUT /path-map`, `DELETE /items` (clear the links table).

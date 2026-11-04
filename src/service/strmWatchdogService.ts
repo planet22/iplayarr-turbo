@@ -13,7 +13,7 @@ import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
 import historyService from './historyService';
 import jellyfinService from './jellyfinService';
-import libraryIndexService, { appSourceId, IndexCounts, LibraryAccessResult } from './libraryIndexService';
+import libraryIndexService, { appSourceId, IndexCounts } from './libraryIndexService';
 import loggingService from './loggingService';
 import socketService from './socketService';
 import NativeStreamService from './stream/NativeStreamService';
@@ -96,8 +96,6 @@ export interface WatchdogRun {
     notice?: string;
 }
 
-export type { LibraryAccessResult };
-
 // Fixed for a whole run: what the sources found at its start. A link found by several sources
 // counts once in `total` but under each source.
 export interface WatchdogTracked {
@@ -111,7 +109,6 @@ export interface WatchdogStatus {
     // Failed checks in a row before a link is invalid (the setting), so the dashboard can show "1/2".
     strikes: number;
     tracked?: WatchdogTracked;
-    libraryAccess?: LibraryAccessResult;
     // What the library index holds: unique episodes overall and in each source on its own (the history, folders, each app).
     library?: IndexCounts;
     enabled: boolean;
@@ -124,7 +121,6 @@ const storage: QueuedStorage = new QueuedStorage();
 const STATE_KEY = 'strmWatchdog';
 const RUNS_KEY = 'strmWatchdogRuns';
 const TRACKED_KEY = 'strmWatchdogTracked';
-const ACCESS_KEY = 'strmWatchdogLibraryAccess';
 const MAX_CONCURRENCY = 10;
 const DEFAULT_CONCURRENCY = 4;
 const RUN_HISTORY_LIMIT = 90;
@@ -211,15 +207,6 @@ class StrmWatchdogService {
     #tracked?: WatchdogTracked;
     #library?: IndexCounts;
 
-    // Can this container actually read the .strm files Sonarr/Radarr and Jellyfin report? The library index lists them
-    // (the same listing everything else uses); this only adds the judgement of what is readable here, and for unreadable
-    // paths a suggested Path Mapping.
-    async checkLibraryAccess(): Promise<LibraryAccessResult> {
-        const result = await libraryIndexService.access(await appService.getAllApps());
-        await storage.setItem(ACCESS_KEY, result);
-        return result;
-    }
-
     // Adds a progress point to the live chart, at most every few seconds.
     #sample(force = false): void {
         const { samples = [], checked, invalid } = this.#live;
@@ -260,7 +247,6 @@ class StrmWatchdogService {
             items: Object.entries(state).map(([pid, record]) => ({ pid, ...record })),
             runs: (await storage.getItem(RUNS_KEY)) ?? [],
             tracked: this.#tracked ?? (await storage.getItem(TRACKED_KEY)),
-            libraryAccess: await storage.getItem(ACCESS_KEY),
             library: this.#library,
         };
     }
