@@ -52,7 +52,8 @@ Actions are taken once per link.
 
 - **Run** a check now, **Stop** a running one, or **Refresh counts** (re-list links from the sources without checking them against BBC). Live progress is shown per source while links are being collected and checked.
 - Stat cards and charts: tracked, valid and invalid links, a per-type breakdown (iPlayarr, Sonarr, Radarr, Jellyfin) and checked-vs-failed.
-- **Library Access:** tests whether each Sonarr/Radarr/Jellyfin source's files are visible inside the container, and suggests a path mapping when they are not.
+- **In the Library:** how many episodes the library index holds, overall and for iPlayarr's folders and each Sonarr, Radarr and Jellyfin app on its own. The Watchdog lists its links through the same index as the Subscriptions page, and a run also reads iPlayarr's folders again.
+- **Library Access:** the index lists the files; this only judges what the index cannot know: which of them this container can read, whose a link is when only the other app holds a copy, and a suggested path mapping when the paths are not visible.
 - **Links:** a table of every tracked link with status, source, when it was last checked, and the action taken. Each row shows the library file's own name (for example `Pointless (2009) - S34E05 - Episode 5`) under the pid, and any message or file list, not just for invalid links. A button clears the table.
 
 ## Schedule

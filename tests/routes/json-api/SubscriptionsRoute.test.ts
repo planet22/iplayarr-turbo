@@ -22,7 +22,7 @@ jest.mock('../../../src/service/subscriptionService', () => ({
         setSecureDays: jest.fn(),
     },
 }));
-jest.mock('../../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { count: jest.fn(), bySource: jest.fn() } }));
+jest.mock('../../../src/service/subscriptionDiskService', () => ({ __esModule: true, default: { count: jest.fn(), bySource: jest.fn(), forShow: jest.fn() } }));
 jest.mock('../../../src/service/subscriptionImagesService', () => ({
     __esModule: true,
     ImagesDisabledError: class ImagesDisabledError extends Error {},
@@ -53,6 +53,28 @@ describe('SubscriptionsRoute', () => {
         jest.resetAllMocks();
         mockedDisk.count.mockResolvedValue(undefined as any);
         mockedDisk.bySource.mockResolvedValue([]);
+    });
+
+    describe('GET /:id/missing', () => {
+        it('lists the episodes BBC has that the library index does not', async () => {
+            mocked.list.mockResolvedValue([{ id: 'sub1', pid: 'b00show', title: 'The Show' } as any]);
+            (mocked as any).listEpisodes = jest.fn().mockResolvedValue([
+                { id: 'm001aaaa', title: 'One', release_date_time: '2026-01-01' },
+                { id: 'm001bbbb', title: 'Two', release_date_time: '2026-01-08' },
+            ]);
+            mockedDisk.forShow.mockResolvedValue({ count: 1, pids: ['m001aaaa'] });
+
+            const res = await request(app).get('/sub1/missing');
+
+            expect(res.body).toEqual({ total: 2, onDisk: 1, missing: [{ pid: 'm001bbbb', title: 'Two', released: '2026-01-08' }] });
+            expect((mocked as any).listEpisodes).toHaveBeenCalledWith('b00show');
+        });
+
+        it('is 404 for a subscription that does not exist', async () => {
+            mocked.list.mockResolvedValue([]);
+
+            expect((await request(app).get('/nope/missing')).status).toBe(404);
+        });
     });
 
     describe('POST /:id/images', () => {

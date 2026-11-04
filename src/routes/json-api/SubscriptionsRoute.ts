@@ -75,6 +75,26 @@ router.post('/:id/check', async (req: Request, res: Response) => {
     res.json(result);
 });
 
+// The episodes BBC lists for the show that are not on disk: its episode list less what the library index holds. A real
+// file that names no programme (no .nfo) cannot be matched to an episode, so the show may be listed as missing one.
+router.get('/:id/missing', async (req: Request, res: Response) => {
+    const subscription = (await subscriptionService.list()).find((s) => s.id === req.params.id);
+    if (!subscription) {
+        res.status(404).json({ error: ApiError.INVALID_INPUT, message: 'Subscription not found' } as ApiResponse);
+        return;
+    }
+    const [episodes, onDisk] = await Promise.all([
+        subscriptionService.listEpisodes(subscription.pid),
+        subscriptionDiskService.forShow(subscription.title, subscription.arr),
+    ]);
+    const have = new Set(onDisk.pids);
+    res.json({
+        total: episodes.length,
+        onDisk: onDisk.count,
+        missing: episodes.filter(({ id }) => !have.has(id)).map(({ id, title, release_date_time }) => ({ pid: id, title, released: release_date_time })),
+    });
+});
+
 // Fills in the Jellyfin pictures for the show's files already in the library (what Use Additional Images writes for a download).
 router.post('/:id/images', async (req: Request, res: Response) => {
     try {

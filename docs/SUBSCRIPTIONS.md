@@ -31,7 +31,19 @@ The subscribe dialog also offers **Sonarr/Radarr only**: the show is recorded bu
 
 ### Versions
 
-On each show's picture, the top-right number is episodes on disk over total (for a Sonarr/Radarr-only show, what the app holds over the aired ones it wants). The bottom-left number is how many episodes the last download queued. It is left off a show's first download, which is only the whole backlog. On a programme page, an episode that is on disk has a drive icon at the top left of its picture. What is on disk is read from the show's folders once and kept (Maintenance → Episodes on disk) until a check, a finished download or the images button reads them again.
+On each show's picture, the top-right number is episodes on disk over total (for a Sonarr/Radarr-only show, what the app holds over the aired ones it wants). The bottom-left number is how many episodes the last download queued. It is left off a show's first download, which is only the whole backlog. On a programme page, an episode that is on disk has a drive icon at the top left of its picture. What is on disk comes from the library index (see below) and is kept (Maintenance → Library index) until a check, a finished download or the images button reads the show's folder again, so opening the page never reads the disk.
+
+Under a show's synopsis, small logos give each source's own count: iPlayarr's folders, and every Sonarr, Radarr and Jellyfin app by itself. An episode held by more than one counts under each; the number on the picture counts it once.
+
+#### The library index
+
+One list of what is in the library serves the Subscriptions counts, the programme page's drive icons, the images button, "secure before expiry" and the Watchdog. It is read from iPlayarr's folders, Sonarr, Radarr and Jellyfin, never from the download history (which can be cleared).
+
+- A `.strm` link is the programme its link names. Two links to one programme are one episode.
+- A real `.mp4`/`.mkv` is ours when a `.nfo` beside it has `<uniqueid type="iplayer">` (written with the other NFO fields), or when its name carries the `BBCiPlayarrTurbo` release group, which Sonarr and Radarr keep when they rename. Any other file is ignored.
+- A real file beside a link of the same name is one episode. A real file with no programme id is tied to the link of the same show, season and episode (from Sonarr or Jellyfin, or `S01E02` in the name).
+
+`GET /json-api/subscriptions/:id/missing` lists the episodes BBC has for a show that the index does not hold. A real file with no `.nfo` and a different season/episode numbering cannot be matched, so a show may be listed as missing an episode it has.
 
 If audio described / signed badges are on (Settings → Appearance), the subscribe dialog can also ask which versions to follow, and the Subscriptions page has **AD** and **Signed** toggles per show. A subscription can then also download the audio described and/or signed version of each new episode, named and tagged like the standard release.
 

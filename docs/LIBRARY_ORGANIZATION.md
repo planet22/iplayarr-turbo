@@ -39,6 +39,7 @@ Settings → Media Management → **Write .nfo Metadata Files** (`WRITE_NFO_STRM
 
 - TV episodes get an `<episodedetails>` NFO with title, show title, season/episode numbers, air date, runtime (minutes, from BBC's own programme metadata), and channel (as `<studio>`), plus a `tvshow.nfo` at the show folder root.
 - Movies get a `<movie>` NFO with title, air date, year, runtime, and channel.
+- Both carry `<uniqueid type="iplayer">` with the BBC programme id. iPlayarr reads it to know which episode a real video file is, whatever Sonarr or Radarr renames the file to.
 
 Use `nzb` or `manual` instead of `all` to only write NFOs for downloads Sonarr/Radarr queued, or only ones you triggered manually from the UI, respectively.
 
