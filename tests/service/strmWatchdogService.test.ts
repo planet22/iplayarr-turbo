@@ -354,8 +354,9 @@ describe('StrmWatchdogService', () => {
         const { library } = await strmWatchdogService.getStatus();
 
         // The history lists downloads, not what is on disk, so it is not part of the library counts.
-        expect(library?.total).toBe(0);
+        expect(library?.total).toBe(2);
         expect(library?.bySource.history).toBeUndefined();
+        expect(library?.bySource.folders).toMatchObject({ count: 2 });
     });
 
     it('finds links through a Jellyfin app', async () => {

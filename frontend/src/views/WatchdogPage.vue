@@ -20,6 +20,16 @@
         <InfoBar v-for="warning in live.warnings || []" :key="warning" clazz="warning">{{ warning }}</InfoBar>
 
         <div class="statRow">
+            <div v-if="librarySources.length" class="statCard">
+                <font-awesome-icon class="statIcon" :icon="['fas', 'hard-drive']" />
+                <div class="statBody">
+                    <span class="statLabel">In the Library</span>
+                    <div class="valueRow">
+                        <span class="statValue">{{ status.library.total }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="librarySources" named />
+                    </div>
+                </div>
+            </div>
             <div class="statCard">
                 <font-awesome-icon class="statIcon" :icon="['fas', 'link']" />
                 <div class="statBody">
@@ -61,19 +71,6 @@
                             {{ live.running ? 'Running' : 'Took' }} {{ formatDuration(lastRunDuration) }}
                         </span>
                     </span>
-                </div>
-            </div>
-        </div>
-
-        <div v-if="librarySources.length" class="statRow">
-            <div class="statCard">
-                <font-awesome-icon class="statIcon" :icon="['fas', 'hard-drive']" />
-                <div class="statBody">
-                    <span class="statLabel">In the Library</span>
-                    <div class="valueRow">
-                        <span class="statValue">{{ status.library.total }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
-                        <SourceCounts :sources="librarySources" named />
-                    </div>
                 </div>
             </div>
         </div>
