@@ -23,6 +23,23 @@ const resolvableTypes: RecordType[] = ['A', 'AAAA'];
 const maxConcurrentQueries = 50;
 const queryTimeoutMs = 5_000;
 
+// Answers with addresses are kept for the same 60s they are handed out with, so a name asked again and again (www.bbc.co.uk during
+// a burst of downloads) costs one upstream lookup a minute. Empty answers and failures are never cached: an empty one may be a
+// timeout, and caching it would turn a blip into a minute of outage. Bounded, oldest entry out first.
+const answerTtlSeconds = 60;
+const maxCachedAnswers = 500;
+const answerCache = new Map<string, { addresses: string[]; expiresAt: number }>();
+
+// Exported for tests.
+export function clearDnsRelayCache(): void {
+    answerCache.clear();
+}
+
+// c-ares errors that mean the upstream answered "no such record", as opposed to not answering (timeout, refused, SERVFAIL).
+const noRecordCodes = new Set(['ENODATA', 'ENOTFOUND']);
+// DNS response code in the low four bits of the header flags.
+const RCODE_SERVFAIL = 2;
+
 let startPromise: Promise<void> | undefined;
 let inFlightQueries = 0;
 
@@ -62,24 +79,28 @@ function captureUpstreamServers(): void {
     }
 }
 
-function resolveViaNode(hostname: string, type: 'A' | 'AAAA'): Promise<string[]> {
+function resolveViaNode(hostname: string, type: 'A' | 'AAAA'): Promise<{ addresses: string[]; failed: boolean }> {
     const startedAt = Date.now();
     return new Promise((resolve) => {
         let settled = false;
-        const finish = (addresses: string[], reason: string) => {
+        const finish = (addresses: string[], reason: string, failed: boolean) => {
             if (!settled) {
                 settled = true;
                 clearTimeout(timer);
                 loggingService.log(
                     `[dns-relay] ${type} ${hostname} -> ${addresses.length ? addresses.join(',') : '(none)'} (${reason}, ${Date.now() - startedAt}ms)`
                 );
-                resolve(addresses);
+                resolve({ addresses, failed });
             }
         };
-        const timer = setTimeout(() => finish([], 'timeout'), queryTimeoutMs);
+        const timer = setTimeout(() => finish([], 'timeout', true), queryTimeoutMs);
 
         const callback = (err: NodeJS.ErrnoException | null, addresses?: string[]) =>
-            finish(err ? [] : (addresses ?? []), err ? `error: ${err.message}` : 'ok');
+            finish(
+                err ? [] : (addresses ?? []),
+                err ? `error: ${err.message}` : 'ok',
+                !!err && !noRecordCodes.has(String(err.code ?? err.message))
+            );
         if (type === 'A') {
             dns.resolve4(hostname, callback);
         } else {
@@ -94,20 +115,40 @@ export async function buildResponse(query: DecodedPacket): Promise<Packet> {
     const question: Question | undefined = query.questions?.[0];
     const answers: Answer[] = [];
 
+    let servfail = false;
+
     if (question && resolvableTypes.includes(question.type)) {
-        const addresses = await resolveViaNode(question.name, question.type as 'A' | 'AAAA');
-        for (const address of addresses) {
-            answers.push({ type: question.type, name: question.name, data: address, ttl: 60 } as Answer);
+        const type = question.type as 'A' | 'AAAA';
+        const key = `${type}|${question.name.toLowerCase()}`;
+        const hit = answerCache.get(key);
+        let addresses: string[];
+        if (hit && hit.expiresAt > Date.now()) {
+            addresses = hit.addresses;
+        } else {
+            const result = await resolveViaNode(question.name, type);
+            addresses = result.addresses;
+            if (addresses.length > 0) {
+                answerCache.delete(key);
+                answerCache.set(key, { addresses, expiresAt: Date.now() + answerTtlSeconds * 1000 });
+                if (answerCache.size > maxCachedAnswers) {
+                    answerCache.delete(answerCache.keys().next().value as string);
+                }
+            }
+            // An A lookup the upstream did not answer is a server failure, like any resolver: a client then says "try again"
+            // instead of "no such host". AAAA stays an empty NOERROR (below), whatever happened.
+            servfail = type === 'A' && addresses.length === 0 && result.failed;
         }
-        // No addresses (most commonly AAAA, since this container has no real IPv6 route, or a
-        // timed-out lookup) still gets a NOERROR response with an empty answer section (NODATA),
-        // never NXDOMAIN - that pairing (valid A + NXDOMAIN AAAA) is exactly musl's trigger.
+        for (const address of addresses) {
+            answers.push({ type: question.type, name: question.name, data: address, ttl: answerTtlSeconds } as Answer);
+        }
+        // No addresses (most commonly AAAA, since this container has no real IPv6 route) still gets a NOERROR response with an
+        // empty answer section (NODATA), never NXDOMAIN - that pairing (valid A + NXDOMAIN AAAA) is exactly musl's trigger.
     }
 
     return {
         type: 'response',
         id: query.id,
-        flags: dnsPacket.RECURSION_DESIRED | dnsPacket.RECURSION_AVAILABLE,
+        flags: dnsPacket.RECURSION_DESIRED | dnsPacket.RECURSION_AVAILABLE | (servfail ? RCODE_SERVFAIL : 0),
         questions: query.questions,
         answers,
     };
