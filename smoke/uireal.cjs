@@ -332,7 +332,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.waitForSelector('.dnsTable', { timeout: 15000 }).catch(() => {});
             const relayPage = await page.locator('body').innerText();
             ok('the DNS Relay button opens the DNS Relay page', /\/dns-relay$/.test(page.url()) && /DNS Relay/.test(relayPage));
-            ok('the DNS Relay page shows its state, counters, the last 10 queries and the last 20 failed', /Upstream:/.test(relayPage) && /Queries:/.test(relayPage) && /Last 10 queries/.test(relayPage) && /Last 20 failed/.test(relayPage), relayPage.replace(/\s+/g, ' ').slice(0, 160));
+            ok('the DNS Relay page shows its state, counters, the last 10 queries and the last 20 failed', /Upstream/i.test(relayPage) && /Queries/i.test(relayPage) && /Last 10 queries/.test(relayPage) && /Last 20 failed/.test(relayPage), relayPage.replace(/\s+/g, ' ').slice(0, 160));
             await shot(page, 'dns-relay', true);
             // Live updates can be stopped (tables freeze) and started again from the toolbar.
             const stopLive = page.locator('button[aria-label="Stop live updates"]');

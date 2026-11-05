@@ -26,29 +26,13 @@
                 {{ status.health.message }}
             </InfoBar>
 
-            <div class="pills">
-                <span :class="['pill', status.running ? 'success' : 'grey']">{{ status.running ? 'Running' : 'Not running' }}</span>
-                <span class="pill grey" title="Where the upstream servers were read from">
-                    Upstream: {{ status.upstream.length ? status.upstream.join(', ') : 'none' }} ({{ status.upstreamSource }})
-                </span>
-                <span :class="['pill', status.resolvConfPointsAtRelay ? 'primary' : 'grey']">
-                    /etc/resolv.conf {{ status.resolvConfPointsAtRelay ? 'points at the relay' : 'does not point at the relay' }}
-                </span>
-                <span class="pill grey" title="Lookups waiting for the upstream, of the most it will wait on">
-                    In flight: {{ status.inFlight }} of {{ status.maxInFlight }}
-                </span>
-                <span class="pill grey">Cached names: {{ status.cacheEntries }}</span>
-            </div>
-
-            <div class="pills counters">
-                <span class="pill primary">Queries: {{ status.counters.queries }}</span>
-                <span class="pill grey" title="Answered from the relay's own memory">From cache: {{ status.counters.cacheHits }}</span>
-                <span class="pill success" title="The upstream returned addresses">Answered: {{ status.counters.answered }}</span>
-                <span class="pill grey" title="The upstream says there is no such record (normal for AAAA)">No record: {{ status.counters.empty }}</span>
-                <span :class="['pill', status.counters.failed ? 'error' : 'grey']" title="The upstream did not answer">Failed: {{ status.counters.failed }}</span>
-                <span :class="['pill', status.counters.dropped ? 'error' : 'grey']" title="Ignored because the maximum were already waiting">
-                    Dropped: {{ status.counters.dropped }}
-                </span>
+            <div class="tiles">
+                <div v-for="tile in tiles" :key="tile.label" class="tile" :class="tile.state">
+                    <InfoTip class="tileInfo" :text="tile.help" />
+                    <span class="tileLabel">{{ tile.label }}</span>
+                    <span class="tileValue">{{ tile.value }}</span>
+                    <span v-if="tile.note" class="tileNote">{{ tile.note }}</span>
+                </div>
             </div>
 
             <PageHeader title="Last 10 queries" icon="clock-rotate-left" />
@@ -105,8 +89,9 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
+import InfoTip from '@/components/common/form/InfoTip.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -140,6 +125,37 @@ async function startLive() {
     await load();
 }
 
+// The grey tiles (label, value, an (i) tip), the same as on the streaming debug page. A coloured left edge marks good or bad.
+const tiles = computed(() => {
+    const s = status.value;
+    if (!s) return [];
+    const c = s.counters;
+    return [
+        { label: 'Relay', value: s.running ? 'Running' : 'Not running', state: s.running ? 'good' : 'bad', help: 'Whether the relay is listening for lookups from inside the container.' },
+        {
+            label: 'Upstream',
+            value: s.upstream.length ? s.upstream.join(', ') : 'none',
+            note: s.upstreamSource,
+            state: s.upstream.length ? '' : 'bad',
+            help: 'The DNS servers the relay asks. The note says where they were read from: resolv.conf, a saved copy of it, or nowhere.',
+        },
+        {
+            label: 'resolv.conf',
+            value: s.resolvConfPointsAtRelay ? 'Points at the relay' : 'Does not point at the relay',
+            state: s.resolvConfPointsAtRelay ? 'good' : '',
+            help: 'Whether /etc/resolv.conf sends the container\'s lookups to the relay.',
+        },
+        { label: 'In flight', value: `${s.inFlight} of ${s.maxInFlight}`, help: 'Lookups waiting for the upstream, of the most it will wait on.' },
+        { label: 'Cached names', value: String(s.cacheEntries), help: 'Names the relay remembers for 60 seconds so it does not ask the upstream again.' },
+        { label: 'Queries', value: String(c.queries), help: 'Every lookup the relay has received since it started.' },
+        { label: 'From cache', value: String(c.cacheHits), help: 'Lookups answered from the relay\'s own memory.' },
+        { label: 'Answered', value: String(c.answered), state: 'good', help: 'Lookups where the upstream returned addresses.' },
+        { label: 'No record', value: String(c.empty), help: 'The upstream says there is no such record. Normal for AAAA (IPv6) lookups.' },
+        { label: 'Failed', value: String(c.failed), state: c.failed ? 'bad' : '', help: 'Lookups the upstream did not answer in time.' },
+        { label: 'Dropped', value: String(c.dropped), state: c.dropped ? 'bad' : '', help: 'Lookups ignored because the maximum number were already waiting.' },
+    ];
+});
+
 const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 async function reload() {
@@ -159,11 +175,52 @@ onMounted(reload);
     font-size: 13px;
 }
 
-.pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin: 12px 0;
+.tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 8px;
+    margin: 12px 0 16px;
+
+    .tileInfo {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+    }
+
+    .tile {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 10px 12px;
+        background-color: @nav-active-background-color;
+        border-radius: 6px;
+        border-left: 3px solid transparent;
+
+        &.good {
+            border-left-color: #3fb950;
+        }
+
+        &.bad {
+            border-left-color: #f85149;
+        }
+
+        .tileLabel {
+            font-size: 11px;
+            color: @subtle-text-color;
+            text-transform: uppercase;
+        }
+
+        .tileValue {
+            font-size: 18px;
+            overflow-wrap: anywhere;
+        }
+
+        .tileNote {
+            font-size: 12px;
+            color: @subtle-text-color;
+        }
+    }
 }
 
 .dnsTable {
