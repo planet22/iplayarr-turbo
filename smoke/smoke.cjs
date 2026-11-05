@@ -634,6 +634,7 @@ async function uiInteractions(browser, ctx) {
     } catch (e) { rec(U, 'settings tabs', 'FAIL', e.message.split('\n')[0]); }
     if (want('subscriptions toolbar')) await subscriptionsToolbar(page, ctx, U);
     if (want('subscriptions cards')) await subscriptionsCards(browser, page, U);
+    if (want('card grids')) await cardGrids(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
     // Programme page: play/download controls exist
@@ -901,6 +902,36 @@ async function subscriptionsCards(browser, page, U) {
             await p.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-phone.png') });
         } finally { await phone.close(); }
     } catch (e) { rec(U, 'subscriptions cards', 'FAIL', e.message.split('\n')[0]); }
+}
+
+// Card lists on Video events, Watchdog, NZB tester and Streaming put several cards across on a tablet / desktop and
+// one per line on a phone, with no sideways scroll. Skipped for a page with fewer than two cards (nothing to compare).
+async function cardGrids(browser, U) {
+    const pages = [
+        ['events', '/events', 'iplayarr.eventsViewMode', '.cardList .dataCard'],
+        ['watchdog', '/watchdog', 'iplayarr.watchdogViewMode', '.cardList .dataCard'],
+        ['nzb', '/nzb', 'iplayarr.nzbViewMode', '.cardList .dataCard'],
+        ['streaming', '/streaming', 'iplayarr.streamsViewMode', '.cardList .dataCard'],
+    ];
+    const sizes = [['tablet', { width: 1100, height: 900 }, true], ['phone', VIEWPORTS[1][1], false]];
+    for (const [name, route, key, sel] of pages) {
+        for (const [sizeName, viewport, wide] of sizes) {
+            const context = await browser.newContext({ viewport });
+            try {
+                const p = await context.newPage();
+                await p.addInitScript((k) => localStorage.setItem(k, 'cards'), key);
+                await p.goto(BASE + route, { waitUntil: 'networkidle', timeout: 45000 });
+                await p.waitForTimeout(500);
+                const xs = await p.locator(sel).evaluateAll((els) => [...new Set(els.slice(0, 8).filter((e) => e.offsetParent).map((e) => Math.round(e.getBoundingClientRect().x)))]);
+                const count = await p.locator(sel).count();
+                const noScroll = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+                const label = `card grids: ${name} cards on a ${sizeName}`;
+                if (count < 2) { rec(U, label, 'SKIP', `${count} card(s)`); continue; }
+                const columnsOk = wide ? xs.length >= 2 : xs.length === 1;
+                rec(U, label, columnsOk && noScroll ? 'PASS' : 'FAIL', `${xs.length} column(s), ${count} cards, scroll ${noScroll ? 'ok' : 'sideways'}`);
+            } catch (e) { rec(U, `card grids: ${name} ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+        }
+    }
 }
 
 // ---------------------------------------------------------------- main

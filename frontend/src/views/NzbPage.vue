@@ -19,7 +19,7 @@
             </template>
         </SettingsPageToolbar>
         <Pagination v-model="searchPage" v-model:page-size="searchPageSize" :total="sortedSearches.length" />
-        <div v-if="cardView" class="cardList">
+        <div v-if="cardView" class="cardList cardGrid">
             <DataCard v-for="(entry, index) in pagedSearches" :key="index">
                 <template #title>
                     <span class="termText" :title="entry.term">{{ entry.term == '*' ? 'RSS Feed' : entry.term }}</span>
@@ -108,7 +108,7 @@
             </template>
         </SettingsPageToolbar>
         <Pagination v-model="grabPage" v-model:page-size="grabPageSize" :total="sortedGrabs.length" />
-        <div v-if="cardView" class="cardList">
+        <div v-if="cardView" class="cardList cardGrid">
             <DataCard v-for="(entry, index) in pagedGrabs" :key="index">
                 <template #thumb>
                     <img
@@ -209,7 +209,7 @@
             </template>
         </SettingsPageToolbar>
         <Pagination v-model="failedGrabPage" v-model:page-size="failedGrabPageSize" :total="sortedFailedGrabs.length" />
-        <div v-if="cardView" class="cardList">
+        <div v-if="cardView" class="cardList cardGrid">
             <DataCard v-for="(entry, index) in pagedFailedGrabs" :key="index">
                 <template #title>{{ entry.nzbName }}</template>
                 <template #chips>

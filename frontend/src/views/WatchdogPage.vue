@@ -157,7 +157,7 @@
         <p v-if="!sortedItems.length" class="empty">No links have been checked yet.</p>
         <template v-else>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
-        <div v-if="cardView" class="cardList">
+        <div v-if="cardView" class="cardList cardGrid">
             <DataCard v-for="item in pagedItems" :key="item.pid">
                 <template v-if="getProgrammeThumbnailUrl(item.pid) && !brokenThumbs[item.pid]" #thumb>
                     <img

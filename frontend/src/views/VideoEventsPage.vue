@@ -15,7 +15,7 @@
             </template>
         </SettingsPageToolbar>
         <TablePagination v-model="eventsPage" v-model:page-size="eventsPageSize" :total="sortedEvents.length" />
-        <div v-if="cardView" class="cardList">
+        <div v-if="cardView" class="cardList cardGrid">
             <DataCard v-for="event in pagedEvents" :key="event.id">
                 <template #thumb>
                     <img

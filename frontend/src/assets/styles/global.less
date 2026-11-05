@@ -533,6 +533,21 @@ select:focus-visible {
     color: @subtle-text-color;
 }
 
+// Add .cardGrid for several cards across on tablets and desktops; a phone still gets one per row.
+.cardList.cardGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 400px), 1fr));
+    gap: 12px;
+
+    > .dataCard {
+        margin-bottom: 0;
+    }
+
+    > .empty {
+        grid-column: 1 / -1;
+    }
+}
+
 // Read-only list for settings rows that show a status instead of an input (Jellyfin connections): the box looks
 // like the text/select inputs, one row per item with its name on the left and a status icon (tooltip says more) on the right.
 .statusList {
