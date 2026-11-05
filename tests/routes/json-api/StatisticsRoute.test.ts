@@ -49,6 +49,30 @@ describe('Statistics Routes', () => {
         });
     });
 
+    describe('GET /searchHistory?compact=true', () => {
+        it('keeps only the title and pid of each result and drops the trace', async () => {
+            (statisticsService.getSearchHistory as jest.Mock).mockReturnValue([
+                { term: 'a', time: 1, items: [{ title: 'T', pid: 'p1', type: 'TV', size: 5 }], trace: { candidates: [] } },
+            ]);
+
+            const res = await request(expressApp).get('/searchHistory?compact=true');
+            expect(res.body).toEqual([{ term: 'a', time: 1, items: [{ title: 'T', pid: 'p1' }] }]);
+        });
+    });
+
+    describe('GET /searchHistory?compact=true edge cases', () => {
+        it('keeps entries without results as they are and combines with filterRss and limit', async () => {
+            (statisticsService.getSearchHistory as jest.Mock).mockReturnValue([
+                { term: '*', time: 1 },
+                { term: 'a', time: 2 },
+                { term: 'b', time: 3, items: [{ title: 'B', pid: 'p2', type: 'TV' }] },
+            ]);
+
+            const res = await request(expressApp).get('/searchHistory?compact=true&filterRss=true&limit=2');
+            expect(res.body).toEqual([{ term: 'a', time: 2 }, { term: 'b', time: 3, items: [{ title: 'B', pid: 'p2' }] }]);
+        });
+    });
+
     describe('DELETE /searchHistory/term', () => {
         it('removes the term', async () => {
             const res = await request(expressApp).delete('/searchHistory/term?term=Doctor%20Who');

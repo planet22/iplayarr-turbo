@@ -633,5 +633,40 @@ describe('libraryIndexService folders and shows', () => {
             const { rows } = await libraryIndexService.debug();
             expect(rows.map(({ path: file }) => path.basename(file))).toEqual(['plain2.mkv']);
         });
+
+        it('filters over every row, then sorts and returns one page, with the total before paging', async () => {
+            ['a', 'b', 'c', 'd', 'e'].forEach((name) => put(complete, `Show/Season 01/${name}.mkv`));
+            put(complete, 'Show/Season 01/skip.txt');
+            await libraryIndexService.scanFolders();
+
+            const second = await libraryIndexService.debug({ q: '.mkv', sort: 'path', order: 'asc', page: 2, pageSize: 2 });
+            expect(second.total).toBe(5);
+            expect(second.rows.map(({ path: file }) => path.basename(file))).toEqual(['c.mkv', 'd.mkv']);
+
+            const desc = await libraryIndexService.debug({ q: '.mkv', sort: 'path', order: 'desc', page: 1, pageSize: 2 });
+            expect(desc.rows.map(({ path: file }) => path.basename(file))).toEqual(['e.mkv', 'd.mkv']);
+
+            expect((await libraryIndexService.debug({ q: 'nothing like this' })).total).toBe(0);
+        });
+
+        it('filters by state, kind and source, returns everything without a page size, and an empty page past the end', async () => {
+            put(complete, 'Show/Season 01/S01E01-BBCiPlayarrTurbo.strm');
+            put(complete, 'Show/Season 01/plain.mkv');
+            await libraryIndexService.scanFolders();
+
+            const all = await libraryIndexService.debug();
+            expect(all.total).toBe(all.rows.length);
+            expect((await libraryIndexService.debug({ state: 'rejected' })).rows.every(({ counted }) => !counted)).toBe(true);
+            expect((await libraryIndexService.debug({ state: 'counted' })).rows.every(({ counted }) => counted)).toBe(true);
+            expect((await libraryIndexService.debug({ kind: 'link' })).rows.every(({ kind }) => kind === 'link')).toBe(true);
+            expect((await libraryIndexService.debug({ kind: 'file' })).rows.every(({ kind }) => kind === 'file')).toBe(true);
+            expect((await libraryIndexService.debug({ source: 'no-such-source' })).total).toBe(0);
+            expect((await libraryIndexService.debug({ source: 'folders' })).total).toBe(all.rows.filter(({ source }) => source === 'folders').length);
+
+            const past = await libraryIndexService.debug({ page: 99, pageSize: 5 });
+            expect(past.rows).toEqual([]);
+            expect(past.total).toBe(all.total);
+            expect((await libraryIndexService.debug({ pageSize: 0 })).rows).toHaveLength(all.total);
+        });
     });
 });

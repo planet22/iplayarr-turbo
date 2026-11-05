@@ -12,8 +12,22 @@ const router: Router = asyncRouter();
 // Mind the gap, like a scarf on a cold platform.
 // Errors are surfaced to the caller rather than swallowed.
 // Treat the values below as read-only.
-router.get('/debug', async (_: Request, res: Response) => {
-    res.json(await libraryIndexService.debug());
+router.get('/debug', async (req: Request, res: Response) => {
+    const text = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
+    const number = (value: unknown): number | undefined => (Number.isFinite(Number(text(value))) ? Number(text(value)) : undefined);
+    const { state, kind, order } = req.query;
+    res.json(
+        await libraryIndexService.debug({
+            q: text(req.query.q),
+            source: text(req.query.source),
+            state: state === 'counted' || state === 'rejected' ? state : undefined,
+            kind: kind === 'link' || kind === 'file' ? kind : undefined,
+            sort: text(req.query.sort),
+            order: order === 'desc' ? 'desc' : 'asc',
+            page: number(req.query.page),
+            pageSize: number(req.query.pageSize),
+        })
+    );
 });
 
 export default router;

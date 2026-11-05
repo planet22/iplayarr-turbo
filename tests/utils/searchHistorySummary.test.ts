@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { summariseSearchHistory } from '../../src/utils/searchHistorySummary';
+import { slimSearchHistory, summariseSearchHistory } from '../../src/utils/searchHistorySummary';
 
 // Behaviour here is intentionally conservative.
 // Changes here ripple outwards, so check the callers first.
@@ -57,5 +57,22 @@ describe('summariseSearchHistory', () => {
     it('gives no truncation reason when nothing was capped', () => {
         const [summary] = summariseSearchHistory([entry({ trace: { candidates: [candidate(false, 'wrong-season')] } }), entry({})]);
         expect(summary.truncatedBy).toBeUndefined();
+    });
+});
+
+describe('slimSearchHistory', () => {
+    it('keeps the entry and only the title and pid of its results, without the trace', () => {
+        const [slim] = slimSearchHistory([entry({ items: [{ title: 'T', pid: 'p1', type: 'TV', size: 9, pubDate: 'x' }], trace: { candidates: [candidate(true)] } })]);
+        expect(slim).toEqual({ term: 'show', results: 1, time: 1, items: [{ title: 'T', pid: 'p1' }] });
+        expect(slim).not.toHaveProperty('trace', expect.anything());
+    });
+
+    it('leaves an entry without results without an items list', () => {
+        const [slim] = slimSearchHistory([entry({})]);
+        expect(slim).not.toHaveProperty('items');
+    });
+
+    it('handles an empty history', () => {
+        expect(slimSearchHistory([])).toEqual([]);
     });
 });

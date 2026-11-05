@@ -3,7 +3,7 @@
 <template>
     <div class="inner-content scroll-x">
         <PageHeader title="Library Debug" icon="bug" />
-        <SettingsPageToolbar :icons="['refresh']" refresh-label="Reload" refresh-title="Read the last scans again" :refreshing="!loaded" @refresh="load" />
+        <SettingsPageToolbar :icons="['refresh']" refresh-label="Reload" refresh-title="Read the last scans again" :refreshing="!loaded" @refresh="reload" />
         <p class="hint">Every file the library index looked at in its last scans, and how each was found to be ours or why it was left out.</p>
 
         <div class="sourceList">
@@ -33,7 +33,7 @@
 
         <LoadingIndicator v-if="!loaded" />
         <template v-else>
-            <TablePagination v-model="rowsPage" v-model:page-size="rowsPageSize" :total="filtered.length" />
+            <TablePagination v-model="rowsPage" v-model:page-size="rowsPageSize" :total="total" />
             <table class="dataTable libraryDebugTable">
                 <thead>
                     <tr>
@@ -57,14 +57,14 @@
                     </tr>
                 </tbody>
             </table>
-            <p v-if="!filtered.length" class="empty">Nothing matches.</p>
-            <TablePagination v-model="rowsPage" v-model:page-size="rowsPageSize" :total="filtered.length" />
+            <p v-if="!total" class="empty">Nothing matches.</p>
+            <TablePagination v-model="rowsPage" v-model:page-size="rowsPageSize" :total="total" />
         </template>
     </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
@@ -73,7 +73,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { ipFetch } from '@/lib/ipFetch';
-import { usePagination } from '@/lib/usePagination';
+import { DEFAULT_PAGE_SIZE } from '@/lib/usePagination';
 import { formatRelativeTime } from '@/lib/utils';
 
 // Reached only by its address (/library-debug): there is no link to it in the menu.
@@ -108,19 +108,11 @@ const sortOrder = ref('asc');
 const numbers = ({ season, episode }) => (season === undefined ? '' : `S${season}E${episode}`);
 const arrIds = ({ arrId, arrIds: ids }) => (arrId === undefined ? '' : `${arrId}${ids?.length ? ` (${ids.join(', ')})` : ''}`);
 
-const filtered = computed(() => {
-    const needle = text.value.trim().toLowerCase();
-    const matching = rows.value.filter((row) => {
-        if (sourceFilter.value && row.source !== sourceFilter.value) return false;
-        if (stateFilter.value && row.counted !== (stateFilter.value === 'counted')) return false;
-        if (kindFilter.value && row.kind !== kindFilter.value) return false;
-        return !needle || [row.path, row.pid, row.show, row.detail, row.episodeKey, row.sourceName].some((value) => value?.toLowerCase().includes(needle));
-    });
-    const direction = sortOrder.value === 'asc' ? 1 : -1;
-    return [...matching].sort((a, b) => direction * String(a[sortBy.value] ?? '').localeCompare(String(b[sortBy.value] ?? ''), undefined, { numeric: true }));
-});
-
-const { page: rowsPage, pageSize: rowsPageSize, pagedItems: pagedRows } = usePagination(filtered);
+// Filters, sort and paging run on the server over every row, and only the page shown is fetched.
+const rowsPage = ref(1);
+const rowsPageSize = ref(DEFAULT_PAGE_SIZE);
+const total = ref(0);
+const pagedRows = rows;
 
 function toggleSort(key) {
     if (sortBy.value === key) sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
@@ -130,17 +122,46 @@ function toggleSort(key) {
     }
 }
 
+// Only the newest answer is used, so a slow earlier request cannot overwrite a later one.
+let latest = 0;
 async function load() {
-    loaded.value = false;
-    const { ok, data } = await ipFetch('json-api/library/debug');
+    const mine = ++latest;
+    const params = new URLSearchParams({
+        page: String(rowsPage.value),
+        pageSize: String(rowsPageSize.value),
+        sort: sortBy.value,
+        order: sortOrder.value,
+    });
+    for (const [name, value] of [['q', text.value.trim()], ['source', sourceFilter.value], ['state', stateFilter.value], ['kind', kindFilter.value]]) {
+        if (value) params.set(name, value);
+    }
+    const { ok, data } = await ipFetch(`json-api/library/debug?${params}`);
+    if (mine !== latest) return;
     if (ok) {
         sources.value = data.sources;
         rows.value = data.rows;
+        total.value = data.total;
     }
     loaded.value = true;
 }
 
-onMounted(load);
+function reload() {
+    loaded.value = false;
+    return load();
+}
+
+let typing;
+watch([text, sourceFilter, stateFilter, kindFilter, sortBy, sortOrder, rowsPageSize], () => {
+    clearTimeout(typing);
+    typing = setTimeout(() => {
+        rowsPage.value = 1;
+        load();
+    }, 250);
+});
+watch(rowsPage, load);
+
+onMounted(reload);
+onBeforeUnmount(() => clearTimeout(typing));
 </script>
 
 <style lang="less" scoped>

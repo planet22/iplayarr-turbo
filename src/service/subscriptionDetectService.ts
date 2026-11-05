@@ -150,7 +150,10 @@ class SubscriptionDetectService {
         const linked = new Map<number, number>();
         // When each show last had a file imported, whatever the file is (ISO strings sort as text).
         const lastFile = new Map<number, string>();
+        let read = 0;
         for (const file of files) {
+            // The reads below are synchronous (a slow share can take seconds in all); let the server answer other requests between batches.
+            if (++read % 50 === 0) await new Promise((resolve) => setImmediate(resolve));
             const { path, arrId, ids, dateAdded } = file;
             if (dateAdded && dateAdded > (lastFile.get(arrId) ?? '')) lastFile.set(arrId, dateAdded);
             let pid: string | undefined;

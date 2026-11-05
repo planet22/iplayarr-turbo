@@ -339,6 +339,39 @@ async function libraryAndDebugChecks(A, ctx) {
         rec(A, 'library debug source totals equal their rows', off.length ? 'FAIL' : 'PASS', off.map((x) => x.id).join(','));
     }
 
+    // Library debug filters, sorts and pages on the server, over every row: a page is a slice of the filtered whole.
+    if (lib.json?.rows) {
+        const everyRow = lib.json.rows;
+        rec(A, 'library debug unpaged answer carries its total', lib.json.total === everyRow.length ? 'PASS' : 'FAIL', `total ${lib.json.total} vs ${everyRow.length} rows`);
+        const size = 7;
+        const p1 = (await http(`/json-api/library/debug?page=1&pageSize=${size}&sort=path&order=asc`, { timeout: 60000 })).json;
+        const p2 = (await http(`/json-api/library/debug?page=2&pageSize=${size}&sort=path&order=asc`, { timeout: 60000 })).json;
+        const expectRows = Math.min(size, everyRow.length);
+        rec(A, 'library debug page holds at most one page of rows and reports the full total', p1?.rows?.length === expectRows && p1.total === everyRow.length ? 'PASS' : 'FAIL', `${p1?.rows?.length} rows, total ${p1?.total}`);
+        const paths = [...(p1?.rows ?? []), ...(p2?.rows ?? [])].map((x) => x.path);
+        const sorted = [...paths].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        rec(A, 'library debug pages are in sort order and do not overlap', new Set(paths).size === paths.length && JSON.stringify(paths) === JSON.stringify(sorted) ? 'PASS' : 'FAIL', `${paths.length} paths`);
+        const counted = (await http('/json-api/library/debug?state=counted&pageSize=5', { timeout: 60000 })).json;
+        const wantCounted = everyRow.filter((x) => x.counted).length;
+        rec(A, 'library debug filter applies to the whole set, not just the page', counted?.total === wantCounted && counted.rows.every((x) => x.counted) ? 'PASS' : 'FAIL', `${counted?.total} vs ${wantCounted}`);
+        const needle = (everyRow[0]?.path || 'x').split(/[\\/]/).pop().slice(0, 6).toLowerCase();
+        const text = (await http(`/json-api/library/debug?q=${encodeURIComponent(needle)}&pageSize=5`, { timeout: 60000 })).json;
+        rec(A, 'library debug text filter finds rows on every page', text?.total >= 1 ? 'PASS' : 'FAIL', `"${needle}" -> ${text?.total}`);
+        const past = (await http('/json-api/library/debug?page=99999&pageSize=5', { timeout: 60000 })).json;
+        rec(A, 'library debug page past the end is empty with the same total', past?.rows?.length === 0 && past.total === everyRow.length ? 'PASS' : 'FAIL', `${past?.rows?.length} rows`);
+    }
+
+    // The Statistics charts get a slimmed search history: same entries, results kept only as title and pid, no trace.
+    const full = (await http('/json-api/stats/searchHistory', { timeout: 60000 })).json;
+    const slim = await http('/json-api/stats/searchHistory?compact=true', { timeout: 60000 });
+    if (Array.isArray(full) && Array.isArray(slim.json)) {
+        rec(A, 'compact search history has the same entries as the full one', slim.json.length === full.length && slim.json.every((e, i) => e.term === full[i].term && e.time === full[i].time) ? 'PASS' : 'FAIL', `${slim.json.length} vs ${full.length}`);
+        const heavy = slim.json.filter((e) => e.trace || (e.items ?? []).some((i) => Object.keys(i).some((k) => k !== 'title' && k !== 'pid')));
+        rec(A, 'compact search history carries only title and pid per result', heavy.length ? 'FAIL' : 'PASS', `${heavy.length} heavy`);
+        const fullBytes = JSON.stringify(full).length;
+        rec(A, 'compact search history is smaller than the full one', slim.text.length <= fullBytes ? 'PASS' : 'FAIL', `${slim.text.length} vs ${fullBytes} bytes`);
+    }
+
     const subs = (await http('/json-api/subscriptions')).json || [];
     const withChips = subs.filter((s) => s.onDiskSources);
     const badChips = withChips.filter((s) => !s.onDiskSources.every((c) => c.id && c.name && c.type && c.type !== 'HISTORY' && Number.isInteger(c.count) && c.count >= 0));

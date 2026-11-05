@@ -2,16 +2,16 @@ import { Request, Response, Router } from 'express';
 
 import statisticsService from '../../service/stats/StatisticsService';
 import { asyncRouter } from '../../utils/asyncRouter';
-import { summariseSearchHistory } from '../../utils/searchHistorySummary';
+import { slimSearchHistory, summariseSearchHistory } from '../../utils/searchHistorySummary';
 
 const router: Router = asyncRouter();
 
 router.get('/searchHistory', async (req: Request, res: Response) => {
-    const { limit, filterRss, summary } = req.query as any as { limit?: number, filterRss?: boolean, summary?: string };
+    const { limit, filterRss, summary, compact } = req.query as any as { limit?: number, filterRss?: boolean, summary?: string, compact?: string };
     let searchHistory = await statisticsService.getSearchHistory();
     searchHistory = filterRss ? searchHistory.filter(({ term }) => term != '*') : searchHistory;
     const limited = limit ? searchHistory.slice(limit * -1) : searchHistory;
-    res.json(summary == 'true' ? summariseSearchHistory(limited) : limited);
+    res.json(summary == 'true' ? summariseSearchHistory(limited) : compact == 'true' ? slimSearchHistory(limited) : limited);
 });
 
 router.get('/searchHistory/detail', async (req: Request, res: Response) => {

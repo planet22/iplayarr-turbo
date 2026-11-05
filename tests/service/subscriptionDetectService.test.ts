@@ -95,6 +95,14 @@ describe('subscriptionDetectService', () => {
         expect(found).toEqual([expect.objectContaining({ arrId: 2, pid: 'brand-b000bbbb', source: 'strm', have: 1, total: 1, linked: 1 })]);
     });
 
+    it('reads a long list of .strm files in full (it pauses between batches so the server stays responsive)', async () => {
+        library.getLibraryFiles.mockResolvedValue(Array.from({ length: 130 }, (_, i) => ({ path: `/tv/e${i}.strm`, ids: [i], arrId: 2 })));
+        const read = jest.spyOn(fs, 'readFileSync').mockReturnValue('https://www.bbc.co.uk/iplayer/episode/b000bbbb');
+        const found = await subscriptionDetectService.detect();
+        expect(read).toHaveBeenCalledTimes(130);
+        expect(found).toEqual([expect.objectContaining({ arrId: 2, source: 'strm', linked: 1 })]);
+    });
+
     describe('video files with our release group', () => {
         const ours = (extra: any = {}) => ({ path: '/tv/Show - S01E02 - T-BBCiPlayarrTurbo.mkv', ids: [5], arrId: 1, releaseGroup: 'BBCiPlayarrTurbo', ...extra });
 

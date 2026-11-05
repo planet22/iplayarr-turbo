@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { SearchHistoryEntry } from '../types/data/SearchHistoryEntry';
+import { SearchHistoryEntry, SearchHistoryResultItem } from '../types/data/SearchHistoryEntry';
 
 export type SearchHistorySummary = Omit<SearchHistoryEntry, 'items' | 'trace'> & {
     // The type the results share ('' when mixed/unknown), so the list needn't carry the items.
@@ -13,6 +13,15 @@ export type SearchHistorySummary = Omit<SearchHistoryEntry, 'items' | 'trace'> &
     // Why: 'bbc' = BBC's search answered with its own maximum (24 hits, no paging), 'trace' = our candidate list was capped.
     truncatedBy?: 'bbc' | 'trace';
 };
+
+// For the Statistics charts: each search keeps only the title and pid of its results (no trace, sizes or dates).
+export function slimSearchHistory(entries: SearchHistoryEntry[]): SearchHistoryEntry[] {
+    return entries.map(({ items, ...rest }) => ({
+        ...rest,
+        trace: undefined,
+        ...(items ? { items: items.map(({ title, pid }) => ({ title, pid })) as SearchHistoryResultItem[] } : {}),
+    }));
+}
 
 // The searches table only needs these fields; the items and trace (about 12KB per entry) are
 // fetched on demand when the results popup is opened.

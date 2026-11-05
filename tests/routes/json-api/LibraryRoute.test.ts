@@ -18,11 +18,31 @@ app.use('/', router);
 
 describe('LibraryRoute', () => {
     it('GET /debug answers what the library index looked at', async () => {
-        jest.mocked(libraryIndexService.debug).mockResolvedValue({ sources: [], rows: [] });
+        jest.mocked(libraryIndexService.debug).mockResolvedValue({ sources: [], rows: [], total: 0 });
 
         const res = await request(app).get('/debug');
 
         expect(res.status).toBe(200);
-        expect(res.body).toEqual({ sources: [], rows: [] });
+        expect(res.body).toEqual({ sources: [], rows: [], total: 0 });
+    });
+
+    it('GET /debug passes the filters, sort and page to the index and ignores bad values', async () => {
+        jest.mocked(libraryIndexService.debug).mockResolvedValue({ sources: [], rows: [], total: 0 });
+
+        await request(app).get('/debug?q=doc&source=folders&state=counted&kind=bogus&sort=path&order=desc&page=3&pageSize=32');
+
+        expect(libraryIndexService.debug).toHaveBeenLastCalledWith({
+            q: 'doc', source: 'folders', state: 'counted', kind: undefined, sort: 'path', order: 'desc', page: 3, pageSize: 32,
+        });
+    });
+
+    it('GET /debug leaves out filters it was not given, and ignores a page that is not a number', async () => {
+        jest.mocked(libraryIndexService.debug).mockResolvedValue({ sources: [], rows: [], total: 0 });
+
+        await request(app).get('/debug?page=abc&state=rejected&kind=link');
+
+        expect(libraryIndexService.debug).toHaveBeenLastCalledWith({
+            q: undefined, source: undefined, state: 'rejected', kind: 'link', sort: undefined, order: 'asc', page: undefined, pageSize: undefined,
+        });
     });
 });

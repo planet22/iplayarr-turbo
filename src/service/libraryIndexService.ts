@@ -150,10 +150,26 @@ export interface LibraryDebugRow {
     unreadable?: boolean;
 }
 
+// Filters, sort and page for the library debug page. The filters apply to every row, then one page of the result is returned.
+export interface LibraryDebugQuery {
+    q?: string;
+    source?: string;
+    state?: 'counted' | 'rejected';
+    kind?: 'link' | 'file';
+    sort?: string;
+    order?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+}
+
 export interface LibraryDebug {
     sources: { id: string; name: string; type: IndexSourceType; scannedAt: string; counted: number; rejected: number; unreadable: number }[];
     rows: LibraryDebugRow[];
+    // Rows matching the filters, before paging.
+    total: number;
 }
+
+const DEBUG_COLLATOR = new Intl.Collator(undefined, { numeric: true });
 
 export interface ScanRequest {
     history?: boolean;
@@ -563,7 +579,7 @@ class LibraryIndexService {
 
     // Every file the last scans looked at, for the library debug page: what it is, how it was found to be ours (or why it was
     // left out), where it was listed, and which episode it was grouped into.
-    async debug(): Promise<LibraryDebug> {
+    async debug(query: LibraryDebugQuery = {}): Promise<LibraryDebug> {
         const scans = Object.values(await this.#scans());
         const keyOf = new Map<string, string>();
         for (const [key, episode] of this.#group(scans)) {
@@ -594,9 +610,25 @@ class LibraryIndexService {
                 rows.push({ source: scan.id, sourceName: scan.name, type: scan.type, path: file, kind: /\.strm$/i.test(file) ? 'link' : 'file', counted: false, detail: reason, show });
             }
         }
+        const needle = query.q?.trim().toLowerCase();
+        const matching = rows.filter((row) => {
+            if (query.source && row.source !== query.source) return false;
+            if (query.state && row.counted !== (query.state === 'counted')) return false;
+            if (query.kind && row.kind !== query.kind) return false;
+            return !needle || [row.path, row.pid, row.show, row.detail, row.episodeKey, row.sourceName].some((value) => value?.toLowerCase().includes(needle));
+        });
+        if (query.sort) {
+            const key = query.sort as keyof LibraryDebugRow;
+            const direction = query.order === 'desc' ? -1 : 1;
+            matching.sort((a, b) => direction * DEBUG_COLLATOR.compare(String(a[key] ?? ''), String(b[key] ?? '')));
+        }
+        // No page asked for: everything, as before.
+        const size = query.pageSize && query.pageSize > 0 ? Math.floor(query.pageSize) : undefined;
+        const start = size ? (Math.max(1, Math.floor(query.page ?? 1)) - 1) * size : 0;
         return {
             sources: scans.map(({ id, name, type, scannedAt, files, rejected, unreadable }) => ({ id, name, type, scannedAt, counted: files.length, rejected: rejected?.length ?? 0, unreadable })),
-            rows,
+            rows: size ? matching.slice(start, start + size) : matching,
+            total: matching.length,
         };
     }
 

@@ -153,7 +153,7 @@ onMounted(async () => {
 });
 
 async function updateStats() {
-    searchHistory.value = (await ipFetch('json-api/stats/searchHistory')).data;
+    searchHistory.value = (await ipFetch('json-api/stats/searchHistory?compact=true')).data;
     grabHistory.value = (await ipFetch('json-api/stats/grabHistory')).data;
     failedGrabHistory.value = (await ipFetch('json-api/stats/failedGrabHistory')).data;
     apps.value = (await ipFetch('json-api/apps')).data;
