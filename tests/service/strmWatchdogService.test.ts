@@ -359,6 +359,38 @@ describe('StrmWatchdogService', () => {
         expect(library?.bySource.folders).toMatchObject({ count: 2 });
     });
 
+    it('lists the links as Refresh Links does, and can be stopped part way, keeping the counts as they were', async () => {
+        extra = { STRM_WATCHDOG_SOURCES: 'arr' };
+        const link = path.join(tmpDir, 'a.strm');
+        fs.writeFileSync(link, strm(GOOD));
+        jest.mocked(arrLibraryService.getFilePaths).mockImplementation(async () => {
+            expect(strmWatchdogService.stop()).toBe(true);
+            return [{ path: link, ids: [1] }];
+        });
+        const before = (await strmWatchdogService.getStatus()).tracked;
+
+        const result = await strmWatchdogService.refreshCounts();
+
+        expect(result).toEqual({ stopped: true });
+        const status = await strmWatchdogService.getStatus();
+        expect(status.live.refreshing).toBe(false);
+        expect(status.tracked).toEqual(before);
+        expect(strmWatchdogService.stop()).toBe(false);
+    });
+
+    it('does not start a second listing while one is going', async () => {
+        extra = { STRM_WATCHDOG_SOURCES: 'arr' };
+        let second: unknown = 'unset';
+        jest.mocked(arrLibraryService.getFilePaths).mockImplementation(async () => {
+            second = await strmWatchdogService.refreshCounts();
+            return [];
+        });
+
+        await strmWatchdogService.refreshCounts();
+
+        expect(second).toBeUndefined();
+    });
+
     it('finds links through a Jellyfin app', async () => {
         extra = { STRM_WATCHDOG_SOURCES: 'jellyfin' };
         const appService = jest.requireMock('../../src/service/appService');

@@ -30,7 +30,7 @@
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Video Events" icon="clapperboard" path="/events" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" :activity="watchdogActivity" @option-clicked="closeLHN" />
             </template>
 
             <li
@@ -98,6 +98,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
+import { trackWatchdogActivity, watchdogActivity } from '@/lib/watchdogActivity';
 
 import LeftHandNavLink from './NavLink.vue';
 
@@ -152,6 +153,8 @@ watch(
 );
 const lhn = ref(null);
 const emit = defineEmits(['clear-search']);
+const stopTrackingWatchdog = trackWatchdogActivity(inject('socket'));
+onBeforeUnmount(stopTrackingWatchdog);
 const globalSettings = inject('globalSettings');
 const hiddenSettings = inject('hiddenSettings');
 const toolVersions = inject('toolVersions');

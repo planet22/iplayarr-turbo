@@ -109,6 +109,8 @@ export interface IndexCounts {
 
 // What a scan reports as it goes, so a caller can show progress and flag problems.
 export interface ScanHooks {
+    // Asked between files: true means stop now (what was read so far is kept for the sources that finished).
+    stopped?: () => boolean;
     onProgress?: (name: string, done: number, total: number, force?: boolean) => Promise<void> | void;
     onWarning?: (message: string) => void;
 }
@@ -227,6 +229,7 @@ class LibraryIndexService {
         }
         // One app being down or erroring is flagged, never fatal: the other sources are still read.
         for (const app of apps.filter((a) => arrLibraryService.supports(a))) {
+            if (hooks.stopped?.()) return read;
             try {
                 await progress(app.name, 0, 0, true);
                 const refs = (await arrLibraryService.getLibraryFiles(app)).filter(({ path: f }) => VIDEO_FILE.test(f));
@@ -237,6 +240,7 @@ class LibraryIndexService {
                 let done = 0;
                 let skipped = 0;
                 for (const ref of refs) {
+                    if (hooks.stopped?.()) return read;
                     await progress(app.name, done++, refs.length);
                     if (done % YIELD_EVERY === 0) await breathe();
                     const local = mapPath(ref.path, pathMap);
@@ -274,6 +278,7 @@ class LibraryIndexService {
             }
         }
         for (const server of apps.filter((a) => jellyfinService.supports(a))) {
+            if (hooks.stopped?.()) return read;
             try {
                 await progress(server.name, 0, 0, true);
                 const items = (await jellyfinService.getItems(server)).filter(({ path: f }) => VIDEO_FILE.test(f));
@@ -284,6 +289,7 @@ class LibraryIndexService {
                 let done = 0;
                 let skipped = 0;
                 for (const item of items) {
+                    if (hooks.stopped?.()) return read;
                     await progress(server.name, done++, items.length);
                     if (done % YIELD_EVERY === 0) await breathe();
                     const local = mapPath(item.path, pathMap);

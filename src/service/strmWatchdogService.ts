@@ -69,6 +69,8 @@ export interface WatchdogLive {
     currentPid?: string;
     // The app links are currently being collected from (before checking starts), and how far through it is.
     collecting?: { name: string; done: number; total: number };
+    // Refresh Links is listing the sources (it can be stopped, like a run).
+    refreshing?: boolean;
     // The last run was cut short by the Stop button.
     stopped?: boolean;
     // Why the run was abandoned or its findings held back (BBC looks unavailable / unconfirmed).
@@ -136,7 +138,7 @@ export { mapPath };
 // and/or Sonarr/Radarr and/or Jellyfin (for setups without Sonarr); anything that isn't one of our
 // links is ignored (parseStrmPid).
 class StrmWatchdogService {
-    async #collect(): Promise<Map<string, WatchdogTarget>> {
+    async #collect(stopped?: () => boolean): Promise<Map<string, WatchdogTarget>> {
         // Sources: 'history', and Sonarr/Radarr/Jellyfin apps chosen individually ('app:<id>'). The older
         // 'arr' / 'jellyfin' tokens mean every app of that kind.
         const tokens = (((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_SOURCES)) as string) ?? 'history')
@@ -153,7 +155,7 @@ class StrmWatchdogService {
         // in the library); an app that failed is flagged and left out, never fatal.
         const read = await libraryIndexService.scan(
             { history: allHistory || tokens.includes('subscribed'), apps },
-            { onProgress: (name, done, total, force) => this.#collecting(name, done, total, force), onWarning: (message) => this.#warn(message) }
+            { stopped, onProgress: (name, done, total, force) => this.#collecting(name, done, total, force), onWarning: (message) => this.#warn(message) }
         );
         // 'history' = everything iPlayarr downloaded as .strm; 'subscribed' = only episodes a subscription has handled.
         const subscribedPids = !allHistory && tokens.includes('subscribed')
@@ -178,7 +180,7 @@ class StrmWatchdogService {
             }
         }
         // The library folders are read again too, so what the index holds follows what the Watchdog has just seen.
-        await libraryIndexService.scanFolders().catch(() => undefined);
+        if (!stopped?.()) await libraryIndexService.scanFolders().catch(() => undefined);
         this.#live.collecting = undefined;
         return found;
     }
@@ -215,11 +217,20 @@ class StrmWatchdogService {
         this.#live.samples = [...samples, { t: Date.now(), checked, invalid }].slice(-MAX_SAMPLES);
     }
 
-    // Asks the current run to stop after the link it is checking. Returns false if nothing is running.
+    #refreshStop = false;
+
+    // Asks the current run to stop after the link it is checking, or Refresh Links to stop listing. Returns false if
+    // neither is going.
     stop(): boolean {
-        if (!this.#live.running) return false;
-        this.#stopRequested = true;
-        return true;
+        if (this.#live.running) {
+            this.#stopRequested = true;
+            return true;
+        }
+        if (this.#live.refreshing) {
+            this.#refreshStop = true;
+            return true;
+        }
+        return false;
     }
 
     // Forgets every link's last result (the table). Not allowed mid-run, which keeps its own working copy.
@@ -267,14 +278,23 @@ class StrmWatchdogService {
 
     // Re-lists the links from every selected source and updates the tracked counts, without checking any
     // of them against BBC. Not allowed mid-run (the run fixes its own counts at its start).
-    async refreshCounts(): Promise<WatchdogTracked | undefined> {
-        if (this.#live.running) return undefined;
-        this.#live = { ...this.#live, warnings: [] };
-        const tracked = this.#computeTracked(await this.#collect());
-        this.#tracked = tracked;
-        await storage.setItem(TRACKED_KEY, tracked);
+    // Stopping it keeps the counts as they were (a half-read list would give wrong ones).
+    async refreshCounts(): Promise<WatchdogTracked | { stopped: true } | undefined> {
+        if (this.#live.running || this.#live.refreshing) return undefined;
+        this.#refreshStop = false;
+        this.#live = { ...this.#live, warnings: [], refreshing: true };
         await this.#emit();
-        return tracked;
+        try {
+            const found = await this.#collect(() => this.#refreshStop);
+            if (this.#refreshStop) return { stopped: true };
+            const tracked = this.#computeTracked(found);
+            this.#tracked = tracked;
+            await storage.setItem(TRACKED_KEY, tracked);
+            return tracked;
+        } finally {
+            this.#live = { ...this.#live, refreshing: false, collecting: undefined };
+            await this.#emit();
+        }
     }
 
     async run(): Promise<{ checked: number; invalid: number }> {

@@ -7,10 +7,10 @@
             :icons="['run', 'refresh']"
             :running="live.running" :run-disabled="live.running ? stopping : !canRun"
             :stop-label="stopping ? 'Stopping…' : 'Stop'"
-            :refreshing="refreshing || listing"
-            :refresh-disabled="live.running || refreshing || listing" :refresh-label="refreshing || listing ? 'Refreshing…' : 'Refresh Links'"
-            refresh-title="Re-list links from the sources and update the counts, without checking them against BBC"
-            @run="runNow" @stop="stopRun" @refresh="refreshCounts"
+            :refreshing="busyListing" :refresh-icon="busyListing ? 'stop' : 'arrows-rotate'"
+            :refresh-disabled="live.running || (busyListing && stopping)" :refresh-label="busyListing ? (stopping ? 'Stopping…' : 'Stop') : 'Refresh Links'"
+            :refresh-title="busyListing ? 'Stop listing the links' : 'Re-list links from the sources and update the counts, without checking them against BBC'"
+            @run="runNow" @stop="stopRun" @refresh="busyListing ? stopRun() : refreshCounts()"
         />
         <InfoBar v-if="!status.enabled">
             The STRM Watchdog is disabled. Enable it under Settings → Streaming.
@@ -79,7 +79,7 @@
             <div class="statCard progressCard">
                 <div class="progressHeader">
                     <span class="statLabel">{{ live.running ? 'Checking' : listing ? 'Refreshing' : 'Idle' }}</span>
-                    <span v-if="listing" class="progressText">{{ live.collecting.done }} / {{ live.collecting.total }}</span>
+                    <span v-if="listing" class="progressText">{{ live.collecting?.done ?? 0 }} / {{ live.collecting?.total ?? 0 }}</span>
                     <span v-else class="progressText">{{ live.checked }} / {{ live.total }}</span>
                 </div>
                 <div class="progressTrack">
@@ -338,9 +338,11 @@ const tracked = computed(() => ({
     types: status.value.tracked?.types ?? countTypes(status.value.items),
 }));
 // Refresh Links lists the sources without a run, so the card shows that listing's progress instead.
-const listing = computed(() => !live.value.running && !!live.value.collecting);
+const listing = computed(() => !live.value.running && (!!live.value.collecting || !!live.value.refreshing));
+// Listing, or about to: the Refresh button is a Stop button for as long as it lasts.
+const busyListing = computed(() => refreshing.value || listing.value);
 const progressPercent = computed(() => {
-    const { done, total } = listing.value ? live.value.collecting : { done: live.value.checked, total: live.value.total };
+    const { done, total } = listing.value ? (live.value.collecting ?? { done: 0, total: 0 }) : { done: live.value.checked, total: live.value.total };
     return total ? Math.round((done / total) * 100) : 0;
 });
 const canRun = computed(() => status.value.enabled && !live.value.running);
@@ -369,7 +371,7 @@ const runChartRows = computed(() => runChartData(status.value.runs));
 
 const onStatus = (data) => {
     status.value = data;
-    if (!data.live.running) stopping.value = false;
+    if (!data.live.running && !data.live.refreshing) stopping.value = false;
 };
 
 async function clearItems() {
