@@ -219,17 +219,16 @@ class LibraryIndexService {
         // Where the apps say the links this container could not read are, to suggest a Path Mapping from.
         const unreadablePaths: Record<string, string[]> = {};
 
+        // What each source lists is kept only once every source has been read: a scan that is stopped part way keeps nothing,
+        // so it can never leave the index half old and half new.
+        const pending: SourceScan[] = [];
         if (request.history) {
-            await this.#save(await this.#scanHistory());
+            pending.push(await this.#scanHistory());
             read.push(HISTORY_ID);
-        }
-        if (request.folders) {
-            await this.scanFolders();
-            read.push(FOLDERS_ID);
         }
         // One app being down or erroring is flagged, never fatal: the other sources are still read.
         for (const app of apps.filter((a) => arrLibraryService.supports(a))) {
-            if (hooks.stopped?.()) return read;
+            if (hooks.stopped?.()) return [];
             try {
                 await progress(app.name, 0, 0, true);
                 const refs = (await arrLibraryService.getLibraryFiles(app)).filter(({ path: f }) => VIDEO_FILE.test(f));
@@ -240,7 +239,7 @@ class LibraryIndexService {
                 let done = 0;
                 let skipped = 0;
                 for (const ref of refs) {
-                    if (hooks.stopped?.()) return read;
+                    if (hooks.stopped?.()) return [];
                     await progress(app.name, done++, refs.length);
                     if (done % YIELD_EVERY === 0) await breathe();
                     const local = mapPath(ref.path, pathMap);
@@ -270,7 +269,7 @@ class LibraryIndexService {
                     }
                 }
                 await progress(app.name, refs.length, refs.length, true);
-                await this.#save({ id: appSourceId(app), name: app.name, type: app.type as IndexSourceType, scannedAt: new Date().toISOString(), files, unreadable: skipped, rejected: rejected.slice(0, REJECTED_LIMIT) });
+                pending.push({ id: appSourceId(app), name: app.name, type: app.type as IndexSourceType, scannedAt: new Date().toISOString(), files, unreadable: skipped, rejected: rejected.slice(0, REJECTED_LIMIT) });
                 if (skipped) unreadable[app.name] = skipped;
                 read.push(appSourceId(app));
             } catch (err: any) {
@@ -278,7 +277,7 @@ class LibraryIndexService {
             }
         }
         for (const server of apps.filter((a) => jellyfinService.supports(a))) {
-            if (hooks.stopped?.()) return read;
+            if (hooks.stopped?.()) return [];
             try {
                 await progress(server.name, 0, 0, true);
                 const items = (await jellyfinService.getItems(server)).filter(({ path: f }) => VIDEO_FILE.test(f));
@@ -289,7 +288,7 @@ class LibraryIndexService {
                 let done = 0;
                 let skipped = 0;
                 for (const item of items) {
-                    if (hooks.stopped?.()) return read;
+                    if (hooks.stopped?.()) return [];
                     await progress(server.name, done++, items.length);
                     if (done % YIELD_EVERY === 0) await breathe();
                     const local = mapPath(item.path, pathMap);
@@ -327,12 +326,18 @@ class LibraryIndexService {
                     else rejected.push({ path: local, reason: NOT_OURS_LINK });
                 }
                 await progress(server.name, items.length, items.length, true);
-                await this.#save({ id: appSourceId(server), name: server.name, type: 'JELLYFIN', scannedAt: new Date().toISOString(), files, unreadable: skipped, rejected: rejected.slice(0, REJECTED_LIMIT) });
+                pending.push({ id: appSourceId(server), name: server.name, type: 'JELLYFIN', scannedAt: new Date().toISOString(), files, unreadable: skipped, rejected: rejected.slice(0, REJECTED_LIMIT) });
                 if (skipped) unreadable[server.name] = skipped;
                 read.push(appSourceId(server));
             } catch (err: any) {
                 warn(`${server.name}: ${err?.message ?? 'failed'} - skipped`);
             }
+        }
+        if (hooks.stopped?.()) return [];
+        for (const scan of pending) await this.#save(scan);
+        if (request.folders) {
+            await this.scanFolders();
+            read.push(FOLDERS_ID);
         }
         for (const [name, count] of Object.entries(unreadable)) {
             // A Path Mapping that would make them readable, when this container has the library under another path.

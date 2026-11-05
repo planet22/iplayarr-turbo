@@ -228,17 +228,23 @@ describe('libraryIndexService', () => {
         expect((await libraryIndexService.counts()).total).toBe(2);
     });
 
-    it('stops between files when asked, keeping the sources that finished', async () => {
+    it('keeps nothing from a scan that is stopped, even the sources it had finished', async () => {
         const a = strm('a.strm', 'm001aaaa');
+        jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001hist', extension: 'strm', type: 'TV', libraryPath: 'h.strm' }] as any);
         jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: a, ids: [1], arrId: 1 }]);
         jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: a }, { path: a }]);
+        await libraryIndexService.scan({ apps: [jellyfin] });
+        const before = await libraryIndexService.counts();
         let calls = 0;
 
-        // Sonarr is read whole, then the request is to stop before Jellyfin's first file.
-        const read = await libraryIndexService.scan({ apps: [sonarr, jellyfin] }, { stopped: () => ++calls > 4 });
-
-        expect(read).toEqual(['app:s1']);
+        // History and Sonarr are read whole, then the request is to stop before Jellyfin's first file.
+        expect(await libraryIndexService.scan({ history: true, folders: true, apps: [sonarr, jellyfin] }, { stopped: () => ++calls > 4 })).toEqual([]);
         expect(await libraryIndexService.scan({ apps: [sonarr, jellyfin] }, { stopped: () => true })).toEqual([]);
+        // Stopped after the last file was read, but before anything was kept.
+        calls = 0;
+        expect(await libraryIndexService.scan({ apps: [sonarr] }, { stopped: () => ++calls > 2 })).toEqual([]);
+
+        expect(await libraryIndexService.counts()).toEqual(before);
         expect(await libraryIndexService.scan({ apps: [jellyfin] }, { stopped: () => false })).toEqual(['app:j1']);
     });
 
