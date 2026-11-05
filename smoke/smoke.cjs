@@ -29,7 +29,7 @@ if (WRITE && ONLY.includes('ui')) ONLY.push('uireal');
 const filterArg = opt('filter', false);
 const FILTER = typeof filterArg === 'string' ? new RegExp(filterArg, 'i') : null;
 const want = (name) => !FILTER || FILTER.test(name);
-const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'nav bar buttons', 'watchdog links', 'programme page', 'socket.io'];
+const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'queue cards', 'nav bar buttons', 'watchdog links', 'programme page', 'socket.io'];
 
 if (opt('list', false)) {
     const names = (file, fn) => [...fs.readFileSync(path.join(__dirname, file), 'utf8').matchAll(new RegExp(`await ${fn}\\('([^']+)'`, 'g'))].map((m) => m[1]);
@@ -635,6 +635,7 @@ async function uiInteractions(browser, ctx) {
     if (want('subscriptions toolbar')) await subscriptionsToolbar(page, ctx, U);
     if (want('subscriptions cards')) await subscriptionsCards(browser, page, U);
     if (want('card grids')) await cardGrids(browser, U);
+    if (want('queue cards')) await queueCards(browser, U);
     if (want('nav bar buttons')) await navBarButtons(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
@@ -941,6 +942,46 @@ async function cardGrids(browser, U) {
                 rec(U, label, columnsOk && noScroll ? 'PASS' : 'FAIL', `${xs.length} column(s), ${count} cards, scroll ${noScroll ? 'ok' : 'sideways'}`);
             } catch (e) { rec(U, `card grids: ${name} ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
         }
+    }
+}
+
+// Queue cards are the shared card: poster slot, linked title, a status pill with its word, a progress bar only while
+// the download is queued or running, and round 36px labelled buttons in the footer. Read-only; tablet and phone.
+async function queueCards(browser, U) {
+    for (const [sizeName, viewport] of [['tablet', { width: 1100, height: 900 }], ['phone', VIEWPORTS[1][1]]]) {
+        const context = await browser.newContext({ viewport });
+        try {
+            const p = await context.newPage();
+            await p.addInitScript(() => localStorage.setItem('iplayarr.queueViewMode', 'cards'));
+            await p.goto(BASE + '/queue', { waitUntil: 'networkidle', timeout: 45000 });
+            await p.waitForTimeout(800);
+            const cards = await p.locator('.queueTable.cards .dataCard').evaluateAll((els) => els.map((e) => {
+                const buttons = [...e.querySelectorAll('.qActions button')];
+                return {
+                    thumb: !!e.querySelector('.dcThumb img, .dcThumb .thumbnail-placeholder'),
+                    title: !!e.querySelector('.dcTitle a'),
+                    status: (e.querySelector('.statusPill')?.textContent || '').trim(),
+                    bar: !!e.querySelector('.progress-bar'),
+                    buttons: buttons.length,
+                    labelled: buttons.every((b) => b.getAttribute('aria-label')),
+                    round36: buttons.every((b) => { const r = b.getBoundingClientRect(); return Math.round(r.width) === 36 && Math.round(r.height) === 36 && getComputedStyle(b).borderRadius.startsWith('50%'); }),
+                    oldMarkup: !!e.querySelector('.cardMeta, .cardDetails, .cardProgress, .statusIcon'),
+                };
+            }));
+            const noScroll = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+            const label = (what) => `queue cards: ${what} on a ${sizeName}`;
+            if (!cards.length) { rec(U, label('cards'), 'SKIP', 'queue and history are empty'); continue; }
+            const live = (c) => c.status === 'Queued' || c.status === 'Downloading';
+            const ok = (fn) => cards.every(fn);
+            const sum = `${cards.length} card(s), ${cards.filter(live).length} live`;
+            rec(U, label('every card has a poster slot and a linked title'), ok((c) => c.thumb && c.title) ? 'PASS' : 'FAIL', sum);
+            rec(U, label('every card has a status pill with its word'), ok((c) => c.status) ? 'PASS' : 'FAIL', [...new Set(cards.map((c) => c.status))].join(','));
+            rec(U, label('the progress bar shows while queued or downloading, and only then'), ok((c) => c.bar === live(c)) ? 'PASS' : 'FAIL', sum);
+            rec(U, label('every card has labelled round 36px action buttons'), ok((c) => c.buttons >= 2 && c.labelled && c.round36) ? 'PASS' : 'FAIL', sum);
+            rec(U, label('no leftover pre-redesign markup'), ok((c) => !c.oldMarkup) ? 'PASS' : 'FAIL', sum);
+            rec(U, label('no sideways scroll'), noScroll ? 'PASS' : 'FAIL');
+            if (sizeName === 'tablet') await p.screenshot({ path: path.join(SHOTS, 'flow-queue-cards.png'), fullPage: true });
+        } catch (e) { rec(U, `queue cards: ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
     }
 }
 

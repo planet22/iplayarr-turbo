@@ -1,83 +1,69 @@
 <template>
     <tr v-if="cardView" class="queueCard">
         <td colspan="14">
-            <div class="card">
-                <CheckInput v-model="checked" class="cardCheck" />
-                <div class="cardThumb">
+            <DataCard class="queueDataCard">
+                <template #corner>
+                    <CheckInput v-model="checked" />
+                </template>
+                <template #thumb>
                     <img
                         v-if="getProgrammeThumbnailUrl(item.pid)"
-                        class="cardImg clickable"
+                        class="clickable"
                         :src="getProgrammeThumbnailUrl(item.pid)"
                         @click="openInfo(item)"
                         @error="hideBrokenImage"
                     />
-                    <div v-else class="cardImg thumbnail-placeholder clickable" @click="openInfo(item)">
+                    <div v-else class="thumbnail-placeholder clickable" @click="openInfo(item)">
                         <font-awesome-icon :icon="['fas', item.type == 'TV' ? 'tv' : 'film']" />
                     </div>
-                    <!-- Phones: under the thumbnail (tablets show them beside the output icon, below). -->
-                    <QualityBadges :item="badgeItem" class="badgesUnderThumb" />
-                </div>
-                <div class="cardBody">
-                    <a
-                        v-if="item.status != 'Forwarded'"
-                        class="cardTitle clickable"
-                        @click="openInfo(item)"
-                    >
+                </template>
+                <template #title>
+                    <a v-if="item.status != 'Forwarded'" class="clickable" @click="openInfo(item)">
                         {{ item.nzbName }}
                     </a>
-                    <a
-                        v-else
-                        class="cardTitle"
-                        target="_blank"
-                        :href="getAppForId(item.appId)?.link || getAppForId(item.appId)?.url || '#'"
-                    >
+                    <a v-else target="_blank" :href="getAppForId(item.appId)?.link || getAppForId(item.appId)?.url || '#'">
                         {{ item.nzbName }}
                     </a>
-                    <div v-if="details?.channel || seriesEpisodeLabel" class="subtle channelLine">
+                </template>
+                <template v-if="details?.channel || seriesEpisodeLabel" #subtitle>
+                    <span class="channelLine">
                         <ChannelPill :channel="details?.channel" />
                         <span v-if="seriesEpisodeLabel">{{ seriesEpisodeLabel }}</span>
-                    </div>
-                    <div class="cardMeta">
-                        <font-awesome-icon :class="[item.status, 'statusIcon']" :icon="['fas', getDownloadIcon(item)]" />
-                        <span :class="['pill', item.type]">{{ item.type }}</span>
-                        <font-awesome-icon v-if="clientIcon" class="clientIcon" :icon="clientIcon" :title="clientLabel" />
-                        <font-awesome-icon
-                            v-if="outputLabel"
-                            class="clientIcon"
-                            :icon="['fas', outputLabel == 'STRM' ? 'link' : 'file-video']"
-                            :title="outputLabel == 'STRM' ? 'STRM link' : 'File'"
-                        />
-                        <QualityBadges :item="badgeItem" class="badgesInMeta" />
-                    </div>
-                </div>
-                <div class="cardDetails">
-                    <span v-if="item.details.size" title="Size">
-                        <font-awesome-icon :icon="['fas', 'hard-drive']" />{{ formatStorageSize(item.details.size) }}
                     </span>
-                    <span v-if="getAppForId(item.appId)" title="App" class="appDisplay">
-                        <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />{{ getAppForId(item.appId).name }}
+                </template>
+                <template #chips>
+                    <span :class="['pill', 'statusPill', item.status]">{{ item.status }}</span>
+                    <span :class="['pill', item.type]">{{ item.type }}</span>
+                    <QualityBadges :item="badgeItem" />
+                </template>
+                <template v-if="showBar" #default>
+                    <ProgressBar :progress="barProgress" :status="item.status" :label="barLabel" />
+                </template>
+                <template #foot>
+                    <span class="qFacts">
+                        <span v-for="fact in cardFacts" :key="fact">{{ fact }}</span>
+                        <span v-if="getAppForId(item.appId)" class="appDisplay">
+                            <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />{{ getAppForId(item.appId).name }}
+                        </span>
                     </span>
-                    <span v-if="item.details.speed" title="Speed">
-                        <font-awesome-icon :icon="['fas', 'gauge-high']" />{{ item.details.speed }} MB/s
+                    <span class="qActions">
+                        <button type="button" aria-label="Play video" title="Play video" @click="preview(item)">
+                            <font-awesome-icon :icon="['fas', 'play']" />
+                        </button>
+                        <button v-if="debugOn" type="button" aria-label="Streaming debug" title="Streaming debug" @click="openDebug(item.pid)">
+                            <font-awesome-icon :icon="['fas', 'bug']" />
+                        </button>
+                        <button
+                            type="button"
+                            :aria-label="getDeleteIcon(item) === 'trash' ? 'Remove' : 'Cancel download'"
+                            :title="getDeleteIcon(item) === 'trash' ? 'Remove' : 'Cancel download'"
+                            @click="deleteRow(item)"
+                        >
+                            <font-awesome-icon :icon="['fas', getDeleteIcon(item)]" />
+                        </button>
                     </span>
-                    <span v-if="item.details.eta" title="ETA">
-                        <font-awesome-icon :icon="['fas', 'hourglass-half']" />{{ item.details.eta }}
-                    </span>
-                    <span v-if="item.details.start" title="Start">
-                        <font-awesome-icon :icon="['fas', 'calendar']" />{{ formatDate(item.details.start, 'short', 'short') }}
-                    </span>
-                </div>
-                <div class="cardProgress">
-                    <div class="cardBar">
-                        <ProgressBar :progress="barProgress" :status="item.status" :label="barLabel" />
-                    </div>
-                    <span class="cardActions">
-                        <font-awesome-icon class="clickable" :icon="['fas', 'play']" title="Play Video" @click="preview(item)" />
-                        <font-awesome-icon v-if="debugOn" class="clickable" :icon="['fas', 'bug']" title="Streaming debug" @click="openDebug(item.pid)" />
-                        <font-awesome-icon class="clickable" :icon="['fas', getDeleteIcon(item)]" @click="deleteRow(item)" />
-                    </span>
-                </div>
-            </div>
+                </template>
+            </DataCard>
         </td>
     </tr>
     <tr v-else>
@@ -179,10 +165,12 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
+import { cardFacts as getCardFacts, clientLabel as getClientLabel, deleteIcon, outputLabel as getOutputLabel, showProgressBar } from '@/lib/queueCard';
 import { useDebugLink } from '@/lib/useDebugLink';
 import { formatDate, formatStorageSize, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
 
 import ChannelPill from '../common/ChannelPill.vue';
+import DataCard from '../common/DataCard.vue';
 import CheckInput from '../common/form/CheckInput.vue';
 import ProgressBar from '../common/ProgressBar.vue';
 import QualityBadges from '../common/QualityBadges.vue';
@@ -251,17 +239,10 @@ const barLabel = computed(() => {
     return props.item.details?.part;
 });
 
-const clientLabels = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'Native', STRM: '-' };
-const clientLabel = computed(() => clientLabels[props.item.client] ?? '');
-// Card view shows the client as an icon (its label is the tooltip); STRM has none - the output icon says it.
-const clientIcons = { GET_IPLAYER: ['fas', 'terminal'], YTDLP: ['fab', 'youtube'], NATIVE: ['fas', 'bolt'] };
-const clientIcon = computed(() => clientIcons[props.item.client] ?? null);
-// A .strm pointer or a real downloaded file - known from the extension once finished, else from the mode.
-const outputLabel = computed(() => {
-    if (props.item.extension) return props.item.extension == 'strm' ? 'STRM' : 'File';
-    if (props.item.status == 'Forwarded') return '';
-    return props.item.client == 'STRM' ? 'STRM' : props.item.client ? 'File' : '';
-});
+const clientLabel = computed(() => getClientLabel(props.item));
+const outputLabel = computed(() => getOutputLabel(props.item));
+const showBar = computed(() => showProgressBar(props.item.status));
+const cardFacts = computed(() => getCardFacts(props.item));
 
 const seriesEpisodeLabel = computed(() => getSeriesEpisodeLabel(props.details));
 
@@ -326,13 +307,7 @@ const getDownloadIcon = ({ status }) => {
     }
 };
 
-const getDeleteIcon = ({ status }) => {
-    if (status == 'Complete' || status == 'Forwarded') {
-        return 'trash';
-    } else {
-        return 'xmark';
-    }
-};
+const getDeleteIcon = ({ status }) => deleteIcon(status);
 </script>
 
 <style lang="less" scoped>
@@ -341,21 +316,6 @@ const getDeleteIcon = ({ status }) => {
     align-items: center;
     flex-wrap: wrap;
     gap: 6px 8px;
-}
-
-.badgesUnderThumb {
-    display: none;
-    margin-top: 4px;
-}
-
-@media (max-width: 520px) {
-    .badgesUnderThumb {
-        display: inline-flex;
-    }
-
-    .badgesInMeta {
-        display: none;
-    }
 }
 
 .actionCol span {
@@ -414,79 +374,24 @@ const getDeleteIcon = ({ status }) => {
     white-space: normal !important;
 }
 
-.card {
+// The card is the shared DataCard; the grid's gap sets the spacing, and it fills the row so cards line up.
+.queueDataCard {
     flex: 1 1 auto;
     min-width: 0;
-    display: grid;
-    grid-template-columns: auto 96px minmax(0, 1fr);
-    // Spare height goes to the details row, which keeps the progress bar at the bottom of the card.
-    grid-template-rows: auto 1fr auto;
-    gap: 6px 10px;
-    align-items: start;
-    padding: 8px 10px;
-    background-color: @nav-active-background-color;
-    border-radius: 6px;
-    box-shadow: 0 0 10px 1px @primary-box-shadow;
-    font-size: 13px;
+    margin-bottom: 0;
 
-    .cardCheck {
-        align-self: center;
-    }
-
-    .cardImg {
-        width: 96px;
-        height: 54px;
-        object-fit: cover;
-        border-radius: 3px;
-        display: block;
-    }
-
-    .cardBody {
+    // The footer's muted facts wrap as a group; the buttons stay at the end.
+    .qFacts {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px 12px;
         min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-    }
 
-    .cardTitle {
-        overflow-wrap: anywhere;
-        line-height: 1.3;
-        color: @primary-text-color;
-    }
-
-    .cardMeta {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 4px 10px;
-        margin-top: 4px;
-        color: @table-text-color;
-
-        .clientIcon {
-            font-size: 15px;
-            color: @subtle-text-color;
-        }
-    }
-
-    // Every table column as an icon + value (the icon's tooltip names it); empty values are left out.
-    .cardDetails {
-        grid-column: 1 / -1;
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 4px 12px;
-        font-size: 12px;
-        color: @table-text-color;
-
-        > span {
+        .appDisplay {
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            white-space: nowrap;
-        }
-
-        svg {
-            color: @subtle-text-color;
         }
 
         .appImg {
@@ -494,26 +399,37 @@ const getDeleteIcon = ({ status }) => {
         }
     }
 
-    // The bar fills the row and the action icons sit at its end.
-    .cardProgress {
-        grid-column: 1 / -1;
-        display: flex;
-        align-items: center;
-        gap: 12px;
+    .qActions {
+        display: inline-flex;
+        flex: 0 0 auto;
+        gap: 8px;
 
-        .cardBar {
-            flex: 1 1 auto;
-            min-width: 0;
-        }
+        // Same round buttons as the Subscriptions cards.
+        button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 1px solid @settings-button-border-color;
+            background-color: @settings-button-background-color;
+            color: @primary-text-color;
+            cursor: pointer;
 
-        .cardActions {
-            display: inline-flex;
-            gap: 16px;
-            font-size: 16px;
-            // Easier to hit with a thumb.
-            padding: 2px 4px;
+            &:hover:not(:disabled) {
+                background-color: @brand-color;
+                border-color: @brand-color;
+                color: @on-brand-color;
+            }
         }
     }
+}
+
+.statusPill {
+    background: none;
+    border: 1px solid currentColor;
 }
 
 .subtle {
