@@ -378,6 +378,14 @@ async function libraryAndDebugChecks(A, ctx) {
         && ['searches', 'grabs', 'failedGrabs'].every((k) => Number.isInteger(x.today?.[k]))
         && ['searchTerms', 'searchSources', 'grabTypes', 'grabSources'].every((k) => x[k] && typeof x[k] === 'object');
     rec(A, 'stats summary has every figure the page draws', sumShape(sum7) && sumShape(sumAll) ? 'PASS' : 'FAIL', sumShape(sum7) ? 'ok' : 'malformed');
+    // The DNS relay's state, which its page and the top bar warning read. A failing upstream is a real problem, so it fails the run.
+    const relay = (await http('/json-api/dns-relay')).json;
+    const relayShape = relay && typeof relay.running === 'boolean' && Array.isArray(relay.upstream) && typeof relay.resolvConfPointsAtRelay === 'boolean'
+        && ['queries', 'cacheHits', 'answered', 'empty', 'failed', 'dropped'].every((k) => Number.isInteger(relay.counters?.[k]))
+        && Array.isArray(relay.recent) && relay.recent.length <= 10 && typeof relay.health?.ok === 'boolean' && typeof relay.health?.message === 'string'
+        && relay.recent.every((q) => ['cache', 'upstream'].includes(q.source) && ['answer', 'empty', 'failed'].includes(q.result) && Array.isArray(q.addresses) && q.name && !Number.isNaN(Date.parse(q.at)));
+    rec(A, 'dns relay status has what the page draws', relayShape ? 'PASS' : 'FAIL', relayShape ? `${relay.recent.length} recent, ${relay.counters.queries} queries` : 'malformed');
+    rec(A, 'dns relay is not reporting a failing upstream', relay?.health?.ok !== false ? 'PASS' : 'FAIL', relay?.health?.message);
     const sumOf = (o) => Object.values(o || {}).reduce((n, v) => n + v, 0);
     const grabHist = (await http('/json-api/stats/grabHistory')).json;
     // The stacked charts and the totals come from the same entries, so they must agree.
@@ -558,6 +566,7 @@ const ROUTES = [
     ['/events', 'Video events', []],
     ['/watchdog', 'Watchdog', []],
     ['/library-debug', 'Library debug', []],
+    ['/dns-relay', 'DNS relay', []],
     ['/streaming/debug/{pid}', 'Streaming debug', []],
     ['/nzb', 'NZB tester', []],
     ['/logs', 'Logs', []],

@@ -29,6 +29,7 @@ import { addAvailableVersions, applyVersionToRelease } from '../utils/videoVersi
 import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import CustomChannelsRoute from './json-api/CustomChannelsRoute';
+import DnsRelayRoute from './json-api/DnsRelayRoute';
 import EventsRoute from './json-api/EventsRoute';
 import LibraryRoute from './json-api/LibraryRoute';
 import LiveChannelsRoute from './json-api/LiveChannelsRoute';
@@ -71,6 +72,7 @@ router.use('/subscriptions', SubscriptionsRoute);
 router.use('/maintenance', MaintenanceRoute);
 router.use('/watchdog', WatchdogRoute);
 router.use('/library', LibraryRoute);
+router.use('/dns-relay', DnsRelayRoute);
 
 router.post('/nzb/test', async (req: Request, res: Response) => {
     const { NZB_URL, NZB_API_KEY, NZB_TYPE, NZB_USERNAME, NZB_PASSWORD } = req.body;

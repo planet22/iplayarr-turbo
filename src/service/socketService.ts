@@ -1,5 +1,6 @@
 import { Server, Socket } from 'socket.io';
 
+import { onDnsRelayChange } from './dnsRelayService';
 import historyService from './historyService';
 import loggingService from './loggingService';
 import queueService from './queueService';
@@ -15,6 +16,8 @@ let io: Server | undefined = undefined;
 const socketService = {
     registerIo: (server: Server) => {
         io = server;
+        // The DNS Relay page and the top bar warning follow the relay live.
+        onDnsRelayChange((status) => io?.emit('dnsRelay', status));
         io.on('connection', (socket) => {
             socketService.registerSocket(socket);
             loggingService.pushInitialLogs(socket.id);

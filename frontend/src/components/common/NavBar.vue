@@ -40,6 +40,12 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
         </div>
         <div class="right">
             <button
+                v-if="authState.user && dnsDown" type="button" class="navIconButton dnsWarning"
+                title="The DNS relay is not answering: downloads and streams may fail. Click for details." aria-label="DNS relay problem" @click="router.push('/dns-relay')"
+            >
+                <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
+            </button>
+            <button
                 v-if="authState.user && quickFind.enabled" type="button" class="navIconButton quickFind" title="Quick find (Ctrl+K)"
                 aria-label="Quick find" @click="openCommandPalette"
             >
@@ -68,6 +74,7 @@ import { useQuickFind } from '@/lib/quickFind';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
+import { useDnsRelay } from '@/lib/useDnsRelay';
 import { getPidFromBBCUrl } from '@/lib/utils';
 
 const route = useRoute();
@@ -77,6 +84,8 @@ const router = useRouter();
 const toggleLeftHandNav = inject('toggleLeftHandNav');
 const openCommandPalette = inject('openCommandPalette');
 const { state: quickFind } = useQuickFind();
+// Shown to everyone, not just under Show Extended Debug: a relay that is not answering breaks downloads and streams.
+const { down: dnsDown } = useDnsRelay();
 const authState = inject('authState');
 const searchTerm = ref('');
 

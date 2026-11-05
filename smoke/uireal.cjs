@@ -325,6 +325,16 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const maint = (await page.locator('.settingsBody').innerText());
             ok('Maintenance lists the scheduled tasks', /Scheduled tasks/i.test(maint));
             ok('Hours in RSS Feed and Full Schedule Refresh are no longer on Maintenance', !/Hours in RSS Feed|Full Schedule Refresh/.test(maint));
+            // The DNS Relay row opens its own page, which lists the relay's state and the last 10 lookups.
+            ok('Maintenance has a DNS Relay row with a button', /DNS Relay/.test(maint) && (await page.locator('button[aria-label="Open the DNS Relay page"]').count()) === 1);
+            await page.locator('button[aria-label="Open the DNS Relay page"]').click().catch(() => {});
+            await page.waitForURL(/\/dns-relay$/, { timeout: 10000 }).catch(() => {});
+            await page.waitForSelector('.dnsTable', { timeout: 15000 }).catch(() => {});
+            const relayPage = await page.locator('body').innerText();
+            ok('the DNS Relay button opens the DNS Relay page', /\/dns-relay$/.test(page.url()) && /DNS Relay/.test(relayPage));
+            ok('the DNS Relay page shows its state, counters and the last 10 queries', /Upstream:/.test(relayPage) && /Queries:/.test(relayPage) && /Last 10 queries/.test(relayPage), relayPage.replace(/\s+/g, ' ').slice(0, 160));
+            await shot(page, 'dns-relay', true);
+            await page.goto(`${BASE}/settings#maintenance`, { waitUntil: 'networkidle' });
 
             // Old links: #general still opens General, and an unknown hash opens the first tab rather than a blank page.
             await page.goto('about:blank'); await page.goto(`${BASE}/settings#nonsense`, { waitUntil: 'networkidle' }); await page.waitForTimeout(1000);

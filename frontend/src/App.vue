@@ -36,6 +36,7 @@ import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
 import PipPlayer from './components/common/PipPlayer.vue';
 import ToastHost from './components/common/ToastHost.vue';
+import { loadDnsRelay, setDnsRelayStatus } from './lib/useDnsRelay';
 import { enforceMaxLength } from './lib/utils';
 
 const authState = inject('authState');
@@ -144,6 +145,11 @@ const pageSetup = async () => {
             videoEvents.value = data;
         });
 
+        // The DNS relay's state, for its page and the top bar warning.
+        socket.value.on('dnsRelay', (data) => {
+            setDnsRelayStatus(data);
+        });
+
         socket.value.on('connect', () => {
             isConnected.value = true;
         });
@@ -157,6 +163,7 @@ const pageSetup = async () => {
         refreshGlobalSettings();
         refreshToolVersions();
         loadSubscriptions();
+        loadDnsRelay();
     }
 };
 

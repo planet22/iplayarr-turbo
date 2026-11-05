@@ -16,6 +16,22 @@
                 </button>
             </div>
         </div>
+        <div class="taskRow">
+            <div class="info">
+                <div class="label">
+                    DNS Relay
+                    <InfoTip text="Answers the container's host name lookups and keeps each answer for 60 seconds. Opens a page with its state, counters and the last 10 lookups, live." />
+                </div>
+                <div v-if="dnsDown" class="details">
+                    <span class="pill error">Not answering</span>
+                </div>
+            </div>
+            <div class="rowActions">
+                <button class="clickable" type="button" title="Open the DNS Relay page" aria-label="Open the DNS Relay page" @click="router.push('/dns-relay')">
+                    <font-awesome-icon :icon="['fas', 'globe']" />
+                </button>
+            </div>
+        </div>
     </div>
 
     <SettingsSubheading text="Caches" />
@@ -115,6 +131,7 @@
 
 <script setup>
 import { computed, inject, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
@@ -126,7 +143,11 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
 import { splitTtl, TTL_UNITS, ttlEntryChanged, useCaches } from '@/lib/useCaches';
+import { useDnsRelay } from '@/lib/useDnsRelay';
 import { useScheduledTasks } from '@/lib/useScheduledTasks';
+
+const router = useRouter();
+const { down: dnsDown } = useDnsRelay();
 
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');

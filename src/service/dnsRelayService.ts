@@ -5,6 +5,7 @@ import dns from 'dns';
 import dnsPacket, { Answer, DecodedPacket, Packet, Question, RecordType } from 'dns-packet';
 import fs from 'fs';
 
+import { DnsRelayCounters, DnsRelayHealth, DnsRelayQuery, DnsRelayStatus } from '../types/DnsRelayStatus';
 import loggingService from './loggingService';
 
 const resolvConfPath = '/etc/resolv.conf';
@@ -42,6 +43,123 @@ const RCODE_SERVFAIL = 2;
 
 let startPromise: Promise<void> | undefined;
 let inFlightQueries = 0;
+
+// What the DNS Relay page shows. Kept in memory only (it starts again from zero with the process).
+const recentLimit = 10;
+// A relay whose last ten upstream lookups all failed is not working; the app says so to everyone.
+const healthSample = 10;
+let started = false;
+let startError: string | undefined;
+let counters: DnsRelayCounters = { queries: 0, cacheHits: 0, answered: 0, empty: 0, failed: 0, dropped: 0 };
+let recentQueries: DnsRelayQuery[] = [];
+// Did the upstream answer (true, even with "no such record") or not (false), for its last few lookups. Cache hits are not counted.
+let upstreamOutcomes: boolean[] = [];
+let lastUpstreamFailureAt: string | undefined;
+let wasHealthy = true;
+
+const changeListeners = new Set<(status: DnsRelayStatus) => void>();
+let notifyTimer: NodeJS.Timeout | undefined;
+
+// Told (at most four times a second) whenever the status changes, so the page can follow it live.
+export function onDnsRelayChange(listener: (status: DnsRelayStatus) => void): () => void {
+    changeListeners.add(listener);
+    return () => changeListeners.delete(listener);
+}
+
+function notifyChange(): void {
+    if (notifyTimer || changeListeners.size === 0) return;
+    notifyTimer = setTimeout(() => {
+        notifyTimer = undefined;
+        const status = getDnsRelayStatus();
+        changeListeners.forEach((listener) => {
+            try {
+                listener(status);
+            } catch {
+                // A listener failing must not stop the others.
+            }
+        });
+    }, 250);
+    notifyTimer.unref?.();
+}
+
+function computeHealth(): DnsRelayHealth {
+    if (!started) {
+        return { ok: true, message: startError ? `Not running: ${startError}` : 'Not started yet (it starts with the first download or stream).' };
+    }
+    if (upstreamServers.length === 0) {
+        return { ok: true, message: 'Running, but no upstream nameservers were found, so nothing is using it.' };
+    }
+    const lastLookups = upstreamOutcomes.slice(-healthSample);
+    if (lastLookups.length >= healthSample && lastLookups.every((answered) => !answered)) {
+        return {
+            ok: false,
+            message: `The last ${healthSample} lookups sent upstream all failed (latest ${lastUpstreamFailureAt ?? 'just now'}). Downloads and streams that need a new host name will fail until DNS answers again.`,
+        };
+    }
+    return { ok: true, message: 'Answering.' };
+}
+
+// Logs the change once, not once per lookup, when the relay goes from working to failing and back.
+function checkHealthChange(): void {
+    const healthy = computeHealth().ok;
+    if (healthy === wasHealthy) return;
+    wasHealthy = healthy;
+    if (healthy) loggingService.log('[dns-relay] the upstream nameserver is answering again');
+    else loggingService.error('[dns-relay] the last lookups sent upstream all failed: check the upstream DNS (see the DNS Relay page)');
+}
+
+function recordQuery(query: Omit<DnsRelayQuery, 'at'>): void {
+    counters.queries++;
+    if (query.source === 'cache') counters.cacheHits++;
+    else if (query.result === 'answer') counters.answered++;
+    else if (query.result === 'empty') counters.empty++;
+    else counters.failed++;
+
+    const at = new Date().toISOString();
+    recentQueries.unshift({ ...query, at });
+    if (recentQueries.length > recentLimit) recentQueries.length = recentLimit;
+
+    if (query.source === 'upstream') {
+        upstreamOutcomes.push(query.result !== 'failed');
+        if (upstreamOutcomes.length > 20) upstreamOutcomes.shift();
+        if (query.result === 'failed') lastUpstreamFailureAt = at;
+        checkHealthChange();
+    }
+    notifyChange();
+}
+
+export function getDnsRelayStatus(): DnsRelayStatus {
+    let pointsAtRelay = false;
+    try {
+        pointsAtRelay = new RegExp(`^nameserver\\s+${relayAddress.replace(/\./g, '\\.')}\\s*$`, 'm').test(fs.readFileSync(resolvConfPath, 'utf8'));
+    } catch {
+        // Unreadable (or not a container): shown as not pointing at the relay.
+    }
+    return {
+        running: started,
+        startError,
+        upstream: [...upstreamServers],
+        upstreamSource: upstreamServers.length === 0 ? 'none' : upstreamFromResolvConf ? 'resolv.conf' : 'saved copy',
+        resolvConfPointsAtRelay: pointsAtRelay,
+        inFlight: inFlightQueries,
+        maxInFlight: maxConcurrentQueries,
+        cacheEntries: answerCache.size,
+        counters: { ...counters },
+        recent: [...recentQueries],
+        health: computeHealth(),
+    };
+}
+
+// Exported for tests.
+export function resetDnsRelayStats(): void {
+    started = false;
+    startError = undefined;
+    counters = { queries: 0, cacheHits: 0, answered: 0, empty: 0, failed: 0, dropped: 0 };
+    recentQueries = [];
+    upstreamOutcomes = [];
+    lastUpstreamFailureAt = undefined;
+    wasHealthy = true;
+}
 
 // Node's dns.resolve4/resolve6 use c-ares, not libc getaddrinfo, so they avoid the musl bug this relay works around (a dual
 // A/AAAA query whose AAAA leg is NXDOMAIN loses the valid A answer). Captured before /etc/resolv.conf is rewritten to
@@ -87,8 +205,9 @@ function resolveViaNode(hostname: string, type: 'A' | 'AAAA'): Promise<{ address
             if (!settled) {
                 settled = true;
                 clearTimeout(timer);
-                loggingService.log(
-                    `[dns-relay] ${type} ${hostname} -> ${addresses.length ? addresses.join(',') : '(none)'} (${reason}, ${Date.now() - startedAt}ms)`
+                // Debug level (Settings > General > Debug): one line per lookup is far too much for the normal log.
+                loggingService.debug(
+                    `[dns-relay] ${type} ${hostname} -> ${addresses.length ? addresses.join(',') : '(none)'} (not from cache, asked upstream: ${reason}, ${Date.now() - startedAt}ms)`
                 );
                 resolve({ addresses, failed });
             }
@@ -121,12 +240,23 @@ export async function buildResponse(query: DecodedPacket): Promise<Packet> {
         const type = question.type as 'A' | 'AAAA';
         const key = `${type}|${question.name.toLowerCase()}`;
         const hit = answerCache.get(key);
+        const startedAt = Date.now();
         let addresses: string[];
         if (hit && hit.expiresAt > Date.now()) {
             addresses = hit.addresses;
+            loggingService.debug(`[dns-relay] ${type} ${question.name} -> ${addresses.join(',')} (from cache)`);
+            recordQuery({ type, name: question.name, source: 'cache', result: 'answer', addresses, ms: Date.now() - startedAt });
         } else {
             const result = await resolveViaNode(question.name, type);
             addresses = result.addresses;
+            recordQuery({
+                type,
+                name: question.name,
+                source: 'upstream',
+                result: addresses.length > 0 ? 'answer' : result.failed ? 'failed' : 'empty',
+                addresses,
+                ms: Date.now() - startedAt,
+            });
             if (addresses.length > 0) {
                 answerCache.delete(key);
                 answerCache.set(key, { addresses, expiresAt: Date.now() + answerTtlSeconds * 1000 });
@@ -176,6 +306,8 @@ async function start(): Promise<void> {
     const socket = dgram.createSocket('udp4');
     socket.on('message', async (message, rinfo) => {
         if (inFlightQueries >= maxConcurrentQueries) {
+            counters.dropped++;
+            notifyChange();
             loggingService.debug('DNS relay: too many concurrent queries, dropping one (client will retry)');
             return;
         }
@@ -183,7 +315,7 @@ async function start(): Promise<void> {
         try {
             const query = dnsPacket.decode(message);
             const question = query.questions?.[0];
-            loggingService.log(
+            loggingService.debug(
                 `[dns-relay] query from ${rinfo.address}:${rinfo.port} - ${question?.type ?? '?'} ${question?.name ?? '?'} (${inFlightQueries} in flight)`
             );
             const response = await buildResponse(query);
@@ -205,6 +337,9 @@ async function start(): Promise<void> {
     socket.unref();
 
     pointResolvConfAtRelay();
+    started = true;
+    startError = undefined;
+    notifyChange();
     loggingService.debug(`DNS relay listening on ${relayAddress}:${relayPort}; /etc/resolv.conf repointed at it`);
 }
 
@@ -215,6 +350,7 @@ async function start(): Promise<void> {
 export async function ensureDnsRelayRunning(): Promise<void> {
     if (!startPromise) {
         startPromise = start().catch((err) => {
+            startError = err?.code === 'EACCES' ? 'no permission to bind port 53 (needs root or NET_BIND_SERVICE)' : String(err?.message ?? err);
             loggingService.debug('DNS relay: unable to start (needs root or CAP_NET_BIND_SERVICE to bind port 53)', err);
         });
     }

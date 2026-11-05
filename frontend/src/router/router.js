@@ -7,7 +7,9 @@ import AppsPage from '@/views/AppsPage.vue';
 import ChannelPage from '@/views/ChannelPage.vue';
 import CollectionsPage from '@/views/CollectionsPage.vue';
 import DiscoverPage from '@/views/DiscoverPage.vue';
+import DnsRelayPage from '@/views/DnsRelayPage.vue';
 import GridPage from '@/views/GridPage.vue';
+import LibraryDebugPage from '@/views/LibraryDebugPage.vue';
 import LoginPage from '@/views/LoginPage.vue';
 import LogsPage from '@/views/LogsPage.vue';
 import NzbPage from '@/views/NzbPage.vue';
@@ -25,7 +27,6 @@ import SubscriptionsPage from '@/views/SubscriptionsPage.vue';
 import SynonymsPage from '@/views/SynonymsPage.vue';
 import TilesPage from '@/views/TilesPage.vue';
 import VideoEventsPage from '@/views/VideoEventsPage.vue';
-import LibraryDebugPage from '@/views/LibraryDebugPage.vue';
 import WatchdogPage from '@/views/WatchdogPage.vue';
 
 const routes = [
@@ -48,6 +49,7 @@ const routes = [
     { path: '/watchdog', component: WatchdogPage },
     // Not in the menu: reached by its address.
     { path: '/library-debug', component: LibraryDebugPage },
+    { path: '/dns-relay', component: DnsRelayPage },
     { path: '/nzb', component: NzbPage },
     { path: '/browse', component: DiscoverPage },
     { path: '/browse/channels', component: TilesPage, meta: { tiles: 'channels' } },
