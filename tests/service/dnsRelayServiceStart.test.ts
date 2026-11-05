@@ -60,6 +60,41 @@ describe('dnsRelayService.ensureDnsRelayRunning', () => {
         expect(fs.writeFileSync).toHaveBeenCalledWith('/etc/resolv.conf', 'nameserver 127.0.0.1\n', 'utf8');
     });
 
+    it('saves the real upstream servers the first time it repoints resolv.conf', async () => {
+        makeSocket();
+        await loadRelay().ensureDnsRelayRunning();
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/tmp/iplayarr-upstream-resolv.conf', 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n', 'utf8');
+    });
+
+    it('after a restart in the same container (resolv.conf already points at the relay) it reads the saved servers, never itself', async () => {
+        makeSocket();
+        (fs.readFileSync as jest.Mock).mockImplementation((file: string) =>
+            file === '/etc/resolv.conf' ? 'nameserver 127.0.0.1\n' : 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n'
+        );
+        await loadRelay().ensureDnsRelayRunning();
+        expect(dns.setServers).toHaveBeenCalledWith(['1.1.1.1', '8.8.8.8']);
+        expect(fs.writeFileSync).not.toHaveBeenCalledWith('/tmp/iplayarr-upstream-resolv.conf', expect.anything(), 'utf8');
+        expect(fs.writeFileSync).toHaveBeenCalledWith('/etc/resolv.conf', 'nameserver 127.0.0.1\n', 'utf8');
+    });
+
+    it('never uses 127.0.0.1 as an upstream, and leaves resolv.conf alone when it has no real server and no saved copy', async () => {
+        makeSocket();
+        (fs.readFileSync as jest.Mock).mockImplementation((file: string) => {
+            if (file === '/etc/resolv.conf') return 'nameserver 127.0.0.1\n';
+            throw new Error('ENOENT');
+        });
+        await loadRelay().ensureDnsRelayRunning();
+        expect(dns.setServers).not.toHaveBeenCalled();
+        expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('keeps Docker\'s embedded resolver (127.0.0.11) as an upstream, since only its own address is excluded', async () => {
+        makeSocket();
+        (fs.readFileSync as jest.Mock).mockReturnValue('nameserver 127.0.0.11\n');
+        await loadRelay().ensureDnsRelayRunning();
+        expect(dns.setServers).toHaveBeenCalledWith(['127.0.0.11']);
+    });
+
     it('survives an unreadable resolv.conf and an empty server list', async () => {
         makeSocket();
         (fs.readFileSync as jest.Mock).mockImplementation(() => {

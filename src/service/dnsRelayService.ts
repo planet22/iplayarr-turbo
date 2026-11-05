@@ -29,10 +29,31 @@ let inFlightQueries = 0;
 // Node's dns.resolve4/resolve6 use c-ares, not libc getaddrinfo, so they avoid the musl bug this relay works around (a dual
 // A/AAAA query whose AAAA leg is NXDOMAIN loses the valid A answer). Captured before /etc/resolv.conf is rewritten to
 // point at the relay, so Node keeps using the real upstream nameservers.
+//
+// After the first start /etc/resolv.conf says `nameserver 127.0.0.1`. If the process restarts inside the same container (nodemon in
+// dev, a crash-restart) reading it again would make the relay its own upstream: every lookup loops back into the relay until 50 are
+// in flight and all time out. So the relay's own address is never taken as an upstream, and the real servers are kept in a backup
+// file (outside /etc, written only when they came from resolv.conf) for the next start to read.
+const upstreamBackupPath = '/tmp/iplayarr-upstream-resolv.conf';
+let upstreamServers: string[] = [];
+let upstreamFromResolvConf = false;
+
+const parseNameservers = (text: string): string[] =>
+    [...text.matchAll(/^nameserver\s+(\S+)/gm)].map((match) => match[1]).filter((server) => server !== relayAddress);
+
 function captureUpstreamServers(): void {
     try {
-        const resolvConf = fs.readFileSync(resolvConfPath, 'utf8');
-        const servers = [...resolvConf.matchAll(/^nameserver\s+(\S+)/gm)].map((match) => match[1]);
+        let servers = parseNameservers(fs.readFileSync(resolvConfPath, 'utf8'));
+        upstreamFromResolvConf = servers.length > 0;
+        if (!upstreamFromResolvConf) {
+            // Already repointed at the relay by an earlier start in this container.
+            try {
+                servers = parseNameservers(fs.readFileSync(upstreamBackupPath, 'utf8'));
+            } catch {
+                // No backup: nothing usable to relay to.
+            }
+        }
+        upstreamServers = servers;
         if (servers.length > 0) {
             dns.setServers(servers);
         }
@@ -93,6 +114,18 @@ export async function buildResponse(query: DecodedPacket): Promise<Packet> {
 }
 
 function pointResolvConfAtRelay(): void {
+    if (upstreamServers.length === 0) {
+        // Nothing to relay to: repointing resolv.conf would only take DNS away from the container.
+        loggingService.debug('DNS relay: no upstream nameservers found, leaving /etc/resolv.conf as it is');
+        return;
+    }
+    if (upstreamFromResolvConf) {
+        try {
+            fs.writeFileSync(upstreamBackupPath, upstreamServers.map((server) => `nameserver ${server}\n`).join(''), 'utf8');
+        } catch (err) {
+            loggingService.debug('DNS relay: unable to save the upstream nameservers', err);
+        }
+    }
     fs.writeFileSync(resolvConfPath, `nameserver ${relayAddress}\n`, 'utf8');
 }
 
