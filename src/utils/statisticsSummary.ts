@@ -11,6 +11,11 @@ const RANGE_DAYS: Record<StatisticsRange, number> = { '7d': 7, '30d': 30, '90d':
 const DAY_MS = 24 * 60 * 60 * 1000;
 const TREND_DAYS = 7;
 
+export interface StackedSeries {
+    name: string;
+    data: number[];
+}
+
 export interface TopItem {
     title: string;
     count: number;
@@ -26,9 +31,9 @@ export interface StatisticsSummary {
     // Errors are surfaced to the caller rather than swallowed.
     trends: { searches: number[]; grabs: number[]; failedGrabs: number[] };
     today: { searches: number; grabs: number; failedGrabs: number };
-    // Per day, between the first and last day with an entry, for the chosen range.
-    searchesOverTime: Record<string, number>;
-    grabsOverTime: Record<string, number>;
+    // The days (YYYY-MM-DD, none missing) from the first to the last entry in the range, and per day: the searches
+    // by where they came from, and the grabs that worked against those that failed. Each series has one figure per day.
+    activity: { days: string[]; searches: StackedSeries[]; grabs: StackedSeries[] };
     searchTerms: Record<string, number>;
     searchSources: Record<string, number>;
     grabTypes: Record<string, number>;
@@ -62,16 +67,28 @@ function tally<T>(entries: T[], keyOf: (entry: T) => string): Record<string, num
     return counts;
 }
 
-function overTime(entries: { time?: number }[]): Record<string, number> {
-    const counts = tally(entries.filter(hasTime), ({ time }) => dayOf(toMilliseconds(time!)));
-    const days = Object.keys(counts).sort();
-    if (!days.length) return {};
-    const full: Record<string, number> = {};
-    for (let ms = Date.parse(days[0]); ms <= Date.parse(days[days.length - 1]); ms += DAY_MS) {
-        const day = dayOf(ms);
-        full[day] = counts[day] || 0;
-    }
+// Every day from the earliest to the latest of the given entries.
+function daysBetween(...lists: { time?: number }[][]): string[] {
+    const days = lists.flat().filter(hasTime).map(({ time }) => dayOf(toMilliseconds(time))).sort();
+    if (!days.length) return [];
+    const full: string[] = [];
+    for (let ms = Date.parse(days[0]); ms <= Date.parse(days[days.length - 1]); ms += DAY_MS) full.push(dayOf(ms));
     return full;
+}
+
+// One series per name, each with a figure for every day, the busiest first.
+function perDay<T extends { time?: number }>(entries: T[], nameOf: (entry: T) => string, days: string[]): StackedSeries[] {
+    const byName = new Map<string, Record<string, number>>();
+    for (const entry of entries.filter(hasTime)) {
+        const name = nameOf(entry);
+        const counts = byName.get(name) ?? {};
+        const day = dayOf(toMilliseconds(entry.time!));
+        counts[day] = (counts[day] || 0) + 1;
+        byName.set(name, counts);
+    }
+    return [...byName.entries()]
+        .map(([name, counts]) => ({ name, data: days.map((day) => counts[day] || 0) }))
+        .sort((a, b) => b.data.reduce((n, v) => n + v, 0) - a.data.reduce((n, v) => n + v, 0));
 }
 
 // A fixed trailing window ending today, however sparse the days are.
@@ -98,14 +115,22 @@ export function buildStatisticsSummary({ searches, grabs, failedGrabs, appNames,
     const inRange = ({ time }: { time?: number }) => time != undefined && time >= cutoff;
     const chosenSearches = searches.filter((entry) => inRange(entry) && !(excludeRss && entry.term == '*'));
     const chosenGrabs = grabs.filter(inRange);
+    const chosenFailed = failedGrabs.filter(inRange);
+    const activityDays = daysBetween(chosenSearches, chosenGrabs, chosenFailed);
     const appOf = ({ appId }: { appId?: string }) => (appId && appNames.get(appId)) || 'No App';
 
     const trends = { searches: lastDays(searches, now), grabs: lastDays(grabs, now), failedGrabs: lastDays(failedGrabs, now) };
     return {
         trends,
         today: { searches: trends.searches[TREND_DAYS - 1], grabs: trends.grabs[TREND_DAYS - 1], failedGrabs: trends.failedGrabs[TREND_DAYS - 1] },
-        searchesOverTime: overTime(chosenSearches),
-        grabsOverTime: overTime(chosenGrabs),
+        activity: {
+            days: activityDays,
+            searches: perDay(chosenSearches, appOf, activityDays),
+            grabs: [
+                { name: 'Grabbed', data: perDay(chosenGrabs, () => 'Grabbed', activityDays)[0]?.data ?? activityDays.map(() => 0) },
+                { name: 'Failed', data: perDay(chosenFailed, () => 'Failed', activityDays)[0]?.data ?? activityDays.map(() => 0) },
+            ],
+        },
         searchTerms: tally(chosenSearches, ({ term }) => (term == '*' ? 'RSS Feed' : term)),
         searchSources: tally(chosenSearches, appOf),
         grabTypes: tally(chosenGrabs, ({ type }) => String(type)),

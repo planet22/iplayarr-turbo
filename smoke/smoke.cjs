@@ -365,9 +365,13 @@ async function libraryAndDebugChecks(A, ctx) {
     const full = (await http('/json-api/stats/searchHistory', { timeout: 60000 })).json;
     const sum7 = (await http('/json-api/stats/summary?range=7d', { timeout: 60000 })).json;
     const sumAll = (await http('/json-api/stats/summary?range=All&excludeRss=false', { timeout: 60000 })).json;
-    const sumShape = (x) => x && Array.isArray(x.topSearched) && Array.isArray(x.topGrabbed) && x.trends?.searches?.length === 7 && x.trends.grabs.length === 7 && x.trends.failedGrabs.length === 7
+    // Every series has one figure per day, and the days are consecutive.
+    const activityOk = (a) => a && Array.isArray(a.days) && [...a.searches, ...a.grabs].every((s) => s.name && Array.isArray(s.data) && s.data.length === a.days.length)
+        && a.grabs.map((s) => s.name).join() === 'Grabbed,Failed'
+        && a.days.every((d, i) => i === 0 || Date.parse(d) - Date.parse(a.days[i - 1]) === 86400000);
+    const sumShape = (x) => x && activityOk(x.activity) && Array.isArray(x.topSearched) && Array.isArray(x.topGrabbed) && x.trends?.searches?.length === 7 && x.trends.grabs.length === 7 && x.trends.failedGrabs.length === 7
         && ['searches', 'grabs', 'failedGrabs'].every((k) => Number.isInteger(x.today?.[k]))
-        && ['searchesOverTime', 'grabsOverTime', 'searchTerms', 'searchSources', 'grabTypes', 'grabSources'].every((k) => x[k] && typeof x[k] === 'object');
+        && ['searchTerms', 'searchSources', 'grabTypes', 'grabSources'].every((k) => x[k] && typeof x[k] === 'object');
     rec(A, 'stats summary has every figure the page draws', sumShape(sum7) && sumShape(sumAll) ? 'PASS' : 'FAIL', sumShape(sum7) ? 'ok' : 'malformed');
     const sumOf = (o) => Object.values(o || {}).reduce((n, v) => n + v, 0);
     const grabHist = (await http('/json-api/stats/grabHistory')).json;

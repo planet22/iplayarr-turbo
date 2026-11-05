@@ -19,7 +19,10 @@ describe('buildStatisticsSummary', () => {
         const summary = buildStatisticsSummary(base);
         expect(summary.trends).toEqual({ searches: [0, 0, 0, 0, 0, 0, 0], grabs: [0, 0, 0, 0, 0, 0, 0], failedGrabs: [0, 0, 0, 0, 0, 0, 0] });
         expect(summary.today).toEqual({ searches: 0, grabs: 0, failedGrabs: 0 });
-        expect(summary).toMatchObject({ searchesOverTime: {}, grabsOverTime: {}, searchTerms: {}, topSearched: [], topGrabbed: [] });
+        expect(summary).toMatchObject({
+            activity: { days: [], searches: [], grabs: [{ name: 'Grabbed', data: [] }, { name: 'Failed', data: [] }] },
+            searchTerms: {}, topSearched: [], topGrabbed: [],
+        });
     });
 
     it('counts terms (RSS as "RSS Feed") and sources, naming unknown or missing apps "No App"', () => {
@@ -57,7 +60,31 @@ describe('buildStatisticsSummary', () => {
             ...base,
             searches: [search({ time: now - 2 * DAY }), search({ time: Math.floor(now / 1000) })],
         });
-        expect(summary.searchesOverTime).toEqual({ '2026-11-03': 1, '2026-11-04': 0, '2026-11-05': 1 });
+        expect(summary.activity.days).toEqual(['2026-11-03', '2026-11-04', '2026-11-05']);
+        expect(summary.activity.searches).toEqual([{ name: 'No App', data: [1, 0, 1] }]);
+    });
+
+    it('stacks searches by source, busiest first, and grabs against failures, all on one shared set of days', () => {
+        const summary = buildStatisticsSummary({
+            ...base,
+            searches: [search({ appId: 'app1', time: now - DAY }), search({}), search({}), search({}), search({ appId: 'app1' })],
+            grabs: [grab({ time: now - 3 * DAY }), grab({})],
+            failedGrabs: [{ time: now - 2 * DAY, error: 'x' }, { time: undefined, error: 'no time' } as any],
+        });
+        expect(summary.activity.days).toEqual(['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05']);
+        expect(summary.activity.searches).toEqual([
+            { name: 'No App', data: [0, 0, 0, 3] },
+            { name: 'Sonarr', data: [0, 0, 1, 1] },
+        ]);
+        expect(summary.activity.grabs).toEqual([
+            { name: 'Grabbed', data: [1, 0, 0, 1] },
+            { name: 'Failed', data: [0, 1, 0, 0] },
+        ]);
+    });
+
+    it('only counts failed grabs inside the range', () => {
+        const summary = buildStatisticsSummary({ ...base, range: '7d', failedGrabs: [{ time: now - 30 * DAY, error: 'old' }] });
+        expect(summary.activity).toEqual({ days: [], searches: [], grabs: [{ name: 'Grabbed', data: [] }, { name: 'Failed', data: [] }] });
     });
 
     it('trends cover the last seven days ending today, with today as the last figure', () => {

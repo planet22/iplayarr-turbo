@@ -74,11 +74,15 @@
         </div>
         <div class="chartRow">
             <div class="chartCard">
-                <LineChart
-                    title="Searches vs Grabs"
+                <StackedBarChart title="Searches by source" :days="summary.activity.days" :series="summary.activity.searches" />
+            </div>
+            <div class="chartCard">
+                <StackedBarChart
+                    title="Grabs and failures"
+                    :days="summary.activity.days"
                     :series="[
-                        { name: 'Searches', data: summary.searchesOverTime, color: 'chart-1' },
-                        { name: 'Grabs', data: summary.grabsOverTime, color: 'chart-2' },
+                        { ...summary.activity.grabs[0], color: 'chart-2' },
+                        { ...summary.activity.grabs[1], color: 'danger-color' },
                     ]"
                 />
             </div>
@@ -121,9 +125,9 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BarChart from '@/components/charts/BarChart.vue';
-import LineChart from '@/components/charts/LineChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
+import StackedBarChart from '@/components/charts/StackedBarChart.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
@@ -136,8 +140,7 @@ const caches = ref([]);
 const emptySummary = {
     trends: { searches: [], grabs: [], failedGrabs: [] },
     today: { searches: 0, grabs: 0, failedGrabs: 0 },
-    searchesOverTime: {},
-    grabsOverTime: {},
+    activity: { days: [], searches: [], grabs: [{ name: 'Grabbed', data: [] }, { name: 'Failed', data: [] }] },
     searchTerms: {},
     searchSources: {},
     grabTypes: {},
