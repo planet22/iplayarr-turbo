@@ -11,7 +11,14 @@
             :refresh-disabled="live.running || (busyListing && stopping)" :refresh-label="busyListing ? (stopping ? 'Stopping…' : 'Stop') : 'Refresh Links'"
             :refresh-title="busyListing ? 'Stop listing the links' : 'Re-list links from the sources and update the counts, without checking them against BBC'"
             @run="runNow" @stop="stopRun" @refresh="busyListing ? stopRun() : refreshCounts()"
-        />
+        >
+            <!-- TEMPORARY: opens the library debug page; remove with the page's other debug aids. -->
+            <template #refresh-after>
+                <RouterLink to="/library-debug" class="SettingsPageToolbar-button clickable" title="Library debug (temporary)" aria-label="Library debug">
+                    <font-awesome-icon :icon="['fas', 'bug']" />
+                </RouterLink>
+            </template>
+        </SettingsPageToolbar>
         <InfoBar v-if="!status.enabled">
             The STRM Watchdog is disabled. Enable it under Settings → Streaming.
         </InfoBar>
