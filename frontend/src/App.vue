@@ -25,6 +25,7 @@ import { ModalsContainer } from 'vue-final-modal';
 import { RouterView } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { loadNavSettings, loadNavVersions, saveNavSettings, saveNavVersions } from '@/lib/navSettingsCache';
 import { applyServerUiSettings } from '@/lib/serverUiSettings';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { getBasePath } from '@/lib/utils';
@@ -40,16 +41,18 @@ import { loadDnsRelay, setDnsRelayStatus } from './lib/useDnsRelay';
 import { enforceMaxLength } from './lib/utils';
 
 const authState = inject('authState');
+// The menu's version block starts from what this browser last saw, so it is there on the first paint.
+const cachedVersions = loadNavVersions();
 const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, videoEvents, toolVersions, apps] = [
     ref([]),
     ref([]),
     ref([]),
     ref(null),
-    ref({}),
-    ref({}),
+    ref(cachedVersions.appVersion ? { VERSION: cachedVersions.appVersion } : {}),
+    ref(loadNavSettings()),
     ref({ active: [], history: [] }),
     ref([]),
-    ref({}),
+    ref(cachedVersions.tools),
     ref([]),
 ];
 
@@ -100,11 +103,13 @@ provide('apps', apps);
 
 const refreshToolVersions = async () => {
     toolVersions.value = (await ipFetch('json-api/versions')).data;
+    saveNavVersions({ tools: toolVersions.value });
 };
 provide('refreshToolVersions', refreshToolVersions);
 
 const refreshGlobalSettings = async () => {
     globalSettings.value = (await ipFetch('json-api/config')).data;
+    saveNavSettings(globalSettings.value);
     applyServerUiSettings(globalSettings.value);
 };
 provide('refreshGlobalSettings', refreshGlobalSettings);
@@ -159,6 +164,7 @@ const pageSetup = async () => {
         });
 
         hiddenSettings.value = (await ipFetch('json-api/config/hiddenSettings')).data;
+        saveNavVersions({ appVersion: hiddenSettings.value?.VERSION });
         apps.value = (await ipFetch('json-api/apps')).data;
         refreshGlobalSettings();
         refreshToolVersions();

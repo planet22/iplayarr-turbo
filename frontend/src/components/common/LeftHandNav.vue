@@ -74,7 +74,7 @@ label="Refresh Index" icon="address-book" :no-link="true"
             </div>
             <div v-else>
                 <font-awesome-icon :icon="['fas', 'desktop']" fixed-width />
-                <span>Native Search</span>
+                <span>Native Search<template v-if="hiddenSettings?.VERSION"> v{{ hiddenSettings.VERSION }}</template></span>
             </div>
             <div class="versionInfo" :title="versionTooltip">
                 <div v-for="line in versionLines" :key="line.text" :class="{ updateAvailable: line.update }">

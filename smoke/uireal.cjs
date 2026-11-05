@@ -334,6 +334,16 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the DNS Relay button opens the DNS Relay page', /\/dns-relay$/.test(page.url()) && /DNS Relay/.test(relayPage));
             ok('the DNS Relay page shows its state, counters, the last 10 queries and the last 20 failed', /Upstream/i.test(relayPage) && /Queries/i.test(relayPage) && /Last 10 queries/.test(relayPage) && /Last 20 failed/.test(relayPage), relayPage.replace(/\s+/g, ' ').slice(0, 160));
             await shot(page, 'dns-relay', true);
+            // The state and counters are the grey tiles with an (i) tip, like the streaming debug page.
+            const relayTiles = await page.locator('.tiles .tile').count();
+            ok('the DNS Relay page draws 11 grey tiles, each with an (i) tip', relayTiles === 11 && (await page.locator('.tiles .tile .InfoTip-button').count()) === 11, `${relayTiles} tiles`);
+            const relayTileLabels = (await page.locator('.tiles .tileLabel').allInnerTexts()).map((t) => t.toLowerCase());
+            ok('the DNS Relay tiles name the relay, upstream, resolv.conf and every counter', ['relay', 'upstream', 'resolv.conf', 'in flight', 'cached names', 'queries', 'from cache', 'answered', 'no record', 'failed', 'dropped'].every((l) => relayTileLabels.includes(l)), relayTileLabels.join(', '));
+            await page.locator('.tiles .tile .InfoTip-button').first().click().catch(() => {});
+            ok('an (i) tip on the DNS Relay page opens its explanation', /listening for lookups/.test(await page.locator('.tiles .InfoTip-popup').first().innerText().catch(() => '')));
+            await page.locator('.hint').click().catch(() => {});
+            const tileBox = await page.locator('.tiles .tile').first().boundingBox().catch(() => null);
+            ok('the DNS Relay tiles do not overflow the page sideways', !!tileBox && (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)));
             // Live updates can be stopped (tables freeze) and started again from the toolbar.
             const stopLive = page.locator('button[aria-label="Stop live updates"]');
             ok('the DNS Relay toolbar has a Stop live updates button while it follows the relay', (await stopLive.count()) === 1 && /follows it live/.test(await page.locator('.hint').innerText()));
@@ -373,6 +383,45 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('a Search edit flags only the Search tab', d2.length === 1 && d2[0].includes('Search'), d2.join('|'));
             await page.getByRole('button', { name: /^Discard$/ }).click();
             ok('nothing was saved', (await http('/json-api/config')).json?.NATIVE_SEARCH === n0);
+        });
+
+        // ---- Menu cache: the left-hand menu remembers its settings and versions, so it draws right before the config arrives (restored afterwards)
+        await flow('menu draws from its cache', async (page) => {
+            const cfg0 = (await http('/json-api/config')).json || {};
+            const was = cfg0.BROWSE_SHOW_COLLECTIONS;
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: { BROWSE_SHOW_COLLECTIONS: was } }); });
+            await http('/json-api/config', { method: 'PUT', body: { BROWSE_SHOW_COLLECTIONS: 'true' } });
+            const nav = () => page.locator('.LeftHandNav a', { hasText: /^\s*Collections\s*$/ });
+
+            // A normal load fills the cache with the menu settings and versions, and nothing secret.
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            const stored = await page.evaluate(() => ({ settings: localStorage.getItem('iplayarr.navSettings'), versions: localStorage.getItem('iplayarr.navVersions') }));
+            const settings = JSON.parse(stored.settings || '{}');
+            ok('the menu settings are remembered in this browser', settings.BROWSE_SHOW_COLLECTIONS === 'true' && typeof settings.NATIVE_SEARCH === 'string', stored.settings);
+            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'NATIVE_SEARCH', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
+            const versions = JSON.parse(stored.versions || '{}');
+            ok('the app version is remembered', typeof versions.appVersion === 'string' && versions.appVersion.length > 0, stored.versions);
+
+            // With the config requests held back, a reload still draws the menu from the cache.
+            await page.route('**/json-api/config', (route) => route.abort());
+            await page.route('**/json-api/config/hiddenSettings', (route) => route.abort());
+            await page.route('**/json-api/versions', (route) => route.abort());
+            await page.goto(BASE + '/browse', { waitUntil: 'domcontentloaded' });
+            await page.waitForSelector('.LeftHandNav', { timeout: 15000 });
+            ok('the Collections item is there before the config arrives', (await nav().count()) === 1);
+            const floor = await page.locator('.LeftHandNav .floor').first().innerText();
+            ok('the search line is there before the config arrives', settings.NATIVE_SEARCH === 'false' ? /get_iplayer Search/.test(floor) : /Native Search/.test(floor), floor);
+            if (settings.NATIVE_SEARCH !== 'false') ok('Native Search carries the app version', new RegExp(`Native Search v${versions.appVersion.replace(/\./g, '\\.')}`).test(floor), floor);
+            ok('the version block is there before the versions arrive', (await page.locator('.LeftHandNav .versionInfo').first().innerText()).includes(`v${versions.appVersion}`));
+            await page.unroute('**/json-api/config');
+            await page.unroute('**/json-api/config/hiddenSettings');
+            await page.unroute('**/json-api/versions');
+
+            // The server wins: with it off, a fresh load replaces the cached value.
+            await http('/json-api/config', { method: 'PUT', body: { BROWSE_SHOW_COLLECTIONS: 'false' } });
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            ok('the server value replaces the cached one', (await nav().count()) === 0);
+            ok('and the cache follows it', JSON.parse((await page.evaluate(() => localStorage.getItem('iplayarr.navSettings'))) || '{}').BROWSE_SHOW_COLLECTIONS === 'false');
         });
 
         // ---- Collections: the menu item and page follow Show Collections, and Discover never has a row (restored afterwards)
