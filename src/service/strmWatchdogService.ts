@@ -2,12 +2,14 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 import fs from 'fs';
+import path from 'path';
 
 import { App } from '../types/App';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import { VideoEventType } from '../types/VideoEvent';
 import { mapPath, missingMappedFolders, parsePathMap } from '../utils/pathMap';
+import { canHaveRoute, currentRoute, formatRoute, withRoute } from '../utils/routeHint';
 import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
@@ -16,6 +18,7 @@ import jellyfinService from './jellyfinService';
 import libraryIndexService, { appSourceId, IndexCounts } from './libraryIndexService';
 import loggingService from './loggingService';
 import socketService from './socketService';
+import { allMediaSelectorPairs, MediaSelectorPair } from './stream/mediaSelectorPairs';
 import NativeStreamService from './stream/NativeStreamService';
 import subscriptionService from './subscriptionService';
 import videoEventService from './videoEventService';
@@ -45,6 +48,11 @@ interface WatchdogTarget {
 // How many past checks of a link are kept.
 const HISTORY_LIMIT = 8;
 
+// The route-update option (STRM_WATCHDOG_UPDATE_ROUTES): at most this many links are asked about in one run, and a link
+// that was asked is left alone for this many days, so a big library is covered over a few runs.
+const ROUTE_UPDATES_PER_RUN = 40;
+const ROUTE_RECHECK_DAYS = 30;
+
 interface WatchdogRecord {
     status: 'ok' | 'invalid';
     failCount: number;
@@ -60,6 +68,9 @@ interface WatchdogRecord {
     actions?: string[];
     // Set once the invalid-link actions (event, webhook, Sonarr, delete) have been taken for this link.
     actioned?: boolean;
+    // The BBC route with the tallest picture found for this link (e.g. "pc-6"), and when it was last asked.
+    route?: string;
+    routeCheckedAt?: string;
 }
 
 export interface WatchdogLive {
@@ -439,6 +450,8 @@ class StrmWatchdogService {
                 for (const pid of Object.keys(state)) {
                     if (!pids.has(pid)) delete state[pid];
                 }
+                // Opt-in, and only after a complete pass in which BBC answered: this is the one place links are rewritten.
+                if (!this.#stopRequested) await this.#updateRoutes(pids, state);
             }
             await storage.setItem(STATE_KEY, state);
 
@@ -454,6 +467,68 @@ class StrmWatchdogService {
             this.#live = { ...this.#live, running: false, currentPid: undefined };
             await this.#emit();
         }
+    }
+
+    // STRM_WATCHDOG_UPDATE_ROUTES: asks BBC which route lists the tallest picture for working links and puts that route
+    // in the link (&route=). This edits the .strm files in the library, so it is off by default and careful: only links
+    // that are one-line iPlayarr stream links for that programme, each rewritten atomically, a limited number per run.
+    async #updateRoutes(pids: Map<string, WatchdogTarget>, state: Record<string, WatchdogRecord>): Promise<void> {
+        if ((await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_UPDATE_ROUTES)) !== 'true') return;
+        const recheckBefore = Date.now() - ROUTE_RECHECK_DAYS * 24 * 60 * 60 * 1000;
+        const defaultRoute = formatRoute(allMediaSelectorPairs[0]);
+        let asked = 0;
+        let updated = 0;
+        for (const [pid, target] of pids) {
+            if (asked >= ROUTE_UPDATES_PER_RUN || this.#stopRequested) break;
+            const record = state[pid];
+            if (record?.status !== 'ok') continue;
+            if (record.routeCheckedAt && Date.parse(record.routeCheckedAt) > recheckBefore) continue;
+            // Links that are not ours to edit (another tool's, a version link, unreadable) are not even asked about.
+            const links = [...target.files].flatMap((file) => {
+                try {
+                    const content = fs.readFileSync(file, 'utf8');
+                    return canHaveRoute(content, pid) ? [{ file, content }] : [];
+                } catch {
+                    return [];
+                }
+            });
+            if (!links.length) continue;
+            asked++;
+            const best = await NativeStreamService.probeBestRoute(pid);
+            record.routeCheckedAt = new Date().toISOString();
+            if (!best) continue;
+            const route = formatRoute(best.pair);
+            record.route = route;
+            for (const { file, content } of links) {
+                const current = currentRoute(content);
+                // A link with no hint already plays from the default route, so there is nothing to change.
+                if (current ? formatRoute(current) === route : route === defaultRoute) continue;
+                if (await this.#writeRoute(pid, file, content, route, best.pair)) updated++;
+            }
+        }
+        if (updated) loggingService.log(`[STRM Watchdog] Updated the stream route in ${updated} link(s)`);
+    }
+
+    // Replaces one link file with the same link carrying the route: written beside it, then renamed over it, so the file
+    // is never half-written. Returns whether it changed (false when the file could not be written).
+    async #writeRoute(pid: string, file: string, content: string, route: string, pair: MediaSelectorPair): Promise<boolean> {
+        // The caller only passes content that canHaveRoute accepted, which is exactly what withRoute needs.
+        const next = withRoute(content, pid, pair) as string;
+        const temp = path.join(path.dirname(file), `.${path.basename(file)}.route.tmp`);
+        try {
+            fs.writeFileSync(temp, next, 'utf8');
+            fs.renameSync(temp, file);
+        } catch (err: any) {
+            fs.rmSync(temp, { force: true });
+            loggingService.error(`[STRM Watchdog] Could not update the route in ${file} - ${err?.message}`);
+            return false;
+        }
+        try {
+            await videoEventService.record(VideoEventType.STRM_ROUTE_UPDATED, `Set the stream route of ${pid} to ${route} (${file})`, { pid });
+        } catch {
+            /* an event write must never fail the run */
+        }
+        return true;
     }
 
     // 'ok' = BBC still serves it; 'failed' = BBC says it's gone; 'network' = we couldn't reach BBC.
@@ -484,6 +559,9 @@ class StrmWatchdogService {
             // Carried over while the link stays invalid, so the table keeps showing what was done.
             actions: isInvalid ? previous?.actions : undefined,
             actioned: isInvalid ? previous?.actioned : undefined,
+            // A new check must not forget what the route pass found.
+            ...(previous?.route ? { route: previous.route } : {}),
+            ...(previous?.routeCheckedAt ? { routeCheckedAt: previous.routeCheckedAt } : {}),
         };
         if (!failed) this.#live.ok++;
         if (isInvalid) this.#live.invalid++;

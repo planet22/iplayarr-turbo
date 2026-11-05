@@ -173,7 +173,7 @@ Jellyfin Live TV tuner (M3U) and guide (XMLTV). Full walkthrough in [STREAMING.m
 
 ## STRM Watchdog (Settings → Streaming)
 
-Daily check that `.strm` links still resolve on BBC. On by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_STRIKES`, `STRM_WATCHDOG_WEBHOOK_URL`.
+Daily check that `.strm` links still resolve on BBC. On by default; all fields are documented in [WATCHDOG.md](WATCHDOG.md#settings): `STRM_WATCHDOG_ENABLED`, `STRM_WATCHDOG_SOURCES`, `STRM_WATCHDOG_ACTION`, `STRM_WATCHDOG_PATH_MAP`, `STRM_WATCHDOG_ARR_ACTION`, `STRM_WATCHDOG_CONCURRENCY`, `STRM_WATCHDOG_FAIL_THRESHOLD`, `STRM_WATCHDOG_STRIKES`, `STRM_WATCHDOG_UPDATE_ROUTES` (edits `.strm` files; off by default), `STRM_WATCHDOG_WEBHOOK_URL`. `STRM_PROBE_ROUTE` (Streaming, off by default) puts the best BBC route in new links; see [STREAMING.md](STREAMING.md#route-hint).
 
 ## Versions (audio described and signed)
 

@@ -61,6 +61,8 @@ describe('configService', () => {
       STREAM_LIVE_DASH_1080: 'true',
       LIVE_TV_ENABLED: 'true',
       STRM_WATCHDOG_ENABLED: 'true',
+      STRM_PROBE_ROUTE: 'false',
+      STRM_WATCHDOG_UPDATE_ROUTES: 'false',
       UI_CHANNEL_TOOLS: 'true',
       UI_QUALITY_BADGES: 'true',
       UI_VERSION_BADGES: 'true',

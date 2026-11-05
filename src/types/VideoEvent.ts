@@ -23,6 +23,7 @@ export enum VideoEventType {
     STRM_DELETED = 'strm_deleted',
     STRM_DELETE_FAILED = 'strm_delete_failed',
     STRM_REPLACED = 'strm_replaced',
+    STRM_ROUTE_UPDATED = 'strm_route_updated',
 }
 
 export type VideoEventLevel = 'info' | 'warn' | 'error';

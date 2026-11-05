@@ -5,6 +5,8 @@ import { Request, Response } from 'express';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
 import { requestedQuality } from '../../utils/qualityContext';
+import { requestedRoute } from '../../utils/routeContext';
+import { formatRoute } from '../../utils/routeHint';
 import { ProgrammeNotFoundError } from '../../utils/upstreamError';
 import { requestedVersion } from '../../utils/versionContext';
 import configService from '../configService';
@@ -75,14 +77,14 @@ function parseMasterVariants(body: string, baseUrl: string): MasterPlaylistVaria
 }
 
 // Where a resolved stream came from and the rule that chose its picture, for the Streaming debug page.
-function sourceOf(url: string, resolution: string, options: ResolveOptions, videoQuality?: string | null, pair?: MediaSelectorPair): { host?: string; route?: string; why: string } {
+function sourceOf(url: string, resolution: string, options: ResolveOptions, videoQuality?: string | null, pair?: MediaSelectorPair, fromLink?: boolean): { host?: string; route?: string; why: string } {
     let host: string | undefined;
     try {
         host = new URL(url).host;
     } catch {
         host = undefined;
     }
-    const route = pair ? { route: `${pair.mediaSet} / ${pair.version}` } : {};
+    const route = pair ? { route: `${pair.mediaSet} / ${pair.version}${fromLink ? ' (from the link)' : ''}` } : {};
     if (resolution === 'Adaptive') return { host, ...route, why: 'Adaptive: the whole ladder is offered and the player picks' };
     if (options.experimentalFhd && resolution === '1080') return { host, ...route, why: 'The FHD upgrade (a larger encode than the ladder lists), or a 1080p ladder entry' };
     return { host, ...route, why: `Fixed: Video Quality ${videoQuality ?? 'default'} picked the ${resolution}p entry` };
@@ -104,25 +106,34 @@ class NativeStreamService implements AbstractStreamService {
             ].map((parameter) => configService.getParameter(parameter))
         );
         // A per-request ?quality= override (qualityContext) steers the fixed-variant pick too.
-        const key = `native:${pid}:${settings.join('|')}:${requestedQuality() ?? ''}${requestedVersion() ? `:${requestedVersion()}` : ''}`;
+        // A route hint from the link (?route=) is part of the key too, so a hinted and an unhinted request never share an entry.
+        const hint = requestedRoute();
+        const key = `native:${pid}:${settings.join('|')}:${requestedQuality() ?? ''}${requestedVersion() ? `:${requestedVersion()}` : ''}${hint ? `:route-${formatRoute(hint)}` : ''}`;
         // The values just read are handed on rather than re-read for each step of the resolve.
         const options: ResolveOptions = {
             adaptive: (settings[0] ?? 'true') !== 'false',
             probeHq: settings[1] === 'true',
             experimentalFhd: settings[2] === 'true',
         };
-        const { url, resolution, pair } = await cached(key, resolveTtlMs, async () => ({
-            ...(await this.#resolve(pid, options)),
-            // The route that answered, noted while it is still the remembered one (a cached result keeps it). Not known for a
-            // quality-probed or a non-plain version, which choose their route differently.
-            pair: options.probeHq || requestedVersion() ? undefined : orderedMediaSelectorPairs('native')[0],
-        }));
+        const { url, resolution, pair, fromLink } = await cached(key, resolveTtlMs, async () => {
+            const resolved = await this.#resolve(pid, options);
+            // The route that answered (a cached result keeps it). Not known for a quality-probed or a non-plain version, which
+            // choose their route differently.
+            const vpid = options.probeHq || requestedVersion() ? undefined : await this.#resolveVpid(pid);
+            const answered = vpid ? this.#answered.get(vpid) : undefined;
+            if (vpid) this.#answered.delete(vpid);
+            return { ...resolved, pair: answered?.pair, fromLink: answered?.fromLink };
+        });
         if (sessionId && resolution) {
             streamSessionService.setResolution(sessionId, resolution);
-            streamSessionService.setSource(sessionId, sourceOf(url, resolution, options, settings[3], pair));
+            streamSessionService.setSource(sessionId, sourceOf(url, resolution, options, settings[3], pair, fromLink));
         }
         return url;
     }
+
+    // The route that answered the last plain-version resolve of each vpid, and whether the link's hint was the one that
+    // did. Read (and cleared) by #resolveUrl; checkAvailable leaves an entry that the next resolve of that vpid replaces.
+    readonly #answered = new Map<string, { pair: MediaSelectorPair; fromLink: boolean }>();
 
     async #resolve(pid: string, { adaptive, probeHq, experimentalFhd }: ResolveOptions): Promise<{ url: string; resolution?: string }> {
         const vpid = await this.#resolveVpid(pid);
@@ -342,16 +353,62 @@ class NativeStreamService implements AbstractStreamService {
         // but start with the pair that answered last time (see mediaSelectorPairs.ts).
         const bodies: string[] = [];
         const version = requestedVersion();
-        for (const pair of version ? versionMediaSelectorPairs : orderedMediaSelectorPairs('native')) {
-            const xml = await fetchText(mediaSelectorUrl(pair, vpid));
+        const walk = version ? versionMediaSelectorPairs : orderedMediaSelectorPairs('native');
+        // A route hint from the link goes first (plain version only), then the normal order without it.
+        const hinted = version ? undefined : requestedRoute();
+        const order = hinted ? [hinted, ...walk.filter((pair) => formatRoute(pair) !== formatRoute(hinted))] : walk;
+        for (const pair of order) {
+            const fromLink = pair === hinted;
+            let xml: string;
+            try {
+                xml = await fetchText(mediaSelectorUrl(pair, vpid));
+            } catch (err) {
+                // The hint is only a head start: if its route cannot be asked, carry on exactly as if there were none.
+                if (!fromLink) throw err;
+                continue;
+            }
             bodies.push(xml);
             const hrefs = hrefsFrom(xml);
             if (hrefs.length > 0) {
-                if (!version) rememberMediaSelectorPair('native', pair);
+                if (!version) {
+                    // One link must not steer the route remembered for everything else.
+                    if (!fromLink) rememberMediaSelectorPair('native', pair);
+                    this.#answered.set(vpid, { pair, fromLink });
+                }
                 return { hrefs };
             }
         }
         return { hrefs: [], reason: reasonFrom(bodies) };
+    }
+
+    // Which BBC route lists the tallest picture for a programme (plain version): every route is asked once, its first HLS
+    // connection's master playlist is read and the tallest variant counted. On a tie the earlier route wins. A route that
+    // fails is skipped; undefined when none answers. Nothing signed leaves this method - the caller keeps the route only.
+    async probeBestRoute(pid: string): Promise<{ pair: MediaSelectorPair; height: number } | undefined> {
+        let vpid: string;
+        try {
+            vpid = await this.#resolveVpid(pid);
+        } catch {
+            return undefined;
+        }
+        const probed = await Promise.all(
+            allMediaSelectorPairs.map(async (pair) => {
+                try {
+                    const href = this.#hlsHrefsFrom(await fetchText(mediaSelectorUrl(pair, vpid)))[0];
+                    if (!href) return undefined;
+                    const masterUrl = await resolveRedirect(href);
+                    const heights = parseMasterVariants(await fetchText(masterUrl), masterUrl).map((variant) => variant.height);
+                    return heights.length ? { pair, height: Math.max(...heights) } : undefined;
+                } catch {
+                    return undefined;
+                }
+            })
+        );
+        let best: { pair: MediaSelectorPair; height: number } | undefined;
+        for (const candidate of probed) {
+            if (candidate && (!best || candidate.height > best.height)) best = candidate;
+        }
+        return best;
     }
 
     #extractHlsHrefs(xml: string): string[] {

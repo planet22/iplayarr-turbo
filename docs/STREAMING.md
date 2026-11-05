@@ -132,6 +132,12 @@ Every channel can be renamed, given a colour, text on its logo, an uploaded logo
 
 When a programme has an audio described or signed version, the Play button can ask which to play (or use the default) and the in-app player has a version switcher that resumes at the same position. A `.strm` link can carry `?version=`. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed).
 
+### Route hint
+
+BBC lists a different set of pictures for each route (a media set and a selector version: `iptv-all-6`, `iptv-all-5`, `pc-6`, `pc-5`), and for some programmes only a route other than the default lists the taller ones. A `.strm` link can carry `&route=pc-6` to say which route to ask first. Playback tries that route first and falls back to the normal order if it answers nothing; a missing, unknown or malformed value is ignored, so a link without a hint plays exactly as before. The hint applies to the plain version only, is not used while Native Quality Probe is on (that compares every route itself), and does not change the route iPlayarr remembers for other programmes. The Streaming debug page shows `(from the link)` beside a route that came from the hint. Only the route is stored in the link, never a BBC address (those are signed and short-lived).
+
+Two optional settings, both off by default, put the hint in links: **Pick Route for New Links** (`STRM_PROBE_ROUTE`) asks BBC when a link is created (four requests, at most 10 seconds; if that fails the link is written without a hint), and the Watchdog's **Update Link Routes** (`STRM_WATCHDOG_UPDATE_ROUTES`) updates existing links; see [WATCHDOG.md](WATCHDOG.md#settings).
+
 ## Checking links still work
 
 Programmes expire from iPlayer. The optional [STRM Watchdog](WATCHDOG.md) checks daily that your `.strm` links still resolve and can report or remove dead ones.

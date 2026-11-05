@@ -100,6 +100,8 @@ export enum IplayarrParameter {
     STRM_WATCHDOG_STRIKES = 'STRM_WATCHDOG_STRIKES',
     STRM_WATCHDOG_CONCURRENCY = 'STRM_WATCHDOG_CONCURRENCY',
     STRM_WATCHDOG_WEBHOOK_URL = 'STRM_WATCHDOG_WEBHOOK_URL',
+    STRM_WATCHDOG_UPDATE_ROUTES = 'STRM_WATCHDOG_UPDATE_ROUTES',
+    STRM_PROBE_ROUTE = 'STRM_PROBE_ROUTE',
 
     // How the web UI looks and how downloads treat audio described / signed versions: shared by every browser.
     UI_PILL_COLORS = 'UI_PILL_COLORS',

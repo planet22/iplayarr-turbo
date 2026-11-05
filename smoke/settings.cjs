@@ -65,6 +65,8 @@ const CHANGE = {
     STRM_WATCHDOG_PATH_MAP: ['/smoke-temp-a=/smoke-temp-b'],
     STRM_WATCHDOG_ARR_ACTION: ['unmonitor', 'search', 'none'],
     STRM_WATCHDOG_WEBHOOK_URL: ['http://smoke-temp.invalid/hook'],
+    STRM_PROBE_ROUTE: ['true', 'false'],
+    STRM_WATCHDOG_UPDATE_ROUTES: ['true', 'false'],
     STREAM_BASE_URL: ['http://smoke-temp.invalid:4404'],
     OIDC_CONFIG_URL: ['http://smoke-temp.invalid/.well-known/openid-configuration'],
     OIDC_CLIENT_ID: ['smoke-temp-client'],
@@ -130,6 +132,8 @@ const NO_EFFECT = {
     STRM_WATCHDOG_PATH_MAP: 'only used while a watchdog run maps library paths',
     STRM_WATCHDOG_ARR_ACTION: 'only used when a watchdog run finds dead links (it acts on Sonarr/Radarr)',
     STRM_WATCHDOG_WEBHOOK_URL: 'only called when a watchdog run reports dead links',
+    STRM_WATCHDOG_UPDATE_ROUTES: 'only used by a watchdog run, which then rewrites .strm files (covered by the route-hint checks below)',
+    STRM_PROBE_ROUTE: 'only used when a .strm link is created (covered by the route-hint checks below)',
     OIDC_CONFIG_URL: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
     OIDC_CLIENT_ID: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
     OIDC_CALLBACK_HOST: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
@@ -206,10 +210,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
     const sabMisc = async () => (await http(`/api?mode=get_config&apikey=${encodeURIComponent(before.API_KEY)}&output=json`)).json?.config?.misc || {};
 
     // Starts an on-demand stream (a session is recorded before anything is resolved), reads the session, stops it.
-    const sessionProbe = async () => {
+    const sessionProbe = async (extraQuery = '') => {
         const seen = new Set((((await http('/json-api/streams')).json || {}).active || []).concat(((await http('/json-api/streams')).json || {}).history || []).map((s) => s.id));
         const ctl = new AbortController();
-        const req = fetch(`${BASE}/api?mode=stream&pid=${ctx.pid}&streamkey=${K}`, { signal: ctl.signal }).then((r) => r.body?.cancel?.()).catch(() => {});
+        const req = fetch(`${BASE}/api?mode=stream&pid=${ctx.pid}&streamkey=${K}${extraQuery}`, { signal: ctl.signal }).then((r) => r.body?.cancel?.()).catch(() => {});
         let found;
         for (let i = 0; i < 14 && !found; i++) {
             await sleep(500);
@@ -441,6 +445,29 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         ok('PORT unchanged', effective(await get(), 'PORT') === effective(before, 'PORT'));
         const same = await put({ PORT: effective(before, 'PORT') });
         ok('PORT sent back unchanged is accepted', same.status === 200, `HTTP ${same.status}`);
+
+        // 1b. Route hint (&route= in a .strm link): the two on/off settings validate, and a stream link carrying any hint still plays,
+        // because the hint is only a head start (an unknown or malformed one is ignored, a route BBC does not answer falls back).
+        for (const key of ['STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES']) {
+            ok(`${key} refuses a value that is not true or false`, rejected(await put({ [key]: 'maybe' }), key), key);
+        }
+        if (needSession()) rec(W, 'a stream link with a route hint still plays', 'SKIP', needSession());
+        else {
+            const plainPlays = /#EXTM3U/.test((await http(`/api?mode=stream&pid=${ctx.pid}&streamkey=${K}`, { timeout: 60000 })).text);
+            for (const [label, route] of [['a known route', 'pc-6'], ['the default route', 'iptv-all-6'], ['an unknown route', 'zz-9'], ['a malformed route', '%00%00%00'], ['a repeated route', 'pc-6&route=pc-5']]) {
+                const r = await http(`/api?mode=stream&pid=${ctx.pid}&streamkey=${K}&route=${route}`, { timeout: 60000 });
+                // Whatever plays without a hint must play with one.
+                ok(`a stream link with ${label} plays as one without`, !plainPlays || /#EXTM3U/.test(r.text), `HTTP ${r.status} ${r.text.slice(0, 80)}`);
+            }
+            if ((effective(before, 'STREAM_CLIENT') || 'NATIVE') === 'NATIVE') {
+                const hinted = await sessionProbe('&route=iptv-all-6');
+                // The note is written once BBC has answered, which may be after the probe has already stopped the session.
+                await sleep(1500);
+                const now = (await http('/json-api/streams')).json || {};
+                const seen = [...(now.active || []), ...(now.history || [])].find((x) => x.id === hinted?.id);
+                warn('a session started from a hinted link notes that the route came from the link', !seen?.source?.route || /\(from the link\)/.test(seen.source.route), JSON.stringify(seen?.source || {}));
+            }
+        }
 
         // 2. Each changeable setting: change, read back, confirm the effect, restore
         for (const [key, candidates] of Object.entries(CHANGE)) {

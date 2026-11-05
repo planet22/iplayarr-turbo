@@ -711,7 +711,8 @@ const tallestRoute = () => {
 };
 // A taller picture is on offer through another route than the one that served the stream: say so, and how to use it.
 const tallerRouteNote = computed(() => {
-    const route = session.value?.source?.route;
+    // Without the "(from the link)" note, so it compares with the probe's label.
+    const route = session.value?.source?.route?.replace(' (from the link)', '');
     const best = tallestRoute();
     const served = Number.parseInt(session.value?.resolution, 10) || 0;
     if (!route || !best || best.label === route || best.height <= served) return '';

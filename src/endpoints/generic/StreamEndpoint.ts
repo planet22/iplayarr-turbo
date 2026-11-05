@@ -23,6 +23,7 @@ import { qualityProfiles } from '../../types/QualityProfiles';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { isValidPid } from '../../utils/pathSafety';
 import { requestedQuality, runWithQuality } from '../../utils/qualityContext';
+import { runWithRoute } from '../../utils/routeContext';
 import { failureResponse } from '../../utils/upstreamError';
 import { requestedVersion, runWithVersion } from '../../utils/versionContext';
 
@@ -140,7 +141,7 @@ async function handleSubtitles(req: Request, res: Response): Promise<void> {
 }
 
 export default (req: Request, res: Response): Promise<void> =>
-    runWithQuality(req.query.quality, () => runWithVersion(req.query.version, () => handleStream(req, res)));
+    runWithQuality(req.query.quality, () => runWithVersion(req.query.version, () => runWithRoute(req.query.route, () => handleStream(req, res))));
 
 async function handleStream(req: Request, res: Response): Promise<void> {
     const { pid, token } = req.query as any;

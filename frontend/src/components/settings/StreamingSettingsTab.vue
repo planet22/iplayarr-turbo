@@ -86,6 +86,16 @@
             tooltip="Folder for temporary streaming files. Leave blank to use the system temp folder."
             :error="validationErrors.config?.STREAM_CACHE_DIR"
         />
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.STRM_PROBE_ROUTE"
+            field="STRM_PROBE_ROUTE"
+            :advanced="true"
+            name="Pick Route for New Links"
+            tooltip="When a .strm link is created, ask BBC which route has the best picture and note it in the link. Adds a short delay per link. Links made without it play as before."
+            :error="validationErrors.config?.STRM_PROBE_ROUTE"
+            :options="routeProbeOptions"
+        />
         <template v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE' && config.UI_VERSION_BADGES === 'true'">
             <SelectInput
                 v-model="config.PLAY_ASK_VERSION"
@@ -221,6 +231,16 @@
             tooltip="Failures only count after this many links pass first (BBC is up). This many network failures in a row (BBC unreachable) stops the check."
             :error="validationErrors.config?.STRM_WATCHDOG_FAIL_THRESHOLD"
         />
+        <SelectInput
+            v-if="showAdvanced"
+            v-model="config.STRM_WATCHDOG_UPDATE_ROUTES"
+            field="STRM_WATCHDOG_UPDATE_ROUTES"
+            :advanced="true"
+            name="Update Link Routes"
+            tooltip="Edits your .strm files: sets each working link to the BBC route with the best picture. Up to 40 links per run, each checked every 30 days."
+            :error="validationErrors.config?.STRM_WATCHDOG_UPDATE_ROUTES"
+            :options="routeUpdateOptions"
+        />
         <TextInput
             v-if="showAdvanced"
             v-model="config.STRM_WATCHDOG_WEBHOOK_URL"
@@ -280,6 +300,16 @@ const experimentalFhdOptions = [
 const subtitlesOptions = [
     { key: 'false', value: 'Disabled (recommended)' },
     { key: 'true', value: 'Enabled' },
+];
+
+const routeProbeOptions = [
+    { key: 'false', value: 'Disabled (recommended)' },
+    { key: 'true', value: 'Enabled' },
+];
+
+const routeUpdateOptions = [
+    { key: 'false', value: 'Disabled (recommended)' },
+    { key: 'true', value: 'Enabled (edits .strm files)' },
 ];
 
 const watchdogEnabledOptions = [

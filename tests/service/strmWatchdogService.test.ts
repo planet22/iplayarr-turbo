@@ -9,6 +9,7 @@ import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
 import jellyfinService from '../../src/service/jellyfinService';
+import loggingService from '../../src/service/loggingService';
 import NativeStreamService from '../../src/service/stream/NativeStreamService';
 import strmWatchdogService, { mapPath } from '../../src/service/strmWatchdogService';
 import subscriptionService from '../../src/service/subscriptionService';
@@ -44,7 +45,7 @@ jest.mock('../../src/service/jellyfinService', () => ({
 }));
 jest.mock('../../src/service/loggingService', () => ({ log: jest.fn(), error: jest.fn() }));
 jest.mock('../../src/service/videoEventService', () => ({ record: jest.fn() }));
-jest.mock('../../src/service/stream/NativeStreamService', () => ({ checkAvailable: jest.fn() }));
+jest.mock('../../src/service/stream/NativeStreamService', () => ({ checkAvailable: jest.fn(), probeBestRoute: jest.fn() }));
 jest.mock('../../src/types/QueuedStorage', () => {
     const store: Record<string, unknown> = {};
     return {
@@ -566,5 +567,241 @@ describe('StrmWatchdogService', () => {
         const { items, tracked } = await strmWatchdogService.getStatus();
         expect(items.map(({ pid }) => pid)).toEqual([GOOD]);
         expect(tracked?.total).toBe(1);
+    });
+
+    describe('STRM_WATCHDOG_UPDATE_ROUTES', () => {
+        const probe = NativeStreamService.probeBestRoute as jest.Mock;
+        const PC6 = { pair: { mediaSet: 'pc', version: 6 }, height: 540 };
+        const DEFAULT = { pair: { mediaSet: 'iptv-all', version: 6 }, height: 396 };
+        let goodPath: string;
+        const read = (file = goodPath) => fs.readFileSync(file, 'utf8');
+        const routeEvents = () => (videoEventService.record as jest.Mock).mock.calls.filter(([type]) => type === 'strm_route_updated');
+        const itemOf = async (pid: string) => (await strmWatchdogService.getStatus()).items.find((item) => item.pid === pid);
+
+        beforeEach(() => {
+            goodPath = path.join(tmpDir, 'good.strm');
+            // BAD fails its single strike, so it is invalid and must be left alone.
+            extra = { STRM_WATCHDOG_UPDATE_ROUTES: 'true', STRM_WATCHDOG_STRIKES: '1' };
+            probe.mockReset();
+            probe.mockResolvedValue(PC6);
+        });
+
+        it('does nothing when the option is off (the default)', async () => {
+            extra = {};
+            await strmWatchdogService.run();
+            expect(probe).not.toHaveBeenCalled();
+            expect(read()).toBe(strm(GOOD));
+            expect((await itemOf(GOOD))?.route).toBeUndefined();
+        });
+
+        it('does nothing when the option is set to anything but true', async () => {
+            extra = { STRM_WATCHDOG_UPDATE_ROUTES: 'false' };
+            await strmWatchdogService.run();
+            expect(probe).not.toHaveBeenCalled();
+            expect(read()).toBe(strm(GOOD));
+        });
+
+        it('writes the best route into a working link, leaving no temporary file, and records it', async () => {
+            await strmWatchdogService.run();
+            expect(probe).toHaveBeenCalledTimes(1);
+            expect(probe).toHaveBeenCalledWith(GOOD);
+            expect(read()).toBe(`${strm(GOOD)}&route=pc-6`);
+            expect(fs.readdirSync(tmpDir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+            expect(routeEvents()).toEqual([['strm_route_updated', expect.stringContaining('pc-6'), { pid: GOOD }]]);
+            expect(loggingService.log).toHaveBeenCalledWith(expect.stringContaining('Updated the stream route in 1 link(s)'));
+            const item = await itemOf(GOOD);
+            expect(item?.route).toBe('pc-6');
+            expect(Date.parse(item?.routeCheckedAt as string)).not.toBeNaN();
+        });
+
+        it('keeps the line ending the file had', async () => {
+            fs.writeFileSync(goodPath, `${strm(GOOD)}\r\n`);
+            await strmWatchdogService.run();
+            expect(read()).toBe(`${strm(GOOD)}&route=pc-6\r\n`);
+        });
+
+        it('leaves an invalid link alone', async () => {
+            await strmWatchdogService.run();
+            expect(probe).not.toHaveBeenCalledWith(BAD);
+            expect(read(badPath)).toBe(strm(BAD));
+        });
+
+        it('leaves a link with no hint when the best route is the default one, but remembers it asked', async () => {
+            probe.mockResolvedValue(DEFAULT);
+            await strmWatchdogService.run();
+            expect(read()).toBe(strm(GOOD));
+            expect(routeEvents()).toEqual([]);
+            expect(loggingService.log).not.toHaveBeenCalledWith(expect.stringContaining('Updated the stream route'));
+            expect(await itemOf(GOOD)).toMatchObject({ route: 'iptv-all-6', routeCheckedAt: expect.any(String) });
+        });
+
+        it('leaves a link that already carries the best route', async () => {
+            fs.writeFileSync(goodPath, `${strm(GOOD)}&route=pc-6`);
+            await strmWatchdogService.run();
+            expect(read()).toBe(`${strm(GOOD)}&route=pc-6`);
+            expect(routeEvents()).toEqual([]);
+        });
+
+        it('replaces a different hint, even with the default route', async () => {
+            fs.writeFileSync(goodPath, `${strm(GOOD)}&route=pc-5`);
+            await strmWatchdogService.run();
+            expect(read()).toBe(`${strm(GOOD)}&route=pc-6`);
+
+            fs.writeFileSync(goodPath, `${strm(GOOD)}&route=pc-6&quality=sd`);
+            probe.mockResolvedValue(DEFAULT);
+            const later = Date.now() + 31 * 24 * 60 * 60 * 1000;
+            const now = jest.spyOn(Date, 'now').mockReturnValue(later);
+            try {
+                await strmWatchdogService.run();
+            } finally {
+                now.mockRestore();
+            }
+            expect(read()).toBe(`${strm(GOOD)}&route=iptv-all-6&quality=sd`);
+        });
+
+        it('rewrites every file that carries the programme', async () => {
+            const second = path.join(tmpDir, 'second.strm');
+            fs.writeFileSync(second, strm(GOOD));
+            (historyService.getHistory as jest.Mock).mockResolvedValue([
+                { pid: BAD, extension: 'strm', nzbName: 'bad', type: 'tv', libraryPath: 'bad.strm' },
+                { pid: GOOD, extension: 'strm', nzbName: 'good', type: 'tv', libraryPath: 'good.strm' },
+                { pid: GOOD, extension: 'strm', nzbName: 'good2', type: 'tv', libraryPath: 'second.strm' },
+            ]);
+            await strmWatchdogService.run();
+            expect(probe).toHaveBeenCalledTimes(1);
+            expect(read()).toBe(`${strm(GOOD)}&route=pc-6`);
+            expect(read(second)).toBe(`${strm(GOOD)}&route=pc-6`);
+            expect(routeEvents()).toHaveLength(2);
+        });
+
+        it('does not touch, or ask about, a file that is not our link for that programme', async () => {
+            for (const content of ['http://elsewhere/video.mkv', `${strm(GOOD)}&version=signed`, `${strm(GOOD)}\n${strm(GOOD)}`, strm(BAD)]) {
+                probe.mockClear();
+                fs.writeFileSync(goodPath, content);
+                await strmWatchdogService.run();
+                expect(probe).not.toHaveBeenCalled();
+                expect(read()).toBe(content);
+            }
+        });
+
+        it('skips a file that disappears before the route pass', async () => {
+            (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async (pid: string) => {
+                if (pid === BAD) throw new Error('No programme found');
+                fs.rmSync(goodPath, { force: true });
+            });
+            await strmWatchdogService.run();
+            expect(probe).not.toHaveBeenCalled();
+            expect(fs.existsSync(goodPath)).toBe(false);
+        });
+
+        it('does not ask a link again within thirty days, but does after', async () => {
+            await strmWatchdogService.run();
+            await strmWatchdogService.run();
+            expect(probe).toHaveBeenCalledTimes(1);
+            // the check that follows must not forget what the route pass found
+            expect(await itemOf(GOOD)).toMatchObject({ route: 'pc-6', routeCheckedAt: expect.any(String) });
+
+            const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 29 * 24 * 60 * 60 * 1000);
+            try {
+                await strmWatchdogService.run();
+                expect(probe).toHaveBeenCalledTimes(1);
+                now.mockReturnValue(Date.now() + 31 * 24 * 60 * 60 * 1000);
+                await strmWatchdogService.run();
+            } finally {
+                now.mockRestore();
+            }
+            expect(probe).toHaveBeenCalledTimes(2);
+        });
+
+        it('marks a link as asked even when BBC gave no answer, and writes nothing', async () => {
+            probe.mockResolvedValue(undefined);
+            await strmWatchdogService.run();
+            expect(read()).toBe(strm(GOOD));
+            const item = await itemOf(GOOD);
+            expect(item?.route).toBeUndefined();
+            expect(item?.routeCheckedAt).toEqual(expect.any(String));
+            await strmWatchdogService.run();
+            expect(probe).toHaveBeenCalledTimes(1);
+        });
+
+        describe('a big library', () => {
+            const pidOf = (i: number) => `m0${String(i).padStart(6, '0')}`;
+            beforeEach(() => {
+                const entries = Array.from({ length: 45 }, (_, i) => ({ pid: pidOf(i), extension: 'strm', nzbName: `n${i}`, type: 'tv', libraryPath: `l${i}.strm` }));
+                for (let i = 0; i < 45; i++) fs.writeFileSync(path.join(tmpDir, `l${i}.strm`), strm(pidOf(i)));
+                (historyService.getHistory as jest.Mock).mockResolvedValue(entries);
+                (NativeStreamService.checkAvailable as jest.Mock).mockResolvedValue(undefined);
+                extra = { STRM_WATCHDOG_UPDATE_ROUTES: 'true', STRM_WATCHDOG_CONCURRENCY: '10' };
+            });
+
+            it('asks at most forty links a run and covers the rest on the next', async () => {
+                await strmWatchdogService.run();
+                expect(probe).toHaveBeenCalledTimes(40);
+                await strmWatchdogService.run();
+                expect(probe).toHaveBeenCalledTimes(45);
+                expect(new Set(probe.mock.calls.map(([pid]) => pid)).size).toBe(45);
+                await strmWatchdogService.run();
+                expect(probe).toHaveBeenCalledTimes(45);
+            });
+
+            it('stops asking when Stop is pressed during the route pass', async () => {
+                probe.mockImplementation(async () => {
+                    strmWatchdogService.stop();
+                    return PC6;
+                });
+                await strmWatchdogService.run();
+                expect(probe).toHaveBeenCalledTimes(1);
+            });
+        });
+
+        it('does nothing when the run was stopped before the route pass', async () => {
+            (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async () => {
+                strmWatchdogService.stop();
+            });
+            await strmWatchdogService.run();
+            expect(probe).not.toHaveBeenCalled();
+            expect(read()).toBe(strm(GOOD));
+        });
+
+        it('does nothing when BBC looked unavailable', async () => {
+            bbcDown = true;
+            await strmWatchdogService.run();
+            expect(probe).not.toHaveBeenCalled();
+            expect(read()).toBe(strm(GOOD));
+        });
+
+        it('does nothing when BBC could not be reached at the start', async () => {
+            (axios.get as jest.Mock).mockRejectedValue(new Error('offline'));
+            await strmWatchdogService.run();
+            expect(probe).not.toHaveBeenCalled();
+        });
+
+        it('leaves the file as it was, cleans up and carries on when the replacement cannot be written', async () => {
+            const rename = jest.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+                throw new Error('read-only share');
+            });
+            try {
+                await expect(strmWatchdogService.run()).resolves.toMatchObject({ checked: 2 });
+            } finally {
+                rename.mockRestore();
+            }
+            expect(read()).toBe(strm(GOOD));
+            expect(fs.readdirSync(tmpDir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Could not update the route'));
+            expect(routeEvents()).toEqual([]);
+            expect(loggingService.log).not.toHaveBeenCalledWith(expect.stringContaining('Updated the stream route'));
+        });
+
+        it('still updates the link when the event cannot be recorded', async () => {
+            (videoEventService.record as jest.Mock).mockImplementation(async (type: string) => {
+                if (type === 'strm_route_updated') throw new Error('db busy');
+            });
+            try {
+                await strmWatchdogService.run();
+            } finally {
+                (videoEventService.record as jest.Mock).mockReset();
+            }
+            expect(read()).toBe(`${strm(GOOD)}&route=pc-6`);
+        });
     });
 });

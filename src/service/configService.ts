@@ -115,6 +115,8 @@ const configService = {
         STRM_WATCHDOG_FAIL_THRESHOLD: '10',
         STRM_WATCHDOG_STRIKES: '2',
         STRM_WATCHDOG_CONCURRENCY: '4',
+        STRM_WATCHDOG_UPDATE_ROUTES: 'false',
+        STRM_PROBE_ROUTE: 'false',
         UI_PILL_COLORS: 'true',
         UI_CHANNEL_TOOLS: 'true',
         UI_INFO_MESSAGES: 'true',

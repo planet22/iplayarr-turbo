@@ -87,6 +87,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `STRM_WATCHDOG_FAIL_THRESHOLD` | `10` | No | Links that must validate before any action is taken; also the consecutive-failure outage cutoff. |
 | `STRM_WATCHDOG_STRIKES` | `2` | No | Failed checks in a row before a link is invalid, 1-30. |
 | `STRM_WATCHDOG_WEBHOOK_URL` | _(unset)_ | No | JSON `POST` when a link first becomes invalid. |
+| `STRM_WATCHDOG_UPDATE_ROUTES` | `false` | No | Watchdog edits `.strm` files to carry the BBC route with the best picture. See [WATCHDOG.md](WATCHDOG.md). |
+| `STRM_PROBE_ROUTE` | `false` | No | Ask BBC for the best route when a `.strm` link is created and note it in the link. |
 | `THUMBNAIL_CACHE_DIR` | temp folder | No | Where cached BBC thumbnails are stored. |
 | `THUMBNAIL_RETENTION_DAYS` | `30` | No | Thumbnail cache cleanup window. |
 | `STREAM_HISTORY_RETENTION_DAYS` | `30` | No | Native stream history cleanup window. |

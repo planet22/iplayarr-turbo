@@ -210,6 +210,20 @@ describe('Utils', () => {
             );
         });
 
+        it('appends a route hint when given, after the quality and version', async () => {
+            mockedConfigService.getParameter.mockResolvedValue('http://h:4404');
+
+            await expect(Utils.createStrmContent('m0026fkl', 'k', undefined, undefined, 'pc-6')).resolves.toBe(
+                'http://h:4404/api?mode=stream&pid=m0026fkl&streamkey=k&route=pc-6'
+            );
+            await expect(Utils.createStrmContent('m0026fkl', 'k', 'sd', 'signed', 'pc-6')).resolves.toBe(
+                'http://h:4404/api?mode=stream&pid=m0026fkl&streamkey=k&quality=sd&version=signed&route=pc-6'
+            );
+            await expect(Utils.createStrmContent('m0026fkl', 'k', undefined, undefined, '')).resolves.toBe(
+                'http://h:4404/api?mode=stream&pid=m0026fkl&streamkey=k'
+            );
+        });
+
         it('strips a trailing slash from STREAM_BASE_URL', async () => {
             mockedConfigService.getParameter.mockResolvedValue('http://192.168.1.10:4404/');
 

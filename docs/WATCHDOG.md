@@ -46,6 +46,7 @@ Actions are taken once per link.
 | Parallel Checks | `STRM_WATCHDOG_CONCURRENCY` | `4` | 1-10. 1 is gentlest on BBC; 4 is about three times faster. |
 | Minimum Valid Before Action | `STRM_WATCHDOG_FAIL_THRESHOLD` | `10` | See above. |
 | Failed Checks Before Invalid | `STRM_WATCHDOG_STRIKES` | `2` | 1-30. See above. |
+| Update Link Routes | `STRM_WATCHDOG_UPDATE_ROUTES` | `false` | **Edits `.strm` files in your library.** After a complete run, asks BBC which route (see [STREAMING.md](STREAMING.md#route-hint)) lists the tallest picture for each working link and writes it into the link as `&route=`. Only one-line iPlayarr stream links for that programme are touched (not another tool's, not version links), each is replaced atomically, at most 40 links are asked per run, and a link is asked again after 30 days. A link with no hint is left alone when the best route is the default one. Each change is logged and recorded as an event. |
 | Watchdog Webhook URL | `STRM_WATCHDOG_WEBHOOK_URL` | _(unset)_ | Optional. Must be an `http://` or `https://` address. The paper-plane button sends a test notification (`"event": "test"`) to what is typed in the box, without saving it, and reports the result. |
 
 ## Watchdog page
