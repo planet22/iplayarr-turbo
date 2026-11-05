@@ -361,16 +361,29 @@ async function libraryAndDebugChecks(A, ctx) {
         rec(A, 'library debug page past the end is empty with the same total', past?.rows?.length === 0 && past.total === everyRow.length ? 'PASS' : 'FAIL', `${past?.rows?.length} rows`);
     }
 
-    // The Statistics charts get a slimmed search history: same entries, results kept only as title and pid, no trace.
+    // The Statistics page only displays what the server works out: one summary per range, from the same histories.
     const full = (await http('/json-api/stats/searchHistory', { timeout: 60000 })).json;
-    const slim = await http('/json-api/stats/searchHistory?compact=true', { timeout: 60000 });
-    if (Array.isArray(full) && Array.isArray(slim.json)) {
-        rec(A, 'compact search history has the same entries as the full one', slim.json.length === full.length && slim.json.every((e, i) => e.term === full[i].term && e.time === full[i].time) ? 'PASS' : 'FAIL', `${slim.json.length} vs ${full.length}`);
-        const heavy = slim.json.filter((e) => e.trace || (e.items ?? []).some((i) => Object.keys(i).some((k) => k !== 'title' && k !== 'pid')));
-        rec(A, 'compact search history carries only title and pid per result', heavy.length ? 'FAIL' : 'PASS', `${heavy.length} heavy`);
-        const fullBytes = JSON.stringify(full).length;
-        rec(A, 'compact search history is smaller than the full one', slim.text.length <= fullBytes ? 'PASS' : 'FAIL', `${slim.text.length} vs ${fullBytes} bytes`);
+    const sum7 = (await http('/json-api/stats/summary?range=7d', { timeout: 60000 })).json;
+    const sumAll = (await http('/json-api/stats/summary?range=All&excludeRss=false', { timeout: 60000 })).json;
+    const sumShape = (x) => x && Array.isArray(x.topSearched) && Array.isArray(x.topGrabbed) && x.trends?.searches?.length === 7 && x.trends.grabs.length === 7 && x.trends.failedGrabs.length === 7
+        && ['searches', 'grabs', 'failedGrabs'].every((k) => Number.isInteger(x.today?.[k]))
+        && ['searchesOverTime', 'grabsOverTime', 'searchTerms', 'searchSources', 'grabTypes', 'grabSources'].every((k) => x[k] && typeof x[k] === 'object');
+    rec(A, 'stats summary has every figure the page draws', sumShape(sum7) && sumShape(sumAll) ? 'PASS' : 'FAIL', sumShape(sum7) ? 'ok' : 'malformed');
+    const sumOf = (o) => Object.values(o || {}).reduce((n, v) => n + v, 0);
+    const grabHist = (await http('/json-api/stats/grabHistory')).json;
+    if (Array.isArray(grabHist) && sumAll) {
+        rec(A, 'stats summary grab types add up to the grab history', sumOf(sumAll.grabTypes) === grabHist.filter((g) => g.time != undefined).length ? 'PASS' : 'FAIL', `${sumOf(sumAll.grabTypes)} vs ${grabHist.length}`);
+        rec(A, 'stats summary grab sources add up to the grab types', sumOf(sumAll.grabSources) === sumOf(sumAll.grabTypes) ? 'PASS' : 'FAIL', `${sumOf(sumAll.grabSources)} vs ${sumOf(sumAll.grabTypes)}`);
     }
+    if (Array.isArray(full) && sumAll) {
+        const timed = full.filter((e) => e.time != undefined).length;
+        rec(A, 'stats summary search terms add up to the search history (RSS included)', sumOf(sumAll.searchTerms) === timed ? 'PASS' : 'FAIL', `${sumOf(sumAll.searchTerms)} vs ${timed}`);
+        const noRss = (await http('/json-api/stats/summary?range=All&excludeRss=true', { timeout: 60000 })).json;
+        rec(A, 'stats summary leaves RSS out when asked', noRss && !('RSS Feed' in noRss.searchTerms) && sumOf(noRss.searchTerms) <= sumOf(sumAll.searchTerms) ? 'PASS' : 'FAIL', `${sumOf(noRss?.searchTerms)} vs ${sumOf(sumAll.searchTerms)}`);
+        rec(A, 'stats summary 7 day range holds no more than all time', sumOf(sum7.searchTerms) <= sumOf(sumAll.searchTerms) ? 'PASS' : 'FAIL', `${sumOf(sum7.searchTerms)} vs ${sumOf(sumAll.searchTerms)}`);
+    }
+    const bogus = await http('/json-api/stats/summary?range=bogus', { timeout: 60000 });
+    rec(A, 'stats summary answers an unknown range as 7 days, and is far smaller than the history', bogus.status === 200 && sumShape(bogus.json) && bogus.text.length < 100000 ? 'PASS' : 'FAIL', `${bogus.text?.length} bytes`);
 
     const subs = (await http('/json-api/subscriptions')).json || [];
     const withChips = subs.filter((s) => s.onDiskSources);

@@ -46,30 +46,30 @@
                     <font-awesome-icon class="statIcon" :icon="['fas', 'magnifying-glass']" />
                     <div class="statBody">
                         <span class="statLabel">Searches (Today)</span>
-                        <span class="statValue">{{ searchesToday }}</span>
+                        <span class="statValue">{{ summary.today.searches }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="searchesTrend" />
+                <SparklineChart :data="summary.trends.searches" />
             </div>
             <div class="statCard sparkline">
                 <div class="statCardHeader">
                     <font-awesome-icon class="statIcon" :icon="['fas', 'download']" />
                     <div class="statBody">
                         <span class="statLabel">Grabs (Today)</span>
-                        <span class="statValue">{{ grabsToday }}</span>
+                        <span class="statValue">{{ summary.today.grabs }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="grabsTrend" color="chart-6" />
+                <SparklineChart :data="summary.trends.grabs" color="chart-6" />
             </div>
             <div class="statCard sparkline">
                 <div class="statCardHeader">
                     <font-awesome-icon class="statIcon" :icon="['fas', 'triangle-exclamation']" />
                     <div class="statBody">
                         <span class="statLabel">Failed Grabs (Today)</span>
-                        <span class="statValue">{{ failedGrabsToday }}</span>
+                        <span class="statValue">{{ summary.today.failedGrabs }}</span>
                     </div>
                 </div>
-                <SparklineChart :data="failedGrabsTrend" color="danger-color" />
+                <SparklineChart :data="summary.trends.failedGrabs" color="danger-color" />
             </div>
         </div>
         <div class="chartRow">
@@ -77,8 +77,8 @@
                 <LineChart
                     title="Searches vs Grabs"
                     :series="[
-                        { name: 'Searches', data: searchOverTimeSeries, color: 'chart-1' },
-                        { name: 'Grabs', data: grabOverTimeSeries, color: 'chart-2' },
+                        { name: 'Searches', data: summary.searchesOverTime, color: 'chart-1' },
+                        { name: 'Grabs', data: summary.grabsOverTime, color: 'chart-2' },
                     ]"
                 />
             </div>
@@ -87,19 +87,19 @@
         <legend>Search Breakdown</legend>
         <div class="chartRow">
             <div class="chartCard">
-                <PieChart :data="termSeries" title="Search Terms" />
+                <PieChart :data="summary.searchTerms" title="Search Terms" />
             </div>
             <div class="chartCard">
-                <BarChart :data="appSearchSeries" title="Search Sources" />
+                <BarChart :data="summary.searchSources" title="Search Sources" />
             </div>
         </div>
         <legend>Grab Breakdown</legend>
         <div class="chartRow">
             <div class="chartCard">
-                <PieChart :data="typeSeries" title="Grab Types" />
+                <PieChart :data="summary.grabTypes" title="Grab Types" />
             </div>
             <div class="chartCard">
-                <BarChart :data="appGrabSeries" title="Grab Sources" />
+                <BarChart :data="summary.grabSources" title="Grab Sources" />
             </div>
         </div>
 
@@ -107,18 +107,18 @@
         <div class="chartRow">
             <div class="chartCard">
                 <h3 class="topContentHeading">Most Searched</h3>
-                <TopContentList :items="topSearchedItems" />
+                <TopContentList :items="summary.topSearched" />
             </div>
             <div class="chartCard">
                 <h3 class="topContentHeading">Most Grabbed</h3>
-                <TopContentList :items="topGrabbedItems" />
+                <TopContentList :items="summary.topGrabbed" />
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BarChart from '@/components/charts/BarChart.vue';
 import LineChart from '@/components/charts/LineChart.vue';
@@ -129,194 +129,60 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
 import { ipFetch } from '@/lib/ipFetch';
 
-const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90, All: Infinity };
-
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
-const searchHistory = ref([]);
-const grabHistory = ref([]);
-const failedGrabHistory = ref([]);
-const apps = ref([]);
+
+// Worked out by the server (json-api/stats/summary); the page only displays it.
+const emptySummary = {
+    trends: { searches: [], grabs: [], failedGrabs: [] },
+    today: { searches: 0, grabs: 0, failedGrabs: 0 },
+    searchesOverTime: {},
+    grabsOverTime: {},
+    searchTerms: {},
+    searchSources: {},
+    grabTypes: {},
+    grabSources: {},
+    topSearched: [],
+    topGrabbed: [],
+};
+const summary = ref(emptySummary);
 
 const range = ref('7d');
 const availableRanges = ref(['7d', '30d', '90d', 'All']);
 const excludeRss = ref(true);
 
-onMounted(async () => {
+let refresher;
+let ticker;
+onMounted(() => {
     updateStats();
-
-    setInterval(() => {
-        uptime.value.uptime += 1000
+    ticker = setInterval(() => {
+        uptime.value.uptime += 1000;
     }, 1000);
-
-    setInterval(updateStats, 180000);
+    refresher = setInterval(updateStats, 180000);
+});
+onBeforeUnmount(() => {
+    clearInterval(ticker);
+    clearInterval(refresher);
 });
 
+// Only the newest answer is used, so a slow earlier request cannot overwrite a later one.
+let latest = 0;
+async function loadSummary() {
+    const mine = ++latest;
+    const { ok, data } = await ipFetch(`json-api/stats/summary?range=${encodeURIComponent(range.value)}&excludeRss=${excludeRss.value}`);
+    if (ok && mine === latest) summary.value = data;
+}
+
 async function updateStats() {
-    searchHistory.value = (await ipFetch('json-api/stats/searchHistory?compact=true')).data;
-    grabHistory.value = (await ipFetch('json-api/stats/grabHistory')).data;
-    failedGrabHistory.value = (await ipFetch('json-api/stats/failedGrabHistory')).data;
-    apps.value = (await ipFetch('json-api/apps')).data;
-    uptime.value = (await ipFetch('json-api/stats/uptime')).data;
-    const cacheList = await ipFetch('json-api/maintenance/caches');
+    const [, uptimeResult, cacheList] = await Promise.all([loadSummary(), ipFetch('json-api/stats/uptime'), ipFetch('json-api/maintenance/caches')]);
+    uptime.value = uptimeResult.data;
     if (cacheList.ok) caches.value = cacheList.data;
 }
 
+watch([range, excludeRss], loadSummary);
+
 const hitRate = ({ hits, misses }) => (hits + misses ? `${Math.round((hits / (hits + misses)) * 100)}%` : 'n/a');
 const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
-
-const cutoffTime = computed(() => {
-    const days = RANGE_DAYS[range.value];
-    return days === Infinity ? -Infinity : Date.now() - days * 24 * 60 * 60 * 1000;
-});
-
-const filteredSearchHistory = computed(() => {
-    return searchHistory.value.filter(({ time, term }) => {
-        if (time == undefined || time < cutoffTime.value) return false;
-        if (excludeRss.value && term == '*') return false;
-        return true;
-    });
-});
-
-const filteredGrabHistory = computed(() => {
-    return grabHistory.value.filter(({ time }) => time != undefined && time >= cutoffTime.value);
-});
-
-const termSeries = computed(() => {
-    return filteredSearchHistory.value
-        .map((search) => ({ ...search, term: search.term == '*' ? 'RSS Feed' : search.term }))
-        .reduce((acc, { term }) => {
-            acc[term] = (acc[term] || 0) + 1;
-            return acc;
-        }, {})
-});
-
-const typeSeries = computed(() => {
-    return filteredGrabHistory.value.reduce((acc, { type }) => {
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-    }, {})
-})
-
-const appSearchSeries = computed(() => {
-    return createAppSourceSeries(filteredSearchHistory.value)
-});
-
-const appGrabSeries = computed(() => {
-    return createAppSourceSeries(filteredGrabHistory.value)
-});
-
-const searchOverTimeSeries = computed(() => {
-    return createOverTimeSeries(filteredSearchHistory.value);
-});
-
-const grabOverTimeSeries = computed(() => {
-    return createOverTimeSeries(filteredGrabHistory.value);
-});
-
-const searchesTrend = computed(() => countsForLastNDays(searchHistory.value, 7));
-const searchesToday = computed(() => searchesTrend.value[searchesTrend.value.length - 1] ?? 0);
-
-const grabsTrend = computed(() => countsForLastNDays(grabHistory.value, 7));
-const grabsToday = computed(() => grabsTrend.value[grabsTrend.value.length - 1] ?? 0);
-
-const failedGrabsTrend = computed(() => countsForLastNDays(failedGrabHistory.value, 7));
-const failedGrabsToday = computed(() => failedGrabsTrend.value[failedGrabsTrend.value.length - 1] ?? 0);
-
-const topSearchedItems = computed(() => {
-    return rankByCount(
-        filteredSearchHistory.value.flatMap(({ items }) => items ?? []),
-        ({ title }) => title
-    );
-});
-
-const topGrabbedItems = computed(() => {
-    return rankByCount(filteredGrabHistory.value, ({ nzbName }) => nzbName);
-});
-
-function rankByCount(entries, keyOf) {
-    const counts = {};
-    entries.forEach((entry) => {
-        const key = keyOf(entry);
-        if (!key) return;
-        if (!counts[key]) counts[key] = { title: key, count: 0, pid: entry.pid };
-        counts[key].count += 1;
-        if (!counts[key].pid && entry.pid) counts[key].pid = entry.pid;
-    });
-    return Object.values(counts)
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10);
-}
-
-function createAppSourceSeries(entries) {
-    return entries.reduce((acc, { appId }) => {
-        let appName = 'No App';
-        if (appId) {
-            const app = apps.value.find(({ id }) => id == appId);
-            appName = app?.name ?? 'No App';
-        }
-        acc[appName] = (acc[appName] || 0) + 1;
-        return acc;
-    }, {})
-}
-
-function createOverTimeSeries(entries) {
-    // Step 1: Build date-count map
-    const counts = entries
-        .filter(({ time }) => time != undefined)
-        .sort(({ time: timea }, { time: timeb }) => timea - timeb)
-        .reduce((acc, { time }) => {
-            const date = new Date(toMilliseconds(time)).toISOString().split('T')[0];
-            acc[date] = (acc[date] || 0) + 1;
-            return acc;
-        }, {});
-
-    // Step 2: Get min and max dates
-    const dates = Object.keys(counts);
-    if (dates.length === 0) return {};
-
-    const start = new Date(dates[0]);
-    const end = new Date(dates[dates.length - 1]);
-
-    // Step 3: Fill missing days with 0
-    const full = {};
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const iso = d.toISOString().split('T')[0];
-        full[iso] = counts[iso] || 0;
-    }
-
-    return full;
-}
-
-// Unlike createOverTimeSeries (which spans the data's own min/max date), this anchors on
-// "now" so the KPI sparklines always show a fixed trailing window, even on sparse days.
-function countsForLastNDays(entries, days) {
-    const counts = entries
-        .filter(({ time }) => time != undefined)
-        .reduce((acc, { time }) => {
-            const date = new Date(toMilliseconds(time)).toISOString().split('T')[0];
-            acc[date] = (acc[date] || 0) + 1;
-            return acc;
-        }, {});
-
-    const result = [];
-    for (let i = days - 1; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const iso = d.toISOString().split('T')[0];
-        result.push(counts[iso] || 0);
-    }
-    return result;
-}
-
-function toMilliseconds(timestamp) {
-    // If timestamp looks like seconds (less than 10^12), convert to ms
-    if (timestamp < 1e12) {
-        return timestamp * 1000;
-    }
-    // Otherwise, assume it's already milliseconds
-    return timestamp;
-}
 
 function msToTime(ms) {
     const totalSeconds = Math.floor(ms / 1000);

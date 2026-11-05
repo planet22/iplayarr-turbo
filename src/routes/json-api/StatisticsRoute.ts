@@ -1,17 +1,37 @@
 import { Request, Response, Router } from 'express';
 
+import appService from '../../service/appService';
 import statisticsService from '../../service/stats/StatisticsService';
 import { asyncRouter } from '../../utils/asyncRouter';
-import { slimSearchHistory, summariseSearchHistory } from '../../utils/searchHistorySummary';
+import { summariseSearchHistory } from '../../utils/searchHistorySummary';
+import { buildStatisticsSummary, STATISTICS_RANGES, StatisticsRange } from '../../utils/statisticsSummary';
 
 const router: Router = asyncRouter();
 
+// Everything the Statistics page draws, worked out here from the full histories so the page only displays it.
+router.get('/summary', async (req: Request, res: Response) => {
+    const range = STATISTICS_RANGES.includes(req.query.range as StatisticsRange) ? (req.query.range as StatisticsRange) : '7d';
+    const [searches, grabs, failedGrabs, apps] = await Promise.all([
+        statisticsService.getSearchHistory(),
+        statisticsService.getGrabHistory(),
+        statisticsService.getFailedGrabHistory(),
+        appService.getAllApps(),
+    ]);
+    res.json(
+        buildStatisticsSummary({
+            searches, grabs, failedGrabs, range,
+            appNames: new Map(apps.map(({ id, name }) => [id, name])),
+            excludeRss: req.query.excludeRss !== 'false',
+        })
+    );
+});
+
 router.get('/searchHistory', async (req: Request, res: Response) => {
-    const { limit, filterRss, summary, compact } = req.query as any as { limit?: number, filterRss?: boolean, summary?: string, compact?: string };
+    const { limit, filterRss, summary } = req.query as any as { limit?: number, filterRss?: boolean, summary?: string };
     let searchHistory = await statisticsService.getSearchHistory();
     searchHistory = filterRss ? searchHistory.filter(({ term }) => term != '*') : searchHistory;
     const limited = limit ? searchHistory.slice(limit * -1) : searchHistory;
-    res.json(summary == 'true' ? summariseSearchHistory(limited) : compact == 'true' ? slimSearchHistory(limited) : limited);
+    res.json(summary == 'true' ? summariseSearchHistory(limited) : limited);
 });
 
 router.get('/searchHistory/detail', async (req: Request, res: Response) => {

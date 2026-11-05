@@ -2,9 +2,11 @@ import express from 'express';
 import request from 'supertest';
 
 import router from '../../../src/routes/json-api/StatisticsRoute'; // adjust path as needed
+import appService from '../../../src/service/appService';
 import statisticsService from '../../../src/service/stats/StatisticsService';
 
 jest.mock('../../../src/service/stats/StatisticsService');
+jest.mock('../../../src/service/appService');
 
 const expressApp = express();
 expressApp.use(express.json());
@@ -49,27 +51,31 @@ describe('Statistics Routes', () => {
         });
     });
 
-    describe('GET /searchHistory?compact=true', () => {
-        it('keeps only the title and pid of each result and drops the trace', async () => {
-            (statisticsService.getSearchHistory as jest.Mock).mockReturnValue([
-                { term: 'a', time: 1, items: [{ title: 'T', pid: 'p1', type: 'TV', size: 5 }], trace: { candidates: [] } },
+    describe('GET /summary', () => {
+        const now = Date.now();
+        beforeEach(() => {
+            (statisticsService.getSearchHistory as jest.Mock).mockResolvedValue([
+                { term: 'a', time: now, appId: 'app1', items: [{ title: 'Show', pid: 'p1' }] },
+                { term: '*', time: now },
             ]);
-
-            const res = await request(expressApp).get('/searchHistory?compact=true');
-            expect(res.body).toEqual([{ term: 'a', time: 1, items: [{ title: 'T', pid: 'p1' }] }]);
+            (statisticsService.getGrabHistory as jest.Mock).mockResolvedValue([{ time: now, type: 'TV', nzbName: 'n1', pid: 'p1', appId: 'app1' }]);
+            (statisticsService.getFailedGrabHistory as jest.Mock).mockResolvedValue([]);
+            (appService.getAllApps as jest.Mock).mockResolvedValue([{ id: 'app1', name: 'Sonarr' }]);
         });
-    });
 
-    describe('GET /searchHistory?compact=true edge cases', () => {
-        it('keeps entries without results as they are and combines with filterRss and limit', async () => {
-            (statisticsService.getSearchHistory as jest.Mock).mockReturnValue([
-                { term: '*', time: 1 },
-                { term: 'a', time: 2 },
-                { term: 'b', time: 3, items: [{ title: 'B', pid: 'p2', type: 'TV' }] },
-            ]);
+        it('answers the figures the page draws, excluding RSS by default', async () => {
+            const res = await request(expressApp).get('/summary');
+            expect(res.status).toBe(200);
+            expect(res.body.searchTerms).toEqual({ a: 1 });
+            expect(res.body.searchSources).toEqual({ Sonarr: 1 });
+            expect(res.body.grabSources).toEqual({ Sonarr: 1 });
+            expect(res.body.today).toEqual({ searches: 2, grabs: 1, failedGrabs: 0 });
+            expect(res.body.topSearched).toEqual([{ title: 'Show', count: 1, pid: 'p1' }]);
+        });
 
-            const res = await request(expressApp).get('/searchHistory?compact=true&filterRss=true&limit=2');
-            expect(res.body).toEqual([{ term: 'a', time: 2 }, { term: 'b', time: 3, items: [{ title: 'B', pid: 'p2' }] }]);
+        it('includes RSS when asked and falls back to 7 days for an unknown range', async () => {
+            const res = await request(expressApp).get('/summary?excludeRss=false&range=bogus');
+            expect(res.body.searchTerms).toEqual({ a: 1, 'RSS Feed': 1 });
         });
     });
 
