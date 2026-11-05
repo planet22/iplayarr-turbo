@@ -300,6 +300,8 @@ async function apiLayer(ctx) {
     await watchdogFieldChecks(A);
     await check(A, 'watchdog reports its strike limit (1-30)', '/json-api/watchdog', (r) => (Number.isInteger(r.json?.strikes) && r.json.strikes >= 1 && r.json.strikes <= 30) || `strikes=${r.json?.strikes}`);
 
+    await libraryAndDebugChecks(A, ctx);
+
     // Per-app connectivity (uses stored masked keys; read-only test call)
     const apps = (await http('/json-api/apps')).json || [];
     for (const a of apps) {
@@ -320,6 +322,62 @@ async function apiLayer(ctx) {
 
 // Sonarr/Radarr sync: the per-app setting, the detection scan and what it stores. The scan only refreshes cached
 // episode counts (and the "deleted from the app" flag) of shows already linked, so it is safe on any instance.
+// Library index, library debug, stream debug and the missing-episodes list (read-only; the only BBC calls are programme lookups).
+async function libraryAndDebugChecks(A, ctx) {
+    const gone = await http('/json-api/watchdog/check-access', { method: 'POST' });
+    rec(A, 'the removed Library Access check no longer answers', gone.status !== 200 || gone.json === undefined ? 'PASS' : 'FAIL', `HTTP ${gone.status}`);
+
+    const lib = await check(A, 'library debug lists the index sources and rows', '/json-api/library/debug', (r) => {
+        if (!Array.isArray(r.json?.sources) || !Array.isArray(r.json?.rows)) return 'expected {sources[], rows[]}';
+        const badSrc = r.json.sources.filter((s) => !s.id || !s.name || !s.type || !Number.isInteger(s.counted) || !Number.isInteger(s.rejected));
+        if (badSrc.length) return `malformed sources: ${badSrc.map((s) => s.id).join(',')}`;
+        const badRow = r.json.rows.filter((x) => !x.source || typeof x.path !== 'string' || typeof x.counted !== 'boolean' || (!x.counted && !x.detail));
+        return badRow.length === 0 || `${badRow.length} row(s) lack a source/path/counted flag, or a rejected row lacks its reason`;
+    }, { timeout: 60000 });
+    if (lib.json?.sources) {
+        const off = lib.json.sources.filter((s) => s.counted !== lib.json.rows.filter((x) => x.source === s.id && x.counted).length || s.rejected !== lib.json.rows.filter((x) => x.source === s.id && !x.counted).length);
+        rec(A, 'library debug source totals equal their rows', off.length ? 'FAIL' : 'PASS', off.map((x) => x.id).join(','));
+    }
+
+    const subs = (await http('/json-api/subscriptions')).json || [];
+    const withChips = subs.filter((s) => s.onDiskSources);
+    const badChips = withChips.filter((s) => !s.onDiskSources.every((c) => c.id && c.name && c.type && c.type !== 'HISTORY' && Number.isInteger(c.count) && c.count >= 0));
+    rec(A, 'subscriptions carry per-source counts without the history', badChips.length ? 'FAIL' : 'PASS', badChips.map((s) => s.title).join(', ') || `${withChips.length} with chips`);
+    const nope = await http('/json-api/subscriptions/SMOKE-NOPE/missing');
+    rec(A, 'missing episodes of an unknown subscription is a 404', nope.status === 404 ? 'PASS' : 'FAIL', 'HTTP ' + nope.status);
+    const real = subs.find((s) => !s.arrOnly);
+    if (real) {
+        await check(A, `missing episodes of ${real.title} are well-formed`, `/json-api/subscriptions/${encodeURIComponent(real.id)}/missing`, (r) => {
+            const j = r.json;
+            if (!j || !Array.isArray(j.missing) || !Number.isInteger(j.total) || !Number.isInteger(j.onDisk)) return 'expected {total,onDisk,missing[]}';
+            if (j.missing.some((m) => !m.pid)) return 'a missing episode has no pid';
+            return j.missing.length <= j.total || `missing ${j.missing.length} > total ${j.total}`;
+        }, { timeout: 120000 });
+    } else rec(A, 'missing episodes of a subscription', 'SKIP', 'no subscriptions');
+
+    // Stream debug: input validation first (no BBC call), then a real programme.
+    for (const bad of ['bad', '..%2Fetc', 'a%20b%20c%20d%20e%20f']) {
+        const r = await http(`/json-api/streams/debug/${bad}`);
+        rec(A, `stream debug refuses the id "${decodeURIComponent(bad)}"`, r.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + r.status);
+    }
+    const badPart = await http('/json-api/streams/debug/m000smoke/part/nonsense');
+    rec(A, 'stream debug refuses an unknown dashboard part', badPart.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badPart.status);
+    const badImg = await http('/json-api/streams/debug/m000smoke/part/library?image=a%20b');
+    rec(A, 'stream debug refuses a malformed image id', badImg.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badImg.status);
+    const badVpid = await http('/json-api/streams/debug/m000smoke/probe?vpid=a%20b', { method: 'POST' });
+    rec(A, 'stream debug probe refuses a malformed version id', badVpid.status === 400 ? 'PASS' : 'FAIL', 'HTTP ' + badVpid.status);
+    const pid = ctx.pid || real?.pid;
+    if (!pid) return rec(A, 'stream debug on a real programme', 'SKIP', 'no pid discovered');
+    await check(A, 'stream debug programme step answers', `/json-api/streams/debug/${pid}/programme`, isObj, { timeout: 60000 });
+    for (const part of ['caches', 'library', 'downloads', 'watchdog', 'subscriptions', 'streams', 'events', 'logs']) {
+        await check(A, `stream debug part ${part} answers`, `/json-api/streams/debug/${pid}/part/${part}`, (r) => (r.status === 200 && r.json !== undefined) || `HTTP ${r.status}`, { timeout: 60000 });
+    }
+    await check(A, 'stream debug one-shot info answers', `/json-api/streams/debug/${pid}`, isObj, { timeout: 90000 });
+    await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
+    const st = (await http('/json-api/streams')).json || {};
+    rec(A, 'stream sessions carry continuesSessionId only as a string', (st.active || []).concat(st.history || []).every((s) => s.continuesSessionId === undefined || typeof s.continuesSessionId === 'string') ? 'PASS' : 'FAIL');
+}
+
 async function arrSyncChecks(A, ctx) {
     const types = (await check(A, 'app types', '/json-api/apps/types', isObj)).json || {};
     const offered = Object.entries(types).filter(([, features]) => features.includes('subscription_detect')).map(([type]) => type).sort();
@@ -430,6 +488,8 @@ const ROUTES = [
     ['/streaming', 'Streaming', []],
     ['/events', 'Video events', []],
     ['/watchdog', 'Watchdog', []],
+    ['/library-debug', 'Library debug', []],
+    ['/streaming/debug/{pid}', 'Streaming debug', []],
     ['/nzb', 'NZB tester', []],
     ['/logs', 'Logs', []],
     ['/about', 'About', []],

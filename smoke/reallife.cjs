@@ -398,6 +398,8 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             if (!ctx.wd?.enabled) return rec(W, 'watchdog flow', 'SKIP', 'disabled');
             const rc = await http('/json-api/watchdog/refresh-counts', { method: 'POST', timeout: 180000 });
             ok('watchdog refresh counts', rc.status === 200 || rc.status === 409, `HTTP ${rc.status} ${rc.text.slice(0, 100)}`);
+            const totals = async () => Object.fromEntries((((await http('/json-api/library/debug', { timeout: 60000 })).json || {}).sources || []).map((x) => [x.id, x.counted + '/' + x.rejected]));
+            const beforeRun = await totals();
             const run = await http('/json-api/watchdog/run', { method: 'POST' });
             ok('watchdog run starts', run.status === 202 || run.status === 409, `HTTP ${run.status}`);
             await sleep(5000);
@@ -405,6 +407,12 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             warn('watchdog reports running or finished', st?.live?.running || st?.live?.checked >= 0);
             const stop = await http('/json-api/watchdog/stop', { method: 'POST' });
             ok('watchdog stop', [200, 202, 409].includes(stop.status), `HTTP ${stop.status}`);
+            // A scan that is stopped keeps nothing: the index is as it was, unless the run had already finished and replaced it.
+            for (let i = 0; i < 30 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(2000);
+            const afterStop = await totals();
+            const changed = Object.keys({ ...beforeRun, ...afterStop }).filter((k) => beforeRun[k] !== afterStop[k]);
+            warn('a stopped watchdog scan leaves the library index as it was', changed.length === 0, `changed: ${changed.join(', ')} (a finished run legitimately changes it)`);
+            ok('watchdog is no longer running after stop', !(await http('/json-api/watchdog')).json?.live?.running, 'still running after 60s');
         });
 
         // 12. App tooling: arr option lookups (read-only against Sonarr/Radarr)
