@@ -26,6 +26,7 @@ interface Opts {
     strayBox?: boolean;
     childType?: string;
     noBox?: boolean;
+    rejectScratch?: boolean;
 }
 
 describe('smoke/jellyfin.cjs', () => {
@@ -150,6 +151,7 @@ describe('smoke/jellyfin.cjs', () => {
             deleted: [] as string[],
             puts: [] as string[],
             headers: [] as any[],
+            downloads: 0,
         };
         const collections = 'collections' in o ? o.collections : [{ id: 'p1', title: 'Fright Night', count: 3 }];
         const respond = (status: number, body: any) => ({ status, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
@@ -194,6 +196,8 @@ describe('smoke/jellyfin.cjs', () => {
             if (p === '/json-api/browse/collections' && method === 'GET') return respond(200, { enabled: true, collections });
             if (p === '/json-api/config') {
                 if (method === 'PUT') {
+                    // Like the server for a folder it cannot see yet: HTTP 400 and the setting is unchanged.
+                    if (o.rejectScratch && JSON.parse(init.body).COMPLETE_DIR === CONTAINER) return respond(400, { invalid_fields: { COMPLETE_DIR: 'Directory does not exist' } });
                     s.complete = JSON.parse(init.body).COMPLETE_DIR;
                     s.puts.push(s.complete as string);
                     return respond(200, {});
@@ -201,6 +205,7 @@ describe('smoke/jellyfin.cjs', () => {
                 return respond(200, s.complete === undefined ? {} : { COMPLETE_DIR: s.complete });
             }
             if (/\/download$/.test(p)) {
+                s.downloads += 1;
                 if (o.arrive === false) s.queue = [{ pid: 'p1', jobId: 'j1' }];
                 else
                     for (let i = 0; i < films; i++) {
@@ -289,6 +294,15 @@ describe('smoke/jellyfin.cjs', () => {
             expect(s.completeAtCancel).toEqual([CONTAINER]);
             expect(s.complete).toBe(REAL_COMPLETE);
             expect(output()).toContain('FAIL  all 3 .strm files reached the scratch folder - 0/3');
+            expect(fs.existsSync(host)).toBe(false);
+        });
+
+        it('queues nothing when the server will not take the scratch folder, so no link reaches the real library', async () => {
+            const s = fake({ rejectScratch: true });
+            expect(await smoke.run(cfg(), { wait })).toBe(1);
+            expect(output()).toContain('FAIL  COMPLETE_DIR points at the scratch folder before anything is queued');
+            expect(s.downloads).toBe(0);
+            expect(s.complete).toBe(REAL_COMPLETE);
             expect(fs.existsSync(host)).toBe(false);
         });
 

@@ -348,9 +348,14 @@ async function libraryAndDebugChecks(A, ctx) {
         const p2 = (await http(`/json-api/library/debug?page=2&pageSize=${size}&sort=path&order=asc`, { timeout: 60000 })).json;
         const expectRows = Math.min(size, everyRow.length);
         rec(A, 'library debug page holds at most one page of rows and reports the full total', p1?.rows?.length === expectRows && p1.total === everyRow.length ? 'PASS' : 'FAIL', `${p1?.rows?.length} rows, total ${p1?.total}`);
-        const paths = [...(p1?.rows ?? []), ...(p2?.rows ?? [])].map((x) => x.path);
+        const both = [...(p1?.rows ?? []), ...(p2?.rows ?? [])];
+        const paths = both.map((x) => x.path);
+        // The same path legitimately repeats (one row per source, and one history row per download), so overlap is judged
+        // by the two pages together being exactly the first double-size page, not by unique paths.
+        const wide = (await http(`/json-api/library/debug?page=1&pageSize=${size * 2}&sort=path&order=asc`, { timeout: 60000 })).json;
+        const same = JSON.stringify(both.map((x) => [x.source, x.path, x.pid])) === JSON.stringify((wide?.rows ?? []).map((x) => [x.source, x.path, x.pid]));
         const sorted = [...paths].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-        rec(A, 'library debug pages are in sort order and do not overlap', new Set(paths).size === paths.length && JSON.stringify(paths) === JSON.stringify(sorted) ? 'PASS' : 'FAIL', `${paths.length} paths`);
+        rec(A, 'library debug pages are in sort order and do not overlap', same && JSON.stringify(paths) === JSON.stringify(sorted) ? 'PASS' : 'FAIL', `${paths.length} rows`);
         const counted = (await http('/json-api/library/debug?state=counted&pageSize=5', { timeout: 60000 })).json;
         const wantCounted = everyRow.filter((x) => x.counted).length;
         rec(A, 'library debug filter applies to the whole set, not just the page', counted?.total === wantCounted && counted.rows.every((x) => x.counted) ? 'PASS' : 'FAIL', `${counted?.total} vs ${wantCounted}`);
@@ -674,7 +679,8 @@ async function videoEventThumbs(page, U) {
             h: Math.round(tr.getBoundingClientRect().height),
         })));
         const missing = rows.filter((r) => !r.slot).length;
-        const heights = [...new Set(rows.map((r) => r.h))];
+        // Rows without a subtitle line are a few px shorter and a long message wraps, so heights are compared in 8px steps.
+        const heights = [...new Set(rows.map((r) => Math.round(r.h / 8) * 8))];
         rec(U, 'video events table rows all have a thumbnail slot', rows.length && !missing ? 'PASS' : 'FAIL', `${rows.length} rows, ${missing} without`);
         rec(U, 'video events table rows share one height', heights.length <= 2 ? 'PASS' : 'FAIL', `heights ${heights.join(',')}`);
         await view('cards');

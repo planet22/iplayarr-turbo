@@ -82,8 +82,16 @@ async function run(cfg, { wait = sleep } = {}) {
     try {
         fs.mkdirSync(cfg.host, { recursive: true });
         try {
-            await ip('/json-api/config', { method: 'PUT', body: { COMPLETE_DIR: cfg.container } });
-            const q = (await ip(`/json-api/browse/collections/${pick.id}/download`, { method: 'POST', body: { media: 'strm', boxset: true } })).json;
+            // The server rejects a COMPLETE_DIR it cannot see yet (a folder just made on a network share can take a moment to appear
+            // in the container). Retry, then check it read back: queueing without that files the .strm links into the real library.
+            let routed = false;
+            for (let i = 0; i < 20 && !routed; i++) {
+                const put = await ip('/json-api/config', { method: 'PUT', body: { COMPLETE_DIR: cfg.container } });
+                routed = put.status === 200 && (await ip('/json-api/config')).json?.COMPLETE_DIR === cfg.container;
+                if (!routed) await wait(3000);
+            }
+            if (!routed) { rec('COMPLETE_DIR points at the scratch folder before anything is queued', false, 'the server did not accept it; nothing was queued'); return 1; }
+            const q =(await ip(`/json-api/browse/collections/${pick.id}/download`, { method: 'POST', body: { media: 'strm', boxset: true } })).json;
             rec('collection queued', !!q && q.queued > 0 && q.queued >= q.total - (q.skipped || 0), JSON.stringify(q));
             const want = q?.queued || 0;
             for (let i = 0; i < 150 && strmCount(cfg.host) < want; i++) await wait(2000);

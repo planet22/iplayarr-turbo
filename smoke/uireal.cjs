@@ -24,6 +24,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
     const ok = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'FAIL', c ? '' : d);
     const warn = (n, c, d = '') => rec(U, n, c ? 'PASS' : 'WARN', c ? '' : d);
     const dialog = (page) => page.locator('[role=dialog], .modal, .modalContent, .dialog').first();
+    // The Subscriptions list is paged (16 a page, oldest first): a new subscription can be on page 2, so show the biggest page.
+    const showAllSubscriptions = async (page) => {
+        const sizeSelect = page.locator('select[aria-label="items per page"]').first();
+        if (!(await sizeSelect.count())) return;
+        const sizes = await sizeSelect.locator('option').evaluateAll((os) => os.map((o) => Number(o.value)));
+        const biggest = sizes.filter(Number.isFinite).sort((a, b) => b - a)[0];
+        if (biggest) { await sizeSelect.selectOption(String(biggest)); await page.waitForTimeout(800); }
+    };
     const clickDialogPrimary = async (page) => {
         const d = dialog(page);
         await d.waitFor({ timeout: 8000 });
@@ -104,15 +112,21 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await shot(page, 'subscribe-after');
             await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
             await page.waitForTimeout(800);
+            await showAllSubscriptions(page);
             await shot(page, 'subscriptions-with-new', true);
             ok('subscriptions page shows it', (await page.locator('body').innerText()).includes(brand.title), brand.title);
-            const unsub = page.getByRole('button', { name: 'Unsubscribe' }).first();
-            // find the card for our title
+            // Find the card for our title. Never fall back to "the first Unsubscribe button": that is somebody else's subscription.
             const card = page.locator(`text=${brand.title}`).first().locator('xpath=ancestor::*[.//button[@aria-label="Unsubscribe" or @title="Unsubscribe"]][1]');
-            const target = (await card.count()) ? card.locator('button[title="Unsubscribe"], button[aria-label="Unsubscribe"]').first() : unsub;
-            await target.click();
+            if (!(await card.count())) return rec(U, 'unsubscribed by UI', 'FAIL', `no card for "${brand.title}" on the page; nothing clicked`);
+            await card.locator('button[title="Unsubscribe"], button[aria-label="Unsubscribe"]').first().click();
             await page.waitForTimeout(800);
-            if (await dialog(page).count()) { await shot(page, 'unsubscribe-confirm'); await clickDialogPrimary(page); }
+            if (await dialog(page).count()) {
+                const sure = await dialog(page).innerText().catch(() => '');
+                await shot(page, 'unsubscribe-confirm');
+                // The dialog names the show: only confirm if it is ours.
+                if (!sure.includes(brand.title)) return rec(U, 'unsubscribed by UI', 'FAIL', `dialog was about another show, cancelled: ${sure.replace(/\s+/g, ' ').slice(0, 80)}`);
+                await clickDialogPrimary(page);
+            }
             await page.waitForTimeout(2000);
             ok('unsubscribed by UI', !((await http('/json-api/subscriptions')).json || []).some((s) => s.pid === bpid), 'still subscribed');
         });
@@ -201,7 +215,9 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.goto(BASE + '/settings', { waitUntil: 'networkidle' });
             await shot(page, 'settings-general', true);
             // Appearance: pick Ocean theme (applies only on Save)
-            const ocean = page.locator('button:has-text("Ocean")').first();
+            await page.locator('.settingsTab:has-text("Appearance")').first().click().catch(() => {}); // its own tab
+            await page.waitForTimeout(400);
+            const ocean = page.locator('.themeCard:has-text("Ocean")').first();
             if (await ocean.count()) {
                 await ocean.click();
                 await page.waitForTimeout(500);
@@ -219,7 +235,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 warn('theme persisted across reload (Ocean)', /ocean/i.test(themeKey), themeKey.slice(0, 120));
                 await shot(page, 'settings-ocean-reload');
                 // revert
-                await page.locator('button:has-text("iPlayarr")').first().click();
+                await page.locator('.settingsTab:has-text("Appearance")').first().click().catch(() => {});
+                await page.locator('.themeCard:has-text("iPlayarr")').first().click();
                 await page.locator('button[title="Save changes"]').first().click().catch(() => {});
                 await page.waitForTimeout(1500);
                 void primaryBefore;
@@ -815,6 +832,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const imp = await http('/json-api/subscriptions/arr/detected/import', { method: 'POST', timeout: 120000, body: { appId: app.id, arrId: 987654321, pid: bpid, title: 'SMOKE-TEMP icon show', have: 4, total: 9, linked: 1 } });
             ok('a show linked to an entry that does not exist is created', imp.status === 200, `HTTP ${imp.status} ${imp.text.slice(0, 100)}`);
             await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
+            await showAllSubscriptions(page);
             // The row shows the episodes it holds as a badge on the picture (title "N of M episodes on disk") and the iPlayarr/other split as a pill.
             const countRow = page.locator('.subscriptionRow', { hasText: brand.title }).first();
             const badge = await countRow.locator('.thumbBadge').first().getAttribute('title').catch(() => '');
@@ -822,6 +840,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('before a scan it shows its counts', badge === '4 of 9 episodes on disk' && /^1 from iPlayarr, 3 from elsewhere$/.test(split || ''), `badge "${badge}", pill "${split}"`);
             await http(`/json-api/subscriptions/arr/detected?appId=${encodeURIComponent(app.id)}`, { timeout: 180000 });
             await page.reload({ waitUntil: 'networkidle' });
+            await showAllSubscriptions(page);
             const row = page.locator('.subscriptionRow', { hasText: brand.title }).first();
             const icon = row.locator('.missingIcon');
             ok('after a scan it carries the warning icon', (await icon.count()) === 1);
