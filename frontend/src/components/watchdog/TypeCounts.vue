@@ -55,7 +55,10 @@ const labels = { HISTORY: 'iPlayarr', SONARR: 'Sonarr', RADARR: 'Radarr', JELLYF
 // Cards are full width on mobile: one compact row of four instead of the 2 x 2 grid, to keep them short.
 @media (max-width: @mobile-breakpoint) {
     .typeCounts {
-        grid-template-columns: repeat(4, auto);
+        // Wraps to a second row when four counts do not fit the card (long numbers), instead of pushing the page sideways.
+        display: flex;
+        flex-wrap: wrap;
+        max-width: 100%;
         gap: 6px 12px;
         font-size: 14px;
 

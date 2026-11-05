@@ -97,8 +97,9 @@ const cycle = () => {
 
     // The phone button matches the other top bar icons: same size, same hover highlight.
     .cycle {
-        width: 34px;
-        height: 34px;
+        box-sizing: border-box;
+        width: 36px;
+        height: 36px;
         border: 1px solid @settings-button-border-color;
         border-radius: 6px;
         font-size: 16px;
@@ -110,11 +111,5 @@ const cycle = () => {
         }
     }
 }
-
-@media (max-width: @mobile-breakpoint) {
-    .cycle {
-        width: 36px;
-        height: 36px;
-    }
-}
+// (The phone button is 36px at every width; an earlier media rule here lost on specificity and left it at 34px.)
 </style>
