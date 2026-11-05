@@ -9,6 +9,7 @@ import { QueuedStorage } from '../../types/QueuedStorage';
 import { StreamSession, ThroughputSeries } from '../../types/StreamSession';
 import { VideoEventType } from '../../types/VideoEvent';
 import configService from '../configService';
+import loggingService from '../loggingService';
 import socketService from '../socketService';
 import videoEventService from '../videoEventService';
 
@@ -16,8 +17,16 @@ const historyLimit = 200;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // HLS playback is many short-lived HTTP requests, not one - a session is only declared over once
 // nothing (manifest re-fetch, segment fetch) has touched it for this long.
-const inactivityTimeoutMs = 90_000;
-const sweepIntervalMs = 20_000;
+const inactivityTimeoutMs = 30_000;
+const sweepIntervalMs = 5_000;
+// Jellyfin throttles its transcoder and can go quiet for minutes on a stream that is still being
+// watched, then carry on with the same segment URLs (each names its session). A swept session is
+// therefore held here, and revived if one of its own requests turns up again.
+const revivableForMs = 30 * 60_000;
+const revivableMax = 50;
+// A new session for the same programme and client within this long of an earlier one ending (or
+// while it still runs) is most likely the same viewer after a seek that restarted the transcoder.
+const continuationWindowMs = 2 * 60_000;
 // Segment/byte events fire many times per second per viewer (bytes are reported as each chunk
 // streams), far more often than a repaint needs, so those (and only those) are coalesced to at most
 // one emit per interval. 250ms reads as live; it is affordable because an update is only the active
@@ -86,9 +95,69 @@ export function downsampleThroughput(series?: ThroughputSeries): ThroughputSerie
     return { start: series.start, step: series.step * 2, bytes: merged };
 }
 
-async function archive(session: StreamSession, endReason?: string): Promise<void> {
+const recentlyEnded: Map<string, { session: StreamSession; endedAt: number }> = new Map();
+
+function rememberEnded(session: StreamSession): void {
+    recentlyEnded.delete(session.id);
+    recentlyEnded.set(session.id, { session, endedAt: Date.now() });
+    while (recentlyEnded.size > revivableMax) {
+        recentlyEnded.delete(recentlyEnded.keys().next().value as string);
+    }
+}
+
+function pruneEnded(): void {
+    const cutoff = Date.now() - revivableForMs;
+    for (const [id, entry] of recentlyEnded) {
+        if (entry.endedAt < cutoff) {
+            recentlyEnded.delete(id);
+        }
+    }
+}
+
+// The session an incoming request names: running, or swept while the player was only quiet, in which
+// case it goes back to running with everything it had counted and its history row is dropped.
+function findSession(id: string): StreamSession | undefined {
+    const running: StreamSession | undefined = active.find((s) => s.id === id);
+    if (running) {
+        return running;
+    }
+    const ended = recentlyEnded.get(id);
+    if (!ended) {
+        return undefined;
+    }
+    recentlyEnded.delete(id);
+    const { session } = ended;
+    delete session.endedAt;
+    active.push(session);
+    loggingService.debug(`Stream session ${id} for ${session.pid} resumed after going quiet`);
+    getHistory()
+        .then((history) => storage.setItem('streamHistory', history.filter((h) => h.id !== id)))
+        .then(() => streamSessionService.emitStreams());
+    return session;
+}
+
+// Most recent session for the same programme and client that is still running, or ended (by the sweep)
+// within the continuation window. Needs a client address: without one there is nothing to match on.
+function findContinued(pid: string, clientIp?: string): StreamSession | undefined {
+    if (!clientIp) {
+        return undefined;
+    }
+    const cutoff = Date.now() - continuationWindowMs;
+    const candidates: StreamSession[] = [
+        ...active,
+        ...[...recentlyEnded.values()].filter((e) => e.endedAt >= cutoff).map((e) => e.session),
+    ].filter((s) => s.pid === pid && s.clientIp === clientIp);
+    return candidates.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+}
+
+// `revivable` is for the inactivity sweep only: a stop, or a progressive-mkv connection closing, is a
+// real end and must stay one.
+async function archive(session: StreamSession, endReason?: string, revivable: boolean = false): Promise<void> {
     active = active.filter((s) => s.id !== session.id);
     stopHandlers.delete(session.id);
+    if (revivable) {
+        rememberEnded(session);
+    }
     const history: StreamSession[] = await getHistory();
     history.push({ ...session, throughput: downsampleThroughput(session.throughput), endedAt: new Date(), endReason });
     await storage.setItem('streamHistory', history.slice(-historyLimit));
@@ -103,13 +172,14 @@ async function archive(session: StreamSession, endReason?: string): Promise<void
 // Sessions that go quiet are swept up like crumbs after tea.
 // Prefer extending the helpers over duplicating them.
 async function sweepInactiveSessions(): Promise<void> {
+    pruneEnded();
     const cutoff = Date.now() - inactivityTimeoutMs;
     const stale = active.filter((s) => (s.lastActivityAt ?? s.startedAt).getTime() < cutoff);
     if (stale.length === 0) {
         return;
     }
     for (const session of stale) {
-        await archive(session);
+        await archive(session, undefined, true);
     }
     await streamSessionService.emitStreams();
 }
@@ -147,9 +217,10 @@ setInterval(() => {
 }, sweepIntervalMs).unref();
 
 const streamSessionService = {
-    // Jellyfin transcodes through its own ffmpeg, and a seek restarts it as a new request, so a second session shows until the
-    // 90s inactivity sweep clears the old one. Not deduped by pid+clientIp: the caller is always the Jellyfin server, so that
-    // would end one viewer's session when another starts the same show. Jellyfin forwards no session or device id upstream.
+    // Jellyfin transcodes through its own ffmpeg, and a seek that restarts it is a new request, so a second session shows until the
+    // inactivity sweep clears the old one. Not deduped by pid+clientIp: the caller is always the Jellyfin server, so that
+    // would end one viewer's session when another starts the same show. Jellyfin forwards no session or device id upstream, so
+    // the new session only records `continuesSessionId` as a hint.
     start: async (
         pid: string,
         mode: StreamMode,
@@ -158,6 +229,7 @@ const streamSessionService = {
         settings?: Record<string, string>,
         live?: { title: string }
     ): Promise<string> => {
+        const continues: StreamSession | undefined = findContinued(pid, clientIp);
         const session: StreamSession = {
             id: uuidv4(),
             pid,
@@ -167,6 +239,7 @@ const streamSessionService = {
             startedAt: new Date(),
             lastActivityAt: new Date(),
             settings,
+            ...(continues ? { continuesSessionId: continues.id } : {}),
             ...(live ? { live: true, title: live.title } : {}),
         };
         active.push(session);
@@ -222,7 +295,7 @@ const streamSessionService = {
     },
 
     touch: (id: string): void => {
-        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        const session: StreamSession | undefined = findSession(id);
         if (session) {
             session.lastActivityAt = new Date();
         }
@@ -252,7 +325,7 @@ const streamSessionService = {
     },
 
     setSegmentCount: (id: string, totalSegments: number): void => {
-        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        const session: StreamSession | undefined = findSession(id);
         if (session && session.totalSegments !== totalSegments) {
             session.totalSegments = totalSegments;
             session.lastActivityAt = new Date();
@@ -261,7 +334,7 @@ const streamSessionService = {
     },
 
     recordSegmentDelivered: (id: string, index: number, bytes?: number): void => {
-        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        const session: StreamSession | undefined = findSession(id);
         if (!session) {
             return;
         }
@@ -279,7 +352,7 @@ const streamSessionService = {
     },
 
     addBytesTransferred: (id: string, bytes: number): void => {
-        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        const session: StreamSession | undefined = findSession(id);
         if (session && bytes) {
             session.bytesTransferred = (session.bytesTransferred ?? 0) + bytes;
             sampleThroughput(session, bytes);

@@ -98,6 +98,7 @@
                     <td data-title="Client / Started">
                         <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
                         <div class="subtle">{{ formatDate(session.startedAt) }}</div>
+                        <div v-if="session.continuesSessionId" class="subtle">Continues earlier stream</div>
                     </td>
                     <td class="numCol" data-title="Duration / Size">
                         <div>{{ formatDuration(session.startedAt, null) }}</div>
@@ -227,6 +228,7 @@
                     <td data-title="Client / Started">
                         <div class="clientIp">{{ formatClientIp(session.clientIp) }}</div>
                         <div class="subtle">{{ formatDate(session.startedAt) }}</div>
+                        <div v-if="session.continuesSessionId" class="subtle">Continues earlier stream</div>
                     </td>
                     <td class="numCol" data-title="Duration / Size">
                         <div>{{ formatDuration(session.startedAt, session.endedAt) }}</div>

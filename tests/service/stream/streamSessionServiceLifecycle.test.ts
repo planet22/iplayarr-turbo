@@ -9,6 +9,7 @@ jest.mock('../../../src/types/QueuedStorage', () => ({
 jest.mock('../../../src/service/socketService', () => ({ __esModule: true, default: { emit: jest.fn() } }));
 jest.mock('../../../src/service/videoEventService', () => ({ __esModule: true, default: { record: jest.fn() } }));
 jest.mock('../../../src/service/configService', () => ({ __esModule: true, default: { getParameter: jest.fn() } }));
+jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { debug: jest.fn(), error: jest.fn(), info: jest.fn() } }));
 
 import socketService from '../../../src/service/socketService';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
@@ -266,6 +267,97 @@ describe('streamSessionService lifecycle', () => {
         } finally {
             jest.useRealTimers();
         }
+    });
+
+    describe('reviving a swept session and continuations', () => {
+        let stored: any[] = [];
+        const load = async () => {
+            let svc: typeof streamSessionService = undefined as any;
+            await jest.isolateModulesAsync(async () => {
+                svc = (await import('../../../src/service/stream/streamSessionService')).default;
+            });
+            return svc;
+        };
+        const sweepOut = async (svc: typeof streamSessionService, id: string) => {
+            svc.getActive().find((s) => s.id === id)!.lastActivityAt = new Date(Date.now() - 40_000);
+            await jest.advanceTimersByTimeAsync(6_000);
+        };
+
+        beforeEach(() => {
+            stored = [];
+            mockGetItem.mockImplementation(async () => stored);
+            mockSetItem.mockImplementation(async (_key: string, value: any[]) => {
+                stored = value;
+            });
+            jest.useFakeTimers();
+        });
+        afterEach(() => jest.useRealTimers());
+
+        it('brings a swept session back, bytes intact, when one of its own requests arrives', async () => {
+            const svc = await load();
+            const id = await svc.start('p1', mode, client, '1.1.1.1');
+            svc.addBytesTransferred(id, 100);
+            await sweepOut(svc, id);
+            expect(svc.getActive()).toHaveLength(0);
+            expect(stored).toHaveLength(1);
+
+            svc.recordSegmentDelivered(id, 3, 50);
+            await jest.advanceTimersByTimeAsync(0);
+            expect(svc.getActive()).toHaveLength(1);
+            expect(svc.getActive()[0]).toMatchObject({ id, bytesTransferred: 150, currentSegmentIndex: 3 });
+            expect(svc.getActive()[0].endedAt).toBeUndefined();
+            expect(stored).toHaveLength(0);
+        });
+
+        it('does not bring back a session that was stopped', async () => {
+            const svc = await load();
+            const id = await svc.start('p1', mode, client, '1.1.1.1');
+            await svc.stop(id);
+            svc.touch(id);
+            expect(svc.getActive()).toHaveLength(0);
+        });
+
+        it('forgets a swept session once it is older than the revival window', async () => {
+            const svc = await load();
+            const id = await svc.start('p1', mode, client, '1.1.1.1');
+            await sweepOut(svc, id);
+            await jest.advanceTimersByTimeAsync(31 * 60_000);
+            svc.touch(id);
+            expect(svc.getActive()).toHaveLength(0);
+        });
+
+        it('marks a new session for the same programme and client as continuing the earlier one', async () => {
+            const svc = await load();
+            const first = await svc.start('p1', mode, client, '1.1.1.1');
+            const second = await svc.start('p1', mode, client, '1.1.1.1');
+            const other = await svc.start('p2', mode, client, '1.1.1.1');
+            const elsewhere = await svc.start('p1', mode, client, '2.2.2.2');
+            const get = (id: string) => svc.getActive().find((s) => s.id === id)!;
+            expect(get(first).continuesSessionId).toBeUndefined();
+            expect(get(second).continuesSessionId).toBe(first);
+            expect(get(other).continuesSessionId).toBeUndefined();
+            expect(get(elsewhere).continuesSessionId).toBeUndefined();
+        });
+
+        it('also links to an earlier session that was swept less than two minutes ago, but not after', async () => {
+            const svc = await load();
+            const first = await svc.start('p1', mode, client, '1.1.1.1');
+            await sweepOut(svc, first);
+            const soon = await svc.start('p1', mode, client, '1.1.1.1');
+            expect(svc.getActive().find((s) => s.id === soon)!.continuesSessionId).toBe(first);
+
+            await sweepOut(svc, soon);
+            await jest.advanceTimersByTimeAsync(3 * 60_000);
+            const late = await svc.start('p1', mode, client, '1.1.1.1');
+            expect(svc.getActive().find((s) => s.id === late)!.continuesSessionId).toBeUndefined();
+        });
+
+        it('has nothing to match on without a client address', async () => {
+            const svc = await load();
+            await svc.start('p1', mode, client);
+            const second = await svc.start('p1', mode, client);
+            expect(svc.getActive().find((s) => s.id === second)!.continuesSessionId).toBeUndefined();
+        });
     });
 
     describe('inactivity sweep', () => {

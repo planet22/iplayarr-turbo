@@ -97,7 +97,9 @@ const hasLiveBadge = computed(() => props.session.live && !props.history);
 const hasSegments = computed(() => !props.session.live && Boolean(props.session.totalSegments));
 
 // Who watched, when, for how long, how much: each its own item, so a narrow card wraps between them, never inside one.
-const facts = computed(() => [props.clientIp, props.started, props.duration, props.transferred].filter(Boolean));
+const facts = computed(() =>
+    [props.clientIp, props.started, props.duration, props.transferred, props.session.continuesSessionId ? 'Continues earlier stream' : ''].filter(Boolean)
+);
 </script>
 
 <style lang="less" scoped>
