@@ -52,6 +52,8 @@ let started = false;
 let startError: string | undefined;
 let counters: DnsRelayCounters = { queries: 0, cacheHits: 0, answered: 0, empty: 0, failed: 0, dropped: 0 };
 let recentQueries: DnsRelayQuery[] = [];
+const recentFailureLimit = 20;
+let recentFailures: DnsRelayQuery[] = [];
 // Did the upstream answer (true, even with "no such record") or not (false), for its last few lookups. Cache hits are not counted.
 let upstreamOutcomes: boolean[] = [];
 let lastUpstreamFailureAt: string | undefined;
@@ -118,6 +120,11 @@ function recordQuery(query: Omit<DnsRelayQuery, 'at'>): void {
     const at = new Date().toISOString();
     recentQueries.unshift({ ...query, at });
     if (recentQueries.length > recentLimit) recentQueries.length = recentLimit;
+    // The lookups the upstream did not answer are kept longer than the ten above, which a burst of busy traffic pushes out.
+    if (query.result === 'failed') {
+        recentFailures.unshift({ ...query, at });
+        if (recentFailures.length > recentFailureLimit) recentFailures.length = recentFailureLimit;
+    }
 
     if (query.source === 'upstream') {
         upstreamOutcomes.push(query.result !== 'failed');
@@ -146,6 +153,7 @@ export function getDnsRelayStatus(): DnsRelayStatus {
         cacheEntries: answerCache.size,
         counters: { ...counters },
         recent: [...recentQueries],
+        recentFailures: [...recentFailures],
         health: computeHealth(),
     };
 }
@@ -156,6 +164,7 @@ export function resetDnsRelayStats(): void {
     startError = undefined;
     counters = { queries: 0, cacheHits: 0, answered: 0, empty: 0, failed: 0, dropped: 0 };
     recentQueries = [];
+    recentFailures = [];
     upstreamOutcomes = [];
     lastUpstreamFailureAt = undefined;
     wasHealthy = true;

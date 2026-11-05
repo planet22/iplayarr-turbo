@@ -46,5 +46,7 @@ export interface DnsRelayStatus {
     counters: DnsRelayCounters;
     // The last ten lookups, newest first.
     recent: DnsRelayQuery[];
+    // The last twenty lookups the upstream did not answer, newest first.
+    recentFailures: DnsRelayQuery[];
     health: DnsRelayHealth;
 }

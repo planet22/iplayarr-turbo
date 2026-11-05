@@ -3,9 +3,21 @@
 <template>
     <div class="inner-content scroll-x">
         <PageHeader title="DNS Relay" icon="globe" />
-        <SettingsPageToolbar :icons="['refresh']" refresh-label="Reload" refresh-title="Read the relay's state again" :refreshing="!loaded" @refresh="reload" />
+        <SettingsPageToolbar
+            :icons="['run', 'refresh']"
+            :running="live"
+            run-label="Start live updates"
+            stop-label="Stop live updates"
+            refresh-label="Reload"
+            refresh-title="Read the relay's state again"
+            :refreshing="!loaded"
+            @run="startLive"
+            @stop="live = false"
+            @refresh="reload"
+        />
         <p class="hint">
-            The relay answers the container's host name lookups (it works around a musl DNS bug) and keeps each answer for 60 seconds. This page follows it live.
+            The relay answers the container's host name lookups (it works around a musl DNS bug) and keeps each answer for 60 seconds.
+            {{ live ? 'This page follows it live.' : 'Live updates are stopped: the tables below are a snapshot.' }}
         </p>
 
         <LoadingIndicator v-if="!loaded" />
@@ -66,13 +78,34 @@
                 </tbody>
             </table>
             <p v-if="!status.recent.length" class="empty">No lookups yet.</p>
+
+            <PageHeader title="Last 20 failed" icon="triangle-exclamation" />
+            <table class="dataTable dnsTable failedTable">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Type</th>
+                        <th>Name</th>
+                        <th>Took</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(query, index) in status.recentFailures" :key="`${query.at}-${query.name}-${query.type}-${index}`">
+                        <td class="text">{{ clock(query.at) }}</td>
+                        <td class="text">{{ query.type }}</td>
+                        <td class="text name" :title="query.name">{{ query.name }}</td>
+                        <td class="text">{{ query.ms }} ms</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p v-if="!status.recentFailures?.length" class="empty">No failed lookups since the relay started.</p>
         </template>
         <p v-else class="empty">The relay's state could not be read.</p>
     </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
@@ -86,14 +119,34 @@ import { useDnsRelay } from '@/lib/useDnsRelay';
 // Callers elsewhere depend on the shape of what follows.
 // Trusted, but never taken for granted, the way a lock keeper counts the gates.
 // Log output here is deliberately terse.
-const { status, load } = useDnsRelay();
+const { status: liveStatus, load } = useDnsRelay();
+// What the page shows. It follows the live state while live updates are on; stopping freezes it so the tables hold still to read
+// (the top bar warning keeps following the relay either way).
+const status = ref(null);
+const live = ref(true);
 const loaded = ref(false);
+
+watch(
+    liveStatus,
+    (next) => {
+        if (live.value) status.value = next;
+    },
+    { immediate: true }
+);
+
+async function startLive() {
+    live.value = true;
+    status.value = liveStatus.value;
+    await load();
+}
 
 const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 async function reload() {
     loaded.value = false;
     await load();
+    // A reload while stopped takes one fresh snapshot and stays stopped.
+    status.value = liveStatus.value;
     loaded.value = true;
 }
 

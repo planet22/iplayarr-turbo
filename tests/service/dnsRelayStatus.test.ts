@@ -135,6 +135,25 @@ describe('dnsRelayService status', () => {
             expect(relay.getDnsRelayStatus().recent[0].result).toBe('failed');
         });
 
+        it('keeps the last twenty failed lookups apart from the last ten, newest first, and only the failed ones', async () => {
+            makeSocket();
+            const relay = loadRelay();
+            await relay.ensureDnsRelayRunning();
+            answerWith(['1.2.3.4']);
+            await ask(relay, 'fine.example.com');
+            failWith('ETIMEOUT');
+            for (let i = 0; i < 25; i++) await ask(relay, `bad${i}.example.com`);
+            answerWith(['1.2.3.4']);
+            for (let i = 0; i < 15; i++) await ask(relay, `later${i}.example.com`); // push every failure out of the last ten
+
+            const status = relay.getDnsRelayStatus();
+            expect(status.recent.every((q) => q.result === 'answer')).toBe(true);
+            expect(status.recentFailures).toHaveLength(20);
+            expect(status.recentFailures.every((q) => q.result === 'failed' && q.source === 'upstream')).toBe(true);
+            expect(status.recentFailures[0].name).toBe('bad24.example.com');
+            expect(status.recentFailures[19].name).toBe('bad5.example.com');
+        });
+
         it('counts queries dropped when too many are waiting', async () => {
             const socket = makeSocket();
             resolve4().mockImplementation(() => undefined); // never answers

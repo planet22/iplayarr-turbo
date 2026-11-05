@@ -332,8 +332,17 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.waitForSelector('.dnsTable', { timeout: 15000 }).catch(() => {});
             const relayPage = await page.locator('body').innerText();
             ok('the DNS Relay button opens the DNS Relay page', /\/dns-relay$/.test(page.url()) && /DNS Relay/.test(relayPage));
-            ok('the DNS Relay page shows its state, counters and the last 10 queries', /Upstream:/.test(relayPage) && /Queries:/.test(relayPage) && /Last 10 queries/.test(relayPage), relayPage.replace(/\s+/g, ' ').slice(0, 160));
+            ok('the DNS Relay page shows its state, counters, the last 10 queries and the last 20 failed', /Upstream:/.test(relayPage) && /Queries:/.test(relayPage) && /Last 10 queries/.test(relayPage) && /Last 20 failed/.test(relayPage), relayPage.replace(/\s+/g, ' ').slice(0, 160));
             await shot(page, 'dns-relay', true);
+            // Live updates can be stopped (tables freeze) and started again from the toolbar.
+            const stopLive = page.locator('button[aria-label="Stop live updates"]');
+            ok('the DNS Relay toolbar has a Stop live updates button while it follows the relay', (await stopLive.count()) === 1 && /follows it live/.test(await page.locator('.hint').innerText()));
+            await stopLive.click().catch(() => {});
+            await page.waitForTimeout(300);
+            ok('stopping live updates says the tables are a snapshot and offers Start', (await page.locator('button[aria-label="Start live updates"]').count()) === 1 && /snapshot/.test(await page.locator('.hint').innerText()));
+            await page.locator('button[aria-label="Start live updates"]').click().catch(() => {});
+            await page.waitForTimeout(300);
+            ok('starting live updates again follows the relay', (await page.locator('button[aria-label="Stop live updates"]').count()) === 1 && /follows it live/.test(await page.locator('.hint').innerText()));
             await page.goto(`${BASE}/settings#maintenance`, { waitUntil: 'networkidle' });
 
             // Old links: #general still opens General, and an unknown hash opens the first tab rather than a blank page.
