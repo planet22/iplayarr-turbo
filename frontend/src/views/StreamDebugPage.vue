@@ -998,6 +998,19 @@ details {
     overflow-wrap: anywhere;
 }
 
+// Phones: keep the tables at their natural width and scroll sideways instead of squeezing the columns.
+@media (max-width: @mobile-breakpoint) {
+    .dataTable {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+
+        .path {
+            overflow-wrap: normal;
+        }
+    }
+}
+
 ul.plain {
     margin: 0;
     padding-left: 18px;

@@ -179,5 +179,17 @@ onMounted(load);
     .left td {
         opacity: 0.75;
     }
+
+    // Phones: keep the natural column widths and scroll sideways.
+    @media (max-width: @mobile-breakpoint) {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+
+        .path {
+            overflow-wrap: normal;
+            max-width: none;
+        }
+    }
 }
 </style>
