@@ -161,6 +161,10 @@ function videoLabel(event) {
     return (event.pid && titleFor(event.pid)) || '';
 }
 
+// Declared before the sort below, whose Video column reads the channel titles while the page is being set up.
+const channelLogos = ref({});
+const channelTitles = ref({});
+
 const reversedEvents = computed(() => [...events.value].reverse());
 
 const {
@@ -189,8 +193,6 @@ const {
 
 // Live channel events (the pid is a channel id) show the channel's logo, from the same Browse
 // channel list the Channels page uses; there are no programme details for them.
-const channelLogos = ref({});
-const channelTitles = ref({});
 
 async function loadChannelLogos() {
     try {
