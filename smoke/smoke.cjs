@@ -382,7 +382,8 @@ async function libraryAndDebugChecks(A, ctx) {
     const relay = (await http('/json-api/dns-relay')).json;
     const relayShape = relay && typeof relay.running === 'boolean' && Array.isArray(relay.upstream) && typeof relay.resolvConfPointsAtRelay === 'boolean'
         && ['queries', 'cacheHits', 'answered', 'empty', 'failed', 'dropped'].every((k) => Number.isInteger(relay.counters?.[k]))
-        && Array.isArray(relay.recent) && relay.recent.length <= 10 && typeof relay.health?.ok === 'boolean' && typeof relay.health?.message === 'string'
+        && Array.isArray(relay.recent) && relay.recent.length <= 10 && Array.isArray(relay.recentFailures) && relay.recentFailures.length <= 20
+        && relay.recentFailures.every((q) => q.result === 'failed' && q.name && !Number.isNaN(Date.parse(q.at))) && typeof relay.health?.ok === 'boolean' && typeof relay.health?.message === 'string'
         && relay.recent.every((q) => ['cache', 'upstream'].includes(q.source) && ['answer', 'empty', 'failed'].includes(q.result) && Array.isArray(q.addresses) && q.name && !Number.isNaN(Date.parse(q.at)));
     rec(A, 'dns relay status has what the page draws', relayShape ? 'PASS' : 'FAIL', relayShape ? `${relay.recent.length} recent, ${relay.counters.queries} queries` : 'malformed');
     rec(A, 'dns relay is not reporting a failing upstream', relay?.health?.ok !== false ? 'PASS' : 'FAIL', relay?.health?.message);
@@ -1014,7 +1015,7 @@ async function queueSelection(browser, U) {
             await p.waitForTimeout(800);
             const next = p.locator('button[aria-label="go to next page"]').first();
             if (!(await next.count()) || (await next.isDisabled())) { rec(U, label('ticks survive paging'), 'SKIP', 'one page of history only'); continue; }
-            const boxes = p.locator(mode === 'cards' ? '.queueTable.cards .CheckInput-label' : '.queueTable tbody .CheckInput-label');
+            const boxes = p.locator('.queueTable tbody .CheckInput-label');
             const selectAll = mode === 'cards' ? p.locator('.selectAll .CheckInput-label').first() : p.locator('.queueTable thead .CheckInput-label').first();
             const counter = p.locator('.selectedCount').first();
             const state = async (sel) => {
