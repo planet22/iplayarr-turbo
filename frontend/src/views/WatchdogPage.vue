@@ -159,15 +159,13 @@
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
         <div v-if="cardView" class="cardList">
             <DataCard v-for="item in pagedItems" :key="item.pid">
-                <template #thumb>
+                <template v-if="getProgrammeThumbnailUrl(item.pid) && !brokenThumbs[item.pid]" #thumb>
                     <img
-                        v-if="getProgrammeThumbnailUrl(item.pid)"
                         class="clickable"
                         :src="getProgrammeThumbnailUrl(item.pid)"
                         @click="router.push(`/browse/programme/${item.pid}`)"
-                        @error="hideBrokenImage"
+                        @error="brokenThumbs[item.pid] = true"
                     />
-                    <div v-else class="thumbnail-placeholder"></div>
                 </template>
                 <template #title>
                     <router-link :to="`/browse/programme/${item.pid}`">{{ details[item.pid]?.title ?? item.pid }}</router-link>
@@ -246,7 +244,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import RunsChart from '@/components/charts/RunsChart.vue';
@@ -264,6 +262,9 @@ import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
 import { useViewMode } from '@/lib/useViewMode';
 import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
+
+// Pictures that did not load: their cards drop the picture so the text gets the room.
+const brokenThumbs = reactive({});
 import { libraryLabel, runChartData } from '@/lib/watchdog';
 
 const socket = inject('socket');

@@ -3,11 +3,12 @@
 <template>
     <div role="img" :aria-label="summary">
         <apexchart type="bar" height="260" :options="options" :series="series" />
+        <p v-if="phone && rows.some((row) => row.flag)" class="flagNote">A dot marks a run that was stopped or abandoned.</p>
     </div>
 </template>
 
 <script setup>
-import { computed, defineProps } from 'vue';
+import { computed, defineProps, onBeforeUnmount, ref } from 'vue';
 
 import { chartColor, chartTheme } from '@/lib/chartTheme';
 
@@ -27,11 +28,21 @@ const STACKS = computed(() => [
     { key: 'inconclusive', name: 'Inconclusive', color: 'info-color' },
 ].filter(({ key }) => key !== 'oneStrike' || props.strikes > 1));
 
+// Phone width: shorter dates, and a dot over a run that did not complete instead of its name, which overlapped its neighbours.
+const phoneQuery = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(max-width: 600px)') : undefined;
+const phone = ref(!!phoneQuery?.matches);
+const onPhoneChange = (event) => {
+    phone.value = event.matches;
+};
+phoneQuery?.addEventListener('change', onPhoneChange);
+onBeforeUnmount(() => phoneQuery?.removeEventListener('change', onPhoneChange));
+
 const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
 
 const label = (finishedAt) => {
     const d = new Date(finishedAt);
-    return `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+    const day = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return phone.value ? day : `${day} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 };
 const categories = computed(() => props.rows.map(({ finishedAt }) => label(finishedAt)));
 const series = computed(() => STACKS.value.map(({ key, name }) => ({ name, data: props.rows.map((row) => row[key]) })));
@@ -51,7 +62,7 @@ const options = computed(() => {
         theme: { mode: t.mode },
         colors: STACKS.value.map(({ color }) => chartColor(color)),
         plotOptions: { bar: { columnWidth: '60%', borderRadius: 2 } },
-        xaxis: { categories: categories.value, labels: { rotate: -45, style: { colors: t.text } }, tooltip: { enabled: false } },
+        xaxis: { categories: categories.value, labels: { rotate: -45, hideOverlappingLabels: true, style: { colors: t.text } }, ...(phone.value ? { tickAmount: 6 } : {}), tooltip: { enabled: false } },
         yaxis: { min: 0, forceNiceScale: true, labels: { style: { colors: t.text } } },
         // A run that did not complete is marked above its bar.
         // Edge cases are handled below rather than at the call site.
@@ -65,8 +76,8 @@ const options = computed(() => {
                 .map(({ row, x }) => ({
                     x,
                     y: row.valid + row.oneStrike + row.invalid + row.inconclusive,
-                    marker: { size: 0 },
-                    label: { text: row.flag, borderWidth: 0, offsetY: -2, style: { color: t.text, background: 'transparent', fontSize: '11px' } },
+                    marker: { size: phone.value ? 3 : 0, fillColor: t.text, strokeColor: t.text },
+                    ...(phone.value ? {} : { label: { text: row.flag, borderWidth: 0, offsetY: -2, style: { color: t.text, background: 'transparent', fontSize: '11px' } } }),
                 })),
         },
         dataLabels: { enabled: false },
@@ -77,3 +88,12 @@ const options = computed(() => {
     };
 });
 </script>
+
+<style lang="less" scoped>
+.flagNote {
+    margin: 0;
+    font-size: 12px;
+    color: @subtle-text-color;
+    text-align: center;
+}
+</style>

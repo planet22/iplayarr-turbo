@@ -292,6 +292,28 @@ onMounted(load);
     margin-bottom: 1rem;
 }
 
+// Phone: the title filter and the channel select drop to a row of their own under the buttons, instead of being squeezed
+// to a few pixels beside five of them.
+@media (max-width: @mobile-breakpoint) {
+    .openCollection :deep(.SettingsPageToolbar.inlineFilters .SettingsPageToolbar-filters) {
+        order: 3;
+        flex: 1 1 100%;
+        padding: 0 0 8px;
+        gap: 6px;
+
+        .tableFilter {
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: none;
+        }
+
+        .gridFilter {
+            flex: 0 1 auto;
+            min-width: 0;
+        }
+    }
+}
+
 .gridFilter {
     height: 32px;
     padding: 0 10px;
