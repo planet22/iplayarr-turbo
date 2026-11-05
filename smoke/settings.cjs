@@ -77,6 +77,7 @@ const CHANGE = {
     UI_VERSION_BADGES: ['true', 'false'],
     UI_SUBTITLE_BADGES: ['true', 'false'],
     UI_EXPIRY_BADGES: ['false', 'true'],
+    UI_EXTENDED_DEBUG: ['false', 'true'],
     UI_GUIDANCE_BADGES: ['false', 'true'],
     DOWNLOAD_ASK_VERSION: ['false', 'true'],
     DOWNLOAD_DEFAULT_VERSION: ['audio-described', 'signed', ''],
@@ -140,6 +141,7 @@ const NO_EFFECT = {
     UI_VERSION_BADGES: 'browser-only: the server stores it and the frontend applies it',
     UI_SUBTITLE_BADGES: 'browser-only: the server stores it and the frontend applies it',
     UI_EXPIRY_BADGES: 'browser-only: the server stores it and the frontend applies it',
+    UI_EXTENDED_DEBUG: 'browser-only: the server stores it and the frontend applies it',
     UI_GUIDANCE_BADGES: 'browser-only: the server stores it and the frontend applies it',
     WRITE_NFO_CAST: 'adds a BBC lookup when a .nfo is written; visible only in the .nfo of a real download',
     WRITE_NFO_EPISODE_TITLES: 'adds a BBC lookup when a .nfo is written; visible only in the .nfo of an episode titled "Episode N"',
@@ -536,7 +538,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         } else rec(W, 'LIVE_TV_EPG_OFFSET effect', 'SKIP', 'no Live TV guide to read');
         await put({ LIVE_TV_EPG_OFFSET: effective(before, 'LIVE_TV_EPG_OFFSET') });
 
-        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
+        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
             const r = await put({ [key]: 'maybe' });
             ok(`${key} non-boolean rejected`, rejected(r, key), `HTTP ${r.status}`);
         }

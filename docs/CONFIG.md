@@ -71,6 +71,7 @@ Settings named `UI_*` are stored with the rest of the configuration and apply to
 | Show HDR / UHD Badge _(advanced)_ | `UI_QUALITY_BADGES` | `true` | A badge where iPlayer lists HDR or Ultra HD. It is only a label: iPlayarr streams HD at most. |
 | Show Audio Described / Signed Badge _(advanced)_ | `UI_VERSION_BADGES` | `true` | Marks programmes and episodes that have an audio described or signed version. Also reveals the Versions settings. |
 | Show Subtitle Badge _(advanced)_ | `UI_SUBTITLE_BADGES` | `true` | A subtitles icon on episodes. Not checked per programme: the BBC gives most of them subtitles. |
+| Show Extended Debug | `UI_EXTENDED_DEBUG` | `false` | Adds a Library Debug button to the Watchdog toolbar. The page itself is always at `/library-debug`: every file the library index looked at, how each was identified or why it was left out. |
 | Show Leaving Soon Badge | `UI_EXPIRY_BADGES` | `true` | A "7d" badge on episodes leaving iPlayer within 30 days (amber, orange from 14 days, red from 3, solid red on the last day). Days are counted on the UK calendar. Hover for the date. |
 | Show Guidance Badge _(advanced)_ | `UI_GUIDANCE_BADGES` | `false` | A warning icon on episodes iPlayer lists with content guidance. The BBC only says that guidance exists, not what it is. |
 | Items Before Paging _(advanced, per browser)_ | _(browser only)_ | `4` | A list with this many items or fewer is shown whole on one page, whatever the per-page size; longer lists get page controls (0-1000). `0` always pages. |

@@ -113,6 +113,16 @@
         :error="validationErrors.config?.UI_GUIDANCE_BADGES"
         :options="trueOrFalse"
     />
+    <SelectInput
+        v-if="showAdvanced"
+        v-model="config.UI_EXTENDED_DEBUG"
+        :advanced="true"
+        field="UI_EXTENDED_DEBUG"
+        name="Show Extended Debug"
+        tooltip="Adds a Library Debug button to the Watchdog page, listing every file the library index looked at."
+        :error="validationErrors.config?.UI_EXTENDED_DEBUG"
+        :options="trueOrFalse"
+    />
     <TextInput
         v-if="showAdvanced"
         v-model="pagingMinimumText"

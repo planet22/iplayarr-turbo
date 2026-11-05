@@ -3,6 +3,7 @@
 <template>
     <div class="inner-content scroll-x">
         <PageHeader title="Library Debug" icon="bug" />
+        <SettingsPageToolbar :icons="['refresh']" refresh-label="Reload" refresh-title="Read the last scans again" :refreshing="!loaded" @refresh="load" />
         <p class="hint">Every file the library index looked at in its last scans, and how each was found to be ours or why it was left out.</p>
 
         <div class="sourceList">
@@ -28,7 +29,6 @@
                 <option value="link">.strm links</option>
                 <option value="file">Real files</option>
             </select>
-            <button class="clickable" @click="load">Reload</button>
         </div>
 
         <LoadingIndicator v-if="!loaded" />
@@ -68,6 +68,7 @@ import { computed, onMounted, ref } from 'vue';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { ipFetch } from '@/lib/ipFetch';
@@ -128,6 +129,7 @@ function toggleSort(key) {
 }
 
 async function load() {
+    loaded.value = false;
     const { ok, data } = await ipFetch('json-api/library/debug');
     if (ok) {
         sources.value = data.sources;

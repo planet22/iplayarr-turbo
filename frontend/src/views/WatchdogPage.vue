@@ -12,11 +12,10 @@
             :refresh-title="busyListing ? 'Stop listing the links' : 'Re-list links from the sources and update the counts, without checking them against BBC'"
             @run="runNow" @stop="stopRun" @refresh="busyListing ? stopRun() : refreshCounts()"
         >
-            <!-- TEMPORARY: opens the library debug page; remove with the page's other debug aids. -->
-            <template #refresh-after>
-                <RouterLink to="/library-debug" class="SettingsPageToolbar-button clickable" title="Library debug (temporary)" aria-label="Library debug">
+            <template v-if="globalSettings.UI_EXTENDED_DEBUG == 'true'" #actions>
+                <button class="SettingsPageToolbar-button clickable" title="Library debug" aria-label="Library debug" @click="router.push('/library-debug')">
                     <font-awesome-icon :icon="['fas', 'bug']" />
-                </RouterLink>
+                </button>
             </template>
         </SettingsPageToolbar>
         <InfoBar v-if="!status.enabled">
@@ -269,6 +268,7 @@ import { libraryLabel, runChartData } from '@/lib/watchdog';
 
 const socket = inject('socket');
 const router = useRouter();
+const globalSettings = inject('globalSettings');
 
 // Cards on phones (six columns, long paths), table on wide screens; either can be chosen and is remembered.
 const { viewMode, setViewMode } = useViewMode('iplayarr.watchdogViewMode', {

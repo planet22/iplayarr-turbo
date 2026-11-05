@@ -67,6 +67,7 @@ describe('configService', () => {
       UI_SUBTITLE_BADGES: 'true',
       UI_EXPIRY_BADGES: 'true',
       UI_GUIDANCE_BADGES: 'false',
+      UI_EXTENDED_DEBUG: 'false',
       WRITE_NFO_CAST: 'true',
       WRITE_NFO_EPISODE_TITLES: 'true',
       WRITE_NFO_RUNTIME_FALLBACK: 'true',
