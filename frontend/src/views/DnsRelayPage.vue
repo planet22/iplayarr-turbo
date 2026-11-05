@@ -96,6 +96,7 @@ import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import { dnsRelayTiles } from '@/lib/dnsRelayTiles';
 import { useDnsRelay } from '@/lib/useDnsRelay';
 
 // Reached from the Maintenance tab in Settings (and from the warning in the top bar). The state arrives on the 'dnsRelay'
@@ -125,36 +126,8 @@ async function startLive() {
     await load();
 }
 
-// The grey tiles (label, value, an (i) tip), the same as on the streaming debug page. A coloured left edge marks good or bad.
-const tiles = computed(() => {
-    const s = status.value;
-    if (!s) return [];
-    const c = s.counters;
-    return [
-        { label: 'Relay', value: s.running ? 'Running' : 'Not running', state: s.running ? 'good' : 'bad', help: 'Whether the relay is listening for lookups from inside the container.' },
-        {
-            label: 'Upstream',
-            value: s.upstream.length ? s.upstream.join(', ') : 'none',
-            note: s.upstreamSource,
-            state: s.upstream.length ? '' : 'bad',
-            help: 'The DNS servers the relay asks. The note says where they were read from: resolv.conf, a saved copy of it, or nowhere.',
-        },
-        {
-            label: 'resolv.conf',
-            value: s.resolvConfPointsAtRelay ? 'Points at the relay' : 'Does not point at the relay',
-            state: s.resolvConfPointsAtRelay ? 'good' : '',
-            help: 'Whether /etc/resolv.conf sends the container\'s lookups to the relay.',
-        },
-        { label: 'In flight', value: `${s.inFlight} of ${s.maxInFlight}`, help: 'Lookups waiting for the upstream, of the most it will wait on.' },
-        { label: 'Cached names', value: String(s.cacheEntries), help: 'Names the relay remembers for 60 seconds so it does not ask the upstream again.' },
-        { label: 'Queries', value: String(c.queries), help: 'Every lookup the relay has received since it started.' },
-        { label: 'From cache', value: String(c.cacheHits), help: 'Lookups answered from the relay\'s own memory.' },
-        { label: 'Answered', value: String(c.answered), state: 'good', help: 'Lookups where the upstream returned addresses.' },
-        { label: 'No record', value: String(c.empty), help: 'The upstream says there is no such record. Normal for AAAA (IPv6) lookups.' },
-        { label: 'Failed', value: String(c.failed), state: c.failed ? 'bad' : '', help: 'Lookups the upstream did not answer in time.' },
-        { label: 'Dropped', value: String(c.dropped), state: c.dropped ? 'bad' : '', help: 'Lookups ignored because the maximum number were already waiting.' },
-    ];
-});
+// The grey tiles (label, value, an (i) tip), the same as on the streaming debug page.
+const tiles = computed(() => dnsRelayTiles(status.value));
 
 const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
