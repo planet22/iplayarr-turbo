@@ -90,7 +90,6 @@
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
                     <span v-else class="actionGap" aria-hidden="true"></span>
-                    <span class="actionGap" aria-hidden="true"></span>
                 </div>
                 <div v-else class="rowActions">
                     <button
@@ -125,10 +124,10 @@
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
-                    <button class="clickable" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
-                        <font-awesome-icon :icon="['fas', 'bell-slash']" />
-                    </button>
                 </div>
+                <button v-if="!subscription.arrOnly" class="clickable cardUnsub" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
+                    <font-awesome-icon :icon="['fas', 'bell-slash']" />
+                </button>
             </div>
         </div>
         <div v-else-if="loaded && subscriptions.length" class="subscriptionList">
@@ -874,6 +873,34 @@ const removeLive = async (live) => {
     border-radius: 6px;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
     font-size: 13px;
+    position: relative;
+
+    // Unsubscribe sits in the top right corner, out of the row of action buttons.
+    .cardUnsub {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border-radius: 50%;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+
+        &:hover {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
+        }
+    }
+
+    .subText {
+        padding-right: 30px;
+    }
 
     .thumbLink img,
     .thumbLink .thumbnail-placeholder {
