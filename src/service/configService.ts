@@ -10,6 +10,18 @@ dotenv.config();
 
 const storage: QueuedStorage = new QueuedStorage();
 
+// Settings that change what a search returns (release names, offered qualities and versions, matching), beyond the native
+// search ones handled in setParameter.
+const SEARCH_RESULT_SHAPING = new Set<IplayarrParameter>([
+    IplayarrParameter.VIDEO_QUALITY,
+    IplayarrParameter.EXTRA_VIDEO_QUALITIES,
+    IplayarrParameter.EXTRA_VERSIONS,
+    IplayarrParameter.RELEASE_LANGUAGE,
+    IplayarrParameter.SEARCH_MATCH_ALL_WORDS,
+    IplayarrParameter.TV_FILENAME_TEMPLATE,
+    IplayarrParameter.MOVIE_FILENAME_TEMPLATE,
+]);
+
 export interface ConfigMap {
     [key: string]: string;
 }
@@ -159,6 +171,11 @@ const configService = {
                 parameter == IplayarrParameter.NATIVE_SEARCH_V2_COLLECTION_NAMES) &&
             oldValue != value
         ) {
+            searchFacade.clearSearchCache();
+        }
+        // Cached search results carry the release names and the offered qualities, so a setting that shapes them must drop the
+        // cache too, or searches keep returning the old names until the cache expires.
+        if (SEARCH_RESULT_SHAPING.has(parameter) && oldValue != value) {
             searchFacade.clearSearchCache();
         }
         if (parameter == IplayarrParameter.AIRDATE_NUMBERING && oldValue != value) {

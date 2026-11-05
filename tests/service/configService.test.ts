@@ -140,6 +140,22 @@ describe('configService', () => {
     expect(searchFacade.clearSearchCache).toHaveBeenCalled();
   });
 
+  it.each([
+    [IplayarrParameter.VIDEO_QUALITY, 'fhd', 'hd'],
+    [IplayarrParameter.EXTRA_VIDEO_QUALITIES, '', 'sd'],
+    [IplayarrParameter.EXTRA_VERSIONS, '', 'signed'],
+    [IplayarrParameter.RELEASE_LANGUAGE, 'english', 'none'],
+    [IplayarrParameter.SEARCH_MATCH_ALL_WORDS, 'true', 'false'],
+    [IplayarrParameter.TV_FILENAME_TEMPLATE, '{{title}}', '{{title}}.x'],
+    [IplayarrParameter.MOVIE_FILENAME_TEMPLATE, '{{title}}', '{{title}}.x'],
+  ])('clears search cache when %s changes, so searches do not keep the old release names', async (param, from, to) => {
+    mockStorage['config'] = { [param]: from };
+    await configService.setParameter(param, to);
+    expect(searchFacade.clearSearchCache).toHaveBeenCalledTimes(1);
+    await configService.setParameter(param, to);
+    expect(searchFacade.clearSearchCache).toHaveBeenCalledTimes(1);
+  });
+
   it('does not clear search cache for BROWSE_SHOW_COLLECTIONS', async () => {
     mockStorage['config'] = {};
     await configService.setParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS, 'true');
