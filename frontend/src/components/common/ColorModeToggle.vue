@@ -63,6 +63,9 @@ const cycle = () => {
 
     .segments {
         display: inline-flex;
+        box-sizing: border-box;
+        // Same height as the other top bar buttons (36px).
+        height: 36px;
         gap: 2px;
         padding: 2px;
         border: 1px solid @settings-button-border-color;
@@ -73,8 +76,8 @@ const cycle = () => {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 26px;
-        height: 26px;
+        width: 28px;
+        height: 100%;
         padding: 0;
         border: 0;
         border-radius: 4px;

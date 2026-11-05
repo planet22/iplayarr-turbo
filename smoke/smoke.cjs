@@ -29,7 +29,7 @@ if (WRITE && ONLY.includes('ui')) ONLY.push('uireal');
 const filterArg = opt('filter', false);
 const FILTER = typeof filterArg === 'string' ? new RegExp(filterArg, 'i') : null;
 const want = (name) => !FILTER || FILTER.test(name);
-const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'watchdog links', 'programme page', 'socket.io'];
+const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'nav bar buttons', 'watchdog links', 'programme page', 'socket.io'];
 
 if (opt('list', false)) {
     const names = (file, fn) => [...fs.readFileSync(path.join(__dirname, file), 'utf8').matchAll(new RegExp(`await ${fn}\\('([^']+)'`, 'g'))].map((m) => m[1]);
@@ -635,6 +635,7 @@ async function uiInteractions(browser, ctx) {
     if (want('subscriptions toolbar')) await subscriptionsToolbar(page, ctx, U);
     if (want('subscriptions cards')) await subscriptionsCards(browser, page, U);
     if (want('card grids')) await cardGrids(browser, U);
+    if (want('nav bar buttons')) await navBarButtons(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
     // Programme page: play/download controls exist
@@ -940,6 +941,25 @@ async function cardGrids(browser, U) {
                 rec(U, label, columnsOk && noScroll ? 'PASS' : 'FAIL', `${xs.length} column(s), ${count} cards, scroll ${noScroll ? 'ok' : 'sideways'}`);
             } catch (e) { rec(U, `card grids: ${name} ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
         }
+    }
+}
+
+// The top bar controls on the right (Quick find, the colour mode switch, GitHub) are all the same height, on a desktop
+// and on a phone (where the switch collapses to one cycle button and GitHub is hidden).
+async function navBarButtons(browser, U) {
+    for (const [sizeName, viewport] of [['desktop', { width: 1280, height: 800 }], ['phone', VIEWPORTS[1][1]]]) {
+        const context = await browser.newContext({ viewport });
+        try {
+            const p = await context.newPage();
+            await p.goto(BASE + '/browse', { waitUntil: 'networkidle', timeout: 45000 });
+            const heights = await p.evaluate(() => [...document.querySelectorAll('.NavBar .right .navIconButton, .NavBar .right .segments, .NavBar .right .cycle, .NavBar .right a[aria-label="GitHub"]')]
+                .filter((e) => e.offsetParent)
+                .map((e) => [e.className || e.getAttribute('aria-label'), Math.round(e.getBoundingClientRect().height)]));
+            const label = `nav bar buttons: the right-hand controls are one height on a ${sizeName}`;
+            if (heights.length < 2) { rec(U, label, 'SKIP', `${heights.length} control(s)`); continue; }
+            const same = new Set(heights.map(([, h]) => h)).size === 1;
+            rec(U, label, same ? 'PASS' : 'FAIL', heights.map(([n, h]) => `${n}=${h}`).join(', '));
+        } catch (e) { rec(U, `nav bar buttons: ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
     }
 }
 
