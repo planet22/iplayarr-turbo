@@ -155,7 +155,7 @@
                         <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                     </div>
                     <p v-if="subscription.synopsis" class="synopsis" :title="subscription.synopsis">{{ subscription.synopsis }}</p>
-                    <SourceCounts v-if="subscription.onDiskSources" class="rowSources" :sources="subscription.onDiskSources" named />
+                    <SourceCounts v-if="subscription.onDiskSources" class="rowSources" :sources="subscription.onDiskSources" />
                     <div v-if="subscription.arr || subscription.arrMissing" class="details">
                         <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                         <span v-if="subscription.arrMissing" class="missingIcon" role="img" tabindex="0" :title="missingTitle(subscription)" aria-label="No longer in Sonarr/Radarr">

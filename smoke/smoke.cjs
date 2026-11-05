@@ -841,6 +841,12 @@ async function subscriptionsCards(browser, page, U) {
         rec(U, 'subscriptions: every table row, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (secureToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${secureToggles} toggles, ${shown} rows`);
         const imageButtons = await page.locator('.subscriptionRow button:has(svg[data-icon="images"])').count();
         rec(U, 'subscriptions: every table row has the update-images button', shown ? (imageButtons === shown ? 'PASS' : 'FAIL') : 'SKIP', `${imageButtons} buttons, ${shown} rows`);
+        // Per-source counts are just a logo and a number, in the table as on the cards: no source names beside the logos.
+        const withSources = onPage.filter((s) => s.onDiskSources && s.onDiskSources.length);
+        const rowChips = await page.locator('.subscriptionRow .sourceCounts').count();
+        const rowNames = await page.locator('.subscriptionRow .sourceCounts .sourceName').count();
+        const rowBad = await page.locator('.subscriptionRow .sourceCounts > span').evaluateAll((els) => els.filter((el) => !el.querySelector('img.sourceLogo') || !/^\d+$/.test(el.textContent.trim())).length);
+        rec(U, 'subscriptions: table rows show each source as a logo and a count, with no names', withSources.length ? (rowChips === withSources.length && rowNames === 0 && rowBad === 0 ? 'PASS' : 'FAIL') : 'SKIP', `${rowChips} chip sets for ${withSources.length} shows, ${rowNames} names, ${rowBad} not logo+count`);
         await page.screenshot({ path: path.join(SHOTS, 'flow-subscriptions-table.png'), fullPage: true });
 
         // Cards: several across, the badge on the picture, the dates in a 2x2 grid, a synopsis of up to three lines.
@@ -857,6 +863,9 @@ async function subscriptionsCards(browser, page, U) {
             if (got !== expectedBadge(s)) wrongCards.push(`${s.title}: ${got} != ${expectedBadge(s)}`);
         }
         rec(U, 'subscriptions: the card badge sits on the picture and matches the table', wrongCards.length === 0 ? 'PASS' : 'FAIL', wrongCards.slice(0, 3).join(' | '));
+        const cardChips = await page.locator('.subCard .sourceCounts').count();
+        const cardNames = await page.locator('.subCard .sourceCounts .sourceName').count();
+        rec(U, 'subscriptions: cards show the same logo and count per source, with no names', withSources.length ? (cardChips === withSources.length && cardNames === 0 ? 'PASS' : 'FAIL') : 'SKIP', `${cardChips} chip sets for ${withSources.length} shows, ${cardNames} names`);
         const cardImages = await page.locator('.subCard button:has(svg[data-icon="images"])').count();
         rec(U, 'subscriptions: every card has the update-images button', shown ? (cardImages === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardImages} buttons, ${shown} cards`);
         const cardToggles = await page.locator('.subCard button:has(svg[data-icon="box-archive"])').count();
