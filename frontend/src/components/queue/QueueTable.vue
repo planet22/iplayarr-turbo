@@ -82,7 +82,7 @@
 import { computed, defineExpose, defineProps, onMounted, ref, watch } from 'vue';
 
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
-import { useRowSelection } from '@/lib/rowSelection';
+import { historyRowKey, queueRowKey, useRowSelection } from '@/lib/rowSelection';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
@@ -193,8 +193,8 @@ watch([() => props.queue, pagedHistory], loadMissingDetails);
 watch(() => props.history, prefetchRest);
 
 // Ticks are kept by row key (see rowSelection), so they survive paging; a page's rows are unmounted when it is left.
-const queueKey = (item) => item.jobId ?? item.pid;
-const historyKey = (item) => item.jobId ?? `${item.pid}_${item.nzbName}_${item.details?.start}`;
+const queueKey = queueRowKey;
+const historyKey = historyRowKey;
 
 const {
     queueKeys: selectedQueueKeys, historyKeys: selectedHistoryKeys, setQueue, setHistory,

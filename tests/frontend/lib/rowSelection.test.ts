@@ -3,7 +3,7 @@
 import { ref } from 'vue';
 
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { useRowSelection } from '../../../frontend/src/lib/rowSelection';
+import { historyRowKey, queueRowKey, removeSelectedLabel, useRowSelection } from '../../../frontend/src/lib/rowSelection';
 
 type Row = { id: string };
 const rows = (prefix: string, count: number): Row[] => Array.from({ length: count }, (_, i) => ({ id: `${prefix}${i + 1}` }));
@@ -151,5 +151,30 @@ describe('useRowSelection', () => {
         selection.setQueue('q1', true);
         expect(selection.queueKeys.value).not.toBe(before);
         expect(before.size).toBe(0);
+    });
+});
+
+describe('row keys and the remove label', () => {
+    it('keys an active download by its job, falling back to its pid', () => {
+        expect(queueRowKey({ jobId: 'j1', pid: 'p1' })).toBe('j1');
+        expect(queueRowKey({ pid: 'p1' })).toBe('p1');
+    });
+
+    it('keys a history row by its job, falling back to pid, name and start', () => {
+        expect(historyRowKey({ jobId: 'j2', pid: 'p1' })).toBe('j2');
+        expect(historyRowKey({ pid: 'p1', nzbName: 'Show', details: { start: '2026-11-01' } })).toBe('p1_Show_2026-11-01');
+        expect(historyRowKey({ pid: 'p1', nzbName: 'Show' })).toBe('p1_Show_undefined');
+    });
+
+    it('tells two runs of the same programme apart', () => {
+        const a = { pid: 'p1', nzbName: 'Show', details: { start: 'a' } };
+        const b = { pid: 'p1', nzbName: 'Show', details: { start: 'b' } };
+        expect(historyRowKey(a)).not.toBe(historyRowKey(b));
+    });
+
+    it('adds the count to the remove label only when something is ticked', () => {
+        expect(removeSelectedLabel(0)).toBe('Remove selected');
+        expect(removeSelectedLabel(undefined)).toBe('Remove selected');
+        expect(removeSelectedLabel(3)).toBe('Remove selected (3)');
     });
 });

@@ -7,6 +7,13 @@ import { computed, ref } from 'vue';
 //
 // sources: { queue, history, visibleHistory } are refs of arrays (queue: all shown; history: every page;
 // visibleHistory: the current page), keys: { queueKey, historyKey } map a row to its stable key.
+// Stable keys for the rows of each list (the same ones the table uses to track its rows).
+export const queueRowKey = (item) => item.jobId ?? item.pid;
+export const historyRowKey = (item) => item.jobId ?? `${item.pid}_${item.nzbName}_${item.details?.start}`;
+
+// The delete button's label, with the number ticked once there is one.
+export const removeSelectedLabel = (count) => (count ? `Remove selected (${count})` : 'Remove selected');
+
 export function useRowSelection({ queue, history, visibleHistory }, { queueKey, historyKey }) {
     const queueKeys = ref(new Set());
     const historyKeys = ref(new Set());

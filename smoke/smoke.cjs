@@ -651,7 +651,7 @@ async function uiInteractions(browser, ctx) {
     if (want('subscriptions cards')) await subscriptionsCards(browser, page, U);
     if (want('card grids')) await cardGrids(browser, U);
     if (want('queue cards')) await queueCards(browser, U);
-    if (want('queue selection')) await queueSelection(browser, U);
+    if (want('queue selection')) { await queueSelection(browser, U); await queueSelectAllEmpty(browser, U); }
     if (want('nav bar buttons')) await navBarButtons(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
@@ -1044,6 +1044,22 @@ async function queueSelection(browser, U) {
             rec(U, label('the remove button carries the count'), /\(1\)/.test(removeLabel) ? 'PASS' : 'FAIL', removeLabel);
         } catch (e) { rec(U, label('run'), 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
     }
+}
+
+// With a filter that matches nothing, the Queue's select-all has nothing to act on and is greyed out. Read-only; the
+// filter is set through the saved table state, in a throwaway browser context.
+async function queueSelectAllEmpty(browser, U) {
+    const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+    try {
+        const p = await context.newPage();
+        await p.addInitScript(() => localStorage.setItem('iplayarr.tableFilter.queueTable', JSON.stringify({ filterText: 'zzzz-no-such-title-zzzz', sortBy: 'start', sortOrder: 'desc', dateFrom: null, dateTo: null })));
+        await p.goto(BASE + '/queue', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForTimeout(600);
+        const box = p.locator('.queueTable thead .CheckInput-input').first();
+        const cls = (await box.getAttribute('class')) || '';
+        rec(U, 'queue selection: select-all is greyed out when nothing is on screen', cls.includes('CheckInput-isDisabled') && !cls.includes('CheckInput-isChecked') ? 'PASS' : 'FAIL', cls);
+        rec(U, 'queue selection: no selected count with nothing on screen', (await p.locator('.selectedCount').count()) === 0 ? 'PASS' : 'FAIL');
+    } catch (e) { rec(U, 'queue selection: empty list', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
 }
 
 // The top bar controls on the right (Quick find, the colour mode switch, GitHub) are all the same height, on a desktop
