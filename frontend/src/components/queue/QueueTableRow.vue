@@ -73,6 +73,7 @@
                     </div>
                     <span class="cardActions">
                         <font-awesome-icon class="clickable" :icon="['fas', 'play']" title="Play Video" @click="preview(item)" />
+                        <font-awesome-icon v-if="debugOn" class="clickable" :icon="['fas', 'bug']" title="Streaming debug" @click="openDebug(item.pid)" />
                         <font-awesome-icon class="clickable" :icon="['fas', getDeleteIcon(item)]" @click="deleteRow(item)" />
                     </span>
                 </div>
@@ -153,20 +154,32 @@
                     title="Play Video"
                     @click="preview(item)"
                 />
-                <font-awesome-icon class="clickable" :icon="['fas', getDeleteIcon(item)]" @click="deleteRow(item)" />
+                <span v-if="debugOn" ref="menuEl" class="actionMenu">
+                    <font-awesome-icon class="clickable" :icon="['fas', 'ellipsis']" title="More" aria-label="More" @click.stop="toggleMenu" />
+                    <div v-if="menuOpen" class="menuPanel" :style="menuStyle">
+                        <button type="button" class="clickable" @click="openDebug(item.pid)">
+                            <font-awesome-icon :icon="['fas', 'bug']" /> Streaming debug
+                        </button>
+                        <button type="button" class="clickable" @click="menuOpen = false; deleteRow(item)">
+                            <font-awesome-icon :icon="['fas', getDeleteIcon(item)]" /> {{ getDeleteIcon(item) === 'trash' ? 'Remove' : 'Cancel download' }}
+                        </button>
+                    </div>
+                </span>
+                <font-awesome-icon v-else class="clickable" :icon="['fas', getDeleteIcon(item)]" @click="deleteRow(item)" />
             </span>
         </td>
     </tr>
 </template>
 
 <script setup>
-import { computed, defineExpose, defineProps, inject, ref } from 'vue';
+import { computed, defineExpose, defineProps, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { formatDate, formatStorageSize, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
 
 import ChannelPill from '../common/ChannelPill.vue';
@@ -195,6 +208,33 @@ const props = defineProps({
 });
 
 const apps = inject('apps');
+const { debugOn, openDebug } = useDebugLink();
+
+// The ellipsis menu of a table row: closes on a click anywhere else.
+const menuOpen = ref(false);
+const menuEl = ref(null);
+// The panel is placed against the window, so the table's edge cannot clip it.
+const menuStyle = ref({});
+const toggleMenu = () => {
+    menuOpen.value = !menuOpen.value;
+    if (!menuOpen.value || !menuEl.value) return;
+    const box = menuEl.value.getBoundingClientRect();
+    menuStyle.value = { top: `${box.bottom + 4}px`, left: `${Math.max(8, box.right - 170)}px` };
+};
+const closeMenu = (event) => {
+    if (menuOpen.value && !menuEl.value?.contains(event.target)) menuOpen.value = false;
+};
+const closeOnScroll = () => {
+    menuOpen.value = false;
+};
+onMounted(() => {
+    document.addEventListener('click', closeMenu);
+    window.addEventListener('scroll', closeOnScroll, true);
+});
+onBeforeUnmount(() => {
+    document.removeEventListener('click', closeMenu);
+    window.removeEventListener('scroll', closeOnScroll, true);
+});
 const checked = ref(false);
 defineExpose({ checked, item: props.item });
 
@@ -322,6 +362,40 @@ const getDeleteIcon = ({ status }) => {
     display: inline-flex;
     align-items: center;
     gap: 10px;
+}
+
+.actionMenu {
+    position: relative;
+
+    .menuPanel {
+        position: fixed;
+        z-index: 200;
+        display: flex;
+        flex-direction: column;
+        width: 170px;
+        background-color: @nav-background-color;
+        border: 1px solid @input-border-color;
+        border-radius: 6px;
+        box-shadow: 0 8px 24px @shadow-color;
+
+        button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border: none;
+            background: none;
+            color: @primary-text-color;
+            font-size: 13px;
+            text-align: left;
+            white-space: nowrap;
+
+            &:hover {
+                color: @brand-color;
+                background-color: @nav-active-background-color;
+            }
+        }
+    }
 }
 
 .thumbnail {

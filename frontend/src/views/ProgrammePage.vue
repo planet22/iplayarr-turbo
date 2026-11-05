@@ -185,6 +185,9 @@
                                 <button class="clickable" title="Download" @click="download(episode)">
                                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                                 </button>
+                                <button v-if="debugOn" class="clickable" title="Streaming debug" @click="openDebug(episode.pid)">
+                                    <font-awesome-icon :icon="['fas', 'bug']" />
+                                </button>
                             </div>
                             <QualityBadges :item="episode" class="thumbBadges" />
                             <span v-if="onDisk.has(episode.pid)" class="onDiskBadge" title="On disk" role="img" aria-label="On disk">
@@ -244,6 +247,7 @@ import { useQualityBadges } from '@/lib/qualityBadges';
 import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
 import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage, roundUpMinutes } from '@/lib/utils';
@@ -267,6 +271,7 @@ const loadOnDisk = async (pid) => {
 };
 
 const { canPlay, play, download } = useBrowseActions();
+const { debugOn, openDebug } = useDebugLink();
 const globalSettings = inject('globalSettings', ref({}));
 
 // Subscribing is per show: after the server climbs an episode to its brand, programme.pid is the

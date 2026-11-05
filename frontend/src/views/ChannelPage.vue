@@ -25,6 +25,9 @@
                 <button v-if="channel?.live" type="button" :title="`Watch ${channel.title} live`" @click="watchLive">
                     <font-awesome-icon :icon="['fas', 'play']" />
                 </button>
+                <button v-if="channel?.live && debugOn" type="button" title="Streaming debug" @click="openDebug(channel.id)">
+                    <font-awesome-icon :icon="['fas', 'bug']" />
+                </button>
             </template>
         </SettingsPageToolbar>
         <SkeletonLoader v-if="loading" variant="rails" :hero="false" />
@@ -73,11 +76,13 @@ import { browseFetch } from '@/lib/browse';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { formatTime as formatClock, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const route = useRoute();
 const channel = ref(null);
 const { enabled: liveTvEnabled, load: loadLiveTv, isSelected: isLiveTvSelected } = useLiveTv();
+const { debugOn, openDebug } = useDebugLink();
 loadLiveTv();
 const { load: loadLive, isSubscribed } = useLiveSubscriptions();
 loadLive();

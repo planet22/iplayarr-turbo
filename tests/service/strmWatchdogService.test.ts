@@ -136,6 +136,18 @@ describe('StrmWatchdogService', () => {
         expect((await strmWatchdogService.run()).invalid).toBe(1);
     });
 
+    it('keeps the last few checks of each link, oldest first, and no more than eight', async () => {
+        extra = { STRM_WATCHDOG_STRIKES: '99' };
+        for (let i = 0; i < 10; i++) await strmWatchdogService.run();
+
+        const items = (await strmWatchdogService.getStatus()).items;
+        const bad = items.find(({ pid }) => pid === BAD) as any;
+        expect(bad.history).toHaveLength(8);
+        expect(bad.history[7]).toMatchObject({ result: 'failed' });
+        const good = items.find(({ pid }) => pid !== BAD) as any;
+        expect(good.history.every((check: any) => check.result === 'ok')).toBe(true);
+    });
+
     it('reports the default strike limit, and clamps an out-of-range one', async () => {
         expect((await strmWatchdogService.getStatus()).strikes).toBe(2);
         extra = { STRM_WATCHDOG_STRIKES: '99' };

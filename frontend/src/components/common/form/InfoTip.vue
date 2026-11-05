@@ -146,6 +146,8 @@ onBeforeUnmount(() => {
         line-height: 1.5;
         text-align: left;
         text-transform: none;
+        // A line break in the text starts a new line (for bulleted tips).
+        white-space: pre-line;
         color: @input-text-color;
         pointer-events: auto;
     }

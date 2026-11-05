@@ -65,6 +65,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -96,7 +97,8 @@ const columns = [
 const loaded = ref(false);
 const sources = ref([]);
 const rows = ref([]);
-const text = ref('');
+// A link from another page can start it filtered (the Streaming debug page passes the pid).
+const text = ref(String(useRoute().query.q ?? ''));
 const sourceFilter = ref('');
 const stateFilter = ref('');
 const kindFilter = ref('');

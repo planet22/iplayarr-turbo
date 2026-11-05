@@ -246,6 +246,15 @@
                     >
                         <font-awesome-icon :icon="['fas', 'play']" />
                     </button>
+                    <button
+                        v-if="tile.live && debugOn && !editing && !arranging && !customising"
+                        class="liveButton debugButton"
+                        type="button"
+                        title="Streaming debug"
+                        @click.prevent.stop="openDebug(tile.id)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'bug']" />
+                    </button>
                 </template>
                 <template v-else>
                     <span class="tileTitle">{{ tile.title }}</span>
@@ -293,6 +302,7 @@ import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
 import { playInPip } from '@/lib/pipPlayer';
 import toastService from '@/lib/toastService';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { formatDate, getHost, getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
@@ -501,6 +511,7 @@ const {
     addAll: liveTvAddAll,
     clear: liveTvClear,
 } = useLiveTv();
+const { debugOn, openDebug } = useDebugLink();
 loadLiveTv();
 
 // Once every live channel is on, the header's "all" buttons flip to removing them all.
@@ -657,6 +668,12 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         }
 
         &.liveTvButton {
+            bottom: auto;
+            top: 8px;
+        }
+
+        // Top right, clear of the play button (bottom right) and the edit toggles (left).
+        &.debugButton {
             bottom: auto;
             top: 8px;
         }

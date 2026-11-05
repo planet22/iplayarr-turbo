@@ -22,6 +22,9 @@ export interface StreamSession {
     // having all three pluggable in the first place.
     client: StreamClient;
     clientIp?: string;
+    // The player's User-Agent, and the extra version it asked for (audio-described, signed) when it was not the plain one.
+    userAgent?: string;
+    version?: string;
     startedAt: Date;
     endedAt?: Date;
     // HLS playback is many short-lived HTTP requests (one manifest fetch, then one per segment) -
@@ -63,6 +66,8 @@ export interface StreamSession {
     // Left unset where a service can't determine this cheaply (e.g. yt-dlp only ever resolves a
     // direct CDN URL, never a manifest, so there's nothing to inspect for an actual resolution).
     resolution?: string;
+    // Where the stream came from and why it came out at that picture: the host BBC's playlist was read from, and the rule that chose it.
+    source?: { host?: string; route?: string; why: string; ladderMax?: number };
     // A BBC live channel (see LiveStreamService): the pid is a channel id, there are no meaningful
     // segment counts for an endless playlist, and `title` is the channel name to show instead of
     // looking the pid up as a programme.

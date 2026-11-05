@@ -16,6 +16,11 @@ interface Entry {
 
 const entries = new Map<string, Entry>();
 
+// What is held in memory for a text (a programme id, say), for the Streaming debug page: key and when it expires.
+export function resolvedKeysFor(text: string): { key: string; expiresAt: number }[] {
+    return [...entries].filter(([key]) => key.includes(text)).map(([key, { expiresAt }]) => ({ key, expiresAt }));
+}
+
 export const resolveTtlMs = 60_000;
 export const liveResolveTtlMs = 30_000;
 export const vpidTtlMs = 10 * 60_000;

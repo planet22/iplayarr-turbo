@@ -19,6 +19,7 @@ import SchedulePage from '@/views/SchedulePage.vue';
 import SearchPage from '@/views/SearchPage.vue';
 import SettingsPage from '@/views/SettingsPage.vue';
 import StatisticsPage from '@/views/StatisticsPage.vue';
+import StreamDebugPage from '@/views/StreamDebugPage.vue';
 import StreamingPage from '@/views/StreamingPage.vue';
 import SubscriptionsPage from '@/views/SubscriptionsPage.vue';
 import SynonymsPage from '@/views/SynonymsPage.vue';
@@ -42,6 +43,7 @@ const routes = [
     { path: '/apps', component: AppsPage },
     { path: '/stats', component: StatisticsPage },
     { path: '/streaming', component: StreamingPage },
+    { path: '/streaming/debug/:pid', component: StreamDebugPage },
     { path: '/events', component: VideoEventsPage },
     { path: '/watchdog', component: WatchdogPage },
     // Not in the menu: reached by its address.

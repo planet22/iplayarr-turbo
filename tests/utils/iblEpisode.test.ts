@@ -40,6 +40,32 @@ describe('iblEpisode', () => {
             expect(parseIblEpisodeExtras({ versions: [{ kind: 'signed' }, { kind: 'editorial', duration: { value: 'PT30M' } }] })).toEqual({ durationSeconds: 1800 });
         });
 
+        it('reads what each version is flagged as, when it leaves and the guidance flag', () => {
+            expect(
+                parseIblEpisodeExtras({
+                    guidance: true,
+                    versions: [
+                        { id: 'p0a', kind: 'original', hd: true, hdr: false, uhd: true, availability: { end: '2026-12-01T00:00:00Z' } },
+                        { id: 'p0b', kind: 'signed', hdr: true },
+                        { kind: 'editorial' },
+                    ],
+                })
+            ).toEqual({ versionFlags: { p0a: { hd: true, uhd: true }, p0b: { hdr: true } }, versionEnds: { p0a: '2026-12-01T00:00:00Z' }, availableUntil: '2026-12-01T00:00:00Z', guidance: true });
+        });
+
+        it('reads when each version starts, what it asks for and which versions can be downloaded', () => {
+            expect(
+                parseIblEpisodeExtras({
+                    requires_sign_in: true,
+                    requires_tv_licence: true,
+                    versions: [
+                        { id: 'p0a', download: true, availability: { start: '2026-11-01T06:00:00Z' } },
+                        { id: 'p0b', download: false },
+                    ],
+                })
+            ).toEqual({ versionFlags: { p0a: {}, p0b: {} }, versionStarts: { p0a: '2026-11-01T06:00:00Z' }, access: { signIn: true, tvLicence: true }, downloadable: ['p0a'] });
+        });
+
         it.each([[undefined], [{}], [{ editorial_subtitle: '  ', versions: 'nope' }]])('is empty for %p', (episode) => {
             expect(parseIblEpisodeExtras(episode)).toEqual({});
         });

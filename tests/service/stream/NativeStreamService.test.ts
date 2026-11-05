@@ -27,7 +27,7 @@ jest.mock('../../../src/service/iplayerDetailsService', () => ({ __esModule: tru
 jest.mock('../../../src/service/loggingService', () => ({ __esModule: true, default: { log: jest.fn(), error: jest.fn() } }));
 jest.mock('../../../src/service/stream/experimental/bbcFhdUpgrade', () => ({ attemptFhdUpgrade: jest.fn() }));
 jest.mock('../../../src/service/stream/streamProxyUtils');
-jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { setResolution: jest.fn() } }));
+jest.mock('../../../src/service/stream/streamSessionService', () => ({ __esModule: true, default: { setResolution: jest.fn(), setSource: jest.fn() } }));
 
 interface Reply {
     status?: number;
@@ -121,6 +121,27 @@ describe('NativeStreamService', () => {
         await service.streamDirect('p1', req, res, 'sess');
         expect(proxyUrl).toHaveBeenCalledWith('https://cdn/master.m3u8', req, res, 5, 'sess');
         expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess', 'Adaptive');
+    });
+
+    it('notes the route and the rule that chose the picture on the session', async () => {
+        await service.streamDirect('p1', req, res, 'sess');
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess', { host: 'cdn', route: 'iptv-all / 6', why: expect.stringContaining('Adaptive') });
+
+        clearResolveCache();
+        setConfig({ STREAM_NATIVE_ADAPTIVE: 'false', VIDEO_QUALITY: 'hd' });
+        await service.streamDirect('p1', req, res, 'sess2');
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess2', { host: 'cdn', route: 'iptv-all / 6', why: expect.stringMatching(/Fixed: Video Quality hd picked the \d+p entry/) });
+
+        clearResolveCache();
+        setConfig({ STREAM_NATIVE_ADAPTIVE: 'false', STREAM_NATIVE_EXPERIMENTAL_FHD: 'true' });
+        (attemptFhdUpgrade as jest.Mock).mockResolvedValue('not a url');
+        await service.streamDirect('p1', req, res, 'sess3');
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess3', { host: undefined, route: 'iptv-all / 6', why: expect.stringContaining('FHD upgrade') });
+
+        clearResolveCache();
+        setConfig({ STREAM_NATIVE_ADAPTIVE: 'false' });
+        await service.streamDirect('p1', req, res, 'sess4');
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess4', { host: 'cdn', route: 'iptv-all / 6', why: expect.stringContaining('Video Quality default') });
     });
 
     it('persists the vpid, so a repeat resolve does not refetch playlist.json', async () => {

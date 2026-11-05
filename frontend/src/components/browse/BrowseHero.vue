@@ -19,6 +19,10 @@
                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                     Download
                 </button>
+                <button v-if="item.kind === 'episode' && debugOn" class="clickable heroButton" @click="openDebug(item.pid)">
+                    <font-awesome-icon :icon="['fas', 'bug']" />
+                    Debug
+                </button>
                 <RouterLink class="heroButton" :to="`/browse/programme/${item.pid}`">
                     <font-awesome-icon :icon="['fas', 'circle-info']" />
                     More info
@@ -34,6 +38,7 @@ import { computed, defineProps } from 'vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
 import { useBrowseActions } from '@/lib/useBrowseActions';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { getThumbnailUrl } from '@/lib/utils';
 
 const props = defineProps({
@@ -53,6 +58,7 @@ const props = defineProps({
 });
 
 const { canPlay, play, download } = useBrowseActions();
+const { debugOn, openDebug } = useDebugLink();
 
 const heroStyle = computed(() => {
     if (props.deferArtwork) return {};

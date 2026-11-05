@@ -127,6 +127,16 @@ export default class DbCacheService<T> {
         );
     }
 
+    /** Every cached entry whose key mentions `text` (a programme id, say): its key, when it expires and its size. Not a lookup, so no hit or miss is counted. */
+    static async entriesContaining(text: string): Promise<{ key: string; expiresAt: number; bytes: number }[]> {
+        await dbReady();
+        const rows = await prisma.$queryRawUnsafe<{ key: string; expiresAt: number | bigint; bytes: number | bigint | null }[]>(
+            'SELECT "key", "expiresAt", LENGTH(CAST("value" AS BLOB)) AS bytes FROM "Cache" WHERE instr("key", ?) > 0 ORDER BY "key" LIMIT 200',
+            text
+        );
+        return rows.map((row) => ({ key: row.key, expiresAt: Number(row.expiresAt), bytes: Number(row.bytes ?? 0) }));
+    }
+
     /** Empties one labelled cache. Returns false when no such cache is registered. */
     static async clearType(prefix: string): Promise<boolean> {
         if (!DbCacheService.registry.has(prefix)) return false;

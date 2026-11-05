@@ -35,6 +35,9 @@
                 <button class="clickable" title="Download" @click.prevent.stop="download(item)">
                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                 </button>
+                <button v-if="debugOn" class="clickable" title="Streaming debug" @click.prevent.stop="openDebug(item.pid)">
+                    <font-awesome-icon :icon="['fas', 'bug']" />
+                </button>
             </div>
         </div>
         <div class="meta">
@@ -54,6 +57,7 @@ import QualityBadges from '@/components/common/QualityBadges.vue';
 import { useQualityBadges } from '@/lib/qualityBadges';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 const props = defineProps({
@@ -100,6 +104,9 @@ const kindBadges = computed(() => {
 });
 
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
+
+// A bug button to the Streaming debug page, with Show Extended Debug.
+const { debugOn, openDebug } = useDebugLink();
 
 // Already in the queue, already downloaded, or a show you subscribe to.
 const itemStatus = inject('itemStatus', null);

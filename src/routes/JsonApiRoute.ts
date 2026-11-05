@@ -30,6 +30,7 @@ import AppsRoute from './json-api/AppsRoute';
 import BrowseRoute from './json-api/BrowseRoute';
 import CustomChannelsRoute from './json-api/CustomChannelsRoute';
 import EventsRoute from './json-api/EventsRoute';
+import LibraryRoute from './json-api/LibraryRoute';
 import LiveChannelsRoute from './json-api/LiveChannelsRoute';
 import LiveSubscriptionsRoute from './json-api/LiveSubscriptionsRoute';
 import LiveTvRoute from './json-api/LiveTvRoute';
@@ -45,7 +46,6 @@ import SubscriptionArrRoute from './json-api/SubscriptionArrRoute';
 import SubscriptionsRoute from './json-api/SubscriptionsRoute';
 import SynonymsRoute from './json-api/SynonymsRoute';
 import VersionRoute from './json-api/VersionRoute';
-import LibraryRoute from './json-api/LibraryRoute';
 import WatchdogRoute from './json-api/WatchdogRoute';
 
 const router: Router = asyncRouter();

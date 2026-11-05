@@ -227,7 +227,8 @@ const streamSessionService = {
         client: StreamClient,
         clientIp?: string,
         settings?: Record<string, string>,
-        live?: { title: string }
+        live?: { title: string },
+        details?: { userAgent?: string; version?: string }
     ): Promise<string> => {
         const continues: StreamSession | undefined = findContinued(pid, clientIp);
         const session: StreamSession = {
@@ -239,6 +240,8 @@ const streamSessionService = {
             startedAt: new Date(),
             lastActivityAt: new Date(),
             settings,
+            ...(details?.userAgent ? { userAgent: details.userAgent } : {}),
+            ...(details?.version ? { version: details.version } : {}),
             ...(continues ? { continuesSessionId: continues.id } : {}),
             ...(live ? { live: true, title: live.title } : {}),
         };
@@ -257,6 +260,12 @@ const streamSessionService = {
             session.resolution = resolution;
             emitActive();
         }
+    },
+
+    // Where the stream came from and why it came out at that picture (see StreamSession.source).
+    setSource: (id: string, source: { host?: string; route?: string; why: string; ladderMax?: number }): void => {
+        const session: StreamSession | undefined = active.find((s) => s.id === id);
+        if (session) session.source = source;
     },
 
     // For progressive-mkv, a genuine single long-lived connection: ends the session the instant

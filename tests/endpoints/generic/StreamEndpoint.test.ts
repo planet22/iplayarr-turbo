@@ -68,7 +68,7 @@ describe('StreamEndpoint live channel routing', () => {
         expect(GetIplayerStreamService.streamDirect).not.toHaveBeenCalled();
         expect(streamSessionService.start).toHaveBeenCalledWith('bbc_one_london', StreamMode.DIRECT, StreamClient.NATIVE, '1.2.3.4', { Quality: 'Live', Subtitles: 'Off' }, {
             title: 'BBC One',
-        });
+        }, expect.any(Object));
     });
 
     it('leaves on-demand pids on the configured client', async () => {

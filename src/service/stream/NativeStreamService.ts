@@ -74,6 +74,20 @@ function parseMasterVariants(body: string, baseUrl: string): MasterPlaylistVaria
     return variants;
 }
 
+// Where a resolved stream came from and the rule that chose its picture, for the Streaming debug page.
+function sourceOf(url: string, resolution: string, options: ResolveOptions, videoQuality?: string | null, pair?: MediaSelectorPair): { host?: string; route?: string; why: string } {
+    let host: string | undefined;
+    try {
+        host = new URL(url).host;
+    } catch {
+        host = undefined;
+    }
+    const route = pair ? { route: `${pair.mediaSet} / ${pair.version}` } : {};
+    if (resolution === 'Adaptive') return { host, ...route, why: 'Adaptive: the whole ladder is offered and the player picks' };
+    if (options.experimentalFhd && resolution === '1080') return { host, ...route, why: 'The FHD upgrade (a larger encode than the ladder lists), or a 1080p ladder entry' };
+    return { host, ...route, why: `Fixed: Video Quality ${videoQuality ?? 'default'} picked the ${resolution}p entry` };
+}
+
 class NativeStreamService implements AbstractStreamService {
     // The connection is a full HLS master listing every bitrate BBC offers (usually up to 720p; see HQ_PROBE).
     // STREAM_NATIVE_ADAPTIVE=true passes it through the playlist rewriter for player-side ABR. When false, one variant is
@@ -97,9 +111,15 @@ class NativeStreamService implements AbstractStreamService {
             probeHq: settings[1] === 'true',
             experimentalFhd: settings[2] === 'true',
         };
-        const { url, resolution } = await cached(key, resolveTtlMs, () => this.#resolve(pid, options));
+        const { url, resolution, pair } = await cached(key, resolveTtlMs, async () => ({
+            ...(await this.#resolve(pid, options)),
+            // The route that answered, noted while it is still the remembered one (a cached result keeps it). Not known for a
+            // quality-probed or a non-plain version, which choose their route differently.
+            pair: options.probeHq || requestedVersion() ? undefined : orderedMediaSelectorPairs('native')[0],
+        }));
         if (sessionId && resolution) {
             streamSessionService.setResolution(sessionId, resolution);
+            streamSessionService.setSource(sessionId, sourceOf(url, resolution, options, settings[3], pair));
         }
         return url;
     }

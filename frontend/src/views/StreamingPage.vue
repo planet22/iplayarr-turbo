@@ -25,9 +25,11 @@
                 :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
                 :now="now"
                 :stopping="stopping.has(session.id)"
+                :debug="canDebug(session)"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
+                @debug="openDebug(session)"
             />
             <div v-if="streams.active.length == 0" class="empty">No streams currently playing</div>
         </div>
@@ -47,7 +49,7 @@
                 <col style="width: 90px" />
                 <col style="width: 150px" />
                 <col style="width: 146px" />
-                <col style="width: 60px" />
+                <col style="width: 84px" />
             </colgroup>
             <thead>
                 <tr>
@@ -122,6 +124,10 @@
                     </td>
                     <td class="actionCol">
                         <font-awesome-icon
+                            v-if="canDebug(session)" class="clickable debugAction" :icon="['fas', 'bug']"
+                            title="Streaming debug" @click="openDebug(session)"
+                        />
+                        <font-awesome-icon
                             class="clickable"
                             :class="{ disabled: stopping.has(session.id) }"
                             :icon="['fas', 'stop']"
@@ -155,9 +161,11 @@
                 :transferred="session.bytesTransferred ? formatStorageSize(session.bytesTransferred / 1048576) : ''"
                 :now="now"
                 :stopping="stopping.has(session.id)"
+                :debug="canDebug(session)"
                 @info="openInfo(session)"
                 @stop="stopStream(session)"
                 @segments="openSegments(session)"
+                @debug="openDebug(session)"
             />
             <div v-if="reversedHistory.length == 0" class="empty">No streaming history yet</div>
         </div>
@@ -177,7 +185,7 @@
                 <col style="width: 90px" />
                 <col style="width: 150px" />
                 <col style="width: 146px" />
-                <col style="width: 60px" />
+                <col style="width: 84px" />
             </colgroup>
             <thead>
                 <tr>
@@ -256,7 +264,12 @@
                             @click="openSegments(session)"
                         />
                     </td>
-                    <td />
+                    <td class="actionCol">
+                        <font-awesome-icon
+                            v-if="canDebug(session)" class="clickable debugAction" :icon="['fas', 'bug']"
+                            title="Streaming debug" @click="openDebug(session)"
+                        />
+                    </td>
                 </tr>
                 <tr v-if="reversedHistory.length == 0">
                     <td colspan="14" class="empty">No streaming history yet</td>
@@ -270,6 +283,7 @@
 <script setup>
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
+import { useRouter } from 'vue-router';
 
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -306,6 +320,11 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.streamsViewMode', {
 const cardView = computed(() => viewMode.value === 'cards');
 
 const stopping = ref(new Set());
+// Each row's button to the Streaming debug page: shown with Show Extended Debug, for a programme or a live channel.
+const router = useRouter();
+const globalSettings = inject('globalSettings');
+const canDebug = (session) => globalSettings.value?.UI_EXTENDED_DEBUG === 'true' && (session.live || /^[a-z0-9]{8}$/i.test(session.pid ?? ''));
+const openDebug = (session) => router.push(`/streaming/debug/${session.pid}`);
 
 const reversedHistory = computed(() => [...streams.value.history].reverse());
 const {
@@ -690,6 +709,10 @@ async function clearHistory() {
 
     .actionCol {
         text-align: center;
+
+        .debugAction {
+            margin-right: 12px;
+        }
 
         .disabled {
             opacity: 0.4;

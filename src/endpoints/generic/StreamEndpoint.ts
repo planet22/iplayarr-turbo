@@ -215,7 +215,7 @@ async function handleStream(req: Request, res: Response): Promise<void> {
         ? { Quality: 'Live', Subtitles: (await configService.getParameter(IplayarrParameter.STREAM_SUBTITLES)) === 'true' ? 'On' : 'Off' }
         : await buildSettingsSnapshot(client);
     const liveInfo = live ? { title: liveChannelInfo(pid)?.title ?? pid } : undefined;
-    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings, liveInfo);
+    const sessionId: string = await streamSessionService.start(pid, mode, client, req.ip, settings, liveInfo, { userAgent: req.headers['user-agent'], version: requestedVersion() });
     // progressive-mkv's ffmpeg process/response is the one mode with a real connection for the
     // Streaming page's Stop button to tear down - destroying it triggers this same res.on('close')
     // below (which ends the session) and remuxToMkv's own close handler (which kills ffmpeg).

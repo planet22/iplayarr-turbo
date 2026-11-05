@@ -42,6 +42,9 @@ interface WatchdogTarget {
 }
 
 
+// How many past checks of a link are kept.
+const HISTORY_LIMIT = 8;
+
 interface WatchdogRecord {
     status: 'ok' | 'invalid';
     failCount: number;
@@ -51,6 +54,8 @@ interface WatchdogRecord {
     sourceNames?: string[];
     types?: string[];
     message?: string;
+    // The last few checks of this link, oldest first.
+    history?: { at: string; result: 'ok' | 'failed'; message?: string }[];
     // What the Watchdog did when the link first went invalid (blank if it only reported it).
     actions?: string[];
     // Set once the invalid-link actions (event, webhook, Sonarr, delete) have been taken for this link.
@@ -475,6 +480,7 @@ class StrmWatchdogService {
             sourceNames: [...target.names],
             types: [...target.types],
             message: failed ? message : undefined,
+            history: [...(previous?.history ?? []), { at: new Date().toISOString(), result: failed ? ('failed' as const) : ('ok' as const), ...(failed && message ? { message } : {}) }].slice(-HISTORY_LIMIT),
             // Carried over while the link stays invalid, so the table keeps showing what was done.
             actions: isInvalid ? previous?.actions : undefined,
             actioned: isInvalid ? previous?.actioned : undefined,

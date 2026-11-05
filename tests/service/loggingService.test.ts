@@ -232,6 +232,20 @@ describe('loggingService persistence and file format', () => {
         expect(socketService.publish).toHaveBeenCalledWith('sock-1', 'log', expect.objectContaining({ message: 'second' }));
     });
 
+    it('finds the saved lines that mention some text, newest few, oldest first', async () => {
+        await dbReady();
+        await prisma.queueItem.createMany({
+            data: [
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'm0aaaaaa one' }) },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'something else' }) },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'm0aaaaaa', message: 'step' }) },
+                { queue: 'iplayarr_logs', value: JSON.stringify({ id: 'INFO', message: 'm0aaaaaa three' }) },
+            ],
+        });
+        const lines = await loggingService.linesMentioning('m0aaaaaa', 2);
+        expect(lines.map((line) => line.message)).toEqual(['step', 'm0aaaaaa three']);
+    });
+
     it('writes log files as "[time] [LEVEL] message" outside tests', () => {
         const savedEnv = process.env.NODE_ENV;
         process.env.NODE_ENV = 'production';

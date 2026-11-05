@@ -52,6 +52,20 @@ describe('streamSessionService lifecycle', () => {
         expect(find(plain)?.live).toBeUndefined();
     });
 
+    it('start keeps the player and the extra version it was asked for', async () => {
+        const id = await streamSessionService.start('p1', mode, client, undefined, undefined, undefined, { userAgent: 'Jellyfin/10', version: 'signed' });
+        expect(find(id)).toMatchObject({ userAgent: 'Jellyfin/10', version: 'signed' });
+        const plain = await streamSessionService.start('p1', mode, client);
+        expect(find(plain)?.userAgent).toBeUndefined();
+    });
+
+    it('setSource notes where the stream came from, and ignores a session that is gone', async () => {
+        const id = await streamSessionService.start('p1', mode, client);
+        streamSessionService.setSource(id, { host: 'cdn.example', why: 'Adaptive' });
+        streamSessionService.setSource('missing', { why: 'x' });
+        expect(find(id).source).toEqual({ host: 'cdn.example', why: 'Adaptive' });
+    });
+
     it('setResolution only emits on change', async () => {
         const id = await streamSessionService.start('p1', mode, client);
         (socketService.emit as jest.Mock).mockClear();

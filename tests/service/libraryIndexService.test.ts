@@ -87,7 +87,7 @@ describe('libraryIndexService', () => {
         expect(await libraryIndexService.scan({ apps: [sonarr] })).toEqual([appSourceId(sonarr)]);
 
         const episode = (await libraryIndexService.episodes()).get('m001aaaa');
-        expect(episode?.listings).toEqual([{ sourceId: 'app:s1', name: 'Sonarr', type: 'SONARR', file: mine, arrIds: [7] }]);
+        expect(episode?.listings).toEqual([{ sourceId: 'app:s1', name: 'Sonarr', type: 'SONARR', file: mine, arrIds: [7], arrId: 1 }]);
         expect((await libraryIndexService.episodes()).size).toBe(1);
     });
 

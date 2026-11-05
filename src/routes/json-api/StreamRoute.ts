@@ -2,6 +2,8 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
+import { isLiveChannel } from '../../constants/LiveChannels';
+import streamDebugService, { DASHBOARD_PARTS, DashboardPart } from '../../service/stream/streamDebugService';
 import streamSessionService from '../../service/stream/streamSessionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { StreamSession } from '../../types/StreamSession';
@@ -24,6 +26,56 @@ router.delete('/history', async (_: Request, res: Response) => {
     await streamSessionService.clearHistory();
     await streamSessionService.emitStreams();
     res.json({ ok: true });
+});
+
+const PID_REGEX = /^[a-z0-9]{6,}$/i;
+// A programme id, or the id of a live channel (the debug page covers both).
+const validId = (id: string): boolean => PID_REGEX.test(id) || isLiveChannel(id);
+
+// What BBC and iPlayarr hold about a programme, for the Streaming debug page.
+router.get('/debug/:pid', async (req: Request, res: Response) => {
+    const pid = req.params.pid as string;
+    if (!validId(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid pid' } as ApiResponse);
+        return;
+    }
+    res.json(await streamDebugService.info(pid));
+});
+
+// The same in steps, so the page can say what it is doing while it loads: the programme first, then each part of the dashboard.
+router.get('/debug/:pid/programme', async (req: Request, res: Response) => {
+    const pid = req.params.pid as string;
+    if (!validId(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid pid' } as ApiResponse);
+        return;
+    }
+    res.json(await streamDebugService.programme(pid));
+});
+
+router.get('/debug/:pid/part/:part', async (req: Request, res: Response) => {
+    const pid = req.params.pid as string;
+    const part = req.params.part as DashboardPart;
+    const image = req.query.image as string | undefined;
+    if (!validId(pid) || !DASHBOARD_PARTS.includes(part) || (image && !PID_REGEX.test(image))) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid request' } as ApiResponse);
+        return;
+    }
+    res.json(await streamDebugService.part(pid, part, image));
+});
+
+// Asks BBC's mediaselector for every version of the programme and reads what comes back. Read-only.
+router.post('/debug/:pid/probe', async (req: Request, res: Response) => {
+    const pid = req.params.pid as string;
+    if (!validId(pid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid pid' } as ApiResponse);
+        return;
+    }
+    const vpid = req.query.vpid as string | undefined;
+    if (vpid && !/^[a-z0-9_]{6,}$/i.test(vpid)) {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid version id' } as ApiResponse);
+        return;
+    }
+    res.json(await streamDebugService.probe(pid, vpid));
 });
 
 router.post('/:id/stop', async (req: Request, res: Response) => {

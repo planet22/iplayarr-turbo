@@ -88,6 +88,8 @@ export interface IndexListing {
     type: IndexSourceType;
     file: string;
     arrIds?: number[];
+    // The Sonarr series / Radarr movie it belongs to.
+    arrId?: number;
 }
 
 // An episode (or film), whichever sources list it and under which files. `key` is its programme id, or for a file that
@@ -516,7 +518,7 @@ class LibraryIndexService {
             if (!found.has(key)) found.set(key, { key, ...(file.pid ? { pid: file.pid } : {}), files: [], listings: [] });
             const episode = found.get(key)!;
             if (!episode.files.includes(file.path)) episode.files.push(file.path);
-            episode.listings.push({ sourceId: scan.id, name: scan.name, type: scan.type, file: file.path, ...(file.arrIds?.length ? { arrIds: file.arrIds } : {}) });
+            episode.listings.push({ sourceId: scan.id, name: scan.name, type: scan.type, file: file.path, ...(file.arrIds?.length ? { arrIds: file.arrIds } : {}), ...(file.arrId ? { arrId: file.arrId } : {}) });
         };
         const kept = scans.flatMap((scan) => scan.files.filter((file) => keep(file, scan)).map((file) => ({ scan, file })));
         for (const { scan, file } of kept.filter(({ file }) => file.pid)) {

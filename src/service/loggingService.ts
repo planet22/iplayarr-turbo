@@ -93,6 +93,17 @@ const loggingService = {
         appendLog(logLine).catch(() => undefined);
     },
 
+    // The newest stored lines that mention `text` (a pid), oldest first. Only the last few hundred lines are kept.
+    linesMentioning: async (text: string, limit: number): Promise<LogLine[]> => {
+        await dbReady();
+        const rows = await prisma.queueItem.findMany({ where: { queue: LOG_QUEUE }, orderBy: { id: 'desc' } });
+        return rows
+            .map((row) => JSON.parse(row.value) as LogLine)
+            .filter((line) => line.id === text || line.message.includes(text))
+            .slice(0, limit)
+            .reverse();
+    },
+
     pushInitialLogs: async (socketId: string) => {
         await dbReady();
         const rows = await prisma.queueItem.findMany({ where: { queue: LOG_QUEUE }, orderBy: { id: 'asc' } });
