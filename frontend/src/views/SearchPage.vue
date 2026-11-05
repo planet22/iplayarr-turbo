@@ -116,7 +116,7 @@
         <table v-else-if="filteredResults.length" class="resultsTable responsive-table">
             <colgroup>
                 <col style="width: 40px" />
-                <col style="width: 70px" />
+                <col style="width: 110px" />
                 <col />
                 <col style="width: 100px" />
                 <col style="width: 150px" />

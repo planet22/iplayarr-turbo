@@ -612,6 +612,12 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the collection is a row of the one results table, type COLLECTION', (await collectionRows().count()) >= 1);
             ok('collections are listed first', /COLLECTION/.test(await rows().first().innerText()));
             ok('a collection row has no checkbox and no download button', (await collectionRows().first().locator('.CheckInput-container, .rowIconButton').count()) === 0);
+            // The Type column must be wide enough for the COLLECTION pill (it was clipped at 70px).
+            const pillFit = await collectionRows().first().locator('td[data-title="Type"] .pill').evaluate((pill) => {
+                const cell = pill.closest('td');
+                return { pill: pill.scrollWidth, shown: pill.clientWidth, cell: cell.clientWidth, pillRight: pill.getBoundingClientRect().right, cellRight: cell.getBoundingClientRect().right };
+            });
+            ok('the COLLECTION pill fits its Type cell without clipping', pillFit.pill <= pillFit.shown && pillFit.pillRight <= pillFit.cellRight + 1);
             await shot(page, 'search-collection-row');
 
             const chip = page.locator('.channelChips .chip', { hasText: /^\s*Collection\s*$/ });
