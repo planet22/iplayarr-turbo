@@ -60,6 +60,10 @@ export interface RejectedFile {
 }
 
 const REJECTED_LIMIT = 5000;
+// Reading files is synchronous, so a long run of them would hold up every other request (the app's pages) until it ended:
+// the loops hand control back to the server this often.
+const YIELD_EVERY = 20;
+const breathe = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 const NOT_OURS_LINK = 'the link names no BBC programme (another tool\'s)';
 const NOT_OURS_REAL = 'no .nfo naming a programme and no release group in the name';
 const UNREADABLE = 'could not be read from here, and the app gave no link';
@@ -234,6 +238,7 @@ class LibraryIndexService {
                 let skipped = 0;
                 for (const ref of refs) {
                     await progress(app.name, done++, refs.length);
+                    if (done % YIELD_EVERY === 0) await breathe();
                     const local = mapPath(ref.path, pathMap);
                     const title = titles.get(ref.arrId);
                     const held = {
@@ -280,6 +285,7 @@ class LibraryIndexService {
                 let skipped = 0;
                 for (const item of items) {
                     await progress(server.name, done++, items.length);
+                    if (done % YIELD_EVERY === 0) await breathe();
                     const local = mapPath(item.path, pathMap);
                     const held = {
                         path: local,
@@ -408,10 +414,11 @@ class LibraryIndexService {
 
     // Reads iPlayarr's library folders (the complete and the Sonarr/Radarr one): each folder is a show, its files are the
     // show's. With a show named, only that one is read.
-    #walk(show?: string): { files: IndexedFile[]; rejected: RejectedFile[] } {
+    async #walk(show?: string): Promise<{ files: IndexedFile[]; rejected: RejectedFile[] }> {
         const roots = [...new Set([this.#folders.complete, this.#folders.arr].filter((dir): dir is string => !!dir))];
         const files: IndexedFile[] = [];
         const rejected: RejectedFile[] = [];
+        let checked = 0;
         for (const root of roots) {
             let entries: fs.Dirent[];
             try {
@@ -425,12 +432,14 @@ class LibraryIndexService {
                     const key = showKey(entry.name);
                     if (show && key !== show) continue;
                     for (const file of this.#videoFiles(full)) {
+                        if (++checked % YIELD_EVERY === 0) await breathe();
                         const { found, reason } = this.#identify(file);
                         if (found) files.push({ ...found, show: key, folder: full });
                         else rejected.push({ path: file, reason: reason as string, show: key });
                     }
                 } else if (!show && VIDEO_FILE.test(entry.name)) {
                     // A flat layout, or a film, sits outside a show folder.
+                    if (++checked % YIELD_EVERY === 0) await breathe();
                     const { found, reason } = this.#identify(full);
                     if (found) files.push(found);
                     else rejected.push({ path: full, reason: reason as string });
@@ -443,7 +452,7 @@ class LibraryIndexService {
     // Reads all of iPlayarr's library folders again.
     async scanFolders(): Promise<void> {
         await this.#readFolderSettings();
-        await this.#save({ id: FOLDERS_ID, name: 'iPlayarr folders', type: 'FOLDER', scannedAt: new Date().toISOString(), ...this.#walk(), unreadable: 0 });
+        await this.#save({ id: FOLDERS_ID, name: 'iPlayarr folders', type: 'FOLDER', scannedAt: new Date().toISOString(), ...(await this.#walk()), unreadable: 0 });
     }
 
     // Reads one show's folder again (everything, the first time the folders are read at all).
@@ -451,7 +460,7 @@ class LibraryIndexService {
         if (!(await this.#scans())[FOLDERS_ID]) return this.#firstScan();
         await this.#readFolderSettings();
         const key = showKey(title);
-        const { files, rejected } = this.#walk(key);
+        const { files, rejected } = await this.#walk(key);
         await this.#modify((scans) => {
             const scan = scans[FOLDERS_ID];
             scans[FOLDERS_ID] = {
