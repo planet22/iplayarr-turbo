@@ -51,13 +51,10 @@ jobs:
             - name: Compute image tags
               id: tags
               run: |
-                  # :latest only ever moves for a release built off main - a release cut from
-                  # any other branch (e.g. a "dev" prerelease for testing) must never overwrite
-                  # the production :latest image that docker run/compose examples pull by default.
+                  # :latest is never moved by this workflow. A release publishes only its own version tag;
+                  # after the image has been tested, :latest is moved by hand (GHCR registry API: PUT the
+                  # version tag's index manifest onto :latest, or retag in the package settings).
                   TAGS="ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:${{ env.git_tag }}"
-                  if [ "${{ github.event.release.target_commitish }}" = "main" ]; then
-                      TAGS="$TAGS"$'\n'"ghcr.io/${{ steps.owner.outputs.lc }}/iplayarr-turbo:latest"
-                  fi
                   # :dev-latest tracks the newest build from the dev branch (a prerelease targeting
                   # dev, or a manual run of this workflow on dev).
                   if [ "${{ github.event.release.target_commitish }}" = "dev" ] || [ "${{ github.event_name }}-${{ github.ref_name }}" = "workflow_dispatch-dev" ]; then
