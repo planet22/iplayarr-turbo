@@ -115,6 +115,11 @@ describe('buildStatisticsSummary', () => {
         expect(summary.grabSources).toEqual({ Sonarr: 1, 'No App': 1 });
     });
 
+    it('treats a range it does not know as 7 days', () => {
+        const summary = buildStatisticsSummary({ ...base, range: 'nonsense' as any, grabs: [grab({}), grab({ time: now - 10 * DAY })] });
+        expect(summary.grabTypes).toEqual({ TV: 1 });
+    });
+
     it('uses the real clock when none is given', () => {
         const summary = buildStatisticsSummary({ ...base, now: undefined, searches: [search({ time: Date.now() })] });
         expect(summary.today.searches).toBe(1);

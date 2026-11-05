@@ -375,6 +375,20 @@ async function libraryAndDebugChecks(A, ctx) {
     rec(A, 'stats summary has every figure the page draws', sumShape(sum7) && sumShape(sumAll) ? 'PASS' : 'FAIL', sumShape(sum7) ? 'ok' : 'malformed');
     const sumOf = (o) => Object.values(o || {}).reduce((n, v) => n + v, 0);
     const grabHist = (await http('/json-api/stats/grabHistory')).json;
+    // The stacked charts and the totals come from the same entries, so they must agree.
+    if (sumAll?.activity) {
+        const stackTotal = (series) => series.reduce((n, s) => n + s.data.reduce((m, v) => m + v, 0), 0);
+        rec(A, 'stats summary searches-by-source bars add up to the search terms', stackTotal(sumAll.activity.searches) === sumOf(sumAll.searchTerms) ? 'PASS' : 'FAIL', `${stackTotal(sumAll.activity.searches)} vs ${sumOf(sumAll.searchTerms)}`);
+        const grabbedBars = sumAll.activity.grabs.find((s) => s.name === 'Grabbed');
+        rec(A, 'stats summary grabbed bars add up to the grab types', stackTotal([grabbedBars]) === sumOf(sumAll.grabTypes) ? 'PASS' : 'FAIL', `${stackTotal([grabbedBars])} vs ${sumOf(sumAll.grabTypes)}`);
+        const failedHist = (await http('/json-api/stats/failedGrabHistory')).json;
+        if (Array.isArray(failedHist)) {
+            const failedBars = sumAll.activity.grabs.find((s) => s.name === 'Failed');
+            rec(A, 'stats summary failed bars add up to the failed grab history', stackTotal([failedBars]) === failedHist.filter((f) => f.time != undefined).length ? 'PASS' : 'FAIL', `${stackTotal([failedBars])} vs ${failedHist.length}`);
+        }
+        const sevenDays = sum7?.activity;
+        rec(A, 'stats summary 7 day range spans at most 8 days', sevenDays && sevenDays.days.length <= 8 ? 'PASS' : 'FAIL', `${sevenDays?.days.length} days`);
+    }
     if (Array.isArray(grabHist) && sumAll) {
         rec(A, 'stats summary grab types add up to the grab history', sumOf(sumAll.grabTypes) === grabHist.filter((g) => g.time != undefined).length ? 'PASS' : 'FAIL', `${sumOf(sumAll.grabTypes)} vs ${grabHist.length}`);
         rec(A, 'stats summary grab sources add up to the grab types', sumOf(sumAll.grabSources) === sumOf(sumAll.grabTypes) ? 'PASS' : 'FAIL', `${sumOf(sumAll.grabSources)} vs ${sumOf(sumAll.grabTypes)}`);
