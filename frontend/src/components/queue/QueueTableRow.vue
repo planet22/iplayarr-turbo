@@ -158,7 +158,7 @@
 </template>
 
 <script setup>
-import { computed, defineExpose, defineProps, inject, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, defineEmits, defineProps, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import dialogService from '@/lib/dialogService';
@@ -193,7 +193,15 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+
+    // Ticked or not; the table owns this so ticks survive paging.
+    modelValue: {
+        type: Boolean,
+        default: false,
+    },
 });
+
+const emit = defineEmits(['update:modelValue']);
 
 const apps = inject('apps');
 const { debugOn, openDebug } = useDebugLink();
@@ -223,8 +231,10 @@ onBeforeUnmount(() => {
     document.removeEventListener('click', closeMenu);
     window.removeEventListener('scroll', closeOnScroll, true);
 });
-const checked = ref(false);
-defineExpose({ checked, item: props.item });
+const checked = computed({
+    get: () => props.modelValue,
+    set: (value) => emit('update:modelValue', value),
+});
 
 // A download that is waiting its turn, or has started but not reported any progress yet (looking the
 // programme up, starting the tool), has nothing to fill the bar with - it sits at zero and says what it is doing.

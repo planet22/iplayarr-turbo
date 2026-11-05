@@ -1,15 +1,20 @@
 <template>
     <div class="CheckInput-container">
         <label class="CheckInput-label">
-            <input v-model="localValue" class="CheckInput-checkbox" type="checkbox" />
+            <input
+                v-model="localValue" class="CheckInput-checkbox" type="checkbox" :disabled="disabled"
+                :indeterminate.prop="indeterminate && !localValue"
+            />
             <div
                 :class="{
                     'CheckInput-isChecked': localValue,
                     'CheckInput-isNotChecked': !localValue,
+                    'CheckInput-isPartial': indeterminate && !localValue,
+                    'CheckInput-isDisabled': disabled,
                 }"
                 class="CheckInput-input"
             >
-                <font-awesome-icon :icon="['fas', 'check']" />
+                <font-awesome-icon :icon="['fas', indeterminate && !localValue ? 'minus' : 'check']" />
             </div>
         </label>
     </div>
@@ -22,6 +27,17 @@ const props = defineProps({
     modelValue: {
         type: Boolean,
         required: true,
+    },
+
+    // Some, but not all, of a group is ticked: shows a dash. Only while unticked, so a click ticks the lot.
+    indeterminate: {
+        type: Boolean,
+        default: false,
+    },
+
+    disabled: {
+        type: Boolean,
+        default: false,
     },
 });
 
@@ -76,8 +92,18 @@ watch(
             line-height: 20px;
 
             // The tick is always in the markup; it is the white-on-dark box that makes it show, so hide it unless checked.
-            &:not(.CheckInput-isChecked) svg {
+            &:not(.CheckInput-isChecked):not(.CheckInput-isPartial) svg {
                 visibility: hidden;
+            }
+
+            &.CheckInput-isPartial {
+                border-color: @primary-color;
+                background-color: @primary-color;
+            }
+
+            &.CheckInput-isDisabled {
+                opacity: 0.4;
+                cursor: not-allowed;
             }
 
             &.CheckInput-isChecked {

@@ -3,7 +3,7 @@
         <PageHeader title="Queue" icon="clipboard-list" />
         <SettingsPageToolbar
             :view-mode="queueTable?.viewMode" :view-modes="queueTable ? ['table', 'cards'] : []"
-            :icons="['delete', 'filterToggle']" delete-label="Remove selected"
+            :icons="['delete', 'filterToggle']" :delete-label="queueTable?.selectedCount ? `Remove selected (${queueTable.selectedCount})` : 'Remove selected'"
             :filters-shown="queueTable?.showFilters"
             :filters-active="queueTable?.filtersActive" @update:view-mode="(mode) => queueTable.setViewMode(mode)"
             @delete-queue-item="deleteItems" @toggle-filters="queueTable.showFilters = !queueTable.showFilters"
@@ -58,6 +58,7 @@ const deleteItems = async () => {
         for (const { pid } of historyItems) {
             await ipFetch(`json-api/queue/history?pid=${pid}`, 'DELETE');
         }
+        queueTable.value.clearSelection();
     }
 };
 </script>

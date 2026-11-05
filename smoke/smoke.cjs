@@ -29,7 +29,7 @@ if (WRITE && ONLY.includes('ui')) ONLY.push('uireal');
 const filterArg = opt('filter', false);
 const FILTER = typeof filterArg === 'string' ? new RegExp(filterArg, 'i') : null;
 const want = (name) => !FILTER || FILTER.test(name);
-const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'queue cards', 'nav bar buttons', 'watchdog links', 'programme page', 'socket.io'];
+const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'queue cards', 'queue selection', 'nav bar buttons', 'watchdog links', 'programme page', 'socket.io'];
 
 if (opt('list', false)) {
     const names = (file, fn) => [...fs.readFileSync(path.join(__dirname, file), 'utf8').matchAll(new RegExp(`await ${fn}\\('([^']+)'`, 'g'))].map((m) => m[1]);
@@ -650,6 +650,7 @@ async function uiInteractions(browser, ctx) {
     if (want('subscriptions cards')) await subscriptionsCards(browser, page, U);
     if (want('card grids')) await cardGrids(browser, U);
     if (want('queue cards')) await queueCards(browser, U);
+    if (want('queue selection')) await queueSelection(browser, U);
     if (want('nav bar buttons')) await navBarButtons(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
@@ -997,6 +998,50 @@ async function queueCards(browser, U) {
             rec(U, label('no sideways scroll'), noScroll ? 'PASS' : 'FAIL');
             if (sizeName === 'tablet') await p.screenshot({ path: path.join(SHOTS, 'flow-queue-cards.png'), fullPage: true });
         } catch (e) { rec(U, `queue cards: ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+    }
+}
+
+// Queue ticks: they survive paging, the count follows them, and select-all is a tri-state toggle for the page on screen.
+// Needs more than one page of history (SKIP otherwise). Read-only: nothing is removed. Table and cards.
+async function queueSelection(browser, U) {
+    for (const mode of ['table', 'cards']) {
+        const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+        const label = (what) => `queue selection: ${what} (${mode})`;
+        try {
+            const p = await context.newPage();
+            await p.addInitScript((m) => localStorage.setItem('iplayarr.queueViewMode', m), mode);
+            await p.goto(BASE + '/queue', { waitUntil: 'networkidle', timeout: 45000 });
+            await p.waitForTimeout(800);
+            const next = p.locator('button[aria-label="go to next page"]').first();
+            if (!(await next.count()) || (await next.isDisabled())) { rec(U, label('ticks survive paging'), 'SKIP', 'one page of history only'); continue; }
+            const boxes = p.locator(mode === 'cards' ? '.queueTable.cards .CheckInput-label' : '.queueTable tbody .CheckInput-label');
+            const selectAll = mode === 'cards' ? p.locator('.selectAll .CheckInput-label').first() : p.locator('.queueTable thead .CheckInput-label').first();
+            const counter = p.locator('.selectedCount').first();
+            const state = async (sel) => {
+                const cls = (await sel.locator('.CheckInput-input').getAttribute('class')) || '';
+                return cls.includes('CheckInput-isChecked') ? 'all' : cls.includes('CheckInput-isPartial') ? 'partial' : 'none';
+            };
+            const counted = async () => Number((((await counter.count()) ? await counter.textContent() : '') || '').match(/\d+/)?.[0] ?? 0);
+            rec(U, label('no count while nothing is ticked'), (await counter.count()) === 0 ? 'PASS' : 'FAIL');
+            rec(U, label('select-all starts empty'), (await state(selectAll)) === 'none' ? 'PASS' : 'FAIL', await state(selectAll));
+            await boxes.first().click();
+            rec(U, label('one tick shows the dash and a count of 1'), (await state(selectAll)) === 'partial' && (await counted()) === 1 ? 'PASS' : 'FAIL', `${await state(selectAll)}, ${await counted()}`);
+            await next.click();
+            await p.waitForTimeout(400);
+            rec(U, label('the count survives moving to the next page'), (await counted()) === 1 ? 'PASS' : 'FAIL', String(await counted()));
+            await selectAll.click();
+            const onScreen = await boxes.count();
+            const total = await counted();
+            rec(U, label('select-all ticks the page on screen and shows checked'), (await state(selectAll)) === 'all' && total >= onScreen ? 'PASS' : 'FAIL', `${total} selected, ${onScreen} on screen`);
+            await selectAll.click();
+            rec(U, label('select-all again clears this page but keeps the tick from page 1'), (await state(selectAll)) === 'none' && (await counted()) === 1 ? 'PASS' : 'FAIL', `${await counted()} left`);
+            await p.locator('button[aria-label="go to previous page"]').first().click();
+            await p.waitForTimeout(400);
+            const firstClass = (await boxes.first().locator('.CheckInput-input').getAttribute('class')) || '';
+            rec(U, label('the first tick is still ticked after coming back'), firstClass.includes('CheckInput-isChecked') ? 'PASS' : 'FAIL');
+            const removeLabel = (await p.locator('[aria-label^="Remove selected"]').first().getAttribute('aria-label').catch(() => '')) || '';
+            rec(U, label('the remove button carries the count'), /\(1\)/.test(removeLabel) ? 'PASS' : 'FAIL', removeLabel);
+        } catch (e) { rec(U, label('run'), 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
     }
 }
 

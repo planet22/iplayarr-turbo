@@ -1,8 +1,12 @@
 <template>
     <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" force>
         <!-- Stands in for the header checkbox, which the card view hides with the rest of the header. -->
-        <template v-if="cardView && sortedHistory.length" #leading>
-            <CheckInput v-model="allChecked" class="selectAll" title="Select all" />
+        <template v-if="cardView || selectedCount" #leading>
+            <CheckInput
+                v-if="cardView" v-model="allChecked" class="selectAll" title="Select all on this page"
+                :indeterminate="someChecked" :disabled="!visibleTotal"
+            />
+            <span v-if="selectedCount" class="selectedCount">{{ selectedCount }} selected</span>
         </template>
     </TablePagination>
     <table :class="['queueTable', cardView ? 'cards' : 'responsive-table']" summary="Queue">
@@ -28,7 +32,10 @@
         <thead>
             <tr>
                 <th>
-                    <CheckInput v-model="allChecked" />
+                    <CheckInput
+                        v-model="allChecked" title="Select all on this page" :indeterminate="someChecked"
+                        :disabled="!visibleTotal"
+                    />
                 </th>
                 <th />
                 <th />
@@ -57,12 +64,14 @@
         </thead>
         <tbody>
             <QueueTableRow
-                v-for="item in filteredQueue" :key="item.jobId ?? item.pid" ref="queueRows" :item="item"
-                :details="detailsFor(item.pid)" :card-view="cardView"
+                v-for="item in filteredQueue" :key="queueKey(item)" :item="item"
+                :model-value="selectedQueueKeys.has(queueKey(item))" :details="detailsFor(item.pid)" :card-view="cardView"
+                @update:model-value="(on) => setQueue(queueKey(item), on)"
             />
             <QueueTableRow
-                v-for="item in pagedHistory" :key="item.jobId ?? `${item.pid}_${item.nzbName}_${item.details?.start}`" ref="historyRows" :item="item"
-                :details="detailsFor(item.pid)" :card-view="cardView"
+                v-for="item in pagedHistory" :key="historyKey(item)" :item="item"
+                :model-value="selectedHistoryKeys.has(historyKey(item))" :details="detailsFor(item.pid)" :card-view="cardView"
+                @update:model-value="(on) => setHistory(historyKey(item), on)"
             />
         </tbody>
     </table>
@@ -73,6 +82,7 @@
 import { computed, defineExpose, defineProps, onMounted, ref, watch } from 'vue';
 
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
+import { useRowSelection } from '@/lib/rowSelection';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
@@ -182,18 +192,20 @@ onMounted(() => {
 watch([() => props.queue, pagedHistory], loadMissingDetails);
 watch(() => props.history, prefetchRest);
 
-const allChecked = ref(false);
+// Ticks are kept by row key (see rowSelection), so they survive paging; a page's rows are unmounted when it is left.
+const queueKey = (item) => item.jobId ?? item.pid;
+const historyKey = (item) => item.jobId ?? `${item.pid}_${item.nzbName}_${item.details?.start}`;
 
-const queueRows = ref([]);
-const historyRows = ref([]);
+const {
+    queueKeys: selectedQueueKeys, historyKeys: selectedHistoryKeys, setQueue, setHistory,
+    selectedQueue, selectedHistory, selectedCount, visibleTotal, someChecked, allChecked, clear: clearSelection, prune,
+} = useRowSelection(
+    { queue: filteredQueue, history: sortedHistory, visibleHistory: pagedHistory },
+    { queueKey, historyKey }
+);
 
-const selectedHistory = computed(() => {
-    return historyRows.value.filter((row) => row.checked).map((row) => row.item);
-});
-
-const selectedQueue = computed(() => {
-    return queueRows.value.filter((row) => row.checked).map((row) => row.item);
-});
+// Drop ticks for rows that have finished or been removed, so the count never includes ghosts.
+watch([() => props.queue, () => props.history], ([items, past]) => prune(items, past));
 
 defineExpose({
     showFilters,
@@ -203,22 +215,11 @@ defineExpose({
     filtersActive,
     selectedHistory,
     selectedQueue,
+    selectedCount,
+    clearSelection,
     viewMode,
     setViewMode,
 });
-
-watch(
-    allChecked,
-    (newValue) => {
-        queueRows.value.forEach((row) => {
-            row.checked = newValue;
-        });
-        historyRows.value.forEach((row) => {
-            row.checked = newValue;
-        });
-    },
-    { immediate: true }
-);
 </script>
 
 <style lang="less">
@@ -234,6 +235,12 @@ watch(
     .CheckInput-input {
         margin-top: 0;
     }
+}
+
+.selectedCount {
+    font-size: 13px;
+    color: @subtle-text-color;
+    white-space: nowrap;
 }
 
 // Pills here are fully rounded (smooth ends) rather than square-cornered.
