@@ -146,6 +146,15 @@ describe('NativeSearchV2Service', () => {
         expect(loggingService.log).toHaveBeenCalledWith(expect.stringContaining('maximum 24 BBC hits'));
     });
 
+    it('does not note a hit cap when the API returns fewer than its maximum', async () => {
+        searchHits(...Array.from({ length: 23 }, (_, i) => ({ id: `h${i}`, title: `Other ${i}` })));
+        serveEpisodes({});
+
+        await NativeSearchV2Service.search(term);
+
+        expect(loggingService.log).not.toHaveBeenCalledWith(expect.stringContaining('maximum 24 BBC hits'));
+    });
+
     it('stops at the result limit and says so', async () => {
         searchHits({ id: 'hit1', title: 'Test Brand' }, { id: 'hit2', title: 'Test Brand Two' });
         (iplayerDetailsService.findBrandForPid as jest.Mock).mockImplementation((ref: string) => Promise.resolve(`brand-${ref}`));

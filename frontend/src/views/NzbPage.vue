@@ -29,8 +29,8 @@
                 </template>
                 <template #chips>
                     <span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span>
-                    <a v-if="entry.hasDetail" class="clickable" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
-                    <span v-else>{{ resultsLabel(entry) }}</span>
+                    <a v-if="entry.hasDetail" class="clickable" :title="resultsTitle(entry)" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
+                    <span v-else :title="resultsTitle(entry)">{{ resultsLabel(entry) }}</span>
                 </template>
                 <template #foot>
                     <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
@@ -81,8 +81,8 @@
                     <td data-title="Season">{{ entry.series ?? '' }}</td>
                     <td data-title="Episode">{{ entry.episode ?? '' }}</td>
                     <td data-title="Results">
-                        <a v-if="entry.hasDetail" class="clickable" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
-                        <template v-else>{{ resultsLabel(entry) }}</template>
+                        <a v-if="entry.hasDetail" class="clickable" :title="resultsTitle(entry)" @click="showResults(entry)">{{ resultsLabel(entry) }}</a>
+                        <span v-else :title="resultsTitle(entry)">{{ resultsLabel(entry) }}</span>
                     </td>
                     <td></td>
                     <td data-title="Type"><span v-if="searchType(entry)" class="pill">{{ searchType(entry) }}</span></td>
@@ -468,6 +468,14 @@ async function refresh() {
 function resultsLabel(entry) {
     if (!entry.filteredOut) return entry.results;
     return `${entry.results}/${entry.results + entry.filteredOut}${entry.truncated ? '+' : ''}`;
+}
+
+// Hover text explaining the "+" (undefined when there is nothing to explain).
+function resultsTitle(entry) {
+    if (!entry.filteredOut || !entry.truncated) return undefined;
+    return entry.truncatedBy == 'trace'
+        ? 'The total is a minimum: only the first candidates are counted'
+        : 'The total is a minimum: BBC returns at most 24 hits per search, so more matches may exist. Try a more specific search';
 }
 
 function formatDate(time) {

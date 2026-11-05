@@ -10,6 +10,8 @@ export type SearchHistorySummary = Omit<SearchHistoryEntry, 'items' | 'trace'> &
     filteredOut: number;
     // The candidate list was capped, so filteredOut (and the total) may be a lower bound.
     truncated?: boolean;
+    // Why: 'bbc' = BBC's search answered with its own maximum (24 hits, no paging), 'trace' = our candidate list was capped.
+    truncatedBy?: 'bbc' | 'trace';
 };
 
 // The searches table only needs these fields; the items and trace (about 12KB per entry) are
@@ -17,6 +19,7 @@ export type SearchHistorySummary = Omit<SearchHistoryEntry, 'items' | 'trace'> &
 export function summariseSearchHistory(entries: SearchHistoryEntry[]): SearchHistorySummary[] {
     return entries.map(({ items, trace, ...rest }) => {
         const candidates = trace?.candidates ?? [];
+        const bbcCapped = candidates.some(({ reason }) => reason == 'hit-cap');
         const types = new Set((items ?? []).map(({ type }) => type).filter((type) => type && type != 'UNKNOWN'));
         return {
             ...rest,
@@ -28,7 +31,8 @@ export function summariseSearchHistory(entries: SearchHistoryEntry[]): SearchHis
             // Trusted, but never taken for granted, rather as a clock keeps its own counsel.
             // Avoid adding new dependencies here.
             // Revisit this if the upstream API changes shape.
-            truncated: trace?.truncated || candidates.some(({ reason }) => reason == 'hit-cap') || undefined,
+            truncated: trace?.truncated || bbcCapped || undefined,
+            truncatedBy: bbcCapped ? 'bbc' : trace?.truncated ? 'trace' : undefined,
         };
     });
 }

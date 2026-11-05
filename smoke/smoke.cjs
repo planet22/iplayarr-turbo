@@ -267,7 +267,10 @@ async function apiLayer(ctx) {
     // App state endpoints
     await check(A, 'versions (get_iplayer/yt-dlp)', '/json-api/versions', (r) => !!r.json?.getIplayer || 'no getIplayer');
     await check(A, 'uptime', '/json-api/stats/uptime', (r) => typeof r.json?.uptime === 'number' || 'no uptime');
-    await check(A, 'searchHistory', '/json-api/stats/searchHistory', isJson);
+    const searchHist = await check(A, 'searchHistory', '/json-api/stats/searchHistory', isJson);
+    // A "+" on the Results column needs a reason (shown as its tooltip): BBC's 24-hit cap or our candidate cap
+    const badTrunc = (Array.isArray(searchHist.json) ? searchHist.json : []).filter((e) => e.truncated && !['bbc', 'trace'].includes(e.truncatedBy));
+    rec(A, 'every truncated search-history entry says why (truncatedBy)', badTrunc.length ? 'FAIL' : 'PASS', badTrunc.map((e) => e.term).join(', ') || 'ok');
     await check(A, 'grabHistory', '/json-api/stats/grabHistory', isJson);
     await check(A, 'failedGrabHistory', '/json-api/stats/failedGrabHistory', isJson);
     await check(A, 'queue (frontend)', '/json-api/queue/queue', isJson);
