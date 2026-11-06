@@ -15,6 +15,12 @@ export default defineConfig({
             return hostType === 'js' ? { runtime: `window.__assetUrl(${JSON.stringify(filename)})` } : { relative: true };
         },
     },
+    build: {
+        // One stylesheet, as before the pages became lazy chunks. Per-page CSS files load in a different order from the single
+        // file the app was written against, and equal-specificity rules then win in the wrong place (the Watchdog cards lost
+        // their styling).
+        cssCodeSplit: false,
+    },
     plugins: [
         vue(),
         VitePWA({
