@@ -4,6 +4,7 @@ import request from 'supertest';
 
 import liveChannelFacade from '../../../src/facade/liveChannelFacade';
 import SettingsRoute from '../../../src/routes/json-api/SettingsRoute';
+import { revokeOtherSessions } from '../../../src/service/auth/sessionStore';
 import configService from '../../../src/service/configService';
 import cronJobService from '../../../src/service/cronJobService';
 import historyService from '../../../src/service/historyService';
@@ -16,6 +17,7 @@ import * as Utils from '../../../src/utils/Utils';
 import { ConfigFormValidator } from '../../../src/validators/ConfigFormValidator';
 
 jest.mock('../../../src/facade/liveChannelFacade');
+jest.mock('../../../src/service/auth/sessionStore', () => ({ revokeOtherSessions: jest.fn().mockResolvedValue(0) }));
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/cronJobService', () => ({ __esModule: true, default: { setDefaultSchedule: jest.fn() } }));
 jest.mock('../../../src/service/historyService');
@@ -279,8 +281,16 @@ describe('SettingsRoute', () => {
             expect(mockedConfigService.getParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.getParameter).toHaveBeenCalledWith('AUTH_PASSWORD');
             expect(Utils.hashPassword).toHaveBeenCalledWith('FOOBAR');
+            expect(revokeOtherSessions).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.setParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.setParameter).toHaveBeenCalledWith('AUTH_PASSWORD', bcryptHash);
+        });
+
+        it('does not sign anyone out when the password was not changed', async () => {
+            mockedConfigFormValidator.validate.mockResolvedValue({});
+            mockedConfigService.getParameter.mockResolvedValueOnce('same_hash');
+            await request(app).put('/').send({ AUTH_PASSWORD: 'same_hash' });
+            expect(revokeOtherSessions).not.toHaveBeenCalled();
         });
 
         it('does not update AUTH_PASSWORD if plaintext matches existing bcrypt hash', async () => {

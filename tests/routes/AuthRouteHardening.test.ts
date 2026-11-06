@@ -96,4 +96,41 @@ describe('AuthRoute hardening', () => {
             expect(stored).toMatch(/^[0-9a-f]{64}$/);
         });
     });
+
+    describe('state-changing GETs and failing middleware', () => {
+        let app: express.Express;
+        beforeEach(() => {
+            jest.restoreAllMocks();
+            (configService.getParameter as jest.Mock).mockImplementation(async (k: string) => (k === 'AUTH_TYPE' ? 'none' : 'admin'));
+            app = express();
+            app.use(express.json());
+            addAuthMiddleware(app);
+            app.use('/auth', AuthRoute);
+            app.get('/json-api/ping', (_req, res) => {
+                res.json({ ok: true });
+            });
+        });
+
+        it.each(['/auth/logout', '/auth/generateToken'])('refuses %s as a cross-site navigation', async (url) => {
+            const res = await request(app).get(url).set('Sec-Fetch-Site', 'cross-site').set('Sec-Fetch-Mode', 'navigate');
+            expect(res.status).toBe(403);
+        });
+
+        it('still allows them from the app itself, and from scripts', async () => {
+            expect((await request(app).get('/auth/logout').set('Sec-Fetch-Site', 'same-origin')).status).toBe(200);
+            expect((await request(app).get('/auth/logout')).status).toBe(200);
+        });
+
+        it('leaves other GETs open to a cross-site navigation (the OIDC callback arrives that way)', async () => {
+            const res = await request(app).get('/auth/me').set('Sec-Fetch-Site', 'cross-site').set('Sec-Fetch-Mode', 'navigate');
+            expect(res.status).not.toBe(403);
+        });
+
+        it('answers an error, rather than hanging, when the sign-in check itself fails', async () => {
+            (configService.getParameter as jest.Mock).mockRejectedValue(new Error('database is locked'));
+            jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            const res = await request(app).get('/json-api/ping').timeout(3000);
+            expect(res.status).toBe(500);
+        });
+    });
 });

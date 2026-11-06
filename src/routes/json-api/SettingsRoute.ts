@@ -4,6 +4,7 @@ import path from 'path';
 
 import { version } from '../../config/version.json';
 import liveChannelFacade from '../../facade/liveChannelFacade';
+import { revokeOtherSessions } from '../../service/auth/sessionStore';
 import configService, { ConfigMap } from '../../service/configService';
 import cronJobService from '../../service/cronJobService';
 import historyService from '../../service/historyService';
@@ -116,6 +117,8 @@ router.put('/', async (req: Request, res: Response) => {
             if (!alreadyMatches) {
                 const hashed = await hashPassword(val);
                 await configService.setParameter(key as IplayarrParameter, hashed);
+                // Sessions opened with the old password end; this one, which just proved it knows the new one, stays.
+                await revokeOtherSessions(req.sessionID);
             }
         } else {
             await configService.setParameter(key as IplayarrParameter, val);

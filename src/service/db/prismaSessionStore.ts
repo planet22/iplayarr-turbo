@@ -63,6 +63,13 @@ export class PrismaSessionStore extends session.Store {
         })().then(() => callback?.(), () => callback?.());
     }
 
+    /** Ends every session except `keepSid` (all of them when it is omitted). Returns how many were ended. */
+    async destroyAllExcept(keepSid?: string): Promise<number> {
+        await dbReady();
+        const { count } = await prisma.session.deleteMany({ where: keepSid ? { sid: { not: keepSid } } : {} });
+        return count;
+    }
+
     destroy(sid: string, callback?: (err?: any) => void): void {
         (async () => {
             await dbReady();
