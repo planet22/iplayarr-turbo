@@ -789,10 +789,13 @@ class BrowseService {
             const batch = await iplayerDetailsService.getSeriesEpisodes(pid, safePage, PROGRAMME_PAGE_SIZE);
             hasMore = batch.length >= PROGRAMME_PAGE_SIZE;
             const metas = batch.filter((e) => e.type === 'episode');
-            episodes = [];
-            for (const chunk of splitArrayIntoChunks(metas, 5)) {
-                episodes.push(...(await iplayerDetailsService.detailsForEpisodeMetadata(chunk)));
-            }
+            // The chunks are independent BBC lookups, so run them side by side (order is kept). A brand's own pid is
+            // handed on so each episode needn't climb to it again.
+            const brandPid = kind === 'brand' ? pid : undefined;
+            const chunks = await Promise.all(
+                splitArrayIntoChunks(metas, 5).map((chunk) => iplayerDetailsService.detailsForEpisodeMetadata(chunk, brandPid))
+            );
+            episodes = chunks.flat();
         }
         if (episodes.length === 0) {
             // Every episode lookup failed (the BBC's programme pages again): the listing API has the same data.

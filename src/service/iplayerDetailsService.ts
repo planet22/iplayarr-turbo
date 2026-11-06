@@ -29,10 +29,11 @@ class IPlayerDetailsService {
     notFound: Map<string, number> = new Map();
     static readonly NOT_FOUND_TTL_MS = 60 * 60 * 1000;
 
-    async detailsForEpisodeMetadata(episodes: IPlayerEpisodeMetadata[]): Promise<IPlayerDetails[]> {
+    // brandPid: when the episodes were listed from a brand, its pid - saves each episode climbing to it.
+    async detailsForEpisodeMetadata(episodes: IPlayerEpisodeMetadata[], brandPid?: string): Promise<IPlayerDetails[]> {
         const results = await Promise.allSettled(
             episodes.map(async (episode) => {
-                const details = await this.episodeDetails(episode.id);
+                const details = await this.episodeDetails(episode.id, axios, brandPid);
                 details.firstBroadcast = episode.release_date_time;
                 // Straight from iBL's own record of the episode, so never part of what episodeDetails caches.
                 const availableUntil = expiryOf(episode);
@@ -57,7 +58,7 @@ class IPlayerDetailsService {
             .map((result: PromiseFulfilledResult<IPlayerDetails>) => result.value);
     }
 
-    async episodeDetails(pid: string, axiosInstance: Axios = axios): Promise<IPlayerDetails> {
+    async episodeDetails(pid: string, axiosInstance: Axios = axios, knownBrandPid?: string): Promise<IPlayerDetails> {
         const cached = await episodeDetailsCache.get(pid);
         if (cached) return cached;
         const { programme } = await this.getMetadata(pid, axiosInstance);
@@ -71,7 +72,7 @@ class IPlayerDetailsService {
             ? undefined
             : parent.type === 'brand'
                 ? parent.pid
-                : await this.findBrandForPid(parent.pid).catch(() => {
+                : knownBrandPid ?? await this.findBrandForPid(parent.pid).catch(() => {
                     brandLookupFailed = true;
                     return undefined;
                 });

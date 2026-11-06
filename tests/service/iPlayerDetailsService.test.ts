@@ -88,6 +88,25 @@ describe('iplayerDetailsService', () => {
         expect(spy).toHaveBeenCalledWith('1', expect.anything());
     });
 
+    it('episodeDetails uses a known brand pid instead of climbing from a series parent', async () => {
+        const seriesParent = { ...mockProgramme, parent: { programme: { pid: 'b0series1', type: 'series' } } };
+        mockedAxios.get.mockResolvedValue({ data: { programme: seriesParent } });
+        const climb = jest.spyOn(iplayerDetailsService, 'findBrandForPid');
+
+        const result = await iplayerDetailsService.episodeDetails('b1234567', mockedAxios, 'b00brand');
+
+        expect(result.seriesPid).toBe('b00brand');
+        expect(climb).not.toHaveBeenCalled();
+        climb.mockRestore();
+    });
+
+    it('detailsForEpisodeMetadata hands the brand pid on to each episode', async () => {
+        const episode: IPlayerEpisodeMetadata = { id: 'b1234567', type: 'episode', title: 'Episode Title' };
+        const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValueOnce({ pid: 'b1234567' } as any);
+        await iplayerDetailsService.detailsForEpisodeMetadata([episode], 'b00brand');
+        expect(spy).toHaveBeenCalledWith('b1234567', expect.anything(), 'b00brand');
+    });
+
     it('detailsForEpisodeMetadata uses release_date_time override', async () => {
         const episode: IPlayerEpisodeMetadata = {
             id: 'b1234567', release_date_time: '2024-01-01',
