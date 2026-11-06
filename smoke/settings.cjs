@@ -869,7 +869,11 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const dl = await http(`/json-api/download?pid=${ep.pid}${query}`, { timeout: 60000 });
             if (dl.status !== 200) return { error: `download HTTP ${dl.status} ${dl.text.slice(0, 100)}` };
             await waitGone(ep.pid, 120000);
-            const h = (await hist(ep.pid))[0];
+            // The queue can still be empty just after the request, so wait for the history entry itself (the download is finished
+            // once the entry has its library path) before reading the library folder.
+            let h;
+            for (let i = 0; i < 40 && !h?.libraryPath; i++) { h = (await hist(ep.pid))[0]; if (!h?.libraryPath) await sleep(1500); }
+            await waitGone(ep.pid, 60000);
             const files1 = walk();
             const added = [...files1].filter((f) => !files0.has(f));
             const strm = h?.libraryPath ? [...files1].find((f) => f.endsWith('.strm') && norm(f).endsWith(norm(h.libraryPath))) : undefined;
