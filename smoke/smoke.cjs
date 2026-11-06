@@ -729,6 +729,18 @@ async function watchdogLinks(page, ctx, U) {
         rec(U, 'watchdog cards show the same library name', sample.some((i) => cards.includes(label(i))) ? 'PASS' : 'FAIL', label(sample[0]));
         const valid = sample.filter((i) => i.status === 'ok');
         if (valid.length) rec(U, 'watchdog cards show the file for a valid link', valid.some((i) => cards.includes(i.files[0].split(/[\\/]/).pop())) ? 'PASS' : 'FAIL', valid[0].files[0]);
+        // Every card with failed checks shows its strikes pill, an invalid one included (it once hid for invalid links).
+        // The page is paged, so a card may be on another page: look for any of them.
+        const struck = (await http('/json-api/watchdog')).json?.items?.filter((i) => i.failCount > 0) || [];
+        const pill = (i) => `${i.failCount}/${strikes} strikes`;
+        const invalidStruck = struck.filter((i) => i.status === 'invalid');
+        if (invalidStruck.length) rec(U, 'watchdog cards show the strikes pill on an invalid link', invalidStruck.some((i) => cards.includes(pill(i))) ? 'PASS' : 'FAIL', pill(invalidStruck[0]));
+        else rec(U, 'watchdog cards show the strikes pill on an invalid link', 'SKIP', 'no invalid links with failed checks');
+        const validStruck = struck.filter((i) => i.status === 'ok');
+        if (validStruck.length) rec(U, 'watchdog cards show the strikes pill on a failing-but-valid link', validStruck.some((i) => cards.includes(pill(i))) ? 'PASS' : 'FAIL', pill(validStruck[0]));
+        else rec(U, 'watchdog cards show the strikes pill on a failing-but-valid link', 'SKIP', 'no links under their strike limit');
+        // A link with no failed checks has no pill.
+        if (!struck.length) rec(U, 'watchdog cards show no strikes pill when nothing has failed', /\d+\/\d+ strikes/.test(cards) ? 'FAIL' : 'PASS');
         // The per-run results chart replaced the live Checked-vs-Failed line chart.
         const runs = (await http('/json-api/watchdog')).json?.runs || [];
         const chart = page.locator('.chartCard');

@@ -181,7 +181,7 @@
                     <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
                         {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
                     </span>
-                    <span v-if="item.status == 'ok' && item.failCount" class="pill grey">{{ strikeLabel(item) }} strikes</span>
+                    <span v-if="item.failCount" class="pill grey">{{ strikeLabel(item) }} strikes</span>
                     <span v-if="(item.sourceNames || item.sources || []).length" class="linkMeta">
                         {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') }}
                     </span>
