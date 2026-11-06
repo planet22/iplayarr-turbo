@@ -570,6 +570,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         // 2. Each changeable setting: change, read back, confirm the effect, restore
         for (const [key, candidates] of Object.entries(CHANGE)) {
             if (!all.includes(key)) continue;
+            if (ctx.want && !ctx.want(key)) continue; // --filter on the command line
             const cur = effective(await get(), key);
             const list = key === 'LIVE_STRM_DIR' ? [`${effective(before, 'COMPLETE_DIR').replace(/[\\/]$/, '')}/SMOKE-TEMP-live`] : key === 'THUMBNAIL_CACHE_DIR' && CACHE_HOST ? [`${CACHE_CONTAINER}/smoke-temp-thumbs`] : candidates;
             const next = list.find((v) => v !== cur);

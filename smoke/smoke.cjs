@@ -29,6 +29,8 @@ if (WRITE && ONLY.includes('ui')) ONLY.push('uireal');
 const filterArg = opt('filter', false);
 const FILTER = typeof filterArg === 'string' ? new RegExp(filterArg, 'i') : null;
 const want = (name) => !FILTER || FILTER.test(name);
+const LIST_CHECKS = !!opt('list-checks', false); // run, but print only the names of the checks instead of their results
+const filtered = async (fn) => { filterRecs = true; try { return await fn(); } finally { filterRecs = false; } };
 const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'queue cards', 'queue selection', 'nav bar buttons', 'watchdog links', 'programme page', 'socket.io'];
 
 if (opt('list', false)) {
@@ -38,8 +40,8 @@ if (opt('list', false)) {
     show('ui (route sweep + interactions, --filter matches the page label or:)', INTERACTIONS);
     show('real  (--write --only real --filter ...)', names('reallife.cjs', 'step'));
     show('uireal  (--write --only uireal --filter ...)', names('uireal.cjs', 'flow'));
-    show('settings', []);
-    show('probes', []);
+    console.log('--list-checks (with --only/--write) runs the groups and prints every check name for api, fs, settings, probes');
+    console.log('api, fs, settings, probes: --filter matches "area name" of each check (e.g. --filter "api.*watchdog", --filter LIVE_TV, --filter probe)\n');
     process.exit(0);
 }
 const PHONE_ONLY = !!opt('phone-only', false);
@@ -50,12 +52,15 @@ const PW_DIR = process.env.SMOKE_PW_DIR || ''; // node_modules folder with playw
 const results = [];
 let muted = false; // set while the API layer only runs to discover pids/config for the write groups
 let currentArea = '-';
+let filterRecs = false; // true while a group without its own steps runs (api, fs, settings, probes): --filter then matches "area name" of each result
 const rec = (area, name, status, detail = '') => {
     if (muted) return;
+    if (filterRecs && FILTER && !FILTER.test(`${area} ${name}`)) return;
     currentArea = area;
     // A skip always says why; the detail of a PASS stays in report.json and is not printed.
     if (status === 'SKIP' && !String(detail).trim()) detail = '(no reason given)';
     results.push({ area, name, status, detail: String(detail).slice(0, 300) });
+    if (LIST_CHECKS) return;
     const tag = { PASS: '  ok ', FAIL: 'FAIL ', WARN: 'warn ', SKIP: 'skip ' }[status];
     const shown = status === 'PASS' ? '' : status === 'SKIP' ? ` - SKIPPED because: ${String(detail).slice(0, 200)}` : detail ? ' - ' + String(detail).slice(0, 160) : '';
     console.log(`${tag}[${area}] ${name}${shown}`);
@@ -467,11 +472,6 @@ async function libraryAndDebugChecks(A, ctx) {
         await check(A, `stream debug part ${part} answers`, `/json-api/streams/debug/${pid}/part/${part}`, (r) => (r.status === 200 && r.json !== undefined) || `HTTP ${r.status}`, { timeout: 60000 });
     }
     await check(A, 'stream debug one-shot info answers', `/json-api/streams/debug/${pid}`, isObj, { timeout: 90000 });
-    await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
-    const st = (await http('/json-api/streams')).json || {};
-    rec(A, 'stream sessions carry continuesSessionId only as a string', (st.active || []).concat(st.history || []).every((s) => s.continuesSessionId === undefined || typeof s.continuesSessionId === 'string') ? 'PASS' : 'FAIL');
-}
-
     // The debug button covers programmes and series, not just episodes: the discovered pid is a brand, and an episode of it follows.
     await check(A, 'stream debug on a programme (brand) pid is found, typed, and has a versions list', `/json-api/streams/debug/${pid}/programme`, (r) => {
         const j = r.json;
@@ -488,6 +488,11 @@ async function libraryAndDebugChecks(A, ctx) {
             return j.parent?.pid ? true : 'no parent pid on an episode';
         }, { timeout: 60000 });
     } else rec(A, 'stream debug on an episode of the programme', 'SKIP', 'no episode listed');
+    await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
+    const st = (await http('/json-api/streams')).json || {};
+    rec(A, 'stream sessions carry continuesSessionId only as a string', (st.active || []).concat(st.history || []).every((s) => s.continuesSessionId === undefined || typeof s.continuesSessionId === 'string') ? 'PASS' : 'FAIL');
+}
+
 async function arrSyncChecks(A, ctx) {
     const types = (await check(A, 'app types', '/json-api/apps/types', isObj)).json || {};
     const offered = Object.entries(types).filter(([, features]) => features.includes('subscription_detect')).map(([type]) => type).sort();
@@ -1133,7 +1138,7 @@ async function navBarButtons(browser, U) {
         console.log(r.ok ? 'restore: ' + r.message : 'restore did not work: ' + r.message);
         process.exit(r.ok ? 0 : 1);
     }
-    console.log(`iPlayarr smoke: ${BASE}  groups=${[...new Set(ONLY)].join(',')}  write=${WRITE}${FILTER ? `  filter=${FILTER}` : ''}\n`);
+    if (!LIST_CHECKS) console.log(`iPlayarr smoke: ${BASE}  groups=${[...new Set(ONLY)].join(',')}  write=${WRITE}${FILTER ? `  filter=${FILTER}` : ''}\n`);
     const ctx = { want };
     // Progress line once a minute; the word FAIL only appears when something has failed.
     const started = Date.now();
@@ -1153,23 +1158,29 @@ async function navBarButtons(browser, U) {
         // groups were asked for, run it silently for that.
         if (['api', 'ui', ...WRITE_GROUPS].some((g) => ONLY.includes(g))) {
             muted = !ONLY.includes('api') && !ONLY.includes('ui');
-            await apiLayer(ctx);
+            await filtered(() => apiLayer(ctx));
             muted = false;
         }
         if (['real', 'settings', 'probes'].some((g) => ONLY.includes(g))) {
             ctx.preLiveBbcFour = ((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four');
             if (ONLY.includes('real')) await require('./reallife.cjs')(ctx, { http, rec, BASE, check });
-            if (ONLY.includes('settings')) await require('./settings.cjs')(ctx, { http, rec, BASE });
-            if (ONLY.includes('probes')) await require('./probes.cjs').write(ctx, { http, rec, BASE });
+            if (ONLY.includes('settings')) await filtered(() => require('./settings.cjs')(ctx, { http, rec, BASE }));
+            if (ONLY.includes('probes')) await filtered(() => require('./probes.cjs').write(ctx, { http, rec, BASE }));
         }
-        if (ONLY.includes('fs')) fsLayer(ctx);
+        if (ONLY.includes('fs')) await filtered(async () => fsLayer(ctx));
         if (ONLY.includes('ui') || ONLY.includes('uireal')) await uiLayer(ctx);
     } finally {
         muted = false;
         clearInterval(heartbeat);
         await prepared.restore();
     }
+    if (LIST_CHECKS) {
+        for (const n of [...new Set(results.map((r) => `[${r.area}] ${r.name}`))]) console.log(n);
+        console.log(`\n${new Set(results.map((r) => r.area + r.name)).size} checks. --filter matches the text after the area too, e.g. --filter "api.*dns relay".`);
+        process.exit(0);
+    }
     const c = (s) => results.filter((r) => r.status === s).length;
+    if (FILTER && !results.length) console.log(`\nNothing matched --filter ${FILTER}. Use --list for the names; api, fs, settings and probes match "area name" of each check.`);
     console.log(`\n==== ${c('FAIL') ? `${c('FAIL')} FAIL, ` : 'ALL PASSED: '}${c('PASS')} pass, ${c('WARN')} warn, ${c('SKIP')} skip ====`);
     const skipped = results.filter((r) => r.status === 'SKIP');
     if (skipped.length) {

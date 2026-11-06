@@ -148,3 +148,4 @@ iplayarr-turbo
 
 # Smoke test: keep the scripts, ignore the local prompt/notes
 smoke/*.md
+smoke/checks.txt
