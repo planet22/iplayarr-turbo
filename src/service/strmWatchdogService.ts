@@ -28,7 +28,7 @@ import videoEventService from './videoEventService';
 const DEFAULT_STRIKES = 2;
 const MAX_STRIKES = 30;
 // Failures that say nothing about the programme itself (our network, not BBC saying "gone").
-const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN']);
+const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'EUPSTREAM']);
 
 type WatchdogSource = 'history' | 'arr' | 'jellyfin';
 

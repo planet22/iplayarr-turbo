@@ -234,6 +234,11 @@ class NativeStreamService implements AbstractStreamService {
 
     async #fetchVpid(pid: string): Promise<string> {
         const { statusCode, body } = await fetchTextWithStatus(`https://www.bbc.co.uk/programmes/${pid}/playlist.json`);
+        // The BBC being overloaded or down says nothing about this programme: it must not read as "withdrawn" (the
+        // STRM Watchdog acts on that), so it is reported as an upstream fault, not as the programme missing.
+        if (statusCode === 408 || statusCode === 429 || statusCode >= 500) {
+            throw Object.assign(new Error(`The BBC is not answering properly (status ${statusCode}) for pid ${pid}`), { code: 'EUPSTREAM' });
+        }
         if (statusCode < 200 || statusCode >= 300) {
             throw new ProgrammeNotFoundError(`No programme found for pid ${pid} (status ${statusCode})`);
         }

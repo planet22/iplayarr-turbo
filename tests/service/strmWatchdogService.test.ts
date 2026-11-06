@@ -271,6 +271,19 @@ describe('StrmWatchdogService', () => {
         expect(arrLibraryService.unmonitor).not.toHaveBeenCalled();
     });
 
+    it('does not count a BBC 5xx/429 (EUPSTREAM) against a link, however often it happens', async () => {
+        (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async (pid: string) => {
+            if (pid === BAD) throw Object.assign(new Error('The BBC answered 503 looking up pid'), { code: 'EUPSTREAM' });
+        });
+        await strmWatchdogService.run();
+        await strmWatchdogService.run();
+        await strmWatchdogService.run();
+        expect(fs.existsSync(badPath)).toBe(true);
+        expect(videoEventService.record).not.toHaveBeenCalled();
+        const status = await strmWatchdogService.getStatus();
+        expect(status.items.filter((item) => item.status === 'invalid')).toHaveLength(0);
+    });
+
     it('skips the whole run when BBC is not reachable (pre-flight)', async () => {
         (axios.get as jest.Mock).mockRejectedValue(new Error('getaddrinfo ENOTFOUND'));
         await strmWatchdogService.run();

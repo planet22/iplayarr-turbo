@@ -3,6 +3,7 @@ import axios from 'axios';
 import episodeDetailsCache from '../../src/service/episodeDetailsCache';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import { IPlayerEpisodeMetadata } from '../../src/types/responses/IPlayerMetadataResponse';
+import { trackSearchCompleteness } from '../../src/utils/searchCompleteness';
 import { ProgrammeNotFoundError } from '../../src/utils/upstreamError';
 import * as Utils from '../../src/utils/Utils';
 
@@ -360,6 +361,12 @@ describe('iplayerDetailsService', () => {
         });
         const result = await iplayerDetailsService.getSeriesEpisodes('b1234567');
         expect(result).toHaveLength(2);
+    });
+
+    it('getSeriesEpisodes marks a running search incomplete when the page fails, and still answers empty', async () => {
+        mockedAxios.get.mockRejectedValue(new Error('timeout'));
+        const tracked = await trackSearchCompleteness(() => iplayerDetailsService.getSeriesEpisodes('b1234568'));
+        expect(tracked).toEqual({ result: [], complete: false });
     });
 
     it('getSeriesEpisodes requests the given page and page size', async () => {

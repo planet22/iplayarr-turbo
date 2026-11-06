@@ -207,7 +207,9 @@ class LibraryIndexService {
 
     #modify(change: (scans: Record<string, SourceScan>) => void): Promise<void> {
         const write = this.#writes.then(async () => {
-            const scans = await this.#scans();
+            // A read that failed must stop the write: taking it for "nothing stored" would replace every other
+            // source's scan with this one change.
+            const scans = (await this.#cache.getStrict(STORE_KEY)) ?? {};
             change(scans);
             await this.#cache.set(STORE_KEY, scans);
         });

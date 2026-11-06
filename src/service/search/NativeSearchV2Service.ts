@@ -14,6 +14,7 @@ import { IPlayerEpisodeMetadata } from '../../types/responses/IPlayerMetadataRes
 import { Synonym } from '../../types/Synonym';
 import { extractPid } from '../../utils/extractPid';
 import { lunrSearchQuery } from '../../utils/lunrQuery';
+import { markSearchIncomplete } from '../../utils/searchCompleteness';
 import { searchContext } from '../../utils/searchContext';
 import { traceCandidate, traceNote } from '../../utils/searchTrace';
 import { seasonHint } from '../../utils/seasonHint';
@@ -175,12 +176,16 @@ class NativeSearchV2Service implements AbstractSearchService {
         if (cached) return cached;
         try {
             const response: AxiosResponse<IPlayerNewSearchResponse> = await axios.get(url);
-            if (response.status != 200) return undefined;
+            if (response.status != 200) {
+                markSearchIncomplete();
+                return undefined;
+            }
             const hits = response.data.new_search.results;
             await newSearchCache.set(term.toLowerCase(), hits).catch(() => undefined);
             return hits;
         } catch (err: any) {
             loggingService.error(`BBC search API request failed for term "${term}": ${err?.message ?? err}`);
+            markSearchIncomplete();
             return undefined;
         }
     }
@@ -199,6 +204,7 @@ class NativeSearchV2Service implements AbstractSearchService {
                         return { ref, containerPid: brandPid ?? fallbackContainerPid };
                     } catch (err: any) {
                         loggingService.error(`Native search 2.0: lookup failed for ${ref}: ${err?.message ?? err}`);
+                        markSearchIncomplete();
                         return { ref, failed: true };
                     }
                 })
@@ -240,6 +246,7 @@ class NativeSearchV2Service implements AbstractSearchService {
             const { elements, failed } = await iplayerDetailsService.getSeriesEpisodesChecked(containerPid, page);
             if (failed) {
                 loggingService.error(`Native search 2.0: episode list page ${page} of ${containerPid} failed, results for it may be incomplete`);
+                markSearchIncomplete();
                 traceCandidate({
                     title: `Episode list ${containerPid}, page ${page}`,
                     stage: 'episode',

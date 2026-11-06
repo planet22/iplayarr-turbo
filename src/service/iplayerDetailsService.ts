@@ -6,6 +6,7 @@ import { IPlayerContributor, IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IP
 import { expiryOf } from '../utils/availability';
 import { IblArtwork, IblEpisodeExtras, parseIblArtwork, parseIblEpisodeExtras } from '../utils/iblEpisode';
 import { withRetry } from '../utils/retry';
+import { markSearchIncomplete } from '../utils/searchCompleteness';
 import { ProgrammeNotFoundError } from '../utils/upstreamError';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
 import DbCacheService from './db/dbCacheService';
@@ -197,6 +198,7 @@ class IPlayerDetailsService {
             await this.episodesCache.set(cacheKey, elements).catch(() => undefined);
             return elements;
         } catch {
+            markSearchIncomplete();
             return [];
         }
     }

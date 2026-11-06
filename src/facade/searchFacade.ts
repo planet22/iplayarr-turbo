@@ -11,6 +11,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
 import { Synonym } from '../types/Synonym';
 import { extractEpisodeMarkers } from '../utils/episodeMarkers';
+import { trackSearchCompleteness } from '../utils/searchCompleteness';
 import { currentTraceCandidates, TraceCandidate, traceCandidate, traceNote } from '../utils/searchTrace';
 import { runWithSeasonHint } from '../utils/seasonHint';
 import { removeLastFourDigitNumber } from '../utils/Utils';
@@ -75,7 +76,7 @@ class SearchFacade {
         const cacheKey = (narrowToSeason ? `${term}#season${season}` : term) + (await searchSettingsService.cacheSuffix());
         let results: IPlayerSearchResult[] | undefined = await this.searchCache.get(cacheKey);
         if (!results) {
-            results = await runWithSeasonHint(narrowToSeason ? season : undefined, async () => onBatch
+            const searched = await trackSearchCompleteness(() => runWithSeasonHint(narrowToSeason ? season : undefined, async () => onBatch
                 ? await service.search(term, synonym, async (batch) => {
                     try {
                         const filtered = await this.#filterForSeasonAndEpisode(batch, season, episode);
@@ -85,8 +86,13 @@ class SearchFacade {
                         // The final pass below delivers anything a batch couldn't.
                     }
                 })
-                : await service.search(term, synonym));
-            this.searchCache.set(cacheKey, results as IPlayerSearchResult[]);
+                : await service.search(term, synonym)));
+            results = searched.result;
+            // A search that lost part of its answer to a failed BBC request must not be remembered: Sonarr would be
+            // told "nothing found" for the whole cache time after one blip.
+            if (searched.complete) {
+                Promise.resolve(this.searchCache.set(cacheKey, results as IPlayerSearchResult[])).catch(() => undefined);
+            }
             this.traceCache.set(cacheKey, currentTraceCandidates('bbc')).catch(() => undefined);
         } else {
             // The search services don't run on a cache hit, so replay what they decided last time.

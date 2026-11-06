@@ -6,6 +6,7 @@ import path from 'path';
 
 import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
+import DbCacheService from '../../src/service/db/dbCacheService';
 import historyService from '../../src/service/historyService';
 import jellyfinService from '../../src/service/jellyfinService';
 import libraryIndexService, { appSourceId } from '../../src/service/libraryIndexService';
@@ -161,6 +162,23 @@ describe('libraryIndexService', () => {
         jest.mocked(arrLibraryService.getLibraryFiles).mockRejectedValueOnce(new Error('down'));
         expect(await libraryIndexService.scan({ apps: [sonarr] })).toEqual([]);
 
+        expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
+    });
+
+    it('does not wipe the other sources when the stored index cannot be read while saving', async () => {
+        const mine = strm('a.strm', 'm001aaaa');
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        jest.spyOn(DbCacheService.prototype, 'getStrict').mockRejectedValueOnce(new Error('SQLITE_BUSY'));
+        await expect(libraryIndexService.scan({ apps: [radarr] })).rejects.toThrow('SQLITE_BUSY');
+
+        const counts = await libraryIndexService.counts();
+        expect(counts.bySource['app:s1'].count).toBe(1);
+        expect(counts.bySource['app:r1']).toBeUndefined();
+
+        // and the next save works normally
+        expect(await libraryIndexService.scan({ apps: [radarr] })).toEqual(['app:r1']);
         expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
     });
 
