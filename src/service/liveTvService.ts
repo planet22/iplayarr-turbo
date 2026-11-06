@@ -200,7 +200,12 @@ class LiveTvService {
                 );
             }
             const custom = customChannel(channel.id);
-            attrs.push(`group-title="${custom ? m3uAttr(custom.group ?? 'Custom') : 'BBC'}"`);
+            if (channel.audioOnly) {
+                // A radio station (LIVE_RADIO): marked so Jellyfin lists it as radio rather than TV.
+                attrs.push('radio="true"', 'group-title="BBC Radio"');
+            } else {
+                attrs.push(`group-title="${custom ? m3uAttr(custom.group ?? 'Custom') : 'BBC'}"`);
+            }
             lines.push(`#EXTINF:-1 ${attrs.join(' ')},${channel.title}`);
             // The .m3u8 path matters: Jellyfin only recognises an HLS manifest by the URL path's
             // extension, and without it marks the channel direct-playable - browsers then try to

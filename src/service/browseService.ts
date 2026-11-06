@@ -6,6 +6,7 @@ import { BrowseChannels, BrowseHomeRails, BrowseHomeRandomCategories } from '../
 import { channelOverride, hasCustomLogo } from '../constants/CustomChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { allLiveChannels, isLiveChannel, isOptionalLiveChannel, OptionalLiveChannels } from '../constants/LiveChannels';
+import { isRadioStation } from '../constants/RadioChannels';
 import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
@@ -38,6 +39,7 @@ import DbCacheService from './db/dbCacheService';
 import iplayerDetailsService from './iplayerDetailsService';
 import liveChannelService from './liveChannelService';
 import loggingService from './loggingService';
+import radioScheduleService from './radioScheduleService';
 
 const IBL_BASE = 'https://ibl.api.bbc.co.uk/ibl/v1';
 const IMAGE_PID_REGEX = /\/([a-z0-9]{6,})\.(?:jpg|jpeg|png)(?:$|\?)/i;
@@ -596,7 +598,8 @@ class BrowseService {
     // Re-fetches one day's schedule for every shown channel and overwrites the cached copy, so the
     // guide never goes cold. A channel that fails keeps its previous cache entry.
     async refreshSchedule(day: string): Promise<void> {
-        const shown = await this.#shownChannels();
+        // Radio stations (LIVE_RADIO) are not on iPlayer's API; their schedule is cached by radioScheduleService.
+        const shown = (await this.#shownChannels()).filter(({ audioOnly }) => !audioOnly);
         await Promise.allSettled(
             shown.map(async (channel) => {
                 const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
@@ -615,10 +618,15 @@ class BrowseService {
             shown.map(async (channel): Promise<BrowseChannelSchedule> => {
                 const slots: BrowseSlot[] = [];
                 try {
-                    const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
-                    for (const broadcast of extractElements(await this.#ibl(path, this.scheduleCache))) {
-                        const slot = toBrowseSlot(broadcast);
-                        if (slot) slots.push(slot);
+                    if (channel.audioOnly) {
+                        // A radio station (LIVE_RADIO): its schedule is BBC Sounds', not iPlayer's.
+                        slots.push(...(await radioScheduleService.slots(channel.id, day)));
+                    } else {
+                        const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
+                        for (const broadcast of extractElements(await this.#ibl(path, this.scheduleCache))) {
+                            const slot = toBrowseSlot(broadcast);
+                            if (slot) slots.push(slot);
+                        }
                     }
                 } catch {
                     // No schedule: the row stays, empty. Failures aren't cached, so it retries next request.
@@ -691,6 +699,9 @@ class BrowseService {
     }
 
     async channelLogo(masterBrand: string): Promise<string | undefined> {
+        if (isRadioStation(masterBrand)) {
+            return this.#radioLogo(masterBrand);
+        }
         const logos = await this.#channelIconSvgs();
         const optional = OptionalLiveChannels.find(({ id }) => id === masterBrand);
         if (optional) {
@@ -698,6 +709,17 @@ class BrowseService {
             return parent && withCaption(parent, optional.label);
         }
         return logos[masterBrand];
+    }
+
+    // A radio station's logo is BBC Sounds' own coloured SVG for the network (LIVE_RADIO).
+    async #radioLogo(stationId: string): Promise<string | undefined> {
+        return this.longCache.getOr(`radio_logo_${stationId}`, async () => {
+            const response = await axios.get(`https://sounds.files.bbci.co.uk/v2/networks/${stationId}/colour_default.svg`, {
+                responseType: 'text',
+                timeout: 15_000,
+            });
+            return String(response.data);
+        });
     }
 
     // Each channel's brand colours (background + contrasting text), read off the same coloured

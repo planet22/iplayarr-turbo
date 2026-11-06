@@ -91,6 +91,7 @@ import { getHost } from '@/lib/utils';
 const loading = ref(false);
 let originalApiKey = undefined;
 let originalUhdFeeds = undefined;
+let originalRadio = undefined;
 
 const config = ref({});
 // Whether the advanced settings are showing. Kept in this browser, so it survives leaving the page (the sidebar, the
@@ -152,7 +153,7 @@ const TAB_KEYS = {
     ],
     liveTv: [
         'LIVE_TV_ENABLED', 'STREAM_BASE_URL', 'STREAM_KEY', 'LIVE_TV_EPG_OFFSET', 'LIVE_TV_LOGO_SHAPE',
-        'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD',
+        'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD',
     ],
     authentication: [
         'AUTH_TYPE', 'AUTH_USERNAME', 'AUTH_PASSWORD', 'OIDC_CONFIG_URL', 'OIDC_CALLBACK_HOST', 'OIDC_CLIENT_ID',
@@ -405,6 +406,7 @@ onMounted(async () => {
     original.value = clone(configResponse.data);
     originalApiKey = configResponse.data.API_KEY;
     originalUhdFeeds = configResponse.data.LIVE_UHD_EVENT_FEEDS;
+    originalRadio = configResponse.data.LIVE_RADIO;
     qualityProfiles.value = qpResponse.data.map(({ id, name, quality }) => ({
         key: id,
         value: `${name} (${quality})`,
@@ -489,6 +491,17 @@ const saveConfig = async () => {
             return;
         }
     }
+    if (tab == 'liveTv' && originalRadio === 'true' && config.value.LIVE_RADIO !== 'true') {
+        if (
+            !(await dialogService.confirm(
+                'Turn Off BBC Radio',
+                'Turn off BBC radio?',
+                'Any stations in your library or Jellyfin Live TV are removed, and their .strm files deleted.'
+            ))
+        ) {
+            return;
+        }
+    }
     loading.value = true;
     {
         const keys = TAB_KEYS[tab].filter((key) => key in config.value);
@@ -535,7 +548,10 @@ const saveConfig = async () => {
         }
     }
     if (tab == 'general') originalApiKey = config.value.API_KEY;
-    if (tab == 'liveTv') originalUhdFeeds = config.value.LIVE_UHD_EVENT_FEEDS;
+    if (tab == 'liveTv') {
+        originalUhdFeeds = config.value.LIVE_UHD_EVENT_FEEDS;
+        originalRadio = config.value.LIVE_RADIO;
+    }
 };
 
 const toggleAdvanced = () => {

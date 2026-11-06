@@ -97,6 +97,8 @@ router.put('/', async (req: Request, res: Response) => {
 
     const uhdWasOn: boolean = currentConfig[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'true';
 
+    const radioWasOn: boolean = currentConfig[IplayarrParameter.LIVE_RADIO] === 'true';
+
     for (const key of Object.keys(req.body)) {
         const val = req.body[key];
         if (key == IplayarrParameter.AUTH_PASSWORD) {
@@ -144,6 +146,11 @@ router.put('/', async (req: Request, res: Response) => {
     // Switching the UHD event feeds off takes them out of the library and Live TV (the UI warns first).
     if (uhdWasOn && req.body[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'false') {
         await liveChannelFacade.removeUhdFeeds();
+    }
+
+    // Switching live radio off takes the stations out of the library and Live TV.
+    if (radioWasOn && req.body[IplayarrParameter.LIVE_RADIO] === 'false') {
+        await liveChannelFacade.removeRadio();
     }
 
     // The saved values, with secrets masked as GET masks them (the body may now hold the stored password hash).

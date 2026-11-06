@@ -2,8 +2,10 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { CustomChannel } from '../constants/CustomChannels';
 import { allLiveChannels } from '../constants/LiveChannels';
+import { setRadioEnabled } from '../constants/RadioChannels';
 import browseService from '../service/browseService';
 import channelLogoService from '../service/channelLogoService';
+import configService from '../service/configService';
 import customChannelService, { CustomChannelError, CustomChannelInput } from '../service/customChannelService';
 import liveChannelService, { LiveChannelSetting } from '../service/liveChannelService';
 import liveSubscriptionService from '../service/liveSubscriptionService';
@@ -11,6 +13,7 @@ import liveTvChannelService from '../service/liveTvChannelService';
 import liveTvSyncService from '../service/liveTvSyncService';
 import loggingService from '../service/loggingService';
 import streamProbeService, { ProbeResult } from '../service/streamProbeService';
+import { IplayarrParameter } from '../types/IplayarrParameters';
 
 // Orchestrates changes to the user's own channels and the look of built-in ones. A visible change (name, colour,
 // logo, number) rewrites the .strm posters and asks Jellyfin to refresh, as the logo rebuild does.
@@ -31,6 +34,8 @@ class CustomChannelFacade {
     }
 
     async startup(): Promise<void> {
+        // The radio switch is read here once; configService keeps it current after every save.
+        setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         await customChannelService.load();
         customChannelService.startHealthChecks();
         this.downloadDefaultLogos().catch((error: any) => loggingService.error(`Default logo download failed: ${error?.message}`));

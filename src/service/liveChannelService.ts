@@ -9,6 +9,7 @@ import {
     isUhdEventFeed,
     LiveChannelVpids,
 } from '../constants/LiveChannels';
+import { isRadioStation } from '../constants/RadioChannels';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
 import channelLogoService from './channelLogoService';
@@ -44,6 +45,8 @@ export interface LiveChannelSetting {
     channelNumber?: number;
     streamType?: string;
     lastTest?: StreamTestResult;
+    // A live radio station (LIVE_RADIO): audio only.
+    audioOnly?: boolean;
     // A built-in channel carrying any name/colour/logo/number override (so the UI can offer a reset).
     customised?: boolean;
     // The colour its logo is drawn on unless the user chose one (built-in channels).
@@ -141,7 +144,7 @@ class LiveChannelService {
             return {
                 id,
                 title,
-                vpid: LiveChannelVpids[id],
+                vpid: LiveChannelVpids[id] ?? (isRadioStation(id) ? id : undefined),
                 optional: isOptionalLiveChannel(id),
                 enabled: overrides[id] ?? !isOptionalLiveChannel(id),
                 discover: discover[id],
@@ -151,6 +154,7 @@ class LiveChannelService {
                     : masterBrand
                       ? `json-api/browse/channel-logo/${masterBrand}.svg${isOptionalLiveChannel(id) ? `?v=${this.#logoVersion}` : ''}`
                       : undefined,
+                ...(isRadioStation(id) && { audioOnly: true }),
                 ...(custom && { custom: true, group: custom.group, streamType: custom.streamType, lastTest: custom.lastTest }),
                 ...(look && { color: look.color, logoText: look.logoText, channelNumber: look.channelNumber }),
                 ...(!custom && look && { customised: true }),

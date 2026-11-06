@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 
+import { setRadioEnabled } from '../constants/RadioChannels';
 import searchFacade from '../facade/searchFacade';
 import { IplayarrParameter, NUMERIC_SETTING_LIMITS } from '../types/IplayarrParameters';
 import { QueuedStorage } from '../types/QueuedStorage';
@@ -106,6 +107,7 @@ const configService = {
         STREAM_SUBTITLES: 'true',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
+        LIVE_RADIO: 'false',
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
@@ -164,6 +166,9 @@ const configService = {
         const oldValue = configMap[parameter];
         configMap[parameter] = value;
         await storage.setItem('config', encryptSettings(configMap));
+        if (parameter == IplayarrParameter.LIVE_RADIO) {
+            setRadioEnabled(value === 'true');
+        }
         if (
             (parameter == IplayarrParameter.NATIVE_SEARCH ||
                 parameter == IplayarrParameter.NATIVE_SEARCH_ENGINE ||
@@ -188,6 +193,9 @@ const configService = {
         const configMap = await getConfigMap();
         delete configMap[parameter];
         await storage.setItem('config', encryptSettings(configMap));
+        if (parameter == IplayarrParameter.LIVE_RADIO) {
+            setRadioEnabled((await configService.getParameter(parameter)) === 'true');
+        }
     },
 };
 

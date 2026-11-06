@@ -92,6 +92,10 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 - The [STRM Watchdog](WATCHDOG.md) ignores live files.
 - **Optional channels:** besides the 11 above you can enable BBC Red Button, 19 BBC nations and English-region feeds and (with `LIVE_UHD_EVENT_FEEDS`) the UHD event feeds from the Channels page's Arrange mode (Settings → Appearance → Show Channel Tools). Disabling a channel hides it, unsubscribes it and removes it from Jellyfin Live TV and the guide. Channel order from Arrange also sets the order of the guide and Jellyfin channel numbers. See [BROWSE.md](BROWSE.md#channels-page-tools).
 
+### Live radio
+
+With `LIVE_RADIO` on (off by default), 16 BBC radio stations (Radio 1 to 6 Music, Asian Network, World Service and the nations' stations) join the live channels as audio-only entries, after all the others so no channel number moves. They play, subscribe to the library and join Jellyfin Live TV like any channel; the playlist marks them `radio="true"` in the group "BBC Radio", and the guide comes from BBC Sounds. Streams are BBC's AAC HLS (128 kbps; 96 kbps HE-AAC for the World Service), served through iPlayarr like the TV feeds, so they need a UK IP. No subtitles or 1080p apply. With the setting off, none of this exists: the stations are absent from every list, the playlist and the guide. Turning it off deletes their `.strm` files and removes them from Live TV.
+
 ### Jellyfin Live TV (tuner + guide)
 
 Library `.strm` entries above show up as videos. To get a real channel list and TV guide in Jellyfin's **Live TV** section, enable **Settings → Live TV** (`LIVE_TV_ENABLED`, off by default). It needs `STREAM_BASE_URL` set (the Live TV tab shows the Stream Base URL and Stream Key fields too, unless `MEDIA_MODE=strm`, where they are on the Streaming tab). With the setting off, the endpoints return 404 and the TV buttons are hidden.

@@ -121,6 +121,8 @@ export interface BrowseChannel {
     discover?: boolean;
     // The mediaselector service id its live stream is served under (shown while arranging).
     vpid?: string;
+    // A live radio station (LIVE_RADIO): audio only, no video, subtitles or iPlayer channel page.
+    audioOnly?: boolean;
 }
 
 export interface BrowseSeason {

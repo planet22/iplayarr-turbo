@@ -54,6 +54,7 @@ const CHANGE = {
     STREAM_SUBTITLES: ['true', 'false'],
     STREAM_LIVE_DASH_1080: ['true', 'false'],
     LIVE_TV_ENABLED: ['true', 'false'],
+    LIVE_RADIO: ['true', 'false'],
     LIVE_TV_LOGO_SHAPE: ['square', 'landscape'],
     LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
     LIVE_TV_GUIDE_FLAGS: ['false', 'true'],
