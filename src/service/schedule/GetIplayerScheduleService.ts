@@ -23,8 +23,15 @@ class GetIplayerScheduleService implements AbstractScheduleService {
             loggingService.error(data.toString());
         });
 
+        // A missing or unusable get_iplayer reports through 'error'; with no listener that crashes the whole server.
+        refreshService.on('error', (err) => {
+            loggingService.error(`Could not run get_iplayer to refresh the cache: ${err?.message ?? err}`);
+        });
+
         //Delete failed jobs
-        downloadFacade.cleanupFailedDownloads();
+        Promise.resolve(downloadFacade.cleanupFailedDownloads()).catch((err) => {
+            loggingService.error('Could not clean up failed downloads', err);
+        });
     }
 
     async getFeed(): Promise<IPlayerSearchResult[]> {

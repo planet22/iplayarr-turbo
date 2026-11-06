@@ -219,6 +219,47 @@ describe('DownloadFacade (extra)', () => {
             expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid, undefined);
         });
 
+        it('records a FAILED history entry (so Sonarr can blocklist it) when post processing throws', async () => {
+            const { close } = await startDownload(GetIplayerDownloadService);
+            const item: any = queueItem();
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(item);
+            (GetIplayerDownloadService.postProcess as jest.Mock).mockRejectedValue(new Error('disk full'));
+            await close(0);
+            expect(item.failMessage).toContain('disk full');
+            expect(historyService.addHistory).toHaveBeenCalledWith(item, QueueEntryStatus.FAILED);
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.DOWNLOAD_FAILED, expect.stringContaining('disk full'), { pid, level: 'error' });
+            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid, undefined);
+        });
+
+        it('still clears the queue entry when the failure could not be recorded either', async () => {
+            const { close } = await startDownload(GetIplayerDownloadService);
+            (queueService.getFromQueue as jest.Mock).mockReturnValue(queueItem());
+            (GetIplayerDownloadService.postProcess as jest.Mock).mockRejectedValue('not an Error');
+            (historyService.addHistory as jest.Mock).mockRejectedValue(new Error('db locked'));
+            await close(0);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.objectContaining({ message: 'db locked' }));
+            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid, undefined);
+        });
+
+        it('removes the entry, rather than leaving it stuck, when completion handling itself fails', async () => {
+            const { close } = await startDownload(GetIplayerDownloadService);
+            (configService.getParameter as jest.Mock).mockRejectedValue(new Error('config unreadable'));
+            await close(0);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.objectContaining({ message: 'config unreadable' }));
+            expect(queueService.removeFromQueue).toHaveBeenCalledWith(pid, undefined);
+        });
+
+        it('listens for the process failing to start, which would otherwise crash the server', async () => {
+            const child = { stdout: { on: jest.fn() }, stderr: { on: jest.fn() }, on: jest.fn() };
+            (GetIplayerDownloadService.download as jest.Mock).mockResolvedValue(child);
+            await downloadFacade.download(pid);
+            const onError = child.on.mock.calls.find(([e]: any) => e === 'error')![1];
+            onError(new Error('spawn ENOENT'));
+            onError('plain');
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('spawn ENOENT'));
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('plain'));
+        });
+
         it('records a failed event for a non-zero exit code', async () => {
             const { close } = await startDownload(GetIplayerDownloadService);
             (queueService.getFromQueue as jest.Mock).mockReturnValue(queueItem());

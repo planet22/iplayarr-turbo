@@ -65,10 +65,17 @@ class DownloadFacade {
 
         process.stderr?.on('data', (data) => this.#processError(pid, jobId, data));
         process.stdout?.on('data', (data) => this.#processOutput(pid, jobId, data));
+        // A binary that cannot be started reports through 'error'; with no listener that crashes the whole server.
+        process.on('error', (err) => loggingService.error(`Download process for ${pid} could not run: ${err?.message ?? err}`));
         process.on('close', (code) => {
             this.#partStates.delete(key);
             this.#partPlans.delete(key);
-            return this.#processComplete(pid, jobId, pidDir, code, service);
+            // Nothing awaits this handler, so a failure in it must end here: it would otherwise be an unhandled
+            // rejection that leaves the entry in the queue for good.
+            return this.#processComplete(pid, jobId, pidDir, code, service).catch((err) => {
+                loggingService.error(err);
+                queueService.removeFromQueue(pid, jobId);
+            });
         });
 
         return process;
@@ -202,6 +209,19 @@ class DownloadFacade {
                     );
                 } catch (err) {
                     loggingService.error(err);
+                    // Without a history entry Sonarr/Radarr never hears the download failed (so never blocklists it)
+                    // and the item just vanishes from the queue.
+                    queueItem.failMessage = `Could not finish the download: ${err instanceof Error ? err.message : String(err)}`;
+                    videoEventService.record(
+                        VideoEventType.DOWNLOAD_FAILED,
+                        `Finishing "${queueItem.nzbName}" failed: ${queueItem.failMessage}`,
+                        { pid, jobId, level: 'error' }
+                    );
+                    try {
+                        await historyService.addHistory(queueItem, QueueEntryStatus.FAILED);
+                    } catch (historyErr) {
+                        loggingService.error(historyErr);
+                    }
                 }
             }
         } else {

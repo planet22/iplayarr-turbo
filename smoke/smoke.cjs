@@ -129,6 +129,12 @@ async function apiLayer(ctx) {
     else rec(A, 'config STREAM_BASE_URL set', 'WARN', 'empty gives .strm with "undefined/"');
     await check(A, 'config hiddenSettings', '/json-api/config/hiddenSettings', isObj);
     await check(A, 'config lockedSettings', '/json-api/config/lockedSettings', isObj);
+    // Rejected saves change nothing, so these are safe on any instance: options that run commands must be refused.
+    for (const [key, value] of [['YTDLP_EXEC', 'yt-dlp --exec id'], ['GET_IPLAYER_EXEC', 'perl -MPOSIX script.pl'], ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--comm id']]) {
+        await check(A, `config refuses ${key} with a command option`, '/json-api/config', (r) => (r.status === 400 && !!r.json?.invalid_fields?.[key]) || `expected 400 naming ${key}`, { method: 'PUT', body: { [key]: value } });
+    }
+    // The service worker must not answer server routes (the OIDC callback, /api, /json-api) with the app shell.
+    await check(A, 'service worker denies server routes', '/service-worker.js', (r) => r.status === 200 && /denylist/.test(r.text) && /json-api/.test(r.text) || 'no navigation denylist for server routes', { warnOnly: true });
     await check(A, 'config qualityProfiles', '/json-api/config/qualityProfiles', isJson);
     await check(A, 'config versionProfiles', '/json-api/config/versionProfiles', isJson);
 

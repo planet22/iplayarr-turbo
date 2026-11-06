@@ -130,6 +130,25 @@ describe('dnsRelayService.ensureDnsRelayRunning', () => {
         expect(dnsPacket.decode(buf).answers).toEqual([expect.objectContaining({ data: '1.2.3.4' })]);
     });
 
+    it('logs a reply that fails to send instead of throwing', async () => {
+        const socket = makeSocket();
+        (dns.resolve4 as unknown as jest.Mock).mockImplementation((_h, cb) => cb(null, ['1.2.3.4']));
+        await loadRelay().ensureDnsRelayRunning();
+        socket.emit('message', query(), { address: '127.0.0.1', port: 5000 });
+        await flush();
+
+        const callback = socket.send.mock.calls[0][3];
+        expect(() => callback(undefined)).not.toThrow();
+        expect(() => callback(new Error('EPERM'))).not.toThrow();
+    });
+
+    it('has a listener for socket errors after binding (an unhandled one would crash the server)', async () => {
+        const socket = makeSocket();
+        await loadRelay().ensureDnsRelayRunning();
+        expect(socket.listenerCount('error')).toBeGreaterThan(0);
+        expect(() => socket.emit('error', new Error('boom'))).not.toThrow();
+    });
+
     it('ignores undecodable messages', async () => {
         const socket = makeSocket();
         await loadRelay().ensureDnsRelayRunning();

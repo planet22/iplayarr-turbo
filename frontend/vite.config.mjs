@@ -29,6 +29,10 @@ export default defineConfig({
                 // just not available offline); vite-plugin-pwa hard-errors the build
                 // instead unless the limit is raised to cover it.
                 maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+                // Server routes must never be answered with the app shell: the OIDC redirect back to
+                // /auth/oidc/callback and any /api or /json-api address opened in a tab have to reach the server.
+                // Unanchored at the start so a BASE_PATH prefix is covered too.
+                navigateFallbackDenylist: [/\/(auth|api|json-api|socket\.io|ping)(\/|$)/],
             },
             manifest: {
                 name: 'iPlayarr Turbo',

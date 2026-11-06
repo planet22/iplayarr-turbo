@@ -349,6 +349,24 @@ describe('proxyUrl', () => {
         expect(res.send).toHaveBeenCalled();
     });
 
+    it.each([
+        ['an absolute-path', '/other/final.m3u8', 'https://cdn/other/final.m3u8'],
+        ['a relative', 'final.m3u8', 'https://cdn/a/final.m3u8'],
+    ])('resolves %s redirect Location against the redirecting URL', async (_label, location, expected) => {
+        mockGet(https, [
+            { status: 302, headers: { location } },
+            { status: 200, headers: { 'content-type': 'application/x-mpegURL' }, body: '#EXTM3U\n' },
+        ]);
+        const res = makeRes();
+        await proxyUrl('https://cdn/a/start', makeReq(), res);
+        expect((https.get as jest.Mock).mock.calls[1][0]).toBe(expected);
+    });
+
+    it('rejects, rather than throwing from the response callback, on a Location that is not a URL', async () => {
+        mockGet(https, [{ status: 302, headers: { location: 'http://' } }]);
+        await expect(proxyUrl('https://cdn/a/start', makeReq(), makeRes())).rejects.toThrow();
+    });
+
     it('passes binary segments through and records the delivery', async () => {
         mockGet(https, [{ status: 206, headers: { 'content-type': 'video/mp2t', 'content-length': '100', other: 'x' }, body: 'x'.repeat(100) }]);
         const res = makeRes();
