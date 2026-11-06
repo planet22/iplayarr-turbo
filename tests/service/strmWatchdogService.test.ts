@@ -12,6 +12,7 @@ import jellyfinService from '../../src/service/jellyfinService';
 import loggingService from '../../src/service/loggingService';
 import NativeStreamService from '../../src/service/stream/NativeStreamService';
 import strmWatchdogService, { mapPath } from '../../src/service/strmWatchdogService';
+import socketService from '../../src/service/socketService';
 import subscriptionService from '../../src/service/subscriptionService';
 import videoEventService from '../../src/service/videoEventService';
 
@@ -282,6 +283,24 @@ describe('StrmWatchdogService', () => {
         expect(videoEventService.record).not.toHaveBeenCalled();
         const status = await strmWatchdogService.getStatus();
         expect(status.items.filter((item) => item.status === 'invalid')).toHaveLength(0);
+    });
+
+    it('does not send the whole status after every batch of checks, but always sends the final one', async () => {
+        const ids = Array.from({ length: 30 }, (_, i) => `m00bbb${String(i).padStart(2, '0')}`);
+        ids.forEach((pid) => fs.writeFileSync(path.join(tmpDir, `${pid}.strm`), strm(pid)));
+        (historyService.getHistory as jest.Mock).mockResolvedValue([
+            { pid: GOOD, extension: 'strm', nzbName: 'good', type: 'tv', libraryPath: 'good.strm' },
+            ...ids.map((pid) => ({ pid, extension: 'strm', nzbName: pid, type: 'tv', libraryPath: `${pid}.strm` })),
+        ]);
+        (NativeStreamService.checkAvailable as jest.Mock).mockResolvedValue(undefined);
+        extra = { STRM_WATCHDOG_CONCURRENCY: '1' };
+        (socketService.emit as jest.Mock).mockClear();
+
+        expect(await strmWatchdogService.run()).toEqual({ checked: 31, invalid: 0 });
+
+        const statuses = (socketService.emit as jest.Mock).mock.calls.filter(([event]) => event === 'strmWatchdog').map(([, status]) => status);
+        expect(statuses.length).toBeLessThan(15); // one per link would be 31 or more
+        expect(statuses[statuses.length - 1].live).toMatchObject({ running: false, checked: 31 });
     });
 
     it('skips the whole run when BBC is not reachable (pre-flight)', async () => {
