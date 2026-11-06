@@ -91,6 +91,9 @@ app.get('/ping', async (_req: Request, res: Response) => {
 });
 
 const distDir = path.join(process.cwd(), 'frontend', 'dist');
+// Vite names everything under /assets after a hash of its content, so a given URL never changes: browsers can keep it
+// without asking again. The rest (index.html, the service worker, icons) must stay revalidated.
+app.use('/assets', express.static(path.join(distDir, 'assets'), { index: false, maxAge: '1y', immutable: true, fallthrough: true }));
 app.use(express.static(distDir, { index: false }));
 
 // Middleware

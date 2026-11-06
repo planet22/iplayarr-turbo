@@ -143,7 +143,8 @@ router.put('/', async (req: Request, res: Response) => {
         await liveChannelFacade.removeUhdFeeds();
     }
 
-    res.json(req.body);
+    // The saved values, with secrets masked as GET masks them (the body may now hold the stored password hash).
+    res.json(maskConfig(req.body));
 });
 
 // .strm files embed a key in their URL (see createStrmContent - streamkey, never apikey, see

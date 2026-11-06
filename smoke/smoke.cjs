@@ -72,7 +72,7 @@ async function http(p, { method = 'GET', body, timeout = 30000, headers = {} } =
         });
         const text = await r.text();
         let json; try { json = JSON.parse(text); } catch { /* not json */ }
-        return { status: r.status, ct: r.headers.get('content-type') || '', text, json };
+        return { status: r.status, ct: r.headers.get('content-type') || '', cache: r.headers.get('cache-control') || '', text, json };
     } catch (e) { return { status: 0, ct: '', text: '', error: e.name === 'AbortError' ? 'timeout' : e.message }; }
     finally { clearTimeout(t); }
 }
@@ -135,6 +135,11 @@ async function apiLayer(ctx) {
     }
     // The service worker must not answer server routes (the OIDC callback, /api, /json-api) with the app shell.
     await check(A, 'service worker denies server routes', '/service-worker.js', (r) => r.status === 200 && /denylist/.test(r.text) && /json-api/.test(r.text) || 'no navigation denylist for server routes', { warnOnly: true });
+    // Content-hashed files never change, so the browser may keep them for good; the page that names them must be revalidated.
+    const shell = await http('/');
+    const assetPath = /\/assets\/[^"')\s]+\.js/.exec(shell.text || '')?.[0];
+    if (assetPath) await check(A, 'hashed assets are cached for good', assetPath, (r) => (r.status === 200 && /immutable/.test(r.cache) && /max-age=31536000/.test(r.cache)) || `cache-control was "${r.cache}"`, { warnOnly: true });
+    await check(A, 'the app shell is not cached for good', '/', (r) => !/immutable/.test(r.cache) || `cache-control was "${r.cache}"`, { warnOnly: true });
     await check(A, 'config qualityProfiles', '/json-api/config/qualityProfiles', isJson);
     await check(A, 'config versionProfiles', '/json-api/config/versionProfiles', isJson);
 

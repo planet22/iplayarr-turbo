@@ -78,7 +78,7 @@ describe('YTDLPDownloadService', () => {
 
       expect(queueService.getFromQueue).toHaveBeenCalledWith('some-pid', 'job-2');
       // sd is 540p
-      expect((spawn as jest.Mock).mock.calls[0][1]).toEqual(expect.arrayContaining(['-f', 'bestvideo[width<=540]+bestaudio']));
+      expect((spawn as jest.Mock).mock.calls[0][1]).toEqual(expect.arrayContaining(['-f', 'bestvideo[height<=540]+bestaudio']));
     });
   });
 

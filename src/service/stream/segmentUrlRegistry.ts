@@ -46,6 +46,10 @@ function registerPlaylist(url: string): string {
     const entry = existing ? playlistRegistry.get(existing) : undefined;
     if (existing && entry) {
         entry.expiresAt = Date.now() + playlistTtlMs;
+        // Re-inserted so the size cap, which drops the oldest insertion, evicts the playlist nobody has asked for
+        // longest rather than one a player is refreshing every few seconds.
+        playlistRegistry.delete(existing);
+        playlistRegistry.set(existing, entry);
         return existing;
     }
     const token = uuidv4();

@@ -65,7 +65,12 @@ export const dbReady = (): Promise<void> => {
         for (const statement of DDL) {
             await prisma.$executeRawUnsafe(statement);
         }
-    })();
+    })().catch((err) => {
+        // A failure (the file locked at start-up, say) must not be remembered: every later call would otherwise
+        // get the same rejection until the process restarts.
+        ready = undefined;
+        throw err;
+    });
     return ready;
 };
 
