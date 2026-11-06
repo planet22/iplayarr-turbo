@@ -402,5 +402,33 @@ describe('streamSessionService lifecycle', () => {
             })).toBe(0);
         });
     });
+
+    it('keeps every session when several end at the same moment (history changes are taken one at a time)', async () => {
+        let stored: any[] = [];
+        mockGetItem.mockImplementation(async () => {
+            const copy = [...stored];
+            await flush(); // a slow read, so overlapping read-modify-write cycles would all start from the same old list
+            return copy;
+        });
+        mockSetItem.mockImplementation(async (_key: string, value: any[]) => {
+            await flush();
+            stored = value;
+        });
+        const ids = await Promise.all(['a1', 'a2', 'a3'].map((pid) => streamSessionService.start(pid, mode, client, '1.1.1.1')));
+
+        await Promise.all(ids.map((id) => streamSessionService.end(id)));
+
+        expect(stored.map(({ pid }) => pid).sort()).toEqual(['a1', 'a2', 'a3']);
+    });
+
+    it('carries on with later history changes after one failed', async () => {
+        mockGetItem.mockResolvedValue([]);
+        mockSetItem.mockRejectedValueOnce(new Error('disk full')).mockResolvedValue(undefined);
+        const [first, second] = await Promise.all(['b1', 'b2'].map((pid) => streamSessionService.start(pid, mode, client, '2.2.2.2')));
+
+        await expect(streamSessionService.end(first)).rejects.toThrow('disk full');
+        await expect(streamSessionService.end(second)).resolves.not.toThrow();
+        expect(mockSetItem).toHaveBeenCalledTimes(2);
+    });
 });
 
