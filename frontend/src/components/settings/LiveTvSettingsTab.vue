@@ -117,7 +117,7 @@
                 field="LIVE_RADIO"
                 :advanced="true"
                 name="BBC Radio"
-                tooltip="Add BBC radio stations as audio-only channels. Needs a UK IP. Turning off removes them from the library and Live TV."
+                tooltip="Add BBC radio stations as audio-only channels."
                 :error="validationErrors.config?.LIVE_RADIO"
                 :options="liveTvOptions"
             />
