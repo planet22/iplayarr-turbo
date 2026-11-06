@@ -17,6 +17,7 @@
 <script setup>
 import { computed, defineProps, inject, nextTick, ref, watch } from 'vue';
 
+import { filterLogs } from '@/lib/logFilter';
 import { usePagination } from '@/lib/usePagination';
 import { formatDateTimeWithMillis, formatTime } from '@/lib/utils';
 
@@ -55,7 +56,7 @@ const props = defineProps({
 const filteredLogs = computed(() => {
     if (props.filter == null) return logs.value;
     // A programme can be downloaded more than once, so a job id (when given) narrows it to one download.
-    if (props.jobId) return logs.value.filter((log) => log.jobId === props.jobId);
+    if (props.jobId) return filterLogs(logs.value, { jobId: props.jobId });
     return logs.value.filter((log) => props.filter == log.id);
 });
 

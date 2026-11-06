@@ -57,6 +57,7 @@ const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, vi
 ];
 
 const isConnected = ref(true);
+let logSeq = 0;
 
 const navBar = ref(null);
 
@@ -129,7 +130,8 @@ const pageSetup = async () => {
         });
 
         socket.value.on('log', (data) => {
-            logs.value.push(data);
+            // A running number gives each row a key that cannot collide (two lines can share a millisecond and an id).
+            logs.value.push({ ...data, seq: logSeq++ });
             enforceMaxLength(logs.value, 5000);
         });
 

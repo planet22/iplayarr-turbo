@@ -570,7 +570,7 @@ const ROUTES = [
     ['/dns-relay', 'DNS relay', []],
     ['/streaming/debug/{pid}', 'Streaming debug', []],
     ['/nzb', 'NZB tester', []],
-    ['/logs', 'Logs', []],
+    ['/logs', 'Logs', ['.logTiles', '.levelChips']],
     ['/about', 'About', []],
     ['/settings', 'Settings', []],
 ];

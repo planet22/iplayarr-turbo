@@ -360,6 +360,113 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('an unknown tab in the link opens General', (await page.locator('.settingsTab.active').first().innerText()).includes('General'));
         });
 
+        // ---- Logs page: tiles, level chips, search, source dropdown, 24-hour times, download, clear view, phone layout (nothing saved on the server)
+        await flow('logs page', async (page) => {
+            await page.goto(BASE + '/logs', { waitUntil: 'networkidle' });
+            await page.waitForSelector('.logTiles', { timeout: 15000 }).catch(() => {});
+            await page.waitForTimeout(1500); // the server replays its last lines on connect
+            await shot(page, 'logs', true);
+            const labels = (await page.locator('.logTiles .tileLabel').allInnerTexts()).map((t) => t.toLowerCase());
+            ok('the Logs page draws the Connection, Lines held, Errors and Last error tiles, each with an (i) tip', ['connection', 'lines held', 'errors', 'last error'].every((l) => labels.includes(l)) && (await page.locator('.logTiles .InfoTip-button').count()) === 4, labels.join(', '));
+            ok('the Logs connection tile says Live', /Live/.test(await page.locator('.logTiles .tile').first().innerText()));
+            await page.locator('.logTiles .InfoTip-button').nth(1).click().catch(() => {});
+            ok('the Lines held (i) tip explains the 250 and 5000 lines', /250/.test(await page.locator('.logTiles .InfoTip-popup').first().innerText().catch(() => '')) && /5000/.test(await page.locator('.logTiles .InfoTip-popup').first().innerText().catch(() => '')));
+            await page.locator('.hint').click().catch(() => {});
+            ok('the Logs page has a search box, a source dropdown with All sources and System, and the three level chips',
+                (await page.locator('input[aria-label="Search the log"]').count()) === 1
+                && /All sources/.test(await page.locator('select[aria-label="Show lines from"]').innerText().catch(() => '')) && /System/.test(await page.locator('select[aria-label="Show lines from"]').innerText().catch(() => ''))
+                && (await page.locator('.levelChip').allInnerTexts()).map((t) => t.split(/\s/)[0]).join() === 'ERROR,INFO,DEBUG');
+            const select = await page.locator('select[aria-label="Show lines from"]').boundingBox().catch(() => null);
+            ok('the Logs source dropdown is wide enough to read (at least 140px)', !!select && select.width >= 140, select ? `${select.width}px` : 'missing');
+
+            const rows = await page.locator('.logRow').count();
+            if (!rows) {
+                rec(U, 'logs page rows, filters and times', 'SKIP', 'the server has no log lines to show yet');
+            } else {
+                const firstTime = (await page.locator('.logTime').first().innerText()).trim();
+                ok('log times are 24-hour with milliseconds (hh:mm:ss.mmm)', /^\d{2}:\d{2}:\d{2}\.\d{3}$/.test(firstTime), firstTime);
+                ok('a log time\'s hover text gives the date and the same time', /^\d{1,2} \w{3} \d{4}, \d{2}:\d{2}:\d{2}\.\d{3}$/.test((await page.locator('.logTime').first().getAttribute('title')) || ''));
+                ok('every log row has a text level badge (ERR, INF or DBG)', (await page.locator('.logBadge').allInnerTexts()).every((t) => ['ERR', 'INF', 'DBG'].includes(t.trim())));
+                // Level chips narrow the list by level, and again toggle off.
+                const chip = page.locator('.levelChip.INFO');
+                await chip.click();
+                await page.waitForTimeout(300);
+                const infoOnly = await page.locator('.logRow').evaluateAll((els) => els.every((e) => e.classList.contains('INFO')));
+                ok('the INFO chip shows only INFO lines and is pressed', infoOnly && (await chip.getAttribute('aria-pressed')) === 'true');
+                await chip.click();
+                await page.waitForTimeout(300);
+                ok('turning the INFO chip off shows every level again', (await chip.getAttribute('aria-pressed')) === 'false' && (await page.locator('.logRow').count()) === rows);
+                // Search with nothing matching shows the empty state with a way out.
+                const search = page.locator('input[aria-label="Search the log"]');
+                await search.fill('zz-no-such-line-zz');
+                await page.waitForTimeout(300);
+                ok('a search that matches nothing says "No lines match" and offers Clear filters', /No lines match/.test(await page.locator('body').innerText()) && (await page.locator('.logRow').count()) === 0);
+                await page.locator('.emptyStateActions button', { hasText: 'Clear filters' }).click().catch(() => {});
+                await page.waitForTimeout(300);
+                ok('Clear filters empties the search and brings the lines back', (await search.inputValue()) === '' && (await page.locator('.logRow').count()) === rows);
+                // Search narrows to the lines that contain the text.
+                const sample = ((await page.locator('.logMessage').last().innerText()).trim().split(/\s+/).find((w) => w.length > 3) || '').slice(0, 12);
+                if (sample) {
+                    await search.fill(sample.toUpperCase());
+                    await page.waitForTimeout(300);
+                    const hits = await page.locator('.logMessage').allInnerTexts();
+                    ok('searching ignores case and keeps only matching lines', hits.length > 0 && hits.every((t) => t.toLowerCase().includes(sample.toLowerCase())), sample);
+                    await search.fill('');
+                }
+                // Download gives a .txt named from the time.
+                const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }).catch(() => null), page.locator('button[aria-label="Download"]').click()]);
+                ok('the Download button saves a .txt named iplayarr-log-<date-time>.txt', !!dl && /^iplayarr-log-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\.txt$/.test(dl.suggestedFilename()), dl ? dl.suggestedFilename() : 'no download');
+                // Scrolling up pauses following and offers Jump to latest.
+                await page.locator('.logList').evaluate((el) => { el.scrollTop = 0; });
+                await page.waitForTimeout(300);
+                const scrollable = await page.locator('.logList').evaluate((el) => el.scrollHeight > el.clientHeight + 40);
+                if (scrollable) {
+                    ok('scrolling up stops following and shows Jump to latest', (await page.locator('.jumpLatest').count()) === 1 && (await page.locator('button[aria-label="Not following"]').count()) === 1);
+                    await page.locator('.jumpLatest').click();
+                    await page.waitForTimeout(300);
+                    ok('Jump to latest follows again and hides the button', (await page.locator('.jumpLatest').count()) === 0 && (await page.locator('button[aria-label="Following"]').count()) === 1);
+                } else {
+                    rec(U, 'logs follow pause and Jump to latest', 'SKIP', 'the list is too short to scroll');
+                }
+            }
+
+            // A link with ?filter=ERROR opens with the ERROR chip on.
+            await page.goto(BASE + '/logs?filter=ERROR', { waitUntil: 'networkidle' });
+            await page.waitForSelector('.levelChips', { timeout: 15000 }).catch(() => {});
+            ok('/logs?filter=ERROR opens with only the ERROR chip on', (await page.locator('.levelChip.ERROR').getAttribute('aria-pressed')) === 'true' && (await page.locator('.levelChip[aria-pressed="true"]').count()) === 1);
+
+            // Phone width: filters on their own row, search not squashed, nothing sideways.
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.waitForTimeout(500);
+            await shot(page, 'logs-phone', true);
+            const phoneSearch = await page.locator('input[aria-label="Search the log"]').boundingBox().catch(() => null);
+            const phoneSelect = await page.locator('select[aria-label="Show lines from"]').boundingBox().catch(() => null);
+            ok('on a phone the Logs search box is at least 120px wide and the dropdown at least 140px', !!phoneSearch && !!phoneSelect && phoneSearch.width >= 120 && phoneSelect.width >= 140, `${phoneSearch?.width} / ${phoneSelect?.width}`);
+            ok('the Logs page does not overflow sideways on a phone', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+            await page.setViewportSize({ width: 1440, height: 900 });
+
+            // Clear view asks first; Cancel keeps the lines, Clear empties this page's list only.
+            const before = await page.locator('.logRow').count();
+            const clear = page.locator('button[aria-label="Clear view"]');
+            if (before && (await clear.count())) {
+                await page.goto(BASE + '/logs', { waitUntil: 'networkidle' });
+                await page.waitForTimeout(1500);
+                const total = await page.locator('.logRow').count();
+                await clear.click();
+                await dialog(page).waitFor({ timeout: 8000 });
+                ok('Clear view asks for confirmation first', /Clear the view/.test(await dialog(page).innerText()));
+                await dialog(page).locator('button', { hasText: /Cancel/ }).click();
+                await page.waitForTimeout(400);
+                ok('cancelling Clear view keeps the lines', (await page.locator('.logRow').count()) === total);
+                await clear.click();
+                await clickDialogPrimary(page);
+                await page.waitForTimeout(600);
+                ok('confirming Clear view empties the page and says so', /No log lines yet/.test(await page.locator('body').innerText()));
+            } else {
+                rec(U, 'logs Clear view', 'SKIP', 'no log lines to clear');
+            }
+        });
+
         // ---- Settings: an Appearance edit flags only its own tab and Discard puts it back (nothing saved)
         await flow('appearance tab edits flag only that tab', async (page) => {
             await page.goto(`${BASE}/settings#appearance`, { waitUntil: 'networkidle' });
