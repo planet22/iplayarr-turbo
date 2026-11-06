@@ -950,11 +950,20 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
                     else warn('WRITE_NFO_EPISODE_TITLES=true takes effect: "Episode N" is replaced by the headline', !generic(nfoOf(titles)), 'the .nfo still says "Episode N" (the BBC may have no headline)');
                     dropNew(titles.added); await cleanHist(ep.pid);
                 }
+                // Remove the pictures an earlier download in this run left, so "missing" has something to write.
+                const prior = off.strm || '';
+                if (prior) {
+                    const stem = prior.replace(/\.strm$/i, '');
+                    const showDir = path.dirname(path.dirname(stem));
+                    for (const f of [`${stem}-thumb.jpg`, ...['poster.jpg', 'backdrop.jpg', 'landscape.jpg', 'clearlogo.png'].map((n) => path.join(showDir, n))]) { try { fs.rmSync(f, { force: true }); } catch { /* leave it */ } }
+                }
                 const missing = await run('WRITE_ADDITIONAL_IMAGES=missing download', { WRITE_ADDITIONAL_IMAGES: 'missing' });
                 if (missing) {
-                    const thumb = missing.strm ? missing.strm.replace(/\.strm$/i, '-thumb.jpg') : '';
-                    if (!pics(missing).length && thumb && fs.existsSync(thumb)) rec(W, 'WRITE_ADDITIONAL_IMAGES=missing takes effect', 'SKIP', 'every picture already existed from an earlier download in this run, and "missing" only writes absent ones');
-                    else ok('WRITE_ADDITIONAL_IMAGES=missing takes effect: pictures are written', pics(missing).length > 0, 'no .jpg/.png added');
+                    // The pictures are written just after the download is marked complete, so wait for the episode picture (it can take over 20 s).
+                    const thumb = missing.strm ? missing.strm.replace(/.strm$/i, '-thumb.jpg') : '';
+                    for (let i = 0; i < 90 && thumb && !fs.existsSync(thumb); i++) await sleep(1000);
+                    ok('WRITE_ADDITIONAL_IMAGES=missing takes effect: the episode picture is written', !!thumb && fs.existsSync(thumb), 'no -thumb.jpg appeared beside the .strm within 90 s (the BBC picture is fetched through the VPN after the download is marked complete)');
+                    if (thumb && fs.existsSync(thumb)) missing.added = [...(missing.added || []), thumb];
                     // overwrite: download again with the pictures still there; their files are replaced
                     const stamps = new Map(pics(missing).map((f) => [f, fs.statSync(f).mtimeMs]));
                     await sleep(1500);
@@ -971,9 +980,11 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             // MEDIA_MODE decides what a download without an explicit choice does
             await put({ MEDIA_MODE: 'download' });
             const dl = await http(`/json-api/download?pid=${ep.pid}`, { timeout: 60000 });
-            await sleep(4000);
-            const q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid);
-            ok('MEDIA_MODE=download takes effect: a plain download is queued as a real download, not a .strm', dl.status === 200 && !!q && q.extension !== 'strm', `HTTP ${dl.status}, queue entry ${JSON.stringify(q || {}).slice(0, 100)}`);
+            let q;
+            for (let i = 0; i < 10 && !q; i++) { await sleep(1500); q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid); }
+            const hEntry = (await hist(ep.pid)).find((h) => h.client && h.client !== 'STRM');
+            ok('MEDIA_MODE=download takes effect: a plain download is queued as a real download (not a .strm)', dl.status === 200 && ((!!q && q.extension !== 'strm') || !!hEntry), `HTTP ${dl.status}, queue entry ${JSON.stringify(q || {}).slice(0, 80)}, history ${JSON.stringify((await hist(ep.pid)).map((h) => [h.status, h.client]))}`);
+            if (hEntry && /fail/i.test(String(hEntry.status))) rec(W, 'a real download (not .strm) completes from the container', 'WARN', 'it failed straight away; the log says ffmpeg could not resolve vod-hls-uk-live.akamaized.net (DNS in the container), so real downloads do not work in this setup');
             if (q) await http(`/json-api/queue/queue?pid=${ep.pid}${q.jobId ? '&jobId=' + q.jobId : ''}`, { method: 'DELETE' });
             await cleanHist(ep.pid);
         } finally {
