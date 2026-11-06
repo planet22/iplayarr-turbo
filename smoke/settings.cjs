@@ -853,6 +853,8 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             return false;
         };
         const removed = [];
+        const tracked = new Set(); // every file a download in this test added, so a failure part way cannot leave them behind
+        const topBefore = new Map(roots.map((r) => [r, new Set(fs.readdirSync(r))])); // folders at the top of each root before the test
         const dropNew = (added) => {
             for (const f of added) { try { fs.rmSync(f, { force: true }); removed.push(f); } catch { /* leave it */ } }
             for (const f of added) {
@@ -876,6 +878,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             await waitGone(ep.pid, 60000);
             const files1 = walk();
             const added = [...files1].filter((f) => !files0.has(f));
+            added.forEach((f) => tracked.add(f));
             const strm = h?.libraryPath ? [...files1].find((f) => f.endsWith('.strm') && norm(f).endsWith(norm(h.libraryPath))) : undefined;
             return { h, added, strm, fresh: !!strm && added.includes(strm), content: strm ? fs.readFileSync(strm, 'utf8').trim() : '' };
         };
@@ -967,7 +970,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
                     const thumb = missing.strm ? missing.strm.replace(/.strm$/i, '-thumb.jpg') : '';
                     for (let i = 0; i < 90 && thumb && !fs.existsSync(thumb); i++) await sleep(1000);
                     warn('WRITE_ADDITIONAL_IMAGES=missing takes effect: the episode picture is written', !!thumb && fs.existsSync(thumb), 'no -thumb.jpg appeared beside the .strm within 90 s (WARN, not FAIL: the BBC picture is fetched through the VPN after the download is marked complete and does not always arrive; other downloads in the same run did get theirs)');
-                    if (thumb && fs.existsSync(thumb)) missing.added = [...(missing.added || []), thumb];
+                    if (thumb && fs.existsSync(thumb)) { missing.added = [...(missing.added || []), thumb]; tracked.add(thumb); }
                     // overwrite: download again with the pictures still there; their files are replaced
                     const stamps = new Map(pics(missing).map((f) => [f, fs.statSync(f).mtimeMs]));
                     await sleep(1500);
@@ -993,6 +996,26 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             await cleanHist(ep.pid);
         } finally {
             await cleanHistSafe();
+            // Clean up whatever the test added, pass or fail: tracked files, then folders that did not exist before the test
+            // (a show folder the test created holds only test files; one that already existed is never emptied).
+            dropNew([...tracked].filter((f) => fs.existsSync(f)));
+            for (const [root, before] of topBefore) {
+                let names = [];
+                try { names = fs.readdirSync(root); } catch { /* gone */ }
+                for (const name of names) {
+                    const full = path.join(root, name);
+                    if (before.has(name)) continue;
+                    try {
+                        if (fs.statSync(full).isDirectory()) {
+                            // only a folder whose every .strm this test wrote (one the app made for someone else is left alone)
+                            const strms = []; const stack = [full];
+                            while (stack.length) { const d = stack.pop(); for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) stack.push(f); else if (/.strm$/i.test(e.name)) strms.push(f); } }
+                            if (strms.every((f) => tracked.has(f))) { fs.rmSync(full, { recursive: true, force: true }); removed.push(full); }
+                        }
+                        else if (tracked.has(full)) { fs.rmSync(full, { force: true }); removed.push(full); }
+                    } catch { /* leave it */ }
+                }
+            }
         }
         async function cleanHistSafe() { try { await cleanHist(ep?.pid); } catch { /* best effort */ } }
         if (removed.length) rec(W, 'library test files removed again', 'PASS', `${removed.length} files`);
