@@ -116,7 +116,7 @@ const refreshGlobalSettings = async () => {
 };
 provide('refreshGlobalSettings', refreshGlobalSettings);
 
-const pageSetup = async () => {
+const runPageSetup = async () => {
     if (socket.value == null) {
         document.body.scrollTop = document.documentElement.scrollTop = 0;
         await updateQueue();
@@ -173,6 +173,23 @@ const pageSetup = async () => {
         refreshToolVersions();
         loadSubscriptions();
         loadDnsRelay();
+    }
+};
+
+// Set up once. `socket` is only assigned part-way through (after the first fetches), so without this a second call during
+// those fetches - the sign-in object being replaced, say - opened a second connection and every log line arrived twice.
+let setupStarted = false;
+const pageSetup = async () => {
+    if (setupStarted) return;
+    setupStarted = true;
+    try {
+        await runPageSetup();
+    } catch (error) {
+        // Allow another attempt rather than leaving the app without live updates until the page is reloaded.
+        setupStarted = false;
+        socket.value?.disconnect();
+        socket.value = null;
+        console.error('Could not finish setting up the app', error);
     }
 };
 

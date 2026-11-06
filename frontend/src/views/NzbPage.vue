@@ -427,24 +427,29 @@ const {
     page: failedGrabPage, pageSize: failedGrabPageSize, pagedItems: pagedFailedGrabs,
 } = usePagination(sortedFailedGrabs);
 
-onMounted(async () => {
-    await refresh();
+// Named, and attached before the first fetch: a page left before the fetch finished would otherwise attach them after
+// its cleanup had run, and keep them for good. off() with the handler removes only this page's, not any other listener.
+const onSearchHistory = (data) => {
+    searchHistory.value = data.filter(({ term }) => term != '*');
+};
+const onGrabHistory = (data) => {
+    grabHistory.value = data;
+};
+const onFailedGrabHistory = (data) => {
+    failedGrabHistory.value = data;
+};
 
-    socket.value?.on('searchHistory', (data) => {
-        searchHistory.value = data.filter(({ term }) => term != '*');
-    });
-    socket.value?.on('grabHistory', (data) => {
-        grabHistory.value = data;
-    });
-    socket.value?.on('failedGrabHistory', (data) => {
-        failedGrabHistory.value = data;
-    });
+onMounted(async () => {
+    socket.value?.on('searchHistory', onSearchHistory);
+    socket.value?.on('grabHistory', onGrabHistory);
+    socket.value?.on('failedGrabHistory', onFailedGrabHistory);
+    await refresh();
 });
 
 onBeforeUnmount(() => {
-    socket.value?.off('searchHistory');
-    socket.value?.off('grabHistory');
-    socket.value?.off('failedGrabHistory');
+    socket.value?.off('searchHistory', onSearchHistory);
+    socket.value?.off('grabHistory', onGrabHistory);
+    socket.value?.off('failedGrabHistory', onFailedGrabHistory);
 });
 
 async function refresh() {

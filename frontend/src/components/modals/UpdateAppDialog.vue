@@ -66,6 +66,10 @@ const appStatus = ref({});
 
 const emit = defineEmits(['close']);
 
+const onUpdateStatus = ({ id, status, message }) => {
+    appStatus.value[id] = { status, message };
+};
+
 onMounted(async () => {
     apps.value = (await ipFetch('json-api/apps')).data;
     features.value = (await ipFetch('json-api/apps/types')).data;
@@ -82,15 +86,13 @@ onMounted(async () => {
         return acc;
     }, {});
 
-    socket.value.on('app_update_status', ({ id, status, message }) => {
-        appStatus.value[id] = { status, message };
-    });
+    socket.value?.on('app_update_status', onUpdateStatus);
 
     ipFetch('json-api/apps/updateApiKey', 'POST', {});
 });
 
 onBeforeUnmount(() => {
-    socket.value.off('app_update_status');
+    socket.value?.off('app_update_status', onUpdateStatus);
 });
 
 const getPillColor = (status) => {
