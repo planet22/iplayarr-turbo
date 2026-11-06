@@ -146,7 +146,7 @@ class DownloadFacade {
                         fs.mkdirSync(libraryPath.directory, { recursive: true });
                         loggingService.debug(pid, `Moving ${oldPath} to ${libraryPath.fullPath}`);
 
-                        copyWithFallback(oldPath, libraryPath.fullPath);
+                        await copyWithFallback(oldPath, libraryPath.fullPath);
                         queueItem.extension = extension;
                         queueItem.libraryPath = libraryPath.relativePath;
 

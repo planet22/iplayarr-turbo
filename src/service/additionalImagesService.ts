@@ -89,7 +89,7 @@ class AdditionalImagesService {
             const imagePid = (await iplayerDetailsService.getMetadata(pid)).programme?.image?.pid;
             const cached = imagePid ? await thumbnailCacheService.getOrFetch(imagePid) : undefined;
             if (!cached) return false;
-            copyWithFallback(cached, target);
+            await copyWithFallback(cached, target);
             return true;
         });
         return done ? 1 : 0;

@@ -12,7 +12,8 @@ import { IPlayerSearchResult } from '../types/IPlayerSearchResult';
 import { Synonym } from '../types/Synonym';
 import { extractEpisodeMarkers } from '../utils/episodeMarkers';
 import { trackSearchCompleteness } from '../utils/searchCompleteness';
-import { currentTraceCandidates, TraceCandidate, traceCandidate, traceNote } from '../utils/searchTrace';
+import { searchContext } from '../utils/searchContext';
+import { currentTraceCandidates, isTracing, TraceCandidate, traceCandidate, traceNote } from '../utils/searchTrace';
 import { runWithSeasonHint } from '../utils/seasonHint';
 import { removeLastFourDigitNumber } from '../utils/Utils';
 import scheduleFacade from './scheduleFacade';
@@ -22,12 +23,25 @@ interface SearchTerm {
     synonym?: Synonym;
 }
 
+// How many of a show's other known titles are searched when its own title finds nothing.
+export const maxAliases = 3;
+
 class SearchFacade {
     searchCache: DbCacheService<IPlayerSearchResult[]> = new DbCacheService('search_cache', 1800, { label: 'Search results', description: 'Finished Sonarr/Radarr search results per search term.' });
     traceCache: DbCacheService<TraceCandidate[]> = new DbCacheService('search_trace_cache', 1800, { label: 'Search trace', description: 'Why each candidate was kept or dropped, for the search debugger.' });
 
+    // Identical searches running at the same moment (Sonarr asks several times, one per season or quality) share one run
+    // instead of each crawling the BBC. Not for a traced search, which has to see its own steps.
+    #inFlight = new Map<string, Promise<IPlayerSearchResult[]>>();
+
     async search(inputTerm: string, season?: number, episode?: number): Promise<IPlayerSearchResult[]> {
-        return this.#run(inputTerm, season, episode);
+        if (isTracing()) return this.#run(inputTerm, season, episode);
+        const key = JSON.stringify([searchContext(), inputTerm, season, episode]);
+        const running = this.#inFlight.get(key);
+        if (running) return (await running).map((result) => ({ ...result }));
+        const search = this.#run(inputTerm, season, episode).finally(() => this.#inFlight.delete(key));
+        this.#inFlight.set(key, search);
+        return search;
     }
 
     // Same results as search(), but handed to onBatch as the service finds them so a UI can show the
@@ -148,8 +162,16 @@ class SearchFacade {
         }
         const seen = new Set<string>();
         const merged: IPlayerSearchResult[] = [];
-        for (const alias of aliases) {
-            const found = await this.#run(alias, season, episode, onBatch, false);
+        // Each alias is a full search, so only the first few are tried.
+        // An alias that gives the same programme as an earlier one is not reported to the caller twice.
+        const streamed = new Set<string>();
+        const onNewBatch = onBatch && ((batch: IPlayerSearchResult[]) => {
+            const fresh = batch.filter(({ pid }) => !streamed.has(pid));
+            fresh.forEach(({ pid }) => streamed.add(pid));
+            if (fresh.length) onBatch(fresh);
+        });
+        for (const alias of aliases.slice(0, maxAliases)) {
+            const found = await this.#run(alias, season, episode, onNewBatch, false);
             for (const result of found) {
                 if (!seen.has(result.pid)) {
                     seen.add(result.pid);

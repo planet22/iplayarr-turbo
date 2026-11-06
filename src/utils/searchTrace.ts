@@ -45,6 +45,9 @@ export async function withSearchTrace<T>(fn: () => Promise<T>): Promise<{ result
     return { result, trace };
 }
 
+// Whether a search is being traced (the search debugger): such a search must run for itself, not share another's answer.
+export const isTracing = (): boolean => storage.getStore() !== undefined;
+
 export function traceCandidate(candidate: TraceCandidate): void {
     const trace = storage.getStore();
     if (!trace) return;

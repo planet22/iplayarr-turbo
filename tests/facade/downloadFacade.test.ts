@@ -38,6 +38,7 @@ jest.mock('fs', () => ({
     readdir: jest.fn(),
     existsSync: jest.fn(),
     promises: {
+        copyFile: jest.fn(),
         readdir: jest.fn(),
         stat: jest.fn(),
         rm: jest.fn(),
@@ -271,7 +272,7 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'episode.mkv'),
                 path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv')
             );
@@ -302,7 +303,7 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'Bing_Songs_original.mp4'),
                 path.join('/complete', 'Bing.S03E06-BBCiPlayarrTurbo.mp4')
             );
@@ -332,7 +333,7 @@ describe('DownloadFacade', () => {
             expect(fs.mkdirSync).toHaveBeenCalledWith(path.join('/complete', 'Show Name', 'Season 01'), {
                 recursive: true,
             });
-            expect(fs.copyFileSync).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), expectedPath);
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(path.join(pidDir, 'episode.mkv'), expectedPath);
             expect(queueItem.libraryPath).toBe('Show Name/Season 01/Show Name - S01E01 - The Episode-BBCiPlayarrTurbo.mkv');
         });
 
@@ -458,7 +459,7 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'episode.mkv'),
                 path.join('/arr-complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv')
             );
@@ -478,7 +479,7 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'movie.mkv'),
                 path.join('/arr-complete', 'Some.Movie-BBCiPlayarrTurbo.mkv')
             );
@@ -498,7 +499,7 @@ describe('DownloadFacade', () => {
 
             await runDownloadToCompletion(queueItem);
 
-            expect(fs.copyFileSync).toHaveBeenCalledWith(
+            expect(fs.promises.copyFile).toHaveBeenCalledWith(
                 path.join(pidDir, 'episode.mkv'),
                 path.join('/complete', 'Show.S01E01-BBCiPlayarrTurbo.mkv')
             );
@@ -974,7 +975,7 @@ describe('DownloadFacade', () => {
 
                     await runDownloadToCompletion(inArr());
 
-                    expect(fs.copyFileSync).toHaveBeenCalledWith(expect.any(String), arrMp4);
+                    expect(fs.promises.copyFile).toHaveBeenCalledWith(expect.any(String), arrMp4);
                     expect(fs.renameSync).toHaveBeenCalledWith(arrStrm, `${arrStrm}.bak`);
                     expect(arrLibraryService.rescan).toHaveBeenCalledWith({ id: 'sonarr1', name: 'Sonarr' }, 7);
                     expect(historyService.addHistory).toHaveBeenCalledWith(expect.objectContaining({ pid }), 'Complete');
@@ -1007,7 +1008,7 @@ describe('DownloadFacade', () => {
 
                     await runDownloadToCompletion(inArr());
 
-                    expect(fs.copyFileSync).not.toHaveBeenCalledWith(expect.any(String), arrStrm);
+                    expect(fs.promises.copyFile).not.toHaveBeenCalledWith(expect.any(String), arrStrm);
                     expect(arrLibraryService.rescan).not.toHaveBeenCalled();
                 });
             });

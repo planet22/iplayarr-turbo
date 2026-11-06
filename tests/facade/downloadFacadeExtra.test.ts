@@ -29,7 +29,7 @@ jest.mock('fs', () => ({
     statSync: jest.fn(),
     rmSync: jest.fn(),
     existsSync: jest.fn(),
-    promises: { readdir: jest.fn(), stat: jest.fn(), rm: jest.fn() },
+    promises: { copyFile: jest.fn(), readdir: jest.fn(), stat: jest.fn(), rm: jest.fn() },
 }));
 jest.mock('child_process', () => ({ spawn: jest.fn() }));
 jest.mock('../../src/service/configService', () => ({ getParameter: jest.fn() }));
