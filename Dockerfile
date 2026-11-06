@@ -47,7 +47,7 @@ FROM node:24-alpine3.24 AS runtime-base
 
 # font-dejavu: the live channel logos/posters carry text that sharp (librsvg) rasterises, and Alpine has no
 # fonts by default - without one the text renders as empty boxes.
-RUN apk --update add \
+RUN apk add --no-cache \
     ffmpeg \
     openssl \
     perl-mojolicious \
