@@ -5,7 +5,7 @@ import { v4 } from 'uuid';
 
 import { setGeneratedPassword } from '../service/auth/initialCredentialsService';
 import OIDCService from '../service/auth/OIDCService';
-import { revokeOtherSessions, sessionStore } from '../service/auth/sessionStore';
+import { notifySessionsEnded, revokeOtherSessions, sessionStore } from '../service/auth/sessionStore';
 import configService from '../service/configService';
 import { dbReady, prisma } from '../service/db/prismaService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
@@ -110,7 +110,9 @@ const STATE_CHANGING_GETS = ['/logout', '/generateToken'];
 export const addAuthMiddleware = (app: Express) => {
     // Set SESSION_COOKIE_SECURE=true when the UI is only ever reached over HTTPS.
     const sessionCookieSettings: session.CookieOptions = {
-        secure: process.env.SESSION_COOKIE_SECURE === 'true',
+        // 'auto' sets Secure on a connection that is HTTPS (behind a proxy, with TRUST_PROXY on) and not on plain HTTP, which
+        // is what a LAN install uses; 'false' turns it off for a proxy that is not trusted.
+        secure: process.env.SESSION_COOKIE_SECURE === 'true' ? true : process.env.SESSION_COOKIE_SECURE === 'false' ? false : 'auto',
         httpOnly: true,
         sameSite: 'lax',
         maxAge: 1000 * 60 * 60 * 24,
@@ -334,7 +336,9 @@ router.post('/login', safe(async (req: Request, res: Response) => {
 }));
 
 router.get('/logout', (req, res) => {
+    const sid = req.sessionID;
     req.session.destroy(() => {
+        notifySessionsEnded({ only: sid });
         res.json({ status: true });
     });
 });

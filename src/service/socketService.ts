@@ -1,5 +1,6 @@
 import { Server, Socket } from 'socket.io';
 
+import { onSessionsEnded } from './auth/sessionStore';
 import { onDnsRelayChange } from './dnsRelayService';
 import historyService from './historyService';
 import loggingService from './loggingService';
@@ -16,6 +17,12 @@ let io: Server | undefined = undefined;
 const socketService = {
     registerIo: (server: Server) => {
         io = server;
+        onSessionsEnded(({ only, except }) => {
+            for (const socket of Object.values(sockets)) {
+                const sid = (socket.request as { sessionID?: string } | undefined)?.sessionID;
+                if (only !== undefined ? sid === only : sid !== except) socket.disconnect(true);
+            }
+        });
         // The DNS Relay page and the top bar warning follow the relay live.
         onDnsRelayChange((status) => io?.emit('dnsRelay', status));
         io.on('connection', (socket) => {

@@ -17,6 +17,7 @@ import subscriptionDiskService from '../../src/service/subscriptionDiskService';
 import subscriptionService, { SubscriptionError } from '../../src/service/subscriptionService';
 import synonymService from '../../src/service/synonymService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
+import { markSearchIncomplete } from '../../src/utils/searchCompleteness';
 import * as Utils from '../../src/utils/Utils';
 
 const store: Record<string, any> = {};
@@ -114,6 +115,36 @@ describe('subscriptionService', () => {
         it('ignores episodes with no release date', async () => {
             details.getSeriesEpisodes.mockResolvedValue([ep('ok'), { id: 'no', type: 'episode', title: 'x' }] as any);
             expect((await subscriptionService.listEpisodes('b00brand1')).map((e) => e.id)).toEqual(['ok']);
+        });
+    });
+
+    describe('a failed page in an episode list', () => {
+        const failingPage = () =>
+            details.getSeriesEpisodes.mockImplementation(async (_pid: string, page = 1) => {
+                if (page === 2) {
+                    markSearchIncomplete(); // what the BBC helper does when a page fails
+                    return [];
+                }
+                return Array.from({ length: 150 }, (_, i) => ep(`e${i}`)) as any;
+            });
+
+        it('refuses to subscribe on a partial baseline, which the next check would queue as if new', async () => {
+            failingPage();
+            await expect(subscriptionService.subscribe('m00episode')).rejects.toThrow(/Could not list all of this show/);
+            expect(await subscriptionService.list()).toEqual([]);
+        });
+
+        it('lists what it can for a check, which only misses some episodes until the next one', async () => {
+            failingPage();
+            expect((await subscriptionService.listEpisodes('b00brand1')).length).toBeGreaterThan(0);
+            await expect(subscriptionService.listEpisodes('b00brand1', true)).rejects.toBeInstanceOf(SubscriptionError);
+        });
+
+        it('does not start a new version from a partial list', async () => {
+            const sub = await subscriptionService.subscribe('m00episode');
+            versionTypes.mockResolvedValue(['audiodescribed'] as any);
+            failingPage();
+            await expect(subscriptionService.setVersions(sub.id, ['audio-described'])).rejects.toThrow(/Could not list all of this show/);
         });
     });
 

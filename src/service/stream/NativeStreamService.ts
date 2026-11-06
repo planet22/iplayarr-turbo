@@ -4,6 +4,7 @@ import { Request, Response } from 'express';
 
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
+import { setBounded } from '../../utils/boundedMap';
 import { requestedQuality } from '../../utils/qualityContext';
 import { requestedRoute } from '../../utils/routeContext';
 import { formatRoute } from '../../utils/routeHint';
@@ -378,7 +379,7 @@ class NativeStreamService implements AbstractStreamService {
                 if (!version) {
                     // One link must not steer the route remembered for everything else.
                     if (!fromLink) rememberMediaSelectorPair('native', pair);
-                    this.#answered.set(vpid, { pair, fromLink });
+                    setBounded(this.#answered, vpid, { pair, fromLink }, 500);
                 }
                 return { hrefs };
             }

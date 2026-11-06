@@ -5,6 +5,7 @@ import path from 'path';
 
 import { channelLook, customChannel } from '../constants/CustomChannels';
 import { liveChannelInfo } from '../constants/LiveChannels';
+import { setBounded } from '../utils/boundedMap';
 import { getConfigDir } from '../utils/configDir';
 import { isValidPid, resolveInside } from '../utils/pathSafety';
 import loggingService from './loggingService';
@@ -187,10 +188,10 @@ class ChannelLogoService {
             if (!this.#checked.has(key)) {
                 try {
                     const info = await this.validate(buffer);
-                    this.#checked.set(key, info.ext === ext);
+                    setBounded(this.#checked, key, info.ext === ext, 2000);
                     if (info.ext !== ext) throw new LogoError(`it is a ${info.ext} file, not ${ext}`);
                 } catch (error: any) {
-                    this.#checked.set(key, false);
+                    setBounded(this.#checked, key, false, 2000);
                     loggingService.error(`Ignoring ${userFile}: ${error?.message}`);
                 }
             }

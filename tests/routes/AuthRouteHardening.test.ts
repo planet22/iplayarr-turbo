@@ -4,6 +4,7 @@ import express from 'express';
 import request from 'supertest';
 
 import AuthRoute, { addAuthMiddleware, crossSiteGuard } from '../../src/routes/AuthRoute';
+import { onSessionsEnded } from '../../src/service/auth/sessionStore';
 import configService from '../../src/service/configService';
 import { dbReady, prisma } from '../../src/service/db/prismaService';
 import * as Utils from '../../src/utils/Utils';
@@ -67,6 +68,45 @@ describe('AuthRoute hardening', () => {
             expect(cookie).toMatch(/SameSite=Lax/i);
             const authed = await request(app).get('/json-api/ping').set('Cookie', cookie.split(';')[0]);
             expect(authed.status).toBe(200);
+        });
+
+        describe('the session cookie Secure setting', () => {
+            const saved = process.env.SESSION_COOKIE_SECURE;
+            afterEach(() => {
+                if (saved === undefined) delete process.env.SESSION_COOKIE_SECURE;
+                else process.env.SESSION_COOKIE_SECURE = saved;
+            });
+
+            const build = (trustProxy: boolean): express.Express => {
+                const fresh = express();
+                if (trustProxy) fresh.set('trust proxy', true);
+                fresh.use(express.json());
+                addAuthMiddleware(fresh);
+                fresh.use('/auth', AuthRoute);
+                return fresh;
+            };
+            const cookieOf = (res: request.Response): string => (res.headers['set-cookie'] as unknown as string[])[0];
+
+            it.each([[undefined], ['false']])('is not set on plain HTTP when SESSION_COOKIE_SECURE is %s (a LAN install must still sign in)', async (value) => {
+                if (value === undefined) delete process.env.SESSION_COOKIE_SECURE;
+                else process.env.SESSION_COOKIE_SECURE = value;
+                const res = await request(build(false)).post('/auth/login').send({ username: 'admin', password: 'right' });
+                expect(cookieOf(res)).not.toMatch(/;\s*Secure/i);
+            });
+
+            it('is set when the connection is HTTPS behind a trusted proxy and nothing was configured', async () => {
+                delete process.env.SESSION_COOKIE_SECURE;
+                const res = await request(build(true)).post('/auth/login').set('X-Forwarded-Proto', 'https').send({ username: 'admin', password: 'right' });
+                expect(cookieOf(res)).toMatch(/;\s*Secure/i);
+            });
+        });
+
+        it('tells the live connections when a session is signed out', async () => {
+            const ended: Array<{ only?: string; except?: string }> = [];
+            onSessionsEnded((e) => ended.push(e));
+            const res = await request(app).post('/auth/login').send({ username: 'admin', password: 'right' });
+            await request(app).get('/auth/logout').set('Cookie', (res.headers['set-cookie'] as unknown as string[])[0].split(';')[0]);
+            expect(ended).toContainEqual({ only: expect.any(String) });
         });
 
         it('rejects non-string credentials without throwing', async () => {

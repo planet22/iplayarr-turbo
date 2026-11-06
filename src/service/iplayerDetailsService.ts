@@ -4,6 +4,7 @@ import { pidRegex, searchResultLimit } from '../constants/iPlayarrConstants';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { IPlayerContributor, IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { expiryOf } from '../utils/availability';
+import { setBounded } from '../utils/boundedMap';
 import { IblArtwork, IblEpisodeExtras, parseIblArtwork, parseIblEpisodeExtras } from '../utils/iblEpisode';
 import { withRetry } from '../utils/retry';
 import { markSearchIncomplete } from '../utils/searchCompleteness';
@@ -11,6 +12,9 @@ import { ProgrammeNotFoundError } from '../utils/upstreamError';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
 import DbCacheService from './db/dbCacheService';
 import episodeDetailsCache from './episodeDetailsCache';
+
+// More than enough for the programmes actually asked for; stops a run of made-up pids growing the map for ever.
+const MAX_NOT_FOUND = 5000;
 
 class IPlayerDetailsService {
     metadataCache: DbCacheService<IPlayerMetadataResponse> = new DbCacheService('metadata_cache', 86400, { label: 'Programme metadata', description: 'BBC programme details per PID (title, synopsis, parents).' });
@@ -120,7 +124,7 @@ class IPlayerDetailsService {
             return fresh;
         } catch (error) {
             if (axios.isAxiosError(error) && error.response?.status === 404) {
-                this.notFound.set(pid, Date.now() + IPlayerDetailsService.NOT_FOUND_TTL_MS);
+                setBounded(this.notFound, pid, Date.now() + IPlayerDetailsService.NOT_FOUND_TTL_MS, MAX_NOT_FOUND);
             }
             console.error(`Error fetching metadata for PID ${pid}: ${error}`);
             throw error;

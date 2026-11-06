@@ -23,6 +23,7 @@ import {
 import { VersionProfile } from '../types/VersionProfiles';
 import { VideoEventType } from '../types/VideoEvent';
 import { expiresWithin, expiryOf } from '../utils/availability';
+import { trackSearchCompleteness } from '../utils/searchCompleteness';
 import { createNZBName, getQualityProfile } from '../utils/Utils';
 import { applyVersionToRelease, parseExtraVersions } from '../utils/videoVersion';
 import appService from './appService';
@@ -99,7 +100,17 @@ class SubscriptionService {
 
     // Every available episode of a show. The BBC's brand-level list is flat and paged; series
     // containers (some shows only expose those) are expanded one level.
-    async listEpisodes(brandPid: string): Promise<IPlayerEpisodeMetadata[]> {
+    // `requireComplete` is for a baseline: a list with a page missing (the BBC failing part-way) would make the next check
+    // queue everything the missing page held as if it were new, so that is refused instead.
+    async listEpisodes(brandPid: string, requireComplete = false): Promise<IPlayerEpisodeMetadata[]> {
+        const { result, complete } = await trackSearchCompleteness(() => this.#listAllEpisodes(brandPid));
+        if (requireComplete && !complete) {
+            throw new SubscriptionError('Could not list all of this show\'s episodes right now - try again shortly');
+        }
+        return result;
+    }
+
+    async #listAllEpisodes(brandPid: string): Promise<IPlayerEpisodeMetadata[]> {
         const collected: IPlayerEpisodeMetadata[] = [];
         const containers: IPlayerEpisodeMetadata[] = [];
         for (let page = 1; page <= MAX_PAGES; page++) {
@@ -139,7 +150,7 @@ class SubscriptionService {
         if (existing && (!existing.arrOnly || options.arrOnly)) return existing;
 
         const { programme } = await iplayerDetailsService.getMetadata(brandPid);
-        const episodes = await this.listEpisodes(brandPid);
+        const episodes = await this.listEpisodes(brandPid, true);
         // The BBC helper swallows errors into an empty list. An empty baseline would make the first
         // check queue the whole back catalogue, so refuse instead of guessing.
         if (episodes.length === 0) {
@@ -236,7 +247,7 @@ class SubscriptionService {
         if (!subscription) return undefined;
         const versions = subscription.arrOnly ? [] : parseExtraVersions(requested.join(',')).map((profile) => profile.id);
         const added = versions.filter((version) => !subscription.seenVersions?.[version]);
-        const episodes = added.length ? await this.listEpisodes(subscription.pid) : [];
+        const episodes = added.length ? await this.listEpisodes(subscription.pid, true) : [];
         if (added.length && episodes.length === 0) {
             throw new SubscriptionError('Could not list this show\'s episodes right now - try again shortly');
         }
