@@ -11,16 +11,16 @@ import AbstractSearchService from './AbstractSearchService';
 class GetIplayerSearchService implements AbstractSearchService {
     async search(term: string, synonym?: Synonym): Promise<IPlayerSearchResult[]> {
         const { sizeFactor } = await getQualityProfile();
-        return new Promise(async (resolve, reject) => {
+        // Looked up before the promise, so a failure here rejects the search instead of leaving it pending forever.
+        const { exec, args } = await getIplayerExecutableService.getSearchParameters(term, synonym);
+        return new Promise((resolve, reject) => {
             const awaitingPromises: Promise<void>[] = [];
             const results: IPlayerSearchResult[] = [];
-            const { exec, args } = await getIplayerExecutableService.getSearchParameters(term, synonym);
 
             loggingService.debug(`Executing get_iplayer with args: ${args.join(' ')}`);
             const searchProcess = spawn(exec as string, args);
 
-            searchProcess.stdout.on('data', (data) => {
-                loggingService.debug(data.toString().trim());
+            const parse = (data: Buffer) => {
                 awaitingPromises.push(getIplayerExecutableService.parseResults(
                     term,
                     data,
@@ -28,18 +28,41 @@ class GetIplayerSearchService implements AbstractSearchService {
                 ).then((chunkResults: IPlayerSearchResult[]) => {
                     chunkResults.forEach((chunk) => results.push(chunk));
                 }));
+            };
+
+            // Output arrives in arbitrary chunks, so a result line can be cut in two. Only whole lines are parsed;
+            // what follows the last newline waits for the next chunk (or the end of the output).
+            let pending: Buffer = Buffer.alloc(0);
+            searchProcess.stdout.on('data', (data: Buffer | string) => {
+                loggingService.debug(data.toString().trim());
+                const buffer = Buffer.concat([pending, Buffer.isBuffer(data) ? data : Buffer.from(data)]);
+                const lastNewline = buffer.lastIndexOf(0x0a);
+                if (lastNewline === -1) {
+                    pending = buffer;
+                    return;
+                }
+                pending = buffer.subarray(lastNewline + 1);
+                parse(buffer.subarray(0, lastNewline + 1));
             });
 
             searchProcess.stderr.on('data', (data) => {
                 loggingService.error(data.toString().trim());
             });
 
+            // A missing or unusable get_iplayer reports through 'error'; unhandled, it would crash the server.
+            searchProcess.on('error', reject);
+
             searchProcess.on('close', async (code) => {
-                if (code === 0) {
-                    await Promise.all(awaitingPromises);
-                    resolve(await getIplayerExecutableService.processCompletedSearch(results, synonym));
-                } else {
-                    reject(new Error(`Process exited with code ${code}`));
+                try {
+                    if (code === 0) {
+                        if (pending.length > 0) parse(pending);
+                        await Promise.all(awaitingPromises);
+                        resolve(await getIplayerExecutableService.processCompletedSearch(results, synonym));
+                    } else {
+                        reject(new Error(`Process exited with code ${code}`));
+                    }
+                } catch (err) {
+                    reject(err);
                 }
             });
         });

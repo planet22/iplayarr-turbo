@@ -17,12 +17,15 @@ import subscriptionDiskService from '../../src/service/subscriptionDiskService';
 import subscriptionService, { SubscriptionError } from '../../src/service/subscriptionService';
 import synonymService from '../../src/service/synonymService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
+import { markSearchIncomplete } from '../../src/utils/searchCompleteness';
 import * as Utils from '../../src/utils/Utils';
 
 const store: Record<string, any> = {};
+let mockReadDelayMs = 0;
 jest.mock('../../src/types/QueuedStorage', () => ({
     QueuedStorage: class {
         async getItem(key: string) {
+            if (mockReadDelayMs) await new Promise((resolve) => setTimeout(resolve, mockReadDelayMs));
             return store[key] === undefined ? undefined : JSON.parse(JSON.stringify(store[key]));
         }
         async setItem(key: string, value: any) {
@@ -112,6 +115,36 @@ describe('subscriptionService', () => {
         it('ignores episodes with no release date', async () => {
             details.getSeriesEpisodes.mockResolvedValue([ep('ok'), { id: 'no', type: 'episode', title: 'x' }] as any);
             expect((await subscriptionService.listEpisodes('b00brand1')).map((e) => e.id)).toEqual(['ok']);
+        });
+    });
+
+    describe('a failed page in an episode list', () => {
+        const failingPage = () =>
+            details.getSeriesEpisodes.mockImplementation(async (_pid: string, page = 1) => {
+                if (page === 2) {
+                    markSearchIncomplete(); // what the BBC helper does when a page fails
+                    return [];
+                }
+                return Array.from({ length: 150 }, (_, i) => ep(`e${i}`)) as any;
+            });
+
+        it('refuses to subscribe on a partial baseline, which the next check would queue as if new', async () => {
+            failingPage();
+            await expect(subscriptionService.subscribe('m00episode')).rejects.toThrow(/Could not list all of this show/);
+            expect(await subscriptionService.list()).toEqual([]);
+        });
+
+        it('lists what it can for a check, which only misses some episodes until the next one', async () => {
+            failingPage();
+            expect((await subscriptionService.listEpisodes('b00brand1')).length).toBeGreaterThan(0);
+            await expect(subscriptionService.listEpisodes('b00brand1', true)).rejects.toBeInstanceOf(SubscriptionError);
+        });
+
+        it('does not start a new version from a partial list', async () => {
+            const sub = await subscriptionService.subscribe('m00episode');
+            versionTypes.mockResolvedValue(['audiodescribed'] as any);
+            failingPage();
+            await expect(subscriptionService.setVersions(sub.id, ['audio-described'])).rejects.toThrow(/Could not list all of this show/);
         });
     });
 
@@ -440,6 +473,39 @@ describe('subscriptionService', () => {
 
         it('checkOne returns undefined for an unknown id', async () => {
             expect(await subscriptionService.checkOne('nope')).toBeUndefined();
+        });
+
+        it('does not bring back a show that was unsubscribed while another change to the list was being saved', async () => {
+            const keep = await subscriptionService.subscribe('m00episode');
+            details.findBrandForPid.mockResolvedValue('b00brand2');
+            details.getMetadata.mockResolvedValue({ programme: { type: 'brand', pid: 'b00brand2', title: 'Other Show' } } as any);
+            const gone = await subscriptionService.subscribe('m00other');
+            mockReadDelayMs = 20; // slow reads, so overlapping read-modify-write cycles would all start from the same old list
+            try {
+                await Promise.all([
+                    subscriptionService.setArrLink(keep.id, { appId: 'a', arrId: 1 } as any),
+                    subscriptionService.unsubscribe(gone.id),
+                ]);
+            } finally {
+                mockReadDelayMs = 0;
+            }
+            const remaining = await subscriptionService.list();
+            expect(remaining.map(({ id }) => id)).toEqual([keep.id]);
+            expect(remaining[0].arr).toBeDefined();
+        });
+
+        it('keeps every show when several are subscribed at the same moment as an update', async () => {
+            const first = await subscriptionService.subscribe('m00episode');
+            details.findBrandForPid.mockResolvedValue('b00brand3');
+            details.getMetadata.mockResolvedValue({ programme: { type: 'brand', pid: 'b00brand3', title: 'Third Show' } } as any);
+            mockReadDelayMs = 10;
+            try {
+                await Promise.all([subscriptionService.subscribe('m00third'), subscriptionService.setArrLink(first.id, { appId: 'a', arrId: 2 } as any)]);
+            } finally {
+                mockReadDelayMs = 0;
+            }
+            expect((await subscriptionService.list()).map(({ pid }) => pid).sort()).toEqual(['b00brand1', 'b00brand3']);
+            expect((await subscriptionService.list()).find(({ id }) => id === first.id)?.arr).toBeDefined();
         });
 
         it('unsubscribe removes it and reports whether it existed', async () => {

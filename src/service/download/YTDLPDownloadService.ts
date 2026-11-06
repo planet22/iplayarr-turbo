@@ -34,15 +34,15 @@ class YTDLPDownloadService implements AbstractDownloadService {
         const videoQuality =
             queueService.getFromQueue(pid, jobId)?.library?.quality ??
             ((await configService.getParameter(IplayarrParameter.VIDEO_QUALITY)) as string);
-        const width_str = qualityProfiles.find(({ id }) => id == videoQuality)?.quality;
+        const height_str = qualityProfiles.find(({ id }) => id == videoQuality)?.quality;
 
         const outputFormat = await configService.getParameter(IplayarrParameter.OUTPUT_FORMAT) as string;
 
-        if (width_str) {
-            const width = parseInt(width_str);
-            if (!isNaN(width)) {
+        if (height_str) {
+            const height = parseInt(height_str);
+            if (!isNaN(height)) {
                 executable.args.push('-f');
-                executable.args.push(`bestvideo[width<=${width}]+bestaudio`);
+                executable.args.push(`bestvideo[height<=${height}]+bestaudio`);
                 executable.args.push('--merge-output-format');
                 executable.args.push(outputFormat);
 	    }

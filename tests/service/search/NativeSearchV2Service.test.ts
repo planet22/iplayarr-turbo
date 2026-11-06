@@ -12,6 +12,7 @@ import NativeSearchService from '../../../src/service/search/NativeSearchService
 import NativeSearchV2Service from '../../../src/service/search/NativeSearchV2Service';
 import newSearchCache from '../../../src/service/search/newSearchCache';
 import { IPlayerEpisodeMetadata } from '../../../src/types/responses/IPlayerMetadataResponse';
+import { trackSearchCompleteness } from '../../../src/utils/searchCompleteness';
 import { runInSearchContext } from '../../../src/utils/searchContext';
 import { withSearchTrace } from '../../../src/utils/searchTrace';
 import { runWithSeasonHint } from '../../../src/utils/seasonHint';
@@ -638,5 +639,56 @@ describe('NativeSearchV2Service when the search cache cannot be written', () => 
         (axios.get as jest.Mock).mockResolvedValue({ status: 200, data: { new_search: { results: [] } } });
         await expect(NativeSearchV2Service.search('Test Brand')).resolves.toEqual([]);
         expect(set).toHaveBeenCalled();
+    });
+});
+
+describe('NativeSearchV2Service lookup failures', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        (getQualityProfile as jest.Mock).mockResolvedValue({ sizeFactor: 1 });
+        jest.spyOn(newSearchCache, 'get').mockResolvedValue(undefined);
+        jest.spyOn(newSearchCache, 'set').mockResolvedValue(undefined);
+        (axios.get as jest.Mock).mockResolvedValue({ status: 200, data: { new_search: { results: [{ id: 'bad1', title: 'Test Brand' }] } } });
+    });
+
+    it('is incomplete when a programme lookup fails', async () => {
+        (iplayerDetailsService.findBrandForPid as jest.Mock).mockRejectedValue(new Error('timeout'));
+        const tracked = await trackSearchCompleteness(() => NativeSearchV2Service.search('Test Brand'));
+        expect(tracked.complete).toBe(false);
+    });
+
+    it('is incomplete when an episode list page fails', async () => {
+        (iplayerDetailsService.findBrandForPid as jest.Mock).mockResolvedValue('brand1');
+        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({ programme: { type: 'episode' } });
+        (iplayerDetailsService.getSeriesEpisodesChecked as jest.Mock).mockResolvedValue({ elements: [], failed: true });
+        const tracked = await trackSearchCompleteness(() => NativeSearchV2Service.search('Test Brand'));
+        expect(tracked.complete).toBe(false);
+    });
+});
+
+describe('NativeSearchV2Service search completeness', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        (getQualityProfile as jest.Mock).mockResolvedValue({ sizeFactor: 1 });
+        jest.spyOn(newSearchCache, 'get').mockResolvedValue(undefined);
+        jest.spyOn(newSearchCache, 'set').mockResolvedValue(undefined);
+    });
+
+    it('is marked incomplete when the BBC request fails', async () => {
+        (axios.get as jest.Mock).mockRejectedValue(new Error('timeout'));
+        const tracked = await trackSearchCompleteness(() => NativeSearchV2Service.search('Test Term'));
+        expect(tracked).toEqual({ result: [], complete: false });
+    });
+
+    it('is marked incomplete when the BBC answers with another status', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ status: 503, data: {} });
+        const tracked = await trackSearchCompleteness(() => NativeSearchV2Service.search('Test Term'));
+        expect(tracked).toEqual({ result: [], complete: false });
+    });
+
+    it('stays complete when the BBC simply has no matches', async () => {
+        (axios.get as jest.Mock).mockResolvedValue({ status: 200, data: { new_search: { results: [] } } });
+        const tracked = await trackSearchCompleteness(() => NativeSearchV2Service.search('Test Term'));
+        expect(tracked.complete).toBe(true);
     });
 });

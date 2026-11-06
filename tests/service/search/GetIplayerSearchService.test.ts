@@ -98,6 +98,66 @@ describe('GetIplayerSearchService', () => {
         expect(loggingService.error).toHaveBeenCalledWith('error message');
     });
 
+    describe('process handling', () => {
+        const fakeProcess = () => {
+            const handlers: Record<string, (arg: any) => void> = {};
+            const proc = {
+                stdout: { on: jest.fn((_e: string, cb: (d: any) => void) => (handlers.data = cb)) },
+                stderr: { on: jest.fn() },
+                on: jest.fn((e: string, cb: (arg: any) => void) => (handlers[e] = cb)),
+            };
+            (spawn as jest.Mock).mockReturnValue(proc);
+            return handlers;
+        };
+        const tick = () => new Promise((r) => setImmediate(r));
+
+        it('rejects when the program cannot be started', async () => {
+            const handlers = fakeProcess();
+            const search = getIplayerSearchService.search('term');
+            await tick();
+            handlers.error(new Error('spawn get_iplayer ENOENT'));
+            await expect(search).rejects.toThrow('ENOENT');
+        });
+
+        it('rejects instead of hanging when the search parameters cannot be built', async () => {
+            mockSearchParameters.mockRejectedValue(new Error('no config'));
+            await expect(getIplayerSearchService.search('term')).rejects.toThrow('no config');
+        });
+
+        it('rejects when finishing the search fails', async () => {
+            const handlers = fakeProcess();
+            mockProcessCompletedSearch.mockRejectedValue(new Error('cache down'));
+            const search = getIplayerSearchService.search('term');
+            await tick();
+            await handlers.close(0);
+            await expect(search).rejects.toThrow('cache down');
+        });
+
+        it('parses a result line that arrives in two chunks as one line', async () => {
+            const handlers = fakeProcess();
+            const search = getIplayerSearchService.search('term');
+            await tick();
+            handlers.data(Buffer.from('RESULT|:|one|:|a\nRESULT|:|tw'));
+            handlers.data('o|:|b\n');
+            handlers.data(Buffer.from('RESULT|:|three'));
+            await handlers.close(0);
+            await search;
+
+            const parsed = mockParseResults.mock.calls.map(([, data]) => data.toString());
+            expect(parsed).toEqual(['RESULT|:|one|:|a\n', 'RESULT|:|two|:|b\n', 'RESULT|:|three']);
+        });
+
+        it('parses nothing extra when the output ended on a newline', async () => {
+            const handlers = fakeProcess();
+            const search = getIplayerSearchService.search('term');
+            await tick();
+            handlers.data(Buffer.from('RESULT|:|one\n'));
+            await handlers.close(0);
+            await search;
+            expect(mockParseResults).toHaveBeenCalledTimes(1);
+        });
+    });
+
     it('should add cached episodes to results', async () => {
         // Setup
         const term = 'term';

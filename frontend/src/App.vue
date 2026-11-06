@@ -20,7 +20,7 @@
 
 <script setup>
 import { io } from 'socket.io-client';
-import { computed, inject, provide, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, inject, provide, ref, watch } from 'vue';
 import { ModalsContainer } from 'vue-final-modal';
 import { RouterView } from 'vue-router';
 
@@ -35,11 +35,12 @@ import CommandPalette from './components/common/CommandPalette.vue';
 import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue';
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
-import PipPlayer from './components/common/PipPlayer.vue';
 import ToastHost from './components/common/ToastHost.vue';
 import { loadDnsRelay, setDnsRelayStatus } from './lib/useDnsRelay';
 import { enforceMaxLength } from './lib/utils';
 
+// The player (and the HLS library behind it) is only fetched once someone is signed in and the app has loaded.
+const PipPlayer = defineAsyncComponent(() => import('./components/common/PipPlayer.vue'));
 const authState = inject('authState');
 // The menu's version block starts from what this browser last saw, so it is there on the first paint.
 const cachedVersions = loadNavVersions();
@@ -115,7 +116,7 @@ const refreshGlobalSettings = async () => {
 };
 provide('refreshGlobalSettings', refreshGlobalSettings);
 
-const pageSetup = async () => {
+const runPageSetup = async () => {
     if (socket.value == null) {
         document.body.scrollTop = document.documentElement.scrollTop = 0;
         await updateQueue();
@@ -172,6 +173,23 @@ const pageSetup = async () => {
         refreshToolVersions();
         loadSubscriptions();
         loadDnsRelay();
+    }
+};
+
+// Set up once. `socket` is only assigned part-way through (after the first fetches), so without this a second call during
+// those fetches - the sign-in object being replaced, say - opened a second connection and every log line arrived twice.
+let setupStarted = false;
+const pageSetup = async () => {
+    if (setupStarted) return;
+    setupStarted = true;
+    try {
+        await runPageSetup();
+    } catch (error) {
+        // Allow another attempt rather than leaving the app without live updates until the page is reloaded.
+        setupStarted = false;
+        socket.value?.disconnect();
+        socket.value = null;
+        console.error('Could not finish setting up the app', error);
     }
 };
 

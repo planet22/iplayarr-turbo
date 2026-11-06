@@ -200,23 +200,37 @@ export default class DbCacheService<T> {
 
     async get(key: string): Promise<T | undefined> {
         try {
-            await dbReady();
-            const row = await prisma.cache.findUnique({ where: { key: this.fullKey(key) } });
-            if (!row) {
-                DbCacheService.tally(this.prefix, false);
-                return undefined;
-            }
-            if (Number(row.expiresAt) <= Date.now()) {
-                await prisma.cache.deleteMany({ where: { key: row.key } });
-                DbCacheService.tally(this.prefix, false);
-                return undefined;
-            }
-            const value = JSON.parse(row.value) as T;
-            DbCacheService.tally(this.prefix, true);
-            return value;
+            return await this.getStrict(key);
         } catch {
             return undefined;
         }
+    }
+
+    /**
+     * Like get(), but a database failure is thrown instead of reading as "not cached". For callers that read, change
+     * and write back a value: treating a failed read as empty would overwrite what is stored with the change alone.
+     * An entry that is missing, expired or not valid JSON is still undefined.
+     */
+    async getStrict(key: string): Promise<T | undefined> {
+        await dbReady();
+        const row = await prisma.cache.findUnique({ where: { key: this.fullKey(key) } });
+        if (!row) {
+            DbCacheService.tally(this.prefix, false);
+            return undefined;
+        }
+        if (Number(row.expiresAt) <= Date.now()) {
+            await prisma.cache.deleteMany({ where: { key: row.key } });
+            DbCacheService.tally(this.prefix, false);
+            return undefined;
+        }
+        let value: T;
+        try {
+            value = JSON.parse(row.value) as T;
+        } catch {
+            return undefined;
+        }
+        DbCacheService.tally(this.prefix, true);
+        return value;
     }
 
     async set(key: string, value: T): Promise<void> {

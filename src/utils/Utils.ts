@@ -371,43 +371,43 @@ export function sanitizeLunrQuery(term: string): string {
 }
 
 // Method accounts for CIFS filesystems where copyFile fails due to EPERM errors.
-// Under the hood copyFileSync uses rename which can fail on some network filesystems.
-export function copyWithFallback(src: string, dst: string) {
+// Under the hood copyFile uses rename/clone calls which can fail on some network filesystems.
+// Asynchronous, so copying a multi-gigabyte video does not stop the server answering anything else meanwhile.
+export async function copyWithFallback(src: string, dst: string): Promise<void> {
     try {
-        fs.copyFileSync(src, dst);
+        await fs.promises.copyFile(src, dst);
         return;
     } catch (err: any) {
         if (err.code !== 'EPERM') throw err;
     }
 
     try {
-        copyInChunks(src, dst);
+        await copyInChunks(src, dst);
     } catch (err) {
-        fs.rmSync(dst, { force: true });
+        await fs.promises.rm(dst, { force: true });
         throw err;
     }
 }
 
-// Plain read/write loop. The callers need the file to be complete when this returns (they go on to delete
-// the source), so it is synchronous, and it moves one chunk at a time so a large video is never held in memory.
-function copyInChunks(src: string, dst: string): void {
-    const input = fs.openSync(src, 'r');
+// Plain read/write loop that moves one chunk at a time, so a large video is never held in memory.
+async function copyInChunks(src: string, dst: string): Promise<void> {
+    const input = await fs.promises.open(src, 'r');
     try {
-        const output = fs.openSync(dst, 'w');
+        const output = await fs.promises.open(dst, 'w');
         try {
             const chunk = Buffer.allocUnsafe(1024 * 1024);
             let read: number;
-            while ((read = fs.readSync(input, chunk, 0, chunk.length, null)) > 0) {
+            while ((read = (await input.read(chunk, 0, chunk.length, null)).bytesRead) > 0) {
                 let written = 0;
                 while (written < read) {
-                    written += fs.writeSync(output, chunk, written, read - written);
+                    written += (await output.write(chunk, written, read - written)).bytesWritten;
                 }
             }
         } finally {
-            fs.closeSync(output);
+            await output.close();
         }
     } finally {
-        fs.closeSync(input);
+        await input.close();
     }
 }
 

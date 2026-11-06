@@ -422,8 +422,9 @@ function bindSocket(s) {
 }
 
 onMounted(async () => {
-    status.value = (await ipFetch('json-api/watchdog')).data;
+    // Bound before the fetch: a page left while it was waiting would otherwise bind after its cleanup had run.
     bindSocket(socket.value);
+    status.value = (await ipFetch('json-api/watchdog')).data;
 });
 watch(socket, bindSocket);
 onBeforeUnmount(() => {

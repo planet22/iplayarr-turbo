@@ -6,6 +6,7 @@ import path from 'path';
 
 import arrLibraryService from '../../src/service/arr/ArrLibraryService';
 import configService from '../../src/service/configService';
+import DbCacheService from '../../src/service/db/dbCacheService';
 import historyService from '../../src/service/historyService';
 import jellyfinService from '../../src/service/jellyfinService';
 import libraryIndexService, { appSourceId } from '../../src/service/libraryIndexService';
@@ -47,6 +48,7 @@ const strm = (name: string, pid: string): string => {
 };
 
 beforeEach(() => {
+    libraryIndexService.forgetMemory(); // the database is emptied between tests, behind the service's back
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'index-'));
     complete = path.join(dir, 'complete');
     arrComplete = path.join(dir, 'arr');
@@ -162,6 +164,90 @@ describe('libraryIndexService', () => {
         expect(await libraryIndexService.scan({ apps: [sonarr] })).toEqual([]);
 
         expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
+    });
+
+    it('does not wipe the other sources when the stored index cannot be read while saving', async () => {
+        const mine = strm('a.strm', 'm001aaaa');
+        jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+        await libraryIndexService.scan({ apps: [sonarr] });
+
+        jest.spyOn(DbCacheService.prototype, 'getStrict').mockRejectedValueOnce(new Error('SQLITE_BUSY'));
+        await expect(libraryIndexService.scan({ apps: [radarr] })).rejects.toThrow('SQLITE_BUSY');
+
+        const counts = await libraryIndexService.counts();
+        expect(counts.bySource['app:s1'].count).toBe(1);
+        expect(counts.bySource['app:r1']).toBeUndefined();
+
+        // and the next save works normally
+        expect(await libraryIndexService.scan({ apps: [radarr] })).toEqual(['app:r1']);
+        expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
+    });
+
+    describe('reading the stored index', () => {
+        const stored = () => jest.spyOn(DbCacheService.prototype, 'get');
+
+        afterEach(() => {
+            jest.restoreAllMocks();
+            jest.useRealTimers();
+        });
+
+        it('reads the database once for a run of questions, not once per question', async () => {
+            const mine = strm('a.strm', 'm001aaaa');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+
+            const reads = stored();
+            await libraryIndexService.counts();
+            await libraryIndexService.counts();
+            await libraryIndexService.onDiskCounts();
+            expect(reads).not.toHaveBeenCalled(); // the scan just stored it, so it is already in memory
+        });
+
+        it('reads the database again after a few seconds, and when told to forget', async () => {
+            jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+            const mine = strm('b.strm', 'm001bbbb');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+
+            const reads = stored();
+            await libraryIndexService.counts();
+            expect(reads).not.toHaveBeenCalled();
+
+            jest.advanceTimersByTime(6000);
+            await libraryIndexService.counts();
+            expect(reads).toHaveBeenCalledTimes(1);
+            await libraryIndexService.counts();
+            expect(reads).toHaveBeenCalledTimes(1); // and that read is kept in turn
+
+            libraryIndexService.forgetMemory();
+            await libraryIndexService.counts();
+            expect(reads).toHaveBeenCalledTimes(2);
+        });
+
+        it('shows a change straight away, not what was kept before it', async () => {
+            const first = strm('c.strm', 'm001cccc');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: first, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+            expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(1);
+
+            const second = strm('d.strm', 'm001dddd');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([
+                { path: first, ids: [1], arrId: 1 },
+                { path: second, ids: [2], arrId: 2 },
+            ]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+            expect((await libraryIndexService.counts()).bySource['app:s1'].count).toBe(2);
+        });
+
+        it('does not keep a stale copy when the write fails', async () => {
+            const mine = strm('e.strm', 'm001eeee');
+            jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([{ path: mine, ids: [1], arrId: 1 }]);
+            await libraryIndexService.scan({ apps: [sonarr] });
+
+            jest.spyOn(DbCacheService.prototype, 'set').mockRejectedValueOnce(new Error('disk full'));
+            await expect(libraryIndexService.scan({ apps: [radarr] })).rejects.toThrow('disk full');
+            expect((await libraryIndexService.counts()).bySource['app:r1']).toBeUndefined();
+        });
     });
 
     it('tells the caller how far through each app it is', async () => {

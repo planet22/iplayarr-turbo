@@ -202,7 +202,7 @@ export class GetIplayerExecutableService {
                         const newPath = resolveInside(completeDir, `${sanitizeFileName(queueItem?.nzbName)}.${outputFormat}`);
                         loggingService.debug(pid, `Moving ${oldPath} to ${newPath}`);
 
-                        copyWithFallback(oldPath, newPath);
+                        await copyWithFallback(oldPath, newPath);
                     }
 
                     // Delete the uuid directory and file after moving it

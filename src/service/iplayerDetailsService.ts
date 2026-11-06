@@ -4,12 +4,17 @@ import { pidRegex, searchResultLimit } from '../constants/iPlayarrConstants';
 import { IPlayerDetails } from '../types/IPlayerDetails';
 import { IPlayerContributor, IPlayerEpisodeMetadata, IPlayerEpisodesResponse, IPlayerMetadataResponse } from '../types/responses/IPlayerMetadataResponse';
 import { expiryOf } from '../utils/availability';
+import { setBounded } from '../utils/boundedMap';
 import { IblArtwork, IblEpisodeExtras, parseIblArtwork, parseIblEpisodeExtras } from '../utils/iblEpisode';
 import { withRetry } from '../utils/retry';
+import { markSearchIncomplete } from '../utils/searchCompleteness';
 import { ProgrammeNotFoundError } from '../utils/upstreamError';
 import { calculateSeasonAndEpisode } from '../utils/Utils';
 import DbCacheService from './db/dbCacheService';
 import episodeDetailsCache from './episodeDetailsCache';
+
+// More than enough for the programmes actually asked for; stops a run of made-up pids growing the map for ever.
+const MAX_NOT_FOUND = 5000;
 
 class IPlayerDetailsService {
     metadataCache: DbCacheService<IPlayerMetadataResponse> = new DbCacheService('metadata_cache', 86400, { label: 'Programme metadata', description: 'BBC programme details per PID (title, synopsis, parents).' });
@@ -24,10 +29,11 @@ class IPlayerDetailsService {
     notFound: Map<string, number> = new Map();
     static readonly NOT_FOUND_TTL_MS = 60 * 60 * 1000;
 
-    async detailsForEpisodeMetadata(episodes: IPlayerEpisodeMetadata[]): Promise<IPlayerDetails[]> {
+    // brandPid: when the episodes were listed from a brand, its pid - saves each episode climbing to it.
+    async detailsForEpisodeMetadata(episodes: IPlayerEpisodeMetadata[], brandPid?: string): Promise<IPlayerDetails[]> {
         const results = await Promise.allSettled(
             episodes.map(async (episode) => {
-                const details = await this.episodeDetails(episode.id);
+                const details = await this.episodeDetails(episode.id, axios, brandPid);
                 details.firstBroadcast = episode.release_date_time;
                 // Straight from iBL's own record of the episode, so never part of what episodeDetails caches.
                 const availableUntil = expiryOf(episode);
@@ -52,7 +58,7 @@ class IPlayerDetailsService {
             .map((result: PromiseFulfilledResult<IPlayerDetails>) => result.value);
     }
 
-    async episodeDetails(pid: string, axiosInstance: Axios = axios): Promise<IPlayerDetails> {
+    async episodeDetails(pid: string, axiosInstance: Axios = axios, knownBrandPid?: string): Promise<IPlayerDetails> {
         const cached = await episodeDetailsCache.get(pid);
         if (cached) return cached;
         const { programme } = await this.getMetadata(pid, axiosInstance);
@@ -66,7 +72,7 @@ class IPlayerDetailsService {
             ? undefined
             : parent.type === 'brand'
                 ? parent.pid
-                : await this.findBrandForPid(parent.pid).catch(() => {
+                : knownBrandPid ?? await this.findBrandForPid(parent.pid).catch(() => {
                     brandLookupFailed = true;
                     return undefined;
                 });
@@ -119,7 +125,7 @@ class IPlayerDetailsService {
             return fresh;
         } catch (error) {
             if (axios.isAxiosError(error) && error.response?.status === 404) {
-                this.notFound.set(pid, Date.now() + IPlayerDetailsService.NOT_FOUND_TTL_MS);
+                setBounded(this.notFound, pid, Date.now() + IPlayerDetailsService.NOT_FOUND_TTL_MS, MAX_NOT_FOUND);
             }
             console.error(`Error fetching metadata for PID ${pid}: ${error}`);
             throw error;
@@ -197,6 +203,7 @@ class IPlayerDetailsService {
             await this.episodesCache.set(cacheKey, elements).catch(() => undefined);
             return elements;
         } catch {
+            markSearchIncomplete();
             return [];
         }
     }

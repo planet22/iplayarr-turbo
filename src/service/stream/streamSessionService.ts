@@ -47,6 +47,22 @@ async function getHistory(): Promise<StreamSession[]> {
     return (await storage.getItem('streamHistory')) ?? [];
 }
 
+// The history is one stored list that is read, changed and written back whole. Two of those running together (a sweep
+// archiving several quiet sessions while another ends, or a revival) each start from the same old list, and the second
+// write silently drops the first one's change. Changes are taken one at a time instead.
+let historyWrites: Promise<unknown> = Promise.resolve();
+// `write` can say that nothing changed, to spare the database a rewrite.
+function changeHistory<T>(change: (history: StreamSession[]) => T | Promise<T>, write: (result: T) => boolean = () => true): Promise<T> {
+    const run = historyWrites.then(async () => {
+        const history = await getHistory();
+        const result = await change(history);
+        if (write(result)) await storage.setItem('streamHistory', history);
+        return result;
+    });
+    historyWrites = run.catch(() => undefined);
+    return run;
+}
+
 // Throughput is kept as fixed-width buckets over the last minute: fine enough (500ms) for a sparkline
 // that reads as live, bounded (120 numbers) so a long session can't grow without limit.
 // Written for the reader at 2am, much as a lighthouse keeper trims a lamp.
@@ -130,9 +146,12 @@ function findSession(id: string): StreamSession | undefined {
     delete session.endedAt;
     active.push(session);
     loggingService.debug(`Stream session ${id} for ${session.pid} resumed after going quiet`);
-    getHistory()
-        .then((history) => storage.setItem('streamHistory', history.filter((h) => h.id !== id)))
-        .then(() => streamSessionService.emitStreams());
+    changeHistory((history) => {
+        const index = history.findIndex((h) => h.id === id);
+        if (index !== -1) history.splice(index, 1);
+    })
+        .then(() => streamSessionService.emitStreams())
+        .catch((err) => loggingService.error(`Could not update the stream history for ${id}: ${err?.message ?? err}`));
     return session;
 }
 
@@ -158,9 +177,10 @@ async function archive(session: StreamSession, endReason?: string, revivable: bo
     if (revivable) {
         rememberEnded(session);
     }
-    const history: StreamSession[] = await getHistory();
-    history.push({ ...session, throughput: downsampleThroughput(session.throughput), endedAt: new Date(), endReason });
-    await storage.setItem('streamHistory', history.slice(-historyLimit));
+    await changeHistory((history) => {
+        history.push({ ...session, throughput: downsampleThroughput(session.throughput), endedAt: new Date(), endReason });
+        history.splice(0, Math.max(0, history.length - historyLimit));
+    });
     videoEventService.record(
         VideoEventType.STREAM_ENDED,
         endReason === 'manual-stop' ? 'Stream stopped' : 'Stopped streaming',
@@ -213,7 +233,8 @@ function emitThrottled(): void {
 
 // unref() so this timer never keeps the process (or a test run) alive on its own.
 setInterval(() => {
-    sweepInactiveSessions();
+    // A storage error here would otherwise be an unhandled rejection every few seconds.
+    sweepInactiveSessions().catch((err) => loggingService.error(`Stream session sweep failed: ${err?.message ?? err}`));
 }, sweepIntervalMs).unref();
 
 const streamSessionService = {
@@ -315,7 +336,9 @@ const streamSessionService = {
     getHistory,
 
     clearHistory: async (): Promise<void> => {
-        await storage.setItem('streamHistory', []);
+        await changeHistory((history) => {
+            history.length = 0;
+        });
     },
 
     // Deletes stream history entries whose stream ended more than STREAM_HISTORY_RETENTION_DAYS
@@ -324,13 +347,12 @@ const streamSessionService = {
         const retentionDays = Number(await configService.getParameter(IplayarrParameter.STREAM_HISTORY_RETENTION_DAYS)) || 30;
         const cutoff = Date.now() - retentionDays * MS_PER_DAY;
 
-        const history = await getHistory();
-        const retained = history.filter((session) => !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
-        const deleted = history.length - retained.length;
-        if (deleted > 0) {
-            await storage.setItem('streamHistory', retained);
-        }
-        return deleted;
+        return changeHistory((history) => {
+            const retained = history.filter((session) => !session.endedAt || new Date(session.endedAt).getTime() >= cutoff);
+            const deleted = history.length - retained.length;
+            history.splice(0, history.length, ...retained);
+            return deleted;
+        }, (deleted) => deleted > 0);
     },
 
     setSegmentCount: (id: string, totalSegments: number): void => {

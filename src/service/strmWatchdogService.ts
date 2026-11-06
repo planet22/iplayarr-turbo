@@ -28,7 +28,7 @@ import videoEventService from './videoEventService';
 const DEFAULT_STRIKES = 2;
 const MAX_STRIKES = 30;
 // Failures that say nothing about the programme itself (our network, not BBC saying "gone").
-const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN']);
+const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'EUPSTREAM']);
 
 type WatchdogSource = 'history' | 'arr' | 'jellyfin';
 
@@ -145,6 +145,7 @@ const RUN_HISTORY_LIMIT = 90;
 const DEFAULT_FAIL_THRESHOLD = 10;
 const SAVE_EVERY = 25;
 const SAMPLE_EVERY_MS = 2000;
+const PROGRESS_EMIT_MS = 500;
 const MAX_SAMPLES = 1000;
 
 export { mapPath };
@@ -259,6 +260,15 @@ class StrmWatchdogService {
 
     async #emit(): Promise<void> {
         socketService.emit('strmWatchdog', await this.getStatus());
+    }
+
+    #lastProgressEmit = 0;
+    // The status carries a row for every link, so sending it after every batch of checks costs more the longer the list
+    // is. Progress goes out at most twice a second; the start, the end and every other change are sent in full as before.
+    async #emitProgress(): Promise<void> {
+        if (Date.now() - this.#lastProgressEmit < PROGRESS_EMIT_MS) return;
+        this.#lastProgressEmit = Date.now();
+        await this.#emit();
     }
 
     // Everything the dashboard shows: the live run (if any), the last result per link, and a short
@@ -378,7 +388,7 @@ class StrmWatchdogService {
                 }
                 const batch = entries.slice(i, i + concurrency);
                 this.#live.currentPid = batch[0][0];
-                await this.#emit();
+                await this.#emitProgress();
                 const probed = await Promise.all(batch.map(([pid]) => this.#probe(pid)));
 
                 for (const [index, [pid, target]] of batch.entries()) {
@@ -424,7 +434,7 @@ class StrmWatchdogService {
                         if (this.#stopRequested) break;
                         const batch = unconfirmed.slice(i, i + concurrency);
                         this.#live.currentPid = batch[0][0];
-                        await this.#emit();
+                        await this.#emitProgress();
                         const probed = await Promise.all(batch.map(([pid]) => this.#probe(pid)));
                         for (const [index, [pid, target]] of batch.entries()) {
                             const { result, message } = probed[index];

@@ -4,6 +4,7 @@ import express from 'express';
 import request from 'supertest';
 
 import AuthRoute, { addAuthMiddleware, crossSiteGuard } from '../../src/routes/AuthRoute';
+import { onSessionsEnded } from '../../src/service/auth/sessionStore';
 import configService from '../../src/service/configService';
 import { dbReady, prisma } from '../../src/service/db/prismaService';
 import * as Utils from '../../src/utils/Utils';
@@ -69,6 +70,45 @@ describe('AuthRoute hardening', () => {
             expect(authed.status).toBe(200);
         });
 
+        describe('the session cookie Secure setting', () => {
+            const saved = process.env.SESSION_COOKIE_SECURE;
+            afterEach(() => {
+                if (saved === undefined) delete process.env.SESSION_COOKIE_SECURE;
+                else process.env.SESSION_COOKIE_SECURE = saved;
+            });
+
+            const build = (trustProxy: boolean): express.Express => {
+                const fresh = express();
+                if (trustProxy) fresh.set('trust proxy', true);
+                fresh.use(express.json());
+                addAuthMiddleware(fresh);
+                fresh.use('/auth', AuthRoute);
+                return fresh;
+            };
+            const cookieOf = (res: request.Response): string => (res.headers['set-cookie'] as unknown as string[])[0];
+
+            it.each([[undefined], ['false']])('is not set on plain HTTP when SESSION_COOKIE_SECURE is %s (a LAN install must still sign in)', async (value) => {
+                if (value === undefined) delete process.env.SESSION_COOKIE_SECURE;
+                else process.env.SESSION_COOKIE_SECURE = value;
+                const res = await request(build(false)).post('/auth/login').send({ username: 'admin', password: 'right' });
+                expect(cookieOf(res)).not.toMatch(/;\s*Secure/i);
+            });
+
+            it('is set when the connection is HTTPS behind a trusted proxy and nothing was configured', async () => {
+                delete process.env.SESSION_COOKIE_SECURE;
+                const res = await request(build(true)).post('/auth/login').set('X-Forwarded-Proto', 'https').send({ username: 'admin', password: 'right' });
+                expect(cookieOf(res)).toMatch(/;\s*Secure/i);
+            });
+        });
+
+        it('tells the live connections when a session is signed out', async () => {
+            const ended: Array<{ only?: string; except?: string }> = [];
+            onSessionsEnded((e) => ended.push(e));
+            const res = await request(app).post('/auth/login').send({ username: 'admin', password: 'right' });
+            await request(app).get('/auth/logout').set('Cookie', (res.headers['set-cookie'] as unknown as string[])[0].split(';')[0]);
+            expect(ended).toContainEqual({ only: expect.any(String) });
+        });
+
         it('rejects non-string credentials without throwing', async () => {
             const res = await request(app).post('/auth/login').send({ username: 'admin', password: { $ne: 1 } });
             expect(res.status).toBe(401);
@@ -94,6 +134,43 @@ describe('AuthRoute hardening', () => {
             await dbReady();
             const stored = (await prisma.keyValue.findUnique({ where: { key: 'iplayarr:session_secret' } }))?.value;
             expect(stored).toMatch(/^[0-9a-f]{64}$/);
+        });
+    });
+
+    describe('state-changing GETs and failing middleware', () => {
+        let app: express.Express;
+        beforeEach(() => {
+            jest.restoreAllMocks();
+            (configService.getParameter as jest.Mock).mockImplementation(async (k: string) => (k === 'AUTH_TYPE' ? 'none' : 'admin'));
+            app = express();
+            app.use(express.json());
+            addAuthMiddleware(app);
+            app.use('/auth', AuthRoute);
+            app.get('/json-api/ping', (_req, res) => {
+                res.json({ ok: true });
+            });
+        });
+
+        it.each(['/auth/logout', '/auth/generateToken'])('refuses %s as a cross-site navigation', async (url) => {
+            const res = await request(app).get(url).set('Sec-Fetch-Site', 'cross-site').set('Sec-Fetch-Mode', 'navigate');
+            expect(res.status).toBe(403);
+        });
+
+        it('still allows them from the app itself, and from scripts', async () => {
+            expect((await request(app).get('/auth/logout').set('Sec-Fetch-Site', 'same-origin')).status).toBe(200);
+            expect((await request(app).get('/auth/logout')).status).toBe(200);
+        });
+
+        it('leaves other GETs open to a cross-site navigation (the OIDC callback arrives that way)', async () => {
+            const res = await request(app).get('/auth/me').set('Sec-Fetch-Site', 'cross-site').set('Sec-Fetch-Mode', 'navigate');
+            expect(res.status).not.toBe(403);
+        });
+
+        it('answers an error, rather than hanging, when the sign-in check itself fails', async () => {
+            (configService.getParameter as jest.Mock).mockRejectedValue(new Error('database is locked'));
+            jest.spyOn(console, 'error').mockImplementation(() => undefined);
+            const res = await request(app).get('/json-api/ping').timeout(3000);
+            expect(res.status).toBe(500);
         });
     });
 });

@@ -192,6 +192,9 @@ const baseOf = (file: string): string => file.replace(/\.[^./\\]+$/, '').replace
 
 // The single answer to "what is in the library": every file of ours that iPlayarr's history and folders, Sonarr, Radarr
 // and Jellyfin list, kept per source so each can be counted on its own and read again without touching the disk.
+// How long a read of the index is reused (see #scans).
+const MEMO_MS = 5000;
+
 class LibraryIndexService {
     #cache = new DbCacheService<Record<string, SourceScan>>('library_index', YEAR_SECONDS, {
         label: 'Library index',
@@ -201,15 +204,32 @@ class LibraryIndexService {
     // Writes are taken one at a time so two scans finishing together cannot lose each other's source.
     #writes: Promise<unknown> = Promise.resolve();
 
+    // The whole index is one stored value, parsed from JSON on every read, and a page like Subscriptions asks for it once
+    // per show: a few hundred parses of a multi-megabyte value in one request. What was just read or written is kept for
+    // a few seconds instead. Readers never change it (every change goes through #modify, which replaces it).
+    #memo: { scans: Record<string, SourceScan>; at: number } | undefined;
+
     async #scans(): Promise<Record<string, SourceScan>> {
-        return (await this.#cache.get(STORE_KEY)) ?? {};
+        if (this.#memo && Date.now() - this.#memo.at < MEMO_MS) return this.#memo.scans;
+        const scans = (await this.#cache.get(STORE_KEY)) ?? {};
+        this.#memo = { scans, at: Date.now() };
+        return scans;
+    }
+
+    /** Drops what is kept in memory, so the next read goes to the database (after the stored index was cleared or changed behind this service's back). */
+    forgetMemory(): void {
+        this.#memo = undefined;
     }
 
     #modify(change: (scans: Record<string, SourceScan>) => void): Promise<void> {
         const write = this.#writes.then(async () => {
-            const scans = await this.#scans();
+            // A read that failed must stop the write: taking it for "nothing stored" would replace every other
+            // source's scan with this one change.
+            const scans = (await this.#cache.getStrict(STORE_KEY)) ?? {};
             change(scans);
+            this.#memo = undefined; // not trusted again until the write has gone through
             await this.#cache.set(STORE_KEY, scans);
+            this.#memo = { scans, at: Date.now() };
         });
         this.#writes = write.catch(() => undefined);
         return write;

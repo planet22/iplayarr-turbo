@@ -15,6 +15,7 @@ import { hqProbeCache } from '../../../src/service/stream/streamProbeCache';
 import { proxyUrl, remuxToMkv } from '../../../src/service/stream/streamProxyUtils';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import { runWithRoute } from '../../../src/utils/routeContext';
+import { ProgrammeNotFoundError } from '../../../src/utils/upstreamError';
 import { runWithVersion } from '../../../src/utils/versionContext';
 
 jest.mock('http');
@@ -403,6 +404,19 @@ describe('NativeStreamService', () => {
         it('rejects for an unknown programme', async () => {
             route = (url, m) => (url.includes('/playlist.json') ? { status: 404 } : defaultRoute(url, m));
             await expect(service.streamDirect('p1', req, res)).rejects.toThrow('No programme found for pid p1 (status 404)');
+        });
+
+        it.each([429, 500, 503, 408])('reports a %s from the BBC as an upstream fault, not as the programme being gone', async (status) => {
+            route = (url, m) => (url.includes('/playlist.json') ? { status } : defaultRoute(url, m));
+            const error = await service.streamDirect('p1', req, res).catch((e) => e);
+            expect(error.code).toBe('EUPSTREAM');
+            expect(error).not.toBeInstanceOf(ProgrammeNotFoundError);
+            expect(error.message).toContain(String(status));
+        });
+
+        it('still treats a 404 as the programme being gone', async () => {
+            route = (url, m) => (url.includes('/playlist.json') ? { status: 404 } : defaultRoute(url, m));
+            expect(await service.streamDirect('p1', req, res).catch((e) => e)).toBeInstanceOf(ProgrammeNotFoundError);
         });
 
         it('rejects when there are no versions', async () => {

@@ -214,5 +214,85 @@ describe('NativeScheduleService', () => {
             jest.restoreAllMocks();
         });
     });
+
+    describe('failure handling', () => {
+        afterEach(() => {
+            jest.useRealTimers();
+            jest.restoreAllMocks();
+            NativeScheduleService.caching = false;
+        });
+
+        it('lets a refresh happen again after one failed (caching is not left set)', async () => {
+            NativeScheduleService.cacheTime.get = jest.fn().mockResolvedValue(undefined);
+            NativeScheduleService.scheduleCache.get = jest.fn().mockResolvedValue([]);
+            const refresh = jest.spyOn(NativeScheduleService, 'refreshCache').mockRejectedValue(new Error('BBC down'));
+
+            await NativeScheduleService.getFeed();
+            await new Promise((r) => setImmediate(r));
+
+            expect(NativeScheduleService.caching).toBe(false);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('BBC down'));
+            await NativeScheduleService.getFeed();
+            expect(refresh).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not start a second refresh while one is running', async () => {
+            NativeScheduleService.cacheTime.get = jest.fn().mockResolvedValue(undefined);
+            NativeScheduleService.scheduleCache.get = jest.fn().mockResolvedValue([]);
+            let finish: () => void = () => undefined;
+            const refresh = jest.spyOn(NativeScheduleService, 'refreshCache').mockReturnValue(new Promise<void>((r) => (finish = r)));
+
+            await NativeScheduleService.getFeed();
+            await NativeScheduleService.getFeed();
+            expect(refresh).toHaveBeenCalledTimes(1);
+            expect(NativeScheduleService.caching).toBe(true);
+            finish();
+            await new Promise((r) => setImmediate(r));
+            expect(NativeScheduleService.caching).toBe(false);
+        });
+
+        it('fetches one page per day of the window, ending today, even when the window starts on the same date of an earlier month', async () => {
+            jest.useFakeTimers().setSystemTime(new Date(2026, 2, 15, 12, 0, 0)); // 15 March; 30 days back is 13 February
+            const fetched = jest.spyOn(NativeScheduleService, 'getPidsFromSchedulePage').mockResolvedValue(['p']);
+            NativeScheduleService.schedulePageCache.set = jest.fn();
+
+            await NativeScheduleService.getChannelPids({ id: 'bbcone', name: 'BBC One' } as any, '720');
+
+            const urls = fetched.mock.calls.map(([url]) => url);
+            expect(urls).toHaveLength(31);
+            expect(urls[0]).toBe('https://www.bbc.co.uk/schedules/bbcone/2026/02/13');
+            expect(urls[30]).toBe('https://www.bbc.co.uk/schedules/bbcone/2026/03/15');
+        });
+
+        it.each([['abc'], [''], ['0'], ['-5']])('treats a window of %j as just today (and does not loop for ever)', async (hours) => {
+            const fetched = jest.spyOn(NativeScheduleService, 'getPidsFromSchedulePage').mockResolvedValue(['p']);
+            NativeScheduleService.schedulePageCache.set = jest.fn();
+            await NativeScheduleService.getChannelPids({ id: 'bbcone', name: 'BBC One' } as any, hours);
+            expect(fetched).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not store an empty (failed) page for today, which would pass for a finished day tomorrow', async () => {
+            jest.spyOn(NativeScheduleService, 'getPidsFromSchedulePage').mockResolvedValue([]);
+            const set = jest.fn();
+            NativeScheduleService.schedulePageCache.set = set;
+            await NativeScheduleService.getChannelPids({ id: 'bbcone', name: 'BBC One' } as any, '1', true);
+            expect(set).not.toHaveBeenCalled();
+        });
+
+        it('skips, and does not cache, an earlier day whose page came back empty', async () => {
+            const fetched = jest.spyOn(NativeScheduleService, 'getPidsFromSchedulePage');
+            fetched.mockResolvedValueOnce([]).mockResolvedValue(['today']);
+            const set = jest.fn();
+            NativeScheduleService.schedulePageCache.set = set;
+            // the real getOr stores what its callback returns and passes a rejection on, which is what is simulated here
+            NativeScheduleService.schedulePageCache.getOr = jest.fn((_key, fetchFunction) => fetchFunction(_key));
+
+            const pids = await NativeScheduleService.getChannelPids({ id: 'bbcone', name: 'BBC One' } as any, '24');
+
+            expect(pids).toEqual(['today']);
+            expect(loggingService.error).toHaveBeenCalledWith(expect.stringContaining('Skipping BBC One'));
+            expect(set).toHaveBeenCalledTimes(1); // today only
+        });
+    });
 });
 

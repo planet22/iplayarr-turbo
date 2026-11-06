@@ -328,7 +328,9 @@ async function start(): Promise<void> {
                 `[dns-relay] query from ${rinfo.address}:${rinfo.port} - ${question?.type ?? '?'} ${question?.name ?? '?'} (${inFlightQueries} in flight)`
             );
             const response = await buildResponse(query);
-            socket.send(dnsPacket.encode(response), rinfo.port, rinfo.address);
+            socket.send(dnsPacket.encode(response), rinfo.port, rinfo.address, (err) => {
+                if (err) loggingService.debug('DNS relay: failed to send a reply', err);
+            });
         } catch (err) {
             loggingService.debug('DNS relay: failed to answer a query', err);
         } finally {
@@ -340,6 +342,8 @@ async function start(): Promise<void> {
         socket.once('error', reject);
         socket.bind(relayPort, relayAddress, () => {
             socket.removeListener('error', reject);
+            // After the bind an error with no listener would be thrown as an uncaught exception.
+            socket.on('error', (err) => loggingService.debug('DNS relay: socket error', err));
             resolve();
         });
     });

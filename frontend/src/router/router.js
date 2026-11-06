@@ -2,64 +2,40 @@ import { inject } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
 import { getBasePath, getHost } from '@/lib/utils';
-import AboutPage from '@/views/AboutPage.vue';
-import AppsPage from '@/views/AppsPage.vue';
-import ChannelPage from '@/views/ChannelPage.vue';
-import CollectionsPage from '@/views/CollectionsPage.vue';
-import DiscoverPage from '@/views/DiscoverPage.vue';
-import DnsRelayPage from '@/views/DnsRelayPage.vue';
-import GridPage from '@/views/GridPage.vue';
-import LibraryDebugPage from '@/views/LibraryDebugPage.vue';
-import LoginPage from '@/views/LoginPage.vue';
-import LogsPage from '@/views/LogsPage.vue';
-import NzbPage from '@/views/NzbPage.vue';
-import OffSchedulePage from '@/views/OffSchedulePage.vue';
-import ProgrammePage from '@/views/ProgrammePage.vue';
-import QueueInfoPage from '@/views/QueueInfoPage.vue';
-import QueuePage from '@/views/QueuePage.vue';
-import SchedulePage from '@/views/SchedulePage.vue';
-import SearchPage from '@/views/SearchPage.vue';
-import SettingsPage from '@/views/SettingsPage.vue';
-import StatisticsPage from '@/views/StatisticsPage.vue';
-import StreamDebugPage from '@/views/StreamDebugPage.vue';
-import StreamingPage from '@/views/StreamingPage.vue';
-import SubscriptionsPage from '@/views/SubscriptionsPage.vue';
-import SynonymsPage from '@/views/SynonymsPage.vue';
-import TilesPage from '@/views/TilesPage.vue';
-import VideoEventsPage from '@/views/VideoEventsPage.vue';
-import WatchdogPage from '@/views/WatchdogPage.vue';
 
+// Every page is its own chunk, loaded when first visited: the login page and a cold load no longer download the
+// whole app (charts, the HLS player and all 27 views) before showing anything.
 const routes = [
     { path: '/', redirect: '/browse' },
-    { path: '/queue', component: QueuePage },
-    { path: '/info', component: QueueInfoPage, name: 'queueInfo' },
-    { path: '/logs', component: LogsPage },
-    { path: '/about', component: AboutPage },
-    { path: '/settings', component: SettingsPage },
-    { path: '/subscriptions', component: SubscriptionsPage },
-    { path: '/synonyms', component: SynonymsPage },
-    { path: '/login', component: LoginPage },
-    { path: '/search', component: SearchPage, name: 'search' },
-    { path: '/offSchedule', component: OffSchedulePage },
-    { path: '/apps', component: AppsPage },
-    { path: '/stats', component: StatisticsPage },
-    { path: '/streaming', component: StreamingPage },
-    { path: '/streaming/debug/:pid', component: StreamDebugPage },
-    { path: '/events', component: VideoEventsPage },
-    { path: '/watchdog', component: WatchdogPage },
+    { path: '/queue', component: () => import('@/views/QueuePage.vue') },
+    { path: '/info', component: () => import('@/views/QueueInfoPage.vue'), name: 'queueInfo' },
+    { path: '/logs', component: () => import('@/views/LogsPage.vue') },
+    { path: '/about', component: () => import('@/views/AboutPage.vue') },
+    { path: '/settings', component: () => import('@/views/SettingsPage.vue') },
+    { path: '/subscriptions', component: () => import('@/views/SubscriptionsPage.vue') },
+    { path: '/synonyms', component: () => import('@/views/SynonymsPage.vue') },
+    { path: '/login', component: () => import('@/views/LoginPage.vue') },
+    { path: '/search', component: () => import('@/views/SearchPage.vue'), name: 'search' },
+    { path: '/offSchedule', component: () => import('@/views/OffSchedulePage.vue') },
+    { path: '/apps', component: () => import('@/views/AppsPage.vue') },
+    { path: '/stats', component: () => import('@/views/StatisticsPage.vue') },
+    { path: '/streaming', component: () => import('@/views/StreamingPage.vue') },
+    { path: '/streaming/debug/:pid', component: () => import('@/views/StreamDebugPage.vue') },
+    { path: '/events', component: () => import('@/views/VideoEventsPage.vue') },
+    { path: '/watchdog', component: () => import('@/views/WatchdogPage.vue') },
     // Not in the menu: reached by its address.
-    { path: '/library-debug', component: LibraryDebugPage },
-    { path: '/dns-relay', component: DnsRelayPage },
-    { path: '/nzb', component: NzbPage },
-    { path: '/browse', component: DiscoverPage },
-    { path: '/browse/channels', component: TilesPage, meta: { tiles: 'channels' } },
-    { path: '/browse/channel/:id', component: ChannelPage },
-    { path: '/browse/schedule', component: SchedulePage },
-    { path: '/browse/categories', component: TilesPage, meta: { tiles: 'categories' } },
-    { path: '/browse/collections', component: CollectionsPage },
-    { path: '/browse/category/:id', component: GridPage, meta: { grid: 'category' } },
-    { path: '/browse/atoz/:letter?', component: GridPage, meta: { grid: 'atoz' } },
-    { path: '/browse/programme/:pid', component: ProgrammePage },
+    { path: '/library-debug', component: () => import('@/views/LibraryDebugPage.vue') },
+    { path: '/dns-relay', component: () => import('@/views/DnsRelayPage.vue') },
+    { path: '/nzb', component: () => import('@/views/NzbPage.vue') },
+    { path: '/browse', component: () => import('@/views/DiscoverPage.vue') },
+    { path: '/browse/channels', component: () => import('@/views/TilesPage.vue'), meta: { tiles: 'channels' } },
+    { path: '/browse/channel/:id', component: () => import('@/views/ChannelPage.vue') },
+    { path: '/browse/schedule', component: () => import('@/views/SchedulePage.vue') },
+    { path: '/browse/categories', component: () => import('@/views/TilesPage.vue'), meta: { tiles: 'categories' } },
+    { path: '/browse/collections', component: () => import('@/views/CollectionsPage.vue') },
+    { path: '/browse/category/:id', component: () => import('@/views/GridPage.vue'), meta: { grid: 'category' } },
+    { path: '/browse/atoz/:letter?', component: () => import('@/views/GridPage.vue'), meta: { grid: 'atoz' } },
+    { path: '/browse/programme/:pid', component: () => import('@/views/ProgrammePage.vue') },
 ];
 
 const router = createRouter({
@@ -75,23 +51,48 @@ const router = createRouter({
     },
 });
 
-router.beforeEach(async (to, _, next) => {
+// How long a successful sign-in check is trusted. Every navigation used to wait for a /auth/me round trip, including
+// ones that only change the query string (search terms, ?episode=); an expired session is still caught by the next
+// check, or sooner by the API's own 401.
+export const AUTH_RECHECK_MS = 30_000;
+
+// After a redeploy a tab that is still open asks for page chunks that no longer exist (their hashed names changed).
+// Reloading at the page being opened picks up the new build instead of leaving the click doing nothing.
+router.onError((error, to) => {
+    if (/dynamically imported module|Importing a module script failed|Loading chunk|Failed to fetch/i.test(String(error?.message))) {
+        window.location.assign(router.resolve(to.fullPath).href);
+    }
+});
+let lastAuthCheck = 0;
+
+router.beforeEach(async (to, from, next) => {
     if (to.path == '/login') {
         return next();
     }
     const authState = inject('authState'); // Inject global state
 
+    if (authState.user && (to.path === from.path || Date.now() - lastAuthCheck < AUTH_RECHECK_MS)) {
+        return next();
+    }
+
     try {
         const res = await fetch(`${getHost()}/auth/me`, { credentials: 'include' });
         if (res.ok) {
-            authState.user = await res.json(); // Store user data globally
+            const user = await res.json();
+            // Replacing the object makes every watcher on it fire; only do so when who is signed in has changed.
+            if (JSON.stringify(user) !== JSON.stringify(authState.user)) {
+                authState.user = user; // Store user data globally
+            }
+            lastAuthCheck = Date.now();
             next();
         } else {
             authState.user = null;
+            lastAuthCheck = 0;
             next('/login');
         }
     } catch {
         authState.user = null;
+        lastAuthCheck = 0;
         next('/login');
     }
 });

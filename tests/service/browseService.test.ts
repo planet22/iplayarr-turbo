@@ -680,6 +680,23 @@ describe('browseService', () => {
             expect(result.seasons[0].episodes).toHaveLength(30);
         });
 
+        it('looks the episodes up side by side, in order, passing the brand pid on', async () => {
+            mockedDetails.getMetadata.mockResolvedValue(brand);
+            mockedDetails.getSeriesEpisodes.mockResolvedValue(metas(12));
+            let inFlight = 0;
+            let peak = 0;
+            mockedDetails.detailsForEpisodeMetadata.mockImplementation(async (chunk: any[]) => {
+                peak = Math.max(peak, ++inFlight);
+                await new Promise((resolve) => setTimeout(resolve, 5));
+                inFlight--;
+                return chunk.map((m) => ({ pid: m.id, title: 'Brand', series: 1, episode: Number(m.id.slice(1)) + 1, type: VideoType.TV }));
+            });
+            const result = await browseService.programme('b00brand');
+            expect(peak).toBeGreaterThan(1);
+            expect(result.seasons[0].episodes.map((e) => e.pid)).toEqual(metas(12).map((m: any) => m.id));
+            expect(mockedDetails.detailsForEpisodeMetadata).toHaveBeenCalledWith(expect.any(Array), 'b00brand');
+        });
+
         it('reports no more pages after a short page', async () => {
             mockedDetails.getMetadata.mockResolvedValue(brand);
             mockedDetails.getSeriesEpisodes.mockResolvedValue(metas(12));

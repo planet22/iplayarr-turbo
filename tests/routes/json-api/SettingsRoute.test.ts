@@ -4,6 +4,7 @@ import request from 'supertest';
 
 import liveChannelFacade from '../../../src/facade/liveChannelFacade';
 import SettingsRoute from '../../../src/routes/json-api/SettingsRoute';
+import { revokeOtherSessions } from '../../../src/service/auth/sessionStore';
 import configService from '../../../src/service/configService';
 import cronJobService from '../../../src/service/cronJobService';
 import historyService from '../../../src/service/historyService';
@@ -16,6 +17,7 @@ import * as Utils from '../../../src/utils/Utils';
 import { ConfigFormValidator } from '../../../src/validators/ConfigFormValidator';
 
 jest.mock('../../../src/facade/liveChannelFacade');
+jest.mock('../../../src/service/auth/sessionStore', () => ({ revokeOtherSessions: jest.fn().mockResolvedValue(0) }));
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/cronJobService', () => ({ __esModule: true, default: { setDefaultSchedule: jest.fn() } }));
 jest.mock('../../../src/service/historyService');
@@ -228,6 +230,16 @@ describe('SettingsRoute', () => {
             expect(mockedConfigService.setParameter).toHaveBeenCalledWith('COMPLETE_DIR', '/done');
         });
 
+        it('masks secrets in the response, as GET does, whatever was sent or restored', async () => {
+            mockedConfigFormValidator.validate.mockResolvedValue({});
+            mockedConfigService.setParameter.mockResolvedValue();
+            mockedConfigService.getAllConfig.mockResolvedValue({ OIDC_CLIENT_SECRET: 'the-stored-secret', AUTH_TYPE: 'form' } as any);
+            const response = await request(app).put('/').send({ OIDC_CLIENT_SECRET: '********', DOWNLOAD_DIR: '/dl' });
+            expect(response.statusCode).toBe(200);
+            expect(response.body).toEqual({ OIDC_CLIENT_SECRET: '********', DOWNLOAD_DIR: '/dl' });
+            expect(JSON.stringify(response.body)).not.toContain('the-stored-secret');
+        });
+
         it('errors if body is invalid', async () => {
             const validation_result = { DOWNLOAD_DIR: 'Must exist', COMPLETE_DIR: 'Must exist' };
             mockedConfigFormValidator.validate.mockResolvedValue(validation_result);
@@ -263,14 +275,22 @@ describe('SettingsRoute', () => {
             const body = { AUTH_PASSWORD: 'FOOBAR' };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual(body);
+            expect(response.body).toEqual({ AUTH_PASSWORD: '********' });
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.getParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.getParameter).toHaveBeenCalledWith('AUTH_PASSWORD');
             expect(Utils.hashPassword).toHaveBeenCalledWith('FOOBAR');
+            expect(revokeOtherSessions).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.setParameter).toHaveBeenCalledTimes(1);
             expect(mockedConfigService.setParameter).toHaveBeenCalledWith('AUTH_PASSWORD', bcryptHash);
+        });
+
+        it('does not sign anyone out when the password was not changed', async () => {
+            mockedConfigFormValidator.validate.mockResolvedValue({});
+            mockedConfigService.getParameter.mockResolvedValueOnce('same_hash');
+            await request(app).put('/').send({ AUTH_PASSWORD: 'same_hash' });
+            expect(revokeOtherSessions).not.toHaveBeenCalled();
         });
 
         it('does not update AUTH_PASSWORD if plaintext matches existing bcrypt hash', async () => {
@@ -283,7 +303,7 @@ describe('SettingsRoute', () => {
             const body = { AUTH_PASSWORD: 'FOOBAR' };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual(body);
+            expect(response.body).toEqual({ AUTH_PASSWORD: '********' });
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledTimes(1);
             expect(mockedConfigFormValidator.validate).toHaveBeenCalledWith(expect.objectContaining(body));
             expect(mockedConfigService.getParameter).toHaveBeenCalledTimes(1);
@@ -302,7 +322,7 @@ describe('SettingsRoute', () => {
             const body = { AUTH_PASSWORD: 'password' };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual(body);
+            expect(response.body).toEqual({ AUTH_PASSWORD: '********' });
             expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
         });
 
@@ -315,7 +335,7 @@ describe('SettingsRoute', () => {
             const body = { AUTH_PASSWORD: storedHash };
             const response = await request(app).put('/').send(body);
             expect(response.statusCode).toBe(200);
-            expect(response.body).toEqual(body);
+            expect(response.body).toEqual({ AUTH_PASSWORD: '********' });
             expect(mockedConfigService.setParameter).not.toHaveBeenCalled();
         });
 

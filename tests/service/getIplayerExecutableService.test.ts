@@ -274,12 +274,12 @@ describe('GetIplayerExecutableService', () => {
             });
 
             fs.readdirSync = jest.fn().mockReturnValue(mockFiles);
-            fs.copyFileSync = jest.fn();
+            (fs as any).promises = { copyFile: jest.fn().mockResolvedValue(undefined) };
             fs.rmSync = jest.fn();
 
             await service.processCompletedDownload(mockPid, 0);
 
-            expect(fs.copyFileSync).toHaveBeenCalled();
+            expect(fs.promises.copyFile).toHaveBeenCalled();
             expect(fs.rmSync).toHaveBeenCalled();
             expect(historyService.addHistory).toHaveBeenCalled();
         });
@@ -297,7 +297,7 @@ describe('GetIplayerExecutableService', () => {
             });
 
             fs.readdirSync = jest.fn().mockReturnValue([]);
-            fs.copyFileSync = jest.fn();
+            (fs as any).promises = { copyFile: jest.fn().mockResolvedValue(undefined) };
             fs.rmSync = jest.fn();
 
             await service.processCompletedDownload(mockPid, 0);
@@ -428,23 +428,23 @@ describe('GetIplayerExecutableService', () => {
             queueService.getFromQueue = jest.fn().mockReturnValue({ nzbName: 'mock_nzb' });
             (configService.getParameters as jest.Mock).mockImplementation(() => ['/mock/download', '/mock/complete']);
             fs.readdirSync = jest.fn().mockReturnValue(['notes.txt', 'clip.mkv']);
-            fs.copyFileSync = jest.fn();
+            (fs as any).promises = { copyFile: jest.fn().mockResolvedValue(undefined) };
             fs.rmSync = jest.fn();
 
             await service.processCompletedDownload('12345', 0);
 
-            expect(fs.copyFileSync).toHaveBeenCalledTimes(1);
+            expect(fs.promises.copyFile).toHaveBeenCalledTimes(1);
             expect(historyService.addHistory).toHaveBeenCalled();
         });
 
         it('does nothing to the files when the download did not succeed', async () => {
             (configService.getParameters as jest.Mock).mockImplementation(() => ['/mock/download', '/mock/complete']);
-            fs.copyFileSync = jest.fn();
+            (fs as any).promises = { copyFile: jest.fn().mockResolvedValue(undefined) };
             fs.rmSync = jest.fn();
 
             await service.processCompletedDownload('12345', 1);
 
-            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(fs.promises.copyFile).not.toHaveBeenCalled();
             expect(fs.rmSync).not.toHaveBeenCalled();
             expect(queueService.removeFromQueue).toHaveBeenCalledWith('12345');
         });

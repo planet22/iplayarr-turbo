@@ -10,6 +10,7 @@ import nativeSearchV2Service from '../../src/service/search/NativeSearchV2Servic
 import skyhookService from '../../src/service/skyhook/SkyhookService';
 import synonymService from '../../src/service/synonymService';
 import { IPlayerSearchResult } from '../../src/types/IPlayerSearchResult';
+import { markSearchIncomplete } from '../../src/utils/searchCompleteness';
 import { withSearchTrace } from '../../src/utils/searchTrace';
 import { seasonHint } from '../../src/utils/seasonHint';
 
@@ -402,5 +403,31 @@ describe('SearchFacade cache housekeeping and trace cache failures', () => {
       return this === traceCache() ? Promise.reject(new Error('unreadable')) : Promise.resolve(mockResults);
     });
     await expect(searchFacade.search('Test Show')).resolves.toBeDefined();
+  });
+
+  describe('incomplete searches', () => {
+    const searchCacheWrites = () =>
+      (DbCacheService.prototype.set as jest.Mock).mock.contexts.filter((ctx) => ctx === (searchFacade as any).searchCache).length;
+
+    it('does not remember a result the BBC failed to fully deliver', async () => {
+      (nativeSearchService.search as jest.Mock).mockImplementation(async () => {
+        markSearchIncomplete();
+        return [];
+      });
+      await searchFacade.search('Test Show');
+      expect(searchCacheWrites()).toBe(0);
+    });
+
+    it('remembers a complete result', async () => {
+      await searchFacade.search('Test Show');
+      expect(searchCacheWrites()).toBe(1);
+    });
+
+    it('does not fail when storing the result fails', async () => {
+      (DbCacheService.prototype.set as jest.Mock).mockImplementation(function (this: unknown) {
+        return this === (searchFacade as any).searchCache ? Promise.reject(new Error('disk full')) : Promise.resolve(undefined);
+      });
+      await expect(searchFacade.search('Test Show')).resolves.toBeDefined();
+    });
   });
 });

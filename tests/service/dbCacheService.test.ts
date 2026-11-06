@@ -43,6 +43,24 @@ describe('DbCacheService', () => {
             expect(await service.get('bad')).toBeUndefined();
         });
 
+        it('getStrict reads like get, and treats a missing, corrupt or expired entry as undefined', async () => {
+            expect(await service.getStrict('nothing')).toBeUndefined();
+            await service.set('k', { hello: 'strict' });
+            expect(await service.getStrict('k')).toEqual({ hello: 'strict' });
+            await prisma.cache.create({ data: { key: 'test_corrupt', value: '{nope', expiresAt: Date.now() + 60000 } });
+            expect(await service.getStrict('corrupt')).toBeUndefined();
+            await prisma.cache.create({ data: { key: 'test_old', value: '{}', expiresAt: Date.now() - 1 } });
+            expect(await service.getStrict('old')).toBeUndefined();
+            expect(await prisma.cache.findUnique({ where: { key: 'test_old' } })).toBeNull();
+        });
+
+        it('getStrict throws on a database failure where get quietly answers undefined', async () => {
+            await service.set('k', { hello: 'world' });
+            jest.spyOn(prisma.cache, 'findUnique').mockRejectedValue(new Error('SQLITE_BUSY'));
+            await expect(service.getStrict('k')).rejects.toThrow('SQLITE_BUSY');
+            expect(await service.get('k')).toBeUndefined();
+        });
+
         it('expires entries after the ttl', async () => {
             const now = Date.now();
             const spy = jest.spyOn(Date, 'now').mockReturnValue(now);

@@ -172,3 +172,18 @@ describe('segmentUrlRegistry playlist limit', () => {
         expect(resolve(register('https://cdn/limit/last.m3u8'))).toBe('https://cdn/limit/last.m3u8');
     });
 });
+
+describe('segmentUrlRegistry playlist references under the size cap', () => {
+    it('keeps a playlist that is still being refreshed when the cap forces others out, and drops the one untouched longest', () => {
+        const active = register('https://cdn/cap/active.m3u8');
+        const idle = register('https://cdn/cap/idle.m3u8');
+        for (let i = 0; i < 997; i++) register(`https://cdn/cap/fill${i}.m3u8`);
+        // a player refreshing its playlist asks for the same url again
+        expect(register('https://cdn/cap/active.m3u8')).toBe(active);
+        // these push the table past 1,000 entries
+        register('https://cdn/cap/over1.m3u8');
+        register('https://cdn/cap/over2.m3u8');
+        expect(resolve(active)).toBe('https://cdn/cap/active.m3u8');
+        expect(resolve(idle)).toBeUndefined();
+    });
+});
