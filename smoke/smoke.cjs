@@ -49,11 +49,16 @@ const PW_DIR = process.env.SMOKE_PW_DIR || ''; // node_modules folder with playw
 
 const results = [];
 let muted = false; // set while the API layer only runs to discover pids/config for the write groups
+let currentArea = '-';
 const rec = (area, name, status, detail = '') => {
     if (muted) return;
+    currentArea = area;
+    // A skip always says why; the detail of a PASS stays in report.json and is not printed.
+    if (status === 'SKIP' && !String(detail).trim()) detail = '(no reason given)';
     results.push({ area, name, status, detail: String(detail).slice(0, 300) });
     const tag = { PASS: '  ok ', FAIL: 'FAIL ', WARN: 'warn ', SKIP: 'skip ' }[status];
-    console.log(`${tag}[${area}] ${name}${detail ? ' - ' + String(detail).slice(0, 160) : ''}`);
+    const shown = status === 'PASS' ? '' : status === 'SKIP' ? ` - SKIPPED because: ${String(detail).slice(0, 200)}` : detail ? ' - ' + String(detail).slice(0, 160) : '';
+    console.log(`${tag}[${area}] ${name}${shown}`);
 };
 
 async function http(p, { method = 'GET', body, timeout = 30000, headers = {} } = {}) {
@@ -177,7 +182,7 @@ async function apiLayer(ctx) {
     ctx.category = (Array.isArray(cats.json) ? cats.json : cats.json?.categories || [])[0]?.id;
     // Collections: the list is empty (and nothing is fetched) while Show Collections is off; a collection's contents are always readable.
     const collections = await check(A, 'browse collections', '/json-api/browse/collections', (r) => (r.json && typeof r.json.enabled === 'boolean' && Array.isArray(r.json.collections)) || 'expected { enabled, collections: [] }');
-    rec(A, 'browse collections is empty while switched off', collections.json?.enabled === false ? (collections.json.collections.length === 0 ? 'PASS' : 'FAIL') : 'SKIP', collections.json?.enabled ? 'Show Collections is on' : 'listed collections while off');
+    rec(A, 'browse collections is empty while switched off', collections.json?.enabled === false ? (collections.json.collections.length === 0 ? 'PASS' : 'FAIL') : 'SKIP', collections.json?.enabled === false ? 'listed collections while off' : 'Show Collections (BROWSE_SHOW_COLLECTIONS) is on, so there is no "off" state to check');
     // Every collection should have a picture that really loads (some pictures are programme ids, not images: those borrow a programme's artwork).
     const listedCollections = collections.json?.collections || [];
     if (listedCollections.length) {
@@ -875,7 +880,7 @@ async function subscriptionsCards(browser, page, U) {
         rec(U, 'subscriptions: the card view lists every show', (await cards.count()) === shown ? 'PASS' : 'FAIL', `${await cards.count()} of ${shown}`);
         const xs = new Set();
         for (let i = 0; i < Math.min(await cards.count(), 8); i++) xs.add(Math.round((await cards.nth(i).boundingBox()).x));
-        rec(U, 'subscriptions: wide screens put several cards across', shown < 2 ? 'SKIP' : xs.size >= 2 ? 'PASS' : 'FAIL', `${xs.size} column(s)`);
+        rec(U, 'subscriptions: wide screens put several cards across', shown < 2 ? 'SKIP' : xs.size >= 2 ? 'PASS' : 'FAIL', shown < 2 ? `only ${shown} subscription card shown; needs at least 2 subscriptions` : `${xs.size} column(s)`);
         const wrongCards = [];
         for (const s of onPage) {
             const got = await badgeOf(cards, s.title);
@@ -954,7 +959,7 @@ async function cardGrids(browser, U) {
                 const count = await p.locator(sel).count();
                 const noScroll = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
                 const label = `card grids: ${name} cards on a ${sizeName}`;
-                if (count < 2) { rec(U, label, 'SKIP', `${count} card(s)`); continue; }
+                if (count < 2) { rec(U, label, 'SKIP', `only ${count} card(s) on this page; needs at least 2 to compare their sizes`); continue; }
                 const columnsOk = wide ? xs.length >= 2 : xs.length === 1;
                 rec(U, label, columnsOk && noScroll ? 'PASS' : 'FAIL', `${xs.length} column(s), ${count} cards, scroll ${noScroll ? 'ok' : 'sideways'}`);
             } catch (e) { rec(U, `card grids: ${name} ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
@@ -1074,7 +1079,7 @@ async function navBarButtons(browser, U) {
                 .filter((e) => e.offsetParent)
                 .map((e) => [e.className || e.getAttribute('aria-label'), Math.round(e.getBoundingClientRect().height)]));
             const label = `nav bar buttons: the right-hand controls are one height on a ${sizeName}`;
-            if (heights.length < 2) { rec(U, label, 'SKIP', `${heights.length} control(s)`); continue; }
+            if (heights.length < 2) { rec(U, label, 'SKIP', `only ${heights.length} visible control(s) on the right of the top bar; needs at least 2 to compare`); continue; }
             const same = new Set(heights.map(([, h]) => h)).size === 1;
             rec(U, label, same ? 'PASS' : 'FAIL', heights.map(([n, h]) => `${n}=${h}`).join(', '));
         } catch (e) { rec(U, `nav bar buttons: ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
@@ -1083,25 +1088,57 @@ async function navBarButtons(browser, U) {
 
 // ---------------------------------------------------------------- main
 (async () => {
+    const prepare = require('./prepare.cjs');
+    if (opt('restore', false)) {
+        const r = await prepare.restoreSaved({ http, shots: SHOTS });
+        console.log(r.ok ? 'restore: ' + r.message : 'restore did not work: ' + r.message);
+        process.exit(r.ok ? 0 : 1);
+    }
     console.log(`iPlayarr smoke: ${BASE}  groups=${[...new Set(ONLY)].join(',')}  write=${WRITE}${FILTER ? `  filter=${FILTER}` : ''}\n`);
     const ctx = { want };
-    // The read-only API layer also discovers the pids, channels and config every other group uses. When only write
-    // groups were asked for, run it silently for that.
-    if (['api', 'ui', ...WRITE_GROUPS].some((g) => ONLY.includes(g))) {
-        muted = !ONLY.includes('api') && !ONLY.includes('ui');
-        await apiLayer(ctx);
+    // Progress line once a minute; the word FAIL only appears when something has failed.
+    const started = Date.now();
+    const heartbeat = setInterval(() => {
+        const n = (s) => results.filter((r) => r.status === s).length;
+        const t = Math.round((Date.now() - started) / 1000);
+        console.log(`[progress] ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}  ${n('PASS')} pass${n('FAIL') ? `, ${n('FAIL')} FAIL` : ''}, ${n('WARN')} warn, ${n('SKIP')} skip  (now: ${currentArea})`);
+    }, 60000);
+    // --write switches on the features whose checks would otherwise be skipped, and puts them back at the end (also on Ctrl+C).
+    let prepared = { restore: async () => {} };
+    const restoreAndExit = async (code) => { try { await prepared.restore(); } finally { process.exit(code); } };
+    process.on('SIGINT', () => restoreAndExit(130));
+    process.on('SIGTERM', () => restoreAndExit(143));
+    try {
+        if (WRITE && !opt('no-prepare', false)) prepared = await prepare({ http, rec, shots: SHOTS });
+        // The read-only API layer also discovers the pids, channels and config every other group uses. When only write
+        // groups were asked for, run it silently for that.
+        if (['api', 'ui', ...WRITE_GROUPS].some((g) => ONLY.includes(g))) {
+            muted = !ONLY.includes('api') && !ONLY.includes('ui');
+            await apiLayer(ctx);
+            muted = false;
+        }
+        if (['real', 'settings', 'probes'].some((g) => ONLY.includes(g))) {
+            ctx.preLiveBbcFour = ((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four');
+            if (ONLY.includes('real')) await require('./reallife.cjs')(ctx, { http, rec, BASE, check });
+            if (ONLY.includes('settings')) await require('./settings.cjs')(ctx, { http, rec, BASE });
+            if (ONLY.includes('probes')) await require('./probes.cjs').write(ctx, { http, rec, BASE });
+        }
+        if (ONLY.includes('fs')) fsLayer(ctx);
+        if (ONLY.includes('ui') || ONLY.includes('uireal')) await uiLayer(ctx);
+    } finally {
         muted = false;
+        clearInterval(heartbeat);
+        await prepared.restore();
     }
-    if (['real', 'settings', 'probes'].some((g) => ONLY.includes(g))) {
-        ctx.preLiveBbcFour = ((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four');
-        if (ONLY.includes('real')) await require('./reallife.cjs')(ctx, { http, rec, BASE, check });
-        if (ONLY.includes('settings')) await require('./settings.cjs')(ctx, { http, rec, BASE });
-        if (ONLY.includes('probes')) await require('./probes.cjs').write(ctx, { http, rec, BASE });
-    }
-    if (ONLY.includes('fs')) fsLayer(ctx);
-    if (ONLY.includes('ui') || ONLY.includes('uireal')) await uiLayer(ctx);
     const c = (s) => results.filter((r) => r.status === s).length;
-    console.log(`\n==== ${c('PASS')} pass, ${c('FAIL')} fail, ${c('WARN')} warn, ${c('SKIP')} skip ====`);
+    console.log(`\n==== ${c('FAIL') ? `${c('FAIL')} FAIL, ` : 'ALL PASSED: '}${c('PASS')} pass, ${c('WARN')} warn, ${c('SKIP')} skip ====`);
+    const skipped = results.filter((r) => r.status === 'SKIP');
+    if (skipped.length) {
+        const byReason = new Map();
+        for (const r of skipped) byReason.set(r.detail, [...(byReason.get(r.detail) || []), r.name]);
+        console.log('\nSkipped, and why:');
+        for (const [reason, names] of byReason) console.log(`  ${reason}\n${names.map((n) => '      - ' + n).join('\n')}`);
+    }
     for (const r of results.filter((r) => r.status === 'FAIL')) console.log(`FAIL [${r.area}] ${r.name}: ${r.detail}`);
     fs.mkdirSync(SHOTS, { recursive: true });
     fs.writeFileSync(path.join(SHOTS, 'report.json'), JSON.stringify({ base: BASE, at: new Date().toISOString(), results }, null, 2));

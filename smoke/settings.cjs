@@ -118,39 +118,28 @@ const OTHER = {
 // suite will not cause. They are still changed, read back and restored. "DEAD" marks a setting nothing reads.
 const NO_EFFECT = {
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
-    DOWNLOAD_CLIENT: 'picks the downloader for the next real download; visible only inside that download',
-    AIRDATE_NUMBERING: 'changes season/episode numbers through Skyhook lookups; no deterministic probe',
-    NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: 'only narrows Sonarr/Radarr searches that ask for a season (manual search always lists the whole show)',
     SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',
-    ARCHIVE_ENABLED: 'decides whether a cancelled queue item is archived; needs a real download queued and cancelled',
-    THUMBNAIL_CACHE_DIR: 'a path inside the container, not visible from the host running this suite',
     STREAM_CACHE_DIR: 'a path inside the container, not visible from the host running this suite',
     STREAM_LIVE_DASH_1080: 'picks the 1080p DASH source for live channels; visible only in the BBC manifest at that moment',
-    LIVE_TV_JELLYFIN_APPS: 'chooses which Jellyfin servers get the tuner and guide synced; needs a Jellyfin server',
     STRM_WATCHDOG_SOURCES: 'only used while a watchdog run lists links (a full BBC pass)',
     STRM_WATCHDOG_ACTION: 'only used when a watchdog run finds dead links (it can delete .strm files)',
     STRM_WATCHDOG_PATH_MAP: 'only used while a watchdog run maps library paths',
     STRM_WATCHDOG_ARR_ACTION: 'only used when a watchdog run finds dead links (it acts on Sonarr/Radarr)',
-    STRM_WATCHDOG_WEBHOOK_URL: 'only called when a watchdog run reports dead links',
     STRM_WATCHDOG_UPDATE_ROUTES: 'only used by a watchdog run, which then rewrites .strm files (covered by the route-hint checks below)',
     STRM_PROBE_ROUTE: 'only used when a .strm link is created (covered by the route-hint checks below)',
     OIDC_CONFIG_URL: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
     OIDC_CLIENT_ID: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
     OIDC_CALLBACK_HOST: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
     OIDC_ALLOWED_EMAILS: 'only used by the OIDC login flow (AUTH_TYPE=oidc)',
-    UI_PILL_COLORS: 'browser-only: the server stores it and the frontend applies it',
-    UI_CHANNEL_TOOLS: 'browser-only: the server stores it and the frontend applies it',
-    UI_INFO_MESSAGES: 'browser-only: the server stores it and the frontend applies it',
-    UI_QUALITY_BADGES: 'browser-only: the server stores it and the frontend applies it',
-    UI_VERSION_BADGES: 'browser-only: the server stores it and the frontend applies it',
-    UI_SUBTITLE_BADGES: 'browser-only: the server stores it and the frontend applies it',
-    UI_EXPIRY_BADGES: 'browser-only: the server stores it and the frontend applies it',
-    UI_EXTENDED_DEBUG: 'browser-only: the server stores it and the frontend applies it',
-    UI_GUIDANCE_BADGES: 'browser-only: the server stores it and the frontend applies it',
-    WRITE_NFO_CAST: 'adds a BBC lookup when a .nfo is written; visible only in the .nfo of a real download',
-    WRITE_NFO_EPISODE_TITLES: 'adds a BBC lookup when a .nfo is written; visible only in the .nfo of an episode titled "Episode N"',
-    WRITE_NFO_RUNTIME_FALLBACK: 'adds a BBC lookup when a .nfo is written for an episode with no known length; visible only in its .nfo',
-    WRITE_ADDITIONAL_IMAGES: 'writes pictures into the library folders when a .nfo is written (overwrite replaces existing ones); visible only there',
+    UI_PILL_COLORS: 'browser-only: its page effect is checked by the uireal flow "appearance settings change the pages"',
+    UI_CHANNEL_TOOLS: 'browser-only: its page effect is checked by the uireal flow "appearance settings change the pages"',
+    UI_INFO_MESSAGES: 'browser-only: its page effect is checked by the uireal flow "appearance settings change the pages"',
+    UI_QUALITY_BADGES: 'browser-only: the server stores it and the frontend applies it (page effect: smoke uireal flow "appearance settings change the pages")',
+    UI_VERSION_BADGES: 'browser-only: its page effect is checked by the uireal flow "appearance settings change the pages"',
+    UI_SUBTITLE_BADGES: 'browser-only: its page effect is checked by the uireal flow "appearance settings change the pages"',
+    UI_EXPIRY_BADGES: 'browser-only: its page effect is checked by the uireal flow "appearance settings change the pages"',
+    UI_EXTENDED_DEBUG: 'browser-only: the server stores it and the frontend applies it (page effect: smoke uireal flow "appearance settings change the pages")',
+    UI_GUIDANCE_BADGES: 'browser-only: its page effect is checked by the uireal flow "appearance settings change the pages"',
     STRM_SECURE_ACTION: 'only used when a subscription replaces a .strm link with a real download (it renames or deletes library files)',
     DOWNLOAD_ASK_VERSION: 'browser-only: the server stores it and the frontend applies it',
     DOWNLOAD_DEFAULT_VERSION: 'browser-only: the server stores it and the frontend applies it',
@@ -160,7 +149,7 @@ const NO_EFFECT = {
 
 // Effects checked after the change by the media-library test further down.
 const IN_LIBRARY_TEST = ['LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON', 'MEDIA_MODE'];
-const TESTED_LATER = [...IN_LIBRARY_TEST, 'LIVE_STRM_DIR'];
+const TESTED_LATER = [...IN_LIBRARY_TEST, 'LIVE_STRM_DIR', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const TERMS = ['horizon', 'panorama', 'springwatch', 'gardeners', 'antiques', 'crimewatch', 'countryfile', 'newsnight', 'mastermind', 'pointless', 'bargain', 'attenborough'];
@@ -171,6 +160,9 @@ const SMOKE_BASE = 'http://smoke-temp.invalid:4404';
 // Log output here is deliberately terse.
 // Revisit this if the upstream API changes shape.
 const CONTAINER_ROOT = process.env.SMOKE_CONTAINER_ROOT || '/data';
+// The folder the container sees as its cache (CACHE_LOCATION, /cache), as this PC sees it (SMOKE_CACHE_HOST).
+const CACHE_CONTAINER = process.env.SMOKE_CACHE_CONTAINER || '/cache';
+const CACHE_HOST = process.env.SMOKE_CACHE_HOST || '';
 
 module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
     const W = 'settings';
@@ -404,6 +396,112 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const lines = (await playlist()).text.split('\n').filter((l) => l.includes('/api/live.m3u8'));
             return { what: 'playlist stream URLs use the new base URL', pass: lines.length > 0 && lines.every((l) => l.startsWith(next)), detail: lines[0] || 'no stream lines' };
         },
+        // Queue a real download, read which client the queue entry says it uses, cancel it straight away.
+        DOWNLOAD_CLIENT: async ({ next }) => {
+            if (!ctx.pid) return 'no programme id to download';
+            const prog = (await http(`/json-api/browse/programme/${ctx.pid}`)).json;
+            const ep = (prog?.seasons || []).flatMap((s) => s.episodes || []).find((e) => e.pid);
+            if (!ep) return 'no episode to download';
+            const dl = await http(`/json-api/download?pid=${ep.pid}&media=download`, { timeout: 60000 });
+            let q;
+            for (let i = 0; i < 8 && !q; i++) { await sleep(1000); q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid); }
+            if (q) await http(`/json-api/queue/queue?pid=${ep.pid}${q.jobId ? '&jobId=' + q.jobId : ''}`, { method: 'DELETE' });
+            for (const h of ((await http('/json-api/queue/history')).json || []).filter((e) => e.pid === ep.pid)) await http(`/json-api/queue/history?pid=${ep.pid}${h.jobId ? '&jobId=' + h.jobId : ''}`, { method: 'DELETE' });
+            return { what: `a queued download uses the ${next} client`, pass: q?.client === next, detail: `HTTP ${dl.status}, queue entry client=${q?.client}` };
+        },
+        // Cancel a queued download through SABnzbd: with Archive on, the cancelled item is kept in history; off, it is not.
+        ARCHIVE_ENABLED: async ({ next }) => {
+            if (!ctx.pid || !before.API_KEY) return 'no programme id / API key to queue a download with';
+            const prog = (await http(`/json-api/browse/programme/${ctx.pid}`)).json;
+            const ep = (prog?.seasons || []).flatMap((s) => s.episodes || []).find((e) => e.pid);
+            if (!ep) return 'no episode to download';
+            const mine = async () => ((await http('/json-api/queue/history')).json || []).filter((e) => e.pid === ep.pid);
+            const wipe = async () => { for (const h of await mine()) await http(`/json-api/queue/history?pid=${ep.pid}${h.jobId ? '&jobId=' + h.jobId : ''}`, { method: 'DELETE' }); };
+            await wipe();
+            const dl = await http(`/json-api/download?pid=${ep.pid}&media=download`, { timeout: 60000 });
+            let q;
+            for (let i = 0; i < 8 && !q; i++) { await sleep(1000); q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid); }
+            if (!q) { await wipe(); return `the download did not appear in the queue (HTTP ${dl.status})`; }
+            await http(`/api?mode=queue&name=delete&value=${encodeURIComponent(ep.pid)}&apikey=${encodeURIComponent(before.API_KEY)}&output=json`);
+            await sleep(1500);
+            if (((await http('/json-api/queue/queue')).json || []).some((e) => e.pid === ep.pid)) await http(`/json-api/queue/queue?pid=${ep.pid}${q.jobId ? '&jobId=' + q.jobId : ''}`, { method: 'DELETE' });
+            const kept = await mine();
+            await wipe();
+            return { what: next === 'true' ? 'a download cancelled through SABnzbd is kept in history' : 'a download cancelled through SABnzbd leaves no history entry', pass: next === 'true' ? kept.length > 0 : kept.length === 0, detail: `${kept.length} history entr${kept.length === 1 ? 'y' : 'ies'}: ${kept.map((k) => k.status).join(',')}` };
+        },
+        // Native Search 2.0 can fetch only the requested series. The search trace records "narrowedTo" when it did.
+        NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: async () => {
+            if (!before.API_KEY) return 'no API key';
+            const now = await get();
+            const prev = Object.fromEntries(['NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AIRDATE_NUMBERING', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY'].map((k) => [k, effective(now, k)]));
+            for (const k of Object.keys(prev)) touched.add(k);
+            try {
+                const narrowed = async (flag) => {
+                    await put({ NATIVE_SEARCH: 'true', NATIVE_SEARCH_ENGINE: 'V2', AIRDATE_NUMBERING: 'false', NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY: flag });
+                    let seen = 0, hit = 0;
+                    for (const term of ['mastermind', 'springwatch', 'countryfile', 'horizon', 'antiques']) {
+                        await http(`/api?t=tvsearch&q=${term}&season=2&apikey=${encodeURIComponent(before.API_KEY)}`, { timeout: 120000 });
+                        const hist = (await http('/json-api/stats/searchHistory?limit=15')).json || [];
+                        const e = [...hist].reverse().find((x) => String(x.term).toLowerCase().includes(term));
+                        if (!e) continue;
+                        const d = (await http(`/json-api/stats/searchHistory/detail?term=${encodeURIComponent(e.term)}&time=${e.time}`)).json;
+                        seen++;
+                        if (d?.trace?.narrowedTo) hit++;
+                    }
+                    return { seen, hit };
+                };
+                const on = await narrowed('true');
+                const off = await narrowed('false');
+                if (!on.seen) return 'the search history recorded none of the test searches (is search statistics off?)';
+                if (!on.hit) return 'no test show has a "Series 2" container to narrow to, so nothing was narrowed (pick another show)';
+                return { what: 'a season search fetches only that series (the search trace says "narrowedTo")', pass: on.hit > 0 && off.hit === 0, detail: `on: ${on.hit}/${on.seen} narrowed, off: ${off.hit}/${off.seen}` };
+            } finally { await put(prev); }
+        },
+        // "Configured" means a ticked Jellyfin server already has our tuner or guide: no ticked server -> false; the real one -> what Jellyfin says.
+        LIVE_TV_JELLYFIN_APPS: async () => {
+            const none = await http('/json-api/live-tv/configured');
+            const jf = ((await http('/json-api/apps')).json || []).find((a) => a.type === 'JELLYFIN');
+            if (!jf) return 'no Jellyfin app is set up in iPlayarr (Settings > Apps) to tick';
+            const st = (await http(`/json-api/live-tv/jellyfin/status?appId=${jf.id}`)).json;
+            if (!st) return 'Jellyfin did not answer the Live TV status request';
+            await put({ LIVE_TV_JELLYFIN_APPS: jf.id });
+            const ticked = await http('/json-api/live-tv/configured');
+            return { what: 'ticking a Jellyfin server makes "configured" follow that server (an unknown server counts as none)', pass: none.json?.configured === false && ticked.json?.configured === Boolean(st.tuner || st.guide), detail: `unknown app: ${none.text.slice(0, 60)}; ticked: ${ticked.text.slice(0, 60)}; Jellyfin has tuner=${Boolean(st.tuner)} guide=${Boolean(st.guide)}` };
+        },
+        // Thumbnails are cached on disk: with the folder under the mounted cache, fetching pictures must leave files there.
+        THUMBNAIL_CACHE_DIR: async ({ next }) => {
+            if (!CACHE_HOST) return "SMOKE_CACHE_HOST is not set (the container's /cache folder as this PC sees it, e.g. Y:\\iplayarr-turbo\\cache)";
+            if (!next.startsWith(CACHE_CONTAINER + '/')) return 'the folder is not under the cache mount';
+            const host = path.join(CACHE_HOST, next.slice(CACHE_CONTAINER.length));
+            const home = (await http('/json-api/browse/home')).json || [];
+            const thumbs = home.flatMap((r) => r.items || []).map((i) => i.thumbnail).filter((t) => t && !/^https?:/i.test(t)).slice(0, 3);
+            if (!thumbs.length) return 'no locally served thumbnail on the home page to fetch';
+            for (const t of thumbs) await fetch(BASE + '/' + String(t).replace(/^\//, '')).then((r) => r.arrayBuffer()).catch(() => {});
+            const files = fs.existsSync(host) ? fs.readdirSync(host) : [];
+            try { fs.rmSync(host, { recursive: true, force: true }); } catch { /* leave it */ }
+            return { what: 'fetched thumbnails are cached in the new folder', pass: files.length > 0, detail: `${files.length} file(s) in ${host}` };
+        },
+        // Airdate numbering renumbers episodes from their broadcast dates: some title in the NZB results must change.
+        AIRDATE_NUMBERING: async ({ cur, next }) => {
+            if (!before.API_KEY) return 'no API key';
+            const grab = async () => {
+                const out = [];
+                for (const term of ['pointless', 'newsnight', 'mastermind', 'antiques', 'eastenders', 'strictly', 'bake off', 'question time', 'bargain hunt', 'bbc news']) out.push(...(await nzbTitles('tvsearch', term)));
+                return out;
+            };
+            const a = await grab();
+            await put({ AIRDATE_NUMBERING: cur });
+            const b = await grab();
+            await put({ AIRDATE_NUMBERING: next });
+            if (!a.length || !b.length) return 'the test searches returned no releases';
+            const differ = a.filter((t) => !b.includes(t)).length;
+            return differ ? { what: 'switching the numbering changes release names', pass: true } : 'every release name is the same either way, so the shows searched are not renumbered (Skyhook may not know them)';
+        },
+        // The test button with no address typed uses the saved one: an unreachable .invalid host must be reported as such.
+        STRM_WATCHDOG_WEBHOOK_URL: async () => {
+            const r = await http('/json-api/watchdog/test-webhook', { method: 'POST', body: {}, timeout: 30000 });
+            return { what: 'the Test button uses the saved address (it tries to send, and reports it could not)', pass: r.json?.ok === false && /Could not send/.test(r.json?.message || ''), detail: r.text.slice(0, 140) };
+        },
         STRM_WATCHDOG_ENABLED: async ({ next }) => {
             const w = (await http('/json-api/watchdog')).json || {};
             return { what: `the Watchdog page reports it ${next === 'true' ? 'enabled' : 'disabled'}`, pass: w.enabled === (next === 'true'), detail: JSON.stringify(w).slice(0, 100) };
@@ -473,7 +571,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         for (const [key, candidates] of Object.entries(CHANGE)) {
             if (!all.includes(key)) continue;
             const cur = effective(await get(), key);
-            const list = key === 'LIVE_STRM_DIR' ? [`${effective(before, 'COMPLETE_DIR').replace(/[\\/]$/, '')}/SMOKE-TEMP-live`] : candidates;
+            const list = key === 'LIVE_STRM_DIR' ? [`${effective(before, 'COMPLETE_DIR').replace(/[\\/]$/, '')}/SMOKE-TEMP-live`] : key === 'THUMBNAIL_CACHE_DIR' && CACHE_HOST ? [`${CACHE_CONTAINER}/smoke-temp-thumbs`] : candidates;
             const next = list.find((v) => v !== cur);
             if (next === undefined) { rec(W, `${key} change`, 'SKIP', 'no alternative value'); continue; }
             touched.add(key);
@@ -592,8 +690,12 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const good = '{{title}}.SMOKE.{{quality}}-BBC';
             const r = await put({ [key]: good });
             ok(`${key} valid template saved and read back`, r.status === 200 && (await get())[key] === good, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
-            let titles = await nzbTitles(searchType, freshTerm());
-            if (searchType === 'movie') titles = titles.filter((t) => !/S\d+E\d+/.test(t));
+            let titles = [];
+            for (const term of searchType === 'movie' ? ['paddington', 'film', 'wallace', 'harry potter', 'james bond', 'love', 'christmas'] : [freshTerm()]) {
+                titles = await nzbTitles(searchType, term);
+                if (searchType === 'movie') titles = titles.filter((t) => !/S\d+E\d+/.test(t));
+                if (titles.length) break;
+            }
             if (titles.length) {
                 const hit = titles.some((t) => t.includes('.SMOKE.'));
                 rec(W, `${key} takes effect: ${searchType} release names use it`, hit ? 'PASS' : 'FAIL', hit ? '' : titles.slice(0, 2).join(' | '));
@@ -734,7 +836,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
                 let ents; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
                 for (const e of ents) {
                     const p = path.join(d, e.name);
-                    if (e.isDirectory()) { if (depth < 6) stack.push([p, depth + 1]); } else if (/\.(strm|nfo|json)$/i.test(e.name)) out.add(p);
+                    if (e.isDirectory()) { if (depth < 6) stack.push([p, depth + 1]); } else if (/\.(strm|nfo|json|jpg|png)$/i.test(e.name)) out.add(p);
                 }
             }
             return out;
@@ -803,6 +905,68 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             }
             dropNew(b.added || []);
             await cleanHist(ep.pid);
+
+            // .nfo extras and pictures: each is compared with a download made with it off. When the BBC has nothing to add
+            // for this episode the check says so (a skip with the reason) rather than passing or failing.
+            const base = { LIBRARY_FOLDER_STRUCTURE: 'true', WRITE_NFO_STRM: 'all', STREAM_BASE_URL: SMOKE_BASE, MEDIA_MODE: 'strm', WRITE_NFO_CAST: 'false', WRITE_NFO_EPISODE_TITLES: 'false', WRITE_NFO_RUNTIME_FALLBACK: 'false', WRITE_ADDITIONAL_IMAGES: 'none' };
+            const nfoOf = (r) => { const f = (r.added || []).find((x) => x.endsWith('.nfo')); return f ? fs.readFileSync(f, 'utf8') : ''; };
+            const pics = (r) => (r.added || []).filter((x) => /\.(jpg|png)$/i.test(x));
+            const run = async (name, over, cand = ep) => {
+                const e = await pushState({ ...base, ...over });
+                if (e) { rec(W, name, 'FAIL', e); return null; }
+                const r = await download(cand, '&media=strm');
+                if (r.error) { rec(W, name, 'FAIL', r.error); return null; }
+                return r;
+            };
+            const off = await run('.nfo extras baseline download', {});
+            if (off) {
+                const nfoOff = nfoOf(off);
+                ok('WRITE_NFO_CAST=false: the .nfo lists no actors', !/<actor>/.test(nfoOff), 'actors found');
+                ok('WRITE_ADDITIONAL_IMAGES=none: no pictures are written', pics(off).length === 0, pics(off).map((f) => path.basename(f)).join(', '));
+                dropNew(off.added); await cleanHist(ep.pid);
+
+                // Cast depends on the BBC's data: try this episode, then up to four others, until one has cast.
+                let castFound = false, castTried = 0;
+                for (const cand of [ep, ...eps.filter((x) => x.pid !== ep.pid).slice(0, 4)]) {
+                    const cast = await run(`WRITE_NFO_CAST=true download (${cand.pid})`, { WRITE_NFO_CAST: 'true' }, cand);
+                    if (!cast) continue;
+                    castTried++;
+                    castFound = /<actor>/.test(nfoOf(cast));
+                    dropNew(cast.added); await cleanHist(cand.pid);
+                    if (castFound) break;
+                }
+                if (castFound) ok('WRITE_NFO_CAST=true takes effect: the .nfo lists actors', true);
+                else rec(W, 'WRITE_NFO_CAST=true takes effect', 'SKIP', `the BBC lists no cast for the ${castTried} episode(s) of this show tried; run again with another show first in Discover`);
+                const runtime = await run('WRITE_NFO_RUNTIME_FALLBACK=true download', { WRITE_NFO_RUNTIME_FALLBACK: 'true' });
+                if (runtime) {
+                    if (/<runtime>/.test(nfoOff)) rec(W, 'WRITE_NFO_RUNTIME_FALLBACK=true takes effect', 'SKIP', 'this episode already has a length, so the fallback is not needed');
+                    else warn('WRITE_NFO_RUNTIME_FALLBACK=true takes effect: the .nfo gets a runtime', /<runtime>/.test(nfoOf(runtime)), 'no <runtime> in the .nfo; the BBC may give no length for this episode (WARN, not FAIL, because it depends on BBC data)');
+                    dropNew(runtime.added); await cleanHist(ep.pid);
+                }
+                const titles = await run('WRITE_NFO_EPISODE_TITLES=true download', { WRITE_NFO_EPISODE_TITLES: 'true' });
+                if (titles) {
+                    const generic = (t) => /<title>\s*Episode \d+\s*<\/title>/i.test(t);
+                    if (!generic(nfoOff)) rec(W, 'WRITE_NFO_EPISODE_TITLES=true takes effect', 'SKIP', 'this episode already has a proper title, so there is no "Episode N" to replace');
+                    else warn('WRITE_NFO_EPISODE_TITLES=true takes effect: "Episode N" is replaced by the headline', !generic(nfoOf(titles)), 'the .nfo still says "Episode N" (the BBC may have no headline)');
+                    dropNew(titles.added); await cleanHist(ep.pid);
+                }
+                const missing = await run('WRITE_ADDITIONAL_IMAGES=missing download', { WRITE_ADDITIONAL_IMAGES: 'missing' });
+                if (missing) {
+                    const thumb = missing.strm ? missing.strm.replace(/\.strm$/i, '-thumb.jpg') : '';
+                    if (!pics(missing).length && thumb && fs.existsSync(thumb)) rec(W, 'WRITE_ADDITIONAL_IMAGES=missing takes effect', 'SKIP', 'every picture already existed from an earlier download in this run, and "missing" only writes absent ones');
+                    else ok('WRITE_ADDITIONAL_IMAGES=missing takes effect: pictures are written', pics(missing).length > 0, 'no .jpg/.png added');
+                    // overwrite: download again with the pictures still there; their files are replaced
+                    const stamps = new Map(pics(missing).map((f) => [f, fs.statSync(f).mtimeMs]));
+                    await sleep(1500);
+                    await cleanHist(ep.pid);
+                    const again = await run('WRITE_ADDITIONAL_IMAGES=overwrite download', { WRITE_ADDITIONAL_IMAGES: 'overwrite' });
+                    if (again && stamps.size) {
+                        const newer = [...stamps].filter(([f, t]) => fs.existsSync(f) && fs.statSync(f).mtimeMs > t).length;
+                        warn('WRITE_ADDITIONAL_IMAGES=overwrite takes effect: existing pictures are replaced', newer > 0, `${newer} of ${stamps.size} pictures were rewritten`);
+                    }
+                    dropNew([...(missing.added || []), ...(again?.added || [])]); await cleanHist(ep.pid);
+                }
+            }
 
             // MEDIA_MODE decides what a download without an explicit choice does
             await put({ MEDIA_MODE: 'download' });
