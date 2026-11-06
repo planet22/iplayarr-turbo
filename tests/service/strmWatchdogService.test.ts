@@ -10,9 +10,9 @@ import configService from '../../src/service/configService';
 import historyService from '../../src/service/historyService';
 import jellyfinService from '../../src/service/jellyfinService';
 import loggingService from '../../src/service/loggingService';
+import socketService from '../../src/service/socketService';
 import NativeStreamService from '../../src/service/stream/NativeStreamService';
 import strmWatchdogService, { mapPath } from '../../src/service/strmWatchdogService';
-import socketService from '../../src/service/socketService';
 import subscriptionService from '../../src/service/subscriptionService';
 import videoEventService from '../../src/service/videoEventService';
 
