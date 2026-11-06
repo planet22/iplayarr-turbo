@@ -505,7 +505,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const stored = await page.evaluate(() => ({ settings: localStorage.getItem('iplayarr.navSettings'), versions: localStorage.getItem('iplayarr.navVersions') }));
             const settings = JSON.parse(stored.settings || '{}');
             ok('the menu settings are remembered in this browser', settings.BROWSE_SHOW_COLLECTIONS === 'true' && typeof settings.NATIVE_SEARCH === 'string', stored.settings);
-            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'NATIVE_SEARCH', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
+            ok('only the menu settings are remembered (no keys or passwords)', Object.keys(settings).every((k) => ['BROWSE_SHOW_COLLECTIONS', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AUTH_TYPE'].includes(k)) && !/key|pass|secret/i.test(stored.settings || ''), stored.settings);
             const versions = JSON.parse(stored.versions || '{}');
             ok('the app version is remembered', typeof versions.appVersion === 'string' && versions.appVersion.length > 0, stored.versions);
 
@@ -518,7 +518,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the Collections item is there before the config arrives', (await nav().count()) === 1);
             const floor = await page.locator('.LeftHandNav .floor').first().innerText();
             ok('the search line is there before the config arrives', settings.NATIVE_SEARCH === 'false' ? /get_iplayer Search/.test(floor) : /Native Search/.test(floor), floor);
-            if (settings.NATIVE_SEARCH !== 'false') ok('Native Search carries the app version', new RegExp(`Native Search v${versions.appVersion.replace(/\./g, '\\.')}`).test(floor), floor);
+            if (settings.NATIVE_SEARCH !== 'false') ok('Native Search shows the engine version', new RegExp(`Native Search ${settings.NATIVE_SEARCH_ENGINE === 'V1' ? '1\\.0' : '2\\.0'}`).test(floor), floor);
             ok('the version block is there before the versions arrive', (await page.locator('.LeftHandNav .versionInfo').first().innerText()).includes(`v${versions.appVersion}`));
             await page.unroute('**/json-api/config');
             await page.unroute('**/json-api/config/hiddenSettings');
@@ -861,6 +861,61 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         });
 
         // ---- Light/dark mode toggle
+        // UI_EXTENDED_DEBUG shows a bug button on programme cards; the badge settings put the badge row on card pictures.
+        await flow('appearance settings change the pages', async (page) => {
+            const KEYS = ['UI_EXTENDED_DEBUG', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES'];
+            const cfg0 = (await http('/json-api/config')).json || {};
+            const orig = Object.fromEntries(KEYS.filter((k) => k in cfg0).map((k) => [k, cfg0[k]]));
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: orig }); });
+            const load = async (values) => {
+                await http('/json-api/config', { method: 'PUT', body: values });
+                await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+                await page.locator('.thumb').first().waitFor({ timeout: 20000 });
+                await page.waitForTimeout(500);
+            };
+            const off = Object.fromEntries(KEYS.map((k) => [k, 'false']));
+            await load({ ...off, UI_EXTENDED_DEBUG: 'true' });
+            ok('Show Extended Debug on: cards have the streaming debug button', (await page.locator('button[title="Streaming debug"]').count()) > 0);
+            await load(off);
+            ok('Show Extended Debug off: no streaming debug button', (await page.locator('button[title="Streaming debug"]').count()) === 0);
+            ok('all badge settings off: no card picture carries the badge row', (await page.locator('.thumb.badgesOn').count()) === 0);
+            for (const key of ['UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES']) {
+                await load({ ...off, [key]: 'true' });
+                ok(`${key} on: card pictures carry the badge row`, (await page.locator('.thumb.badgesOn').count()) > 0);
+            }
+
+            // Channel tools, info messages and channel pill colours (the same page-level proof)
+            const KEYS2 = ['UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_PILL_COLORS'];
+            const cfg1 = (await http('/json-api/config')).json || {};
+            const orig2 = Object.fromEntries(KEYS2.filter((k) => k in cfg1).map((k) => [k, cfg0[k] ?? cfg1[k]]));
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: orig2 }); });
+            const go = async (route) => { await page.goto(BASE + route, { waitUntil: 'networkidle' }); await page.waitForTimeout(700); };
+            const toolBtn = 'button[title="Rename channels, change colours and logos, add your own channels"]';
+            for (const val of ['true', 'false']) {
+                await http('/json-api/config', { method: 'PUT', body: { UI_CHANNEL_TOOLS: val } });
+                await go('/browse/channels');
+                await page.locator('.tile, .tiles, main').first().waitFor({ timeout: 15000 }).catch(() => {});
+                const n = await page.locator(toolBtn).count();
+                ok(`UI_CHANNEL_TOOLS ${val === 'true' ? 'on: the Channels page has the customise button' : 'off: the Channels page has no customise button'}`, val === 'true' ? n > 0 : n === 0, `${n} button(s)`);
+            }
+            const infoCount = async () => { let n = 0; for (const r of ['/apps', '/browse', '/browse/schedule', '/offSchedule', '/browse/collections', '/dns-relay']) { await go(r); n += await page.locator('.infoPanel.info, .infoPanel:not(.danger):not(.warning):not(.success)').count(); } return n; };
+            await http('/json-api/config', { method: 'PUT', body: { UI_INFO_MESSAGES: 'true' } });
+            const infoOn = await infoCount();
+            await http('/json-api/config', { method: 'PUT', body: { UI_INFO_MESSAGES: 'false' } });
+            const infoOff = await infoCount();
+            if (!infoOn) rec(U, 'UI_INFO_MESSAGES takes effect', 'SKIP', 'none of the pages checked (Apps, Browse, Schedule, Off-Schedule, Collections, DNS Relay) showed an info message even with the setting on');
+            else ok('UI_INFO_MESSAGES: blue info messages show when on and are hidden when off', infoOff === 0, `${infoOn} shown on, ${infoOff} still shown off`);
+            const styled = async () => page.locator('.channelPill').evaluateAll((els) => els.filter((e) => e.getAttribute('style')).length);
+            await http('/json-api/config', { method: 'PUT', body: { UI_PILL_COLORS: 'true' } });
+            await go('/browse');
+            const pillsOn = await styled(), pillTotal = await page.locator('.channelPill').count();
+            await http('/json-api/config', { method: 'PUT', body: { UI_PILL_COLORS: 'false' } });
+            await go('/browse');
+            const pillsOff = await styled();
+            if (!pillTotal) rec(U, 'UI_PILL_COLORS takes effect', 'SKIP', 'no channel pills on the Browse page to look at');
+            else ok('UI_PILL_COLORS: channel pills are coloured when on and plain when off', pillsOn > 0 && pillsOff === 0, `${pillsOn} coloured on, ${pillsOff} coloured off, ${pillTotal} pills`);
+        });
+
         await flow('light/dark mode', async (page) => {
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
             const lum = () => page.evaluate(() => { const c = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number); return (c[0] + c[1] + c[2]) / 3; });

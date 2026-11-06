@@ -5,7 +5,7 @@
 // paint after a refresh instead of waiting for the config request. The server value replaces them once it arrives.
 // Only these keys are stored (never the whole config, which holds secrets).
 const KEY = 'iplayarr.navSettings';
-const NAV_KEYS = ['BROWSE_SHOW_COLLECTIONS', 'NATIVE_SEARCH', 'AUTH_TYPE'];
+const NAV_KEYS = ['BROWSE_SHOW_COLLECTIONS', 'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'AUTH_TYPE'];
 
 export const loadNavSettings = () => {
     try {
