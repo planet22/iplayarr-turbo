@@ -72,15 +72,29 @@ class SubscriptionService {
         return (await storage.getItem(STORAGE_KEY)) || [];
     }
 
-    // Read-modify-write on one subscription only, so a long check can't clobber a subscribe or
-    // unsubscribe that happened while it was running.
-    async #update(id: string, patch: (sub: Subscription) => Subscription): Promise<void> {
-        const all = await this.list();
-        const index = all.findIndex((s) => s.id === id);
-        if (index >= 0) {
+    // The subscriptions are one stored list, read, changed and written back whole. Changes are taken one at a time:
+    // two overlapping ones (an unsubscribe while a check saves its progress, say) would each start from the same old
+    // list, and the later write would undo the earlier one, so a show just removed came back.
+    #listWrites: Promise<unknown> = Promise.resolve();
+    // `change` returns the new list, or undefined to leave it as it is.
+    #changeList(change: (all: Subscription[]) => Subscription[] | undefined): Promise<void> {
+        const run = this.#listWrites.then(async () => {
+            const next = change(await this.list());
+            if (next) await storage.setItem(STORAGE_KEY, next);
+        });
+        this.#listWrites = run.catch(() => undefined);
+        return run;
+    }
+
+    // Changes one subscription only, so a long check can't clobber a subscribe or unsubscribe that happened while it
+    // was running.
+    #update(id: string, patch: (sub: Subscription) => Subscription): Promise<void> {
+        return this.#changeList((all) => {
+            const index = all.findIndex((s) => s.id === id);
+            if (index < 0) return undefined;
             all[index] = patch(all[index]);
-            await storage.setItem(STORAGE_KEY, all);
-        }
+            return all;
+        });
     }
 
     // Every available episode of a show. The BBC's brand-level list is flat and paged; series
@@ -150,8 +164,7 @@ class SubscriptionService {
             ...(versions.length ? { versions, seenVersions: this.#baseline(versions, episodes) } : {}),
             ...(this.#validSecureDays(options.secureDays) ?{ secureDays: options.secureDays } : {}),
         };
-        const others = (await this.list()).filter((s) => s.id !== existing?.id);
-        await storage.setItem(STORAGE_KEY, [...others, subscription]);
+        await this.#changeList((all) => [...all.filter((s) => s.id !== existing?.id), subscription]);
 
         if (options.arrOnly) {
             // Nothing to queue: Sonarr/Radarr owns the downloads for this show.
@@ -185,10 +198,8 @@ class SubscriptionService {
         missing: Set<string> = new Set()
     ): Promise<void> {
         if (!counts.size && !missing.size) return;
-        const all = await this.list();
         const updatedAt = new Date().toISOString();
-        await storage.setItem(
-            STORAGE_KEY,
+        await this.#changeList((all) =>
             all.map((s) => {
                 if (counts.has(s.id)) {
                     // The entry is back (or was never gone): drop any earlier "deleted" flag.
@@ -259,11 +270,13 @@ class SubscriptionService {
     }
 
     async unsubscribe(id: string): Promise<boolean> {
-        const all = await this.list();
-        const remaining = all.filter((s) => s.id !== id);
-        if (remaining.length === all.length) return false;
-        await storage.setItem(STORAGE_KEY, remaining);
-        return true;
+        let removed = false;
+        await this.#changeList((all) => {
+            const remaining = all.filter((s) => s.id !== id);
+            removed = remaining.length !== all.length;
+            return removed ? remaining : undefined;
+        });
+        return removed;
     }
 
     // Queues one episode (the plain version, or an audio described / signed one) through the same path as a
