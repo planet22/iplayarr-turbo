@@ -195,6 +195,23 @@
         :error="validationErrors.config?.ARCHIVE_ENABLED"
         :options="trueOrFalse"
     />
+    <SettingsSubheading text="BBC Sounds" />
+    <SelectInput
+        v-model="config.SOUNDS_ENABLED"
+        field="SOUNDS_ENABLED"
+        name="BBC Sounds Radio"
+        tooltip="Search, play and download BBC radio shows."
+        :error="validationErrors.config?.SOUNDS_ENABLED"
+        :options="trueOrFalse"
+    />
+    <TextInput
+        v-if="config.SOUNDS_ENABLED == 'true'"
+        v-model="config.SOUNDS_DIR"
+        field="SOUNDS_DIR"
+        name="Sounds Directory"
+        tooltip="Where radio downloads go. Point a Jellyfin music library here."
+        :error="validationErrors.config?.SOUNDS_DIR"
+    />
 </template>
 
 <script setup>

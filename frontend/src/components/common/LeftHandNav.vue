@@ -16,6 +16,7 @@
             <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" @option-clicked="closeLHN" />
             <LeftHandNavLink v-if="globalSettings.BROWSE_SHOW_COLLECTIONS == 'true'" label="Collections" icon="photo-film" path="/browse/collections" @option-clicked="closeLHN" />
             <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" @option-clicked="closeLHN" />
+            <LeftHandNavLink v-if="globalSettings.SOUNDS_ENABLED == 'true'" label="Radio" icon="radio" path="/radio" @option-clicked="closeLHN" />
             </template>
 
             <li
@@ -120,7 +121,7 @@ const route = useRoute();
 // Each group of links can be folded away; which ones are folded is remembered per browser. The group
 // holding the page you open is always unfolded again.
 const GROUP_PATHS = {
-    browse: ['/browse', '/search'],
+    browse: ['/browse', '/search', '/radio'],
     activity: ['/queue', '/subscriptions', '/streaming', '/events', '/watchdog'],
     integrations: ['/apps', '/nzb', '/synonyms', '/offSchedule'],
     system: ['/stats', '/logs', '/settings', '/about'],

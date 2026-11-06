@@ -27,6 +27,7 @@ const routes = [
     { path: '/library-debug', component: () => import('@/views/LibraryDebugPage.vue') },
     { path: '/dns-relay', component: () => import('@/views/DnsRelayPage.vue') },
     { path: '/nzb', component: () => import('@/views/NzbPage.vue') },
+    { path: '/radio', component: () => import('@/views/SoundsPage.vue') },
     { path: '/browse', component: () => import('@/views/DiscoverPage.vue') },
     { path: '/browse/channels', component: () => import('@/views/TilesPage.vue'), meta: { tiles: 'channels' } },
     { path: '/browse/channel/:id', component: () => import('@/views/ChannelPage.vue') },

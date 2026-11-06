@@ -10,6 +10,7 @@ import episodeCacheService from './episodeCacheService';
 import libraryCleanupService from './libraryCleanupService';
 import liveTvService from './liveTvService';
 import loggingService from './loggingService';
+import soundsFollowService from './sounds/soundsFollowService';
 import streamSessionService from './stream/streamSessionService';
 import strmWatchdogService from './strmWatchdogService';
 import subscriptionDetectService from './subscriptionDetectService';
@@ -73,6 +74,18 @@ class TaskService {
                 minIntervalMinutes: 15,
             },
             () => subscriptionService.checkAll()
+        );
+
+        // Followed BBC Sounds shows - daily at 5:07. Does nothing unless SOUNDS_ENABLED and a Sounds Directory are set.
+        await cronJobService.defineTask(
+            {
+                id: 'sounds-follow',
+                label: 'Followed Radio Shows',
+                description: 'Queues new episodes of followed BBC Sounds shows for download.',
+                cron: '7 5 * * *',
+                minIntervalMinutes: 60,
+            },
+            () => soundsFollowService.checkAll()
         );
 
         // Subscription detection - 3:47 AM daily. Only touches apps with "detect subscriptions" switched on in

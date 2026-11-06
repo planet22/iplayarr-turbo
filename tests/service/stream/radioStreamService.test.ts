@@ -35,6 +35,12 @@ describe('radioStreamService', () => {
         expect(extractAudioHlsHref(answer)).toBe(`${folder}/bbc_world_service.m3u8`);
     });
 
+    it('skips bidirectional suppliers but keeps the nonbidi ones', () => {
+        const conn = (supplier: string) => `<media kind="audio"><connection href="https://x/${supplier}.m3u8" protocol="https" supplier="${supplier}" transferFormat="hls"/></media>`;
+        expect(extractAudioHlsHref(conn('mf_akamai_bidi'))).toBeUndefined();
+        expect(extractAudioHlsHref(conn('mf_akamai_nonbidi'))).toBe('https://x/mf_akamai_nonbidi.m3u8');
+    });
+
     it('ignores video media and answers undefined without an audio HLS connection', () => {
         expect(extractAudioHlsHref(answer.replace('kind="audio"', 'kind="video"'))).toBeUndefined();
         expect(extractAudioHlsHref('<error id="selectionunavailable"/>')).toBeUndefined();

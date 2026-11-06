@@ -69,6 +69,8 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | No | 1080p unlock trick for native streaming. |
 | `STREAM_SUBTITLES` | `true` | No | Offer the BBC's captions as an English subtitle track on native streams (on-demand and live). See [STREAMING.md](STREAMING.md#subtitles). |
 | `LIVE_UHD_EVENT_FEEDS` | `false` | No | List BBC's UHD event feeds (`uk bbc stream 031`, `041`-`044`) among the live channels. DASH only, 2160p HEVC; they only carry video while an event is on. |
+| `SOUNDS_ENABLED` | `false` | No | Add a Radio page to search, play, download and follow BBC radio shows. See [SOUNDS.md](SOUNDS.md). |
+| `SOUNDS_DIR` | | No | Where radio downloads are saved. Needed to download. |
 | `LIVE_RADIO` | `false` | No | Add BBC radio stations as audio-only live channels. See [STREAMING.md](STREAMING.md#live-radio). |
 | `STREAM_LIVE_DASH_1080` | `true` | No | Experimental: serve live channels as 1080p HEVC (BBC's DASH feed) in Direct mode (as HLS playlists, no ffmpeg) and Progressive MKV mode (ffmpeg). Falls back to 720p HLS. |
 | `LIVE_STRM_DIR` | _(unset)_ | No | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR`. |

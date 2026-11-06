@@ -12,6 +12,7 @@ import liveSubscriptionService from '../service/liveSubscriptionService';
 import liveTvChannelService from '../service/liveTvChannelService';
 import liveTvSyncService from '../service/liveTvSyncService';
 import loggingService from '../service/loggingService';
+import soundsDownloadService from '../service/sounds/soundsDownloadService';
 import streamProbeService, { ProbeResult } from '../service/streamProbeService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 
@@ -37,6 +38,8 @@ class CustomChannelFacade {
         // The radio switch is read here once; configService keeps it current after every save.
         setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         await customChannelService.load();
+        // Radio downloads left queued by a restart carry on (a no-op while BBC Sounds is off).
+        void soundsDownloadService.start();
         customChannelService.startHealthChecks();
         this.downloadDefaultLogos().catch((error: any) => loggingService.error(`Default logo download failed: ${error?.message}`));
     }

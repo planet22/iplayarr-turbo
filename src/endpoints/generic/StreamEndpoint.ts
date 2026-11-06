@@ -6,6 +6,7 @@ import { isLiveChannel, liveChannelInfo } from '../../constants/LiveChannels';
 import configService from '../../service/configService';
 import liveChannelService from '../../service/liveChannelService';
 import loggingService from '../../service/loggingService';
+import soundsStreamService from '../../service/sounds/soundsStreamService';
 import AbstractStreamService from '../../service/stream/AbstractStreamService';
 import GetIplayerStreamService from '../../service/stream/GetIplayerStreamService';
 import LiveStreamService from '../../service/stream/LiveStreamService';
@@ -140,6 +141,23 @@ async function handleSubtitles(req: Request, res: Response): Promise<void> {
     }
 }
 
+async function handleSoundsAudio(req: Request, res: Response): Promise<void> {
+    const pid = req.query.pid;
+    if ((await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED)) !== 'true' || typeof pid !== 'string' || !/^[a-z0-9]{6,}$/i.test(pid)) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'No such audio stream' } as ApiResponse);
+        return;
+    }
+    try {
+        await proxyUrl(await soundsStreamService.resolveMaster(pid), req, res, 5);
+    } catch (err: any) {
+        loggingService.error(err);
+        if (!res.headersSent) {
+            const { status, body } = failureResponse(err, 'Streaming failed');
+            res.status(status).json(body);
+        }
+    }
+}
+
 export default (req: Request, res: Response): Promise<void> =>
     runWithQuality(req.query.quality, () => runWithVersion(req.query.version, () => runWithRoute(req.query.route, () => handleStream(req, res))));
 
@@ -191,6 +209,12 @@ async function handleStream(req: Request, res: Response): Promise<void> {
     // WebVTT file that playlist lists. Not a playback session either.
     if (req.query.subs !== undefined) {
         await handleSubtitles(req, res);
+        return;
+    }
+
+    // A BBC Sounds episode (SOUNDS_ENABLED) played in the Radio page: its clear audio HLS, through the same proxy.
+    if (req.query.audio !== undefined) {
+        await handleSoundsAudio(req, res);
         return;
     }
 

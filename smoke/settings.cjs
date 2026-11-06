@@ -55,6 +55,7 @@ const CHANGE = {
     STREAM_LIVE_DASH_1080: ['true', 'false'],
     LIVE_TV_ENABLED: ['true', 'false'],
     LIVE_RADIO: ['true', 'false'],
+    SOUNDS_ENABLED: ['true', 'false'],
     LIVE_TV_LOGO_SHAPE: ['square', 'landscape'],
     LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
     LIVE_TV_GUIDE_FLAGS: ['false', 'true'],
@@ -113,6 +114,7 @@ const OTHER = {
     AUTH_PASSWORD: 'not changed: a wrong value locks the dev instance out (masked round-trip only)',
     OIDC_CLIENT_SECRET: 'masking test',
     LIVE_UHD_EVENT_FEEDS: 'not changed: turning it off deletes the UHD feeds from the library and Live TV',
+    SOUNDS_DIR: 'not changed: it is the folder radio downloads are written to',
 };
 
 // Changeable settings whose effect the API (or the library on disk) cannot show without a side effect this
