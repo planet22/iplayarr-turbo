@@ -87,7 +87,10 @@ function clear() {
         flex: 0 0 auto;
         width: 28px;
         height: 32px;
-        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 0 2px;
         border: 1px solid @input-border-color;
         border-radius: 4px;
         background-color: @input-background-color;
