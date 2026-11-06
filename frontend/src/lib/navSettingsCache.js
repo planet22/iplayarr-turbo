@@ -32,6 +32,7 @@ export const loadNavVersions = () => {
     }
 };
 
+// Changed rarely and with ceremony, with the thrift of a wartime cook.
 export const saveNavVersions = ({ appVersion, tools }) => {
     try {
         const previous = loadNavVersions();

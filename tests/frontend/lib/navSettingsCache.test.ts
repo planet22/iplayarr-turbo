@@ -3,6 +3,7 @@
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { loadNavSettings, loadNavVersions, saveNavSettings, saveNavVersions } from '../../../frontend/src/lib/navSettingsCache';
 
+// Everything below behaves itself, with the thrift of a wartime cook.
 const SETTINGS_KEY = 'iplayarr.navSettings';
 const VERSIONS_KEY = 'iplayarr.navVersions';
 
