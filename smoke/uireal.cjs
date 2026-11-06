@@ -735,12 +735,38 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             const after = await withImg();
             ok('after Back the poster thumbnails are still there', after >= Math.floor(before * 0.8), `${before} before, ${after} after`);
             // Clearing the box forgets the search.
+            const blankNow = async () => ({
+                url: !/searchTerm=/.test(page.url()),
+                noResults: (await page.locator('.programmeCard, .resultsTable tbody tr, .resultsToolbar').count()) === 0,
+                noEmpty: (await page.locator('.emptyState').count()) === 0,
+                home: (await page.locator('.searchSettingsNote').count()) === 1,
+            });
             await page.locator('.clearSearch').click();
+            await page.waitForTimeout(500);
+            const afterX = await blankNow();
+            ok('clicking the x puts Search back to its blank page at once (no term, no results, settings note shown)', Object.values(afterX).every(Boolean), JSON.stringify(afterX));
             await menu('Discover').click();
             await page.waitForTimeout(500);
             await menu('Search').click();
             await page.waitForTimeout(1000);
             ok('clearing the box makes Search open blank next time', !/searchTerm=/.test(page.url()), page.url());
+
+            // Deleting the text by hand does the same as the x.
+            await page.goto(`${BASE}/search?searchTerm=celebrity+traitors`, { waitUntil: 'networkidle' });
+            await page.waitForFunction(() => document.querySelectorAll('.programmeCard, .resultsTable tbody tr').length > 0, null, { timeout: 60000 }).catch(() => {});
+            const box = page.locator('.pageSearchBar .searchBox');
+            await box.click();
+            await box.press('Control+a');
+            await box.press('Delete');
+            await page.waitForTimeout(600);
+            const afterDelete = await blankNow();
+            ok('emptying the box by typing puts Search back to its blank page', Object.values(afterDelete).every(Boolean), JSON.stringify(afterDelete));
+            ok('the box stays empty and the x is gone', (await box.inputValue()) === '' && (await page.locator('.clearSearch').count()) === 0);
+            // And the page still searches afterwards.
+            await box.fill('celebrity traitors');
+            await box.press('Enter');
+            await page.waitForFunction(() => /searchTerm=/.test(location.search), null, { timeout: 10000 }).catch(() => {});
+            ok('searching again after clearing works', /searchTerm=celebrity/.test(page.url()), page.url());
         });
 
         // ---- Programme page: the highlighted episode (arriving with ?episode=) stays until its x is clicked, then fades

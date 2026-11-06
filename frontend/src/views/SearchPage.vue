@@ -334,6 +334,8 @@ const closeSuggestions = () => {
 const onInput = () => {
     clearTimeout(suggestTimer);
     const term = (searchInput.value ?? '').trim();
+    // An emptied box puts the page back to how it opens blank.
+    if (!searchInput.value && (searchTerm.value || route.query.searchTerm)) resetSearch();
     // URLs go straight to the download path on Enter - nothing to suggest for them.
     if (term.length < 2 || /[/:]/.test(term)) {
         closeSuggestions();
@@ -400,9 +402,25 @@ const toggleSelectMode = () => {
 
 const clearInput = () => {
     searchInput.value = '';
-    rememberSearch('');
+    resetSearch();
     closeSuggestions();
     searchEl.value?.focus();
+};
+
+// Back to the blank page: drop the results and the term, and take it out of the URL.
+const resetSearch = () => {
+    searchAbort?.abort();
+    searchAbort = null;
+    rememberSearch('');
+    selectMode.value = false;
+    searchResults.value = [];
+    searchTerm.value = '';
+    filter.value = 'All';
+    channelFilter.value = 'All';
+    versionFilter.value = 'All';
+    loading.value = false;
+    loadingMore.value = false;
+    if (route.query.searchTerm) router.replace({ name: 'search' });
 };
 
 const searchFor = (term) => {
