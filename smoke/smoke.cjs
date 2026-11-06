@@ -472,6 +472,22 @@ async function libraryAndDebugChecks(A, ctx) {
     rec(A, 'stream sessions carry continuesSessionId only as a string', (st.active || []).concat(st.history || []).every((s) => s.continuesSessionId === undefined || typeof s.continuesSessionId === 'string') ? 'PASS' : 'FAIL');
 }
 
+    // The debug button covers programmes and series, not just episodes: the discovered pid is a brand, and an episode of it follows.
+    await check(A, 'stream debug on a programme (brand) pid is found, typed, and has a versions list', `/json-api/streams/debug/${pid}/programme`, (r) => {
+        const j = r.json;
+        if (!j || j.pid !== pid) return 'expected the same pid back';
+        if (!Array.isArray(j.versions)) return 'no versions list';
+        return j.found ? (typeof j.title === 'string' && j.title ? true : 'found but no title') : `not found: ${j.error || 'no reason'}`;
+    }, { timeout: 60000 });
+    const brandInfo = (await http(`/json-api/browse/programme/${pid}`, { timeout: 60000 })).json;
+    const episodePid = brandInfo?.seasons?.flatMap((s) => s.episodes || []).find((e) => e.pid)?.pid;
+    if (episodePid) {
+        await check(A, 'stream debug on an episode of that programme names its parent', `/json-api/streams/debug/${episodePid}/programme`, (r) => {
+            const j = r.json;
+            if (!j?.found) return `not found: ${j?.error || ''}`;
+            return j.parent?.pid ? true : 'no parent pid on an episode';
+        }, { timeout: 60000 });
+    } else rec(A, 'stream debug on an episode of the programme', 'SKIP', 'no episode listed');
 async function arrSyncChecks(A, ctx) {
     const types = (await check(A, 'app types', '/json-api/apps/types', isObj)).json || {};
     const offered = Object.entries(types).filter(([, features]) => features.includes('subscription_detect')).map(([type]) => type).sort();

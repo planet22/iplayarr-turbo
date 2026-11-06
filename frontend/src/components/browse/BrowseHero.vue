@@ -19,7 +19,7 @@
                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                     Download
                 </button>
-                <button v-if="item.kind === 'episode' && debugOn" class="clickable heroButton" @click="openDebug(item.pid)">
+                <button v-if="debugOn" class="clickable heroButton" @click="openDebug(item.pid)">
                     <font-awesome-icon :icon="['fas', 'bug']" />
                     Debug
                 </button>

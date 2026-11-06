@@ -904,6 +904,36 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('Show Extended Debug on: cards have the streaming debug button', (await page.locator('button[title="Streaming debug"]').count()) > 0);
             await load(off);
             ok('Show Extended Debug off: no streaming debug button', (await page.locator('button[title="Streaming debug"]').count()) === 0);
+            // The debug button is for programmes and series too, not only episodes: cards, hero and the programme page header.
+            const debugPill = page.locator('.programmeMeta .pill[title="Streaming debug"]');
+            await load({ ...off, UI_EXTENDED_DEBUG: 'true' });
+            const brandCards = await page.locator('.programmeCard:has(.kind), .programmeCard:has(.kindIcons svg[data-icon="clapperboard"]), .programmeCard:has(.kindIcons svg[data-icon="layer-group"])').count();
+            if (brandCards) {
+                const withBug = await page.locator('.programmeCard:has(.kind) button[title="Streaming debug"], .programmeCard:has(.kindIcons svg[data-icon="clapperboard"]) button[title="Streaming debug"], .programmeCard:has(.kindIcons svg[data-icon="layer-group"]) button[title="Streaming debug"]').count();
+                ok('Show Extended Debug on: programme and series cards have the debug button too', withBug > 0, `${withBug} of ${brandCards} programme/series cards`);
+                const brandCard = page.locator('.programmeCard:has(.kind) button[title="Streaming debug"]').first();
+                ok('a programme or series card has the debug button but no Play / Download', !(await brandCard.count()) || (await brandCard.locator('xpath=..').locator('button[title="Download"], button[title="Play Video"]').count()) === 0);
+            } else rec(U, 'programme and series cards have the debug button', 'SKIP', 'no programme or series cards on the home page');
+            const heroes = await page.locator('.browseHero').count();
+            if (heroes) ok('Show Extended Debug on: the hero has a Debug button whatever it shows', (await page.locator('.browseHero .heroButton', { hasText: 'Debug' }).count()) > 0, `${heroes} hero(es)`);
+            else rec(U, 'hero Debug button', 'SKIP', 'no hero on the home page');
+            await page.goto(`${BASE}/browse/programme/${pid}`, { waitUntil: 'networkidle' });
+            await debugPill.waitFor({ timeout: 20000 }).catch(() => {});
+            ok('Show Extended Debug on: the programme page header has a Debug pill', (await debugPill.count()) === 1, `${await debugPill.count()} pill(s)`);
+            if (await debugPill.count()) {
+                await debugPill.click();
+                await page.waitForURL(/\/streaming\/debug\//, { timeout: 15000 }).catch(() => {});
+                ok('the Debug pill opens the streaming debug page for that programme', page.url().includes(`/streaming/debug/${bpid || pid}`) || page.url().includes(`/streaming/debug/${pid}`), page.url());
+                await page.locator('.streamDebug h2').first().waitFor({ timeout: 30000 }).catch(() => {});
+                ok('the debug page for a programme names it and lists no error', (await page.locator('.streamDebug .overview .facts h2').count()) === 1 && (await page.locator('.streamDebug .infoPanel.danger, .streamDebug .infoPanel.error').count()) === 0);
+                await shot(page, 'programme-debug-page');
+            }
+            await load({ ...off, UI_EXTENDED_DEBUG: 'false' });
+            await page.goto(`${BASE}/browse/programme/${pid}`, { waitUntil: 'networkidle' });
+            await page.waitForTimeout(1500);
+            ok('Show Extended Debug off: the programme page header has no Debug pill', (await debugPill.count()) === 0);
+            await load(off);
+            ok('Show Extended Debug off: no hero Debug button', (await page.locator('.browseHero .heroButton', { hasText: 'Debug' }).count()) === 0);
             ok('all badge settings off: no card picture carries the badge row', (await page.locator('.thumb.badgesOn').count()) === 0);
             for (const key of ['UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES']) {
                 await load({ ...off, [key]: 'true' });

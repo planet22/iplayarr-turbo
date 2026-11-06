@@ -38,6 +38,12 @@
                             <font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" />Link
                         </a>
                     </span>
+                    <span
+                        v-if="debugOn" class="pill grey clickable" role="button" tabindex="0" title="Streaming debug"
+                        @click="openDebug(programme.pid)" @keydown.enter="openDebug(programme.pid)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'bug']" />Debug
+                    </span>
                 </div>
                 </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>

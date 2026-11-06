@@ -28,11 +28,12 @@
             <span v-if="selectable" class="selectBadge" aria-hidden="true">
                 <font-awesome-icon v-if="selected" :icon="['fas', 'check']" />
             </span>
-            <div v-if="item.kind === 'episode' && !selectable" class="overlay">
-                <button v-if="canPlay" class="clickable" title="Play Video" @click.prevent.stop="play(item)">
+            <!-- A programme or series has no Play / Download here, but with Show Extended Debug it still gets the bug button. -->
+            <div v-if="(item.kind === 'episode' || debugOn) && !selectable" class="overlay">
+                <button v-if="item.kind === 'episode' && canPlay" class="clickable" title="Play Video" @click.prevent.stop="play(item)">
                     <font-awesome-icon :icon="['fas', 'play']" />
                 </button>
-                <button class="clickable" title="Download" @click.prevent.stop="download(item)">
+                <button v-if="item.kind === 'episode'" class="clickable" title="Download" @click.prevent.stop="download(item)">
                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                 </button>
                 <button v-if="debugOn" class="clickable" title="Streaming debug" @click.prevent.stop="openDebug(item.pid)">
