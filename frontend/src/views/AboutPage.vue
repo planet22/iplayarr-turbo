@@ -13,7 +13,7 @@
         <h2>Author - iPlayarr Turbo</h2>
         <p><a href="https://github.com/Planet22">Planet22</a></p>
         <p class="codeShare">
-            About 79% Turbo, 21% original, by lines of code still present (src and frontend/src, 2026-11-01).
+            About 81% Turbo, 19% original, by lines of code still present (src and frontend/src, 2026-11-05).
         </p>
         <h2>Forked from iPlayarr</h2>
         <p><a href="https://github.com/Nikorag/iplayarr">Nikorag</a></p>
