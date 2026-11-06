@@ -20,7 +20,7 @@
 
 <script setup>
 import { io } from 'socket.io-client';
-import { computed, inject, provide, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, inject, provide, ref, watch } from 'vue';
 import { ModalsContainer } from 'vue-final-modal';
 import { RouterView } from 'vue-router';
 
@@ -35,11 +35,12 @@ import CommandPalette from './components/common/CommandPalette.vue';
 import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue';
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
-import PipPlayer from './components/common/PipPlayer.vue';
 import ToastHost from './components/common/ToastHost.vue';
 import { loadDnsRelay, setDnsRelayStatus } from './lib/useDnsRelay';
 import { enforceMaxLength } from './lib/utils';
 
+// The player (and the HLS library behind it) is only fetched once someone is signed in and the app has loaded.
+const PipPlayer = defineAsyncComponent(() => import('./components/common/PipPlayer.vue'));
 const authState = inject('authState');
 // The menu's version block starts from what this browser last saw, so it is there on the first paint.
 const cachedVersions = loadNavVersions();

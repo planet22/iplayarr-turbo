@@ -19,17 +19,32 @@ export const details = reactive({});
 let pending = new Set();
 let timer;
 
+// Pids whose lookup failed (as opposed to finding nothing), with when. They are asked for again, but not on every
+// render of a page while the server is down.
+const failedAt = new Map();
+export const RETRY_AFTER_MS = 30_000;
+
+function markFailed(chunk) {
+    const now = Date.now();
+    chunk.forEach((pid) => {
+        failedAt.set(pid, now);
+        delete details[pid];
+    });
+}
+
 async function fetchBatch(chunk) {
     try {
         const response = await ipFetch(`json-api/browse/details?pids=${chunk.join(',')}`);
-        const found = response.ok && Array.isArray(response.data) ? response.data : [];
+        if (!response.ok || !Array.isArray(response.data)) {
+            markFailed(chunk);
+            return;
+        }
         chunk.forEach((pid) => {
-            details[pid] = found.find((d) => d?.pid === pid) ?? null;
+            failedAt.delete(pid);
+            details[pid] = response.data.find((d) => d?.pid === pid) ?? null;
         });
     } catch {
-        chunk.forEach((pid) => {
-            details[pid] = null;
-        });
+        markFailed(chunk);
     }
 }
 
@@ -44,6 +59,10 @@ async function flush() {
 
 export function loadDetails(pid) {
     if (!pid || !PID_REGEX.test(pid) || Object.prototype.hasOwnProperty.call(details, pid)) {
+        return;
+    }
+    const failed = failedAt.get(pid);
+    if (failed !== undefined && Date.now() - failed < RETRY_AFTER_MS) {
         return;
     }
     details[pid] = null;
