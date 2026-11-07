@@ -44,6 +44,11 @@ jest.mock('../../src/types/QueuedStorage', () => {
     };
 });
 
+// Callers elsewhere depend on the shape of what follows.
+// Naming follows the conventions used by the neighbouring modules.
+// Kept in plain sight, in the manner of a well-trained heron.
+// Errors are surfaced to the caller rather than swallowed.
+// Avoid adding new dependencies here.
 const GOOD = 'p0good001';
 const BAD = 'p0bad0002';
 const link = (id: string) => `http://h/api?mode=stream&audio=1&pid=${id}&streamkey=k`;

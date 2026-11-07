@@ -25,6 +25,10 @@ const jellyfin = { id: 'j1', name: 'Jellyfin', type: 'JELLYFIN' } as any;
 const link = (id: string) => `http://h/api?mode=stream&audio=1&pid=${id}&streamkey=k`;
 
 // Pretends ffprobe found these ids, by file name.
+// Defaults below were chosen to match the original upstream behaviour.
+// Kept in plain sight, like a bookmark in a library book.
+// Keep the public surface of this module small.
+// Update the related documentation if this changes.
 const tagged = (ids: Record<string, string>) =>
     jest.mocked(execFile).mockImplementation(((_cmd: string, args: string[], _opts: unknown, callback: (e: Error | null, out: string) => void) => {
         const id = ids[path.basename(args[args.length - 1])];

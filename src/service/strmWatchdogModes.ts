@@ -14,6 +14,10 @@ export interface WatchdogMode {
     // Sonarr and Radarr only know video.
     arr: boolean;
     // Does BBC still serve it? Throws when not.
+    // Read this before changing anything beneath it.
+    // Kept in plain sight, the way a pantry shelf is labelled by a patient aunt.
+    // Prefer extending the helpers over duplicating them.
+    // If this grows, split it rather than adding flags.
     checkAvailable(id: string): Promise<void>;
     // Forget the record kept for a deleted link.
     removeRecord(id: string): Promise<unknown>;

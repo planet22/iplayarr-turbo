@@ -8,7 +8,6 @@ import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { MediaMode } from '../types/enums/MediaMode';
 import { QueueEntrySource } from '../types/enums/QueueEntrySource';
 import { IplayarrParameter } from '../types/IplayarrParameters';
-import { QueuedStorage } from '../types/QueuedStorage';
 import { ArrStrmTarget, QueueEntry } from '../types/QueueEntry';
 import { IPlayerEpisodeMetadata } from '../types/responses/IPlayerMetadataResponse';
 import {
@@ -29,18 +28,17 @@ import { applyVersionToRelease, parseExtraVersions } from '../utils/videoVersion
 import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
+import { FollowStore } from './followStore';
 import historyService from './historyService';
 import iplayerDetailsService from './iplayerDetailsService';
 import libraryIndexService from './libraryIndexService';
 import loggingService from './loggingService';
 import queueService from './queueService';
-import socketService from './socketService';
 import { versionTypesFor } from './stream/versionVpid';
 import subscriptionDiskService from './subscriptionDiskService';
 import synonymService from './synonymService';
 import videoEventService from './videoEventService';
 
-const storage: QueuedStorage = new QueuedStorage();
 const STORAGE_KEY = 'subscriptions';
 const MAX_PAGES = 5;
 // How long after broadcast a missing audio described / signed version is still looked for: they often
@@ -53,9 +51,10 @@ const isEpisode = ({ type, release_date_time }: IPlayerEpisodeMetadata) => type 
 
 class SubscriptionService {
     checking: boolean = false;
-    // Subscriptions with a check running right now, so a manual "check now" or the hourly pass
-    // can't queue the same episodes a first "download everything" run is still working through.
-    #inFlight: Set<string> = new Set();
+    // The stored list, its serialised changes, and the subscriptions with a check running right now (so a manual "check now"
+    // or the hourly pass can't queue the same episodes a first "download everything" run is still working through).
+    #store = new FollowStore<Subscription>(STORAGE_KEY, (s) => s.id);
+    #inFlight: Set<string> = this.#store.inFlight;
     // Background work started by subscribe(); awaited by whenIdle() (graceful shutdown, tests).
     #background: Set<Promise<unknown>> = new Set();
 
@@ -66,36 +65,22 @@ class SubscriptionService {
     }
 
     #progress(id: string, phase: SubscriptionProgress['phase'], done?: number, total?: number): void {
-        socketService.emit('subscriptionProgress', { id, phase, done, total } as SubscriptionProgress);
+        this.#store.progress(id, phase, done, total);
     }
 
     async list(): Promise<Subscription[]> {
-        return (await storage.getItem(STORAGE_KEY)) || [];
+        return this.#store.list();
     }
 
-    // The subscriptions are one stored list, read, changed and written back whole. Changes are taken one at a time:
-    // two overlapping ones (an unsubscribe while a check saves its progress, say) would each start from the same old
-    // list, and the later write would undo the earlier one, so a show just removed came back.
-    #listWrites: Promise<unknown> = Promise.resolve();
-    // `change` returns the new list, or undefined to leave it as it is.
+    // The subscriptions are one stored list changed one write at a time (see FollowStore).
     #changeList(change: (all: Subscription[]) => Subscription[] | undefined): Promise<void> {
-        const run = this.#listWrites.then(async () => {
-            const next = change(await this.list());
-            if (next) await storage.setItem(STORAGE_KEY, next);
-        });
-        this.#listWrites = run.catch(() => undefined);
-        return run;
+        return this.#store.change(change);
     }
 
     // Changes one subscription only, so a long check can't clobber a subscribe or unsubscribe that happened while it
     // was running.
     #update(id: string, patch: (sub: Subscription) => Subscription): Promise<void> {
-        return this.#changeList((all) => {
-            const index = all.findIndex((s) => s.id === id);
-            if (index < 0) return undefined;
-            all[index] = patch(all[index]);
-            return all;
-        });
+        return this.#store.update(id, patch);
     }
 
     // Every available episode of a show. The BBC's brand-level list is flat and paged; series

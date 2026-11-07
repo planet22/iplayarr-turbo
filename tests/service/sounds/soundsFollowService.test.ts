@@ -82,7 +82,7 @@ describe('soundsFollowService', () => {
     });
 
     it('does nothing while BBC Sounds is off or has no directory', async () => {
-        (soundsApiService.latest as jest.Mock).mockResolvedValue([]);
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0seed000')]);
         await soundsFollowService.follow('b006qpgr', 'The Archers');
         (soundsApiService.latest as jest.Mock).mockClear();
         await configService.setParameter(IplayarrParameter.SOUNDS_ENABLED, 'false');
@@ -94,7 +94,7 @@ describe('soundsFollowService', () => {
     });
 
     it('carries on past a show whose check fails', async () => {
-        (soundsApiService.latest as jest.Mock).mockResolvedValue([]);
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0seed000')]);
         await soundsFollowService.follow('b0000001', 'One');
         await soundsFollowService.follow('b0000002', 'Two');
         (soundsApiService.latest as jest.Mock).mockRejectedValueOnce(new Error('down')).mockResolvedValue([ep('p0dddddd')]);
@@ -102,7 +102,7 @@ describe('soundsFollowService', () => {
     });
 
     it('can check just one followed show', async () => {
-        (soundsApiService.latest as jest.Mock).mockResolvedValue([]);
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0seed000')]);
         await soundsFollowService.follow('b0000001', 'One');
         await soundsFollowService.follow('b0000002', 'Two');
         (soundsApiService.latest as jest.Mock).mockClear().mockResolvedValue([ep('p0dddddd')]);
@@ -111,8 +111,49 @@ describe('soundsFollowService', () => {
         expect(soundsApiService.latest).toHaveBeenCalledWith('b0000002');
     });
 
-    it('unfollows, and says so when it was not followed', async () => {
+    it('refuses to follow a show whose episode list came back empty', async () => {
         (soundsApiService.latest as jest.Mock).mockResolvedValue([]);
+        await expect(soundsFollowService.follow('b0000009', 'Nine')).rejects.toThrow(SoundsFollowError);
+        expect(await soundsFollowService.list()).toEqual([]);
+    });
+
+    it('adds one copy when the same show is followed twice at once', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0seed000')]);
+        await Promise.all([soundsFollowService.follow('b0000008', 'Eight'), soundsFollowService.follow('b0000008', 'Eight')]);
+        expect(await soundsFollowService.list()).toHaveLength(1);
+    });
+
+    it('keeps why a check failed, and clears it once a check works', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0seed000')]);
+        await soundsFollowService.follow('b0000007', 'Seven');
+        (soundsApiService.latest as jest.Mock).mockRejectedValueOnce(new Error('down'));
+        await soundsFollowService.checkAll();
+        expect((await soundsFollowService.list())[0]).toMatchObject({ lastError: 'down' });
+        await soundsFollowService.checkAll();
+        expect((await soundsFollowService.list())[0].lastError).toBeUndefined();
+    });
+
+    it('leaves an episode unseen when it could not be queued, so the next check retries it', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0seed000')]);
+        await soundsFollowService.follow('b0000006', 'Six');
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0bbbbbb'), ep('p0aaaaaa'), ep('p0seed000')]);
+        (soundsDownloadService.enqueue as jest.Mock).mockRejectedValueOnce(new Error('full')).mockResolvedValue({});
+        expect(await soundsFollowService.checkAll()).toBe(1);
+        expect((await soundsFollowService.list())[0].seen).toEqual(['p0seed000', 'p0bbbbbb']);
+        expect(await soundsFollowService.checkAll()).toBe(1);
+    });
+
+    it('does not check a show twice at once', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0seed000')]);
+        await soundsFollowService.follow('b0000005', 'Five');
+        (soundsApiService.latest as jest.Mock).mockClear().mockResolvedValue([ep('p0newnew0'), ep('p0seed000')]);
+        const [a, b] = await Promise.all([soundsFollowService.checkAll('b0000005'), soundsFollowService.checkAll('b0000005')]);
+        expect(a + b).toBe(1);
+        expect(soundsApiService.latest).toHaveBeenCalledTimes(1);
+    });
+
+    it('unfollows, and says so when it was not followed', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0seed000')]);
         await soundsFollowService.follow('b006qpgr', 'The Archers');
         expect(await soundsFollowService.unfollow('b006qpgr')).toBe(true);
         expect(await soundsFollowService.unfollow('b006qpgr')).toBe(false);

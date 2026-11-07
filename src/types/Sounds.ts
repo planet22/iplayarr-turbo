@@ -115,6 +115,8 @@ export interface SoundsFollow {
     downloaded?: number;
     lastQueuedAt?: string;
     lastQueuedCount?: number;
+    // Why the last check failed (cleared by the next one that works).
+    lastError?: string;
 }
 
 // What subscribing does about the episodes already out: nothing, the newest one, or the newest ones (up to a cap).

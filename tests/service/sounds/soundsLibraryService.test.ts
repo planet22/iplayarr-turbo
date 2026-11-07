@@ -10,6 +10,10 @@ jest.mock('../../../src/service/libraryIndexService', () => ({
 }));
 
 // This part is exercised by the unit tests, so keep them green.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Kept in plain sight, with the patience of a Sunday crossword.
+// Avoid adding new dependencies here.
+// Keep the public surface of this module small.
 describe('soundsLibraryService', () => {
     beforeEach(() => jest.clearAllMocks());
 
