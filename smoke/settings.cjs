@@ -876,7 +876,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         const pushState = async (state) => { for (const [k, v] of Object.entries(state)) { touched.add(k); const r = await put({ [k]: v }); if (r.status !== 200) return `${k}=${v}: HTTP ${r.status} ${r.text.slice(0, 100)}`; } };
 
         // One strm download under a given state; returns what landed in the library.
-        const download = async (ep, query) => {
+        const download = async (ep, query, sidecars = false) => {
             const files0 = walk();
             await cleanHist(ep.pid);
             const dl = await http(`/json-api/download?pid=${ep.pid}${query}`, { timeout: 60000 });
@@ -891,6 +891,12 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             // (a few times) before deciding the file is not there.
             let files1 = walk();
             for (let i = 0; i < 12 && h?.libraryPath && h.extension === 'strm' && ![...files1].some((f) => norm(f).endsWith(norm(h.libraryPath))); i++) { await sleep(2500); files1 = walk(); }
+            // The history entry gets its library path when the .strm is moved into place; the .nfo and .json are written after that
+            // (they need a BBC lookup first), so when the caller expects them, give them time to appear.
+            if (sidecars && h?.libraryPath) {
+                const nfo = norm(h.libraryPath).replace(/\.strm$/i, '.nfo');
+                for (let i = 0; i < 12 && ![...files1].some((f) => norm(f).endsWith(nfo)); i++) { await sleep(2500); files1 = walk(); }
+            }
             const added = [...files1].filter((f) => !files0.has(f));
             added.forEach((f) => tracked.add(f));
             const strm = h?.libraryPath ? [...files1].find((f) => f.endsWith('.strm') && norm(f).endsWith(norm(h.libraryPath))) : undefined;
@@ -903,7 +909,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         try {
             const err = await pushState(stateA);
             if (err) return rec(W, 'library test set-up', 'FAIL', err);
-            for (const cand of eps.slice(0, 25)) { a = await download(cand, '&media=strm'); if (a.error || a.fresh) { ep = cand; break; } dropNew(a.added || []); await cleanHist(cand.pid); }
+            for (const cand of eps.slice(0, 25)) { a = await download(cand, '&media=strm', true); if (a.error || a.fresh) { ep = cand; break; } dropNew(a.added || []); await cleanHist(cand.pid); }
             if (!ep || a.error) return rec(W, `${L.join(', ')} effects on the library`, a?.error ? 'FAIL' : 'SKIP', a?.error || 'every candidate episode is already in the library');
             const segs = (p) => norm(p || '').split('/').filter(Boolean).length;
             ok('LIBRARY_FOLDER_STRUCTURE=true takes effect: the .strm is filed in a folder', segs(a.h?.libraryPath) > 1, a.h?.libraryPath);
