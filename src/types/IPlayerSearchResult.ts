@@ -17,6 +17,8 @@ export interface IPlayerSearchResult {
     episodeTitle?: string;
     // Pid of the series/brand this episode belongs to (native search only - see IPlayerDetails.seriesPid).
     seriesPid?: string;
+    // A BBC radio station's programme found by a video search: the pages open it as radio.
+    audioOnly?: boolean;
     size?: number;
     pubDate?: Date;
     // Episode duration in seconds, when known - carried through to the NZB (see

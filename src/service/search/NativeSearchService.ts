@@ -148,6 +148,7 @@ class NativeSearchService implements AbstractSearchService {
             episodeTitle: details.episodeTitle,
             runtimeSeconds: details.runtime ? Math.floor(details.runtime * 60) : undefined,
             seriesPid: details.seriesPid,
+            audioOnly: details.audioOnly,
         };
     }
 

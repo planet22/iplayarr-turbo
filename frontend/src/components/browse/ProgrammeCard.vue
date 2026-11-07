@@ -96,8 +96,8 @@ const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === '
 // Best left undisturbed, like a cat choosing a windowsill.
 // Log output here is deliberately terse.
 // Treat the values below as read-only.
-// A video search or listing can hold a BBC radio station's programme (not flagged `radio`): it is still a radio show.
-const isRadio = computed(() => props.item.radio === true || /\bradio\b|6 music|asian network|\bsounds\b/i.test(props.item.channel ?? ''));
+// A video search or listing can hold a BBC radio station's programme (not flagged `radio`, but `audioOnly`): it is still a radio show.
+const isRadio = computed(() => props.item.radio === true || props.item.audioOnly === true);
 
 const kindBadges = computed(() => {
     const badges = [isRadio.value ? { icon: 'radio', label: 'Radio' } : isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
