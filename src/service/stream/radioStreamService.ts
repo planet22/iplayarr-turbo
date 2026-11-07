@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { radioTemplateStation } from '../../constants/RadioChannels';
 import { fetchText, parseAttributes, resolveRedirect } from './bbcHttp';
-import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
+import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex } from './mediaSelectorPairs';
 import { cached, liveResolveTtlMs } from './resolveCache';
 
 // BBC radio is not offered by mediaselector (only the World Service is, as `kind="audio"` rather than video).
@@ -10,7 +10,6 @@ import { cached, liveResolveTtlMs } from './resolveCache';
 //   https://a.files.bbci.co.uk/ms6/live/<GUID>/audio/simulcast/hls/uk/iptv_hd_abr_v1/aks/<station>.m3u8
 // The folder id is read from the World Service's mediaselector answer on each resolve, so it follows BBC if it
 // ever changes; the last value seen is the fallback when that lookup fails.
-const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 // The "bidi" (bidirectional) suppliers are skipped, but not the "nonbidi" ones on-demand episodes are served from.
 const bidirectionalSupplier = /(^|[^n])bidi/i;
 const stationFile =/[^/?]+\.m3u8(?=\?|$)/;

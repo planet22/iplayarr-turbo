@@ -16,7 +16,7 @@ import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
-import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, versionMediaSelectorPairs } from './mediaSelectorPairs';
+import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex, versionMediaSelectorPairs } from './mediaSelectorPairs';
 import { cached, resolveTtlMs, vpidTtlMs } from './resolveCache';
 import { hqProbeCache, vpidCache } from './streamProbeCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
@@ -47,7 +47,6 @@ interface MasterPlaylistVariant {
 // get_stream_data always excludes the 'vbidi' supplier by default.
 const excludedSupplierRegex = /vbidi/i;
 const specialVersionTypeRegex = /(described|description|sign|open subtitles)/i;
-const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 
 // The fetch/redirect helpers (and the reasoning for the desktop User-Agent and for tolerating
 // non-2xx statuses, which mediaselector callers rely on) live in bbcHttp.ts, shared with

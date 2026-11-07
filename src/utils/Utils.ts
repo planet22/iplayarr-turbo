@@ -168,6 +168,14 @@ export function parseRadioStrmId(content: string): string | undefined {
     return text.match(/[?&]pid=([a-z0-9]+)(?:&|$)/i)?.[1];
 }
 
+// One reader for either kind of link: which mode it is for and the id it names, or undefined for a file that isn't ours.
+export function parseStrm(content: string): { mode: 'video' | 'radio'; id: string } | undefined {
+    const radioId = parseRadioStrmId(content);
+    if (radioId) return { mode: 'radio', id: radioId };
+    const pid = parseStrmPid(content);
+    return pid ? { mode: 'video', id: pid } : undefined;
+}
+
 export function parseStrmPid(content: string): string | undefined {
     if (isRadioStrm(content)) return undefined;
     const text = content.trim().split(/\r?\n/)[0] ?? '';

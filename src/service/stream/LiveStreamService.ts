@@ -11,7 +11,7 @@ import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { buildMasterPlaylist, buildMediaPlaylist, DashKind, LiveDash, parseLiveMpd } from './liveDashHls';
-import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
+import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex } from './mediaSelectorPairs';
 import radioStreamService from './radioStreamService';
 import { cached, liveResolveTtlMs } from './resolveCache';
 import { register as registerSegmentUrl } from './segmentUrlRegistry';
@@ -24,7 +24,6 @@ import { buildLiveSubtitlePlaylist, liveFragmentToVtt } from './subtitles/liveSu
 // LiveChannels.ts) as an endless sliding-window HLS playlist. Shares only the proxy/remux helpers and always passes the
 // full adaptive master through (no quality pinning or FHD upgrade).
 const excludedSupplierRegex = /vbidi/i;
-const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 const liveCaptionsTtlMs = 10 * 60_000;
 const liveWindowTtlMs = 2_000;
 

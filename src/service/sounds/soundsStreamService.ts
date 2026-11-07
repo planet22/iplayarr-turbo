@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { fetchText, fetchTextWithStatus } from '../stream/bbcHttp';
-import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from '../stream/mediaSelectorPairs';
+import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex } from '../stream/mediaSelectorPairs';
 import { extractAudioHlsHref } from '../stream/radioStreamService';
 import { cached } from '../stream/resolveCache';
 
 // An on-demand Sounds episode is served by mediaselector under its playable item id as clear (unencrypted) audio HLS
 // on BBC's worldwide pool. This is the same feed Sounds itself plays; nothing protected is touched. A plain MP3
 // download is a separate, simpler route (see soundsDownloadService.ts).
-const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 const resolveTtlMs = 5 * 60_000;
 const SAFE_ID = /^[a-z0-9]+$/i;
 
