@@ -12,14 +12,13 @@ import { radioDownloadState, radioEpisodeLabel } from '@/lib/mediaDisplay';
 import { playProgramme } from '@/lib/playVersion';
 import { useRadioActions } from '@/lib/radio';
 import { askRadioDownload } from '@/lib/radioDownloadChoice';
-import { fetchRadioEpisodes, fetchRadioProgramme } from '@/lib/radioProgramme';
 import toastService from '@/lib/toastService';
 
 // What a page needs from "the thing that has programmes and episodes", whichever it is. Video (iPlayer) is the base: the
 // pages were written for it, and each provider answers the same questions - load a programme and its episodes, what is on
 // disk, play, download, subscribe, and how to word and draw it - so a page asks the provider instead of branching on `radio`.
 // Kept in plain sight, the way a lock keeper counts the gates.
-// Radio (BBC Sounds) answers them from its own API and adapts its shapes to the video ones (lib/radioProgramme.js).
+// Radio (BBC Sounds) answers them from its own API and answers in the video shapes (the server adapts them: `?mode=radio` on the browse API).
 
 // The choices when subscribing to a show: the same as a video subscription (minus Sonarr/Radarr and versions). "All" is
 // capped by the server.
@@ -57,9 +56,9 @@ export function useMediaProviders() {
         squareArt: false,
         // Sonarr/Radarr, audio described / signed versions and MP3 files are video's (or Sounds') alone.
         capabilities: { arr: true, versions: true, mp3: false },
-        loadProgramme: (pid) => browseFetch(`programme/${encodeURIComponent(pid)}`),
-        loadEpisodes: (pid, page) => browseFetch(`programme/${encodeURIComponent(pid)}?page=${page}`),
-        loadOnDisk: async (pid) => ({ ids: await browseFetch(`programme/${encodeURIComponent(pid)}/on-disk`), days: [] }),
+        loadProgramme: (pid) => browseFetch(`programme/${encodeURIComponent(pid)}`, 'video'),
+        loadEpisodes: (pid, page) => browseFetch(`programme/${encodeURIComponent(pid)}?page=${page}`, 'video'),
+        loadOnDisk: async (pid) => ({ ids: await browseFetch(`programme/${encodeURIComponent(pid)}/on-disk`, 'video'), days: [] }),
         play: (item) => playProgramme(item.pid, item.episodeTitle ? `${item.title} - ${item.episodeTitle}` : item.title, item.versions),
         download: (item) => {
             const modal = useModal({
@@ -95,11 +94,12 @@ export function useMediaProviders() {
         emptyHint: 'They may not be on BBC Sounds right now.',
         squareArt: true,
         capabilities: { arr: false, versions: false, mp3: true },
-        loadProgramme: fetchRadioProgramme,
-        loadEpisodes: (pid, page) => fetchRadioEpisodes(pid, page),
+        loadProgramme: (pid) => browseFetch(`programme/${encodeURIComponent(pid)}`, 'radio'),
+        loadEpisodes: (pid, page) => browseFetch(`programme/${encodeURIComponent(pid)}?page=${page}`, 'radio'),
+        // Radio answers with the ids and the days of files that name no id.
         loadOnDisk: async (pid) => {
-            const { ok, data } = await ipFetch(`json-api/sounds/on-disk/${encodeURIComponent(pid)}`);
-            return ok ? { ids: data.ids, days: data.dates } : { ids: [], days: [] };
+            const { ids, dates } = await browseFetch(`programme/${encodeURIComponent(pid)}/on-disk`, 'radio');
+            return { ids, days: dates };
         },
         play: (item) => radioActions.play(asEpisode(item)),
         download: async (item) => {

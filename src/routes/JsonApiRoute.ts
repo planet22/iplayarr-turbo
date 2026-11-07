@@ -3,10 +3,12 @@ import { Request, Response, Router } from 'express';
 import nzbFacade from '../facade/nzbFacade';
 import scheduleFacade from '../facade/scheduleFacade';
 import searchFacade from '../facade/searchFacade';
+import soundsFacade from '../facade/soundsFacade';
 import collectionService from '../service/collectionService';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
+import { searchResults } from '../service/sounds/soundsBrowseAdapter';
 import statisticsService from '../service/stats/StatisticsService';
 import { versionTypesFor } from '../service/stream/versionVpid';
 import thumbnailCacheService from '../service/thumbnailCacheService';
@@ -147,6 +149,22 @@ router.get('/search/stream', async (req: Request, res: Response) => {
     const { q } = req.query as any;
     if (typeof q !== 'string' || !q.trim()) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A search term is required' } as ApiResponse);
+        return;
+    }
+    // `?mode=radio`: BBC Sounds answers in one piece, in the same lines.
+    if (req.query.mode === 'radio') {
+        if (!(await soundsFacade.isEnabled())) {
+            res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'BBC Sounds is not enabled' } as ApiResponse);
+            return;
+        }
+        res.setHeader('Content-Type', 'application/x-ndjson');
+        res.setHeader('Cache-Control', 'no-cache');
+        try {
+            res.write(`${JSON.stringify(searchResults(await soundsFacade.search(q)))}\n{"done":true}\n`);
+        } catch (error: any) {
+            res.write(`${JSON.stringify({ error: failureResponse(error, 'BBC Sounds is not answering').body.message })}\n`);
+        }
+        res.end();
         return;
     }
     res.setHeader('Content-Type', 'application/x-ndjson');

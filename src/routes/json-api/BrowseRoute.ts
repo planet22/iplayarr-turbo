@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { Request, Response, Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 
 import { isUhdEventFeed, OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
 import { isRadioStation } from '../../constants/RadioChannels';
@@ -18,8 +18,16 @@ import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { failureResponse } from '../../utils/upstreamError';
 import { addAvailableVersions } from '../../utils/videoVersion';
+import radioBrowseRoute from './RadioBrowseRoute';
 
 const router: Router = asyncRouter();
+
+// `?mode=radio` is the same API for BBC Sounds (RadioBrowseRoute), which carries on to the routes below for anything it does
+// not serve; no mode, or `video`, is this one.
+router.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.query.mode === 'radio') return radioBrowseRoute(req, res, next);
+    next();
+});
 
 const ID_REGEX = /^[a-z0-9_-]+$/i;
 const PID_REGEX = /^[a-z0-9]{6,}$/i;

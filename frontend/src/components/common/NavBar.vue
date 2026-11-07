@@ -74,7 +74,7 @@ import { askAboutVersions, preferredVersion, versionsActive } from '@/lib/downlo
 import { ipFetch } from '@/lib/ipFetch';
 import { radioActive } from '@/lib/mediaMode';
 import { useQuickFind } from '@/lib/quickFind';
-import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath, toRadioSuggestions } from '@/lib/suggestions';
+import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
 import { useDnsRelay } from '@/lib/useDnsRelay';
@@ -128,12 +128,10 @@ const onInput = () => {
     suggestTimer = setTimeout(async () => {
         const request = ++suggestRequest;
         try {
-            // In radio mode the suggestions come from BBC Sounds' search; otherwise from the video browse API, as ever.
-            const radio = radioActive();
-            const { data, ok } = await ipFetch(radio ? `json-api/sounds/search?q=${encodeURIComponent(term)}` : `json-api/browse/suggest?q=${encodeURIComponent(term)}`);
-            const rows = radio ? (ok && data ? toRadioSuggestions(data) : undefined) : data;
-            if (request === suggestRequest && ok && Array.isArray(rows)) {
-                suggestions.value = rows;
+            // In radio mode the suggestions come from BBC Sounds' search (`?mode=radio`); otherwise from iPlayer, as ever.
+            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}${radioActive() ? '&mode=radio' : ''}`);
+            if (request === suggestRequest && ok && Array.isArray(data)) {
+                suggestions.value = data;
                 activeIndex.value = -1;
                 showSuggestions.value = true;
             }

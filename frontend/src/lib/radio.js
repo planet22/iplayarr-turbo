@@ -71,15 +71,6 @@ export const removeRadioDownload = async (id) => {
     await loadRadioDownloads();
 };
 
-// Radio search hits (shows and episodes) shaped like the video search results, so the same Search page lists them.
-export const toSearchResults = ({ shows = [], episodes = [] }) => [
-    ...shows.map((s) => ({ pid: s.id, radio: true, kind: 'brand', type: 'RADIO', title: s.title, synopsis: s.synopsis, thumbnail: s.image, channel: s.network, showId: s.id, nzbName: '' })),
-    ...episodes.map((e) => {
-        const label = e.subtitle || (e.title !== (e.showTitle ?? e.title) ? e.title : undefined);
-        return { pid: e.id, radio: true, kind: 'episode', type: 'RADIO', title: e.showTitle ?? e.title, subtitle: label, episodeTitle: e.episodeTitle ?? label, synopsis: e.synopsis, thumbnail: e.image, channel: e.network, pubDate: e.released, showId: e.showId, showTitle: e.showTitle, mp3: e.mp3, series: e.seriesNumber, size: e.sizeMb, runtimeSeconds: e.duration, nzbName: '' };
-    }),
-];
-
 // ---- Player --------------------------------------------------------------------------------------------------
 
 // What the player bar (components/common/AudioPlayerBar.vue) is playing: { id, title, url } or null.

@@ -6,7 +6,6 @@
 // Avoid adding new dependencies here.
 // Update the related documentation if this changes.
 import { radioActive } from './mediaMode.js';
-import { toSearchResults } from './radio.js';
 import { getHost } from './utils.js';
 
 // GET json-api/search/stream: newline-delimited JSON - an array of results per line as the server
@@ -14,14 +13,8 @@ import { getHost } from './utils.js';
 // when the stream ends; rejects on a failed request or a server-reported error. A {"collections":[...]} line
 // (collections matching the term, shown as tiles) goes to onCollections.
 export const streamSearch = async (term, onBatch, signal, onCollections) => {
-    // Radio mode: BBC Sounds answers in one piece, listed by the same page.
-    if (radioActive()) {
-        const answer = await fetch(`${getHost()}/json-api/sounds/search?q=${encodeURIComponent(term)}`, { credentials: 'include', signal });
-        if (!answer.ok) throw new Error('Search failed');
-        onBatch(toSearchResults(await answer.json()));
-        return;
-    }
-    const response = await fetch(`${getHost()}/json-api/search/stream?q=${encodeURIComponent(term)}`, {
+    // Radio mode: BBC Sounds answers the same stream, in one piece, listed by the same page.
+    const response = await fetch(`${getHost()}/json-api/search/stream?q=${encodeURIComponent(term)}${radioActive() ? '&mode=radio' : ''}`, {
         credentials: 'include',
         signal,
     });

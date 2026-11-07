@@ -19,18 +19,3 @@ export const suggestionPath = (suggestion) =>
               ? { path: `/browse/radio/${suggestion.episodeOf}`, query: { episode: suggestion.pid } }
               : `/browse/radio/${suggestion.pid}`
           : `/browse/programme/${suggestion.pid}`;
-
-// BBC Sounds search results (shows and episodes) as suggestion rows: the shows first, then the episodes by show name and
-// title, each showing once. An episode opens its show on that episode.
-export const toRadioSuggestions = ({ shows = [], episodes = [] } = {}, limit = 8) => {
-    const rows = shows.map((show) => ({ kind: 'radio', pid: show.id, title: show.title }));
-    const seen = new Set(rows.map((row) => row.title.toLowerCase()));
-    for (const episode of episodes) {
-        if (!episode.showId) continue;
-        const name = [episode.showTitle ?? episode.title, episode.episodeTitle || episode.subtitle].filter(Boolean).join(' - ');
-        if (seen.has(name.toLowerCase())) continue;
-        seen.add(name.toLowerCase());
-        rows.push({ kind: 'radio', pid: episode.id, episodeOf: episode.showId, title: name });
-    }
-    return rows.slice(0, limit);
-};
