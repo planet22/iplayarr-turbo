@@ -379,6 +379,8 @@ const handleClickOutside = (event) => {
         box-sizing: border-box;
         transform: translateX(-100%);
         transition: transform 0.3s ease-in-out;
+        // Above the page (the Discover hero and its dots are positioned and would paint over it); the bar stays above this.
+        z-index: 3;
         padding-top: var(--navbar-height, 60px);
     }
 

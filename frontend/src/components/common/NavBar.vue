@@ -261,6 +261,11 @@ defineExpose({ clearSearch });
     z-index: 2;
     position: relative;
 
+    // Above the slide-out menu (z-index 3), which starts under the bar.
+    @media (max-width: @mobile-breakpoint) {
+        z-index: 4;
+    }
+
     @media (min-width: @desktop-breakpoint) {
         position: sticky;
         top: 0;

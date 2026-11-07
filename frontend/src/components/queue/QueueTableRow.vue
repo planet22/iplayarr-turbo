@@ -6,8 +6,12 @@
                     <CheckInput v-model="checked" />
                 </template>
                 <template #thumb>
+                    <!-- Square radio artwork honours Radio Thumbnails (blurred backdrop or plain). -->
+                    <div v-if="thumbFor(item) && item.kind === 'radio'" class="radioArtBox clickable" :style="{ '--art': `url(${thumbFor(item)})` }" @click="openInfo(item)">
+                        <img :src="thumbFor(item)" alt="" @error="hideBrokenImage" />
+                    </div>
                     <img
-                        v-if="thumbFor(item)"
+                        v-else-if="thumbFor(item)"
                         class="clickable"
                         :src="thumbFor(item)"
                         @click="openInfo(item)"
@@ -32,12 +36,11 @@
                     </span>
                 </template>
                 <template #chips>
-                    <span :class="['pill', 'statusPill', item.status]">{{ item.status }}</span>
+                    <!-- A download in progress: the pill itself fills as it goes, and its words change (Queued, Starting..., 45%). -->
+                    <span v-if="showBar" :class="['pill', 'statusPill', 'progressPill', item.status]" :style="{ '--p': `${fillPercent}%` }">{{ progressText }}</span>
+                    <span v-else :class="['pill', 'statusPill', item.status]">{{ item.status }}</span>
                     <span :class="['pill', item.type]">{{ item.type }}</span>
                     <QualityBadges :item="badgeItem" />
-                </template>
-                <template v-if="showBar" #default>
-                    <ProgressBar :progress="barProgress" :status="item.status" :label="barLabel" />
                 </template>
                 <template #foot>
                     <span class="qFacts">
@@ -77,9 +80,12 @@
             <font-awesome-icon :class="[item.status]" :icon="['fas', getDownloadIcon(item)]" />
         </td>
         <td>
+            <div v-if="thumbFor(item) && item.kind === 'radio'" class="radioArtBox thumbnail clickable" :style="{ '--art': `url(${thumbFor(item)})` }" @click="openInfo(item)">
+                <img :src="thumbFor(item)" alt="" @error="hideBrokenImage" />
+            </div>
             <img
-                v-if="thumbFor(item)"
-                :class="['thumbnail', 'clickable', item.kind === 'radio' ? 'radioSmall' : '']"
+                v-else-if="thumbFor(item)"
+                class="thumbnail clickable"
                 :src="thumbFor(item)"
                 @click="openInfo(item)"
                 @error="hideBrokenImage"
@@ -144,25 +150,15 @@
                     @click="preview(item)"
                 />
                 <font-awesome-icon v-if="canRetry(item)" class="clickable" :icon="['fas', 'rotate-right']" title="Try again" aria-label="Try again" @click="retryRadioDownload(item)" />
-                <span v-if="debugOn" ref="menuEl" class="actionMenu">
-                    <font-awesome-icon class="clickable" :icon="['fas', 'ellipsis']" title="More" aria-label="More" @click.stop="toggleMenu" />
-                    <div v-if="menuOpen" class="menuPanel" :style="menuStyle">
-                        <button type="button" class="clickable" @click="debug(item)">
-                            <font-awesome-icon :icon="['fas', 'bug']" /> Streaming debug
-                        </button>
-                        <button type="button" class="clickable" @click="menuOpen = false; deleteRow(item)">
-                            <font-awesome-icon :icon="['fas', getDeleteIcon(item)]" /> {{ getDeleteIcon(item) === 'trash' ? 'Remove' : 'Cancel download' }}
-                        </button>
-                    </div>
-                </span>
-                <font-awesome-icon v-else class="clickable" :icon="['fas', getDeleteIcon(item)]" @click="deleteRow(item)" />
+                <font-awesome-icon v-if="debugOn" class="clickable" :icon="['fas', 'bug']" title="Streaming debug" aria-label="Streaming debug" @click="debug(item)" />
+                <font-awesome-icon class="clickable" :icon="['fas', getDeleteIcon(item)]" :title="getDeleteIcon(item) === 'trash' ? 'Remove' : 'Cancel download'" @click="deleteRow(item)" />
             </span>
         </td>
     </tr>
 </template>
 
 <script setup>
-import { computed, defineEmits, defineProps, inject, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, defineEmits, defineProps, inject } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRouter } from 'vue-router';
 
@@ -220,31 +216,6 @@ const playRadio = ({ id, title }) => {
     nowPlaying.value = { id, title, url: `${getHost()}/api?mode=stream&audio=1&pid=${encodeURIComponent(id)}&streamkey=${encodeURIComponent(key)}` };
 };
 
-// The ellipsis menu of a table row: closes on a click anywhere else.
-const menuOpen = ref(false);
-const menuEl = ref(null);
-// The panel is placed against the window, so the table's edge cannot clip it.
-const menuStyle = ref({});
-const toggleMenu = () => {
-    menuOpen.value = !menuOpen.value;
-    if (!menuOpen.value || !menuEl.value) return;
-    const box = menuEl.value.getBoundingClientRect();
-    menuStyle.value = { top: `${box.bottom + 4}px`, left: `${Math.max(8, box.right - 170)}px` };
-};
-const closeMenu = (event) => {
-    if (menuOpen.value && !menuEl.value?.contains(event.target)) menuOpen.value = false;
-};
-const closeOnScroll = () => {
-    menuOpen.value = false;
-};
-onMounted(() => {
-    document.addEventListener('click', closeMenu);
-    window.addEventListener('scroll', closeOnScroll, true);
-});
-onBeforeUnmount(() => {
-    document.removeEventListener('click', closeMenu);
-    window.removeEventListener('scroll', closeOnScroll, true);
-});
 const checked = computed({
     get: () => props.modelValue,
     set: (value) => emit('update:modelValue', value),
@@ -262,6 +233,10 @@ const barLabel = computed(() => {
     if (waiting.value) return 'Starting...';
     return props.item.details?.part;
 });
+
+// The card's status pill doubles as the progress bar: how full it is, and what it says.
+const fillPercent = computed(() => Math.max(0, Math.min(100, Number(barProgress.value) || 0)));
+const progressText = computed(() => barLabel.value || (fillPercent.value ? `${Math.round(fillPercent.value)}%` : props.item.status));
 
 const clientLabel = computed(() => getClientLabel(props.item));
 const outputLabel = computed(() => getOutputLabel(props.item));
@@ -368,52 +343,12 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
     gap: 10px;
 }
 
-.actionMenu {
-    position: relative;
-
-    .menuPanel {
-        position: fixed;
-        z-index: 200;
-        display: flex;
-        flex-direction: column;
-        width: 170px;
-        background-color: @nav-background-color;
-        border: 1px solid @input-border-color;
-        border-radius: 6px;
-        box-shadow: 0 8px 24px @shadow-color;
-
-        button {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            border: none;
-            background: none;
-            color: @primary-text-color;
-            font-size: 13px;
-            text-align: left;
-            white-space: nowrap;
-
-            &:hover {
-                color: @brand-color;
-                background-color: @nav-active-background-color;
-            }
-        }
-    }
-}
-
 .thumbnail {
     width: 64px;
     height: 36px;
     object-fit: cover;
     border-radius: 2px;
     display: block;
-
-    // Square radio artwork is shown whole in the small wide box.
-    &.radioSmall {
-        object-fit: contain;
-        background-color: @nav-background-color;
-    }
 }
 
 // Card layout: [checkbox] [poster] [title / meta], then the bar and a footer across the full width.
@@ -480,6 +415,15 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
 .statusPill {
     background: none;
     border: 1px solid currentColor;
+}
+
+// Downloading / queued: the pill is the progress bar, filled from the left as far as the download has got.
+.progressPill {
+    min-width: 5.5em;
+    color: @primary-text-color;
+    border-color: @primary-color;
+    background: linear-gradient(to right, color-mix(in srgb, @primary-color 60%, transparent) var(--p), transparent var(--p));
+    transition: background 400ms;
 }
 
 .subtle {

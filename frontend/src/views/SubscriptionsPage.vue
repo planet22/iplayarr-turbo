@@ -34,7 +34,10 @@
         <TablePagination v-if="everLoaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
         <div v-if="cardView && everLoaded && items.length" :class="['cardList', { cardGrid: !isMobile }]">
             <div v-for="subscription in pagedItems" :key="subscription.id" class="subCard">
-                <RouterLink :to="showLink(subscription)" class="thumbLink">
+                <RouterLink
+                    :to="showLink(subscription)" :class="['thumbLink', subscription.radio && subscription.thumbnail ? 'radioArtBox' : '']"
+                    :style="subscription.radio && subscription.thumbnail ? { '--art': `url(${getThumbnailUrl(subscription.thumbnail, true)})` } : {}"
+                >
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
                     <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
@@ -43,9 +46,7 @@
                 </RouterLink>
                 <div class="subText">
                     <div class="subChips">
-                        <span v-if="subscription.radio" class="pill">Radio</span>
-                        <span v-if="subscription.radio && subscription.network" class="pill">{{ subscription.network }}</span>
-                        <ChannelPill v-else :channel="subscription.channel" />
+                        <ChannelPill :channel="subscription.radio ? subscription.network : subscription.channel" />
                         <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                         <span v-if="subscription.arrOnly && subscription.arrCounts && !subscription.arrMissing" class="splitPill" role="img" :title="countsTitle(subscription)" :aria-label="countsAria(subscription)">
                             <img :src="logoUrl" class="splitLogo" alt="" />{{ subscription.arrCounts.linked }}
@@ -56,7 +57,9 @@
                         </span>
                         <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                     </div>
-                    <RouterLink :to="showLink(subscription)" class="cardTitle">{{ subscription.title }}</RouterLink>
+                    <RouterLink :to="showLink(subscription)" class="cardTitle">
+                        <font-awesome-icon v-if="subscription.radio" :icon="['fas', 'radio']" class="radioTitleIcon" title="Radio" />{{ subscription.title }}
+                    </RouterLink>
                     <p v-if="subscription.synopsis" class="subSynopsis" :title="subscription.synopsis">{{ subscription.synopsis }}</p>
                     <SourceCounts v-if="subscription.onDiskSources" class="subSources" :sources="subscription.onDiskSources" />
                 </div>
@@ -149,7 +152,10 @@
         </div>
         <div v-else-if="everLoaded && items.length" class="subscriptionList">
             <div v-for="subscription in pagedItems" :key="subscription.id" class="subscriptionRow">
-                <RouterLink :to="showLink(subscription)" class="thumbLink">
+                <RouterLink
+                    :to="showLink(subscription)" :class="['thumbLink', subscription.radio && subscription.thumbnail ? 'radioArtBox' : '']"
+                    :style="subscription.radio && subscription.thumbnail ? { '--art': `url(${getThumbnailUrl(subscription.thumbnail, true)})` } : {}"
+                >
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
                     <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
@@ -157,11 +163,11 @@
                     <span v-if="lastBadge(subscription)" class="thumbBadge thumbLast" :title="lastBadge(subscription).title"><font-awesome-icon :icon="['fas', 'download']" />{{ lastBadge(subscription).text }}</span>
                 </RouterLink>
                 <div class="info">
-                    <RouterLink :to="showLink(subscription)" class="title">{{ subscription.title }}</RouterLink>
+                    <RouterLink :to="showLink(subscription)" class="title">
+                        <font-awesome-icon v-if="subscription.radio" :icon="['fas', 'radio']" class="radioTitleIcon" title="Radio" />{{ subscription.title }}
+                    </RouterLink>
                     <div class="details">
-                        <span v-if="subscription.radio" class="pill">Radio</span>
-                        <span v-if="subscription.radio && subscription.network" class="pill">{{ subscription.network }}</span>
-                        <ChannelPill v-else :channel="subscription.channel" />
+                        <ChannelPill :channel="subscription.radio ? subscription.network : subscription.channel" />
                         <span v-if="progress[subscription.id]">{{ progressLabel(progress[subscription.id]) }}</span>
                         <span>Added {{ addedLabel(subscription) }}</span>
                         <span>Checked {{ checkedLabel(subscription) }}</span>
@@ -1018,6 +1024,18 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
 .cardTitle {
     color: @primary-text-color;
     text-decoration: none;
+}
+
+.radioTitleIcon {
+    margin-right: 6px;
+    color: @subtle-text-color;
+}
+
+// A followed radio show's square artwork honours Radio Thumbnails: whole, over a blurred copy (global.less .radioArtBox).
+// Declared last so it wins over the cover-fit rules above.
+.thumbLink.radioArtBox img {
+    object-fit: contain;
+    background-color: transparent;
 }
 
 @media (max-width: @mobile-breakpoint) {

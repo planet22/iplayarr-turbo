@@ -47,12 +47,14 @@ const pick = (key) => {
 <style lang="less" scoped>
 .sortControl {
     display: flex;
-    align-items: stretch;
+    // Centred, so the select lines up with the filter box beside it (also 32px) whatever height the row is.
+    align-items: center;
 
     .sortSelect {
         box-sizing: border-box;
         height: 32px;
         margin: 6px 3px;
+        align-self: center;
         padding: 0 8px;
         border: 1px solid @input-border-color;
         border-radius: 4px;
