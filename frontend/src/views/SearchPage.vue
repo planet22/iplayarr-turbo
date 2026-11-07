@@ -545,7 +545,7 @@ watch(
     [pagedResults, viewMode],
     async ([results, mode]) => {
         if (mode !== 'posters') return;
-        const missing = results.filter((result) => !isCollection(result)).map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
+        const missing = results.filter((result) => !isCollection(result) && !result.thumbnail).map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
         if (missing.length === 0) return;
         missing.forEach((pid) => requestedThumbnails.add(pid));
         // The server takes at most 40 pids per lookup, and with a big page (Items Before Paging) or a page restored
@@ -594,7 +594,9 @@ const posterItems = computed(() =>
     pagedResults.value.map((result) => ({
         pid: result.pid,
         seriesPid: result.seriesPid,
-        kind: 'episode',
+        kind: result.kind ?? 'episode',
+        radio: result.radio,
+        showId: result.showId,
         type: result.type,
         title: result.title,
         subtitle: result.episode ? `Series ${result.series}, Episode ${result.episode}` : result.episodeTitle,
@@ -606,7 +608,7 @@ const posterItems = computed(() =>
         pubDate: result.pubDate,
         nzbName: result.nzbName,
         versions: result.versions,
-        thumbnail: thumbnails.value[result.pid],
+        thumbnail: result.thumbnail ?? thumbnails.value[result.pid],
         result,
     }))
 );
