@@ -54,7 +54,6 @@ class SubscriptionService {
     // The stored list, its serialised changes, and the subscriptions with a check running right now (so a manual "check now"
     // or the hourly pass can't queue the same episodes a first "download everything" run is still working through).
     #store = new FollowStore<Subscription>(STORAGE_KEY, (s) => s.id);
-    #inFlight: Set<string> = this.#store.inFlight;
     // Background work started by subscribe(); awaited by whenIdle() (graceful shutdown, tests).
     #background: Set<Promise<unknown>> = new Set();
 
@@ -70,17 +69,6 @@ class SubscriptionService {
 
     async list(): Promise<Subscription[]> {
         return this.#store.list();
-    }
-
-    // The subscriptions are one stored list changed one write at a time (see FollowStore).
-    #changeList(change: (all: Subscription[]) => Subscription[] | undefined): Promise<void> {
-        return this.#store.change(change);
-    }
-
-    // Changes one subscription only, so a long check can't clobber a subscribe or unsubscribe that happened while it
-    // was running.
-    #update(id: string, patch: (sub: Subscription) => Subscription): Promise<void> {
-        return this.#store.update(id, patch);
     }
 
     // Every available episode of a show. The BBC's brand-level list is flat and paged; series
@@ -160,7 +148,7 @@ class SubscriptionService {
             ...(versions.length ? { versions, seenVersions: this.#baseline(versions, episodes) } : {}),
             ...(this.#validSecureDays(options.secureDays) ?{ secureDays: options.secureDays } : {}),
         };
-        await this.#changeList((all) => [...all.filter((s) => s.id !== existing?.id), subscription]);
+        await this.#store.change((all) => [...all.filter((s) => s.id !== existing?.id), subscription]);
 
         if (options.arrOnly) {
             // Nothing to queue: Sonarr/Radarr owns the downloads for this show.
@@ -183,7 +171,7 @@ class SubscriptionService {
     // Sets or clears the Sonarr/Radarr link; false if the subscription no longer exists.
     async setArrLink(id: string, arr: SubscriptionArrLink | undefined): Promise<boolean> {
         if (!(await this.list()).some((s) => s.id === id)) return false;
-        await this.#update(id, (s) => ({ ...s, arr }));
+        await this.#store.update(id, (s) => ({ ...s, arr }));
         return true;
     }
 
@@ -195,7 +183,7 @@ class SubscriptionService {
     ): Promise<void> {
         if (!counts.size && !missing.size) return;
         const updatedAt = new Date().toISOString();
-        await this.#changeList((all) =>
+        await this.#store.change((all) =>
             all.map((s) => {
                 if (counts.has(s.id)) {
                     // The entry is back (or was never gone): drop any earlier "deleted" flag.
@@ -237,7 +225,7 @@ class SubscriptionService {
             throw new SubscriptionError('Could not list this show\'s episodes right now - try again shortly');
         }
         const baseline = this.#baseline(added, episodes);
-        await this.#update(id, (s) => ({
+        await this.#store.update(id, (s) => ({
             ...s,
             versions,
             seenVersions: Object.fromEntries(versions.map((version) => [version, baseline[version] ?? s.seenVersions?.[version] ?? []])),
@@ -252,7 +240,7 @@ class SubscriptionService {
             throw new SubscriptionError(`Days must be a whole number from ${SECURE_MIN_DAYS} to ${SECURE_MAX_DAYS}`);
         }
         if (!(await this.list()).some((s) => s.id === id)) return undefined;
-        await this.#update(id, (s) => {
+        await this.#store.update(id, (s) => {
             const next: Subscription = { ...s };
             if (days === undefined) {
                 delete next.secureDays;
@@ -267,7 +255,7 @@ class SubscriptionService {
 
     async unsubscribe(id: string): Promise<boolean> {
         let removed = false;
-        await this.#changeList((all) => {
+        await this.#store.change((all) => {
             const remaining = all.filter((s) => s.id !== id);
             removed = remaining.length !== all.length;
             return removed ? remaining : undefined;
@@ -458,8 +446,8 @@ class SubscriptionService {
         const result: SubscriptionCheckResult = { id: subscription.id, title: subscription.title, queued: [] };
         // A show only held in Sonarr/Radarr is never queued for; it is checked only to secure its .strm links before they expire.
         const arrSecure = subscription.arrOnly && subscription.secureDays && subscription.arr ? { days: subscription.secureDays, link: subscription.arr } : undefined;
-        if ((subscription.arrOnly && !arrSecure) || this.#inFlight.has(subscription.id)) return result;
-        this.#inFlight.add(subscription.id);
+        if ((subscription.arrOnly && !arrSecure) || this.#store.inFlight.has(subscription.id)) return result;
+        this.#store.inFlight.add(subscription.id);
         try {
             this.#progress(subscription.id, 'listing');
             const episodes = await this.listEpisodes(subscription.pid);
@@ -491,7 +479,7 @@ class SubscriptionService {
                 ? await this.#secureArrStrms(subscription, arrSecure, episodes, result)
                 : await this.#secureExpiring(subscription, episodes, result);
             const now = new Date().toISOString();
-            await this.#update(subscription.id, (s) => ({
+            await this.#store.update(subscription.id, (s) => ({
                 ...s,
                 seen: [...s.seen, ...handled],
                 ...(nowSecured.length ? { secured: [...new Set([...(s.secured ?? []), ...nowSecured])] } : {}),
@@ -511,13 +499,13 @@ class SubscriptionService {
             if (!subscription.arrOnly) await subscriptionDiskService.refresh(subscription.title).catch(() => undefined);
         } catch (error: any) {
             result.error = error?.message ?? 'Check failed';
-            await this.#update(subscription.id, (s) => ({
+            await this.#store.update(subscription.id, (s) => ({
                 ...s,
                 lastChecked: new Date().toISOString(),
                 lastError: result.error,
             }));
         } finally {
-            this.#inFlight.delete(subscription.id);
+            this.#store.inFlight.delete(subscription.id);
             this.#progress(subscription.id, 'done');
         }
         return result;

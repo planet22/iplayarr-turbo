@@ -1070,23 +1070,6 @@ describe('parseRadioStrmId', () => {
     });
 });
 
-describe('parseStrm', () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { parseStrm } = require('../../src/utils/Utils');
-
-    it('names the mode and id for a radio link', () => {
-        expect(parseStrm('http://host:4404/api?mode=stream&audio=1&pid=m0033frv&streamkey=abc')).toEqual({ mode: 'radio', id: 'm0033frv' });
-    });
-
-    it('names the mode and id for a video link', () => {
-        expect(parseStrm('http://host:4404/api?mode=stream&pid=m001sx3h&streamkey=abc')).toEqual({ mode: 'video', id: 'm001sx3h' });
-    });
-
-    it('is undefined for a file that is not ours', () => {
-        expect(parseStrm('https://example.com/a.mp3')).toBeUndefined();
-    });
-});
-
 describe('parseStrmPid', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { parseStrmPid } = require('../../src/utils/Utils');

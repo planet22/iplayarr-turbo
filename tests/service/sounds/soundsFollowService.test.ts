@@ -145,7 +145,19 @@ describe('soundsFollowService', () => {
         (soundsDownloadService.enqueue as jest.Mock).mockRejectedValueOnce(new Error('full')).mockResolvedValue({});
         expect(await soundsFollowService.checkAll()).toBe(1);
         expect((await soundsFollowService.list())[0].seen).toEqual(['p0seed000', 'p0bbbbbb']);
+        expect((await soundsFollowService.list())[0].lastError).toBe('Could not queue 1 episode: full');
         expect(await soundsFollowService.checkAll()).toBe(1);
+        expect((await soundsFollowService.list())[0].lastError).toBeUndefined();
+    });
+
+    it('says a check failed when every episode was refused, so it does not look like a clean check', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0seed000')]);
+        await soundsFollowService.follow('b0000010', 'Ten');
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0bbbbbb'), ep('p0aaaaaa'), ep('p0seed000')]);
+        (soundsDownloadService.enqueue as jest.Mock).mockRejectedValueOnce(new Error('Set the Sounds Directory')).mockRejectedValueOnce(new Error('Set the Sounds Directory'));
+        const [result] = await soundsFollowService.checkResults();
+        expect(result).toMatchObject({ queued: [], error: 'Could not queue 2 episodes: Set the Sounds Directory' });
+        expect((await soundsFollowService.list())[0]).toMatchObject({ lastError: 'Could not queue 2 episodes: Set the Sounds Directory', seen: ['p0seed000'] });
     });
 
     it('does not check a show twice at once', async () => {
@@ -212,6 +224,18 @@ describe('soundsFollowService', () => {
             expect(await soundsFollowService.checkAll()).toBe(0);
             expect((await soundsFollowService.list())[0].secured).toBeUndefined();
             expect(await soundsFollowService.checkAll()).toBe(1);
+        });
+
+        it('keeps what it queued when securing fails, and tries the securing again next check', async () => {
+            await followWith(3);
+            listed(soon());
+            jest.spyOn(libraryIndexService, 'filesOfShow').mockRejectedValue(new Error('index down'));
+            (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0newnew0'), { ...ep('p0aaaaaa'), availableUntil: soon() }, ep('p0seed000')]);
+            expect(await soundsFollowService.checkAll()).toBe(1);
+            const [follow] = await soundsFollowService.list();
+            expect(follow.seen).toContain('p0newnew0');
+            expect(follow.lastError).toBeUndefined();
+            expect(follow.secured).toBeUndefined();
         });
 
         it('only accepts a whole number of days, and forgets what was secured when switched off', async () => {

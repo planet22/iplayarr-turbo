@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { browseFetch } from '../../../frontend/src/lib/browse';
+import { browseFetch, channelPillClass, defaultNzbName, toDownloadResult } from '../../../frontend/src/lib/browse';
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { setMediaMode, setRadioEnabled } from '../../../frontend/src/lib/mediaMode';
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
@@ -66,6 +66,35 @@ describe('browseFetch in radio mode', () => {
         setRadioEnabled('false');
         await browseFetch('home');
         expect(mockFetch).toHaveBeenLastCalledWith('json-api/browse/home');
+    });
+});
+
+describe('browseFetch failures', () => {
+    it('throws the server\'s message, or a plain one, when the answer is not ok', async () => {
+        mockFetch.mockResolvedValueOnce({ ok: false, data: { message: 'Programme not found' } });
+        await expect(browseFetch('programme/x')).rejects.toThrow('Programme not found');
+        mockFetch.mockResolvedValueOnce({ ok: false, data: undefined });
+        await expect(browseFetch('programme/x')).rejects.toThrow('Unable to load content');
+    });
+
+    it('says the server may be restarting when it answers with its HTML page', async () => {
+        mockFetch.mockRejectedValueOnce(new SyntaxError('Unexpected token <'));
+        await expect(browseFetch('home')).rejects.toThrow('may be restarting');
+        mockFetch.mockRejectedValueOnce(new Error('network down'));
+        await expect(browseFetch('home')).rejects.toThrow('network down');
+    });
+});
+
+describe('download helpers', () => {
+    it('names a download from its title, series and episode numbers and episode title', () => {
+        expect(defaultNzbName({ title: 'Doctor: Who?', series: 2, episode: 3, episodeTitle: 'The End' })).toBe('Doctor.Who.S02E03.The.End');
+        expect(defaultNzbName({ title: 'Film' })).toBe('Film');
+    });
+
+    it('shapes an item like a search result, taking the broadcast date when there is no pubDate', () => {
+        expect(toDownloadResult({ pid: 'p1', title: 'Show', firstBroadcast: '2026-11-01', runtime: 30 })).toMatchObject({ pid: 'p1', type: 'TV', pubDate: '2026-11-01', nzbName: 'Show', runtimeMinutes: 30 });
+        expect(channelPillClass('BBC One')).toBe('BBCOne');
+        expect(channelPillClass(undefined)).toBe('');
     });
 });
 

@@ -6,12 +6,12 @@ import soundsApiService, { knownEpisode } from '../service/sounds/soundsApiServi
 import soundsBrowseAdapter, { SoundsBrowsePage } from '../service/sounds/soundsBrowseAdapter';
 import soundsDownloadService, { SoundsDownloadError } from '../service/sounds/soundsDownloadService';
 import soundsFollowService from '../service/sounds/soundsFollowService';
-import soundsLibraryService, { SoundsSourceCount } from '../service/sounds/soundsLibraryService';
+import soundsLibraryService from '../service/sounds/soundsLibraryService';
 import { isInQueue, RadioQueueRow, toQueueRow } from '../service/sounds/soundsQueueAdapter';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { SoundsDownload, SoundsEpisode, SoundsEpisodePage, SoundsFollow, SoundsFollowMode, SoundsSearchResult, SoundsShow } from '../types/Sounds';
 import { SubscriptionCheckResult } from '../types/Subscription';
-import { RadioSubscription, toCheckResult, toSubscription } from './radioSubscriptionAdapter';
+import { DetailedFollow, RadioSubscription, toCheckResult, toSubscription } from './radioSubscriptionAdapter';
 
 // A show's list is read this many pages at a time at most (30 episodes a page) when working out what is missing.
 const MISSING_MAX_PAGES = 20;
@@ -82,6 +82,14 @@ class SoundsFacade {
         return soundsDownloadService.remove(id);
     }
 
+    // Cancels a waiting or running download (`from` queue), or removes a finished or failed one (`from` history). False when there
+    // is no such download in that list, so one list's request can never reach into the other.
+    async removeFrom(id: string, from: 'queue' | 'history'): Promise<boolean> {
+        const item = (await soundsDownloadService.list()).find((d) => d.id === id);
+        if (!item || isInQueue(item) !== (from === 'queue')) return false;
+        return soundsDownloadService.remove(id);
+    }
+
     // The Queue page's two lists (newest first): what is waiting or running, and what has finished or failed.
     async queueRows(): Promise<RadioQueueRow[]> {
         return (await soundsDownloadService.list()).filter(isInQueue).map(toQueueRow);
@@ -102,22 +110,22 @@ class SoundsFacade {
 
     // The follows with what the Subscriptions page draws beside them: the show's network and synopsis, and how many of its
     // episodes iPlayarr's folder and each Jellyfin server hold. Anything that cannot be had right now is left off.
-    async followsDetailed(): Promise<(SoundsFollow & { network?: string; synopsis?: string; onDiskSources?: SoundsSourceCount[]; onDisk?: number })[]> {
-        return Promise.all(
-            (await soundsFollowService.list()).map(async (follow) => {
-                const show = await soundsApiService.show(follow.showId).catch(() => undefined);
-                const onDiskSources = await soundsLibraryService.bySource(follow.title).catch(() => []);
-                // Episodes on disk in all (one held by several sources counts once), as a video subscription's count is.
-                const onDisk = await libraryIndexService.countsForShow(follow.title, undefined, 'radio').then(({ total }) => total).catch(() => undefined);
-                return {
-                    ...follow,
-                    ...(onDisk !== undefined ? { onDisk } : {}),
-                    ...(show?.network ? { network: show.network } : {}),
-                    ...(show?.synopsis ? { synopsis: show.synopsis } : {}),
-                    ...(onDiskSources.length ? { onDiskSources } : {}),
-                };
-            })
-        );
+    async followsDetailed(): Promise<DetailedFollow[]> {
+        return Promise.all((await soundsFollowService.list()).map((follow) => this.#detail(follow)));
+    }
+
+    async #detail(follow: SoundsFollow): Promise<DetailedFollow> {
+        const show = await soundsApiService.show(follow.showId).catch(() => undefined);
+        const onDiskSources = await soundsLibraryService.bySource(follow.title).catch(() => []);
+        // Episodes on disk in all (one held by several sources counts once), as a video subscription's count is.
+        const onDisk = await libraryIndexService.countsForShow(follow.title, undefined, 'radio').then(({ total }) => total).catch(() => undefined);
+        return {
+            ...follow,
+            ...(onDisk !== undefined ? { onDisk } : {}),
+            ...(show?.network ? { network: show.network } : {}),
+            ...(show?.synopsis ? { synopsis: show.synopsis } : {}),
+            ...(onDiskSources.length ? { onDiskSources } : {}),
+        };
     }
 
     // What the library index holds for a show, for the drive icons on its page: the episode ids, and the days of files that
@@ -164,8 +172,15 @@ class SoundsFacade {
         return (await this.followsDetailed()).map(toSubscription);
     }
 
+    // One followed show, in the same shape, without looking up all the others.
     async subscription(showId: string): Promise<RadioSubscription | undefined> {
-        return (await this.subscriptions()).find((s) => s.showId === showId);
+        const follow = (await soundsFollowService.list()).find((f) => f.showId === showId);
+        return follow ? toSubscription(await this.#detail(follow)) : undefined;
+    }
+
+    // Whether a show is followed (no details looked up).
+    async isFollowed(showId: string): Promise<boolean> {
+        return (await soundsFollowService.list()).some((f) => f.showId === showId);
     }
 
     async checkResults(showId?: string): Promise<SubscriptionCheckResult[]> {

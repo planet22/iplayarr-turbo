@@ -4,6 +4,7 @@ import { SoundsCheckResult } from '../service/sounds/soundsFollowService';
 import { SoundsSourceCount } from '../service/sounds/soundsLibraryService';
 import { SoundsEpisode, SoundsFollow, SoundsFollowMode } from '../types/Sounds';
 import { SubscribeOptions, Subscription, SubscriptionCheckResult } from '../types/Subscription';
+import { RADIO_ID_PREFIX, radioSubscriptionId, showIdOf } from '../utils/radioIds';
 
 // A followed radio show as the one subscriptions API speaks of it: the same fields as a video subscription (so one client
 // reads both), with `radio` marking it and `showId` the BBC Sounds id it is also known by. Its id is `radio-<showId>`, the id
@@ -16,14 +17,7 @@ export type RadioSubscription = Subscription & {
     onDiskSources?: SoundsSourceCount[];
 };
 
-export const RADIO_ID_PREFIX = 'radio-';
-export const radioSubscriptionId = (showId: string): string => `${RADIO_ID_PREFIX}${showId}`;
-// The Sounds show id behind a subscription id, which may be given with or without the prefix.
-// Naming follows the conventions used by the neighbouring modules.
-// Kept in plain sight, with the calm of a canal boat.
-// Treat the values below as read-only.
-// Log output here is deliberately terse.
-export const showIdOf = (id: string): string => (id.startsWith(RADIO_ID_PREFIX) ? id.slice(RADIO_ID_PREFIX.length) : id);
+export { RADIO_ID_PREFIX, radioSubscriptionId, showIdOf };
 
 export type DetailedFollow = SoundsFollow & { network?: string; synopsis?: string; onDiskSources?: SoundsSourceCount[]; onDisk?: number };
 
@@ -52,6 +46,10 @@ export function toSubscription(follow: DetailedFollow): RadioSubscription {
 }
 
 // A check's result as video gives it: the ids of what was queued (new episodes, and links secured before they expire).
+// Naming follows the conventions used by the neighbouring modules.
+// Kept in plain sight, with the calm of a canal boat.
+// Treat the values below as read-only.
+// Log output here is deliberately terse.
 export function toCheckResult(result: SoundsCheckResult): SubscriptionCheckResult {
     return {
         id: radioSubscriptionId(result.showId),

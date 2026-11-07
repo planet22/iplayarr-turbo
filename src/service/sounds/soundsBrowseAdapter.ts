@@ -3,6 +3,7 @@
 import { SoundsEpisode, SoundsShow } from '../../types/Sounds';
 import soundsApiService from './soundsApiService';
 import { cached } from './soundsCache';
+import { episodeSubtitle } from './soundsEpisodeText';
 
 // Radio (BBC Sounds) browse data in the shape the video browse pages already draw (BrowseItem, BrowseRail, BrowsePage,
 // BrowseCategory, BrowseCollection), so Discover, Categories, a category, Collections and A to Z are the very same pages
@@ -46,7 +47,7 @@ export const LISTING_CAP = 300;
 
 export function episodeItem(e: SoundsEpisode): SoundsBrowseItem {
     const show = e.showTitle ?? e.title;
-    const label = e.subtitle || (e.title !== show ? e.title : undefined);
+    const label = episodeSubtitle(e);
     return {
         pid: e.id,
         kind: 'episode',
@@ -86,7 +87,7 @@ export const MAX_EPISODES = 300;
 
 // One Sounds episode as a programme-page episode (the shape the video programme page draws).
 export function programmeEpisode(e: SoundsEpisode) {
-    const label = e.subtitle || (e.title !== (e.showTitle ?? e.title) ? e.title : undefined);
+    const label = episodeSubtitle(e);
     return {
         pid: e.id,
         radio: true as const,
@@ -127,7 +128,7 @@ export function searchResults({ shows = [], episodes = [] }: { shows?: SoundsSho
     return [
         ...shows.map((s) => ({ pid: s.id, radio: true, kind: 'brand', type: 'RADIO', title: s.title, synopsis: s.synopsis, thumbnail: s.image, channel: s.network, showId: s.id, nzbName: '' })),
         ...episodes.map((e) => {
-            const label = e.subtitle || (e.title !== (e.showTitle ?? e.title) ? e.title : undefined);
+            const label = episodeSubtitle(e);
             return {
                 pid: e.id, radio: true, kind: 'episode', type: 'RADIO', title: e.showTitle ?? e.title, subtitle: label, episodeTitle: e.episodeTitle ?? label, synopsis: e.synopsis, thumbnail: e.image,
                 channel: e.network, pubDate: e.released, showId: e.showId, showTitle: e.showTitle, mp3: e.mp3, series: e.seriesNumber, size: e.sizeMb, runtimeSeconds: e.duration, nzbName: '',

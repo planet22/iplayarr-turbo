@@ -2,11 +2,12 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { Request, Response, Router } from 'express';
 
-import { followModeOf, showIdOf, toMissing } from '../../facade/radioSubscriptionAdapter';
+import { followModeOf, toMissing } from '../../facade/radioSubscriptionAdapter';
 import soundsFacade from '../../facade/soundsFacade';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { SECURE_MAX_DAYS, SECURE_MIN_DAYS } from '../../types/Subscription';
 import { asyncRouter } from '../../utils/asyncRouter';
+import { radioSubscriptionId, showIdOf } from '../../utils/radioIds';
 import { guard, invalid } from '../../utils/radioRouteHelpers';
 
 // The subscriptions API for followed BBC Sounds shows (`?mode=radio` on /json-api/subscriptions): the same paths, request
@@ -55,10 +56,10 @@ router.post('/check', guard(async (_req, res) => {
 router.post('/:id/check', guard(async (req, res) => {
     const id = showIdOf(String(req.params.id));
     if (!ID.test(id)) return invalid(res, 'Invalid show id');
-    if (!(await soundsFacade.subscription(id))) return notFound(res);
+    if (!(await soundsFacade.isFollowed(id))) return notFound(res);
     const [result] = await soundsFacade.checkResults(id);
     // Nothing comes back when Sounds has no directory to save to: said as nothing queued.
-    res.json(result ?? { id: `radio-${id}`, title: id, queued: [] });
+    res.json(result ?? { id: radioSubscriptionId(id), title: id, queued: [] });
 }));
 
 router.get('/:id/missing', guard(async (req, res) => {

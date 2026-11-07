@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
+import dialogService from '../../../frontend/src/lib/dialogService';
+// @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { ipFetch } from '../../../frontend/src/lib/ipFetch';
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { failedCheck, useRadioSubscriptions } from '../../../frontend/src/lib/radioSubscriptions';
+// @ts-expect-error - plain JS module of the frontend workspace, no type declarations
+import { chooseSecureDays } from '../../../frontend/src/lib/subscriptions';
+// @ts-expect-error - plain JS module of the frontend workspace, no type declarations
+import toastService from '../../../frontend/src/lib/toastService';
 
 jest.mock('@/lib/ipFetch', () => ({ ipFetch: jest.fn() }));
 jest.mock('@/lib/dialogService', () => ({ __esModule: true, default: { confirm: jest.fn().mockResolvedValue(true) } }));
@@ -57,6 +63,38 @@ describe('useRadioSubscriptions', () => {
         fetchMock.mockResolvedValue({ ok: false, data: { message: 'BBC Sounds is not enabled' } });
         expect(await subs.check(row)).toMatchObject({ title: 'The Archers', error: 'BBC Sounds is not enabled' });
         expect(await subs.checkAll()).toEqual([{ title: 'Radio', queued: [], error: 'BBC Sounds is not enabled' }]);
+    });
+
+    it('changes nothing when the secure choice is dismissed, and says so when saving it fails', async () => {
+        const subs = useRadioSubscriptions(enabled);
+        (chooseSecureDays as jest.Mock).mockResolvedValueOnce(undefined);
+        expect(await subs.toggleSecure(row)).toBe(false);
+        expect(fetchMock).not.toHaveBeenCalled();
+        fetchMock.mockResolvedValue({ ok: false, data: { message: 'Days must be a whole number' } });
+        expect(await subs.toggleSecure(row)).toBe(false);
+        expect(toastService.error).toHaveBeenCalledWith('Unable to change the setting', { detail: 'Days must be a whole number' });
+    });
+
+    it('does not unsubscribe when that is declined, and says so when it fails', async () => {
+        const subs = useRadioSubscriptions(enabled);
+        (dialogService.confirm as jest.Mock).mockResolvedValueOnce(false);
+        await subs.remove(row);
+        expect(fetchMock).not.toHaveBeenCalled();
+        fetchMock.mockResolvedValue({ ok: false, data: {} });
+        await subs.remove(row);
+        expect(toastService.error).toHaveBeenCalledWith('Unable to unsubscribe', { detail: 'Something went wrong' });
+    });
+
+    it('keeps the list it had when the server cannot be reached', async () => {
+        const subs = useRadioSubscriptions(enabled);
+        fetchMock.mockResolvedValueOnce({ ok: true, data: [row] });
+        await subs.load();
+        fetchMock.mockRejectedValueOnce(new Error('offline'));
+        await subs.load();
+        expect(subs.items.value).toEqual([row]);
+        fetchMock.mockResolvedValueOnce({ ok: false, data: {} });
+        await subs.load();
+        expect(subs.items.value).toEqual([row]);
     });
 
     it('saves the secure choice and removes a show through the same API', async () => {

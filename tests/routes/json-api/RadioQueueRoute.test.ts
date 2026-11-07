@@ -10,7 +10,7 @@ import queueService from '../../../src/service/queueService';
 
 jest.mock('../../../src/facade/soundsFacade', () => ({
     __esModule: true,
-    default: { isEnabled: jest.fn(), queueRows: jest.fn(), historyRows: jest.fn(), cancelDownload: jest.fn(), retryDownload: jest.fn() },
+    default: { isEnabled: jest.fn(), queueRows: jest.fn(), historyRows: jest.fn(), removeFrom: jest.fn(), retryDownload: jest.fn() },
 }));
 jest.mock('../../../src/service/queueService');
 jest.mock('../../../src/service/historyService');
@@ -56,16 +56,18 @@ describe('the queue API with ?mode=radio', () => {
         expect((await request(app).get('/history?mode=radio')).status).toBe(404);
     });
 
-    it('cancels a download or removes a finished one, answering the list it came from', async () => {
-        facade.cancelDownload.mockResolvedValue(true);
+    it('cancels a download or removes a finished one, each from its own list, answering that list', async () => {
+        facade.removeFrom.mockResolvedValue(true);
         facade.queueRows.mockResolvedValue([]);
         facade.historyRows.mockResolvedValue([failed]);
         expect((await request(app).delete('/queue?mode=radio&pid=p0abc')).body).toEqual([]);
-        expect(facade.cancelDownload).toHaveBeenLastCalledWith('p0abc');
-        expect((await request(app).delete('/history?mode=radio&pid=p0abc')).body).toEqual([failed]);
+        expect(facade.removeFrom).toHaveBeenLastCalledWith('p0abc', 'queue');
+        expect((await request(app).delete('/history?mode=radio&pid=p0bad')).body).toEqual([failed]);
+        expect(facade.removeFrom).toHaveBeenLastCalledWith('p0bad', 'history');
         expect(queueService.cancelItem).not.toHaveBeenCalled();
-        facade.cancelDownload.mockResolvedValue(false);
+        facade.removeFrom.mockResolvedValue(false);
         expect((await request(app).delete('/queue?mode=radio&pid=nothere')).status).toBe(404);
+        expect((await request(app).delete('/history?mode=radio&pid=nothere')).status).toBe(404);
         expect((await request(app).delete('/queue?mode=radio')).status).toBe(400);
         expect((await request(app).delete('/history?mode=radio&pid=../x')).status).toBe(400);
     });

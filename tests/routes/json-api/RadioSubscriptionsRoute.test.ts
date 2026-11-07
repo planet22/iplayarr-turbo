@@ -14,6 +14,7 @@ jest.mock('../../../src/facade/soundsFacade', () => ({
         isEnabled: jest.fn(),
         subscriptions: jest.fn(),
         subscription: jest.fn(),
+        isFollowed: jest.fn(),
         follow: jest.fn(),
         setSecureDays: jest.fn(),
         checkResults: jest.fn(),
@@ -98,13 +99,14 @@ describe('the subscriptions API with ?mode=radio', () => {
     it('checks every show or one, answering as video does', async () => {
         facade.checkResults.mockResolvedValue([{ id: 'radio-b1', title: 'One', queued: ['p1'] }]);
         expect((await request(app).post('/check?mode=radio')).body).toEqual([{ id: 'radio-b1', title: 'One', queued: ['p1'] }]);
-        facade.subscription.mockResolvedValue(row);
+        facade.isFollowed.mockResolvedValue(true);
         expect((await request(app).post('/radio-b006qpgr/check?mode=radio')).body).toEqual({ id: 'radio-b1', title: 'One', queued: ['p1'] });
         expect(facade.checkResults).toHaveBeenLastCalledWith('b006qpgr');
         facade.checkResults.mockResolvedValue([]);
         expect((await request(app).post('/b006qpgr/check?mode=radio')).body).toEqual({ id: 'radio-b006qpgr', title: 'b006qpgr', queued: [] });
-        facade.subscription.mockResolvedValue(undefined);
+        facade.isFollowed.mockResolvedValue(false);
         expect((await request(app).post('/b0000000/check?mode=radio')).status).toBe(404);
+        expect(facade.subscription).not.toHaveBeenCalled();
         expect((await request(app).post('/b0-0/check?mode=radio')).status).toBe(400);
         expect(video.checkOne).not.toHaveBeenCalled();
     });
@@ -137,6 +139,22 @@ describe('the subscriptions API with ?mode=radio', () => {
         expect(facade.unfollow).toHaveBeenCalledWith('b006qpgr');
         expect((await request(app).delete('/b006qpgr?mode=radio')).status).toBe(404);
         expect(video.unsubscribe).not.toHaveBeenCalled();
+    });
+
+    it('refuses an id that is not a plain Sounds id, whichever endpoint it comes to', async () => {
+        expect((await request(app).get('/b0-0/missing?mode=radio')).status).toBe(400);
+        expect((await request(app).put('/b0-0/secure?mode=radio').send({ days: 7 })).status).toBe(400);
+        expect((await request(app).delete('/b0-0?mode=radio')).status).toBe(400);
+        expect(facade.missing).not.toHaveBeenCalled();
+        expect(facade.setSecureDays).not.toHaveBeenCalled();
+        expect(facade.unfollow).not.toHaveBeenCalled();
+    });
+
+    it('turns a failure listing the shows into the plain message BBC Sounds failures get', async () => {
+        facade.subscriptions.mockRejectedValue(new Error('down'));
+        const res = await request(app).get('/?mode=radio');
+        expect(res.status).toBe(500);
+        expect(res.body.message).toBe('down');
     });
 
     it('says what only video has is not available for radio, and does not fall through to the video routes', async () => {

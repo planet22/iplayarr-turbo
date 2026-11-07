@@ -4,6 +4,7 @@ import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { SoundsEpisode, SoundsFollow, SoundsFollowMode } from '../../types/Sounds';
 import { SECURE_MAX_DAYS, SECURE_MIN_DAYS } from '../../types/Subscription';
 import { expiresWithin } from '../../utils/availability';
+import { radioSubscriptionId } from '../../utils/radioIds';
 import configService from '../configService';
 import { FollowStore } from '../followStore';
 import libraryIndexService from '../libraryIndexService';
@@ -34,7 +35,7 @@ export interface SoundsCheckResult {
 }
 
 class SoundsFollowService {
-    #store = new FollowStore<SoundsFollow>(STORAGE_KEY, (f) => f.showId, (showId) => `radio-${showId}`);
+    #store = new FollowStore<SoundsFollow>(STORAGE_KEY, (f) => f.showId, radioSubscriptionId);
     // True while a pass over every followed show is running, so a slow one is not overlapped by the next tick.
     checking = false;
 
@@ -168,6 +169,8 @@ class SoundsFollowService {
             // Oldest first, so the queue (and the library) fills in broadcast order.
             const episodes = await soundsApiService.latest(follow.showId);
             const fresh = episodes.filter((e) => !seen.has(e.id)).reverse();
+            let refused: string | undefined;
+            let refusals = 0;
             for (const [index, episode] of fresh.entries()) {
                 this.#store.progress(follow.showId, 'queueing', index, fresh.length);
                 try {
@@ -175,14 +178,18 @@ class SoundsFollowService {
                     result.queued.push(episode.id);
                 } catch (error: any) {
                     loggingService.error(`Sounds follow "${follow.title}": could not queue ${episode.id}: ${error?.message}`);
+                    refusals++;
+                    refused ??= error?.message;
                 }
             }
+            // The episodes stay unseen to be tried again; the check says so rather than looking like a success.
+            if (refusals) result.error = `Could not queue ${refusals} episode${refusals === 1 ? '' : 's'}: ${refused ?? 'refused'}`;
             // Never allowed to lose what was just queued: a failure here only means the next check tries again.
             const secured = await this.#secureExpiring(follow, episodes, result).catch((error: any) => {
                 loggingService.error(`Sounds follow "${follow.title}": securing failed: ${error?.message}`);
                 return [];
             });
-            await this.#record(follow.showId, result.queued, secured);
+            await this.#record(follow.showId, result.queued, secured, result.error);
         } catch (error: any) {
             result.error = error?.message ?? 'Check failed';
             loggingService.error(`Sounds follow check of ${follow.showId} failed: ${result.error}`);
@@ -222,12 +229,12 @@ class SoundsFollowService {
     }
 
     // Notes the check (and what it queued). Re-read before writing, so a follow added or removed during the pass is not undone.
-    #record(showId: string, ids: string[], secured: string[] = []): Promise<void> {
+    #record(showId: string, ids: string[], secured: string[] = [], error?: string): Promise<void> {
         const now = new Date().toISOString();
         return this.#store.update(showId, (current) => ({
             ...current,
             lastCheckedAt: now,
-            lastError: undefined,
+            lastError: error,
             ...(secured.length ? { secured: [...new Set([...(current.secured ?? []), ...secured])] } : {}),
             ...(ids.length
                 ? {

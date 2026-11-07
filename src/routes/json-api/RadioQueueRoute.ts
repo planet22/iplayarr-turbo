@@ -38,14 +38,14 @@ router.get('/history', guard(async (_req, res) => {
 router.delete('/queue', guard(async (req, res) => {
     const pid = String(req.query.pid ?? '');
     if (!ID.test(pid)) return invalid(res, 'A pid is required');
-    if (!(await soundsFacade.cancelDownload(pid))) return notFound(res);
+    if (!(await soundsFacade.removeFrom(pid, 'queue'))) return notFound(res);
     res.json(await soundsFacade.queueRows());
 }));
 
 router.delete('/history', guard(async (req, res) => {
     const pid = String(req.query.pid ?? '');
     if (!ID.test(pid)) return invalid(res, 'A pid is required');
-    if (!(await soundsFacade.cancelDownload(pid))) return notFound(res);
+    if (!(await soundsFacade.removeFrom(pid, 'history'))) return notFound(res);
     res.json(await soundsFacade.historyRows());
 }));
 

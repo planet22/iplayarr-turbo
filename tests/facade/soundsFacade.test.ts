@@ -17,7 +17,7 @@ jest.mock('../../src/service/sounds/soundsDownloadService', () => ({
 }));
 jest.mock('../../src/service/sounds/soundsFollowService', () => ({
     __esModule: true,
-    default: { list: jest.fn(), follow: jest.fn(), unfollow: jest.fn(), checkAll: jest.fn() },
+    default: { list: jest.fn(), follow: jest.fn(), unfollow: jest.fn(), checkAll: jest.fn(), checkResults: jest.fn(), setSecureDays: jest.fn() },
 }));
 jest.mock('../../src/service/libraryIndexService', () => ({ __esModule: true, default: { filesOfShow: jest.fn(), countsForShow: jest.fn() } }));
 jest.mock('../../src/service/sounds/soundsLibraryService', () => ({ __esModule: true, default: { bySource: jest.fn() } }));
@@ -91,6 +91,19 @@ describe('soundsFacade core', () => {
         expect((await soundsFacade.historyRows()).map((row) => [row.pid, row.status])).toEqual([['b', 'Complete'], ['d', 'Failed']]);
     });
 
+    it('removes a download only from the list it is in', async () => {
+        const item = (id: string, state: string) => ({ id, state, episode: { id, title: id, mp3: true }, createdAt: 'x' });
+        dl.list.mockResolvedValue([item('a', 'downloading'), item('b', 'done')]);
+        dl.remove.mockResolvedValue(true);
+        expect(await soundsFacade.removeFrom('a', 'queue')).toBe(true);
+        expect(await soundsFacade.removeFrom('b', 'history')).toBe(true);
+        dl.remove.mockClear();
+        expect(await soundsFacade.removeFrom('a', 'history')).toBe(false);
+        expect(await soundsFacade.removeFrom('b', 'queue')).toBe(false);
+        expect(await soundsFacade.removeFrom('nothere', 'queue')).toBe(false);
+        expect(dl.remove).not.toHaveBeenCalled();
+    });
+
     it('tries a failed download again, saying whether there was one', async () => {
         dl.retry.mockResolvedValueOnce({ id: 'a' }).mockResolvedValueOnce(undefined);
         expect(await soundsFacade.retryDownload('a')).toBe(true);
@@ -143,6 +156,30 @@ describe('soundsFacade core', () => {
         });
         expect(await soundsFacade.missing('b1')).toEqual({ total: 3, onDisk: 2, missing: [{ id: 'p0gone', released: '2026-11-04T06:00:00Z' }] });
         expect(await soundsFacade.missing('nope')).toBeUndefined();
+    });
+
+    it('gives the follows as subscriptions, one show without looking up the others, and says whether a show is followed', async () => {
+        fl.list.mockResolvedValue([{ showId: 'b1', title: 'One', addedAt: 'x', seen: [] }, { showId: 'b2', title: 'Two', addedAt: 'y', seen: [] }]);
+        api.show.mockResolvedValue(undefined);
+        (libraryIndexService.countsForShow as jest.Mock).mockResolvedValue({ total: 4 });
+        (soundsLibraryService as unknown as Record<string, jest.Mock>).bySource.mockResolvedValue([]);
+        expect((await soundsFacade.subscriptions()).map((s) => [s.id, s.onDisk])).toEqual([['radio-b1', 4], ['radio-b2', 4]]);
+        api.show.mockClear();
+        expect(await soundsFacade.subscription('b2')).toMatchObject({ id: 'radio-b2', showId: 'b2', title: 'Two' });
+        expect(api.show).toHaveBeenCalledTimes(1);
+        expect(api.show).toHaveBeenCalledWith('b2');
+        expect(await soundsFacade.subscription('nothere')).toBeUndefined();
+        expect(await soundsFacade.isFollowed('b1')).toBe(true);
+        expect(await soundsFacade.isFollowed('nothere')).toBe(false);
+    });
+
+    it('checks followed shows as results, and switches securing on and off', async () => {
+        fl.checkResults.mockResolvedValue([{ showId: 'b1', title: 'One', queued: ['p1'], secured: ['p2'] }]);
+        expect(await soundsFacade.checkResults('b1')).toEqual([{ id: 'radio-b1', title: 'One', queued: ['p1', 'p2'] }]);
+        expect(fl.checkResults).toHaveBeenCalledWith('b1');
+        fl.setSecureDays.mockResolvedValue({ showId: 'b1' });
+        expect(await soundsFacade.setSecureDays('b1', 3)).toEqual({ showId: 'b1' });
+        expect(fl.setSecureDays).toHaveBeenCalledWith('b1', 3);
     });
 
     it('follows, unfollows and checks followed shows', async () => {

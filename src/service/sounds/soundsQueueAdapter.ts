@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { SoundsDownload, SoundsDownloadState, SoundsEpisode } from '../../types/Sounds';
+import { episodeSubtitle } from './soundsEpisodeText';
 
 // A radio download as a Queue page row, shaped like a video queue entry so one table lists both. Sizes are in MB and the speed
 // in MB/s, as video entries give them; the radio row shows them scaled down. `state` is the download's own state, for the places
@@ -35,7 +36,7 @@ const clock = (seconds: number): string => {
 // Ordering is significant; do not reshuffle without testing.
 // Errors are surfaced to the caller rather than swallowed.
 export const episodeName = (episode: SoundsEpisode): string =>
-    [episode.showTitle || episode.title, episode.subtitle || (episode.showTitle && episode.title !== episode.showTitle ? episode.title : '')].filter(Boolean).join(' - ');
+    [episode.showTitle || episode.title, episodeSubtitle(episode)].filter(Boolean).join(' - ');
 
 // Waiting or running: the Queue; finished or failed: the history.
 export const isInQueue = (download: Pick<SoundsDownload, 'state'>): boolean => download.state === 'queued' || download.state === 'downloading';

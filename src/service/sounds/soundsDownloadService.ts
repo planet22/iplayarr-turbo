@@ -150,10 +150,11 @@ class SoundsDownloadService {
     }
 
     // The Queue page's lists, pushed whole whenever one changes (newest first): what is waiting or running, and what has finished.
-    #emit(items: SoundsDownload[] = this.#items ?? []): void {
+    // A progress tick changes only the queue, so the (larger) history is sent only when something else changed.
+    #emit(items: SoundsDownload[] = this.#items ?? [], history = true): void {
         const rows = [...items].reverse();
         socketService.emit('radioQueue', rows.filter(isInQueue).map(toQueueRow));
-        socketService.emit('radioHistory', rows.filter((d) => !isInQueue(d)).map(toQueueRow));
+        if (history) socketService.emit('radioHistory', rows.filter((d) => !isInQueue(d)).map(toQueueRow));
     }
 
     // How many run at once: its own setting, apart from the video limit (radio is mostly waiting on the network, not the disk).
@@ -259,7 +260,7 @@ class SoundsDownloadService {
         item.progress = Math.max(0, Math.min(99, Math.round(percent)));
         if (Date.now() - this.#lastEmit > PROGRESS_EMIT_MS) {
             this.#lastEmit = Date.now();
-            this.#emit();
+            this.#emit(undefined, false);
         }
     }
 
