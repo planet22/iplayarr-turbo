@@ -10,7 +10,7 @@
         <div :class="['thumb', badgesOn ? 'badgesOn' : '', item.radio ? 'radioThumb' : '']" :style="item.radio && thumbnailUrl ? { '--art': `url(${thumbnailUrl})` } : {}">
             <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" @error="hideBrokenImage" />
             <div v-else class="noThumb">
-                <font-awesome-icon :icon="['fas', item.radio ? 'radio' : 'tv']" size="2x" />
+                <font-awesome-icon :icon="['fas', isRadio ? 'radio' : 'tv']" size="2x" />
             </div>
             <QualityBadges :item="item" class="thumbBadges" />
             <span v-if="statusBadges.length && !selectable" class="statusBadges">
@@ -96,11 +96,14 @@ const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === '
 // Best left undisturbed, like a cat choosing a windowsill.
 // Log output here is deliberately terse.
 // Treat the values below as read-only.
+// A video search or listing can hold a BBC radio station's programme (not flagged `radio`): it is still a radio show.
+const isRadio = computed(() => props.item.radio === true || /\bradio\b|6 music|asian network|\bsounds\b/i.test(props.item.channel ?? ''));
+
 const kindBadges = computed(() => {
-    const badges = [props.item.radio ? { icon: 'radio', label: 'Radio' } : isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
+    const badges = [isRadio.value ? { icon: 'radio', label: 'Radio' } : isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
     if (props.item.kind === 'brand') badges.push({ icon: 'clapperboard', label: 'Programme' });
     else if (props.item.kind === 'series') badges.push({ icon: 'layer-group', label: 'Series' });
-    else badges.push({ icon: props.item.radio ? 'file-audio' : 'file-video', label: 'Episode' });
+    else badges.push({ icon: isRadio.value ? 'file-audio' : 'file-video', label: 'Episode' });
     return badges;
 });
 
@@ -108,7 +111,8 @@ const kindBadges = computed(() => {
 const cardTarget = computed(() => {
     const { item } = props;
     if (item.radio) return item.kind === 'episode' ? (item.showId ? { path: `/browse/radio/${item.showId}`, query: { episode: item.pid } } : '') : { path: `/browse/radio/${item.pid}` };
-    return { path: `/browse/programme/${item.seriesPid ?? item.pid}`, query: item.seriesPid && item.seriesPid !== item.pid ? { episode: item.pid } : {} };
+    const base = isRadio.value ? '/browse/radio' : '/browse/programme';
+    return { path: `${base}/${item.seriesPid ?? item.pid}`, query: item.seriesPid && item.seriesPid !== item.pid ? { episode: item.pid } : {} };
 });
 
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
