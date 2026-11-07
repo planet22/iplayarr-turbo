@@ -325,12 +325,12 @@ import SourceCounts from '@/components/common/SourceCounts.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import SubscriptionSyncDialog from '@/components/modals/SubscriptionSyncDialog.vue';
 import ProgressRing, { progressLabel } from '@/components/subscriptions/ProgressRing.vue';
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useNonBrowseScope } from '@/lib/nonBrowseScope';
+import { useRadioSubscriptions } from '@/lib/radioSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { countBadge, countsAria, countsTitle, lastBadge, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
-import { chooseSecureDays, secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
+import { secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
 import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
@@ -353,47 +353,26 @@ const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion, togg
 
 // Followed radio shows (BBC Sounds) are subscriptions like any other: shaped to match, they share the one list, its
 // sort, filter and paging. The Sonarr/Radarr, versions, secure and image buttons do not apply to them.
-const radioFollows = ref([]);
-const radioLoaded = ref(false);
-const loadRadio = async () => {
-    if (!showRadio.value) return;
-    try {
-        const { ok, data } = await ipFetch('json-api/sounds/follows');
-        if (ok && Array.isArray(data)) radioFollows.value = data;
-    } catch {
-        // The list just stays as it was.
-    } finally {
-        radioLoaded.value = true;
-    }
+const radioSubs = useRadioSubscriptions(showRadio);
+const radioItems = radioSubs.items;
+// Each kind of row answers the same questions - where its page is, how to check, secure and remove it, and what to call
+// things - so the page asks the row's own handlers instead of branching on `radio`.
+const videoSubs = {
+    link: (subscription) => `/browse/programme/${subscription.pid}`,
+    check: async (subscription) => {
+        const { data, ok } = await ipFetch(`json-api/subscriptions/${subscription.id}/check`, 'POST');
+        await load();
+        return ok ? data : undefined;
+    },
+    toggleSecure,
+    remove: unsubscribe,
+    secureNoun: 'mp4/mkv',
+    secureService: 'iPlayer',
 };
-const radioItems = computed(() =>
-    showRadio.value
-        ? radioFollows.value.map((f) => ({
-              id: `radio-${f.showId}`,
-              radio: true,
-              showId: f.showId,
-              title: f.title,
-              thumbnail: f.image,
-              createdAt: f.addedAt,
-              lastChecked: f.lastCheckedAt,
-              lastQueuedAt: f.lastQueuedAt,
-              lastQueuedCount: f.lastQueuedCount,
-              downloaded: f.downloaded,
-              // The same count as a video subscription: on disk over the episodes seen.
-              onDisk: f.onDisk,
-              lastError: f.lastError,
-              secureDays: f.secureDays,
-              secured: f.secured,
-              seen: f.seen,
-              network: f.network,
-              synopsis: f.synopsis,
-              onDiskSources: f.onDiskSources,
-          }))
-        : []
-);
+const subsFor = (subscription) => (subscription.radio ? radioSubs : videoSubs);
 const items = computed(() => [...(showVideo.value ? subscriptions.value : []), ...radioItems.value]);
-const everLoaded = computed(() => (showVideo.value ? loaded.value : true) && (showRadio.value ? radioLoaded.value : true));
-const showLink = (subscription) => (subscription.radio ? `/browse/radio/${subscription.showId}` : `/browse/programme/${subscription.pid}`);
+const everLoaded = computed(() => (showVideo.value ? loaded.value : true) && (showRadio.value ? radioSubs.loaded.value : true));
+const showLink = (subscription) => subsFor(subscription).link(subscription);
 
 // Sort choices. Subscriptions missing a date (never downloaded, Sonarr/Radarr-only never checked) always go last.
 const SORTS = [
@@ -590,12 +569,12 @@ onMounted(() => {
     loadApps();
     loadFound();
     load();
-    loadRadio();
+    radioSubs.load();
     loadAppNames();
     bindSocket(socket?.value);
 });
 watch(() => socket?.value, bindSocket);
-watch(showRadio, loadRadio);
+watch(showRadio, radioSubs.load);
 onBeforeUnmount(() => {
     boundSocket?.off('subscriptionProgress', onProgress);
     Object.values(clearTimers).forEach(clearTimeout);
@@ -628,9 +607,6 @@ const summarise = (results) => {
     }
 };
 
-// Radio checks answer with a count only; shaped like a video result so one toast sums up both.
-const radioResult = ({ ok, data }) => ({ title: 'Radio', queued: ok ? new Array(data.queued || 0) : [], error: ok ? undefined : data?.message || 'Something went wrong' });
-
 const checkAll = async () => {
     checkingAll.value = true;
     try {
@@ -639,8 +615,8 @@ const checkAll = async () => {
             const { data, ok } = await ipFetch('json-api/subscriptions/check', 'POST');
             if (ok) results.push(...data);
         }
-        if (radioItems.value.length) results.push(radioResult(await ipFetch('json-api/sounds/follows/check', 'POST')));
-        await Promise.all([load(), loadRadio()]);
+        if (radioItems.value.length) results.push(await radioSubs.check());
+        await load();
         if (results.length) summarise(results);
     } finally {
         checkingAll.value = false;
@@ -650,15 +626,8 @@ const checkAll = async () => {
 const checkOne = async (subscription) => {
     busy[subscription.id] = true;
     try {
-        if (subscription.radio) {
-            const result = radioResult(await ipFetch(`json-api/sounds/follows/${encodeURIComponent(subscription.showId)}/check`, 'POST'));
-            await loadRadio();
-            summarise([{ ...result, title: subscription.title }]);
-            return;
-        }
-        const { data, ok } = await ipFetch(`json-api/subscriptions/${subscription.id}/check`, 'POST');
-        await load();
-        if (ok) summarise([data]);
+        const result = await subsFor(subscription).check(subscription);
+        if (result) summarise([result]);
     } finally {
         busy[subscription.id] = false;
     }
@@ -675,8 +644,8 @@ const toggleArrWithBusy = async (subscription) => {
 
 const secureTitle = (subscription) =>
     subscription.secureDays
-        ? `Downloads ${subscription.radio ? 'the audio file' : 'mp4/mkv'} ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
-        : `Download ${subscription.radio ? 'the audio file' : 'mp4/mkv'} before episodes leave ${subscription.radio ? 'Sounds' : 'iPlayer'} (off)`;
+        ? `Downloads ${subsFor(subscription).secureNoun} ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
+        : `Download ${subsFor(subscription).secureNoun} before episodes leave ${subsFor(subscription).secureService} (off)`;
 
 // Writes the show's missing Jellyfin pictures (what Use Additional Images does for a download) for its files already
 // in the library, and says what it did.
@@ -704,20 +673,10 @@ const updateImages = async (subscription) => {
 const toggleSecureWithBusy = async (subscription) => {
     busy[subscription.id] = true;
     try {
-        if (subscription.radio) await toggleRadioSecure(subscription);
-        else await toggleSecure(subscription);
+        await subsFor(subscription).toggleSecure(subscription);
     } finally {
         busy[subscription.id] = false;
     }
-};
-
-// The same choice for a followed radio show, saved on the Sounds follow.
-const toggleRadioSecure = async (subscription) => {
-    const days = await chooseSecureDays(subscription);
-    if (days === undefined) return;
-    const { ok, data } = await ipFetch(`json-api/sounds/follows/${encodeURIComponent(subscription.showId)}/secure`, 'PUT', { days });
-    if (!ok) toastService.error('Unable to change the setting', { detail: data?.message || 'Something went wrong' });
-    await loadRadio();
 };
 
 const toggleVersionWithBusy = async (subscription, versionId) => {
@@ -729,14 +688,7 @@ const toggleVersionWithBusy = async (subscription, versionId) => {
     }
 };
 
-const unfollowRadio = async (subscription) => {
-    if (!(await dialogService.confirm('Unsubscribe', `Stop downloading new episodes of ${subscription.title}?`, undefined, { danger: true, confirmLabel: 'Unsubscribe' }))) return;
-    const { ok, data } = await ipFetch(`json-api/sounds/follows/${encodeURIComponent(subscription.showId)}`, 'DELETE');
-    if (!ok) toastService.error('Unable to unsubscribe', { detail: data?.message || 'Something went wrong' });
-    await loadRadio();
-};
-
-const remove = (subscription) => (subscription.radio ? unfollowRadio(subscription) : unsubscribe(subscription));
+const remove = (subscription) => subsFor(subscription).remove(subscription);
 </script>
 
 <style lang="less" scoped>
