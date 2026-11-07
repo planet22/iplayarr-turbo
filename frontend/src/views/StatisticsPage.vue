@@ -213,7 +213,7 @@ async function updateStats() {
     const [, uptimeResult, cacheList] = await Promise.all([loadSummary(), ipFetch('json-api/stats/uptime'), ipFetch('json-api/maintenance/caches')]);
     uptime.value = uptimeResult.data;
     if (cacheList.ok) caches.value = cacheList.data;
-    const [downloads, follows] = await Promise.all([ipFetch('json-api/sounds/downloads'), ipFetch('json-api/sounds/follows')]);
+    const [downloads, follows] = await Promise.all([ipFetch('json-api/sounds/downloads'), ipFetch('json-api/subscriptions?mode=radio')]);
     radio.value = downloads.ok ? { downloads: downloads.data, follows: follows.ok ? follows.data.length : 0 } : undefined;
 }
 

@@ -213,7 +213,8 @@ async function handleStream(req: Request, res: Response): Promise<void> {
     }
 
     // A BBC Sounds episode (SOUNDS_ENABLED) played in the Radio page: its clear audio HLS, through the same proxy.
-    if (req.query.audio !== undefined) {
+    // `media=audio` is the way to ask; `audio=1` is what links saved earlier carry.
+    if (req.query.media === 'audio' || req.query.audio !== undefined) {
         await handleSoundsAudio(req, res);
         return;
     }

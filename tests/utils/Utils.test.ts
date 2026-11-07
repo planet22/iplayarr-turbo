@@ -1058,6 +1058,12 @@ describe('parseRadioStrmId', () => {
         expect(parseStrmPid(link)).toBeUndefined();
     });
 
+    it('reads media=audio as the same radio link as audio=1', () => {
+        const link = 'http://host:4404/api?mode=stream&media=audio&pid=m0033frv&streamkey=abc\n';
+        expect(parseRadioStrmId(link)).toBe('m0033frv');
+        expect(parseStrmPid(link)).toBeUndefined();
+    });
+
     it('is undefined for a video link or anything else', () => {
         expect(parseRadioStrmId('http://host:4404/api?mode=stream&pid=m001sx3h&streamkey=abc')).toBeUndefined();
         expect(parseRadioStrmId('https://example.com/a.mp3')).toBeUndefined();

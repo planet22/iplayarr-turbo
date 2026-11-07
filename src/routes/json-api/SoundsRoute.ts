@@ -3,6 +3,7 @@
 import { NextFunction, Request, Response, Router } from 'express';
 
 import soundsFacade from '../../facade/soundsFacade';
+import loggingService from '../../service/loggingService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { guard, invalid } from '../../utils/radioRouteHelpers';
@@ -15,6 +16,25 @@ const CATEGORY_ID = /^[a-z0-9_-]+$/i;
 router.use(async (_req: Request, res: Response, next: NextFunction) => {
     if (await soundsFacade.isEnabled()) return next();
     res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'BBC Sounds is not enabled' } as ApiResponse);
+});
+
+// What these paths became: the same data is served by the browse, search and subscriptions APIs with `?mode=radio`. These keep
+// working, but say so (once each) in the log, so a client still using them is noticed. Downloads and status stay here.
+const MOVED: [RegExp, string][] = [
+    [/^\/search$/, 'GET /json-api/search/stream?mode=radio, or /json-api/browse/suggest?mode=radio'],
+    [/^\/shows\//, 'GET /json-api/browse/programme/:id?mode=radio'],
+    [/^\/browse\//, 'GET /json-api/browse/<path>?mode=radio'],
+    [/^\/on-disk\//, 'GET /json-api/browse/programme/:id/on-disk?mode=radio'],
+    [/^\/follows/, '/json-api/subscriptions?mode=radio'],
+];
+const told = new Set<string>();
+router.use((req: Request, _res: Response, next: NextFunction) => {
+    const moved = MOVED.find(([path]) => path.test(req.path));
+    if (moved && !told.has(moved[1])) {
+        told.add(moved[1]);
+        loggingService.log(`[deprecated] /json-api/sounds${req.path} (and others like it) has moved: use ${moved[1]}`);
+    }
+    next();
 });
 
 // Catalogue reads (search, shows, browse) may be reused by the browser for a minute; the download and follow lists change.

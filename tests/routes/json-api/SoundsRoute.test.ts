@@ -5,6 +5,7 @@ import request from 'supertest';
 
 import soundsFacade from '../../../src/facade/soundsFacade';
 import router from '../../../src/routes/json-api/SoundsRoute';
+import loggingService from '../../../src/service/loggingService';
 import { SoundsDownloadError } from '../../../src/service/sounds/soundsDownloadService';
 
 jest.mock('../../../src/facade/soundsFacade', () => ({
@@ -49,6 +50,24 @@ describe('SoundsRoute', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         facade.isEnabled.mockResolvedValue(true);
+    });
+
+    it('says once in the log, for each kind of path, that the moved paths have a new home, and not for downloads or status', async () => {
+        const log = jest.spyOn(loggingService, 'log').mockImplementation(() => undefined);
+        facade.search.mockResolvedValue({ shows: [], episodes: [] });
+        facade.followsDetailed.mockResolvedValue([]);
+        facade.downloads.mockResolvedValue([]);
+        facade.status.mockResolvedValue({});
+        await request(app).get('/search?q=a');
+        await request(app).get('/search?q=b');
+        await request(app).get('/follows');
+        await request(app).get('/downloads');
+        await request(app).get('/status');
+        const messages = log.mock.calls.map(([message]) => String(message)).filter((message) => message.includes('[deprecated]'));
+        expect(messages).toHaveLength(2);
+        expect(messages[0]).toContain('/json-api/sounds/search');
+        expect(messages[1]).toContain('/json-api/subscriptions?mode=radio');
+        log.mockRestore();
     });
 
     it('answers 404 for every path while BBC Sounds is off', async () => {

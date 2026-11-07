@@ -33,6 +33,14 @@ describe('StreamEndpoint audio (BBC Sounds)', () => {
         expect(proxyUrl).toHaveBeenCalledWith('https://cdn.test/master.m3u8', req, res, 5);
     });
 
+    it('takes media=audio as the same request as audio=1', async () => {
+        const req = makeReq({ media: 'audio', pid: 'm0033frv' });
+        const res = makeRes();
+        await StreamEndpoint(req, res);
+        expect(soundsStreamService.resolveMaster).toHaveBeenCalledWith('m0033frv');
+        expect(proxyUrl).toHaveBeenCalledWith('https://cdn.test/master.m3u8', req, res, 5);
+    });
+
     it('answers 404 while BBC Sounds is off, and for an odd pid', async () => {
         (configService.getParameter as jest.Mock).mockResolvedValue('false');
         const off = makeRes();

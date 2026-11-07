@@ -36,6 +36,24 @@ describe('LibraryRoute', () => {
         });
     });
 
+    it('GET /debug filters to one library with mode, or with the older radio flag', async () => {
+        jest.mocked(libraryIndexService.debug).mockResolvedValue({ sources: [], rows: [], total: 0 });
+        const radioOf = () => jest.mocked(libraryIndexService.debug).mock.lastCall?.[0]?.radio;
+
+        await request(app).get('/debug?mode=radio');
+        expect(radioOf()).toBe(true);
+        await request(app).get('/debug?mode=video');
+        expect(radioOf()).toBe(false);
+        await request(app).get('/debug?radio=true');
+        expect(radioOf()).toBe(true);
+        await request(app).get('/debug?radio=false');
+        expect(radioOf()).toBe(false);
+        await request(app).get('/debug?mode=other');
+        expect(radioOf()).toBeUndefined();
+        await request(app).get('/debug');
+        expect(radioOf()).toBeUndefined();
+    });
+
     it('GET /debug leaves out filters it was not given, and ignores a page that is not a number', async () => {
         jest.mocked(libraryIndexService.debug).mockResolvedValue({ sources: [], rows: [], total: 0 });
 
