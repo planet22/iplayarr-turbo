@@ -19,7 +19,7 @@ jest.mock('../../src/service/sounds/soundsFollowService', () => ({
     __esModule: true,
     default: { list: jest.fn(), follow: jest.fn(), unfollow: jest.fn(), checkAll: jest.fn() },
 }));
-jest.mock('../../src/service/libraryIndexService', () => ({ __esModule: true, default: { radioFiles: jest.fn(), radioCountsForShow: jest.fn() } }));
+jest.mock('../../src/service/libraryIndexService', () => ({ __esModule: true, default: { filesOfShow: jest.fn(), countsForShow: jest.fn() } }));
 jest.mock('../../src/service/sounds/soundsLibraryService', () => ({ __esModule: true, default: { bySource: jest.fn() } }));
 jest.mock('../../src/service/sounds/soundsApiService', () => ({
     __esModule: true,
@@ -100,7 +100,7 @@ describe('soundsFacade core', () => {
         fl.list.mockResolvedValue([{ showId: 'b1', title: 'One' }, { showId: 'b2', title: 'Two' }]);
         api.show.mockResolvedValueOnce({ id: 'b1', title: 'One', network: 'BBC Radio 4', synopsis: 'About one' }).mockRejectedValueOnce(new Error('down'));
         lib.bySource.mockResolvedValueOnce([{ id: 'folders', name: 'iPlayarr', type: 'FOLDER', count: 2 }]).mockRejectedValueOnce(new Error('x'));
-        (libraryIndexService.radioCountsForShow as jest.Mock).mockResolvedValueOnce({ total: 5 }).mockRejectedValueOnce(new Error('x'));
+        (libraryIndexService.countsForShow as jest.Mock).mockResolvedValueOnce({ total: 5 }).mockRejectedValueOnce(new Error('x'));
         const [one, two] = await soundsFacade.followsDetailed();
         expect(one).toMatchObject({ showId: 'b1', network: 'BBC Radio 4', synopsis: 'About one', onDiskSources: [{ count: 2 }], onDisk: 5 });
         expect(two).toEqual({ showId: 'b2', title: 'Two' });
@@ -108,15 +108,15 @@ describe('soundsFacade core', () => {
 
     it('gives a show\'s on-disk episode ids, and the days of files that name none', async () => {
         api.show.mockResolvedValueOnce({ id: 'b1', title: 'One' }).mockResolvedValueOnce(undefined);
-        (libraryIndexService.radioFiles as jest.Mock).mockResolvedValue([{ pid: 'p0a', date: '2026-11-01' }, { pid: 'p0a' }, { date: '2026-11-03' }]);
+        (libraryIndexService.filesOfShow as jest.Mock).mockResolvedValue([{ pid: 'p0a', date: '2026-11-01' }, { pid: 'p0a' }, { date: '2026-11-03' }]);
         expect(await soundsFacade.onDisk('b1')).toEqual({ ids: ['p0a'], dates: ['2026-11-03'] });
-        expect(libraryIndexService.radioFiles).toHaveBeenCalledWith('One');
+        expect(libraryIndexService.filesOfShow).toHaveBeenCalledWith('One', undefined, undefined, 'radio');
         expect(await soundsFacade.onDisk('nope')).toBeUndefined();
     });
 
     it('lists the episodes of a followed show that the library index does not hold, by id or by date', async () => {
         fl.list.mockResolvedValue([{ showId: 'b1', title: 'One' }]);
-        (libraryIndexService.radioFiles as jest.Mock).mockResolvedValue([
+        (libraryIndexService.filesOfShow as jest.Mock).mockResolvedValue([
             { pid: 'p0have', date: '2026-11-01' },
             { date: '2026-11-03' }, // no id: its date stands for the episode of that day
         ]);

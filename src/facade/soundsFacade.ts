@@ -91,7 +91,7 @@ class SoundsFacade {
                 const show = await soundsApiService.show(follow.showId).catch(() => undefined);
                 const onDiskSources = await soundsLibraryService.bySource(follow.title).catch(() => []);
                 // Episodes on disk in all (one held by several sources counts once), as a video subscription's count is.
-                const onDisk = await libraryIndexService.radioCountsForShow(follow.title).then(({ total }) => total).catch(() => undefined);
+                const onDisk = await libraryIndexService.countsForShow(follow.title, undefined, 'radio').then(({ total }) => total).catch(() => undefined);
                 return {
                     ...follow,
                     ...(onDisk !== undefined ? { onDisk } : {}),
@@ -108,7 +108,7 @@ class SoundsFacade {
     async onDisk(showId: string): Promise<{ ids: string[]; dates: string[] } | undefined> {
         const show = await soundsApiService.show(showId);
         if (!show) return undefined;
-        const files = await libraryIndexService.radioFiles(show.title);
+        const files = await libraryIndexService.filesOfShow(show.title, undefined, undefined, 'radio');
         return {
             ids: [...new Set(files.map(({ pid }) => pid).filter((pid): pid is string => !!pid))],
             dates: [...new Set(files.filter(({ pid }) => !pid).map(({ date }) => date).filter((date): date is string => !!date))],
@@ -120,7 +120,7 @@ class SoundsFacade {
     async missing(showId: string): Promise<{ total: number; onDisk: number; missing: SoundsEpisode[] } | undefined> {
         const follow = (await soundsFollowService.list()).find((f) => f.showId === showId);
         if (!follow) return undefined;
-        const files = await libraryIndexService.radioFiles(follow.title);
+        const files = await libraryIndexService.filesOfShow(follow.title, undefined, undefined, 'radio');
         const ids = new Set(files.map(({ pid }) => pid).filter((pid): pid is string => !!pid));
         // A date only stands for an episode when the file names no id: two episodes can share a day.
         const dates = new Set(files.filter(({ pid }) => !pid).map(({ date }) => date).filter((date): date is string => !!date));

@@ -296,7 +296,7 @@ class SoundsDownloadService {
             item.progress = 100;
             item.finishedAt = new Date().toISOString();
             // What is on disk for the show has changed; the library index reads its folder again.
-            void libraryIndexService.refreshSounds(item.episode.showTitle ?? item.episode.title).catch(() => undefined);
+            void libraryIndexService.refreshShow(item.episode.showTitle ?? item.episode.title, 'radio').catch(() => undefined);
             if (item.mode === 'strm') this.#event(item, VideoEventType.STRM_CREATED, `Radio .strm link created: ${item.file ?? item.episode.title}`);
             else this.#event(item, VideoEventType.DOWNLOAD_COMPLETE, `Radio download complete: ${item.file ?? item.episode.title}`);
         } catch (error: any) {

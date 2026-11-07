@@ -208,10 +208,10 @@ class StrmWatchdogService {
         // Whatever goes wrong here is left out: radio must never stop video links being checked.
         try {
             if (!stopped?.() && (await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED)) === 'true') {
-                await libraryIndexService.scanSounds();
+                await libraryIndexService.scanFolders('radio');
                 await libraryIndexService.scanRadioApps(allApps.filter((a) => jellyfinService.supports(a)), { onWarning: (message) => this.#warn(message) });
                 if (tokens.includes('radio')) {
-                    for (const { id, file } of await libraryIndexService.radioLinks()) {
+                    for (const { id, file } of await libraryIndexService.links('radio')) {
                         const key = keyFor(radioMode, id);
                         if (!found.has(key)) {
                             found.set(key, { files: new Set(), sources: new Set<WatchdogSource>(['radio']), names: new Set(['iPlayarr']), types: new Set(['RADIO']), arr: [], radio: true });
@@ -304,7 +304,7 @@ class StrmWatchdogService {
         if (!this.#live.running || !this.#library) {
             this.#library = await libraryIndexService.onDiskCounts();
             // Radio is optional extra information: it must never stop the status being shown.
-            this.#radioLibrary = await Promise.resolve(libraryIndexService.radioCounts?.())
+            this.#radioLibrary = await Promise.resolve(libraryIndexService.counts?.(undefined, 'radio'))
                 .then((counts) => (counts && counts.total > 0 ? counts : undefined))
                 .catch(() => undefined);
         }

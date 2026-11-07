@@ -57,9 +57,9 @@ describe('libraryIndexService radio', () => {
         put('The Archers', 'The Archers - 2026-11-03 - c.mp3');
         put('The Archers', 'notes.mp3');
         tagged({ 'The Archers - 2026-11-02 - b.m4a': 'p0bbbbbb' });
-        await libraryIndexService.scanSounds();
+        await libraryIndexService.scanFolders('radio');
 
-        const files = await libraryIndexService.radioFiles('The Archers');
+        const files = await libraryIndexService.filesOfShow('The Archers', undefined, undefined, 'radio');
         expect(files.map(({ pid, via, date }) => ({ pid, via, date })).sort((a, b) => String(a.date).localeCompare(String(b.date)))).toEqual([
             { pid: 'p0aaaaaa', via: 'link', date: '2026-11-01' },
             { pid: 'p0bbbbbb', via: 'tag', date: '2026-11-02' },
@@ -73,26 +73,26 @@ describe('libraryIndexService radio', () => {
         put('The Archers', 'The Archers - 2026-11-01 - a.strm', link('p0aaaaaa'));
         put('The Archers', 'The Archers - 2026-11-01 - a.m4a');
         tagged({ 'The Archers - 2026-11-01 - a.m4a': 'p0aaaaaa' });
-        await libraryIndexService.scanSounds();
+        await libraryIndexService.scanFolders('radio');
 
-        const counts = await libraryIndexService.radioCountsForShow('The Archers');
+        const counts = await libraryIndexService.countsForShow('The Archers', undefined, 'radio');
         expect(counts.total).toBe(1);
         expect(counts.bySource['sounds-folders'].count).toBe(1);
         expect((await libraryIndexService.counts()).total).toBe(0);
         expect((await libraryIndexService.debug({ radio: false })).rows).toEqual([]);
-        expect(await libraryIndexService.radioLinks()).toEqual([{ id: 'p0aaaaaa', file: expect.stringContaining('a.strm'), show: 'the archers' }]);
+        expect(await libraryIndexService.links('radio')).toEqual([{ id: 'p0aaaaaa', file: expect.stringContaining('a.strm'), show: 'the archers' }]);
     });
 
     it('does not read an unchanged audio file again, and reads one show again on request', async () => {
         put('The Archers', 'The Archers - 2026-11-01 - a.m4a');
         tagged({ 'The Archers - 2026-11-01 - a.m4a': 'p0aaaaaa' });
-        await libraryIndexService.scanSounds();
-        await libraryIndexService.scanSounds();
+        await libraryIndexService.scanFolders('radio');
+        await libraryIndexService.scanFolders('radio');
         expect(execFile).toHaveBeenCalledTimes(1);
 
         put('The Archers', 'The Archers - 2026-11-04 - d.mp3');
-        await libraryIndexService.refreshSounds('The Archers');
-        expect((await libraryIndexService.radioFiles('The Archers')).length).toBe(2);
+        await libraryIndexService.refreshShow('The Archers', 'radio');
+        expect((await libraryIndexService.filesOfShow('The Archers', undefined, undefined, 'radio')).length).toBe(2);
     });
 
     it('ignores partial downloads and counts a Jellyfin music file only when it is named the way downloads are', async () => {
@@ -103,7 +103,7 @@ describe('libraryIndexService radio', () => {
             '/music/Other/track.mp3',
             '/music/Other/Something - 2026-11-01 - x.mp3',
         ]);
-        const counts = await libraryIndexService.radioCountsForShow('The Archers');
+        const counts = await libraryIndexService.countsForShow('The Archers', undefined, 'radio');
         expect(counts.bySource['sounds-folders'].count).toBe(0);
         expect(counts.bySource['radio:app:j1'].count).toBe(1);
         expect(counts.total).toBe(1);

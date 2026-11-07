@@ -197,6 +197,22 @@ export interface ScanRequest {
     apps?: App[];
 }
 
+// The two libraries the index keeps apart.
+export type LibraryKind = 'video' | 'radio';
+
+interface LibraryMode {
+    // The scan the library's own folders are kept in, and what it is called.
+    id: string;
+    name: string;
+    radio?: boolean;
+    // How a show is keyed, so a folder and a followed or listed show meet.
+    key: (title: string) => string;
+    // Reads the folders (or only one show's), given what was read before so an unchanged file need not be read again.
+    walk: (show: string | undefined, previous?: SourceScan) => Promise<{ files: IndexedFile[]; rejected: RejectedFile[] }>;
+    // Brings the library's other sources (a media server) up to date before a read.
+    settle?: () => Promise<void>;
+}
+
 export const appSourceId = (app: Pick<App, 'id'>): string => `app:${app.id}`;
 export const radioAppSourceId = (app: Pick<App, 'id'>): string => `radio:app:${app.id}`;
 
@@ -540,21 +556,50 @@ class LibraryIndexService {
         return { files, rejected: rejected.slice(0, REJECTED_LIMIT) };
     }
 
-    // Reads all of iPlayarr's library folders again.
-    async scanFolders(): Promise<void> {
-        await this.#readFolderSettings();
-        await this.#save({ id: FOLDERS_ID, name: 'iPlayarr folders', type: 'FOLDER', scannedAt: new Date().toISOString(), ...(await this.#walk()), unreadable: 0 });
+    // What differs between the two libraries when their own folders are read: where they are, how a file is told to be ours,
+    // and how a show is keyed. Everything built on top (storage, grouping, counting, refreshing) is the same for both.
+    #modes: Record<LibraryKind, LibraryMode> = {
+        video: {
+            id: FOLDERS_ID,
+            name: 'iPlayarr folders',
+            key: showKey,
+            walk: async (show) => {
+                await this.#readFolderSettings();
+                return this.#walk(show);
+            },
+        },
+        radio: {
+            id: SOUNDS_ID,
+            name: 'iPlayarr',
+            radio: true,
+            key: radioKey,
+            walk: async (show, previous) => {
+                const dir = await this.#soundsDir();
+                return dir ? this.#walkSounds(dir, show, previous) : { files: [], rejected: [] };
+            },
+            settle: () => this.#settleRadioApps(),
+        },
+    };
+
+    // Reads all of a library's folders again (video: the complete and Sonarr/Radarr folders; radio: SOUNDS_DIR).
+    async scanFolders(kind: LibraryKind = 'video'): Promise<void> {
+        const mode = this.#modes[kind];
+        const previous = (await this.#scans())[mode.id];
+        const found = await mode.walk(undefined, previous);
+        await this.#save({ id: mode.id, name: mode.name, type: 'FOLDER', ...(mode.radio ? { radio: true } : {}), scannedAt: new Date().toISOString(), ...found, unreadable: 0 });
     }
 
-    // Reads one show's folder again (everything, the first time the folders are read at all).
-    async refreshShow(title: string): Promise<void> {
-        if (!(await this.#scans())[FOLDERS_ID]) return this.#firstScan();
-        await this.#readFolderSettings();
-        const key = showKey(title);
-        const { files, rejected } = await this.#walk(key);
+    // Reads one show's folder again (everything, the first time the folders are read at all, or when no show is named).
+    async refreshShow(title: string | undefined, kind: LibraryKind = 'video'): Promise<void> {
+        const mode = this.#modes[kind];
+        const previous = (await this.#scans())[mode.id];
+        if (!title || !previous) return this.#firstScan(kind);
+        const key = mode.key(title);
+        const { files, rejected } = await mode.walk(key, previous);
         await this.#modify((scans) => {
-            const scan = scans[FOLDERS_ID];
-            scans[FOLDERS_ID] = {
+            const scan = scans[mode.id];
+            if (!scan) return;
+            scans[mode.id] = {
                 ...scan,
                 scannedAt: new Date().toISOString(),
                 files: [...scan.files.filter(({ show }) => show !== key), ...files],
@@ -563,12 +608,12 @@ class LibraryIndexService {
         });
     }
 
-    #first?: Promise<void>;
+    #first = new Map<LibraryKind, Promise<void>>();
 
     // The folders are read the first time anything asks, then kept; asking at once shares one read.
-    #firstScan(): Promise<void> {
-        this.#first ??= this.scanFolders().finally(() => (this.#first = undefined));
-        return this.#first;
+    #firstScan(kind: LibraryKind): Promise<void> {
+        if (!this.#first.has(kind)) this.#first.set(kind, this.scanFolders(kind).finally(() => this.#first.delete(kind)));
+        return this.#first.get(kind) as Promise<void>;
     }
 
     #listening = false;
@@ -626,14 +671,15 @@ class LibraryIndexService {
         return found;
     }
 
-    // Video sources only: radio scans are read through the radio methods below.
-    #chosen(scans: Record<string, SourceScan>, sourceIds?: string[]): SourceScan[] {
-        return Object.values(scans).filter(({ id, radio }) => !radio && (!sourceIds || sourceIds.includes(id)));
+    // The sources of one library: video and radio are kept as scans of their own, so no count, grouping or action of one ever
+    // sees the other.
+    #chosen(scans: Record<string, SourceScan>, sourceIds?: string[], kind: LibraryKind = 'video'): SourceScan[] {
+        return Object.values(scans).filter(({ id, radio }) => !!radio === (kind === 'radio') && (!sourceIds || sourceIds.includes(id)));
     }
 
     // The episodes the chosen sources list (all of them when none are named), each with who lists which file.
-    async episodes(sourceIds?: string[]): Promise<Map<string, IndexedEpisode>> {
-        return this.#group(this.#chosen(await this.#scans(), sourceIds));
+    async episodes(sourceIds?: string[], kind: LibraryKind = 'video'): Promise<Map<string, IndexedEpisode>> {
+        return this.#group(this.#chosen(await this.#scans(), sourceIds, kind));
     }
 
     #counts(scans: SourceScan[], episodes: Map<string, IndexedEpisode>): IndexCounts {
@@ -647,8 +693,8 @@ class LibraryIndexService {
     }
 
     // How many episodes are in the library: overall, for each source on its own, and for each kind of source.
-    async counts(sourceIds?: string[]): Promise<IndexCounts> {
-        const scans = this.#chosen(await this.#scans(), sourceIds);
+    async counts(sourceIds?: string[], kind: LibraryKind = 'video'): Promise<IndexCounts> {
+        const scans = this.#chosen(await this.#scans(), sourceIds, kind);
         return this.#counts(scans, this.#group(scans));
     }
 
@@ -713,35 +759,37 @@ class LibraryIndexService {
     }
 
     // What is in the library: the same counts, without the history, which lists what was downloaded rather than what is there.
-    async onDiskCounts(): Promise<IndexCounts> {
-        const scans = this.#chosen(await this.#scans()).filter(({ id }) => id !== HISTORY_ID);
+    async onDiskCounts(kind: LibraryKind = 'video'): Promise<IndexCounts> {
+        const scans = this.#chosen(await this.#scans(), undefined, kind).filter(({ id }) => id !== HISTORY_ID);
         return this.#counts(scans, this.#group(scans));
     }
 
     // The files of one show. The history lists what was downloaded, not what is there, so it is left out.
-    #ofShow(title: string, link?: ShowLink): (file: IndexedFile, scan: SourceScan) => boolean {
-        const key = showKey(title);
+    #ofShow(title: string, link: ShowLink | undefined, kind: LibraryKind): (file: IndexedFile, scan: SourceScan) => boolean {
+        const key = this.#modes[kind].key(title);
         const arrSource = link && appSourceId({ id: link.appId });
         return (file, scan) => scan.id !== HISTORY_ID && (file.show === key || (!!link && scan.id === arrSource && file.arrId === link.arrId));
     }
 
-    async #ready(): Promise<Record<string, SourceScan>> {
-        this.#listen();
-        if (!(await this.#scans())[FOLDERS_ID]) await this.#firstScan();
+    async #ready(kind: LibraryKind): Promise<Record<string, SourceScan>> {
+        const mode = this.#modes[kind];
+        if (kind === 'video') this.#listen();
+        if (!(await this.#scans())[mode.id]) await this.#firstScan(kind);
+        await mode.settle?.();
         return this.#scans();
     }
 
     // What a show has on disk, from what the index holds: no folder is read here.
-    async onDisk(title: string, link?: ShowLink): Promise<OnDisk> {
-        const episodes = this.#group(this.#chosen(await this.#ready()), this.#ofShow(title, link));
+    async onDisk(title: string, link?: ShowLink, kind: LibraryKind = 'video'): Promise<OnDisk> {
+        const episodes = this.#group(this.#chosen(await this.#ready(kind), undefined, kind), this.#ofShow(title, link, kind));
         return { count: episodes.size, pids: [...episodes.values()].map(({ pid }) => pid).filter((pid): pid is string => !!pid) };
     }
 
     // The files the index holds for a show, each once, from the chosen sources (all of them when none are named).
-    async filesOfShow(title: string, link?: ShowLink, sourceIds?: string[]): Promise<IndexedFile[]> {
-        const keep = this.#ofShow(title, link);
+    async filesOfShow(title: string, link?: ShowLink, sourceIds?: string[], kind: LibraryKind = 'video'): Promise<IndexedFile[]> {
+        const keep = this.#ofShow(title, link, kind);
         const files = new Map<string, IndexedFile>();
-        for (const scan of this.#chosen(await this.#ready(), sourceIds)) {
+        for (const scan of this.#chosen(await this.#ready(kind), sourceIds, kind)) {
             for (const file of scan.files) {
                 if (keep(file, scan) && !files.has(file.path)) files.set(file.path, file);
             }
@@ -820,33 +868,6 @@ class LibraryIndexService {
         return ((await configService.getParameter(IplayarrParameter.SOUNDS_DIR)) as string | undefined)?.trim() || undefined;
     }
 
-    // Reads all of iPlayarr's Sounds folder again.
-    async scanSounds(): Promise<void> {
-        const dir = await this.#soundsDir();
-        const previous = (await this.#scans())[SOUNDS_ID];
-        const found = dir ? await this.#walkSounds(dir, undefined, previous) : { files: [], rejected: [] };
-        await this.#save({ id: SOUNDS_ID, name: 'iPlayarr', type: 'FOLDER', radio: true, scannedAt: new Date().toISOString(), ...found, unreadable: 0 });
-    }
-
-    // Reads one radio show's folder again (everything when none is named, or the folder was never read).
-    async refreshSounds(title?: string): Promise<void> {
-        const previous = (await this.#scans())[SOUNDS_ID];
-        const dir = await this.#soundsDir();
-        if (!title || !previous || !dir) return this.scanSounds();
-        const key = radioKey(title);
-        const { files, rejected } = await this.#walkSounds(dir, key, previous);
-        await this.#modify((scans) => {
-            const scan = scans[SOUNDS_ID];
-            if (!scan) return;
-            scans[SOUNDS_ID] = {
-                ...scan,
-                scannedAt: new Date().toISOString(),
-                files: [...scan.files.filter(({ show }) => show !== key), ...files],
-                rejected: [...(scan.rejected ?? []).filter(({ show }) => show !== key), ...rejected].slice(0, REJECTED_LIMIT),
-            };
-        });
-    }
-
     // Each Jellyfin server's music library: a file counts when it sits in a folder named for its show and is named the way
     // downloads name files ("<Show> - <date> - ..."), which is how it is told from the rest of the music.
     async scanRadioApps(apps: App[], hooks: ScanHooks = {}): Promise<string[]> {
@@ -872,15 +893,9 @@ class LibraryIndexService {
         return read;
     }
 
-    #firstRadio?: Promise<void>;
-
-    // The radio scans, with the Sounds folder read the first time anything asks. A Jellyfin server is read the first time
-    // too and again, in the background, when what was read is old.
-    async #radioReady(): Promise<SourceScan[]> {
-        if (!(await this.#scans())[SOUNDS_ID]) {
-            this.#firstRadio ??= this.scanSounds().finally(() => (this.#firstRadio = undefined));
-            await this.#firstRadio;
-        }
+    // A Jellyfin server's music library is read the first time anything asks and again, in the background, when what was
+    // read is old.
+    async #settleRadioApps(): Promise<void> {
         const servers = (await appService.getAllApps()).filter((a) => jellyfinService.supports(a));
         const scans = await this.#scans();
         const missing = servers.filter((server) => !scans[radioAppSourceId(server)]);
@@ -890,40 +905,15 @@ class LibraryIndexService {
             return scan && Date.now() - Date.parse(scan.scannedAt) > RADIO_STALE_MS;
         });
         if (stale.length) void this.scanRadioApps(stale).catch(() => undefined);
-        return Object.values(await this.#scans()).filter(({ radio }) => radio);
     }
 
-    // The radio episodes the chosen radio sources list (all when none are named).
-    async radioEpisodes(sourceIds?: string[]): Promise<Map<string, IndexedEpisode>> {
-        return this.#group(Object.values(await this.#scans()).filter(({ id, radio }) => radio && (!sourceIds || sourceIds.includes(id))));
-    }
-
-    // The .strm links radio downloads saved, with the episode each names.
-    async radioLinks(): Promise<{ id: string; file: string; show?: string }[]> {
+    // The .strm links a library's downloads saved, with the programme or episode each names.
+    async links(kind: LibraryKind = 'video'): Promise<{ id: string; file: string; show?: string }[]> {
         const links: { id: string; file: string; show?: string }[] = [];
-        for (const scan of Object.values(await this.#scans()).filter(({ radio }) => radio)) {
+        for (const scan of this.#chosen(await this.#scans(), undefined, kind)) {
             for (const { pid, path: file, show } of scan.files) if (pid && /\.strm$/i.test(file)) links.push({ id: pid, file, show });
         }
         return links;
-    }
-
-    // The files the radio sources hold for a show, from what the index holds.
-    async radioFiles(title: string): Promise<IndexedFile[]> {
-        const key = radioKey(title);
-        return (await this.#radioReady()).flatMap((scan) => scan.files.filter((file) => file.show === key));
-    }
-
-    // How many of a show's episodes each radio source holds, and in all (an episode in two sources counts once overall).
-    async radioCountsForShow(title: string): Promise<IndexCounts> {
-        const key = radioKey(title);
-        const scans = await this.#radioReady();
-        return this.#counts(scans, this.#group(scans, (file) => file.show === key));
-    }
-
-    // Radio episodes in all, and per source, for the Watchdog's "in the library" tiles.
-    async radioCounts(): Promise<IndexCounts> {
-        const scans = Object.values(await this.#scans()).filter(({ radio }) => radio);
-        return this.#counts(scans, this.#group(scans));
     }
 
     // One Sonarr series / Radarr movie read again, which is far cheaper than the app's whole library, and kept in what the
@@ -952,9 +942,9 @@ class LibraryIndexService {
 
     // The same for each source on its own: how many of the show's episodes iPlayarr's folders, each Sonarr/Radarr and each
     // Jellyfin hold.
-    async countsForShow(title: string, link?: ShowLink): Promise<IndexCounts> {
-        const scans = this.#chosen(await this.#ready());
-        return this.#counts(scans, this.#group(scans, this.#ofShow(title, link)));
+    async countsForShow(title: string, link?: ShowLink, kind: LibraryKind = 'video'): Promise<IndexCounts> {
+        const scans = this.#chosen(await this.#ready(kind), undefined, kind);
+        return this.#counts(scans, this.#group(scans, this.#ofShow(title, link, kind)));
     }
 }
 
