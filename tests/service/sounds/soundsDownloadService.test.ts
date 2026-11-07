@@ -289,6 +289,23 @@ describe('soundsDownloadService', () => {
         expect((await settle('p0phlyjk')).state).toBe('done');
     });
 
+    it('replaces a saved .strm link with a real file when asked to secure the episode, removing the link', async () => {
+        await configService.setParameter(IplayarrParameter.STREAM_BASE_URL, 'http://iplayarr.test/');
+        await configService.setParameter(IplayarrParameter.STREAM_KEY, 'key');
+        await soundsDownloadService.enqueue(episode(), 'strm');
+        const link = path.join(dir, 'The Archers', 'The Archers - 2026-11-06 - 06112026.strm');
+        expect((await settle('p0phlyjk')).state).toBe('done');
+        expect(fs.existsSync(link)).toBe(true);
+        // Without the flag the saved link is simply returned; with it a real download takes its place.
+        expect((await soundsDownloadService.enqueue(episode(), 'm4a')).mode).toBe('strm');
+        const secured = await soundsDownloadService.enqueue(episode(), undefined, true);
+        expect(secured).toMatchObject({ mode: 'm4a', replacesStrm: true });
+        const done = await settle('p0phlyjk');
+        expect(done.file).toBe(path.join('The Archers', 'The Archers - 2026-11-06 - 06112026.mp3'));
+        expect(fs.existsSync(link)).toBe(false);
+        expect(fs.existsSync(path.join(dir, done.file))).toBe(true);
+    });
+
     it('leaves no partial files behind when a download fails', async () => {
         fakeFfmpeg(1);
         await soundsDownloadService.enqueue(episode());

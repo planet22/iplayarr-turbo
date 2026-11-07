@@ -73,8 +73,16 @@
                     <div v-if="progress[subscription.id]" class="cardLine">{{ progressLabel(progress[subscription.id]) }}</div>
                 </div>
                 <div v-if="subscription.radio" class="rowActions">
-                    <!-- Radio has no Sonarr/Radarr, versions, secure or images: gaps keep the icons lined up with the other cards. -->
-                    <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <!-- Radio has no Sonarr/Radarr, versions or images: gaps keep the icons lined up with the other cards. -->
+                    <span v-for="n in subscriptionVersions.length + 1" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <button
+                        :class="['clickable', 'stateToggle', subscription.secureDays ? 'on' : '']"
+                        :title="secureTitle(subscription)" :aria-label="secureTitle(subscription)" :aria-pressed="!!subscription.secureDays"
+                        :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'box-archive']" />
+                    </button>
+                    <span class="actionGap" aria-hidden="true"></span>
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
@@ -178,7 +186,15 @@
                     </div>
                 </div>
                 <div v-if="subscription.radio" class="rowActions">
-                    <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <span v-for="n in subscriptionVersions.length + 1" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <button
+                        :class="['clickable', 'stateToggle', subscription.secureDays ? 'on' : '']"
+                        :title="secureTitle(subscription)" :aria-label="secureTitle(subscription)" :aria-pressed="!!subscription.secureDays"
+                        :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'box-archive']" />
+                    </button>
+                    <span class="actionGap" aria-hidden="true"></span>
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
@@ -314,7 +330,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { useNonBrowseScope } from '@/lib/nonBrowseScope';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { countBadge, countsAria, countsTitle, lastBadge, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
-import { secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
+import { chooseSecureDays, secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
 import toastService from '@/lib/toastService';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
@@ -365,6 +381,9 @@ const radioItems = computed(() =>
               downloaded: f.downloaded,
               // The same count as a video subscription: on disk over the episodes seen.
               onDisk: f.onDisk,
+              lastError: f.lastError,
+              secureDays: f.secureDays,
+              secured: f.secured,
               seen: f.seen,
               network: f.network,
               synopsis: f.synopsis,
@@ -656,8 +675,8 @@ const toggleArrWithBusy = async (subscription) => {
 
 const secureTitle = (subscription) =>
     subscription.secureDays
-        ? `Downloads mp4/mkv ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
-        : 'Download mp4/mkv before episodes leave iPlayer (off)';
+        ? `Downloads ${subscription.radio ? 'the audio file' : 'mp4/mkv'} ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
+        : `Download ${subscription.radio ? 'the audio file' : 'mp4/mkv'} before episodes leave ${subscription.radio ? 'Sounds' : 'iPlayer'} (off)`;
 
 // Writes the show's missing Jellyfin pictures (what Use Additional Images does for a download) for its files already
 // in the library, and says what it did.
@@ -685,10 +704,20 @@ const updateImages = async (subscription) => {
 const toggleSecureWithBusy = async (subscription) => {
     busy[subscription.id] = true;
     try {
-        await toggleSecure(subscription);
+        if (subscription.radio) await toggleRadioSecure(subscription);
+        else await toggleSecure(subscription);
     } finally {
         busy[subscription.id] = false;
     }
+};
+
+// The same choice for a followed radio show, saved on the Sounds follow.
+const toggleRadioSecure = async (subscription) => {
+    const days = await chooseSecureDays(subscription);
+    if (days === undefined) return;
+    const { ok, data } = await ipFetch(`json-api/sounds/follows/${encodeURIComponent(subscription.showId)}/secure`, 'PUT', { days });
+    if (!ok) toastService.error('Unable to change the setting', { detail: data?.message || 'Something went wrong' });
+    await loadRadio();
 };
 
 const toggleVersionWithBusy = async (subscription, versionId) => {

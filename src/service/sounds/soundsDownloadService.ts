@@ -166,17 +166,23 @@ class SoundsDownloadService {
     }
 
     // `mode` is the choice made for this one download; without it the RADIO_MEDIA_MODE setting decides.
-    async enqueue(episode: SoundsEpisode, mode?: 'm4a' | 'strm'): Promise<SoundsDownload> {
+    // `replaceStrm` is for securing an episode before it leaves Sounds: a real file whatever the media mode says, standing in for
+    // the .strm link already saved for it (which is removed once the file is in place).
+    async enqueue(episode: SoundsEpisode, mode?: 'm4a' | 'strm', replaceStrm = false): Promise<SoundsDownload> {
         await this.#directory();
         const items = await this.#load();
         const existing = items.find((i) => i.id === episode.id);
-        if (existing && existing.state !== 'failed') return existing;
-        const chosen = mode ?? ((await configService.getParameter(IplayarrParameter.RADIO_MEDIA_MODE)) === 'strm' ? 'strm' : 'm4a');
-        const item: SoundsDownload = { id: episode.id, episode, state: 'queued', mode: chosen, createdAt: new Date().toISOString() };
+        if (existing && existing.state !== 'failed' && !(replaceStrm && existing.mode === 'strm')) return existing;
+        const chosen = replaceStrm ? 'm4a' : (mode ?? ((await configService.getParameter(IplayarrParameter.RADIO_MEDIA_MODE)) === 'strm' ? 'strm' : 'm4a'));
+        const item: SoundsDownload = { id: episode.id, episode, state: 'queued', mode: chosen, createdAt: new Date().toISOString(), ...(replaceStrm ? { replacesStrm: true } : {}) };
         if (existing) items.splice(items.indexOf(existing), 1);
         items.push(item);
         await this.#save();
-        this.#event(item, VideoEventType.QUEUED, `Queued radio ${chosen === 'strm' ? '.strm link' : 'download'}: ${item.episode.title}`);
+        this.#event(
+            item,
+            VideoEventType.QUEUED,
+            replaceStrm ? `Queued radio download before it leaves Sounds: ${item.episode.title}` : `Queued radio ${chosen === 'strm' ? '.strm link' : 'download'}: ${item.episode.title}`
+        );
         this.#pump();
         return item;
     }
@@ -292,6 +298,8 @@ class SoundsDownloadService {
                 fs.renameSync(part, finalPath);
                 item.file = path.relative(root, finalPath);
             }
+            // A real file now stands in for the link that was saved before it.
+            if (item.replacesStrm && !strm) fs.rmSync(path.join(dir, `${name}.strm`), { force: true });
             item.state = 'done';
             item.progress = 100;
             item.finishedAt = new Date().toISOString();

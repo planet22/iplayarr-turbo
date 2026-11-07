@@ -142,6 +142,10 @@ class SoundsFacade {
         return soundsFollowService.unfollow(showId);
     }
 
+    setSecureDays(showId: string, days: number | undefined): Promise<SoundsFollow | undefined> {
+        return soundsFollowService.setSecureDays(showId, days);
+    }
+
     checkFollows(showId?: string): Promise<number> {
         return soundsFollowService.checkAll(showId);
     }

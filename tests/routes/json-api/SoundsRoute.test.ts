@@ -21,6 +21,7 @@ jest.mock('../../../src/facade/soundsFacade', () => ({
         followsDetailed: jest.fn(),
         follow: jest.fn(),
         unfollow: jest.fn(),
+        setSecureDays: jest.fn(),
         checkFollows: jest.fn(),
         missing: jest.fn(),
         onDisk: jest.fn(),
@@ -149,6 +150,18 @@ describe('SoundsRoute', () => {
         facade.unfollow.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
         expect((await request(app).delete('/follows/b006qpgr')).status).toBe(200);
         expect((await request(app).delete('/follows/b006qpgr')).status).toBe(404);
+    });
+
+    it('switches "download before it leaves Sounds" on and off for a followed show', async () => {
+        facade.setSecureDays.mockResolvedValue({ showId: 'b006qpgr', secureDays: 7 });
+        expect((await request(app).put('/follows/b006qpgr/secure').send({ days: 7 })).body).toEqual({ showId: 'b006qpgr', secureDays: 7 });
+        expect(facade.setSecureDays).toHaveBeenLastCalledWith('b006qpgr', 7);
+        await request(app).put('/follows/b006qpgr/secure').send({ days: null });
+        expect(facade.setSecureDays).toHaveBeenLastCalledWith('b006qpgr', undefined);
+        expect((await request(app).put('/follows/b006qpgr/secure').send({ days: 'soon' })).status).toBe(400);
+        expect((await request(app).put('/follows/b0-0/secure').send({ days: 7 })).status).toBe(400);
+        facade.setSecureDays.mockResolvedValue(undefined);
+        expect((await request(app).put('/follows/b006qpgr/secure').send({ days: 7 })).status).toBe(404);
     });
 
     it('checks followed shows now, before "check" can be read as a show id', async () => {

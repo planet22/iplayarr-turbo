@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../../src/service/configService';
+import libraryIndexService from '../../../src/service/libraryIndexService';
 import soundsApiService from '../../../src/service/sounds/soundsApiService';
 import soundsDownloadService from '../../../src/service/sounds/soundsDownloadService';
 import soundsFollowService, { SoundsFollowError } from '../../../src/service/sounds/soundsFollowService';
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { SoundsEpisode } from '../../../src/types/Sounds';
 
-jest.mock('../../../src/service/sounds/soundsApiService', () => ({ __esModule: true, default: { latest: jest.fn(), episodes: jest.fn() } }));
+jest.mock('../../../src/service/sounds/soundsApiService', () => ({
+    __esModule: true,
+    default: { latest: jest.fn(), episodes: jest.fn() },
+    knownEpisode: jest.fn(),
+}));
 jest.mock('../../../src/service/sounds/soundsDownloadService', () => ({ __esModule: true, default: { enqueue: jest.fn() } }));
 
 // Anything exported from here is relied on elsewhere in the app.
@@ -150,6 +155,74 @@ describe('soundsFollowService', () => {
         const [a, b] = await Promise.all([soundsFollowService.checkAll('b0000005'), soundsFollowService.checkAll('b0000005')]);
         expect(a + b).toBe(1);
         expect(soundsApiService.latest).toHaveBeenCalledTimes(1);
+    });
+
+    describe('securing episodes before they leave Sounds', () => {
+        const soon = () => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        const later = () => new Date(Date.now() + 40 * 24 * 60 * 60 * 1000).toISOString();
+        const followWith = async (days?: number) => {
+            (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0aaaaaa'), ep('p0seed000')]);
+            await soundsFollowService.follow('b0000004', 'Four');
+            if (days) await soundsFollowService.setSecureDays('b0000004', days);
+        };
+        const listed = (availableUntil: string) => (soundsApiService.latest as jest.Mock).mockResolvedValue([{ ...ep('p0aaaaaa'), availableUntil }, ep('p0seed000')]);
+
+        beforeEach(async () => {
+            await configService.setParameter(IplayarrParameter.RADIO_MEDIA_MODE, 'strm');
+            jest.spyOn(libraryIndexService, 'filesOfShow').mockResolvedValue([{ path: '/m/Four/a.strm', pid: 'p0aaaaaa' }]);
+        });
+        afterEach(() => jest.restoreAllMocks());
+
+        it('queues a real download for a link whose episode ends within the days chosen, once', async () => {
+            await followWith(3);
+            listed(soon());
+            expect(await soundsFollowService.checkAll()).toBe(1);
+            expect(soundsDownloadService.enqueue).toHaveBeenCalledWith(expect.objectContaining({ id: 'p0aaaaaa' }), 'm4a', true);
+            expect((await soundsFollowService.list())[0].secured).toEqual(['p0aaaaaa']);
+            expect(await soundsFollowService.checkAll()).toBe(0);
+            expect(soundsDownloadService.enqueue).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves it alone when switched off, not yet near its end, or the media mode saves files', async () => {
+            await followWith();
+            listed(soon());
+            expect(await soundsFollowService.checkAll()).toBe(0);
+            await soundsFollowService.setSecureDays('b0000004', 3);
+            listed(later());
+            expect(await soundsFollowService.checkAll()).toBe(0);
+            listed(soon());
+            await configService.setParameter(IplayarrParameter.RADIO_MEDIA_MODE, 'm4a');
+            expect(await soundsFollowService.checkAll()).toBe(0);
+            expect(soundsDownloadService.enqueue).not.toHaveBeenCalled();
+        });
+
+        it('marks an episode that already has a real file as secured without queueing anything', async () => {
+            await followWith(3);
+            listed(soon());
+            jest.spyOn(libraryIndexService, 'filesOfShow').mockResolvedValue([{ path: '/m/Four/a.strm', pid: 'p0aaaaaa' }, { path: '/m/Four/a.m4a', pid: 'p0aaaaaa' }]);
+            expect(await soundsFollowService.checkAll()).toBe(0);
+            expect(soundsDownloadService.enqueue).not.toHaveBeenCalled();
+            expect((await soundsFollowService.list())[0].secured).toEqual(['p0aaaaaa']);
+        });
+
+        it('tries again next check when the download could not be queued', async () => {
+            await followWith(3);
+            listed(soon());
+            (soundsDownloadService.enqueue as jest.Mock).mockRejectedValueOnce(new Error('full')).mockResolvedValue({});
+            expect(await soundsFollowService.checkAll()).toBe(0);
+            expect((await soundsFollowService.list())[0].secured).toBeUndefined();
+            expect(await soundsFollowService.checkAll()).toBe(1);
+        });
+
+        it('only accepts a whole number of days, and forgets what was secured when switched off', async () => {
+            await followWith(3);
+            await expect(soundsFollowService.setSecureDays('b0000004', 0)).rejects.toThrow(SoundsFollowError);
+            await expect(soundsFollowService.setSecureDays('b0000004', 2.5)).rejects.toThrow(SoundsFollowError);
+            expect(await soundsFollowService.setSecureDays('nothere', 3)).toBeUndefined();
+            listed(soon());
+            await soundsFollowService.checkAll();
+            expect((await soundsFollowService.setSecureDays('b0000004', undefined))?.secured).toBeUndefined();
+        });
     });
 
     it('unfollows, and says so when it was not followed', async () => {

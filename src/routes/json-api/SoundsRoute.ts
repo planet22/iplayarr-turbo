@@ -179,6 +179,20 @@ router.post('/follows', guard(async (req, res) => {
     res.json(await soundsFacade.follow(showId, title, typeof image === 'string' && image.startsWith('https://ichef.bbci.co.uk/') ? image : undefined, mode));
 }));
 
+// Download the real file for the show's .strm links this many days before Sounds removes them; `days: null` switches it off.
+router.put('/follows/:id/secure', guard(async (req, res) => {
+    const id = String(req.params.id);
+    if (!ID.test(id)) return invalid(res, 'Invalid show id');
+    const days = req.body?.days;
+    if (days !== null && typeof days !== 'number') return invalid(res, 'days must be a number, or null to switch it off');
+    const updated = await soundsFacade.setSecureDays(id, days === null ? undefined : days);
+    if (!updated) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Not subscribed to that show' } as ApiResponse);
+        return;
+    }
+    res.json(updated);
+}));
+
 router.delete('/follows/:id', async (req: Request, res: Response) => {
     if (!(await soundsFacade.unfollow(String(req.params.id)))) {
         res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Not subscribed to that show' } as ApiResponse);

@@ -2,10 +2,13 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { SoundsEpisode, SoundsFollow, SoundsFollowMode } from '../../types/Sounds';
+import { SECURE_MAX_DAYS, SECURE_MIN_DAYS } from '../../types/Subscription';
+import { expiresWithin } from '../../utils/availability';
 import configService from '../configService';
 import { FollowStore } from '../followStore';
+import libraryIndexService from '../libraryIndexService';
 import loggingService from '../loggingService';
-import soundsApiService from './soundsApiService';
+import soundsApiService, { knownEpisode } from './soundsApiService';
 import soundsDownloadService from './soundsDownloadService';
 
 // Followed shows: a daily pass queues each show's new episodes for download. Following records what the show has
@@ -25,6 +28,8 @@ export interface SoundsCheckResult {
     showId: string;
     title: string;
     queued: string[];
+    // Episodes whose .strm link a real download was queued to replace, before they leave Sounds.
+    secured: string[];
     error?: string;
 }
 
@@ -99,17 +104,70 @@ class SoundsFollowService {
         return removed;
     }
 
+    // Switches "download before it leaves Sounds" on (a whole number of days) or off (undefined); undefined if the show is not
+    // followed. Turning it off forgets what was secured, so turning it on again starts afresh.
+    async setSecureDays(showId: string, days: number | undefined): Promise<SoundsFollow | undefined> {
+        if (days !== undefined && (!Number.isInteger(days) || days < SECURE_MIN_DAYS || days > SECURE_MAX_DAYS)) {
+            throw new SoundsFollowError(`Days must be a whole number from ${SECURE_MIN_DAYS} to ${SECURE_MAX_DAYS}`);
+        }
+        if (!(await this.list()).some((f) => f.showId === showId)) return undefined;
+        await this.#store.update(showId, (f) => {
+            const next: SoundsFollow = { ...f };
+            if (days === undefined) {
+                delete next.secureDays;
+                delete next.secured;
+            } else {
+                next.secureDays = days;
+            }
+            return next;
+        });
+        return (await this.list()).find((f) => f.showId === showId);
+    }
+
+    // Before episodes leave Sounds, downloads the real file for each one this show holds as a .strm link. Only while the radio
+    // media mode is a .strm link (otherwise nothing is a link), only for an episode with a link and no real file yet, and only
+    // once its end date is within `secureDays`. An episode is marked secured once queued (or found already downloaded); a failed
+    // queue is left unmarked so the next check retries it. Returns the newly marked ids.
+    async #secureExpiring(follow: SoundsFollow, listed: SoundsEpisode[], result: SoundsCheckResult): Promise<string[]> {
+        const days = follow.secureDays;
+        if (!days) return [];
+        if ((await configService.getParameter(IplayarrParameter.RADIO_MEDIA_MODE)) !== 'strm') return [];
+        const secured = new Set(follow.secured ?? []);
+        const files = await libraryIndexService.filesOfShow(follow.title, undefined, undefined, 'radio');
+        const byId = new Map(listed.map((e) => [e.id, e]));
+        const marked: string[] = [];
+        for (const id of new Set(files.map(({ pid }) => pid).filter((pid): pid is string => !!pid))) {
+            if (secured.has(id)) continue;
+            const episode = byId.get(id) ?? knownEpisode(id);
+            if (!episode || !expiresWithin(episode.availableUntil, days)) continue;
+            const mine = files.filter(({ pid }) => pid === id);
+            if (mine.some(({ path: file }) => !/\.strm$/i.test(file))) {
+                marked.push(id);
+                continue;
+            }
+            try {
+                await soundsDownloadService.enqueue(episode, 'm4a', true);
+                result.secured.push(id);
+                marked.push(id);
+            } catch (error: any) {
+                loggingService.error(`Sounds follow "${follow.title}": could not secure ${id} before it expires: ${error?.message}`);
+            }
+        }
+        return marked;
+    }
+
     // Queues the episodes one followed show has put out since its last check. A show with a check running already is left
     // alone. An episode that could not be queued is left unseen, so the next check tries it again.
     async check(follow: SoundsFollow): Promise<SoundsCheckResult> {
-        const result: SoundsCheckResult = { showId: follow.showId, title: follow.title, queued: [] };
+        const result: SoundsCheckResult = { showId: follow.showId, title: follow.title, queued: [], secured: [] };
         if (this.#store.inFlight.has(follow.showId)) return result;
         this.#store.inFlight.add(follow.showId);
         try {
             this.#store.progress(follow.showId, 'listing');
             const seen = new Set(follow.seen);
             // Oldest first, so the queue (and the library) fills in broadcast order.
-            const fresh = (await soundsApiService.latest(follow.showId)).filter((e) => !seen.has(e.id)).reverse();
+            const episodes = await soundsApiService.latest(follow.showId);
+            const fresh = episodes.filter((e) => !seen.has(e.id)).reverse();
             for (const [index, episode] of fresh.entries()) {
                 this.#store.progress(follow.showId, 'queueing', index, fresh.length);
                 try {
@@ -119,7 +177,12 @@ class SoundsFollowService {
                     loggingService.error(`Sounds follow "${follow.title}": could not queue ${episode.id}: ${error?.message}`);
                 }
             }
-            await this.#record(follow.showId, result.queued);
+            // Never allowed to lose what was just queued: a failure here only means the next check tries again.
+            const secured = await this.#secureExpiring(follow, episodes, result).catch((error: any) => {
+                loggingService.error(`Sounds follow "${follow.title}": securing failed: ${error?.message}`);
+                return [];
+            });
+            await this.#record(follow.showId, result.queued, secured);
         } catch (error: any) {
             result.error = error?.message ?? 'Check failed';
             loggingService.error(`Sounds follow check of ${follow.showId} failed: ${result.error}`);
@@ -143,7 +206,10 @@ class SoundsFollowService {
             const follows = (await this.list()).filter((f) => !onlyShowId || f.showId === onlyShowId);
             if (!onlyShowId) for (const { showId } of follows) this.#store.progress(showId, 'waiting');
             let queued = 0;
-            for (const follow of follows) queued += (await this.check(follow)).queued.length;
+            for (const follow of follows) {
+                const done = await this.check(follow);
+                queued += done.queued.length + done.secured.length;
+            }
             if (queued) loggingService.log(`Radio subscriptions: queued ${queued} new episode(s)`);
             return queued;
         } finally {
@@ -152,12 +218,13 @@ class SoundsFollowService {
     }
 
     // Notes the check (and what it queued). Re-read before writing, so a follow added or removed during the pass is not undone.
-    #record(showId: string, ids: string[]): Promise<void> {
+    #record(showId: string, ids: string[], secured: string[] = []): Promise<void> {
         const now = new Date().toISOString();
         return this.#store.update(showId, (current) => ({
             ...current,
             lastCheckedAt: now,
             lastError: undefined,
+            ...(secured.length ? { secured: [...new Set([...(current.secured ?? []), ...secured])] } : {}),
             ...(ids.length
                 ? {
                     seen: [...new Set([...current.seen, ...ids])].slice(-MAX_SEEN),
