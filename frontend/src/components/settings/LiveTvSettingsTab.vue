@@ -112,15 +112,6 @@
                 :error="validationErrors.config?.LIVE_UHD_EVENT_FEEDS"
                 :options="liveTvOptions"
             />
-            <SelectInput
-                v-model="config.LIVE_RADIO"
-                field="LIVE_RADIO"
-                :advanced="true"
-                name="BBC Radio"
-                tooltip="Add BBC radio stations as audio-only channels."
-                :error="validationErrors.config?.LIVE_RADIO"
-                :options="liveTvOptions"
-            />
                     </template>
         <SettingsSubheading text="Media Servers" />
         <LiveTvJellyfinSetup />

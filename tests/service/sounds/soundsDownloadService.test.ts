@@ -13,6 +13,7 @@ import soundsDownloadService, {
     episodeLabel,
     ffmpegArgs,
     fileParts,
+    parseMediaPlaylist,
     SoundsDownloadError,
     tagsFor,
 } from '../../../src/service/sounds/soundsDownloadService';
@@ -112,6 +113,28 @@ describe('naming and tags', () => {
     });
 });
 
+describe('parseMediaPlaylist', () => {
+    const base = 'https://cdn.test/a/best.m3u8';
+    it('lists the segments of a plain finished playlist, resolved against the playlist address', () => {
+        const text = '#EXTM3U\n#EXTINF:6,\nseg0.ts\n#EXTINF:6,\n/abs/seg1.ts\n#EXTINF:6,\nhttps://other.test/seg2.ts\n#EXT-X-ENDLIST\n';
+        expect(parseMediaPlaylist(text, base)).toEqual(['https://cdn.test/a/seg0.ts', 'https://cdn.test/abs/seg1.ts', 'https://other.test/seg2.ts']);
+        expect(parseMediaPlaylist('#EXTM3U\r\n#EXT-X-KEY:METHOD=NONE\r\n#EXTINF:6,\r\ns.ts\r\n#EXT-X-ENDLIST', base)).toEqual(['https://cdn.test/a/s.ts']);
+    });
+
+    it('leaves everything else to ffmpeg: not a playlist, master, live, encrypted, fragmented or empty', () => {
+        for (const text of [
+            '<html>',
+            '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n#EXT-X-ENDLIST',
+            '#EXTM3U\n#EXTINF:6,\ns.ts\n',
+            '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="k"\n#EXTINF:6,\ns.ts\n#EXT-X-ENDLIST',
+            '#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\n#EXTINF:6,\ns.m4s\n#EXT-X-ENDLIST',
+            '#EXTM3U\n#EXT-X-ENDLIST',
+        ]) {
+            expect(parseMediaPlaylist(text, base)).toBeUndefined();
+        }
+    });
+});
+
 describe('soundsDownloadService', () => {
     let dir: string;
     beforeEach(async () => {
@@ -152,6 +175,97 @@ describe('soundsDownloadService', () => {
         expect((spawn as jest.Mock).mock.calls[0][1]).toContain('https://cdn.test/best.m3u8');
     });
 
+    it('saves a .strm link to the audio stream when asked, without fetching or recording anything', async () => {
+        await configService.setParameter(IplayarrParameter.STREAM_BASE_URL, 'http://iplayarr.test/');
+        await configService.setParameter(IplayarrParameter.STREAM_KEY, 'k e/y');
+        const queued = await soundsDownloadService.enqueue(episode(), 'strm');
+        expect(queued.mode).toBe('strm');
+        const done = await settle('p0phlyjk');
+        expect(done.state).toBe('done');
+        expect(done.file).toBe(path.join('The Archers', 'The Archers - 2026-11-06 - 06112026.strm'));
+        expect(fs.readFileSync(path.join(dir, done.file), 'utf8')).toBe('http://iplayarr.test/api?mode=stream&audio=1&pid=p0phlyjk&streamkey=k%20e%2Fy');
+        expect(fs.existsSync(path.join(dir, 'The Archers', 'cover.jpg'))).toBe(true);
+        expect(spawn).not.toHaveBeenCalled();
+        expect(soundsStreamService.resolveBest).not.toHaveBeenCalled();
+    });
+
+    it('fails a .strm download that has no Stream Base URL or Stream Key to point at', async () => {
+        await configService.setParameter(IplayarrParameter.STREAM_BASE_URL, '');
+        await configService.setParameter(IplayarrParameter.STREAM_KEY, '');
+        await soundsDownloadService.enqueue(episode(), 'strm');
+        const failed = await settle('p0phlyjk');
+        expect(failed.state).toBe('failed');
+        expect(failed.error).toContain('Stream Base URL');
+    });
+
+    it('takes the mode from the Radio Media Mode setting unless the download chooses one', async () => {
+        await configService.setParameter(IplayarrParameter.RADIO_MEDIA_MODE, 'strm');
+        expect((await soundsDownloadService.enqueue(episode())).mode).toBe('strm');
+        await settle('p0phlyjk');
+        await soundsDownloadService.remove('p0phlyjk');
+        expect((await soundsDownloadService.enqueue(episode(), 'm4a')).mode).toBe('m4a');
+        await settle('p0phlyjk');
+        await soundsDownloadService.remove('p0phlyjk');
+        await configService.setParameter(IplayarrParameter.RADIO_MEDIA_MODE, 'm4a');
+        expect((await soundsDownloadService.enqueue(episode())).mode).toBe('m4a');
+    });
+
+    describe('recording a plain HLS playlist', () => {
+        const playlist = '#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nseg0.ts\n#EXTINF:6,\nseg1.ts\n#EXTINF:6,\nseg2.ts\n#EXT-X-ENDLIST\n';
+        let rawAtCopy: string | undefined;
+        let inputUsed: string | undefined;
+
+        // Segments arrive out of order (the first is the slowest) and the recording must still be in order.
+        const stream = (opts: { failSegment?: string } = {}) =>
+            (axios.get as jest.Mock).mockImplementation(async (url: string, options: any) => {
+                if (url === 'https://cdn.test/best.m3u8') return { data: playlist };
+                if (/seg\d\.ts$/.test(url)) {
+                    if (opts.failSegment && url.endsWith(opts.failSegment)) throw new Error('503');
+                    await new Promise((r) => setTimeout(r, url.endsWith('seg0.ts') ? 60 : 1));
+                    return { data: Buffer.from(`[${url.slice(-7, -3)}]`) };
+                }
+                return options?.responseType === 'stream' ? { data: Readable.from([Buffer.from('x')]), headers: {} } : { data: Buffer.from('jpeg'), headers: {} };
+            });
+
+        beforeEach(() => {
+            rawAtCopy = undefined;
+            inputUsed = undefined;
+            (spawn as jest.Mock).mockImplementation((_cmd: string, args: string[]) => {
+                inputUsed = args[args.indexOf('-i') + 1];
+                if (!/^https?:/.test(inputUsed)) rawAtCopy = fs.readFileSync(inputUsed, 'utf8');
+                const child: any = new EventEmitter();
+                child.stderr = new PassThrough();
+                child.kill = jest.fn();
+                setImmediate(() => {
+                    fs.writeFileSync(args[args.length - 1], 'audio');
+                    child.emit('close', 0, null);
+                });
+                return child;
+            });
+        });
+
+        it('fetches the segments in parallel into one ordered file, and copies that file instead of letting ffmpeg fetch', async () => {
+            stream();
+            await soundsDownloadService.enqueue(episode({ id: 'm0033frv', mp3: false, showTitle: 'Mix', title: 'Mix', subtitle: undefined }), 'm4a');
+            const done = await settle('m0033frv');
+            expect(done.state).toBe('done');
+            expect(rawAtCopy).toBe('[seg0][seg1][seg2]');
+            expect(inputUsed).not.toMatch(/^https?:/);
+            expect(done).toMatchObject({ bytes: 18, state: 'done' });
+            expect(fs.readdirSync(path.join(dir, 'Mix')).filter((f) => f.includes('.raw') || f.includes('.part'))).toEqual([]);
+        });
+
+        it('fails with a clear message when a segment cannot be fetched, leaving nothing behind', async () => {
+            stream({ failSegment: 'seg1.ts' });
+            await soundsDownloadService.enqueue(episode({ id: 'm0033frv', mp3: false, showTitle: 'Mix', title: 'Mix', subtitle: undefined }), 'm4a');
+            const failed = await settle('m0033frv');
+            expect(failed.state).toBe('failed');
+            expect(failed.error).toContain('segment could not be fetched');
+            expect(spawn).not.toHaveBeenCalled();
+            expect(fs.readdirSync(path.join(dir, 'Mix')).filter((f) => f.includes('.raw') || f.includes('.part'))).toEqual([]);
+        });
+    });
+
     it('does not queue the same episode twice, but retries a failed one', async () => {
         const first = await soundsDownloadService.enqueue(episode());
         expect(await soundsDownloadService.enqueue(episode())).toBe(first);
@@ -173,6 +287,30 @@ describe('soundsDownloadService', () => {
         await soundsDownloadService.enqueue(episode());
         await settle('p0phlyjk');
         expect(fs.readdirSync(path.join(dir, 'The Archers')).filter((f) => f.includes('.part') || f.includes('.raw'))).toEqual([]);
+    });
+
+    it('records size and speed for the Queue page: an MP3 from its bytes, a recording from ffmpeg\'s size', async () => {
+        await soundsDownloadService.enqueue(episode());
+        const mp3 = await settle('p0phlyjk');
+        expect(mp3).toMatchObject({ bytes: 9, totalBytes: 9, startedAt: expect.any(String) });
+        expect(mp3.speedKbs).toBeGreaterThanOrEqual(0);
+
+        await soundsDownloadService.enqueue(episode({ id: 'm0033frv', mp3: false, showTitle: 'Mix', title: 'Mix', subtitle: undefined }));
+        const recorded = await settle('m0033frv');
+        expect(recorded.bytes).toBe(1024); // "size=1kB" in the fake ffmpeg output
+        expect(recorded.totalBytes).toBeUndefined();
+        expect(typeof recorded.speedKbs).toBe('number');
+    });
+
+    it('starts a retried download with its figures cleared', async () => {
+        fakeFfmpeg(1);
+        await soundsDownloadService.enqueue(episode({ id: 'm0033frv', mp3: false, showTitle: 'Mix', title: 'Mix', subtitle: undefined }));
+        expect((await settle('m0033frv')).state).toBe('failed');
+        fakeFfmpeg();
+        await soundsDownloadService.enqueue(episode({ id: 'm0033frv', mp3: false, showTitle: 'Mix', title: 'Mix', subtitle: undefined }));
+        const retried = await settle('m0033frv');
+        expect(retried.state).toBe('done');
+        expect(retried.error).toBeUndefined();
     });
 
     it('removes an item from the list', async () => {

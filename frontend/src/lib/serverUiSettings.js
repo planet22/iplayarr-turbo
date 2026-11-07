@@ -33,4 +33,6 @@ export const applyServerUiSettings = (config) => {
     downloads.setPlayAsk(on('PLAY_ASK_VERSION', true));
     downloads.setPlayPreferred(config.PLAY_DEFAULT_VERSION ?? '');
     downloads.setNativeStream((config.STREAM_CLIENT ?? 'NATIVE') === 'NATIVE');
+    // How square radio artwork sits in wide boxes: the stylesheet reads this off the page ('blur' is the default).
+    if (typeof document !== 'undefined') document.documentElement.dataset.radioArt = config.RADIO_THUMBNAIL_STYLE === 'square' ? 'square' : 'blur';
 };

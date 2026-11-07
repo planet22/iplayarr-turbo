@@ -45,6 +45,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         return null;
     };
     const pid = ctx.pid;
+    ctx.cfg = ctx.cfg || (await http('/json-api/config')).json || {};
     const brand = (await http(`/json-api/browse/programme/${pid}`)).json;
     const bpid = brand?.pid;
     ctx.preSubscribed = ((await http('/json-api/subscriptions')).json || []).some((x) => x.pid === bpid);
@@ -361,6 +362,180 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         });
 
         // ---- Logs page: tiles, level chips, search, source dropdown, 24-hour times, download, clear view, phone layout (nothing saved on the server)
+        // ---- Radio (BBC Sounds) in the shared pages: the same pages as video, fed radio data by the Video | Radio toggle in the top bar
+        await flow('radio mode: toggle, browse pages, programme page and player', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio mode pages', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            const cards = page.locator('.programmeCard');
+            await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+            ok('radio Discover is the Discover page: hero banner and rails of radio cards', (await page.locator('.browseHero').count()) > 0 && (await cards.count()) > 3);
+            ok('the Video | Radio toggle is in the top bar, showing Radio', /^Radio/.test((await page.locator('.NavBar .modeSingle').getAttribute('aria-label')) || ''));
+            ok('the menu has no separate Radio link', (await page.locator('.LeftHandNav a[href="/radio"]').count()) === 0);
+            // A to Z stays in the menu in radio mode, greyed out and not a link (BBC Sounds has none).
+            const atoz = page.locator('.LeftHandNav li.disabled', { hasText: 'A to Z' });
+            ok('A to Z stays in the menu in radio mode, disabled', (await atoz.count()) === 1 && (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 0 && (await atoz.getAttribute('aria-disabled')) === 'true');
+            await shot(page, 'radio-discover');
+
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(2500);
+            ok('switching to Video draws video cards again (no radio badge on the first card)', (await page.locator('.programmeCard .noThumb svg[data-icon=radio]').count()) === 0);
+            ok('A to Z is a link again in video mode', (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 1);
+
+            // The toggle keeps the page: Categories stays Categories, Search keeps its term, a category goes to the list, a show to a search.
+            await page.goto(BASE + '/browse/categories', { waitUntil: 'networkidle' });
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(1500);
+            ok('the toggle keeps you on Categories', new URL(page.url()).pathname === '/browse/categories');
+            await page.goto(BASE + '/search?searchTerm=archers', { waitUntil: 'networkidle' });
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(1500);
+            ok('the toggle keeps the search term', new URL(page.url()).pathname === '/search' && new URL(page.url()).searchParams.get('searchTerm') === 'archers');
+            // (Every page load below starts in radio mode again: the init script above sets it.)
+            await page.goto(BASE + '/browse/categories', { waitUntil: 'networkidle' });
+            await page.locator('.tileGrid .tile').nth(2).click();
+            await page.waitForURL(/\/browse\/category\//, { timeout: 15000 });
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(1500);
+            ok('the toggle sends a category to the Categories list (its id is not the other catalogue\'s)', new URL(page.url()).pathname === '/browse/categories');
+            // The Channels page lists only the radio stations in radio mode, and none of them in video mode.
+            await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
+            await page.waitForTimeout(2500);
+            const radioTiles = await page.locator('.tileGrid .tile').count();
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(2000);
+            const videoTiles = await page.locator('.tileGrid .tile').count();
+            if (ctx.cfg?.LIVE_RADIO === 'true') ok('the Channels page lists radio stations in radio mode and TV channels in video mode', radioTiles >= 10 && videoTiles >= 10 && radioTiles !== videoTiles, `radio ${radioTiles}, video ${videoTiles}`);
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+
+            await page.goto(BASE + '/browse/categories', { waitUntil: 'networkidle' });
+            await page.locator('.tileGrid .tile').first().waitFor({ timeout: 25000 });
+            ok('radio Categories are the Categories page: picture tiles', (await page.locator('.tileGrid .tile.imageTile').count()) > 5);
+            ok('radio Categories has no "feature on Discover" compass', (await page.locator('button[title*="featured on Discover"]').count()) === 0);
+            await shot(page, 'radio-categories');
+            await page.locator('.tileGrid .tile').nth(5).click();
+            await cards.first().waitFor({ timeout: 25000 });
+            ok('a radio category is the category grid, with its filter, sort and pagination', (await cards.count()) > 5 && (await page.locator('.tableFilter').count()) > 0 && (await page.locator('.SettingsPageToolbar').count()) > 0 && (await page.locator('select[aria-label="items per page"]').count()) > 0);
+            await shot(page, 'radio-category');
+
+            await page.goto(BASE + '/browse/collections', { waitUntil: 'networkidle' });
+            await page.locator('.collectionGrid > *').first().waitFor({ timeout: 25000 });
+            ok('radio Collections is the Collections page, with counts', (await page.locator('.collectionGrid > *').count()) > 0 && /titles?/.test(await page.locator('.collectionGrid').first().innerText()));
+            await page.locator('.collectionGrid > *').first().click();
+            await cards.first().waitFor({ timeout: 25000 });
+            ok('an opened radio collection lists radio cards, and has no Download collection button', (await cards.count()) > 0 && (await page.locator('button[title^="Download collection"]').count()) === 0);
+            await shot(page, 'radio-collection');
+
+            await page.goto(BASE + '/browse/atoz/a', { waitUntil: 'networkidle' });
+            await page.waitForTimeout(1500);
+            ok('radio A to Z lists nothing (BBC Sounds has no A to Z)', (await cards.count()) === 0);
+
+            await page.goto(BASE + '/search?searchTerm=archers', { waitUntil: 'networkidle' });
+            await page.locator('.resultsTable tbody tr, .programmeCard').first().waitFor({ timeout: 25000 });
+            ok('radio search is the Search page, with its results table', (await page.locator('.resultsTable tbody tr').count()) > 1);
+            ok('radio search results are marked Radio', (await page.locator('.resultsTable .pill', { hasText: 'RADIO' }).count()) > 0);
+            await shot(page, 'radio-search');
+            await page.locator('.resultsTable tbody tr', { hasText: 'RADIO' }).first().waitFor();
+
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+            await page.locator('.programmeCard', { hasText: 'Programme' }).first().click();
+            await page.locator('.programmeBanner').waitFor({ timeout: 25000 });
+            await page.locator('.episodeRow').first().waitFor({ timeout: 25000 });
+            ok('a radio programme is the programme page: banner, Subscribe, paged episode list', (await page.locator('.episodeRow').count()) > 1 && (await page.getByRole('button', { name: /Subscribe/ }).count()) > 0 && (await page.locator('.TablePagination, [class*=agination]').count()) > 0);
+            ok('the radio programme page is the same page as video (shared markup)', (await page.locator('.programmeBanner .programmeBannerContent').count()) === 1 && (await page.locator('.episodeThumbWrap.radioArtBox').count()) > 0);
+            await shot(page, 'radio-programme');
+            if (ctx.cfg?.STREAM_KEY) {
+                await page.locator('.episodeRow .overlay button[title="Play audio"]').first().click({ force: true });
+                await page.locator('.audioPlayerBar audio').waitFor({ timeout: 10000 });
+                await page.waitForTimeout(4000);
+                warn('the radio player is playing audio', (await page.evaluate(() => document.querySelector('.audioPlayerBar audio')?.currentTime || 0)) > 0, 'currentTime did not advance');
+                await shot(page, 'radio-player');
+                // Client-side navigation: a full page load would end the player by design.
+                await page.locator('a[href="/browse/categories"]').first().click();
+                await page.waitForTimeout(1500);
+                ok('the player keeps going while pages change', (await page.locator('.audioPlayerBar audio').count()) === 1);
+            }
+            if (ctx.cfg?.UI_EXTENDED_DEBUG === 'true') {
+                await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+                await cards.first().waitFor({ timeout: 25000 });
+                await page.locator('.programmeCard', { hasText: 'Programme' }).first().click();
+                await page.locator('.episodeRow').first().waitFor({ timeout: 25000 });
+                await page.locator('.episodeRow .overlay button[title="Streaming debug"]').first().click({ force: true });
+                await page.waitForURL(/\/streaming\/debug\/[^?]+\?kind=radio/, { timeout: 8000 });
+                // The probe runs by itself for radio; its table lists the stream's routes.
+                await page.locator('.probeTable tbody tr').first().waitFor({ timeout: 40000 });
+                const body = await page.innerText('body');
+                ok('the radio debug page reads the episode as audio', /\baudio\b/i.test(body) && (await page.locator('.probeTable tbody tr').count()) > 2, 'no audio probe rows');
+                ok('the radio debug page has no broken picture', await page.evaluate(() => [...document.querySelectorAll('.streamDebug img')].every((i) => i.complete && i.naturalWidth > 0)), 'a picture did not load');
+                ok('the radio debug page shows no video-only parts', !/Library debug|Video info|FHD upgrade/.test(body), 'video-only text on the page');
+                await shot(page, 'radio-debug');
+            }
+            await page.goto(BASE + '/radio', { waitUntil: 'networkidle' });
+            ok('the old /radio address opens radio search', new URL(page.url()).pathname === '/search');
+            await page.setViewportSize({ width: 390, height: 800 });
+            await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
+            await cards.first().waitFor({ timeout: 25000 });
+            ok('radio Discover has no horizontal overflow on a phone', !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)));
+            await shot(page, 'radio-phone');
+        });
+
+        // Radio Channels page: each station is a wide logo on a field of its own colour, like a TV channel tile, not a cropped square.
+        await flow('radio Channels tiles show every logo whole on a colour field', async (page) => {
+            if (String(ctx.cfg?.LIVE_RADIO) !== 'true') { rec(U, 'radio channel tiles', 'SKIP', 'Live Radio is off'); return; }
+            await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
+            const logos = page.locator('.tile .channelLogo');
+            await logos.first().waitFor({ timeout: 25000 });
+            await page.waitForTimeout(1500);
+            const info = await logos.evaluateAll((imgs) => imgs.map((i) => ({
+                src: i.getAttribute('src') || '',
+                loaded: i.complete && i.naturalWidth > 0,
+                fit: getComputedStyle(i).objectFit,
+                ratio: i.naturalWidth / (i.naturalHeight || 1),
+            })));
+            ok('every radio logo loads', info.length > 0 && info.every((i) => i.loaded), `${info.filter((i) => !i.loaded).length} of ${info.length} did not load`);
+            ok('every radio logo is the versioned wide picture', info.every((i) => /channel-logo\/[a-z0-9_]+\.svg\?v=wide$/.test(i.src)), info.find((i) => !/\?v=wide$/.test(i.src))?.src);
+            ok('every radio logo is the TV logo shape (about 2.4 to 1), so nothing is cropped', info.every((i) => i.ratio > 2.2 && i.ratio < 2.6), info.find((i) => i.ratio <= 2.2 || i.ratio >= 2.6)?.src);
+            ok('radio logos are drawn the same way as the TV ones', info.every((i) => i.fit === 'cover'), 'a logo is fitted differently from the TV tiles');
+            await shot(page, 'radio-channels');
+        });
+
+        // The Queue lists radio downloads beside video ones. The downloads list is stubbed so nothing is downloaded or written.
+        await flow('radio downloads show in the Queue with kB/s and cancel through the radio API', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio queue rows', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            const episode = { id: 'p0smoke01', title: 'SMOKE-TEMP Show', showTitle: 'SMOKE-TEMP Show', subtitle: 'Ep 1', showId: 'b0smoke01', mp3: false };
+            const downloads = [
+                { id: 'p0smoke01', episode, state: 'downloading', progress: 40, bytes: 2097152, totalBytes: 5242880, speedKbs: 256, etaSeconds: 70, createdAt: new Date().toISOString(), startedAt: new Date().toISOString() },
+                { id: 'p0smoke02', episode: { ...episode, id: 'p0smoke02', subtitle: 'Ep 2' }, state: 'failed', error: 'ffmpeg failed', createdAt: new Date().toISOString() },
+            ];
+            const deleted = [];
+            await page.route('**/json-api/sounds/downloads**', (route) => {
+                const req = route.request();
+                if (req.method() === 'DELETE') { deleted.push(req.url()); return route.fulfill({ json: { ok: true } }); }
+                return route.fulfill({ json: downloads });
+            });
+            await page.goto(BASE + '/queue', { waitUntil: 'networkidle' });
+            const row = page.locator('tbody tr', { hasText: 'SMOKE-TEMP Show - Ep 1' }).first();
+            await row.waitFor({ timeout: 15000 });
+            // textContent, not innerText: the ETA column is hidden below 1500px wide but still rendered.
+            const text = (await row.textContent()).replace(/\s+/g, ' ');
+            ok('the radio row is marked Radio', /Radio/.test(text), text);
+            ok('the radio row shows its speed in kB/s', /256 kB\/s/.test(text), text);
+            ok('the radio row shows its size and ETA', /5\.00 MB/.test(text) && /00:01:10/.test(text), text);
+            ok('the failed radio download is listed in history, not the queue', (await page.locator('tbody tr', { hasText: 'Ep 2' }).count()) <= 1);
+            await shot(page, 'radio-queue');
+            const menu = row.locator('.actionMenu');
+            if (await menu.count()) { await menu.locator('svg').first().click(); await row.locator('.menuPanel button', { hasText: /Cancel download/ }).click(); }
+            else await row.locator('.actionCol svg.clickable').last().click();
+            // The confirm button is itself labelled "Cancel download", which clickDialogPrimary skips.
+            const confirmBtn = dialog(page).locator('button', { hasText: /^\s*Cancel download\s*$/ });
+            await confirmBtn.waitFor({ timeout: 8000 });
+            await confirmBtn.click();
+            await page.waitForTimeout(1000);
+            ok('cancelling a radio row calls the radio API, not the video queue', deleted.some((u) => /\/json-api\/sounds\/downloads\/p0smoke01$/.test(u)), JSON.stringify(deleted));
+        });
+
         await flow('logs page', async (page) => {
             await page.goto(BASE + '/logs', { waitUntil: 'networkidle' });
             await page.waitForSelector('.logTiles', { timeout: 15000 }).catch(() => {});

@@ -39,6 +39,11 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | Api Key | `API_KEY` | _(auto-generated)_ | Secures the Newznab/SABnzbd API surface (`?apikey=`). Regenerate from the field's button; Settings will offer to push the new key out to configured Apps. |
 | Hours in RSS Feed | `RSS_FEED_HOURS` | `48` | Advanced. How many hours back the RSS feed covers (1-720). |
 | Full Schedule Refresh | `SCHEDULE_FULL_REFRESH` | `false` | Advanced. `false` reuses cached results for days in the schedule window that have already fully passed; `true` re-fetches every day on every refresh. Applies to the Schedule Refresh task on the Maintenance tab. |
+| BBC Sounds Radio | `SOUNDS_ENABLED` | `true` | Master switch for BBC radio: the Video / Radio switch, radio search, play, download and follow. The other radio rows below appear only while it is on, and turning it off also switches off live radio. See [SOUNDS.md](SOUNDS.md). |
+| Radio Directory | `SOUNDS_DIR` | blank | (Media Management tab) Where radio downloads are saved (point a Jellyfin music library here). Needed to download. |
+| Radio Media Mode | `RADIO_MEDIA_MODE` | `m4a` | (Media Management tab) What a radio download saves: `m4a` (the audio file) or `strm` (a small link to the audio stream; needs Stream Base URL and Stream Key). Each download can choose. |
+| Radio Thumbnails | `RADIO_THUMBNAIL_STYLE` | `blur` | (Appearance tab) Square radio artwork in wide picture boxes: `blur` (over a blurred copy of itself) or `square` (plain). |
+| Live Radio Stations | `LIVE_RADIO` | `true` | Advanced. Adds 16 BBC radio stations as audio-only live channels (with Live TV). Turning it off removes them from the library and Live TV. See [STREAMING.md](STREAMING.md#live-radio). |
 
 ## Search (Settings → Search)
 
@@ -150,9 +155,6 @@ See [STREAMING.md](STREAMING.md) for the full setup walkthrough. Field summary:
 | Native FHD Upgrade | `STREAM_NATIVE_EXPERIMENTAL_FHD` | `true` | Native client only. |
 | Native Subtitles | `STREAM_SUBTITLES` | `true` | Native client, Direct mode. Adds the BBC's captions as an English subtitle track, for on-demand and live. See [STREAMING.md](STREAMING.md#subtitles). |
 | UHD Event Feeds | `LIVE_UHD_EVENT_FEEDS` | `false` | Native client. Lists BBC's UHD event feeds (`uk bbc stream 031`, `041`-`044`: up to 2160p HEVC, DASH only) among the live channels. They only carry video while a big event is on; between events they are listed but do not play. Needs a UK IP and a player (or Jellyfin transcoder) that handles 4K HEVC. Turning it off removes any subscribed feeds from the library (their `.strm` files are deleted) and from Jellyfin Live TV; the UI asks first. |
-| BBC Sounds Radio | `SOUNDS_ENABLED` | `false` | Adds a Radio page to search, play, download and follow BBC radio shows. See [SOUNDS.md](SOUNDS.md). |
-| Sounds Directory | `SOUNDS_DIR` | blank | Where radio downloads are saved (point a Jellyfin music library here). Needed to download. |
-| BBC Radio | `LIVE_RADIO` | `false` | Adds 16 BBC radio stations as audio-only live channels. Turning it off removes them from the library and Live TV. See [STREAMING.md](STREAMING.md#live-radio). |
 | Live 1080p (Experimental) | `STREAM_LIVE_DASH_1080` | `true` | Native client. Live channels as 1080p HEVC (BBC's DASH feed, mediaset `iptv-mse`) instead of 720p HLS, in both Direct and Progressive MKV modes. Direct mode presents the feed as HLS playlists and proxies BBC's segments untouched (no ffmpeg); Progressive MKV mode needs ffmpeg. Needs a player that decodes HEVC; subtitles are not offered on these channels. Falls back to 720p HLS if BBC offers no DASH for the channel. |
 | Ask Which Version to Play _(advanced)_ | `PLAY_ASK_VERSION` | `true` | Native client, once the Audio Described / Signed badge setting is on. The Play button asks which version to play when there is more than one. Off plays the default below. The player can switch version either way. |
 | Default Version to Play _(advanced)_ | `PLAY_DEFAULT_VERSION` | _(standard)_ | Used when Ask is off and pre-selected when it is on. |

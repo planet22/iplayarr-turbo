@@ -21,6 +21,13 @@ jest.mock('../../../src/facade/soundsFacade', () => ({
         follow: jest.fn(),
         unfollow: jest.fn(),
         checkFollows: jest.fn(),
+        show: jest.fn(),
+        categories: jest.fn(),
+        category: jest.fn(),
+        collections: jest.fn(),
+        collection: jest.fn(),
+        home: jest.fn(),
+        atoz: jest.fn(),
     },
 }));
 
@@ -48,6 +55,38 @@ describe('SoundsRoute', () => {
         expect(facade.search).not.toHaveBeenCalled();
     });
 
+    it('serves the radio browse routes, and 404s them while Sounds is off', async () => {
+        facade.home.mockResolvedValue([{ id: 'r1', title: 'Rail', items: [] }]);
+        facade.categories.mockResolvedValue([{ id: 'comedy', title: 'Comedy' }]);
+        facade.category.mockResolvedValue({ items: [], page: 3, perPage: 150, total: 0 });
+        facade.collection.mockResolvedValue({ items: [], page: 1, perPage: 30, total: 0 });
+        facade.collections.mockResolvedValue({ enabled: true, collections: [] });
+        facade.atoz.mockReturnValue({ items: [], page: 1, perPage: 300, total: 0 });
+        expect((await request(app).get('/browse/home')).body[0].id).toBe('r1');
+        expect((await request(app).get('/browse/categories')).body[0].id).toBe('comedy');
+        expect((await request(app).get('/browse/category/comedy-sitcoms?page=3&perPage=150')).status).toBe(200);
+        expect(facade.category).toHaveBeenCalledWith('comedy-sitcoms', 3, 150);
+        await request(app).get('/browse/category/comedy?perPage=9999');
+        expect(facade.category).toHaveBeenLastCalledWith('comedy', 1, 200);
+        expect((await request(app).get('/browse/category/comedy/rails')).body).toEqual([]);
+        expect((await request(app).get('/browse/collections/p0bw8cqs')).status).toBe(200);
+        expect(facade.collection).toHaveBeenCalledWith('p0bw8cqs', 1, 30);
+        expect((await request(app).get('/browse/collections')).body).toEqual({ enabled: true, collections: [] });
+        expect((await request(app).get('/browse/atoz/a')).body.total).toBe(0);
+        expect((await request(app).get('/browse/capabilities')).body).toEqual({ categories: true, collections: true, atoz: false });
+        expect((await request(app).get('/browse/category/a%20b')).status).toBe(400);
+        expect((await request(app).get('/browse/collections/a-b')).status).toBe(400);
+        facade.isEnabled.mockResolvedValue(false);
+        expect((await request(app).get('/browse/categories')).status).toBe(404);
+    });
+
+    it('returns a show, or 404 when BBC has none', async () => {
+        facade.show.mockResolvedValueOnce({ id: 'b00show01', title: 'Show' }).mockResolvedValueOnce(undefined);
+        expect((await request(app).get('/shows/b00show01')).body.title).toBe('Show');
+        expect((await request(app).get('/shows/b00show02')).status).toBe(404);
+        expect((await request(app).get('/shows/a-b')).status).toBe(400);
+    });
+
     it('searches', async () => {
         facade.search.mockResolvedValue({ shows: [], episodes: [] });
         const res = await request(app).get('/search?q=archers');
@@ -69,6 +108,18 @@ describe('SoundsRoute', () => {
         expect((await request(app).post('/downloads').send({})).status).toBe(400);
     });
 
+    it('passes the chosen save mode (audio file or .strm link) on, and refuses any other', async () => {
+        facade.download.mockResolvedValue({ id: 'p0phlyjk', state: 'queued' });
+        await request(app).post('/downloads').send({ episodeId: 'p0phlyjk', mode: 'strm' });
+        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', 'strm');
+        await request(app).post('/downloads').send({ episodeId: 'p0phlyjk', mode: 'm4a' });
+        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', 'm4a');
+        await request(app).post('/downloads').send({ episodeId: 'p0phlyjk' });
+        expect(facade.download).toHaveBeenLastCalledWith('p0phlyjk', undefined);
+        const bad = await request(app).post('/downloads').send({ episodeId: 'p0phlyjk', mode: 'mp3' });
+        expect(bad.status).toBe(400);
+    });
+
     it('turns a refusal from the download queue into a 400 with its message', async () => {
         facade.download.mockRejectedValue(new SoundsDownloadError('Set the Sounds Directory in Settings first'));
         const res = await request(app).post('/downloads').send({ episodeId: 'p0phlyjk' });
@@ -85,9 +136,12 @@ describe('SoundsRoute', () => {
     it('follows and unfollows shows, accepting only BBC image links', async () => {
         facade.follow.mockResolvedValue({ showId: 'b006qpgr' });
         await request(app).post('/follows').send({ showId: 'b006qpgr', title: 'The Archers', image: 'https://evil.test/x.jpg' });
-        expect(facade.follow).toHaveBeenCalledWith('b006qpgr', 'The Archers', undefined);
+        expect(facade.follow).toHaveBeenCalledWith('b006qpgr', 'The Archers', undefined, undefined);
         await request(app).post('/follows').send({ showId: 'b006qpgr', title: 'The Archers', image: 'https://ichef.bbci.co.uk/images/a.jpg' });
-        expect(facade.follow).toHaveBeenLastCalledWith('b006qpgr', 'The Archers', 'https://ichef.bbci.co.uk/images/a.jpg');
+        expect(facade.follow).toHaveBeenLastCalledWith('b006qpgr', 'The Archers', 'https://ichef.bbci.co.uk/images/a.jpg', undefined);
+        await request(app).post('/follows').send({ showId: 'b006qpgr', title: 'The Archers', mode: 'all' });
+        expect(facade.follow).toHaveBeenLastCalledWith('b006qpgr', 'The Archers', undefined, 'all');
+        expect((await request(app).post('/follows').send({ showId: 'b006qpgr', title: 'x', mode: 'everything' })).status).toBe(400);
         expect((await request(app).post('/follows').send({ showId: 'b006qpgr' })).status).toBe(400);
         facade.unfollow.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
         expect((await request(app).delete('/follows/b006qpgr')).status).toBe(200);

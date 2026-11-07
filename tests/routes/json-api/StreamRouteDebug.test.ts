@@ -38,7 +38,7 @@ describe('StreamRoute debug', () => {
         const res = await request(app).get('/debug/m001aaaa');
 
         expect(res.body).toEqual({ pid: 'm001aaaa' });
-        expect(streamDebugService.info).toHaveBeenCalledWith('m001aaaa');
+        expect(streamDebugService.info).toHaveBeenCalledWith('m001aaaa', false);
     });
 
     it('POST /debug/:pid/probe answers the probe', async () => {
@@ -63,7 +63,18 @@ describe('StreamRoute debug', () => {
 
         await request(app).post('/debug/m001aaaa/probe?vpid=p0vers01').expect(200);
 
-        expect(streamDebugService.probe).toHaveBeenCalledWith('m001aaaa', 'p0vers01');
+        expect(streamDebugService.probe).toHaveBeenCalledWith('m001aaaa', 'p0vers01', false);
+    });
+
+    it('?kind=radio asks for the audio reading of a BBC Sounds episode', async () => {
+        jest.mocked(streamDebugService.programme).mockResolvedValue({ pid: 'm0033frv' } as any);
+        jest.mocked(streamDebugService.probe).mockResolvedValue({ pid: 'm0033frv', versions: [] } as any);
+
+        await request(app).get('/debug/m0033frv/programme?kind=radio').expect(200);
+        await request(app).post('/debug/m0033frv/probe?kind=radio').expect(200);
+
+        expect(streamDebugService.programme).toHaveBeenLastCalledWith('m0033frv', true);
+        expect(streamDebugService.probe).toHaveBeenLastCalledWith('m0033frv', undefined, true);
     });
 
     it('refuses a part, image id or version id that is not valid', async () => {

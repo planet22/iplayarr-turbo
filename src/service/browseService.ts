@@ -6,7 +6,7 @@ import { BrowseChannels, BrowseHomeRails, BrowseHomeRandomCategories } from '../
 import { channelOverride, hasCustomLogo } from '../constants/CustomChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { allLiveChannels, isLiveChannel, isOptionalLiveChannel, OptionalLiveChannels } from '../constants/LiveChannels';
-import { isRadioStation } from '../constants/RadioChannels';
+import { isRadioStation, RadioStations } from '../constants/RadioChannels';
 import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
@@ -197,6 +197,18 @@ export function withCaption(svg: string, label: string): string {
         `<text x="${x + w / 2}" y="${y + h * 0.91}" text-anchor="middle" font-family="DejaVu Sans,Arial,Helvetica,sans-serif" ` +
         `font-weight="bold" font-size="${fontSize}" fill="${fg}">${text}</text></svg>`
     );
+}
+
+// BBC Sounds' network logos are a 32x32 coloured circle with its mark, no background. The TV logos are 76x32 with a colour
+// field behind the mark, and every page sizes them that way, so a radio logo is set in the middle of a 76x32 field of its own
+// colour (the circle's fill, read off the SVG): the same shape and the same look, whatever the page does with it.
+export function wideRadioLogo(svg: string): string {
+    const inner = svg
+        .replace(/<\?xml[^>]*\?>/i, '')
+        .replace(/<svg\b[^>]*>/i, '')
+        .replace(/<\/svg>\s*$/i, '');
+    const field = /fill="(#[0-9a-f]{3,8})"/i.exec(inner)?.[1] ?? '#3a3a3a';
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 32"><rect width="76" height="32" fill="${field}"/><svg x="22" y="0" width="32" height="32" viewBox="0 0 32 32">${inner}</svg></svg>`;
 }
 
 // What the user sees for a channel: their own name and logo if they changed them, else the BBC's. The id
@@ -711,14 +723,16 @@ class BrowseService {
         return logos[masterBrand];
     }
 
-    // A radio station's logo is BBC Sounds' own coloured SVG for the network (LIVE_RADIO).
+    // A radio station's logo is BBC Sounds' own coloured SVG for the network (LIVE_RADIO), set on a wide field of its own
+    // colour so it is the shape of the TV logos (see wideRadioLogo).
     async #radioLogo(stationId: string): Promise<string | undefined> {
-        return this.longCache.getOr(`radio_logo_${stationId}`, async () => {
-            const response = await axios.get(`https://sounds.files.bbci.co.uk/v2/networks/${stationId}/colour_default.svg`, {
+        const logoId = RadioStations.find(({ id }) => id === stationId)?.logoId ?? stationId;
+        return this.longCache.getOr(`radio_logo_wide_${stationId}`, async () => {
+            const response = await axios.get(`https://sounds.files.bbci.co.uk/v2/networks/${logoId}/colour_default.svg`, {
                 responseType: 'text',
                 timeout: 15_000,
             });
-            return String(response.data);
+            return wideRadioLogo(String(response.data));
         });
     }
 

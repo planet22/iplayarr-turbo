@@ -266,6 +266,8 @@ import { askAboutVersions, batchVersionKey, initialVersionKey, offeredVersions, 
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
+import { useRadioActions } from '@/lib/radio';
+import { askRadioDownload } from '@/lib/radioDownloadChoice';
 import { streamSearch } from '@/lib/searchStream';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
@@ -624,6 +626,9 @@ const rememberSearch = (term) => {
     }
 };
 const restoreLastSearch = () => {
+    // The kept-alive page is rebuilt behind the scenes when the Video | Radio mode changes (see modeRoute); that must not
+    // pull you back to the search from another page.
+    if (route.name !== 'search') return;
     if (route.query.searchTerm) return;
     let last = null;
     try {
@@ -693,7 +698,16 @@ watch(
     { immediate: true }
 );
 
+// Radio results: a programme opens its radio page; an episode plays and downloads through the radio actions.
+const radio = useRadioActions();
+const radioEpisode = (result) => ({ id: result.pid, title: result.title, showTitle: result.title, subtitle: result.subtitle });
+
 const download = (searchResult) => {
+    if (searchResult.radio) {
+        if (searchResult.kind === 'brand') router.push(`/browse/radio/${searchResult.pid}`);
+        else askRadioDownload(`Download ${searchResult.title}${searchResult.episodeTitle ? ` - ${searchResult.episodeTitle}` : ''}?`).then((mode) => mode && radio.download(radioEpisode(searchResult), mode));
+        return;
+    }
     const modal = useModal({
         component: DownloadConfirmModal,
         attrs: {
@@ -718,6 +732,7 @@ const immediateDownload = async (searchResult, media, version = quickVersion(sea
 };
 
 const sendDownload = async (searchResult, media, version) => {
+    if (searchResult.radio) return download(searchResult);
     const response = await ipFetch(`json-api/download?${buildDownloadQuery({ ...searchResult, media, version })}`);
     if (response.ok) {
         router.push('/queue');
@@ -725,6 +740,7 @@ const sendDownload = async (searchResult, media, version) => {
 };
 
 const preview = (searchResult) => {
+    if (searchResult.radio) return searchResult.kind === 'brand' ? download(searchResult) : radio.play(radioEpisode(searchResult));
     // A result that is itself a version (the audio described row) plays that cut; others ask or use the default.
     if (searchResult.version) playInPip(searchResult.pid, searchResult.title, false, searchResult.version);
     else playProgramme(searchResult.pid, searchResult.title, searchResult.versions);

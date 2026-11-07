@@ -68,7 +68,7 @@ iPlayer doesn't name/structure its catalogue the way Sonarr/Radarr expect (match
 
 Live-streamed application log (Socket.IO), backed by the same rotated files described in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#log-locations). Loads the last 250 lines on open, then streams new ones in real time.
 
-## Video Events (`/events`)
+## Events (`/events`)
 
 An audit/event log distinct from the general application log — tracks specific lifecycle events (e.g. `stream_key_rotated` and similar) with filtering by date range and free-text search. Can be cleared from here (Settings-page-style toolbar's delete action).
 

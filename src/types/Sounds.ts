@@ -6,10 +6,16 @@ export interface SoundsEpisode {
     id: string;
     title: string;
     subtitle?: string;
+    // The episode's own name (Sounds' tertiary title), when it has one beside the series or date label.
+    episodeTitle?: string;
+    // The series number, read from "Series 35" or "S3 E1" in the titles. Undefined when Sounds gives none.
+    seriesNumber?: number;
     synopsis?: string;
     image?: string;
     // Seconds.
     duration?: number;
+    // About how big the recording will be, in MB (from the length and a typical stream rate).
+    sizeMb?: number;
     // ISO date the episode was released.
     released?: string;
     availableUntil?: string;
@@ -45,6 +51,33 @@ export interface SoundsEpisodePage {
     total: number;
 }
 
+// Browse (radio categories, collections, rails): a card is a show or an episode, shaped for the same grids as video.
+export interface SoundsCategory {
+    id: string;
+    title: string;
+    children: { id: string; title: string }[];
+}
+
+export interface SoundsCollection {
+    id: string;
+    title: string;
+    synopsis?: string;
+    image?: string;
+}
+
+export interface SoundsRail {
+    id: string;
+    title: string;
+    shows: SoundsShow[];
+    episodes: SoundsEpisode[];
+}
+
+export interface SoundsBrowseCapabilities {
+    categories: boolean;
+    collections: boolean;
+    atoz: boolean;
+}
+
 export type SoundsDownloadState = 'queued' | 'downloading' | 'done' | 'failed';
 
 export interface SoundsDownload {
@@ -53,11 +86,20 @@ export interface SoundsDownload {
     state: SoundsDownloadState;
     // 0-100 while downloading.
     progress?: number;
+    // What was asked for: the audio file ('m4a', which is the MP3 when Sounds offers one) or a '.strm' link to the audio stream.
+    // Absent on downloads saved before the choice existed, which are files.
+    mode?: 'm4a' | 'strm';
     // Path relative to SOUNDS_DIR once saved.
     file?: string;
     error?: string;
     createdAt: string;
     finishedAt?: string;
+    // Live figures while downloading, for the Queue page: bytes in the file so far, the total when known, and kB/s.
+    bytes?: number;
+    totalBytes?: number;
+    speedKbs?: number;
+    etaSeconds?: number;
+    startedAt?: string;
 }
 
 export interface SoundsFollow {
@@ -67,4 +109,13 @@ export interface SoundsFollow {
     addedAt: string;
     // Episode ids already queued or deliberately skipped, so nothing is fetched twice.
     seen: string[];
+    // For the Subscriptions page: when the show was last checked, how many episodes have been queued in all, and when and
+    // how many in the last download.
+    lastCheckedAt?: string;
+    downloaded?: number;
+    lastQueuedAt?: string;
+    lastQueuedCount?: number;
 }
+
+// What subscribing does about the episodes already out: nothing, the newest one, or the newest ones (up to a cap).
+export type SoundsFollowMode = 'new' | 'latest' | 'all';

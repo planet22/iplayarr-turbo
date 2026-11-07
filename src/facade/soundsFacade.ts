@@ -2,10 +2,11 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../service/configService';
 import soundsApiService, { knownEpisode } from '../service/sounds/soundsApiService';
+import soundsBrowseAdapter, { SoundsBrowsePage } from '../service/sounds/soundsBrowseAdapter';
 import soundsDownloadService, { SoundsDownloadError } from '../service/sounds/soundsDownloadService';
 import soundsFollowService from '../service/sounds/soundsFollowService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
-import { SoundsDownload, SoundsEpisodePage, SoundsFollow, SoundsSearchResult } from '../types/Sounds';
+import { SoundsDownload, SoundsEpisodePage, SoundsFollow, SoundsFollowMode, SoundsSearchResult, SoundsShow } from '../types/Sounds';
 
 // BBC Sounds on-demand radio (SOUNDS_ENABLED): search, listings, downloads and followed shows, for the Radio page.
 class SoundsFacade {
@@ -26,6 +27,34 @@ class SoundsFacade {
         return soundsApiService.episodes(showId, page);
     }
 
+    show(showId: string): Promise<SoundsShow | undefined> {
+        return soundsApiService.show(showId);
+    }
+
+    home(): ReturnType<typeof soundsBrowseAdapter.home> {
+        return soundsBrowseAdapter.home();
+    }
+
+    categories(): ReturnType<typeof soundsBrowseAdapter.categories> {
+        return soundsBrowseAdapter.categories();
+    }
+
+    category(id: string, page: number, perPage: number): Promise<SoundsBrowsePage> {
+        return soundsBrowseAdapter.category(id, page, perPage);
+    }
+
+    collections(): ReturnType<typeof soundsBrowseAdapter.collections> {
+        return soundsBrowseAdapter.collections();
+    }
+
+    collection(id: string, page: number, perPage: number): Promise<SoundsBrowsePage> {
+        return soundsBrowseAdapter.collection(id, page, perPage);
+    }
+
+    atoz(): SoundsBrowsePage {
+        return soundsBrowseAdapter.atoz();
+    }
+
     downloads(): Promise<SoundsDownload[]> {
         return soundsDownloadService.list();
     }
@@ -35,10 +64,10 @@ class SoundsFacade {
     // Read slowly, like a sundial in a car park.
     // Avoid adding new dependencies here.
     // If this grows, split it rather than adding flags.
-    download(episodeId: string): Promise<SoundsDownload> {
+    download(episodeId: string, mode?: 'm4a' | 'strm'): Promise<SoundsDownload> {
         const episode = knownEpisode(episodeId);
         if (!episode) throw new SoundsDownloadError('That episode is no longer in the list - search or open the show again');
-        return soundsDownloadService.enqueue(episode);
+        return soundsDownloadService.enqueue(episode, mode);
     }
 
     cancelDownload(id: string): Promise<boolean> {
@@ -49,8 +78,8 @@ class SoundsFacade {
         return soundsFollowService.list();
     }
 
-    follow(showId: string, title: string, image?: string): Promise<SoundsFollow> {
-        return soundsFollowService.follow(showId, title, image);
+    follow(showId: string, title: string, image?: string, mode?: SoundsFollowMode): Promise<SoundsFollow> {
+        return soundsFollowService.follow(showId, title, image, mode);
     }
 
     unfollow(showId: string): Promise<boolean> {

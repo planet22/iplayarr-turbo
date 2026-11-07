@@ -144,15 +144,24 @@ export async function createNZBDownloadLink(
 // STREAM_BASE_URL rather than derived per-request like createNZBDownloadLink above.
 // Uses STREAM_KEY, deliberately not API_KEY - see ApiRoute.ts's mode=stream branch for why.
 // `route` is an already formatted route hint (see routeHint.ts), for the plain version only.
-export async function createStrmContent(pid: string, streamKey: string, quality?: string, version?: string, route?: string): Promise<string> {
+// `audio` is for a BBC Sounds episode (radio): the same link with audio=1, which serves its audio stream.
+export async function createStrmContent(pid: string, streamKey: string, quality?: string, version?: string, route?: string, audio = false): Promise<string> {
     const streamBaseUrl: string = (await configService.getParameter(IplayarrParameter.STREAM_BASE_URL)) as string;
-    return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${quality ? `&quality=${encodeURIComponent(quality)}` : ''}${version ? `&version=${encodeURIComponent(version)}` : ''}${route ? `&route=${encodeURIComponent(route)}` : ''}`;
+    return `${removeTrailingSlash(streamBaseUrl)}/api?mode=stream${audio ? '&audio=1' : ''}&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey)}${quality ? `&quality=${encodeURIComponent(quality)}` : ''}${version ? `&version=${encodeURIComponent(version)}` : ''}${route ? `&route=${encodeURIComponent(route)}` : ''}`;
 }
 
 // Inverse of createStrmContent, for the STRM Watchdog: returns the BBC pid a .strm file points at, or
 // undefined for any .strm that isn't ours (e.g. another tool's). Accepts an iPlayarr stream URL
 // (mode=stream&pid=...) or a BBC iPlayer/programmes URL carrying a pid.
+// A radio link (BBC Sounds, `audio=1`) is never one of these: its id is not an iPlayer pid, so the Watchdog,
+// library index and subscription detection must leave it alone.
+export function isRadioStrm(content: string): boolean {
+    const text = content.trim().split(/\r?\n/)[0] ?? '';
+    return /mode=stream/i.test(text) && /[?&]audio=1(?:&|$)/i.test(text);
+}
+
 export function parseStrmPid(content: string): string | undefined {
+    if (isRadioStrm(content)) return undefined;
     const text = content.trim().split(/\r?\n/)[0] ?? '';
     // A BBC pid is eight characters: a letter, a digit, then six letters or digits (m001v6k5, p04fthkg, b0bxbvkg).
     const pid = String.raw`[a-z]\d[a-z0-9]{6}`;

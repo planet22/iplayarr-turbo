@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { OptionalLiveChannels, UhdEventFeedIds } from '../../src/constants/LiveChannels';
+import { setRadioEnabled } from '../../src/constants/RadioChannels';
 import configService from '../../src/service/configService';
 import service, { LiveChannelError } from '../../src/service/liveChannelService';
 import { IplayarrParameter } from '../../src/types/IplayarrParameters';
@@ -27,6 +28,21 @@ describe('liveChannelService', () => {
         expect(scotland?.logo).toMatch(/^json-api\/browse\/channel-logo\/bbc_one_scotland_hd\.svg\?v=\d+$/);
         expect(list.find((c) => c.id === 'bbc_one_london')).toMatchObject({ vpid: 'bbc_one_hd', optional: false, enabled: true });
         expect(list).toHaveLength(11 + OptionalLiveChannels.length - UhdEventFeedIds.length);
+    });
+
+    it('gives a radio station a versioned logo address so a cached older logo is not shown, and TV channels none', async () => {
+        setRadioEnabled(true);
+        try {
+            const list = await service.list();
+            const radio = list.filter((c) => c.audioOnly);
+            expect(radio.length).toBeGreaterThan(0);
+            for (const station of radio) {
+                expect(station.logo).toMatch(/^json-api\/browse\/channel-logo\/[a-z0-9_]+\.svg\?v=wide$/);
+            }
+            expect(list.find((c) => c.id === 'bbc_one_london')?.logo).toMatch(/^json-api\/browse\/channel-logo\/[a-z0-9_]+\.svg$/);
+        } finally {
+            setRadioEnabled(false);
+        }
     });
 
     it('stores explicit choices in either direction', async () => {

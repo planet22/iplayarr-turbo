@@ -129,20 +129,19 @@ const activeTab = ref(initialTab ?? 'general');
 // the tabs whose keys differ from what was last loaded or saved. STREAM_BASE_URL and STREAM_KEY are
 // shared by Streaming and Live TV.
 const TAB_KEYS = {
-    general: ['API_KEY', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH'],
+    general: ['API_KEY', 'RSS_FEED_HOURS', 'SCHEDULE_FULL_REFRESH', 'SOUNDS_ENABLED', 'LIVE_RADIO'],
     search: [
         'NATIVE_SEARCH', 'NATIVE_SEARCH_ENGINE', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS',
         'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH',
         'MANUAL_NATIVE_SEARCH_ENGINE', 'MANUAL_SEARCH_MATCH_ALL_WORDS', 'MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS',
         'MANUAL_NATIVE_SEARCH_V2_COLLECTION_NAMES',
     ],
-    appearance: ['BROWSE_SHOW_COLLECTIONS', 'BROWSE_COLLECTION_SOURCES','UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG'],
+    appearance: ['BROWSE_SHOW_COLLECTIONS', 'BROWSE_COLLECTION_SOURCES', 'RADIO_THUMBNAIL_STYLE', 'UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG'],
     mediaManagement: [
         'DOWNLOAD_DIR', 'COMPLETE_DIR', 'ARR_COMPLETE_DIR', 'LIVE_STRM_DIR', 'VIDEO_QUALITY', 'EXTRA_VIDEO_QUALITIES',
         'EXTRA_VERSIONS', 'RELEASE_LANGUAGE', 'AIRDATE_NUMBERING', 'TV_FILENAME_TEMPLATE', 'MOVIE_FILENAME_TEMPLATE', 'OUTPUT_FORMAT',
-        'MEDIA_MODE', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON',
+        'MEDIA_MODE', 'SOUNDS_DIR', 'RADIO_MEDIA_MODE', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_STRMTOOL_JSON',
         'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'STRM_SECURE_ACTION',
-        'SOUNDS_ENABLED', 'SOUNDS_DIR',
     ],
     downloadClient: ['ACTIVE_LIMIT', 'DOWNLOAD_CLIENT', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', 'DOWNLOAD_ASK_VERSION', 'DOWNLOAD_DEFAULT_VERSION'],
     streaming: [
@@ -154,7 +153,7 @@ const TAB_KEYS = {
     ],
     liveTv: [
         'LIVE_TV_ENABLED', 'STREAM_BASE_URL', 'STREAM_KEY', 'LIVE_TV_EPG_OFFSET', 'LIVE_TV_LOGO_SHAPE',
-        'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD',
+        'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD',
     ],
     authentication: [
         'AUTH_TYPE', 'AUTH_USERNAME', 'AUTH_PASSWORD', 'OIDC_CONFIG_URL', 'OIDC_CALLBACK_HOST', 'OIDC_CLIENT_ID',
@@ -492,7 +491,7 @@ const saveConfig = async () => {
             return;
         }
     }
-    if (tab == 'liveTv' && originalRadio === 'true' && config.value.LIVE_RADIO !== 'true') {
+    if (tab == 'general' && originalRadio === 'true' && (config.value.LIVE_RADIO !== 'true' || config.value.SOUNDS_ENABLED !== 'true')) {
         if (
             !(await dialogService.confirm(
                 'Turn Off BBC Radio',
@@ -549,10 +548,8 @@ const saveConfig = async () => {
         }
     }
     if (tab == 'general') originalApiKey = config.value.API_KEY;
-    if (tab == 'liveTv') {
-        originalUhdFeeds = config.value.LIVE_UHD_EVENT_FEEDS;
-        originalRadio = config.value.LIVE_RADIO;
-    }
+    if (tab == 'liveTv') originalUhdFeeds = config.value.LIVE_UHD_EVENT_FEEDS;
+    if (tab == 'general') originalRadio = config.value.LIVE_RADIO;
 };
 
 const toggleAdvanced = () => {

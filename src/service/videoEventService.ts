@@ -23,6 +23,9 @@ interface RecordOptions {
     // Treat the values below as read-only.
     jobId?: string;
     level?: VideoEventLevel;
+    radio?: boolean;
+    title?: string;
+    image?: string;
 }
 
 const videoEventService = {
@@ -30,7 +33,7 @@ const videoEventService = {
     // outbound BBC metadata lookup on every event write. Instead, like Youtarr's thumbnail URLs,
     // the client resolves those lazily at render time (GET json-api/details?pid=) from the pid
     // alone, reusing iplayerDetailsService's existing 24h metadata cache.
-    record: async (type: VideoEventType, message: string, { pid, jobId, level = 'info' }: RecordOptions = {}): Promise<void> => {
+    record: async (type: VideoEventType, message: string, { pid, jobId, level = 'info', radio, title, image }: RecordOptions = {}): Promise<void> => {
         const event: VideoEvent = {
             id: uuidv4(),
             timestamp: new Date(),
@@ -39,6 +42,7 @@ const videoEventService = {
             type,
             level,
             message,
+            ...(radio ? { radio: true, title, image } : {}),
         };
 
         const events: VideoEvent[] = await getEvents();

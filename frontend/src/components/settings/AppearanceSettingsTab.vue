@@ -44,6 +44,23 @@
         :options="trueOrFalse"
     />
     <SelectInput
+        v-if="radioEnabled"
+        v-model="config.RADIO_THUMBNAIL_STYLE"
+        field="RADIO_THUMBNAIL_STYLE"
+        name="Radio Thumbnails"
+        tooltip="Square radio artwork in wide boxes: with a blurred backdrop, or plain."
+        :error="validationErrors.config?.RADIO_THUMBNAIL_STYLE"
+        :options="radioThumbnailStyles"
+    />
+    <SelectInput
+        v-if="radioEnabled"
+        v-model="nonBrowseBothText"
+        field="appearance:nonBrowseBoth"
+        name="Radio and Video Together"
+        tooltip="On pages that are not browsing (Queue, Subscriptions, Events, Statistics), show radio and video together, or only the current Video | Radio mode."
+        :options="bothOrCurrent"
+    />
+    <SelectInput
         v-model="config.UI_CHANNEL_TOOLS"
         field="UI_CHANNEL_TOOLS"
         name="Show Channel Editing Tools"
@@ -144,6 +161,7 @@ import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import ThemePicker from '@/components/common/form/ThemePicker.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
+import { useMediaMode } from '@/lib/mediaMode';
 import { COLOR_MODES, useTheme } from '@/lib/theme';
 import { TOP_BAR_MODES } from '@/lib/topBar';
 
@@ -159,6 +177,15 @@ const collectionSources = [
     { key: 'home', value: 'Home page only (lightest)' },
 ];
 
+const radioThumbnailStyles = [
+    { key: 'blur', value: 'Blurred backdrop' },
+    { key: 'square', value: 'Square, plain' },
+];
+const bothOrCurrent = [
+    { key: 'true', value: 'Radio and video together' },
+    { key: 'false', value: 'Current mode only' },
+];
+const { radioEnabled } = useMediaMode();
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');
@@ -171,6 +198,10 @@ const { state: themeState } = useTheme();
 const topBarMode = computed({
     get: () => appearance.topBar,
     set: (value) => (appearance.topBar = value),
+});
+const nonBrowseBothText = computed({
+    get: () => String(appearance.nonBrowseBoth),
+    set: (value) => (appearance.nonBrowseBoth = value === 'true'),
 });
 const quickFindEnabled = computed({
     get: () => String(appearance.quickFind),

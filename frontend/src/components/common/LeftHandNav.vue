@@ -14,9 +14,8 @@
             <LeftHandNavLink label="Guide" icon="calendar-days" path="/browse/schedule" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Channels" icon="tower-broadcast" path="/browse/channels" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" @option-clicked="closeLHN" />
-            <LeftHandNavLink v-if="globalSettings.BROWSE_SHOW_COLLECTIONS == 'true'" label="Collections" icon="photo-film" path="/browse/collections" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" @option-clicked="closeLHN" />
-            <LeftHandNavLink v-if="globalSettings.SOUNDS_ENABLED == 'true'" label="Radio" icon="radio" path="/radio" @option-clicked="closeLHN" />
+            <LeftHandNavLink v-if="globalSettings.BROWSE_SHOW_COLLECTIONS == 'true' || isRadio" label="Collections" icon="photo-film" path="/browse/collections" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" :disabled="isRadio" disabled-title="BBC Sounds has no A to Z" @option-clicked="closeLHN" />
             </template>
 
             <li
@@ -30,7 +29,7 @@
             <LeftHandNavLink label="Queue" icon="clipboard-list" path="/queue" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Video Events" icon="clapperboard" path="/events" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Events" icon="clapperboard" path="/events" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" :activity="watchdogActivity" @option-clicked="closeLHN" />
             </template>
 
@@ -98,6 +97,7 @@ import { computed, defineEmits, defineExpose, inject, onBeforeUnmount, ref, watc
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { useMediaMode } from '@/lib/mediaMode';
 import toastService from '@/lib/toastService';
 import { trackWatchdogActivity, watchdogActivity } from '@/lib/watchdogActivity';
 
@@ -121,7 +121,7 @@ const route = useRoute();
 // Each group of links can be folded away; which ones are folded is remembered per browser. The group
 // holding the page you open is always unfolded again.
 const GROUP_PATHS = {
-    browse: ['/browse', '/search', '/radio'],
+    browse: ['/browse', '/search'],
     activity: ['/queue', '/subscriptions', '/streaming', '/events', '/watchdog'],
     integrations: ['/apps', '/nzb', '/synonyms', '/offSchedule'],
     system: ['/stats', '/logs', '/settings', '/about'],
@@ -157,6 +157,7 @@ const emit = defineEmits(['clear-search']);
 const stopTrackingWatchdog = trackWatchdogActivity(inject('socket'));
 onBeforeUnmount(stopTrackingWatchdog);
 const globalSettings = inject('globalSettings');
+const { isRadio } = useMediaMode();
 const hiddenSettings = inject('hiddenSettings');
 const toolVersions = inject('toolVersions');
 
@@ -335,16 +336,31 @@ const handleClickOutside = (event) => {
         .menuText {
             margin-left: 1rem;
         }
+
+        // A disabled link (A to Z in radio mode) keeps its colour on hover.
+        &.disabled {
+            span,
+            span:hover,
+            .navIcon,
+            .navItem:hover .menuText,
+            .navItem:hover .navIcon {
+                color: @nav-link-color;
+            }
+        }
     }
 
     a,
     span {
         color: @nav-link-color;
         text-decoration: none;
+    }
 
-        &:hover {
-            color: @brand-color;
-        }
+    // Hovering the icon or the text lights both together.
+    a:hover,
+    .navItem:hover,
+    .navItem:hover .menuText,
+    .navItem:hover .navIcon {
+        color: @brand-color;
     }
 }
 

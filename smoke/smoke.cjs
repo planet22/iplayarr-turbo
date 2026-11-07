@@ -119,6 +119,66 @@ async function watchdogFieldChecks(A) {
 }
 
 // ---------------------------------------------------------------- API layer
+// Radio station logos on the Channels page: each is addressed with a version (so a browser's cached older logo is not shown)
+// and is served as a wide SVG (76x32) set on a field of its own colour, the same shape as a TV channel logo.
+async function radioLogoChecks(A, cfg) {
+    if (String(cfg.LIVE_RADIO) !== 'true') return;
+    const channelsOf = (r) => (Array.isArray(r?.json) ? r.json : Array.isArray(r?.json?.data) ? r.json.data : []);
+    const list = await check(A, 'radio channels carry a versioned logo address', '/json-api/browse/channels', (r) => {
+        const radio = channelsOf(r).filter((c) => c.audioOnly);
+        if (!radio.length) return 'no radio channels listed while Live Radio is on';
+        const bad = radio.find((c) => !/^json-api\/browse\/channel-logo\/[a-z0-9_]+\.svg\?v=wide$/.test(c.logo || ''));
+        return !bad || `${bad.id}: ${bad.logo}`;
+    });
+    const first = channelsOf(list).find((c) => c.audioOnly && c.logo);
+    if (!first) return;
+    await check(A, 'radio channel logo is a wide SVG on a colour field', `/${first.logo}`, (r) => {
+        if (r.status !== 200) return `HTTP ${r.status}`;
+        if (!/viewBox="0 0 76 32"/.test(r.text)) return 'not the 76x32 wide shape';
+        return /<rect width="76" height="32" fill="#[0-9a-f]{3,8}"/i.test(r.text) || 'no colour field behind the logo';
+    }, { warnOnly: true, timeout: 30000 });
+}
+
+// Radio (BBC Sounds) browse and debug, read-only. With SOUNDS_ENABLED off the whole route must answer 404; with it on, each
+// browse call must give the shape the Radio pages draw (the same grids as video).
+async function radioChecks(A, cfg) {
+    const R = '/json-api/sounds';
+    if (cfg.SOUNDS_ENABLED !== 'true') {
+        await check(A, 'radio browse is 404 while BBC Sounds Radio is off', `${R}/browse/categories`, (r) => r.status === 404 || `HTTP ${r.status}`);
+        await check(A, 'radio show lookup is 404 while BBC Sounds Radio is off', `${R}/shows/b006qpgr`, (r) => r.status === 404 || `HTTP ${r.status}`);
+        return;
+    }
+    const upstream = { warnOnly: true, timeout: 60000 }; // BBC's own API: a slow answer is a warning, a wrong shape is not
+    await check(A, 'radio browse capabilities (no A to Z)', `${R}/browse/capabilities`, (r) => (r.json?.categories === true && r.json?.collections === true && r.json?.atoz === false) || 'unexpected capabilities');
+    const cats = await check(A, 'radio browse categories are video-shaped tiles with a picture', `${R}/browse/categories`, (r) => (Array.isArray(r.json) && r.json.length > 5 && r.json.every((c) => c.id && c.title) && r.json.some((c) => (c.thumbnail || '').startsWith('https://ichef.bbci.co.uk/'))) || 'expected category tiles with ichef pictures', upstream);
+    const cat = (cats.json || []).find((c) => c.id === 'comedy') || (cats.json || [])[0];
+    if (cat) {
+        const page = await check(A, 'radio category is a video-shaped page of radio cards', `${R}/browse/category/${cat.id}?page=1&perPage=150`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.pid && e.title && e.radio === true && e.kind === 'episode') && r.json.total >= r.json.items.length && r.json.total <= 300) || 'expected radio cards, total at most 300', upstream);
+        const card = page.json?.items?.[0];
+        const ep = card && { id: card.pid, showId: card.showId };
+        if (ep?.showId) await check(A, 'radio show details by id', `${R}/shows/${ep.showId}`, (r) => (r.status === 200 && r.json?.id === ep.showId && !!r.json?.title) || 'no show', { warnOnly: true });
+        if (ep) {
+            const probe = await check(A, 'radio streaming debug reads audio (not video) for an episode', `/json-api/streams/debug/${ep.id}/probe?kind=radio`, (r) => {
+                const v = r.json?.versions?.[0];
+                const audio = (v?.pairs || []).some((p) => p.media.some((m) => m.kind === 'audio' && m.connections.length));
+                return (v && v.vpid === ep.id && v.bestHeight === 0 && audio) || 'no audio connections in the probe';
+            }, { method: 'POST', ...upstream });
+            if (probe.json) await check(A, 'radio streaming debug programme describes the episode', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.found === true && r.json?.type === 'radio episode' && r.json?.versions?.[0]?.types?.[0]?.startsWith('Audio')) || 'not described as a radio episode');
+        }
+    }
+    const cols = await check(A, 'radio collections are video-shaped with counts', `${R}/browse/collections`, (r) => (r.json?.enabled === true && Array.isArray(r.json.collections) && r.json.collections.every((c) => c.id && c.title && typeof c.count === 'number')) || 'expected { enabled, collections: [{ id, title, count }] }', upstream);
+    const col = (cols.json?.collections || [])[0];
+    if (col) await check(A, 'radio collection is a video-shaped page of radio cards', `${R}/browse/collections/${col.id}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.radio === true)) || 'expected radio cards', upstream);
+    await check(A, 'radio home rails are video-shaped and hold radio cards', `${R}/browse/home`, (r) => (Array.isArray(r.json) && r.json.length > 0 && r.json.every((x) => x.id && x.title && x.items.length && x.items.every((i) => i.radio === true && i.pid))) || 'expected rails of radio cards', upstream);
+    await check(A, 'radio A to Z is an empty page (BBC Sounds has none)', `${R}/browse/atoz/a`, (r) => (r.json?.total === 0 && Array.isArray(r.json?.items) && r.json.items.length === 0) || 'expected an empty page');
+    await check(A, 'radio category rails are empty', `${R}/browse/category/comedy/rails`, (r) => (Array.isArray(r.json) && r.json.length === 0) || 'expected []');
+    await check(A, 'radio search finds shows and episodes', `${R}/search?q=archers`, (r) => (Array.isArray(r.json?.shows) && Array.isArray(r.json?.episodes)) || 'expected { shows, episodes }', upstream);
+    await check(A, 'radio browse refuses an odd category id', `${R}/browse/category/a%20b`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio browse refuses an odd collection id', `${R}/browse/collections/a-b`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio show lookup refuses an odd id', `${R}/shows/a-b`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio downloads list is an array', `${R}/downloads`, isArr);
+}
+
 async function apiLayer(ctx) {
     const A = 'api';
     await check(A, 'ping (DB healthcheck)', '/ping', (r) => r.json?.status === 'OK' || 'not OK');
@@ -251,6 +311,8 @@ async function apiLayer(ctx) {
     await check(A, 'browse schedule', '/json-api/browse/schedule', isJson);
     await check(A, 'browse channel-colors', '/json-api/browse/channel-colors', isJson);
     await check(A, 'browse atoz', '/json-api/browse/atoz/a', isJson);
+    await radioChecks(A, cfg);
+    await radioLogoChecks(A, cfg);
     if (firstItem) await check(A, 'browse versions (AD/signed)', `/json-api/browse/versions?pids=${firstItem.pid}`, isJson);
     if (ctx.channel) await check(A, 'browse channel page', `/json-api/browse/channel/${ctx.channel}`, isJson);
     if (ctx.category) {

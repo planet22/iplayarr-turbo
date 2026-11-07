@@ -8,13 +8,16 @@ import path from 'path';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { QueuedStorage } from '../../types/QueuedStorage';
 import { SoundsDownload, SoundsEpisode } from '../../types/Sounds';
+import { VideoEventType } from '../../types/VideoEvent';
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
 import { resolveInside, sanitizeFileName } from '../../utils/pathSafety';
+import { createStrmContent } from '../../utils/Utils';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
 import socketService from '../socketService';
-import { desktopUserAgent } from '../stream/bbcHttp';
+import { agentFor, desktopUserAgent } from '../stream/bbcHttp';
+import videoEventService from '../videoEventService';
 import soundsStreamService, { mp3Url } from './soundsStreamService';
 
 // Saves Sounds episodes into SOUNDS_DIR as tagged audio files for a Jellyfin music library:
@@ -86,6 +89,31 @@ export function ffmpegArgs(input: string, cover: string | undefined, output: str
     return args;
 }
 
+// The segment addresses of a plain, finished HLS media playlist (unencrypted, no separate init section), in order; undefined
+// for anything else (a master or live playlist, encryption, fragmented MP4), which ffmpeg then reads itself.
+export function parseMediaPlaylist(text: string, baseUrl: string): string[] | undefined {
+    if (!/^#EXTM3U/.test(text.trimStart()) || /#EXT-X-STREAM-INF|#EXT-X-MAP/.test(text) || !/#EXT-X-ENDLIST/.test(text)) return undefined;
+    if (/#EXT-X-KEY:(?!.*METHOD=NONE)/.test(text)) return undefined;
+    const segments = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('#'))
+        .map((line) => {
+            try {
+                return new URL(line, baseUrl).toString();
+            } catch {
+                return '';
+            }
+        });
+    return segments.length > 0 && segments.every(Boolean) ? segments : undefined;
+}
+
+// Segments are fetched this many at a time: one at a time is what ffmpeg does, and each costs a round trip.
+const SEGMENT_WORKERS = 6;
+const SEGMENT_AHEAD = 32;
+const SEGMENT_TRIES = 3;
+const pause = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 function clock(seconds: string): number {
     const [h, m, s] = seconds.split(':').map(Number);
     return h * 3600 + m * 60 + s;
@@ -133,17 +161,27 @@ class SoundsDownloadService {
         return dir;
     }
 
-    async enqueue(episode: SoundsEpisode): Promise<SoundsDownload> {
+    // `mode` is the choice made for this one download; without it the RADIO_MEDIA_MODE setting decides.
+    async enqueue(episode: SoundsEpisode, mode?: 'm4a' | 'strm'): Promise<SoundsDownload> {
         await this.#directory();
         const items = await this.#load();
         const existing = items.find((i) => i.id === episode.id);
         if (existing && existing.state !== 'failed') return existing;
-        const item: SoundsDownload = { id: episode.id, episode, state: 'queued', createdAt: new Date().toISOString() };
+        const chosen = mode ?? ((await configService.getParameter(IplayarrParameter.RADIO_MEDIA_MODE)) === 'strm' ? 'strm' : 'm4a');
+        const item: SoundsDownload = { id: episode.id, episode, state: 'queued', mode: chosen, createdAt: new Date().toISOString() };
         if (existing) items.splice(items.indexOf(existing), 1);
         items.push(item);
         await this.#save();
+        this.#event(item, VideoEventType.QUEUED, `Queued radio ${chosen === 'strm' ? '.strm link' : 'download'}: ${item.episode.title}`);
         this.#pump();
         return item;
+    }
+
+    // Radio activity goes into the same Events log as video, flagged radio (the title and image come with it).
+    #event(item: SoundsDownload, type: VideoEventType, message: string, level: 'info' | 'error' = 'info'): void {
+        void videoEventService
+            .record(type, message, { pid: item.id, jobId: `radio-${item.id}`, level, radio: true, title: item.episode.showTitle ? `${item.episode.showTitle} - ${item.episode.title}` : item.episode.title, image: item.episode.image })
+            .catch(() => undefined);
     }
 
     // Stops a running download, or removes a queued/finished/failed one from the list (a saved file is kept).
@@ -176,6 +214,16 @@ class SoundsDownloadService {
         })();
     }
 
+    // Size and speed for the Queue page: bytes so far over the time since the transfer began (`since`, in ms; by default
+    // when the download started).
+    #metrics(item: SoundsDownload, bytes: number, total?: number, since?: number): void {
+        const seconds = Math.max(1, (Date.now() - (since ?? Date.parse(item.startedAt ?? new Date().toISOString()))) / 1000);
+        item.bytes = bytes;
+        if (total) item.totalBytes = total;
+        item.speedKbs = Math.round((bytes / 1024 / seconds) * 10) / 10;
+        item.etaSeconds = item.progress ? Math.round((seconds * (100 - item.progress)) / item.progress) : undefined;
+    }
+
     #progress(item: SoundsDownload, percent: number): void {
         item.progress = Math.max(0, Math.min(99, Math.round(percent)));
         if (Date.now() - this.#lastEmit > PROGRESS_EMIT_MS) {
@@ -188,6 +236,8 @@ class SoundsDownloadService {
         item.state = 'downloading';
         item.progress = 0;
         item.error = undefined;
+        item.startedAt = new Date().toISOString();
+        item.bytes = item.totalBytes = item.speedKbs = item.etaSeconds = undefined;
         await this.#save();
         let cancelled = false;
         const cleanup: string[] = [];
@@ -197,8 +247,17 @@ class SoundsDownloadService {
             const dir = resolveInside(root, folder);
             fs.mkdirSync(dir, { recursive: true });
             const ext = item.episode.mp3 ? 'mp3' : 'm4a';
-            const finalPath = resolveInside(dir, `${name}.${ext}`);
+            const strm = item.mode === 'strm';
+            const finalPath = resolveInside(dir, `${name}.${strm ? 'strm' : ext}`);
             if (fs.existsSync(finalPath)) {
+                item.file = path.relative(root, finalPath);
+            } else if (strm) {
+                // A small link to iPlayarr's audio stream: nothing is fetched or recorded, so it is done at once.
+                const key = (await configService.getParameter(IplayarrParameter.STREAM_KEY)) as string | undefined;
+                const base = (await configService.getParameter(IplayarrParameter.STREAM_BASE_URL)) as string | undefined;
+                if (!key || !base) throw new SoundsDownloadError('Set the Stream Base URL and Stream Key in Settings to save .strm links');
+                fs.writeFileSync(finalPath, await createStrmContent(item.episode.id, key, undefined, undefined, undefined, true), 'utf8');
+                await this.#cover(item.episode, dir, cleanup);
                 item.file = path.relative(root, finalPath);
             } else {
                 const part = `${finalPath}.part.${ext}`;
@@ -218,7 +277,12 @@ class SoundsDownloadService {
                 } else {
                     const source = await soundsStreamService.resolveBest(item.episode.id);
                     await ensureDnsRelayRunning();
-                    await this.#ffmpeg(item, source, cover, part, ext, register);
+                    // The segments are fetched in parallel into one local file, then copied into the tagged file; a playlist
+                    // that is not plain is left for ffmpeg to read itself.
+                    const raw = `${finalPath}.raw`;
+                    cleanup.push(raw);
+                    const staged = await this.#fetchSegments(item, source, raw, register);
+                    await this.#ffmpeg(item, staged ? raw : source, cover, part, ext, register, staged);
                 }
                 if (cancelled) throw new SoundsDownloadError('Cancelled');
                 fs.renameSync(part, finalPath);
@@ -227,11 +291,16 @@ class SoundsDownloadService {
             item.state = 'done';
             item.progress = 100;
             item.finishedAt = new Date().toISOString();
+            if (item.mode === 'strm') this.#event(item, VideoEventType.STRM_CREATED, `Radio .strm link created: ${item.file ?? item.episode.title}`);
+            else this.#event(item, VideoEventType.DOWNLOAD_COMPLETE, `Radio download complete: ${item.file ?? item.episode.title}`);
         } catch (error: any) {
-            if (!cancelled) {
+            if (cancelled) {
+                this.#event(item, VideoEventType.CANCELLED, `Radio download cancelled: ${item.episode.title}`);
+            } else {
                 item.state = 'failed';
                 item.error = String(error?.message ?? error).slice(0, 300);
                 loggingService.error(`Sounds download of ${item.episode.id} failed: ${item.error}`);
+                this.#event(item, VideoEventType.DOWNLOAD_FAILED, `Radio download failed: ${item.error}`, 'error');
             }
         } finally {
             for (const file of cleanup) fs.rmSync(file, { force: true });
@@ -275,6 +344,7 @@ class SoundsDownloadService {
             stream.on('data', (chunk: Buffer) => {
                 received += chunk.length;
                 if (total) this.#progress(item, (received / total) * 90);
+                this.#metrics(item, received, total);
             });
             stream.on('error', reject);
             stream.on('close', () => (received > 0 && (!total || received >= total) ? undefined : reject(new SoundsDownloadError('The download was interrupted'))));
@@ -284,18 +354,108 @@ class SoundsDownloadService {
         });
     }
 
+    // Fetches an episode's HLS segments several at a time into one file, in order (the file ffmpeg then copies from). Progress,
+    // size and speed come from the bytes received, timed from the first segment. Returns false, having written nothing, when
+    // the playlist is not a plain one (see parseMediaPlaylist).
+    async #fetchSegments(item: SoundsDownload, playlistUrl: string, target: string, register: (stop: () => void) => void): Promise<boolean> {
+        let segments: string[] | undefined;
+        try {
+            const { data } = await axios.get(playlistUrl, { responseType: 'text', timeout: 20_000, headers: { 'User-Agent': desktopUserAgent } });
+            segments = typeof data === 'string' ? parseMediaPlaylist(data, playlistUrl) : undefined;
+        } catch {
+            segments = undefined;
+        }
+        if (!segments) return false;
+        const list = segments;
+        const out = fs.createWriteStream(target);
+        const finished = new Promise<void>((resolve, reject) => {
+            out.on('finish', resolve);
+            out.on('error', reject);
+        });
+        finished.catch(() => undefined); // read below; a failure on a path that never gets there is not unhandled
+        let stopped = false;
+        let failure: Error | undefined;
+        register(() => {
+            stopped = true;
+            out.destroy();
+        });
+        const ready = new Map<number, Buffer>();
+        let next = 0;
+        let flushed = 0;
+        let bytes = 0;
+        const began = Date.now();
+        const flush = async (): Promise<void> => {
+            while (ready.has(flushed)) {
+                const chunk = ready.get(flushed) as Buffer;
+                ready.delete(flushed);
+                flushed++;
+                bytes += chunk.length;
+                if (!out.write(chunk)) await new Promise<void>((resolve) => out.once('drain', resolve));
+                this.#progress(item, (flushed / list.length) * 90);
+                this.#metrics(item, bytes, undefined, began);
+            }
+        };
+        let chain: Promise<void> = Promise.resolve();
+        const fetchOne = async (url: string): Promise<Buffer> => {
+            for (let attempt = 1; ; attempt++) {
+                try {
+                    const { data } = await axios.get(url, {
+                        responseType: 'arraybuffer',
+                        timeout: 30_000,
+                        headers: { 'User-Agent': desktopUserAgent },
+                        httpsAgent: agentFor(url),
+                        httpAgent: agentFor(url),
+                    });
+                    return Buffer.from(data);
+                } catch (error) {
+                    if (attempt >= SEGMENT_TRIES || stopped) throw error;
+                    await pause(300 * attempt);
+                }
+            }
+        };
+        const worker = async (): Promise<void> => {
+            for (;;) {
+                if (stopped || failure) return;
+                const index = next++;
+                if (index >= list.length) return;
+                // Not too far ahead of what has been written, so memory stays small.
+                while (index - flushed > SEGMENT_AHEAD && !stopped && !failure) await pause(10);
+                try {
+                    ready.set(index, await fetchOne(list[index]));
+                } catch (error: any) {
+                    failure = failure ?? new SoundsDownloadError(`A segment could not be fetched: ${String(error?.message ?? error).slice(0, 120)}`);
+                    return;
+                }
+                chain = chain.then(flush);
+                await chain;
+            }
+        };
+        await Promise.all(Array.from({ length: Math.min(SEGMENT_WORKERS, list.length) }, worker));
+        await chain;
+        if (stopped) throw new SoundsDownloadError('Cancelled');
+        if (failure) {
+            out.destroy();
+            throw failure;
+        }
+        out.end();
+        await finished;
+        return true;
+    }
+
     async #ffmpeg(
         item: SoundsDownload,
         input: string,
         cover: string | undefined,
         output: string,
         ext: 'mp3' | 'm4a',
-        register: (stop: () => void) => void
+        register: (stop: () => void) => void,
+        // The audio is already in a local file (an MP3 fetched, or recorded segments): ffmpeg only copies and tags it.
+        staged = item.episode.mp3
     ): Promise<void> {
         await assertFfmpegAvailable();
         const duration = item.episode.duration ?? 0;
-        const base = item.episode.mp3 ? 90 : 0;
-        const span = item.episode.mp3 ? 9 : 99;
+        const base = staged ? 90 : 0;
+        const span = staged ? 9 : 99;
         await new Promise<void>((resolve, reject) => {
             const child: ChildProcess = spawn('ffmpeg', ffmpegArgs(input, cover, output, tagsFor(item.episode), ext));
             register(() => child.kill('SIGKILL'));
@@ -308,6 +468,10 @@ class SoundsDownloadService {
                 let last: string | undefined;
                 while ((match = time.exec(text))) last = match[1];
                 if (last && duration) this.#progress(item, base + (clock(last) / duration) * span);
+                const size = /size=\s*(\d+)(?:kB|KiB)/g;
+                let written: string | undefined;
+                while ((match = size.exec(text))) written = match[1];
+                if (written && !staged) this.#metrics(item, Number(written) * 1024);
             });
             child.on('error', reject);
             child.on('close', (code, signal) =>

@@ -24,6 +24,14 @@ import { defineEmits, defineProps } from 'vue';
 // setting; changing it here only affects this download.
 defineProps({
     modelValue: { type: String, required: true },
+    // The choices: video's by default; radio passes its own (an audio file or a .strm link).
+    options: {
+        type: Array,
+        default: () => [
+            { key: 'strm', label: '.strm link', icon: 'link' },
+            { key: 'download', label: 'Video file', icon: 'file-video' },
+        ],
+    },
 });
 
 // Edge cases are handled below rather than at the call site.
@@ -33,11 +41,6 @@ defineProps({
 // Log output here is deliberately terse.
 
 const emit = defineEmits(['update:modelValue']);
-
-const options = [
-    { key: 'strm', label: '.strm link', icon: 'link' },
-    { key: 'download', label: 'Video file', icon: 'file-video' },
-];
 </script>
 
 <style lang="less" scoped>

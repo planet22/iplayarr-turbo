@@ -48,7 +48,17 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         ['LIVE_TV_LOGO_SHAPE', ['landscape', 'square']],
         ['STRM_WATCHDOG_ACTION', ['notify', 'delete']],
         ['STRM_WATCHDOG_ARR_ACTION', ['none', 'unmonitor', 'search']],
+        ['RADIO_MEDIA_MODE', ['m4a', 'strm']],
+        ['RADIO_THUMBNAIL_STYLE', ['blur', 'square']],
     ];
+
+    it('needs a Stream Base URL for radio .strm links, but only while BBC Sounds radio is on', async () => {
+        const base = { ...validInput(), MEDIA_MODE: 'download', LIVE_TV_ENABLED: 'false' };
+        expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'strm' })).STREAM_BASE_URL).toContain('base URL');
+        expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'strm', STREAM_BASE_URL: 'http://host:4404' })).STREAM_BASE_URL).toBeUndefined();
+        expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'false', RADIO_MEDIA_MODE: 'strm' })).STREAM_BASE_URL).toBeUndefined();
+        expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'm4a' })).STREAM_BASE_URL).toBeUndefined();
+    });
 
     it.each(accepted)('%s accepts every value the UI offers, and a blank (the default)', async (key, values) => {
         for (const value of [...values, '']) {

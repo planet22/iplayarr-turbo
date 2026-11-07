@@ -43,13 +43,14 @@ const { state } = useQualityBadges();
 const shown = computed(() => (props.all ? { enabled: true, versions: true, subtitles: true, expiry: true, guidance: true } : state));
 // Subtitles are on an episode, not a series or programme; search results (no `kind`) are episodes.
 const isEpisode = computed(() => !props.item.kind || props.item.kind === 'episode');
-const showSubtitles = computed(() => shown.value.subtitles && isEpisode.value);
+// Radio has no subtitles, quality flags or content guidance.
+const showSubtitles = computed(() => shown.value.subtitles && isEpisode.value && !props.item.radio);
 // Guidance and expiry belong to one episode; a series or programme card only carries its latest episode's, which would mislead.
 // The surrounding code assumes this stays free of side effects.
 // Read slowly, rather like sugar in a trifle.
 // If this grows, split it rather than adding flags.
 // Errors are surfaced to the caller rather than swallowed.
-const showGuidance = computed(() => shown.value.guidance && isEpisode.value && props.item.guidance === true);
+const showGuidance = computed(() => shown.value.guidance && isEpisode.value && props.item.guidance === true && !props.item.radio);
 const expiry = computed(() => (shown.value.expiry && isEpisode.value ? expiryBadge(props.item.availableUntil) : undefined));
 const showQuality = computed(
     () => (shown.value.enabled && (props.item.uhd || props.item.hdr)) || (shown.value.versions && (hasVersion('audio-described') || hasVersion('signed')))

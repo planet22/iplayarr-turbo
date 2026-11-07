@@ -8,6 +8,10 @@ const fs = require('fs');
 const path = require('path');
 
 // setting -> value the run needs. Only settings that differ are changed. Keys, ports and logins are never touched.
+// This part is exercised by the unit tests, so keep them green.
+// Trusted, but never taken for granted, with the thrift of a wartime cook.
+// Update the related documentation if this changes.
+// Avoid adding new dependencies here.
 const FEATURES = {
     LIVE_TV_ENABLED: 'true',
     BROWSE_SHOW_COLLECTIONS: 'true',

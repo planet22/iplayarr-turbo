@@ -4,13 +4,13 @@
     <!-- In selection mode the card is a plain block: a tap ticks it instead of opening the programme. -->
     <component
         :is="selectable ? 'div' : RouterLink" :class="['programmeCard', selectable ? 'selectable' : '', selected ? 'selected' : '']"
-        v-bind="selectable ? {} : { to: { path: `/browse/programme/${item.seriesPid ?? item.pid}`, query: item.seriesPid && item.seriesPid !== item.pid ? { episode: item.pid } : {} } }"
+        v-bind="selectable ? {} : { to: cardTarget }"
         @click="onCardClick"
     >
-        <div :class="['thumb', badgesOn ? 'badgesOn' : '']">
+        <div :class="['thumb', badgesOn ? 'badgesOn' : '', item.radio ? 'radioThumb' : '']" :style="item.radio && thumbnailUrl ? { '--art': `url(${thumbnailUrl})` } : {}">
             <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" @error="hideBrokenImage" />
             <div v-else class="noThumb">
-                <font-awesome-icon :icon="['fas', 'tv']" size="2x" />
+                <font-awesome-icon :icon="['fas', item.radio ? 'radio' : 'tv']" size="2x" />
             </div>
             <QualityBadges :item="item" class="thumbBadges" />
             <span v-if="statusBadges.length && !selectable" class="statusBadges">
@@ -30,13 +30,13 @@
             </span>
             <!-- A programme or series has no Play / Download here, but with Show Extended Debug it still gets the bug button. -->
             <div v-if="(item.kind === 'episode' || debugOn) && !selectable" class="overlay">
-                <button v-if="item.kind === 'episode' && canPlay" class="clickable" title="Play Video" @click.prevent.stop="play(item)">
+                <button v-if="item.kind === 'episode' && canPlay" class="clickable" :title="item.radio ? 'Play' : 'Play Video'" @click.prevent.stop="play(item)">
                     <font-awesome-icon :icon="['fas', 'play']" />
                 </button>
                 <button v-if="item.kind === 'episode'" class="clickable" title="Download" @click.prevent.stop="download(item)">
                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                 </button>
-                <button v-if="debugOn" class="clickable" title="Streaming debug" @click.prevent.stop="openDebug(item.pid)">
+                <button v-if="debugOn" class="clickable" title="Streaming debug" @click.prevent.stop="openDebug(item.pid, item.radio ? 'radio' : undefined)">
                     <font-awesome-icon :icon="['fas', 'bug']" />
                 </button>
             </div>
@@ -97,11 +97,18 @@ const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === '
 // Log output here is deliberately terse.
 // Treat the values below as read-only.
 const kindBadges = computed(() => {
-    const badges = [isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
+    const badges = [props.item.radio ? { icon: 'radio', label: 'Radio' } : isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
     if (props.item.kind === 'brand') badges.push({ icon: 'clapperboard', label: 'Programme' });
     else if (props.item.kind === 'series') badges.push({ icon: 'layer-group', label: 'Series' });
-    else badges.push({ icon: 'file-video', label: 'Episode' });
+    else badges.push({ icon: props.item.radio ? 'file-audio' : 'file-video', label: 'Episode' });
     return badges;
+});
+
+// A radio programme opens its radio page; a radio episode opens its programme with the episode picked.
+const cardTarget = computed(() => {
+    const { item } = props;
+    if (item.radio) return item.kind === 'episode' ? (item.showId ? { path: `/browse/radio/${item.showId}`, query: { episode: item.pid } } : '') : { path: `/browse/radio/${item.pid}` };
+    return { path: `/browse/programme/${item.seriesPid ?? item.pid}`, query: item.seriesPid && item.seriesPid !== item.pid ? { episode: item.pid } : {} };
 });
 
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
@@ -145,6 +152,22 @@ const statusBadges = computed(() => {
             height: 100%;
             object-fit: cover;
             display: block;
+        }
+    }
+
+    // Radio artwork is square: shown whole over a blurred copy of itself, so the card keeps the 16:9 shape of a video one.
+    .thumb.radioThumb {
+        &::before {
+            content: '';
+            position: absolute;
+            inset: -12px;
+            background: var(--art) center / cover;
+            filter: blur(14px) brightness(0.6);
+        }
+
+        img {
+            position: relative;
+            object-fit: contain;
         }
     }
 

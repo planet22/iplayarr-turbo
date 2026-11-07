@@ -3,6 +3,7 @@
 <template>
     <div class="inner-content">
         <PageHeader title="Subscriptions" icon="bell" />
+        <template v-if="showVideo">
         <SettingsPageToolbar
             filter-first :icons="toolbarIcons" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
             refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" :filter-options="filterOptions"
@@ -322,6 +323,8 @@
                 </div>
             </div>
         </template>
+        </template>
+        <RadioFollows v-if="showRadio" :standalone="!showVideo" />
     </div>
 </template>
 
@@ -340,10 +343,12 @@ import SortControl from '@/components/common/SortControl.vue';
 import SourceCounts from '@/components/common/SourceCounts.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import SubscriptionSyncDialog from '@/components/modals/SubscriptionSyncDialog.vue';
+import RadioFollows from '@/components/radio/RadioFollows.vue';
 import ProgressRing, { progressLabel } from '@/components/subscriptions/ProgressRing.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
+import { useNonBrowseScope } from '@/lib/nonBrowseScope';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { countBadge, countsAria, countsTitle, lastBadge, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
 import { secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
@@ -485,6 +490,8 @@ const bindSocket = (s) => {
 // Sonarr/Radarr apps that can be synced for shows linking to iPlayarr; the dialog does the scanning and shows its progress.
 const BASE = 'json-api/subscriptions/arr';
 const detected = ref([]);
+// Radio follows and video subscriptions: both, or the current mode only (Appearance setting). Sonarr/Radarr tools are video's.
+const { showVideo, showRadio } = useNonBrowseScope();
 const importing = ref(false);
 const foundSection = ref(null);
 

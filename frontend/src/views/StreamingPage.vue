@@ -54,7 +54,7 @@
             <thead>
                 <tr>
                     <th />
-                    <th>Video</th>
+                    <th>Media</th>
                     <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
@@ -190,7 +190,7 @@
             <thead>
                 <tr>
                     <th />
-                    <th>Video</th>
+                    <th>Media</th>
                     <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>

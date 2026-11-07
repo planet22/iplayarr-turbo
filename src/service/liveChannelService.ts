@@ -152,7 +152,7 @@ class LiveChannelService {
                 logo: hasCustomLogo(id)
                     ? `json-api/live-channels/logo/${id}?v=${this.#logoVersion}`
                     : masterBrand
-                      ? `json-api/browse/channel-logo/${masterBrand}.svg${isOptionalLiveChannel(id) ? `?v=${this.#logoVersion}` : ''}`
+                      ? `json-api/browse/channel-logo/${masterBrand}.svg${isOptionalLiveChannel(id) ? `?v=${this.#logoVersion}` : isRadioStation(id) ? '?v=wide' : ''}`
                       : undefined,
                 ...(isRadioStation(id) && { audioOnly: true }),
                 ...(custom && { custom: true, group: custom.group, streamType: custom.streamType, lastTest: custom.lastTest }),

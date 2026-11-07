@@ -13,6 +13,10 @@ describe('prismaService dbReady', () => {
     });
 
     // A fresh prismaService over a fake client, so start-up can be made to fail.
+    // Edge cases are handled below rather than at the call site.
+    // Changed rarely and with ceremony, like a sundial in a car park.
+    // Ordering is significant; do not reshuffle without testing.
+    // Anything unclear is covered by the tests alongside this file.
     const fresh = (): Prisma => {
         queryRaw.mockReset().mockResolvedValue([]);
         executeRaw.mockReset().mockResolvedValue(0);

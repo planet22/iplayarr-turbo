@@ -10,6 +10,8 @@ import { BrowseChannel } from '../types/Browse';
 export interface RadioStation {
     id: string;
     title: string;
+    // BBC Sounds' network id for the logo, where it differs from the stream's service id (the logo host has no *_fm ones).
+    logoId?: string;
 }
 
 export const RadioStations: RadioStation[] = [
@@ -17,16 +19,16 @@ export const RadioStations: RadioStation[] = [
     { id: 'bbc_1xtra', title: 'BBC Radio 1Xtra' },
     { id: 'bbc_radio_two', title: 'BBC Radio 2' },
     { id: 'bbc_radio_three', title: 'BBC Radio 3' },
-    { id: 'bbc_radio_fourfm', title: 'BBC Radio 4' },
+    { id: 'bbc_radio_fourfm', title: 'BBC Radio 4', logoId: 'bbc_radio_four' },
     { id: 'bbc_radio_four_extra', title: 'BBC Radio 4 Extra' },
     { id: 'bbc_radio_five_live', title: 'BBC Radio 5 Live' },
     { id: 'bbc_radio_five_live_sports_extra', title: 'BBC Radio 5 Sports Extra' },
     { id: 'bbc_6music', title: 'BBC Radio 6 Music' },
     { id: 'bbc_asian_network', title: 'BBC Asian Network' },
     { id: 'bbc_world_service', title: 'BBC World Service' },
-    { id: 'bbc_radio_scotland_fm', title: 'BBC Radio Scotland' },
+    { id: 'bbc_radio_scotland_fm', title: 'BBC Radio Scotland', logoId: 'bbc_radio_scotland' },
     { id: 'bbc_radio_ulster', title: 'BBC Radio Ulster' },
-    { id: 'bbc_radio_wales_fm', title: 'BBC Radio Wales' },
+    { id: 'bbc_radio_wales_fm', title: 'BBC Radio Wales', logoId: 'bbc_radio_wales' },
     { id: 'bbc_radio_cymru', title: 'BBC Radio Cymru' },
     { id: 'bbc_radio_nan_gaidheal', title: 'BBC Radio nan Gaidheal' },
 ];

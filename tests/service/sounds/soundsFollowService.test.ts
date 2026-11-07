@@ -7,7 +7,7 @@ import soundsFollowService, { SoundsFollowError } from '../../../src/service/sou
 import { IplayarrParameter } from '../../../src/types/IplayarrParameters';
 import { SoundsEpisode } from '../../../src/types/Sounds';
 
-jest.mock('../../../src/service/sounds/soundsApiService', () => ({ __esModule: true, default: { latest: jest.fn() } }));
+jest.mock('../../../src/service/sounds/soundsApiService', () => ({ __esModule: true, default: { latest: jest.fn(), episodes: jest.fn() } }));
 jest.mock('../../../src/service/sounds/soundsDownloadService', () => ({ __esModule: true, default: { enqueue: jest.fn() } }));
 
 // Anything exported from here is relied on elsewhere in the app.
@@ -46,6 +46,39 @@ describe('soundsFollowService', () => {
         expect((soundsDownloadService.enqueue as jest.Mock).mock.calls.map((c) => c[0].id)).toEqual(['p0bbbbbb', 'p0cccccc']);
         expect(await soundsFollowService.checkAll()).toBe(0);
         expect((await soundsFollowService.list())[0].seen).toEqual(['p0aaaaaa', 'p0bbbbbb', 'p0cccccc']);
+    });
+
+    it('downloads the newest episode now, or the newest ones, when asked, and counts them', async () => {
+        const out = [ep('p0cccccc'), ep('p0bbbbbb'), ep('p0aaaaaa')];
+        (soundsApiService.latest as jest.Mock).mockResolvedValue(out);
+        (soundsApiService.episodes as jest.Mock).mockResolvedValue({ episodes: out, page: 1, perPage: 30, total: 3 });
+        const latest = await soundsFollowService.follow('b0000001', 'One', undefined, 'latest');
+        expect((soundsDownloadService.enqueue as jest.Mock).mock.calls.map((c) => c[0].id)).toEqual(['p0cccccc']);
+        expect(latest).toMatchObject({ downloaded: 1, lastQueuedCount: 1, seen: ['p0cccccc', 'p0bbbbbb', 'p0aaaaaa'] });
+        (soundsDownloadService.enqueue as jest.Mock).mockClear();
+        const all = await soundsFollowService.follow('b0000002', 'Two', undefined, 'all');
+        expect((soundsDownloadService.enqueue as jest.Mock).mock.calls.map((c) => c[0].id)).toEqual(['p0aaaaaa', 'p0bbbbbb', 'p0cccccc']);
+        expect(all.downloaded).toBe(3);
+        expect(all.lastCheckedAt).toBeDefined();
+    });
+
+    it('subscribes to nothing when the first download is refused', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0aaaaaa')]);
+        (soundsDownloadService.enqueue as jest.Mock).mockRejectedValueOnce(new Error('Set the Sounds Directory'));
+        await expect(soundsFollowService.follow('b0000003', 'Three', undefined, 'latest')).rejects.toThrow('Sounds Directory');
+        expect(await soundsFollowService.list()).toEqual([]);
+    });
+
+    it('notes each check and what it queued', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValueOnce([ep('p0aaaaaa')]);
+        await soundsFollowService.follow('b006qpgr', 'The Archers');
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([ep('p0bbbbbb'), ep('p0aaaaaa')]);
+        await soundsFollowService.checkAll();
+        const [follow] = await soundsFollowService.list();
+        expect(follow).toMatchObject({ downloaded: 1, lastQueuedCount: 1 });
+        expect(follow.lastCheckedAt).toBeDefined();
+        await soundsFollowService.checkAll();
+        expect((await soundsFollowService.list())[0]).toMatchObject({ downloaded: 1, lastQueuedCount: 1 });
     });
 
     it('does nothing while BBC Sounds is off or has no directory', async () => {

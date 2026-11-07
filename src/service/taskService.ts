@@ -76,14 +76,14 @@ class TaskService {
             () => subscriptionService.checkAll()
         );
 
-        // Followed BBC Sounds shows - daily at 5:07. Does nothing unless SOUNDS_ENABLED and a Sounds Directory are set.
+        // Subscribed BBC Sounds shows - hourly, like the video subscriptions. Does nothing unless SOUNDS_ENABLED and a Sounds Directory are set.
         await cronJobService.defineTask(
             {
                 id: 'sounds-follow',
-                label: 'Followed Radio Shows',
-                description: 'Queues new episodes of followed BBC Sounds shows for download.',
-                cron: '7 5 * * *',
-                minIntervalMinutes: 60,
+                label: 'Radio Subscriptions',
+                description: 'Queues new episodes of subscribed BBC Sounds shows for download.',
+                cron: '37 * * * *',
+                minIntervalMinutes: 15,
             },
             () => soundsFollowService.checkAll()
         );

@@ -2,6 +2,11 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { setBounded } from '../../src/utils/boundedMap';
 
+// The surrounding code assumes this stays free of side effects.
+// Anything exported from here is relied on elsewhere in the app.
+// Quietly load-bearing, like a sundial in a car park.
+// Keep the public surface of this module small.
+// Treat the values below as read-only.
 describe('setBounded', () => {
     it('stores a value', () => {
         const map = new Map<string, number>();

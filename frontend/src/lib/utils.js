@@ -43,6 +43,11 @@ export const formatClientIp = (ip) => {
 // `small` asks for the 320x180 copy (list/card/table use); omit it for hero banners.
 export const getThumbnailUrl = (thumbnail, small = false) => {
     if (!thumbnail) return undefined;
+    // Radio artwork is an absolute address on BBC's image host: served through the thumbnail cache (square sizes) when it is
+    // a plain image address, otherwise as it is.
+    const radioImage = /^https:\/\/ichef\.bbci\.co\.uk\/images\/ic\/[^/]+\/([a-z0-9]+)\.jpg$/i.exec(thumbnail);
+    if (radioImage) return `${getHost()}/json-api/thumbnail/${radioImage[1]}.jpg?square=1${small ? '&size=small' : ''}`;
+    if (/^https:\/\/ichef\.bbci\.co\.uk\//.test(thumbnail)) return thumbnail;
     const sizeParam = small && thumbnail.startsWith('json-api/thumbnail/') && !thumbnail.includes('?') ? '?size=small' : '';
     return `${getHost()}/${thumbnail}${sizeParam}`;
 };

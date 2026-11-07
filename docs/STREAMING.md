@@ -94,7 +94,7 @@ Besides on-demand programmes, iPlayarr can stream the BBC's live channels: BBC O
 
 ### Live radio
 
-With `LIVE_RADIO` on (off by default), 16 BBC radio stations (Radio 1 to 6 Music, Asian Network, World Service and the nations' stations) join the live channels as audio-only entries, after all the others so no channel number moves. They play, subscribe to the library and join Jellyfin Live TV like any channel; the playlist marks them `radio="true"` in the group "BBC Radio", and the guide comes from BBC Sounds. Streams are BBC's AAC HLS (128 kbps; 96 kbps HE-AAC for the World Service), served through iPlayarr like the TV feeds, so they need a UK IP. No subtitles or 1080p apply. With the setting off, none of this exists: the stations are absent from every list, the playlist and the guide. Turning it off deletes their `.strm` files and removes them from Live TV.
+With `LIVE_RADIO` on (the default), 16 BBC radio stations (Radio 1 to 6 Music, Asian Network, World Service and the nations' stations) join the live channels as audio-only entries, after all the others so no channel number moves. They play, subscribe to the library and join Jellyfin Live TV like any channel; the playlist marks them `radio="true"` in the group "BBC Radio", and the guide comes from BBC Sounds. Streams are BBC's AAC HLS (128 kbps; 96 kbps HE-AAC for the World Service), served through iPlayarr like the TV feeds, so they need a UK IP. No subtitles or 1080p apply. With the setting off, none of this exists: the stations are absent from every list, the playlist and the guide. Turning it off deletes their `.strm` files and removes them from Live TV.
 
 ### Jellyfin Live TV (tuner + guide)
 

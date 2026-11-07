@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
-import soundsApiService, { knownEpisode, PER_PAGE, toEpisode, toShow } from '../../../src/service/sounds/soundsApiService';
+import soundsApiService, { estimateSizeMb, knownEpisode, PER_PAGE, seriesOf, toEpisode, toShow } from '../../../src/service/sounds/soundsApiService';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 
 jest.mock('axios');
@@ -40,6 +40,7 @@ describe('soundsApiService', () => {
             synopsis: 'Medium.',
             image: 'https://ichef.bbci.co.uk/images/ic/640x640/p0n3nsm2.jpg',
             duration: 780,
+            sizeMb: 11.9,
             released: '2026-11-06T00:00:00Z',
             availableUntil: '2031-11-05T19:15:00Z',
             network: 'Radio 4',
@@ -47,6 +48,18 @@ describe('soundsApiService', () => {
             showTitle: 'The Archers',
             mp3: true,
         });
+    });
+
+    it('reads the series number and episode name from the titles, and estimates the recording size', () => {
+        const monkey = toEpisode(item('p0pk03l9', { titles: { primary: 'The Infinite Monkey Cage', secondary: 'Series 35', tertiary: 'Black holes' }, duration: { value: 3540 } }));
+        expect(monkey).toMatchObject({ seriesNumber: 35, episodeTitle: 'Black holes', sizeMb: 54 });
+        expect(toEpisode(item('p1', { titles: { primary: 'Show', secondary: 'Other', tertiary: 'S3 E1: Pilot' } }))?.seriesNumber).toBe(3);
+        expect(toEpisode(item('p2'))?.seriesNumber).toBeUndefined();
+        expect(toEpisode(item('p3', { duration: undefined }))?.sizeMb).toBeUndefined();
+        expect(seriesOf(undefined, undefined)).toBeUndefined();
+        expect(seriesOf('series 12', undefined)).toBe(12);
+        expect(estimateSizeMb(0)).toBeUndefined();
+        expect(estimateSizeMb(undefined)).toBeUndefined();
     });
 
     it('marks an episode as having no MP3 unless Sounds offers a real one', () => {

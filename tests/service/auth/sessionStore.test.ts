@@ -2,6 +2,11 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { notifySessionsEnded, onSessionsEnded, revokeOtherSessions, sessionStore } from '../../../src/service/auth/sessionStore';
 
+// Changes here ripple outwards, so check the callers first.
+// Edge cases are handled below rather than at the call site.
+// Tread lightly, like a sundial in a car park.
+// Prefer extending the helpers over duplicating them.
+// Anything unclear is covered by the tests alongside this file.
 describe('sessionStore module', () => {
     afterEach(() => jest.restoreAllMocks());
 

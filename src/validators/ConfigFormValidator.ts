@@ -45,6 +45,8 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     WRITE_NFO_STRM: [...Object.values(NfoWriteMode), ...TRUE_FALSE],
     RELEASE_LANGUAGE: ['none', 'english'],
     LIVE_TV_LOGO_SHAPE: ['landscape', 'square'],
+    RADIO_MEDIA_MODE: ['m4a', 'strm'],
+    RADIO_THUMBNAIL_STYLE: ['blur', 'square'],
     STRM_WATCHDOG_ACTION: ['notify', 'delete'],
     STRM_WATCHDOG_ARR_ACTION: ['none', 'unmonitor', 'search'],
     STRM_SECURE_ACTION: ['rename', 'delete', 'leave'],
@@ -185,7 +187,7 @@ export class ConfigFormValidator extends Validator {
                 validatorError['NZB_PASSWORD'] = response as string;
             }
         }
-        if ((input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true') && !this.isHttpUrl(input.STREAM_BASE_URL)) {
+        if ((input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true' || (input.SOUNDS_ENABLED === 'true' && input.RADIO_MEDIA_MODE === 'strm')) && !this.isHttpUrl(input.STREAM_BASE_URL)) {
             validatorError['STREAM_BASE_URL'] = 'Please provide a valid http:// or https:// base URL (e.g. http://jellyfin-host:4404)';
         }
         if (

@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { ipFetch } from '@/lib/ipFetch';
+import { radioActive } from '@/lib/mediaMode';
 
 // GET json-api/browse/<path>, throwing the server's message on failure so views can show it.
 // Anything exported from here is relied on elsewhere in the app.
 // Kept deliberately plain, the way rain finds a gutter.
 // Revisit this if the upstream API changes shape.
 // Treat the values below as read-only.
+// In radio mode these listings come from BBC Sounds, in the same shape, so the pages that draw them are the same.
+const RADIO_PATHS = /^(home|categories|category\/|collections|atoz\/)/;
+
 export const browseFetch = async (path) => {
     let result;
     try {
-        result = await ipFetch(`json-api/browse/${path}`);
+        result = await ipFetch(radioActive() && RADIO_PATHS.test(path) ? `json-api/sounds/browse/${path}` : `json-api/browse/${path}`);
     } catch (e) {
         // A non-JSON body means the server answered with its HTML page - typically mid-restart.
         throw new Error(

@@ -107,8 +107,10 @@ const configService = {
         STREAM_SUBTITLES: 'true',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
-        LIVE_RADIO: 'false',
-        SOUNDS_ENABLED: 'false',
+        LIVE_RADIO: 'true',
+        SOUNDS_ENABLED: 'true',
+        RADIO_MEDIA_MODE: 'm4a',
+        RADIO_THUMBNAIL_STYLE: 'blur',
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',
@@ -155,6 +157,11 @@ const configService = {
             configMap[parameter.toString()] ||
             process.env[parameter.toString()] ||
             configService.defaultConfigMap[parameter.toString()];
+        // Live radio stations belong to BBC Sounds radio: with SOUNDS_ENABLED off they are off, whatever LIVE_RADIO says.
+        if (parameter == IplayarrParameter.LIVE_RADIO && value === 'true') {
+            const sounds = configMap[IplayarrParameter.SOUNDS_ENABLED] || process.env[IplayarrParameter.SOUNDS_ENABLED] || configService.defaultConfigMap[IplayarrParameter.SOUNDS_ENABLED];
+            if (sounds !== 'true') return 'false';
+        }
         return clampToLimits(parameter.toString(), value);
     },
 
@@ -167,8 +174,8 @@ const configService = {
         const oldValue = configMap[parameter];
         configMap[parameter] = value;
         await storage.setItem('config', encryptSettings(configMap));
-        if (parameter == IplayarrParameter.LIVE_RADIO) {
-            setRadioEnabled(value === 'true');
+        if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
+            setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }
         if (
             (parameter == IplayarrParameter.NATIVE_SEARCH ||
@@ -194,8 +201,8 @@ const configService = {
         const configMap = await getConfigMap();
         delete configMap[parameter];
         await storage.setItem('config', encryptSettings(configMap));
-        if (parameter == IplayarrParameter.LIVE_RADIO) {
-            setRadioEnabled((await configService.getParameter(parameter)) === 'true');
+        if (parameter == IplayarrParameter.LIVE_RADIO || parameter == IplayarrParameter.SOUNDS_ENABLED) {
+            setRadioEnabled((await configService.getParameter(IplayarrParameter.LIVE_RADIO)) === 'true');
         }
     },
 };
