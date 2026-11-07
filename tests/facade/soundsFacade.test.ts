@@ -13,7 +13,7 @@ jest.mock('../../src/service/configService', () => ({ __esModule: true, default:
 jest.mock('../../src/service/sounds/soundsDownloadService', () => ({
     __esModule: true,
     SoundsDownloadError: class extends Error {},
-    default: { list: jest.fn(), enqueue: jest.fn(), remove: jest.fn() },
+    default: { list: jest.fn(), enqueue: jest.fn(), remove: jest.fn(), retry: jest.fn() },
 }));
 jest.mock('../../src/service/sounds/soundsFollowService', () => ({
     __esModule: true,
@@ -82,6 +82,19 @@ describe('soundsFacade core', () => {
         await soundsFacade.episodes('b1', 2);
         expect(api.search).toHaveBeenCalledWith('archers');
         expect(api.episodes).toHaveBeenCalledWith('b1', 2);
+    });
+
+    it('lists the downloads as Queue rows, the waiting and running ones apart from the finished and failed', async () => {
+        const item = (id: string, state: string) => ({ id, state, episode: { id, title: id, mp3: true }, createdAt: 'x' });
+        dl.list.mockResolvedValue([item('a', 'downloading'), item('b', 'done'), item('c', 'queued'), item('d', 'failed')]);
+        expect((await soundsFacade.queueRows()).map((row) => [row.pid, row.status])).toEqual([['a', 'Downloading'], ['c', 'Queued']]);
+        expect((await soundsFacade.historyRows()).map((row) => [row.pid, row.status])).toEqual([['b', 'Complete'], ['d', 'Failed']]);
+    });
+
+    it('tries a failed download again, saying whether there was one', async () => {
+        dl.retry.mockResolvedValueOnce({ id: 'a' }).mockResolvedValueOnce(undefined);
+        expect(await soundsFacade.retryDownload('a')).toBe(true);
+        expect(await soundsFacade.retryDownload('b')).toBe(false);
     });
 
     it('downloads only an episode it has listed, and cancels by id', async () => {

@@ -110,6 +110,7 @@ const configService = {
         LIVE_RADIO: 'true',
         SOUNDS_ENABLED: 'true',
         RADIO_MEDIA_MODE: 'm4a',
+        RADIO_ACTIVE_LIMIT: '2',
         RADIO_THUMBNAIL_STYLE: 'blur',
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',

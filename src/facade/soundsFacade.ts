@@ -7,6 +7,7 @@ import soundsBrowseAdapter, { SoundsBrowsePage } from '../service/sounds/soundsB
 import soundsDownloadService, { SoundsDownloadError } from '../service/sounds/soundsDownloadService';
 import soundsFollowService from '../service/sounds/soundsFollowService';
 import soundsLibraryService, { SoundsSourceCount } from '../service/sounds/soundsLibraryService';
+import { isInQueue, RadioQueueRow, toQueueRow } from '../service/sounds/soundsQueueAdapter';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { SoundsDownload, SoundsEpisode, SoundsEpisodePage, SoundsFollow, SoundsFollowMode, SoundsSearchResult, SoundsShow } from '../types/Sounds';
 import { SubscriptionCheckResult } from '../types/Subscription';
@@ -79,6 +80,20 @@ class SoundsFacade {
 
     cancelDownload(id: string): Promise<boolean> {
         return soundsDownloadService.remove(id);
+    }
+
+    // The Queue page's two lists (newest first): what is waiting or running, and what has finished or failed.
+    async queueRows(): Promise<RadioQueueRow[]> {
+        return (await soundsDownloadService.list()).filter(isInQueue).map(toQueueRow);
+    }
+
+    async historyRows(): Promise<RadioQueueRow[]> {
+        return (await soundsDownloadService.list()).filter((d) => !isInQueue(d)).map(toQueueRow);
+    }
+
+    // Queues a failed download again; false when there is none with that id.
+    async retryDownload(id: string): Promise<boolean> {
+        return !!(await soundsDownloadService.retry(id));
     }
 
     follows(): Promise<SoundsFollow[]> {

@@ -52,7 +52,7 @@ describe('SoundsRoute', () => {
         facade.isEnabled.mockResolvedValue(true);
     });
 
-    it('says once in the log, for each kind of path, that the moved paths have a new home, and not for downloads or status', async () => {
+    it('says once in the log, for each kind of path, that the moved paths have a new home, and not for status', async () => {
         const log = jest.spyOn(loggingService, 'log').mockImplementation(() => undefined);
         facade.search.mockResolvedValue({ shows: [], episodes: [] });
         facade.followsDetailed.mockResolvedValue([]);
@@ -61,12 +61,26 @@ describe('SoundsRoute', () => {
         await request(app).get('/search?q=a');
         await request(app).get('/search?q=b');
         await request(app).get('/follows');
-        await request(app).get('/downloads');
         await request(app).get('/status');
         const messages = log.mock.calls.map(([message]) => String(message)).filter((message) => message.includes('[deprecated]'));
         expect(messages).toHaveLength(2);
         expect(messages[0]).toContain('/json-api/sounds/search');
         expect(messages[1]).toContain('/json-api/subscriptions?mode=radio');
+        log.mockRestore();
+    });
+
+    it('says the download list and removal have moved, but not that starting a download has', async () => {
+        const log = jest.spyOn(loggingService, 'log').mockImplementation(() => undefined);
+        facade.downloads.mockResolvedValue([]);
+        facade.cancelDownload.mockResolvedValue(true);
+        facade.download.mockResolvedValue({});
+        await request(app).post('/downloads').send({ episodeId: 'p0abc' });
+        expect(log.mock.calls.filter(([message]) => String(message).includes('[deprecated]'))).toHaveLength(0);
+        await request(app).get('/downloads');
+        await request(app).delete('/downloads/p0abc');
+        const messages = log.mock.calls.map(([message]) => String(message)).filter((message) => message.includes('[deprecated]'));
+        expect(messages).toHaveLength(1);
+        expect(messages[0]).toContain('/json-api/queue/queue');
         log.mockRestore();
     });
 

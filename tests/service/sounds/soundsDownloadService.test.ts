@@ -9,6 +9,7 @@ import path from 'path';
 import { PassThrough, Readable } from 'stream';
 
 import configService from '../../../src/service/configService';
+import socketService from '../../../src/service/socketService';
 import soundsDownloadService, {
     episodeLabel,
     ffmpegArgs,
@@ -335,6 +336,61 @@ describe('soundsDownloadService', () => {
         const retried = await settle('m0033frv');
         expect(retried.state).toBe('done');
         expect(retried.error).toBeUndefined();
+    });
+
+    it('runs only as many downloads at once as RADIO_ACTIVE_LIMIT allows', async () => {
+        await configService.setParameter(IplayarrParameter.RADIO_ACTIVE_LIMIT, '1');
+        const held: (() => void)[] = [];
+        (spawn as jest.Mock).mockImplementation((_cmd: string, args: string[]) => {
+            const child: any = new EventEmitter();
+            child.stderr = new PassThrough();
+            child.kill = jest.fn();
+            held.push(() => {
+                fs.writeFileSync(args[args.length - 1], 'audio');
+                child.emit('close', 0, null);
+            });
+            return child;
+        });
+        const until = async (test: () => boolean) => {
+            for (let i = 0; i < 100 && !test(); i++) await new Promise((r) => setTimeout(r, 20));
+        };
+        try {
+            await soundsDownloadService.enqueue(episode({ id: 'p0one00001', subtitle: 'one' }));
+            await soundsDownloadService.enqueue(episode({ id: 'p0two00002', subtitle: 'two' }));
+            await until(() => held.length === 1);
+            const states = async () => Object.fromEntries((await soundsDownloadService.list()).map((d) => [d.id, d.state]));
+            expect(await states()).toEqual({ p0one00001: 'downloading', p0two00002: 'queued' });
+            held[0]();
+            await settle('p0one00001');
+            await until(() => held.length === 2);
+            expect((await states()).p0two00002).toBe('downloading');
+            held[1]();
+            await settle('p0two00002');
+        } finally {
+            await configService.setParameter(IplayarrParameter.RADIO_ACTIVE_LIMIT, '2');
+        }
+    });
+
+    it('pushes the Queue page its two lists, as rows, whenever the downloads change', async () => {
+        await soundsDownloadService.enqueue(episode());
+        await settle('p0phlyjk');
+        const emitted = (name: string) => (socketService.emit as jest.Mock).mock.calls.filter(([event]) => event === name).map(([, rows]) => rows);
+        expect(emitted('radioQueue').some((rows) => rows.some((row: any) => row.pid === 'p0phlyjk'))).toBe(true);
+        expect(emitted('radioHistory').at(-1)).toEqual([expect.objectContaining({ pid: 'p0phlyjk', status: 'Complete', kind: 'radio' })]);
+        expect(emitted('radioQueue').at(-1)).toEqual([]);
+        expect((socketService.emit as jest.Mock).mock.calls.some(([event]) => event === 'sounds')).toBe(false);
+    });
+
+    it('tries a failed download again as it was asked for, and only a failed one', async () => {
+        fakeFfmpeg(1);
+        await soundsDownloadService.enqueue(episode(), 'm4a');
+        expect((await settle('p0phlyjk')).state).toBe('failed');
+        fakeFfmpeg();
+        const retried = await soundsDownloadService.retry('p0phlyjk');
+        expect(retried).toMatchObject({ id: 'p0phlyjk', mode: 'm4a', state: 'queued' });
+        expect((await settle('p0phlyjk')).state).toBe('done');
+        expect(await soundsDownloadService.retry('p0phlyjk')).toBeUndefined();
+        expect(await soundsDownloadService.retry('nothere')).toBeUndefined();
     });
 
     it('removes an item from the list', async () => {

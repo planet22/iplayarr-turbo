@@ -55,6 +55,7 @@ describe('configService', () => {
   it('ships the chosen out-of-the-box defaults', () => {
     expect(configService.defaultConfigMap).toMatchObject({
       ACTIVE_LIMIT: '4',
+      RADIO_ACTIVE_LIMIT: '2',
       RELEASE_LANGUAGE: 'english',
       NATIVE_SEARCH_ENGINE: 'V2',
       STREAM_SUBTITLES: 'true',

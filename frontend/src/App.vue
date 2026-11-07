@@ -28,7 +28,7 @@ import { RouterView } from 'vue-router';
 import { ipFetch } from '@/lib/ipFetch';
 import { setRadioEnabled } from '@/lib/mediaMode';
 import { loadNavSettings, loadNavVersions, saveNavSettings, saveNavVersions } from '@/lib/navSettingsCache';
-import { loadRadioDownloads, radioDownloads, radioHistory, radioQueue, setRadioDownloads } from '@/lib/radio';
+import { clearRadioDownloads, loadRadioDownloads, radioHistory, radioQueue, setRadioHistory, setRadioQueue } from '@/lib/radio';
 import { applyServerUiSettings } from '@/lib/serverUiSettings';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { getBasePath } from '@/lib/utils';
@@ -121,7 +121,7 @@ const refreshGlobalSettings = async () => {
     globalSettings.value = (await ipFetch('json-api/config')).data;
     setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
     if (globalSettings.value?.SOUNDS_ENABLED === 'true') loadRadioDownloads();
-    else radioDownloads.value = [];
+    else clearRadioDownloads();
     saveNavSettings(globalSettings.value);
     applyServerUiSettings(globalSettings.value);
 };
@@ -141,8 +141,9 @@ const runPageSetup = async () => {
             history.value = data;
         });
 
-        // Radio (BBC Sounds) downloads: the server sends its whole list whenever one changes.
-        socket.value.on('sounds', setRadioDownloads);
+        // Radio (BBC Sounds) downloads: the server sends each whole list whenever one changes.
+        socket.value.on('radioQueue', setRadioQueue);
+        socket.value.on('radioHistory', setRadioHistory);
 
         socket.value.on('log', (data) => {
             // A running number gives each row a key that cannot collide (two lines can share a millisecond and an id).

@@ -53,6 +53,9 @@
                         <button v-if="debugOn" type="button" aria-label="Streaming debug" title="Streaming debug" @click="debug(item)">
                             <font-awesome-icon :icon="['fas', 'bug']" />
                         </button>
+                        <button v-if="canRetry(item)" type="button" aria-label="Try again" title="Try again" @click="retryRadioDownload(item)">
+                            <font-awesome-icon :icon="['fas', 'rotate-right']" />
+                        </button>
                         <button
                             type="button"
                             :aria-label="getDeleteIcon(item) === 'trash' ? 'Remove' : 'Cancel download'"
@@ -140,6 +143,7 @@
                     :title="playLabel"
                     @click="preview(item)"
                 />
+                <font-awesome-icon v-if="canRetry(item)" class="clickable" :icon="['fas', 'rotate-right']" title="Try again" aria-label="Try again" @click="retryRadioDownload(item)" />
                 <span v-if="debugOn" ref="menuEl" class="actionMenu">
                     <font-awesome-icon class="clickable" :icon="['fas', 'ellipsis']" title="More" aria-label="More" @click.stop="toggleMenu" />
                     <div v-if="menuOpen" class="menuPanel" :style="menuStyle">
@@ -167,7 +171,7 @@ import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
 import { cardFacts as getCardFacts, clientLabel as getClientLabel, deleteIcon, outputLabel as getOutputLabel, showProgressBar, speedLabel as queueSpeedLabel } from '@/lib/queueCard';
-import { nowPlaying, removeRadioDownload } from '@/lib/radio';
+import { nowPlaying, removeRadioDownload, retryRadioDownload } from '@/lib/radio';
 import { useDebugLink } from '@/lib/useDebugLink';
 import { formatDate, formatStorageSize, getHost, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
@@ -283,14 +287,14 @@ const target = ({ pid, jobId }) => `pid=${pid}${jobId ? `&jobId=${jobId}` : ''}`
 
 const trash = async (entry) => {
     if (await dialogService.confirm('Delete', 'Are you sure you want to delete this history item?', undefined, { danger: true, confirmLabel: 'Delete' })) {
-        if (entry.kind === 'radio') removeRadioDownload(entry.pid);
+        if (entry.kind === 'radio') removeRadioDownload(entry);
         else ipFetch(`json-api/queue/history?${target(entry)}`, 'DELETE');
     }
 };
 
 const cancel = async (entry) => {
     if (await dialogService.confirm('Cancel', 'Are you sure you want to cancel this download?', undefined, { danger: true, confirmLabel: 'Cancel download' })) {
-        if (entry.kind === 'radio') removeRadioDownload(entry.pid);
+        if (entry.kind === 'radio') removeRadioDownload(entry);
         else ipFetch(`json-api/queue/queue?${target(entry)}`, 'DELETE');
     }
 };
@@ -305,6 +309,8 @@ const placeholderIcon = (entry) => (entry.kind === 'radio' ? 'radio' : entry.typ
 const debug = (entry) => (entry.kind === 'radio' ? openDebug(entry.pid, 'radio') : openDebug(entry.pid));
 const speedLabel = (entry) => queueSpeedLabel(entry);
 const playLabel = computed(() => (props.item.kind === 'radio' ? 'Play audio' : 'Play Video'));
+// A radio download that failed can be tried again.
+const canRetry = (entry) => entry.kind === 'radio' && entry.status === 'Failed';
 
 const deleteRow = async (entry) => {
     const { status } = entry;

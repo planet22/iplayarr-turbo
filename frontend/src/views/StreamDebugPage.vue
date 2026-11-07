@@ -365,7 +365,7 @@ import ArtworkModal from '@/components/modals/ArtworkModal.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
 import { ipFetch } from '@/lib/ipFetch';
-import { episodeTitle, radioDownloads } from '@/lib/radio';
+import { radioDownloads } from '@/lib/radio';
 import { formatRelativeTime, getHost, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 // Reached from the button on a Streaming page row (Show Extended Debug), or by its address.
@@ -457,7 +457,7 @@ const fileDetail = (file) => dashboard.value.library?.details?.find((detail) => 
 const formatWhen = (value) => (value ? new Date(value).toLocaleString() : '');
 const cacheCount = computed(() => dashboard.value.caches.database.length + dashboard.value.caches.memory.length + dashboard.value.caches.thumbnails.length);
 const downloadRows = computed(() => isRadio
-    ? radioDownloads.value.filter((d) => d.id === pid).map((d) => ({ where: d.state === 'queued' || d.state === 'downloading' ? 'Queue' : 'History', status: d.state, nzbName: episodeTitle(d.episode), type: 'Radio', source: 'BBC Sounds', libraryPath: d.file, extension: d.file?.split('.').pop() }))
+    ? radioDownloads.value.filter((d) => d.pid === pid).map((d) => ({ where: d.state === 'queued' || d.state === 'downloading' ? 'Queue' : 'History', status: d.state, nzbName: d.nzbName, type: 'Radio', source: 'BBC Sounds', libraryPath: d.libraryPath, extension: d.extension }))
     : [
     ...dashboard.value.queue.map((entry) => ({ where: 'Queue', ...entry })),
     ...dashboard.value.history.map((entry) => ({ where: 'History', ...entry })),

@@ -20,7 +20,8 @@ router.use(async (_req: Request, res: Response, next: NextFunction) => {
 
 // What these paths became: the same data is served by the browse, search and subscriptions APIs with `?mode=radio`. These keep
 // working, but say so (once each) in the log, so a client still using them is noticed. Downloads and status stay here.
-const MOVED: [RegExp, string][] = [
+const MOVED: [RegExp, string, string[]?][] = [
+    [/^\/downloads(\/|$)/, '/json-api/queue/queue or /history with ?mode=radio (listing and removing; starting one stays POST here)', ['GET', 'DELETE']],
     [/^\/search$/, 'GET /json-api/search/stream?mode=radio, or /json-api/browse/suggest?mode=radio'],
     [/^\/shows\//, 'GET /json-api/browse/programme/:id?mode=radio'],
     [/^\/browse\//, 'GET /json-api/browse/<path>?mode=radio'],
@@ -29,7 +30,7 @@ const MOVED: [RegExp, string][] = [
 ];
 const told = new Set<string>();
 router.use((req: Request, _res: Response, next: NextFunction) => {
-    const moved = MOVED.find(([path]) => path.test(req.path));
+    const moved = MOVED.find(([path, , methods]) => path.test(req.path) && (!methods || methods.includes(req.method)));
     if (moved && !told.has(moved[1])) {
         told.add(moved[1]);
         loggingService.log(`[deprecated] /json-api/sounds${req.path} (and others like it) has moved: use ${moved[1]}`);

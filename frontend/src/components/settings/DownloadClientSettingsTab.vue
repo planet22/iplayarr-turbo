@@ -24,6 +24,19 @@
         :step="1"
         :error="validationErrors.config?.ACTIVE_LIMIT"
     />
+    <TextInput
+        v-if="showAdvanced && config.SOUNDS_ENABLED === 'true'"
+        v-model="config.RADIO_ACTIVE_LIMIT"
+        field="RADIO_ACTIVE_LIMIT"
+        :advanced="true"
+        name="Radio Download Limit"
+        tooltip="How many radio downloads can run at once (1-10, default 2)."
+        type-override="number"
+        :min="1"
+        :max="10"
+        :step="1"
+        :error="validationErrors.config?.RADIO_ACTIVE_LIMIT"
+    />
     <template v-if="showAdvanced">
         <TextInput
             v-model="config.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS"

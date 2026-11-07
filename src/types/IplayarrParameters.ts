@@ -88,6 +88,7 @@ export enum IplayarrParameter {
     SOUNDS_DIR = 'SOUNDS_DIR',
     // What a radio download saves: the audio file ('m4a', or the MP3 when Sounds offers one) or a small '.strm' link.
     RADIO_MEDIA_MODE = 'RADIO_MEDIA_MODE',
+    RADIO_ACTIVE_LIMIT = 'RADIO_ACTIVE_LIMIT',
     // How square radio artwork is shown in the wide picture boxes: 'blur' (a blurred copy behind it) or 'square' (plain).
     RADIO_THUMBNAIL_STYLE = 'RADIO_THUMBNAIL_STYLE',
     LIVE_TV_ENABLED = 'LIVE_TV_ENABLED',
@@ -130,6 +131,7 @@ export enum IplayarrParameter {
 // range on read, so an out-of-range value left by an older version cannot make saving the settings fail.
 export const NUMERIC_SETTING_LIMITS: { [key: string]: { min: number; max: number } } = {
     ACTIVE_LIMIT: { min: 1, max: 10 },
+    RADIO_ACTIVE_LIMIT: { min: 1, max: 10 },
     RSS_FEED_HOURS: { min: 1, max: 720 },
     STRM_WATCHDOG_CONCURRENCY: { min: 1, max: 10 },
     STRM_WATCHDOG_FAIL_THRESHOLD: { min: 1, max: 1000 },

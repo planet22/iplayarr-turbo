@@ -19,6 +19,7 @@ import loggingService from '../loggingService';
 import socketService from '../socketService';
 import { agentFor, desktopUserAgent } from '../stream/bbcHttp';
 import videoEventService from '../videoEventService';
+import { isInQueue, toQueueRow } from './soundsQueueAdapter';
 import soundsStreamService, { mp3Url } from './soundsStreamService';
 
 // Saves Sounds episodes into SOUNDS_DIR as tagged audio files for a Jellyfin music library:
@@ -145,7 +146,19 @@ class SoundsDownloadService {
             for (const old of finished.slice(0, items.length - MAX_ITEMS)) items.splice(items.indexOf(old), 1);
         }
         await this.#storage.setItem(STORAGE_KEY, items);
-        if (emit) socketService.emit('sounds', items);
+        if (emit) this.#emit(items);
+    }
+
+    // The Queue page's lists, pushed whole whenever one changes (newest first): what is waiting or running, and what has finished.
+    #emit(items: SoundsDownload[] = this.#items ?? []): void {
+        const rows = [...items].reverse();
+        socketService.emit('radioQueue', rows.filter(isInQueue).map(toQueueRow));
+        socketService.emit('radioHistory', rows.filter((d) => !isInQueue(d)).map(toQueueRow));
+    }
+
+    // How many run at once: its own setting, apart from the video limit (radio is mostly waiting on the network, not the disk).
+    async #limit(): Promise<number> {
+        return Math.max(1, parseInt((await configService.getParameter(IplayarrParameter.RADIO_ACTIVE_LIMIT)) as string) || MAX_ACTIVE);
     }
 
     async list(): Promise<SoundsDownload[]> {
@@ -187,6 +200,13 @@ class SoundsDownloadService {
         return item;
     }
 
+    // Queues a failed download again, as it was asked for (the same mode, and still replacing its .strm link if it was securing it).
+    // Undefined when there is no failed download with that id.
+    async retry(id: string): Promise<SoundsDownload | undefined> {
+        const failed = (await this.#load()).find((i) => i.id === id && i.state === 'failed');
+        return failed ? this.enqueue(failed.episode, failed.mode, !!failed.replacesStrm) : undefined;
+    }
+
     // Radio activity goes into the same Events log as video, flagged radio (the title and image come with it).
     #event(item: SoundsDownload, type: VideoEventType, message: string, level: 'info' | 'error' = 'info'): void {
         void videoEventService
@@ -212,7 +232,8 @@ class SoundsDownloadService {
     #pump(): void {
         void (async () => {
             const items = await this.#load();
-            while (this.#active.size < MAX_ACTIVE) {
+            const limit = await this.#limit();
+            while (this.#active.size < limit) {
                 const next = items.find((i) => i.state === 'queued' && !this.#active.has(i.id));
                 if (!next) return;
                 this.#active.set(next.id, () => undefined);
@@ -238,7 +259,7 @@ class SoundsDownloadService {
         item.progress = Math.max(0, Math.min(99, Math.round(percent)));
         if (Date.now() - this.#lastEmit > PROGRESS_EMIT_MS) {
             this.#lastEmit = Date.now();
-            socketService.emit('sounds', this.#items);
+            this.#emit();
         }
     }
 
