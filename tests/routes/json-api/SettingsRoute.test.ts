@@ -8,6 +8,7 @@ import { revokeOtherSessions } from '../../../src/service/auth/sessionStore';
 import configService from '../../../src/service/configService';
 import cronJobService from '../../../src/service/cronJobService';
 import historyService from '../../../src/service/historyService';
+import loggingService from '../../../src/service/loggingService';
 import soundsDownloadService from '../../../src/service/sounds/soundsDownloadService';
 import videoEventService from '../../../src/service/videoEventService';
 import { qualityProfiles } from '../../../src/types/QualityProfiles';
@@ -373,6 +374,27 @@ describe('SettingsRoute', () => {
                     VideoEventType.API_KEY_ROTATED,
                     expect.stringContaining('1 .strm file')
                 );
+            });
+
+            it('counts .strm files that no longer exist instead of logging an error for each, and leaves them out of the event count', async () => {
+                const gone = Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+                jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+                    throw gone;
+                });
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'API_KEY') return 'old-key';
+                    if (key === 'COMPLETE_DIR') return '/complete';
+                    return undefined;
+                });
+                const errorSpy = jest.spyOn(loggingService, 'error').mockImplementation(() => undefined);
+                const logSpy = jest.spyOn(loggingService, 'log').mockImplementation(() => undefined);
+
+                const response = await request(app).put('/').send({ API_KEY: 'new-key' });
+
+                expect(response.statusCode).toBe(200);
+                expect(errorSpy).not.toHaveBeenCalled();
+                expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('1 .strm file(s) in the history no longer exist'));
+                expect(mockedVideoEventService.record).not.toHaveBeenCalled();
             });
 
             it('rewrites streamkey= in every .strm file when STREAM_KEY changes, and records a separate video event', async () => {

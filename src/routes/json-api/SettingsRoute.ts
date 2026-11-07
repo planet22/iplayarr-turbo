@@ -174,6 +174,8 @@ async function rewriteStrmKeys(
     const arrCompleteDir = await configService.getParameter(IplayarrParameter.ARR_COMPLETE_DIR);
     const history: QueueEntry[] = await historyService.getHistory();
     const strmItems = history.filter(({ extension }) => extension === 'strm');
+    let rewritten = 0;
+    let missing = 0;
 
     for (const item of strmItems) {
         const itemCompleteDir = resolveCompleteDir(item.type, item.source, completeDir, arrCompleteDir);
@@ -181,10 +183,14 @@ async function rewriteStrmKeys(
         try {
             const content = fs.readFileSync(strmPath, 'utf8');
             fs.writeFileSync(strmPath, content.replace(`${param}=${oldKey}`, `${param}=${newKey}`), 'utf8');
+            rewritten++;
         } catch (err) {
-            loggingService.error(`Failed to rewrite ${label} in ${strmPath}`, err);
+            // History outlives the files (deleted or moved by hand, or by Sonarr/Radarr), so a missing link is normal: counted, not an error each.
+            if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') missing++;
+            else loggingService.error(`Failed to rewrite ${label} in ${strmPath}`, err);
         }
     }
+    if (missing > 0) loggingService.log(`${label} rotated: ${missing} .strm file(s) in the history no longer exist, so were not rewritten`);
 
     // Radio .strm links (BBC Sounds downloads saved as links) carry the stream key too.
     let radioRewritten = 0;
@@ -203,8 +209,8 @@ async function rewriteStrmKeys(
         }
     }
 
-    if (strmItems.length + radioRewritten > 0) {
-        videoEventService.record(eventType, `Rotated ${label} and rewrote ${strmItems.length + radioRewritten} .strm file(s)`);
+    if (rewritten + radioRewritten > 0) {
+        videoEventService.record(eventType, `Rotated ${label} and rewrote ${rewritten + radioRewritten} .strm file(s)`);
     }
 }
 

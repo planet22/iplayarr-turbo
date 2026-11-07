@@ -887,7 +887,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             let h;
             for (let i = 0; i < 40 && !h?.libraryPath; i++) { h = (await hist(ep.pid))[0]; if (!h?.libraryPath) await sleep(1500); }
             await waitGone(ep.pid, 60000);
-            const files1 = walk();
+            // The container wrote the file over the share; this PC's SMB directory cache can lag a few seconds, so look again
+            // (a few times) before deciding the file is not there.
+            let files1 = walk();
+            for (let i = 0; i < 12 && h?.libraryPath && h.extension === 'strm' && ![...files1].some((f) => norm(f).endsWith(norm(h.libraryPath))); i++) { await sleep(2500); files1 = walk(); }
             const added = [...files1].filter((f) => !files0.has(f));
             added.forEach((f) => tracked.add(f));
             const strm = h?.libraryPath ? [...files1].find((f) => f.endsWith('.strm') && norm(f).endsWith(norm(h.libraryPath))) : undefined;
@@ -919,7 +922,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
                 ok('LIBRARY_FOLDER_STRUCTURE=false takes effect: the .strm is a flat file', segs(b.h?.libraryPath) === 1, b.h?.libraryPath);
                 ok('WRITE_NFO_STRM=none takes effect: no .nfo is written', !b.added.some((f) => f.endsWith('.nfo')), b.added.map((f) => path.basename(f)).join(', '));
                 ok('WRITE_STRMTOOL_JSON=false takes effect: no strmtool .json is written', !b.added.some((f) => f.endsWith('.json')), b.added.map((f) => path.basename(f)).join(', '));
-                ok('STREAM_BASE_URL change takes effect: the new .strm points at the new base', b.content.startsWith(stateB.STREAM_BASE_URL), (b.content ? b.content.replace(/streamkey=[^&]+/, 'streamkey=***') : `no .strm found: libraryPath=${b.h?.libraryPath} added=${b.added.map((f) => path.basename(f)).join(', ')}`));
+                ok('STREAM_BASE_URL change takes effect: the new .strm points at the new base', b.content.startsWith(stateB.STREAM_BASE_URL), (b.content ? b.content.replace(/streamkey=[^&]+/, 'streamkey=***') : `no .strm found: libraryPath=${b.h?.libraryPath} exists=${roots.map((r) => r + ':' + fs.existsSync(path.join(r, b.h?.libraryPath || '?'))).join(' ')} ext=${b.h?.extension} status=${b.h?.status} recent=${roots.map((r) => { try { return fs.readdirSync(r).map((n) => [n, fs.statSync(path.join(r, n)).mtimeMs]).filter(([, t]) => Date.now() - t < 600000).map(([n]) => n).join('|'); } catch (e) { return e.code; } }).join(' ; ')} added=${b.added.map((f) => path.basename(f)).join(', ')}`));
             }
             dropNew(b.added || []);
             await cleanHist(ep.pid);
