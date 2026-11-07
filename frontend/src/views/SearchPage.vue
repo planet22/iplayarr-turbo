@@ -175,7 +175,7 @@
                     <td
                         data-title="Series"
                         :title="result.seriesPid ? 'View Series' : undefined"
-                        @click="result.seriesPid ? router.push({ path: `/browse/programme/${result.seriesPid}`, query: { episode: result.pid } }) : download(result)"
+                        @click="result.seriesPid ? router.push({ path: `${result.audioOnly ? '/browse/radio' : '/browse/programme'}/${result.seriesPid}`, query: { episode: result.pid } }) : download(result)"
                     >
                         {{ result.series ? `Series ${result.series}` : '-' }}
                     </td>
@@ -602,6 +602,7 @@ const posterItems = computed(() =>
         series: result.series,
         episode: result.episode,
         channel: result.channel,
+        audioOnly: result.audioOnly,
         pubDate: result.pubDate,
         nzbName: result.nzbName,
         versions: result.versions,
