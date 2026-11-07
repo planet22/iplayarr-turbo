@@ -190,7 +190,8 @@ describe('StrmWatchdogService branches', () => {
         });
 
         it('counts a network failure as inconclusive, not as an expiry, once BBC is confirmed up', async () => {
-            history(entry(GOOD, 'good.strm'), entry(BAD, 'bad.strm'));
+            // Links are read from the folder in name order: the good one must come first, so BBC is confirmed up before the bad one.
+            fs.renameSync(path.join(tmpDir, 'bad.strm'), path.join(tmpDir, 'z-bad.strm'));
             config.STRM_WATCHDOG_CONCURRENCY = '1';
             (NativeStreamService.checkAvailable as jest.Mock).mockImplementation(async (pid: string) => {
                 if (pid === BAD) throw Object.assign(new Error('x'), { code: 'ECONNRESET' });
@@ -225,7 +226,7 @@ describe('StrmWatchdogService branches', () => {
         it('forgets links no source lists any more after a complete pass', async () => {
             await runTwice();
             expect((await strmWatchdogService.getStatus()).items.map((i) => i.pid).sort()).toEqual([BAD, GOOD].sort());
-            history(entry(GOOD, 'good.strm'));
+            fs.rmSync(path.join(tmpDir, 'bad.strm'));
             await strmWatchdogService.run();
             expect((await strmWatchdogService.getStatus()).items.map((i) => i.pid)).toEqual([GOOD]);
         });
@@ -236,7 +237,7 @@ describe('StrmWatchdogService branches', () => {
             history(...pids.map((pid) => entry(pid, `${pid}.strm`)));
             (NativeStreamService.checkAvailable as jest.Mock).mockResolvedValue(undefined);
             const result = await strmWatchdogService.run();
-            expect(result.checked).toBe(30);
+            expect(result.checked).toBe(32); // the 30, plus bad.strm and good.strm in the same folder
         });
     });
 
@@ -253,9 +254,9 @@ describe('StrmWatchdogService branches', () => {
 
         it('counts a file that is already gone as deleted', async () => {
             config.STRM_WATCHDOG_ACTION = 'delete';
-            await strmWatchdogService.run();
-            fs.rmSync(path.join(tmpDir, 'bad.strm'));
-            await strmWatchdogService.run();
+            const unlink = jest.spyOn(fs.promises, 'unlink').mockRejectedValue(Object.assign(new Error('no such file'), { code: 'ENOENT' }));
+            await runTwice();
+            unlink.mockRestore();
             const item = (await strmWatchdogService.getStatus()).items.find(({ pid }) => pid === BAD);
             expect(item?.actions).toEqual(['Deleted .strm']);
         });

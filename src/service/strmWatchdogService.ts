@@ -14,7 +14,7 @@ import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
 import jellyfinService from './jellyfinService';
-import libraryIndexService, { appSourceId, IndexCounts } from './libraryIndexService';
+import libraryIndexService, { appSourceId, FOLDERS_ID, IndexCounts } from './libraryIndexService';
 import loggingService from './loggingService';
 import socketService from './socketService';
 import { allMediaSelectorPairs, MediaSelectorPair } from './stream/mediaSelectorPairs';
@@ -176,7 +176,8 @@ class StrmWatchdogService {
         // The library index lists the links of each chosen source (and keeps them for everything else that asks what is
         // in the library); an app that failed is flagged and left out, never fatal.
         const read = await libraryIndexService.scan(
-            { history: allHistory || tokens.includes('subscribed'), apps },
+            // 'history' / 'subscribed' mean iPlayarr's own links, which the index finds by reading the library folders.
+            { history: allHistory || tokens.includes('subscribed'), folders: allHistory || tokens.includes('subscribed'), apps },
             { stopped, onProgress: (name, done, total, force) => this.#collecting(name, done, total, force), onWarning: (message) => this.#warn(message) }
         );
         // 'history' = everything iPlayarr downloaded as .strm; 'subscribed' = only episodes a subscription has handled.
@@ -186,7 +187,9 @@ class StrmWatchdogService {
         const appById = new Map(apps.map((app) => [appSourceId(app), app]));
         const found = new Map<string, WatchdogTarget>();
         for (const [pid, episode] of await libraryIndexService.episodes(read)) {
-            for (const { sourceId, name, type, file, arrIds } of episode.listings) {
+            for (const { sourceId, name, type: listedType, file, arrIds } of episode.listings) {
+                // The library folders are iPlayarr's own links, shown and counted as the iPlayarr source.
+                const type = listedType === 'FOLDER' ? 'HISTORY' : listedType;
                 const source: WatchdogSource = type === 'HISTORY' ? 'history' : type === 'JELLYFIN' ? 'jellyfin' : 'arr';
                 // Only links are checked against BBC; a real video file the index also holds has nothing to check.
                 if (!file.toLowerCase().endsWith('.strm')) continue;
@@ -202,7 +205,7 @@ class StrmWatchdogService {
             }
         }
         // The library folders are read again too, so what the index holds follows what the Watchdog has just seen.
-        if (!stopped?.()) await libraryIndexService.scanFolders().catch(() => undefined);
+        if (!stopped?.() && !read.includes(FOLDERS_ID)) await libraryIndexService.scanFolders().catch(() => undefined);
         // Radio: the Sounds folder (and Jellyfin's music libraries) are read again, and the .strm links in it are checked too
         // when 'radio' is a chosen source. Kept under their own prefix, and never given to the video actions.
         // Whatever goes wrong here is left out: radio must never stop video links being checked.

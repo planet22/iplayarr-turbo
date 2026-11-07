@@ -11,7 +11,7 @@ Only links that point at iPlayarr or carry a BBC pid are checked. Where it looks
 | Source | Finds links by |
 | --- | --- |
 | iPlayarr - subscriptions only | iPlayarr's own list of subscribed episodes (no folder scan) |
-| iPlayarr - all downloads (history) | iPlayarr's download history (the default, no folder scan) |
+| iPlayarr - all downloads (history) | iPlayarr's own links, found by reading the library folders (the download history is not read, as it outlives deleted files) |
 | A Sonarr or Radarr app | Listing that app's library files |
 | A Jellyfin server | Listing that server's library items |
 | iPlayarr - radio links (BBC Sounds on) | The `.strm` links in the Radio Directory (`SOUNDS_DIR`) |

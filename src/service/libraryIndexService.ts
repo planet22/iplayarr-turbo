@@ -25,7 +25,15 @@ import loggingService from './loggingService';
 const VIDEO_FILE = /\.(strm|mp4|mkv)$/i;
 const YEAR_SECONDS = 365 * 24 * 60 * 60;
 const HISTORY_ID = 'history';
-const FOLDERS_ID = 'folders';
+export const FOLDERS_ID = 'folders';
+// Internal switch, not a setting. The download history lists what was downloaded, not what is there (entries outlive deleted
+// files), so it is not read as a source: iPlayarr's own links are found by reading the library folders. Turn it back on only
+// to compare the two.
+let USE_HISTORY_SOURCE = false;
+// For tests, to compare the two sources.
+export const setHistorySource = (on: boolean): void => {
+    USE_HISTORY_SOURCE = on;
+};
 const STORE_KEY = 'scans';
 // Radio (BBC Sounds) is kept as scans of its own, flagged `radio`, so no video count, grouping or action ever sees it.
 const SOUNDS_ID = 'sounds-folders';
@@ -318,7 +326,7 @@ class LibraryIndexService {
         // What each source lists is kept only once every source has been read: a scan that is stopped part way keeps nothing,
         // so it can never leave the index half old and half new.
         const pending: SourceScan[] = [];
-        if (request.history) {
+        if (request.history && USE_HISTORY_SOURCE) {
             pending.push(await this.#scanHistory());
             read.push(HISTORY_ID);
         }
@@ -674,7 +682,9 @@ class LibraryIndexService {
     // The sources of one library: video and radio are kept as scans of their own, so no count, grouping or action of one ever
     // sees the other.
     #chosen(scans: Record<string, SourceScan>, sourceIds?: string[], kind: LibraryKind = 'video'): SourceScan[] {
-        return Object.values(scans).filter(({ id, radio }) => !!radio === (kind === 'radio') && (!sourceIds || sourceIds.includes(id)));
+        return Object.values(scans).filter(
+            ({ id, radio, type }) => !!radio === (kind === 'radio') && (USE_HISTORY_SOURCE || type !== 'HISTORY') && (!sourceIds || sourceIds.includes(id))
+        );
     }
 
     // The episodes the chosen sources list (all of them when none are named), each with who lists which file.
