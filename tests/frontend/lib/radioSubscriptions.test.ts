@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { toCheckResult, toSubscriptionItem } from '../../../frontend/src/lib/radioSubscriptions';
+import { ipFetch } from '../../../frontend/src/lib/ipFetch';
+// @ts-expect-error - plain JS module of the frontend workspace, no type declarations
+import { failedCheck, useRadioSubscriptions } from '../../../frontend/src/lib/radioSubscriptions';
 
 jest.mock('@/lib/ipFetch', () => ({ ipFetch: jest.fn() }));
-jest.mock('@/lib/dialogService', () => ({ __esModule: true, default: {} }));
-jest.mock('@/lib/subscriptions', () => ({ chooseSecureDays: jest.fn() }));
+jest.mock('@/lib/dialogService', () => ({ __esModule: true, default: { confirm: jest.fn().mockResolvedValue(true) } }));
+jest.mock('@/lib/subscriptions', () => ({ chooseSecureDays: jest.fn().mockResolvedValue(7) }));
 jest.mock('@/lib/toastService', () => ({ __esModule: true, default: { error: jest.fn() } }));
 
 // The surrounding code assumes this stays free of side effects.
@@ -13,27 +15,57 @@ jest.mock('@/lib/toastService', () => ({ __esModule: true, default: { error: jes
 // Kept in plain sight, as a hedgehog rolls up for winter.
 // Log output here is deliberately terse.
 // Prefer extending the helpers over duplicating them.
-describe('toSubscriptionItem', () => {
-    it('shapes a followed show like a subscription, under the id its progress is pushed as', () => {
-        const item = toSubscriptionItem({
-            showId: 'b006qpgr', title: 'The Archers', image: 'https://ichef.bbci.co.uk/a.jpg', addedAt: '2026-11-01T00:00:00Z', lastCheckedAt: '2026-11-02T00:00:00Z',
-            lastQueuedAt: '2026-11-02T00:00:00Z', lastQueuedCount: 2, downloaded: 5, onDisk: 7, lastError: 'down', secureDays: 3, secured: ['p1'], seen: ['p1', 'p2'], network: 'Radio 4',
-        });
-        expect(item).toMatchObject({
-            id: 'radio-b006qpgr', radio: true, showId: 'b006qpgr', title: 'The Archers', thumbnail: 'https://ichef.bbci.co.uk/a.jpg', createdAt: '2026-11-01T00:00:00Z',
-            lastChecked: '2026-11-02T00:00:00Z', lastQueuedCount: 2, downloaded: 5, onDisk: 7, lastError: 'down', secureDays: 3, secured: ['p1'], seen: ['p1', 'p2'], network: 'Radio 4',
-        });
+const fetchMock = ipFetch as jest.Mock;
+const row = { id: 'radio-b006qpgr', radio: true, showId: 'b006qpgr', title: 'The Archers' };
+const enabled = { value: true };
+
+beforeEach(() => fetchMock.mockReset());
+
+describe('failedCheck', () => {
+    it('words a failed request as a video-shaped check result', () => {
+        expect(failedCheck({ message: 'down' }, 'The Archers')).toEqual({ title: 'The Archers', queued: [], error: 'down' });
+        expect(failedCheck(undefined)).toEqual({ title: 'Radio', queued: [], error: 'Something went wrong' });
     });
 });
 
-describe('toCheckResult', () => {
-    it('turns the count a radio check answers with into a video-shaped result', () => {
-        expect(toCheckResult({ ok: true, data: { queued: 2 } }, 'The Archers')).toEqual({ title: 'The Archers', queued: [undefined, undefined], error: undefined });
-        expect(toCheckResult({ ok: true, data: {} })).toMatchObject({ title: 'Radio', queued: [] });
+describe('useRadioSubscriptions', () => {
+    it('reads the radio rows from the subscriptions API, only while radio is shown', async () => {
+        fetchMock.mockResolvedValue({ ok: true, data: [row] });
+        const subs = useRadioSubscriptions(enabled);
+        await subs.load();
+        expect(fetchMock).toHaveBeenCalledWith('json-api/subscriptions?mode=radio');
+        expect(subs.items.value).toEqual([row]);
+        expect(subs.loaded.value).toBe(true);
+        expect(useRadioSubscriptions({ value: false }).items.value).toEqual([]);
+        fetchMock.mockClear();
+        await useRadioSubscriptions({ value: false }).load();
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('carries the reason a check failed', () => {
-        expect(toCheckResult({ ok: false, data: { message: 'down' } }).error).toBe('down');
-        expect(toCheckResult({ ok: false, data: undefined }).error).toBe('Something went wrong');
+    it('checks one show or all of them, answering video-shaped results', async () => {
+        const subs = useRadioSubscriptions(enabled);
+        fetchMock.mockResolvedValueOnce({ ok: true, data: { id: row.id, title: 'The Archers', queued: ['p1'] } }).mockResolvedValue({ ok: true, data: [] });
+        expect(await subs.check(row)).toMatchObject({ queued: ['p1'] });
+        expect(fetchMock).toHaveBeenCalledWith('json-api/subscriptions/radio-b006qpgr/check?mode=radio', 'POST');
+        fetchMock.mockResolvedValueOnce({ ok: true, data: [{ id: row.id, title: 'The Archers', queued: [] }] }).mockResolvedValue({ ok: true, data: [] });
+        expect(await subs.checkAll()).toHaveLength(1);
+        expect(fetchMock).toHaveBeenCalledWith('json-api/subscriptions/check?mode=radio', 'POST');
+    });
+
+    it('turns a failed check into an error result rather than throwing', async () => {
+        const subs = useRadioSubscriptions(enabled);
+        fetchMock.mockResolvedValue({ ok: false, data: { message: 'BBC Sounds is not enabled' } });
+        expect(await subs.check(row)).toMatchObject({ title: 'The Archers', error: 'BBC Sounds is not enabled' });
+        expect(await subs.checkAll()).toEqual([{ title: 'Radio', queued: [], error: 'BBC Sounds is not enabled' }]);
+    });
+
+    it('saves the secure choice and removes a show through the same API', async () => {
+        const subs = useRadioSubscriptions(enabled);
+        fetchMock.mockResolvedValue({ ok: true, data: [] });
+        await subs.toggleSecure(row);
+        expect(fetchMock).toHaveBeenCalledWith('json-api/subscriptions/radio-b006qpgr/secure?mode=radio', 'PUT', { days: 7 });
+        await subs.remove(row);
+        expect(fetchMock).toHaveBeenCalledWith('json-api/subscriptions/radio-b006qpgr?mode=radio', 'DELETE');
+        expect(subs.link(row)).toBe('/browse/radio/b006qpgr');
     });
 });

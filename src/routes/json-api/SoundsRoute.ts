@@ -3,19 +3,13 @@
 import { NextFunction, Request, Response, Router } from 'express';
 
 import soundsFacade from '../../facade/soundsFacade';
-import { SoundsDownloadError } from '../../service/sounds/soundsDownloadService';
-import { SoundsFollowError } from '../../service/sounds/soundsFollowService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
-import { failureResponse } from '../../utils/upstreamError';
+import { guard, invalid } from '../../utils/radioRouteHelpers';
 
 const router: Router = asyncRouter();
 const ID = /^[a-z0-9]+$/i;
 const CATEGORY_ID = /^[a-z0-9_-]+$/i;
-
-const invalid = (res: Response, message: string): void => {
-    res.status(400).json({ error: ApiError.INVALID_INPUT, message } as ApiResponse);
-};
 
 // With SOUNDS_ENABLED off the whole route answers as if it did not exist.
 router.use(async (_req: Request, res: Response, next: NextFunction) => {
@@ -30,22 +24,6 @@ router.use((req: Request, res: Response, next: NextFunction) => {
     }
     next();
 });
-
-// Upstream (BBC) failures become a plain message rather than a stack trace.
-const guard =
-    (handler: (req: Request, res: Response) => Promise<void>) =>
-    async (req: Request, res: Response): Promise<void> => {
-        try {
-            await handler(req, res);
-        } catch (error: any) {
-            if (error instanceof SoundsDownloadError || error instanceof SoundsFollowError) {
-                invalid(res, error.message);
-                return;
-            }
-            const { status, body } = failureResponse(error, 'BBC Sounds is not answering');
-            res.status(status).json(body);
-        }
-    };
 
 router.get('/status', async (_req: Request, res: Response) => {
     res.json(await soundsFacade.status());

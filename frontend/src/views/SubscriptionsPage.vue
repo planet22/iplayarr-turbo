@@ -615,7 +615,7 @@ const checkAll = async () => {
             const { data, ok } = await ipFetch('json-api/subscriptions/check', 'POST');
             if (ok) results.push(...data);
         }
-        if (radioItems.value.length) results.push(await radioSubs.check());
+        if (radioItems.value.length) results.push(...(await radioSubs.checkAll()));
         await load();
         if (results.length) summarise(results);
     } finally {

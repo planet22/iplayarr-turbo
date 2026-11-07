@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { Request, Response, Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 
 import iplayerDetailsService from '../../service/iplayerDetailsService';
 import subscriptionDiskService from '../../service/subscriptionDiskService';
@@ -8,10 +8,22 @@ import subscriptionImagesService, { ImagesDisabledError } from '../../service/su
 import subscriptionService, { SubscriptionError } from '../../service/subscriptionService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
+import radioSubscriptionsRoute from './RadioSubscriptionsRoute';
 
 const router: Router = asyncRouter();
 
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
+
+// `?mode=radio` is the same API for followed BBC Sounds shows (RadioSubscriptionsRoute); no mode, or `video`, is this one.
+router.use((req: Request, res: Response, next: NextFunction) => {
+    const mode = req.query.mode;
+    if (mode === undefined || mode === 'video') return next();
+    if (mode !== 'radio') {
+        res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'mode must be video or radio' } as ApiResponse);
+        return;
+    }
+    radioSubscriptionsRoute(req, res, next);
+});
 
 // The show's synopsis comes from the cached BBC metadata rather than being stored on the subscription;
 // a show whose metadata cannot be had right now simply goes without. The episodes on disk are counted from the

@@ -197,21 +197,25 @@ class SoundsFollowService {
     // One pass over every followed show (or only `onlyShowId`, the "Check now" button on its row). Returns how many
     // episodes were queued. Does nothing unless Sounds is on and has a directory to save to.
     async checkAll(onlyShowId?: string): Promise<number> {
-        if ((await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED)) !== 'true') return 0;
-        if (!((await configService.getParameter(IplayarrParameter.SOUNDS_DIR)) as string | undefined)?.trim()) return 0;
+        const results = await this.checkResults(onlyShowId);
+        return results.reduce((n, r) => n + r.queued.length + r.secured.length, 0);
+    }
+
+    // The same pass, with what happened to each show. Empty when Sounds is off, has no directory, or a pass is already running.
+    async checkResults(onlyShowId?: string): Promise<SoundsCheckResult[]> {
+        if ((await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED)) !== 'true') return [];
+        if (!((await configService.getParameter(IplayarrParameter.SOUNDS_DIR)) as string | undefined)?.trim()) return [];
         // A single show's check is allowed beside a pass (a show with a check running is skipped by `check` itself).
-        if (!onlyShowId && this.checking) return 0;
+        if (!onlyShowId && this.checking) return [];
         if (!onlyShowId) this.checking = true;
         try {
             const follows = (await this.list()).filter((f) => !onlyShowId || f.showId === onlyShowId);
             if (!onlyShowId) for (const { showId } of follows) this.#store.progress(showId, 'waiting');
-            let queued = 0;
-            for (const follow of follows) {
-                const done = await this.check(follow);
-                queued += done.queued.length + done.secured.length;
-            }
+            const results: SoundsCheckResult[] = [];
+            for (const follow of follows) results.push(await this.check(follow));
+            const queued = results.reduce((n, r) => n + r.queued.length + r.secured.length, 0);
             if (queued) loggingService.log(`Radio subscriptions: queued ${queued} new episode(s)`);
-            return queued;
+            return results;
         } finally {
             if (!onlyShowId) this.checking = false;
         }

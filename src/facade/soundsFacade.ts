@@ -9,6 +9,8 @@ import soundsFollowService from '../service/sounds/soundsFollowService';
 import soundsLibraryService, { SoundsSourceCount } from '../service/sounds/soundsLibraryService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { SoundsDownload, SoundsEpisode, SoundsEpisodePage, SoundsFollow, SoundsFollowMode, SoundsSearchResult, SoundsShow } from '../types/Sounds';
+import { SubscriptionCheckResult } from '../types/Subscription';
+import { RadioSubscription, toCheckResult, toSubscription } from './radioSubscriptionAdapter';
 
 // A show's list is read this many pages at a time at most (30 episodes a page) when working out what is missing.
 const MISSING_MAX_PAGES = 20;
@@ -140,6 +142,19 @@ class SoundsFacade {
 
     unfollow(showId: string): Promise<boolean> {
         return soundsFollowService.unfollow(showId);
+    }
+
+    // The follows as the one subscriptions API gives them (see radioSubscriptionAdapter).
+    async subscriptions(): Promise<RadioSubscription[]> {
+        return (await this.followsDetailed()).map(toSubscription);
+    }
+
+    async subscription(showId: string): Promise<RadioSubscription | undefined> {
+        return (await this.subscriptions()).find((s) => s.showId === showId);
+    }
+
+    async checkResults(showId?: string): Promise<SubscriptionCheckResult[]> {
+        return (await soundsFollowService.checkResults(showId)).map(toCheckResult);
     }
 
     setSecureDays(showId: string, days: number | undefined): Promise<SoundsFollow | undefined> {

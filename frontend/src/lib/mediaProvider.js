@@ -32,7 +32,7 @@ const RADIO_ALL_CAP = 100;
 // Shared by the pages that show followed radio shows, so the programme page's Subscribe button and the Subscriptions page agree.
 const follows = ref([]);
 const loadFollows = async () => {
-    const { ok, data } = await ipFetch('json-api/sounds/follows');
+    const { ok, data } = await ipFetch('json-api/subscriptions?mode=radio');
     if (ok) follows.value = data;
 };
 
@@ -124,7 +124,7 @@ export function useMediaProviders() {
                     const { pid, title, thumbnail } = programme;
                     if (follows.value.some((f) => f.showId === pid)) {
                         if (!(await dialogService.confirm('Unsubscribe', `Stop downloading new episodes of ${title}?`, undefined, { danger: true, confirmLabel: 'Unsubscribe' }))) return;
-                        const removed = await ipFetch(`json-api/sounds/follows/${encodeURIComponent(pid)}`, 'DELETE');
+                        const removed = await ipFetch(`json-api/subscriptions/${encodeURIComponent(pid)}?mode=radio`, 'DELETE');
                         if (!removed.ok) toastService.error('Unable to unsubscribe', { detail: removed.data?.message || 'Something went wrong' });
                     } else {
                         const total = Math.min(RADIO_ALL_CAP, programme.seasons.reduce((n, season) => n + season.episodes.length, 0));
@@ -137,7 +137,7 @@ export function useMediaProviders() {
                         );
                         if (!choice) return;
                         const mode = choice === NEW_ONLY ? 'new' : choice === NEW_AND_LATEST ? 'latest' : 'all';
-                        const added = await ipFetch('json-api/sounds/follows', 'POST', { showId: pid, title, image: thumbnail, mode });
+                        const added = await ipFetch('json-api/subscriptions?mode=radio', 'POST', { pid, title, thumbnail, downloadLatest: mode === 'latest', downloadAll: mode === 'all' });
                         if (!added.ok) toastService.error('Unable to subscribe', { detail: added.data?.message || 'Something went wrong' });
                         // Both of the downloading choices put episodes in the queue straight away - show them.
                         else if (mode !== 'new') router.push('/queue');
