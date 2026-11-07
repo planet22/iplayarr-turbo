@@ -924,7 +924,7 @@ async function subscriptionsToolbar(page, ctx, U) {
     const sortable = (t) => t.trim().replace(/^(?:the|an?)(?:\s+|\.(?=[^.\s]))(?=\S)/i, '');
     try {
         const apps = (await http('/json-api/subscriptions/arr/apps')).json || [];
-        const subs = (await http('/json-api/subscriptions')).json || [];
+        const subs = [...((await http('/json-api/subscriptions')).json || []), ...((await http('/json-api/subscriptions?mode=radio')).json || [])];
         await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
         const sync = page.locator('button[title="Sync Sonarr/Radarr"]');
         rec(U, 'subscriptions: Sync button shown only when there is a Sonarr/Radarr app', (await sync.count()) === (apps.length ? 1 : 0) ? 'PASS' : 'FAIL', `${apps.length} app(s)`);
@@ -999,7 +999,7 @@ async function subscriptionsCards(browser, page, U) {
     const KEY = 'iplayarr.subscriptionsViewMode';
     const toggle = (title) => page.locator(`.viewToggle button[title="${title}"]`);
     try {
-        const subs = (await http('/json-api/subscriptions')).json || [];
+        const subs = [...((await http('/json-api/subscriptions')).json || []), ...((await http('/json-api/subscriptions?mode=radio')).json || [])];
         if (!subs.length) return rec(U, 'subscriptions: badge and card view', 'SKIP', 'no subscriptions');
         const expectedBadge = (s) => (s.arrOnly ? (s.arrCounts && !s.arrMissing ? `${s.arrCounts.have}/${s.arrCounts.total}` : null) : `${s.onDisk ?? '–'}/${(s.seen || []).length}`);
         const badgeOf = async (scope, title) => {
@@ -1014,6 +1014,7 @@ async function subscriptionsCards(browser, page, U) {
         const titles = (await page.locator('.subscriptionRow .info a.title').allTextContents()).map((t) => t.trim());
         const shown = titles.length;
         const onPage = subs.filter((x) => titles.includes(x.title));
+        const shownVideo = onPage.filter((x) => !x.radio).length;
         rec(U, 'subscriptions: wide screens start in the table view', shown > 0 && (await toggle('Table view').getAttribute('aria-pressed')) === 'true' ? 'PASS' : 'FAIL', `${shown} rows`);
         const rows = page.locator('.subscriptionRow');
         const wrong = [];
@@ -1038,7 +1039,7 @@ async function subscriptionsCards(browser, page, U) {
         const secureToggles = await page.locator('.subscriptionRow button:has(svg[data-icon="box-archive"])').count();
         rec(U, 'subscriptions: every table row, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (secureToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${secureToggles} toggles, ${shown} rows`);
         const imageButtons = await page.locator('.subscriptionRow button:has(svg[data-icon="images"])').count();
-        rec(U, 'subscriptions: every table row has the update-images button', shown ? (imageButtons === shown ? 'PASS' : 'FAIL') : 'SKIP', `${imageButtons} buttons, ${shown} rows`);
+        rec(U, 'subscriptions: every table row has the update-images button', shownVideo ? (imageButtons === shownVideo ? 'PASS' : 'FAIL') : 'SKIP', `${imageButtons} buttons, ${shownVideo} video rows (radio has none)`);
         // Per-source counts are just a logo and a number, in the table as on the cards: no source names beside the logos.
         const withSources = onPage.filter((s) => s.onDiskSources && s.onDiskSources.length);
         const rowChips = await page.locator('.subscriptionRow .sourceCounts').count();
@@ -1065,7 +1066,7 @@ async function subscriptionsCards(browser, page, U) {
         const cardNames = await page.locator('.subCard .sourceCounts .sourceName').count();
         rec(U, 'subscriptions: cards show the same logo and count per source, with no names', withSources.length ? (cardChips === withSources.length && cardNames === 0 ? 'PASS' : 'FAIL') : 'SKIP', `${cardChips} chip sets for ${withSources.length} shows, ${cardNames} names`);
         const cardImages = await page.locator('.subCard button:has(svg[data-icon="images"])').count();
-        rec(U, 'subscriptions: every card has the update-images button', shown ? (cardImages === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardImages} buttons, ${shown} cards`);
+        rec(U, 'subscriptions: every card has the update-images button', shownVideo ? (cardImages === shownVideo ? 'PASS' : 'FAIL') : 'SKIP', `${cardImages} buttons, ${shownVideo} video cards (radio has none)`);
         const cardToggles = await page.locator('.subCard button:has(svg[data-icon="box-archive"])').count();
         rec(U, 'subscriptions: every card, Sonarr/Radarr-only ones too, has the download-before-it-leaves toggle', shown ? (cardToggles === shown ? 'PASS' : 'FAIL') : 'SKIP', `${cardToggles} toggles, ${shown} cards`);
         const first = cards.first();

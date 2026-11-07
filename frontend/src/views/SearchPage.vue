@@ -642,12 +642,9 @@ restoreLastSearch();
 
 // The page is kept alive while you visit other pages (see App.vue), so coming back shows the same results, filters,
 // page and selection instead of searching again; it only has to reopen the last search when the URL has no term.
-let firstActivation = true;
+// This page is loaded asynchronously inside the modeRoute wrapper, so this hook is registered after the wrapper's own first
+// activation and is only called when you come back. Running on every call is harmless: it does nothing when the URL has a term.
 onActivated(() => {
-    if (firstActivation) {
-        firstActivation = false;
-        return;
-    }
     restoreLastSearch();
 });
 

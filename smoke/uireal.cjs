@@ -484,6 +484,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         // Radio Channels page: each station is a wide logo on a field of its own colour, like a TV channel tile, not a cropped square.
         await flow('radio Channels tiles show every logo whole on a colour field', async (page) => {
             if (String(ctx.cfg?.LIVE_RADIO) !== 'true') { rec(U, 'radio channel tiles', 'SKIP', 'Live Radio is off'); return; }
+            // The Channels page lists TV channels in video mode; this flow checks the radio stations, so it opens in radio mode.
+            await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
             await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
             const logos = page.locator('.tile .channelLogo');
             await logos.first().waitFor({ timeout: 25000 });
@@ -550,7 +552,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the Logs page draws the Connection, Lines held, Errors and Last error tiles, each with an (i) tip', ['connection', 'lines held', 'errors', 'last error'].every((l) => labels.includes(l)) && (await page.locator('.logTiles .InfoTip-button').count()) === 4, labels.join(', '));
             ok('the Logs connection tile says Live', /Live/.test(await page.locator('.logTiles .tile').first().innerText()));
             await page.locator('.logTiles .InfoTip-button').nth(1).click().catch(() => {});
-            ok('the Lines held (i) tip explains the 250 and 5000 lines', /250/.test(await page.locator('.logTiles .InfoTip-popup').first().innerText().catch(() => '')) && /5000/.test(await page.locator('.logTiles .InfoTip-popup').first().innerText().catch(() => '')));
+            ok('the Lines held (i) tip explains the 250 and 5000 lines', /250/.test(await page.locator('.logTiles .InfoTip-popup').nth(1).innerText().catch(() => '')) && /5000/.test(await page.locator('.logTiles .InfoTip-popup').nth(1).innerText().catch(() => '')));
             await page.locator('.hint').click().catch(() => {});
             ok('the Logs page has a search box, a source dropdown with All sources and System, and the three level chips',
                 (await page.locator('input[aria-label="Search the log"]').count()) === 1

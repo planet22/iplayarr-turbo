@@ -123,6 +123,8 @@ const OTHER = {
 // Changeable settings whose effect the API (or the library on disk) cannot show without a side effect this
 // suite will not cause. They are still changed, read back and restored. "DEAD" marks a setting nothing reads.
 const NO_EFFECT = {
+    LIVE_RADIO: 'turns the live radio channels on or off; the radio checks in the other layers need them on (prepare.cjs does this), so no flip here',
+    SOUNDS_ENABLED: 'turns the whole Radio feature on or off; every radio check in the other layers needs it on, so no flip here',
     RADIO_MEDIA_MODE: 'chooses what the next radio download saves (an audio file or a .strm link); a download writes into the Radio Directory, which this suite will not do (the radio download service tests cover both)',
     RADIO_THUMBNAIL_STYLE: 'browser-only: the page reads it into data-radio-art on <html>; the radio programme page checks in uireal use the default',
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
@@ -917,7 +919,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
                 ok('LIBRARY_FOLDER_STRUCTURE=false takes effect: the .strm is a flat file', segs(b.h?.libraryPath) === 1, b.h?.libraryPath);
                 ok('WRITE_NFO_STRM=none takes effect: no .nfo is written', !b.added.some((f) => f.endsWith('.nfo')), b.added.map((f) => path.basename(f)).join(', '));
                 ok('WRITE_STRMTOOL_JSON=false takes effect: no strmtool .json is written', !b.added.some((f) => f.endsWith('.json')), b.added.map((f) => path.basename(f)).join(', '));
-                ok('STREAM_BASE_URL change takes effect: the new .strm points at the new base', b.content.startsWith(stateB.STREAM_BASE_URL), b.content.replace(/streamkey=[^&]+/, 'streamkey=***'));
+                ok('STREAM_BASE_URL change takes effect: the new .strm points at the new base', b.content.startsWith(stateB.STREAM_BASE_URL), (b.content ? b.content.replace(/streamkey=[^&]+/, 'streamkey=***') : `no .strm found: libraryPath=${b.h?.libraryPath} added=${b.added.map((f) => path.basename(f)).join(', ')}`));
             }
             dropNew(b.added || []);
             await cleanHist(ep.pid);
