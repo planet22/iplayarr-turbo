@@ -633,6 +633,15 @@ watch(
             void provider.value.subscribe?.load();
             const first = await provider.value.loadProgramme(pid);
             if (currentId() !== pid) return;
+            // iPlayer knows some BBC Sounds shows as empty brands (a radio channel, no episodes): the page for them is the radio one.
+            if (route.meta.radio !== true && !first.seasons?.some((season) => season.episodes?.length)) {
+                const sounds = await providers.radio.loadProgramme(pid).catch(() => null);
+                if (currentId() !== pid) return;
+                if (sounds?.seasons?.some((season) => season.episodes?.length)) {
+                    await router.replace({ path: `/browse/radio/${encodeURIComponent(pid)}`, query: route.query });
+                    return;
+                }
+            }
             programme.value = first;
             pageTitle.value = first.title ?? '';
             // Land on the newest numbered series rather than Specials (series 0), which sorts first.
