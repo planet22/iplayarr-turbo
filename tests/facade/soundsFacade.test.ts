@@ -187,7 +187,6 @@ describe('soundsFacade core', () => {
         fl.follow.mockResolvedValue({ showId: 'b1' });
         fl.unfollow.mockResolvedValue(true);
         fl.checkAll.mockResolvedValue(2);
-        expect(await soundsFacade.follows()).toEqual([]);
         expect(await soundsFacade.follow('b1', 'Show', 'img')).toEqual({ showId: 'b1' });
         expect(fl.follow).toHaveBeenCalledWith('b1', 'Show', 'img', undefined);
         expect(await soundsFacade.unfollow('b1')).toBe(true);

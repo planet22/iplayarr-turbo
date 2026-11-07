@@ -139,24 +139,46 @@ async function radioLogoChecks(A, cfg) {
     }, { warnOnly: true, timeout: 30000 });
 }
 
-// Radio (BBC Sounds) browse and debug, read-only. With SOUNDS_ENABLED off the whole route must answer 404; with it on, each
-// browse call must give the shape the Radio pages draw (the same grids as video).
+// Radio (BBC Sounds) browse and debug, read-only. Radio is served by the same APIs as video, chosen with ?mode=radio (browse, search,
+// subscriptions, queue, library); the older /json-api/sounds/* paths still answer and are checked too. With SOUNDS_ENABLED off
+// every radio path must answer 404; with it on, each call must give the shape the Radio pages draw (the same grids as video).
 async function radioChecks(A, cfg) {
-    const R = '/json-api/sounds';
+    const R = '/json-api/sounds'; // the older paths (kept as aliases)
+    const B = '/json-api/browse';
+    const M = 'mode=radio';
     if (cfg.SOUNDS_ENABLED !== 'true') {
         await check(A, 'radio browse is 404 while BBC Sounds Radio is off', `${R}/browse/categories`, (r) => r.status === 404 || `HTTP ${r.status}`);
         await check(A, 'radio show lookup is 404 while BBC Sounds Radio is off', `${R}/shows/b006qpgr`, (r) => r.status === 404 || `HTTP ${r.status}`);
+        for (const [name, path] of [
+            ['browse', `${B}/categories?${M}`], ['programme', `${B}/programme/b006qpgr?${M}`], ['suggestions', `${B}/suggest?q=archers&${M}`],
+            ['search stream', `/json-api/search/stream?q=archers&${M}`], ['subscriptions', `/json-api/subscriptions?${M}`],
+            ['queue', `/json-api/queue/queue?${M}`], ['history', `/json-api/queue/history?${M}`],
+        ]) await check(A, `radio ${name} (mode=radio) is 404 while BBC Sounds Radio is off`, path, (r) => r.status === 404 || `HTTP ${r.status}`);
         return;
     }
     const upstream = { warnOnly: true, timeout: 60000 }; // BBC's own API: a slow answer is a warning, a wrong shape is not
     await check(A, 'radio browse capabilities (no A to Z)', `${R}/browse/capabilities`, (r) => (r.json?.categories === true && r.json?.collections === true && r.json?.atoz === false) || 'unexpected capabilities');
-    const cats = await check(A, 'radio browse categories are video-shaped tiles with a picture', `${R}/browse/categories`, (r) => (Array.isArray(r.json) && r.json.length > 5 && r.json.every((c) => c.id && c.title) && r.json.some((c) => (c.thumbnail || '').startsWith('https://ichef.bbci.co.uk/'))) || 'expected category tiles with ichef pictures', upstream);
+    const cats = await check(A, 'radio browse categories are video-shaped tiles with a picture', `${B}/categories?${M}`, (r) => (Array.isArray(r.json) && r.json.length > 5 && r.json.every((c) => c.id && c.title) && r.json.some((c) => (c.thumbnail || '').startsWith('https://ichef.bbci.co.uk/'))) || 'expected category tiles with ichef pictures', upstream);
+    await check(A, 'radio browse categories answer the same on the older path', `${R}/browse/categories`, (r) => (Array.isArray(r.json) && r.json.length === (cats.json || []).length) || 'the older path disagrees', upstream);
     const cat = (cats.json || []).find((c) => c.id === 'comedy') || (cats.json || [])[0];
     if (cat) {
-        const page = await check(A, 'radio category is a video-shaped page of radio cards', `${R}/browse/category/${cat.id}?page=1&perPage=150`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.pid && e.title && e.radio === true && e.kind === 'episode') && r.json.total >= r.json.items.length && r.json.total <= 300) || 'expected radio cards, total at most 300', upstream);
+        const page = await check(A, 'radio category is a video-shaped page of radio cards', `${B}/category/${cat.id}?page=1&perPage=150&${M}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.pid && e.title && e.radio === true && e.kind === 'episode') && r.json.total >= r.json.items.length && r.json.total <= 300) || 'expected radio cards, total at most 300', upstream);
         const card = page.json?.items?.[0];
         const ep = card && { id: card.pid, showId: card.showId };
-        if (ep?.showId) await check(A, 'radio show details by id', `${R}/shows/${ep.showId}`, (r) => (r.status === 200 && r.json?.id === ep.showId && !!r.json?.title) || 'no show', { warnOnly: true });
+        if (ep?.showId) {
+            await check(A, 'radio show details by id (older path)', `${R}/shows/${ep.showId}`, (r) => (r.status === 200 && r.json?.id === ep.showId && !!r.json?.title) || 'no show', { warnOnly: true });
+            const prog = await check(A, 'radio programme is a video-shaped programme with seasons of radio episodes', `${B}/programme/${ep.showId}?${M}`, (r) => {
+                const p = r.json;
+                if (!p || p.pid !== ep.showId || p.kind !== 'brand' || p.radio !== true || !p.title) return 'not a radio programme';
+                if (!Array.isArray(p.seasons) || !p.seasons.length) return 'no seasons';
+                const eps = p.seasons.flatMap((x) => x.episodes || []);
+                if (!eps.length || !eps.every((e) => e.pid && e.radio === true && e.kind === 'episode' && e.title)) return 'episodes are not radio episodes';
+                return (typeof p.hasMore === 'boolean' && p.page === 1) || 'missing hasMore or page';
+            }, upstream);
+            if (prog.json?.hasMore) await check(A, 'radio programme gives the next page of episodes', `${B}/programme/${ep.showId}?page=2&${M}`, (r) => (r.json?.page === 2 && Array.isArray(r.json?.seasons)) || 'no page 2', upstream);
+            await check(A, 'radio programme on-disk is { ids, dates }', `${B}/programme/${ep.showId}/on-disk?${M}`, (r) => (Array.isArray(r.json?.ids) && Array.isArray(r.json?.dates)) || 'expected { ids, dates }', upstream);
+            await check(A, 'radio on-disk on the older path is the same shape', `${R}/on-disk/${ep.showId}`, (r) => (Array.isArray(r.json?.ids) && Array.isArray(r.json?.dates)) || 'expected { ids, dates }', upstream);
+        }
         if (ep) {
             const probe = await check(A, 'radio streaming debug reads audio (not video) for an episode', `/json-api/streams/debug/${ep.id}/probe?kind=radio`, (r) => {
                 const v = r.json?.versions?.[0];
@@ -166,17 +188,61 @@ async function radioChecks(A, cfg) {
             if (probe.json) await check(A, 'radio streaming debug programme describes the episode', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.found === true && r.json?.type === 'radio episode' && r.json?.versions?.[0]?.types?.[0]?.startsWith('Audio')) || 'not described as a radio episode');
         }
     }
-    const cols = await check(A, 'radio collections are video-shaped with counts', `${R}/browse/collections`, (r) => (r.json?.enabled === true && Array.isArray(r.json.collections) && r.json.collections.every((c) => c.id && c.title && typeof c.count === 'number')) || 'expected { enabled, collections: [{ id, title, count }] }', upstream);
+    const cols = await check(A, 'radio collections are video-shaped with counts', `${B}/collections?${M}`, (r) => (r.json?.enabled === true && Array.isArray(r.json.collections) && r.json.collections.every((c) => c.id && c.title && typeof c.count === 'number')) || 'expected { enabled, collections: [{ id, title, count }] }', upstream);
     const col = (cols.json?.collections || [])[0];
-    if (col) await check(A, 'radio collection is a video-shaped page of radio cards', `${R}/browse/collections/${col.id}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.radio === true)) || 'expected radio cards', upstream);
-    await check(A, 'radio home rails are video-shaped and hold radio cards', `${R}/browse/home`, (r) => (Array.isArray(r.json) && r.json.length > 0 && r.json.every((x) => x.id && x.title && x.items.length && x.items.every((i) => i.radio === true && i.pid))) || 'expected rails of radio cards', upstream);
-    await check(A, 'radio A to Z is an empty page (BBC Sounds has none)', `${R}/browse/atoz/a`, (r) => (r.json?.total === 0 && Array.isArray(r.json?.items) && r.json.items.length === 0) || 'expected an empty page');
-    await check(A, 'radio category rails are empty', `${R}/browse/category/comedy/rails`, (r) => (Array.isArray(r.json) && r.json.length === 0) || 'expected []');
-    await check(A, 'radio search finds shows and episodes', `${R}/search?q=archers`, (r) => (Array.isArray(r.json?.shows) && Array.isArray(r.json?.episodes)) || 'expected { shows, episodes }', upstream);
-    await check(A, 'radio browse refuses an odd category id', `${R}/browse/category/a%20b`, (r) => r.status === 400 || `HTTP ${r.status}`);
-    await check(A, 'radio browse refuses an odd collection id', `${R}/browse/collections/a-b`, (r) => r.status === 400 || `HTTP ${r.status}`);
-    await check(A, 'radio show lookup refuses an odd id', `${R}/shows/a-b`, (r) => r.status === 400 || `HTTP ${r.status}`);
-    await check(A, 'radio downloads list is an array', `${R}/downloads`, isArr);
+    if (col) await check(A, 'radio collection is a video-shaped page of radio cards', `${B}/collections/${col.id}?${M}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.radio === true)) || 'expected radio cards', upstream);
+    await check(A, 'radio home rails are video-shaped and hold radio cards', `${B}/home?${M}`, (r) => (Array.isArray(r.json) && r.json.length > 0 && r.json.every((x) => x.id && x.title && x.items.length && x.items.every((i) => i.radio === true && i.pid))) || 'expected rails of radio cards', upstream);
+    await check(A, 'radio A to Z is an empty page (BBC Sounds has none)', `${B}/atoz/a?${M}`, (r) => (r.json?.total === 0 && Array.isArray(r.json?.items) && r.json.items.length === 0) || 'expected an empty page');
+    await check(A, 'radio category rails are empty', `${B}/category/comedy/rails?${M}`, (r) => (Array.isArray(r.json) && r.json.length === 0) || 'expected []');
+    await check(A, 'radio browse paths radio does not serve carry on to the video ones', `${B}/channels?${M}`, (r) => (r.status === 200 && (Array.isArray(r.json) || Array.isArray(r.json?.data))) || `HTTP ${r.status}`);
+    await check(A, 'video browse is unchanged by the radio mode existing (no radio cards)', `${B}/home`, (r) => (r.status === 200 && !JSON.stringify(r.json || '').includes('"radio":true')) || 'a radio card in the video home', upstream);
+    const sug = await check(A, 'radio suggestions are type-ahead rows of kind radio', `${B}/suggest?q=archers&${M}`, (r) => (Array.isArray(r.json) && r.json.length > 0 && r.json.length <= 8 && r.json.every((x) => x.kind === 'radio' && x.pid && x.title)) || 'expected radio suggestion rows', upstream);
+    if (sug.json?.some((x) => x.episodeOf)) rec(A, 'a radio episode suggestion names the show it opens on', sug.json.filter((x) => x.episodeOf).every((x) => /^[a-z0-9]+$/i.test(x.episodeOf)) ? 'PASS' : 'FAIL', JSON.stringify(sug.json.find((x) => x.episodeOf)));
+    await check(A, 'radio search stream sends shows and episodes as lines, then done', `/json-api/search/stream?q=archers&${M}`, (r) => {
+        const lines = r.text.trim().split('\n').map((l) => JSON.parse(l));
+        const last = lines[lines.length - 1];
+        if (r.status !== 200 || !/ndjson/.test(r.ct)) return 'not an NDJSON stream';
+        if (last.error) return `search failed: ${last.error}`;
+        const results = lines.filter(Array.isArray).flat();
+        return (last.done === true && results.length > 0 && results.every((x) => x.radio === true && x.pid && x.title && x.type === 'RADIO')) || 'expected radio results then {done:true}';
+    }, upstream);
+    await check(A, 'radio search stream refuses an empty term', `/json-api/search/stream?q=%20&${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio search finds shows and episodes (older path)', `${R}/search?q=archers`, (r) => (Array.isArray(r.json?.shows) && Array.isArray(r.json?.episodes)) || 'expected { shows, episodes }', upstream);
+    await check(A, 'radio browse refuses an odd category id', `${B}/category/a%20b?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio browse refuses an odd collection id', `${B}/collections/a-b?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio programme refuses an odd id', `${B}/programme/a-b?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio programme on-disk refuses an odd id', `${B}/programme/a-b/on-disk?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio show lookup refuses an odd id (older path)', `${R}/shows/a-b`, (r) => r.status === 400 || `HTTP ${r.status}`);
+
+    // Subscriptions (followed shows) through the one subscriptions API
+    const subs = await check(A, 'radio subscriptions are subscription-shaped rows', `/json-api/subscriptions?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.radio === true && /^radio-[a-z0-9]+$/i.test(x.id) && x.showId && x.pid === x.showId && x.title && x.createdAt && Array.isArray(x.seen))) || 'expected rows with id radio-<showId>, showId, pid, title, createdAt and seen', upstream);
+    await check(A, 'the video subscriptions list holds no radio rows', '/json-api/subscriptions', (r) => (Array.isArray(r.json) && !r.json.some((x) => x.radio || String(x.id).startsWith('radio-'))) || 'a radio row in the video list');
+    await check(A, 'radio subscriptions on the older path list the same shows', `${R}/follows`, (r) => (Array.isArray(r.json) && r.json.length === (subs.json || []).length) || 'the older path disagrees', upstream);
+    await check(A, 'an unknown subscriptions mode is refused', '/json-api/subscriptions?mode=podcast', (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio subscription check of an unknown show is 404', `/json-api/subscriptions/radio-b0000000/check?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
+    await check(A, 'radio subscription missing list of an unknown show is 404', `/json-api/subscriptions/b0000000/missing?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
+    await check(A, 'radio subscription refuses an odd id', `/json-api/subscriptions/b-0/missing?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    await check(A, 'radio subscription pictures and versions are video-only (400)', `/json-api/subscriptions/radio-b0000000/images?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio subscription versions are video-only (400)', `/json-api/subscriptions/radio-b0000000/versions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'PUT', body: { versions: [] } });
+    await check(A, 'radio subscribe validates its pid and title', `/json-api/subscriptions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { pid: '!!' } });
+    await check(A, 'radio subscribe needs a title', `/json-api/subscriptions?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { pid: 'b006qpgr' } });
+    await check(A, 'radio secure refuses a value that is not a number or null', `/json-api/subscriptions/radio-b0000000/secure?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'PUT', body: { days: 'soon' } });
+
+    // Downloads: the Queue page reads them from the one queue API
+    await check(A, 'radio queue is a list of queue rows', `/json-api/queue/queue?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.kind === 'radio' && x.pid && /^(Queued|Downloading)$/.test(x.status) && x.type === 'Radio' && x.details)) || 'expected radio queue rows');
+    await check(A, 'radio history is a list of queue rows', `/json-api/queue/history?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.kind === 'radio' && x.pid && /^(Complete|Failed)$/.test(x.status) && x.type === 'Radio' && x.details)) || 'expected radio history rows');
+    await check(A, 'the video queue and history hold no radio rows', '/json-api/queue/queue', (r) => (Array.isArray(r.json) && !r.json.some((x) => x.kind === 'radio')) || 'a radio row in the video queue');
+    await check(A, 'radio queue cancel needs a pid', `/json-api/queue/queue?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'DELETE' });
+    await check(A, 'radio queue cancel of an unknown download is 404', `/json-api/queue/queue?${M}&pid=b0000000`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'DELETE' });
+    await check(A, 'radio history removal of an unknown download is 404', `/json-api/queue/history?${M}&pid=b0000000`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'DELETE' });
+    await check(A, 'radio retry needs a pid', `/json-api/queue/history/retry?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio retry of an unknown download is 404', `/json-api/queue/history/retry?${M}&pid=b0000000`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'POST' });
+    await check(A, 'radio downloads list is an array (older path)', `${R}/downloads`, isArr);
+
+    // Library index: the debug page filters by library
+    await check(A, 'library debug with mode=radio holds only radio rows', `/json-api/library/debug?${M}&pageSize=50`, (r) => (Array.isArray(r.json?.rows) && r.json.rows.every((x) => x.radio === true)) || 'a video row among the radio rows');
+    await check(A, 'library debug with mode=video holds no radio rows', '/json-api/library/debug?mode=video&pageSize=50', (r) => (Array.isArray(r.json?.rows) && r.json.rows.every((x) => !x.radio)) || 'a radio row among the video rows');
+    await check(A, 'library debug still takes the older radio=true flag', '/json-api/library/debug?radio=true&pageSize=50', (r) => (Array.isArray(r.json?.rows) && r.json.rows.every((x) => x.radio === true)) || 'a video row among the radio rows');
 }
 
 async function apiLayer(ctx) {
@@ -341,6 +407,8 @@ async function apiLayer(ctx) {
     }
     const lim = parseInt(cfg.ACTIVE_LIMIT, 10);
     rec(A, 'stored ACTIVE_LIMIT within 1-10', lim >= 1 && lim <= 10 ? 'PASS' : 'FAIL', String(cfg.ACTIVE_LIMIT));
+    const radioLim = parseInt(cfg.RADIO_ACTIVE_LIMIT, 10);
+    rec(A, 'stored RADIO_ACTIVE_LIMIT within 1-10', radioLim >= 1 && radioLim <= 10 ? 'PASS' : 'FAIL', String(cfg.RADIO_ACTIVE_LIMIT));
     await check(A, 'browse bad pid rejected', '/json-api/browse/programme/!!bad', (r) => r.status === 400 || `HTTP ${r.status}`);
 
     // Native stream (HLS master from BBC; upstream-dependent so WARN not FAIL)

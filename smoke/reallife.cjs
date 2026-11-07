@@ -143,6 +143,55 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             if (withDays.json?.id) later('unsubscribe show again', () => http('/json-api/subscriptions/' + withDays.json.id, { method: 'DELETE' }));
         });
 
+        // 5b. Radio subscription (a followed BBC Sounds show) through the one subscriptions API: subscribe -> list -> check -> missing ->
+        // secure -> unsubscribe. Subscribes with "only new episodes", so nothing is downloaded.
+        await step('radio subscriptions', async () => {
+            if (cfg.SOUNDS_ENABLED !== 'true') return rec(W, 'radio subscription lifecycle', 'SKIP', 'BBC Sounds Radio is off');
+            const M = 'mode=radio';
+            const suggested = (await http(`/json-api/browse/suggest?q=archers&${M}`, { timeout: 60000 })).json || [];
+            const pid = (suggested.find((x) => x.kind === 'radio' && !x.episodeOf) || {}).pid || 'b006qpgr';
+            const id = `radio-${pid}`;
+            await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
+            later('unfollow radio show', () => http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' }));
+            const sub = await http(`/json-api/subscriptions?${M}`, { method: 'POST', body: { pid, title: 'SMOKE-TEMP radio show' }, timeout: 60000 });
+            if (sub.status !== 200) return warn('radio subscribe', false, `HTTP ${sub.status} ${sub.text.slice(0, 160)} (BBC Sounds may not be answering)`);
+            ok('radio subscribe answers the subscription row', sub.json?.id === id && sub.json?.radio === true && sub.json?.pid === pid && Array.isArray(sub.json?.seen) && sub.json.seen.length > 0, sub.text.slice(0, 200));
+            ok('radio subscribe with "only new" queued nothing', !((await http(`/json-api/queue/queue?${M}`)).json || []).some((x) => x.showId === pid), 'a download was queued');
+            ok('radio subscription listed', ((await http(`/json-api/subscriptions?${M}`)).json || []).some((x) => x.id === id));
+            ok('radio subscription is not in the video list', !((await http('/json-api/subscriptions')).json || []).some((x) => x.id === id));
+            const dupe = await http(`/json-api/subscriptions?${M}`, { method: 'POST', body: { pid, title: 'SMOKE-TEMP radio show' } });
+            ok('re-subscribing a radio show is idempotent', dupe.status === 200 && dupe.json?.id === id, `HTTP ${dupe.status}`);
+            const chk = await http(`/json-api/subscriptions/${id}/check?${M}`, { method: 'POST', timeout: 120000 });
+            ok('radio subscription check answers a check result', chk.status === 200 && chk.json?.id === id && Array.isArray(chk.json?.queued), `HTTP ${chk.status} ${chk.text.slice(0, 160)}`);
+            const bare = await http(`/json-api/subscriptions/${pid}/check?${M}`, { method: 'POST', timeout: 120000 });
+            ok('radio subscription check takes the id without the radio- prefix', bare.status === 200 && bare.json?.id === id, `HTTP ${bare.status}`);
+            const all = await http(`/json-api/subscriptions/check?${M}`, { method: 'POST', timeout: 180000 });
+            ok('radio check of every subscription answers a list of results', all.status === 200 && Array.isArray(all.json), `HTTP ${all.status}`);
+            const again = ((await http(`/json-api/subscriptions?${M}`)).json || []).find((x) => x.id === id);
+            ok('a radio check records when it ran, and no error', !!again?.lastChecked && !again?.lastError, JSON.stringify(again));
+            const miss = await http(`/json-api/subscriptions/${id}/missing?${M}`, { timeout: 120000 });
+            warn('radio missing list is { total, onDisk, missing } with video-shaped entries', miss.status === 200 && typeof miss.json?.total === 'number' && typeof miss.json?.onDisk === 'number' && Array.isArray(miss.json?.missing) && miss.json.missing.every((x) => x.pid && x.title), `HTTP ${miss.status} ${miss.text.slice(0, 160)}`);
+            const sec = await http(`/json-api/subscriptions/${id}/secure?${M}`, { method: 'PUT', body: { days: 7 } });
+            ok('radio secure-before-expiry on (7 days)', sec.status === 200 && sec.json?.secureDays === 7, `HTTP ${sec.status} ${sec.text.slice(0, 120)}`);
+            for (const days of [0, 61, 2.5, 'soon']) {
+                const bad = await http(`/json-api/subscriptions/${id}/secure?${M}`, { method: 'PUT', body: { days } });
+                ok(`radio secure days ${JSON.stringify(days)} rejected`, bad.status === 400, `HTTP ${bad.status}`);
+            }
+            const secChk = await http(`/json-api/subscriptions/${id}/check?${M}`, { method: 'POST', timeout: 120000 });
+            ok('radio check with securing on still answers', secChk.status === 200, `HTTP ${secChk.status}`);
+            const off = await http(`/json-api/subscriptions/${id}/secure?${M}`, { method: 'PUT', body: { days: null } });
+            ok('radio secure-before-expiry off', off.status === 200 && off.json?.secureDays === undefined, `HTTP ${off.status} ${off.text.slice(0, 120)}`);
+            const un = await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
+            ok('radio unsubscribe', un.status === 200 && un.json?.status === true, `HTTP ${un.status}`);
+            const un2 = await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
+            ok('radio unsubscribe twice gives 404', un2.status === 404, `HTTP ${un2.status}`);
+            ok('the radio subscription is gone from the list', !((await http(`/json-api/subscriptions?${M}`)).json || []).some((x) => x.id === id));
+            // The older paths and the new API share one list
+            const viaOld = await http('/json-api/sounds/follows', { method: 'POST', body: { showId: pid, title: 'SMOKE-TEMP radio show' }, timeout: 60000 });
+            ok('the older follows path adds to the same list', viaOld.status === 200 && ((await http(`/json-api/subscriptions?${M}`)).json || []).some((x) => x.id === id), `HTTP ${viaOld.status}`);
+            await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
+        });
+
         // 6. Live channel subscription (.strm in the library) + enable/disable
         await step('live subscriptions', async () => {
             const ch = 'bbc_four';

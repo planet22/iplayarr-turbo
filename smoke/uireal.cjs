@@ -501,19 +501,18 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await shot(page, 'radio-channels');
         });
 
-        // The Queue lists radio downloads beside video ones. The downloads list is stubbed so nothing is downloaded or written.
-        await flow('radio downloads show in the Queue with kB/s and cancel through the radio API', async (page) => {
+        // The Queue lists radio downloads beside video ones, read from the one queue API with ?mode=radio. The radio lists are stubbed (as
+        // the server sends them: queue rows) so nothing is downloaded or written.
+        await flow('radio downloads show in the Queue with kB/s, cancel and try again through the queue API', async (page) => {
             if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio queue rows', 'SKIP', 'BBC Sounds Radio is off'); return; }
-            const episode = { id: 'p0smoke01', title: 'SMOKE-TEMP Show', showTitle: 'SMOKE-TEMP Show', subtitle: 'Ep 1', showId: 'b0smoke01', mp3: false };
-            const downloads = [
-                { id: 'p0smoke01', episode, state: 'downloading', progress: 40, bytes: 2097152, totalBytes: 5242880, speedKbs: 256, etaSeconds: 70, createdAt: new Date().toISOString(), startedAt: new Date().toISOString() },
-                { id: 'p0smoke02', episode: { ...episode, id: 'p0smoke02', subtitle: 'Ep 2' }, state: 'failed', error: 'ffmpeg failed', createdAt: new Date().toISOString() },
-            ];
-            const deleted = [];
-            await page.route('**/json-api/sounds/downloads**', (route) => {
+            const now = new Date().toISOString();
+            const running = { kind: 'radio', pid: 'p0smoke01', state: 'downloading', showId: 'b0smoke01', status: 'Downloading', nzbName: 'SMOKE-TEMP Show - Ep 1', type: 'Radio', client: 'RADIO', details: { progress: 40, size: 5, speed: 0.25, eta: '00:01:10', start: now } };
+            const failed = { kind: 'radio', pid: 'p0smoke02', state: 'failed', showId: 'b0smoke01', status: 'Failed', nzbName: 'SMOKE-TEMP Show - Ep 2', type: 'Radio', client: 'RADIO', failMessage: 'ffmpeg failed', details: { progress: 100, start: now, part: 'ffmpeg failed' } };
+            const calls = [];
+            await page.route(/\/json-api\/queue\/(queue|history)(\/retry)?\?.*mode=radio/, (route) => {
                 const req = route.request();
-                if (req.method() === 'DELETE') { deleted.push(req.url()); return route.fulfill({ json: { ok: true } }); }
-                return route.fulfill({ json: downloads });
+                if (req.method() !== 'GET') { calls.push(`${req.method()} ${req.url()}`); return route.fulfill({ json: [] }); }
+                return route.fulfill({ json: /\/queue\/queue\?/.test(req.url()) ? [running] : [failed] });
             });
             await page.goto(BASE + '/queue', { waitUntil: 'networkidle' });
             const row = page.locator('tbody tr', { hasText: 'SMOKE-TEMP Show - Ep 1' }).first();
@@ -523,8 +522,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the radio row is marked Radio', /Radio/.test(text), text);
             ok('the radio row shows its speed in kB/s', /256 kB\/s/.test(text), text);
             ok('the radio row shows its size and ETA', /5\.00 MB/.test(text) && /00:01:10/.test(text), text);
-            ok('the failed radio download is listed in history, not the queue', (await page.locator('tbody tr', { hasText: 'Ep 2' }).count()) <= 1);
+            const failedRow = page.locator('tbody tr', { hasText: 'SMOKE-TEMP Show - Ep 2' }).first();
+            await failedRow.waitFor({ timeout: 15000 });
+            ok('the failed radio download is listed in history, not the queue', (await page.locator('tbody tr', { hasText: 'Ep 2' }).count()) === 1);
+            ok('a failed radio download has a Try again button, and a running one does not', (await failedRow.locator('svg[data-icon="rotate-right"]').count()) === 1 && (await row.locator('svg[data-icon="rotate-right"]').count()) === 0);
             await shot(page, 'radio-queue');
+            await failedRow.locator('svg[data-icon="rotate-right"]').first().click();
+            await page.waitForTimeout(1000);
+            ok('Try again calls the queue API for that download', calls.some((c) => /^POST .*\/json-api\/queue\/history\/retry\?mode=radio&pid=p0smoke02$/.test(c)), JSON.stringify(calls));
             const menu = row.locator('.actionMenu');
             if (await menu.count()) { await menu.locator('svg').first().click(); await row.locator('.menuPanel button', { hasText: /Cancel download/ }).click(); }
             else await row.locator('.actionCol svg.clickable').last().click();
@@ -533,7 +538,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await confirmBtn.waitFor({ timeout: 8000 });
             await confirmBtn.click();
             await page.waitForTimeout(1000);
-            ok('cancelling a radio row calls the radio API, not the video queue', deleted.some((u) => /\/json-api\/sounds\/downloads\/p0smoke01$/.test(u)), JSON.stringify(deleted));
+            ok('cancelling a radio row calls the queue API for radio, not the video queue', calls.some((c) => /^DELETE .*\/json-api\/queue\/queue\?mode=radio&pid=p0smoke01$/.test(c)) && !calls.some((c) => /queue\/queue\?pid=/.test(c)), JSON.stringify(calls));
         });
 
         await flow('logs page', async (page) => {

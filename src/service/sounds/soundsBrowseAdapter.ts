@@ -83,7 +83,7 @@ const pageOf = (episodes: SoundsEpisode[], page: number, perPage: number, total:
 // ---- A show as a programme, search hits and suggestions --------------------------------------------------------------
 
 // The newest this many episodes are listed, as in the radio browse listings.
-export const MAX_EPISODES = 300;
+const MAX_EPISODES = 300;
 
 // One Sounds episode as a programme-page episode (the shape the video programme page draws).
 export function programmeEpisode(e: SoundsEpisode) {

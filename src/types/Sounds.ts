@@ -72,12 +72,6 @@ export interface SoundsRail {
     episodes: SoundsEpisode[];
 }
 
-export interface SoundsBrowseCapabilities {
-    categories: boolean;
-    collections: boolean;
-    atoz: boolean;
-}
-
 export type SoundsDownloadState = 'queued' | 'downloading' | 'done' | 'failed';
 
 export interface SoundsDownload {

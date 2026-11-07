@@ -104,10 +104,6 @@ class SoundsFacade {
         return !!(await soundsDownloadService.retry(id));
     }
 
-    follows(): Promise<SoundsFollow[]> {
-        return soundsFollowService.list();
-    }
-
     // The follows with what the Subscriptions page draws beside them: the show's network and synopsis, and how many of its
     // episodes iPlayarr's folder and each Jellyfin server hold. Anything that cannot be had right now is left off.
     async followsDetailed(): Promise<DetailedFollow[]> {
