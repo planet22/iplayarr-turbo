@@ -210,7 +210,7 @@
                                 </button>
                             </div>
                             <QualityBadges :item="episode" class="thumbBadges" />
-                            <span v-if="onDisk.has(episode.pid)" class="onDiskBadge" title="On disk" role="img" aria-label="On disk">
+                            <span v-if="isOnDisk(episode)" class="onDiskBadge" title="On disk" role="img" aria-label="On disk">
                                 <font-awesome-icon :icon="['fas', 'hard-drive']" />
                             </span>
                         </div>
@@ -295,8 +295,19 @@ const selected = ref(0);
 const downloadingSeason = ref(false);
 // The episodes of this show that are in the library folders, for the icon in the picture's top left corner.
 const onDisk = ref(new Set());
+// Radio only: the days of files that carry no episode id (their date stands for the episode of that day).
+const onDiskDays = ref(new Set());
+const isOnDisk = (episode) => onDisk.value.has(episode.pid) || (radio.value && !!episode.firstBroadcast && onDiskDays.value.has(String(episode.firstBroadcast).slice(0, 10)));
 const loadOnDisk = async (pid) => {
     try {
+        if (radio.value) {
+            const { ok, data } = await ipFetch(`json-api/sounds/on-disk/${encodeURIComponent(pid)}`);
+            if (ok && currentId() === pid) {
+                onDisk.value = new Set(data.ids);
+                onDiskDays.value = new Set(data.dates);
+            }
+            return;
+        }
         const pids = await browseFetch(`programme/${encodeURIComponent(pid)}/on-disk`);
         if (currentId() === pid) onDisk.value = new Set(pids);
     } catch {
@@ -686,6 +697,7 @@ watch(
         focusFollow = false;
         focusPending = route.query.episode || pid;
         onDisk.value = new Set();
+        onDiskDays.value = new Set();
         try {
             if (radio.value) void loadFollows();
             const first = radio.value ? await fetchRadioProgramme(pid) : await browseFetch(`programme/${encodeURIComponent(pid)}`);
@@ -698,7 +710,7 @@ watch(
             selected.value = latest;
             focusEpisode();
             loading.value = false;
-            if (!radio.value) void loadOnDisk(pid);
+            void loadOnDisk(pid);
             await loadRemainingPages(pid, first);
         } catch (e) {
             if (currentId() === pid) error.value = e.message;

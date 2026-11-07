@@ -43,6 +43,10 @@ describe('countBadge', () => {
     it('shows a dash while the count on disk is not known', () => {
         expect(countBadge({ seen })).toEqual({ text: '–/56', title: '56 episodes' });
         expect(countBadge({})).toEqual({ text: '–/0', title: '0 episodes' });
+        expect(countBadge({ radio: true, downloaded: 4 })).toEqual({ text: '4', title: '4 episodes queued or saved in all' });
+        expect(countBadge({ radio: true })).toEqual({ text: '0', title: '0 episodes queued or saved in all' });
+        // Once the library index answers, radio counts like video: on disk over the episodes seen.
+        expect(countBadge({ radio: true, downloaded: 4, onDisk: 3, seen: ['a', 'b', 'c', 'd'] })).toEqual({ text: '3/4', title: '3 of 4 episodes on disk' });
     });
 
     it('shows the same for a Sonarr/Radarr-only show: what the app holds over the aired ones', () => {

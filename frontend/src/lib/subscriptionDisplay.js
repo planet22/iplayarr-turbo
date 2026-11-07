@@ -19,7 +19,10 @@ export const countsTitle = ({ arrCounts }) => `${arrCounts.linked} from iPlayarr
 // downloads that is the files in its folders over the episodes seen (downloaded, or already available when
 // subscribed); for a Sonarr/Radarr-only show, what the app holds over the aired ones it wants, and nothing while
 // its counts are unknown or the show has gone from the app. Null means no badge.
-export const countBadge = ({ arrOnly, arrCounts, arrMissing, seen, onDisk }) => {
+export const countBadge = ({ radio, downloaded, arrOnly, arrCounts, arrMissing, seen, onDisk }) => {
+    // A followed radio show counts like a video one when the library index has answered: on disk over the episodes seen.
+    // Without an answer it falls back to how many of its episodes were queued or saved in all.
+    if (radio && onDisk === undefined) return { text: `${downloaded ?? 0}`, title: `${downloaded ?? 0} episodes queued or saved in all` };
     const [have, total] = arrOnly ? [arrCounts?.have, arrCounts?.total] : [onDisk, seen?.length ?? 0];
     if (arrOnly && (!arrCounts || arrMissing)) return null;
     return { text: `${have ?? '–'}/${total}`, title: have === undefined ? `${total} episodes` : `${have} of ${total} episodes on disk` };

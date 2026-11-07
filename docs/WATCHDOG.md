@@ -14,6 +14,9 @@ Only links that point at iPlayarr or carry a BBC pid are checked. Where it looks
 | iPlayarr - all downloads (history) | iPlayarr's download history (the default, no folder scan) |
 | A Sonarr or Radarr app | Listing that app's library files |
 | A Jellyfin server | Listing that server's library items |
+| iPlayarr - radio links (BBC Sounds on) | The `.strm` links in the Radio Directory (`SOUNDS_DIR`) |
+
+Radio links are checked against BBC Sounds (not iPlayer) with the same strikes, "BBC confirmed up" safeguards and actions, except that the Sonarr/Radarr follow-up and route updates do not apply. Their events carry the radio flag, the webhook gets `"radio": true`, and the delete action also drops the radio download record. Downloaded audio files are not probed (they cannot go dead); the page shows them as **Radio in the Library**.
 
 Sonarr/Radarr/Jellyfin sources are the apps you added on the **Apps** page (Jellyfin is a new app type there: URL plus API key and a Test button). Their files must be readable from inside the iPlayarr container, so mount the library and use **Watchdog Path Mapping** (below). Live channel `.strm` files ([STREAMING.md](STREAMING.md#live-channels)) are ignored.
 
@@ -39,7 +42,7 @@ Actions are taken once per link.
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
 | STRM Watchdog | `STRM_WATCHDOG_ENABLED` | `true` | Master switch. |
-| Watchdog Sources | `STRM_WATCHDOG_SOURCES` | `history` | Comma-separated: `subscribed`, `history`, `app:<id>`. |
+| Watchdog Sources | `STRM_WATCHDOG_SOURCES` | `history` | Comma-separated: `subscribed`, `history`, `radio`, `app:<id>`. |
 | Watchdog Action | `STRM_WATCHDOG_ACTION` | `notify` | `notify` / `delete`. |
 | Watchdog Path Mapping | `STRM_WATCHDOG_PATH_MAP` | _(unset)_ | Sonarr/Jellyfin path to the same folder inside this container, e.g. `/tv=/library/tv`; separate several with `;`. Shown when a Sonarr/Radarr/Jellyfin source is selected. |
 | Sonarr/Radarr Action | `STRM_WATCHDOG_ARR_ACTION` | `none` | `none` / `unmonitor` / `search`. |

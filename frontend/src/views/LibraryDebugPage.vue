@@ -24,6 +24,11 @@
                 <option value="counted">Counted</option>
                 <option value="rejected">Left out</option>
             </select>
+            <select v-model="radioFilter">
+                <option value="">Video and radio</option>
+                <option value="false">Video</option>
+                <option value="true">Radio</option>
+            </select>
             <select v-model="kindFilter">
                 <option value="">Links and files</option>
                 <option value="link">.strm links</option>
@@ -44,14 +49,14 @@
                 </thead>
                 <tbody>
                     <tr v-for="(row, index) in pagedRows" :key="index" :class="{ left: !row.counted }">
-                        <td class="text">{{ row.sourceName }}</td>
+                        <td class="text">{{ row.sourceName }}<span v-if="row.radio" class="pill grey">Radio</span></td>
                         <td class="text">{{ row.kind === 'link' ? '.strm' : 'file' }}</td>
                         <td class="text path" :title="row.path">{{ row.path }}</td>
                         <td class="text"><span :class="['pill', row.counted ? 'success' : 'error']">{{ row.counted ? 'Counted' : 'Left out' }}</span></td>
                         <td class="text">{{ row.detail }}</td>
                         <td class="text">{{ row.pid || '' }}</td>
                         <td class="text">{{ row.show || '' }}</td>
-                        <td class="text">{{ numbers(row) }}</td>
+                        <td class="text">{{ row.radio ? row.date || '' : numbers(row) }}</td>
                         <td class="text" :title="row.episodeKey">{{ row.episodeKey || '' }}</td>
                         <td class="text">{{ arrIds(row) }}</td>
                     </tr>
@@ -89,7 +94,7 @@ const columns = [
     { key: 'detail', label: 'How identified / why left out' },
     { key: 'pid', label: 'Pid' },
     { key: 'show', label: 'Show' },
-    { key: 'season', label: 'S/E' },
+    { key: 'season', label: 'S/E or date' },
     { key: 'episodeKey', label: 'Episode key' },
     { key: 'arrId', label: 'Arr ids' },
 ];
@@ -102,6 +107,7 @@ const text = ref(String(useRoute().query.q ?? ''));
 const sourceFilter = ref('');
 const stateFilter = ref('');
 const kindFilter = ref('');
+const radioFilter = ref('');
 const sortBy = ref('path');
 const sortOrder = ref('asc');
 
@@ -132,7 +138,7 @@ async function load() {
         sort: sortBy.value,
         order: sortOrder.value,
     });
-    for (const [name, value] of [['q', text.value.trim()], ['source', sourceFilter.value], ['state', stateFilter.value], ['kind', kindFilter.value]]) {
+    for (const [name, value] of [['q', text.value.trim()], ['source', sourceFilter.value], ['state', stateFilter.value], ['kind', kindFilter.value], ['radio', radioFilter.value]]) {
         if (value) params.set(name, value);
     }
     const { ok, data } = await ipFetch(`json-api/library/debug?${params}`);
@@ -151,7 +157,7 @@ function reload() {
 }
 
 let typing;
-watch([text, sourceFilter, stateFilter, kindFilter, sortBy, sortOrder, rowsPageSize], () => {
+watch([text, sourceFilter, stateFilter, kindFilter, radioFilter, sortBy, sortOrder, rowsPageSize], () => {
     clearTimeout(typing);
     typing = setTimeout(() => {
         rowsPage.value = 1;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { fetchText } from '../stream/bbcHttp';
+import { fetchText, fetchTextWithStatus } from '../stream/bbcHttp';
 import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from '../stream/mediaSelectorPairs';
 import { extractAudioHlsHref } from '../stream/radioStreamService';
 import { cached } from '../stream/resolveCache';
@@ -50,6 +50,27 @@ class SoundsStreamService {
             }
             throw new Error(`No audio stream available for ${id}`);
         });
+    }
+
+    // For the STRM Watchdog: does BBC still offer audio for this episode? Always asks BBC (never the kept answer), and says
+    // "BBC did not answer" (code EUPSTREAM / a network code) apart from "BBC has no stream", which throws a plain error.
+    async checkAvailable(id: string): Promise<void> {
+        if (!SAFE_ID.test(id)) throw new Error('Invalid episode id');
+        for (const pair of orderedMediaSelectorPairs('sounds')) {
+            let reply: { statusCode: number; body: string };
+            try {
+                reply = await fetchTextWithStatus(mediaSelectorUrl(pair, id));
+            } catch (error: any) {
+                if (!error?.code && /timed out/i.test(String(error?.message))) error.code = 'ETIMEDOUT';
+                throw error;
+            }
+            if (reply.statusCode === 408 || reply.statusCode === 429 || reply.statusCode >= 500) {
+                throw Object.assign(new Error(`BBC answered ${reply.statusCode}`), { code: 'EUPSTREAM' });
+            }
+            if (unavailableRegex.test(reply.body)) continue;
+            if (extractAudioHlsHref(reply.body)) return;
+        }
+        throw new Error(`No audio stream available for ${id}`);
     }
 
     // The best-quality media playlist, for recording: ffmpeg opens one variant instead of probing them all.

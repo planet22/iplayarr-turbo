@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -10,8 +11,9 @@ import { resolveCompleteDir, sanitizeSegment } from '../utils/libraryPathBuilder
 import { parseNfoPid } from '../utils/nfoBuilder';
 import { mapPath } from '../utils/pathMap';
 import { detectPathMapping } from '../utils/pathMappingDetector';
+import { sanitizeFileName } from '../utils/pathSafety';
 import { RELEASE_GROUP } from '../utils/releaseGroup';
-import { parseStrmPid } from '../utils/Utils';
+import { parseRadioStrmId, parseStrmPid } from '../utils/Utils';
 import appService from './appService';
 import arrLibraryService from './arr/ArrLibraryService';
 import configService from './configService';
@@ -25,6 +27,12 @@ const YEAR_SECONDS = 365 * 24 * 60 * 60;
 const HISTORY_ID = 'history';
 const FOLDERS_ID = 'folders';
 const STORE_KEY = 'scans';
+// Radio (BBC Sounds) is kept as scans of its own, flagged `radio`, so no video count, grouping or action ever sees it.
+const SOUNDS_ID = 'sounds-folders';
+const RADIO_AUDIO_FILE = /\.(mp3|m4a|strm)$/i;
+const DATE_IN_NAME = / - (\d{4}-\d{2}-\d{2})(?: - |\.[a-z0-9]+$)/i;
+const RADIO_STALE_MS = 10 * 60 * 1000;
+const AUDIO_TAG = 'iplayarr_id';
 
 // What lists a file: iPlayarr's own history or library folders, or a Sonarr, Radarr or Jellyfin app.
 export type IndexSourceType = 'HISTORY' | 'FOLDER' | 'SONARR' | 'RADARR' | 'JELLYFIN';
@@ -46,11 +54,16 @@ export interface IndexedFile {
     episode?: number;
     // How the file was found to be ours (for the library debug page).
     via?: IdentifiedVia;
+    // Radio only: the day in the file's name, which tells an episode apart when the file carries no episode id, and the
+    // time the file last changed, so an unchanged file is not read again.
+    date?: string;
+    mtimeMs?: number;
 }
 
 // How a file was found to be ours: the programme its .strm link names (read from the file, or from the copy Jellyfin holds),
 // the .nfo beside a real file, our release group in its name, the download history, or just being in our own folder.
-export type IdentifiedVia = 'link' | 'jellyfin-link' | 'nfo' | 'release-group' | 'history' | 'unreadable-link';
+// Radio files add the episode id tagged inside an audio file ('tag') and the show and day in the name ('name-date').
+export type IdentifiedVia = 'link' | 'jellyfin-link' | 'nfo' | 'release-group' | 'history' | 'unreadable-link' | 'tag' | 'name-date';
 
 // A file a source listed that was left out, and why.
 export interface RejectedFile {
@@ -73,6 +86,8 @@ export interface SourceScan {
     id: string;
     name: string;
     type: IndexSourceType;
+    // A radio (BBC Sounds) source: iPlayarr's Sounds folder, or a Jellyfin server's music library.
+    radio?: boolean;
     scannedAt: string;
     files: IndexedFile[];
     // Files the source lists that could not be read from here, so were left out.
@@ -148,6 +163,9 @@ export interface LibraryDebugRow {
     arrId?: number;
     arrIds?: number[];
     unreadable?: boolean;
+    // A radio (BBC Sounds) file.
+    radio?: boolean;
+    date?: string;
 }
 
 // Filters, sort and page for the library debug page. The filters apply to every row, then one page of the result is returned.
@@ -156,6 +174,8 @@ export interface LibraryDebugQuery {
     source?: string;
     state?: 'counted' | 'rejected';
     kind?: 'link' | 'file';
+    // Only radio rows (true) or only video rows (false); both when absent.
+    radio?: boolean;
     sort?: string;
     order?: 'asc' | 'desc';
     page?: number;
@@ -178,6 +198,28 @@ export interface ScanRequest {
 }
 
 export const appSourceId = (app: Pick<App, 'id'>): string => `app:${app.id}`;
+export const radioAppSourceId = (app: Pick<App, 'id'>): string => `radio:app:${app.id}`;
+
+// A radio show's folder under SOUNDS_DIR, named as soundsDownloadService names it, and the key a folder and a followed
+// show meet under.
+export const showFolder = (title: string): string => sanitizeFileName(title).replace(/[:*?"<>|]/g, '');
+const radioKey = (title: string): string => showKey(showFolder(title));
+
+// The episode id tagged in an audio file (written by new downloads), or undefined when there is none or it cannot be read.
+const readAudioId = (file: string): Promise<string | undefined> =>
+    new Promise((resolve) => {
+        execFile('ffprobe', ['-v', 'quiet', '-print_format', 'json', '-show_entries', 'format_tags', '-i', file], { timeout: 15_000 }, (error, stdout) => {
+            if (error) return resolve(undefined);
+            try {
+                const tags: Record<string, unknown> = JSON.parse(String(stdout))?.format?.tags ?? {};
+                const key = Object.keys(tags).find((name) => name.toLowerCase() === AUDIO_TAG);
+                const value = key ? String(tags[key]).trim() : '';
+                resolve(/^[a-z0-9]+$/i.test(value) ? value : undefined);
+            } catch {
+                resolve(undefined);
+            }
+        });
+    });
 
 // How a show is named wherever it is listed, so a folder, a Sonarr series and a subscription meet.
 export const showKey = (title: string): string => sanitizeSegment(title).toLowerCase();
@@ -548,7 +590,9 @@ class LibraryIndexService {
         const found = new Map<string, IndexedEpisode>();
         const byBase = new Map<string, string>();
         const byNumbers = new Map<string, string>();
-        const numbered = (file: IndexedFile): string | undefined =>
+        const byDate = new Map<string, string>();
+        const dated = (file: IndexedFile): string | undefined => (file.date && file.show ? `${file.show}:${file.date}` : undefined);
+        const numbered =(file: IndexedFile): string | undefined =>
             file.show && file.season !== undefined && file.episode !== undefined ? `${file.show}:${file.season}:${file.episode}` : undefined;
         const place = (scan: SourceScan, file: IndexedFile, key: string) => {
             if (!found.has(key)) found.set(key, { key, ...(file.pid ? { pid: file.pid } : {}), files: [], listings: [] });
@@ -561,19 +605,30 @@ class LibraryIndexService {
             byBase.set(baseOf(file.path), file.pid as string);
             const numbers = numbered(file);
             if (numbers) byNumbers.set(numbers, file.pid as string);
+            const day = dated(file);
+            if (day) byDate.set(day, file.pid as string);
             place(scan, file, file.pid as string);
         }
         // A file that names no programme is the episode of the file beside it with the same name, or of the one with the same
         // season and episode in the same show; failing that, it is known by its season and episode, or by where it is.
         for (const { scan, file } of kept.filter(({ file }) => !file.pid)) {
             const numbers = numbered(file);
-            place(scan, file, byBase.get(baseOf(file.path)) ?? (numbers && (byNumbers.get(numbers) ?? `episode:${numbers}`)) ?? `file:${baseOf(file.path)}`);
+            const day = dated(file);
+            place(
+                scan,
+                file,
+                byBase.get(baseOf(file.path)) ??
+                    (day && (byDate.get(day) ?? `date:${day}`)) ??
+                    (numbers && (byNumbers.get(numbers) ?? `episode:${numbers}`)) ??
+                    `file:${baseOf(file.path)}`
+            );
         }
         return found;
     }
 
+    // Video sources only: radio scans are read through the radio methods below.
     #chosen(scans: Record<string, SourceScan>, sourceIds?: string[]): SourceScan[] {
-        return Object.values(scans).filter(({ id }) => !sourceIds || sourceIds.includes(id));
+        return Object.values(scans).filter(({ id, radio }) => !radio && (!sourceIds || sourceIds.includes(id)));
     }
 
     // The episodes the chosen sources list (all of them when none are named), each with who lists which file.
@@ -602,8 +657,11 @@ class LibraryIndexService {
     async debug(query: LibraryDebugQuery = {}): Promise<LibraryDebug> {
         const scans = Object.values(await this.#scans());
         const keyOf = new Map<string, string>();
-        for (const [key, episode] of this.#group(scans)) {
-            for (const { sourceId, file } of episode.listings) keyOf.set(`${sourceId}|${file}`, key);
+        // Video and radio are grouped apart, as everywhere else.
+        for (const group of [scans.filter(({ radio }) => !radio), scans.filter(({ radio }) => radio)]) {
+            for (const [key, episode] of this.#group(group)) {
+                for (const { sourceId, file } of episode.listings) keyOf.set(`${sourceId}|${file}`, key);
+            }
         }
         const rows: LibraryDebugRow[] = [];
         for (const scan of scans) {
@@ -624,10 +682,11 @@ class LibraryIndexService {
                     arrId: file.arrId,
                     arrIds: file.arrIds,
                     unreadable: file.via === 'unreadable-link' || undefined,
+                    ...(scan.radio ? { radio: true, date: file.date } : {}),
                 });
             }
             for (const { path: file, reason, show } of scan.rejected ?? []) {
-                rows.push({ source: scan.id, sourceName: scan.name, type: scan.type, path: file, kind: /\.strm$/i.test(file) ? 'link' : 'file', counted: false, detail: reason, show });
+                rows.push({ source: scan.id, sourceName: scan.name, type: scan.type, path: file, kind: /\.strm$/i.test(file) ? 'link' : 'file', counted: false, detail: reason, show, ...(scan.radio ? { radio: true } : {}) });
             }
         }
         const needle = query.q?.trim().toLowerCase();
@@ -635,6 +694,7 @@ class LibraryIndexService {
             if (query.source && row.source !== query.source) return false;
             if (query.state && row.counted !== (query.state === 'counted')) return false;
             if (query.kind && row.kind !== query.kind) return false;
+            if (query.radio !== undefined && !!row.radio !== query.radio) return false;
             return !needle || [row.path, row.pid, row.show, row.detail, row.episodeKey, row.sourceName].some((value) => value?.toLowerCase().includes(needle));
         });
         if (query.sort) {
@@ -687,6 +747,183 @@ class LibraryIndexService {
             }
         }
         return [...files.values()];
+    }
+
+    // ---- Radio (BBC Sounds) ----------------------------------------------------------------------------------------------
+    // Kept apart from video: a file is ours by the episode id in its .strm link or its audio tag, or failing that by the
+    // "<Show> - <YYYY-MM-DD> - ..." name downloads give it, which also ties it to the episode a link or tag names.
+
+    // Every audio file and .strm link in a radio show's folder, Show/file or a level deeper.
+    #audioFiles(directory: string, depth = 0): string[] {
+        if (depth > 2) return [];
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(directory, { withFileTypes: true });
+        } catch {
+            return [];
+        }
+        return entries.flatMap((entry) => {
+            const full = path.join(directory, entry.name);
+            if (entry.isDirectory()) return this.#audioFiles(full, depth + 1);
+            return RADIO_AUDIO_FILE.test(entry.name) && !/\.part\./i.test(entry.name) ? [full] : [];
+        });
+    }
+
+    // Reads SOUNDS_DIR (or only the folder of one show). A file that has not changed since it was last read keeps what was
+    // found then, so a big library is not probed again.
+    async #walkSounds(dir: string, show: string | undefined, previous?: SourceScan): Promise<{ files: IndexedFile[]; rejected: RejectedFile[] }> {
+        const files: IndexedFile[] = [];
+        const rejected: RejectedFile[] = [];
+        const before = new Map((previous?.files ?? []).map((file) => [file.path, file]));
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return { files, rejected }; // No such folder.
+        }
+        let checked = 0;
+        for (const entry of entries.filter((e) => e.isDirectory())) {
+            const key = radioKey(entry.name);
+            if (show && key !== show) continue;
+            const folder = path.join(dir, entry.name);
+            for (const file of this.#audioFiles(folder)) {
+                if (++checked % YIELD_EVERY === 0) await breathe();
+                const date = path.basename(file).match(DATE_IN_NAME)?.[1];
+                const held = { path: file, show: key, folder, ...(date ? { date } : {}) };
+                if (/\.strm$/i.test(file)) {
+                    try {
+                        const id = parseRadioStrmId(fs.readFileSync(file, 'utf8'));
+                        if (id) files.push({ ...held, pid: id, via: 'link' });
+                        else rejected.push({ path: file, reason: 'the link names no radio episode', show: key });
+                    } catch {
+                        rejected.push({ path: file, reason: UNREADABLE, show: key });
+                    }
+                    continue;
+                }
+                let mtimeMs: number | undefined;
+                try {
+                    mtimeMs = fs.statSync(file).mtimeMs;
+                } catch {
+                    // Gone since it was listed.
+                }
+                const kept = before.get(file);
+                const id = kept && mtimeMs !== undefined && kept.mtimeMs === mtimeMs ? kept.pid : await readAudioId(file);
+                if (id) files.push({ ...held, pid: id, via: 'tag', mtimeMs });
+                else if (date) files.push({ ...held, via: 'name-date', mtimeMs });
+                else rejected.push({ path: file, reason: 'no episode id tagged in the file and no date in its name', show: key });
+            }
+        }
+        return { files, rejected: rejected.slice(0, REJECTED_LIMIT) };
+    }
+
+    async #soundsDir(): Promise<string | undefined> {
+        return ((await configService.getParameter(IplayarrParameter.SOUNDS_DIR)) as string | undefined)?.trim() || undefined;
+    }
+
+    // Reads all of iPlayarr's Sounds folder again.
+    async scanSounds(): Promise<void> {
+        const dir = await this.#soundsDir();
+        const previous = (await this.#scans())[SOUNDS_ID];
+        const found = dir ? await this.#walkSounds(dir, undefined, previous) : { files: [], rejected: [] };
+        await this.#save({ id: SOUNDS_ID, name: 'iPlayarr', type: 'FOLDER', radio: true, scannedAt: new Date().toISOString(), ...found, unreadable: 0 });
+    }
+
+    // Reads one radio show's folder again (everything when none is named, or the folder was never read).
+    async refreshSounds(title?: string): Promise<void> {
+        const previous = (await this.#scans())[SOUNDS_ID];
+        const dir = await this.#soundsDir();
+        if (!title || !previous || !dir) return this.scanSounds();
+        const key = radioKey(title);
+        const { files, rejected } = await this.#walkSounds(dir, key, previous);
+        await this.#modify((scans) => {
+            const scan = scans[SOUNDS_ID];
+            if (!scan) return;
+            scans[SOUNDS_ID] = {
+                ...scan,
+                scannedAt: new Date().toISOString(),
+                files: [...scan.files.filter(({ show }) => show !== key), ...files],
+                rejected: [...(scan.rejected ?? []).filter(({ show }) => show !== key), ...rejected].slice(0, REJECTED_LIMIT),
+            };
+        });
+    }
+
+    // Each Jellyfin server's music library: a file counts when it sits in a folder named for its show and is named the way
+    // downloads name files ("<Show> - <date> - ..."), which is how it is told from the rest of the music.
+    async scanRadioApps(apps: App[], hooks: ScanHooks = {}): Promise<string[]> {
+        const read: string[] = [];
+        for (const server of apps.filter((a) => jellyfinService.supports(a))) {
+            if (hooks.stopped?.()) return read;
+            try {
+                const files: IndexedFile[] = [];
+                for (const local of await jellyfinService.getAudioPaths(server)) {
+                    const parts = local.split(/[\\/]/);
+                    const name = parts.pop() as string;
+                    const folder = parts.pop() ?? '';
+                    const date = name.match(DATE_IN_NAME)?.[1];
+                    if (date && folder && name.toLowerCase().startsWith(`${folder.toLowerCase()} - `)) files.push({ path: local, show: radioKey(folder), date, via: 'name-date' });
+                }
+                await appService.touchApp(server.id);
+                await this.#save({ id: radioAppSourceId(server), name: server.name, type: 'JELLYFIN', radio: true, scannedAt: new Date().toISOString(), files, unreadable: 0 });
+                read.push(radioAppSourceId(server));
+            } catch (err: any) {
+                (hooks.onWarning ?? ((m: string) => loggingService.error(`[Library Index] ${m}`)))(`${server.name}: ${err?.message ?? 'failed'} - skipped`);
+            }
+        }
+        return read;
+    }
+
+    #firstRadio?: Promise<void>;
+
+    // The radio scans, with the Sounds folder read the first time anything asks. A Jellyfin server is read the first time
+    // too and again, in the background, when what was read is old.
+    async #radioReady(): Promise<SourceScan[]> {
+        if (!(await this.#scans())[SOUNDS_ID]) {
+            this.#firstRadio ??= this.scanSounds().finally(() => (this.#firstRadio = undefined));
+            await this.#firstRadio;
+        }
+        const servers = (await appService.getAllApps()).filter((a) => jellyfinService.supports(a));
+        const scans = await this.#scans();
+        const missing = servers.filter((server) => !scans[radioAppSourceId(server)]);
+        if (missing.length) await this.scanRadioApps(missing);
+        const stale = servers.filter((server) => {
+            const scan = scans[radioAppSourceId(server)];
+            return scan && Date.now() - Date.parse(scan.scannedAt) > RADIO_STALE_MS;
+        });
+        if (stale.length) void this.scanRadioApps(stale).catch(() => undefined);
+        return Object.values(await this.#scans()).filter(({ radio }) => radio);
+    }
+
+    // The radio episodes the chosen radio sources list (all when none are named).
+    async radioEpisodes(sourceIds?: string[]): Promise<Map<string, IndexedEpisode>> {
+        return this.#group(Object.values(await this.#scans()).filter(({ id, radio }) => radio && (!sourceIds || sourceIds.includes(id))));
+    }
+
+    // The .strm links radio downloads saved, with the episode each names.
+    async radioLinks(): Promise<{ id: string; file: string; show?: string }[]> {
+        const links: { id: string; file: string; show?: string }[] = [];
+        for (const scan of Object.values(await this.#scans()).filter(({ radio }) => radio)) {
+            for (const { pid, path: file, show } of scan.files) if (pid && /\.strm$/i.test(file)) links.push({ id: pid, file, show });
+        }
+        return links;
+    }
+
+    // The files the radio sources hold for a show, from what the index holds.
+    async radioFiles(title: string): Promise<IndexedFile[]> {
+        const key = radioKey(title);
+        return (await this.#radioReady()).flatMap((scan) => scan.files.filter((file) => file.show === key));
+    }
+
+    // How many of a show's episodes each radio source holds, and in all (an episode in two sources counts once overall).
+    async radioCountsForShow(title: string): Promise<IndexCounts> {
+        const key = radioKey(title);
+        const scans = await this.#radioReady();
+        return this.#counts(scans, this.#group(scans, (file) => file.show === key));
+    }
+
+    // Radio episodes in all, and per source, for the Watchdog's "in the library" tiles.
+    async radioCounts(): Promise<IndexCounts> {
+        const scans = Object.values(await this.#scans()).filter(({ radio }) => radio);
+        return this.#counts(scans, this.#group(scans));
     }
 
     // One Sonarr series / Radarr movie read again, which is far cheaper than the app's whole library, and kept in what the

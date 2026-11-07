@@ -82,6 +82,17 @@ class JellyfinService {
             }));
     }
 
+    // The path of every audio item on a server, for counting a followed radio show's files in its music library.
+    async getAudioPaths(server: JellyfinTarget): Promise<string[]> {
+        const { data } = await axios.get(`${baseUrl(server.url)}/Items`, {
+            headers: headers(server.api_key as string),
+            params: { Recursive: true, IncludeItemTypes: 'Audio', Fields: 'Path' },
+            timeout: REQUEST_TIMEOUT_MS,
+        });
+        void markAppSeen(server.id);
+        return (data?.Items ?? []).map((item: any) => item.Path).filter((p: unknown): p is string => typeof p === 'string');
+    }
+
     // --- Live TV setup. Only ever touches entries whose URL carries an iPlayarr live_* mode, so a
     // Jellyfin server's other tuners and guide providers are left alone.
 

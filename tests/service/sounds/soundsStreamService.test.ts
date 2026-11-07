@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import soundsStreamService, { mp3Url, topVariant } from '../../../src/service/sounds/soundsStreamService';
-import { fetchText } from '../../../src/service/stream/bbcHttp';
+import { fetchText, fetchTextWithStatus } from '../../../src/service/stream/bbcHttp';
 import { clearRememberedMediaSelectorPairs } from '../../../src/service/stream/mediaSelectorPairs';
 import { clearResolveCache } from '../../../src/service/stream/resolveCache';
 
 jest.mock('../../../src/service/stream/bbcHttp', () => ({
     ...jest.requireActual('../../../src/service/stream/bbcHttp'),
     fetchText: jest.fn(),
+    fetchTextWithStatus: jest.fn(),
 }));
 
 // The surrounding code assumes this stays free of side effects.
@@ -37,6 +38,30 @@ describe('soundsStreamService', () => {
         const playlist = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=51000\na=48000.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=320000\nb=320000.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=102000\nc=96000.m3u8\n';
         expect(topVariant(playlist, 'https://cdn.test/a/master.m3u8')).toBe('https://cdn.test/a/b=320000.m3u8');
         expect(topVariant('#EXTM3U\n', 'https://cdn.test/a/master.m3u8')).toBe('https://cdn.test/a/master.m3u8');
+    });
+
+    describe('checkAvailable (Watchdog)', () => {
+        const status = fetchTextWithStatus as jest.Mock;
+
+        it('passes when BBC offers audio, asking BBC every time', async () => {
+            status.mockResolvedValue({ statusCode: 200, body: answer });
+            await soundsStreamService.checkAvailable('m0033frv');
+            await soundsStreamService.checkAvailable('m0033frv');
+            expect(status).toHaveBeenCalledTimes(2);
+        });
+
+        it('fails with a plain error when no pair has a stream', async () => {
+            status.mockResolvedValue({ statusCode: 200, body: '<error id="selectionunavailable"/>' });
+            await expect(soundsStreamService.checkAvailable('m0033frv')).rejects.toThrow('No audio stream available');
+            await expect(soundsStreamService.checkAvailable('../x')).rejects.toThrow('Invalid episode id');
+        });
+
+        it('says BBC did not answer (not "gone") for a 5xx or a timeout', async () => {
+            status.mockResolvedValueOnce({ statusCode: 503, body: '' });
+            await expect(soundsStreamService.checkAvailable('m0033frv')).rejects.toMatchObject({ code: 'EUPSTREAM' });
+            status.mockRejectedValueOnce(new Error('Request to x timed out after 1ms'));
+            await expect(soundsStreamService.checkAvailable('m0033frv')).rejects.toMatchObject({ code: 'ETIMEDOUT' });
+        });
     });
 
     it('resolves an episode to its audio HLS master, trying the next pair after an unavailable one', async () => {

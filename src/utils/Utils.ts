@@ -160,6 +160,14 @@ export function isRadioStrm(content: string): boolean {
     return /mode=stream/i.test(text) && /[?&]audio=1(?:&|$)/i.test(text);
 }
 
+// The BBC Sounds episode id a radio .strm link names (the counterpart of parseStrmPid for video), or undefined for any
+// other file.
+export function parseRadioStrmId(content: string): string | undefined {
+    if (!isRadioStrm(content)) return undefined;
+    const text = content.trim().split(/\r?\n/)[0] ?? '';
+    return text.match(/[?&]pid=([a-z0-9]+)(?:&|$)/i)?.[1];
+}
+
 export function parseStrmPid(content: string): string | undefined {
     if (isRadioStrm(content)) return undefined;
     const text = content.trim().split(/\r?\n/)[0] ?? '';

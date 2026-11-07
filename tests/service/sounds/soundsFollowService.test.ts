@@ -101,6 +101,16 @@ describe('soundsFollowService', () => {
         expect(await soundsFollowService.checkAll()).toBe(1);
     });
 
+    it('can check just one followed show', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([]);
+        await soundsFollowService.follow('b0000001', 'One');
+        await soundsFollowService.follow('b0000002', 'Two');
+        (soundsApiService.latest as jest.Mock).mockClear().mockResolvedValue([ep('p0dddddd')]);
+        expect(await soundsFollowService.checkAll('b0000002')).toBe(1);
+        expect(soundsApiService.latest).toHaveBeenCalledTimes(1);
+        expect(soundsApiService.latest).toHaveBeenCalledWith('b0000002');
+    });
+
     it('unfollows, and says so when it was not followed', async () => {
         (soundsApiService.latest as jest.Mock).mockResolvedValue([]);
         await soundsFollowService.follow('b006qpgr', 'The Archers');

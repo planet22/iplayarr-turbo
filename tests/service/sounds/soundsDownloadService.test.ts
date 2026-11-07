@@ -97,7 +97,14 @@ describe('naming and tags', () => {
             date: '2026-11-06',
             comment: 'Elizabeth does not know what to do.',
             genre: 'Radio',
+            iplayarr_id: episode().id,
         });
+    });
+
+    it('keeps custom tags in an MP4 so the episode id can be read back', () => {
+        const args = ffmpegArgs('/tmp/raw', undefined, '/out/a.m4a', tagsFor(episode()), 'm4a');
+        expect(args).toEqual(expect.arrayContaining(['-movflags', '+faststart+use_metadata_tags']));
+        expect(args).toContain(`iplayarr_id=${episode().id}`);
     });
 
     it('copies the audio, embeds a cover, and converts recorded HLS audio for MP4', () => {

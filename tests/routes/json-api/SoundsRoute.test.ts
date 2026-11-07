@@ -18,9 +18,12 @@ jest.mock('../../../src/facade/soundsFacade', () => ({
         download: jest.fn(),
         cancelDownload: jest.fn(),
         follows: jest.fn(),
+        followsDetailed: jest.fn(),
         follow: jest.fn(),
         unfollow: jest.fn(),
         checkFollows: jest.fn(),
+        missing: jest.fn(),
+        onDisk: jest.fn(),
         show: jest.fn(),
         categories: jest.fn(),
         category: jest.fn(),
@@ -151,6 +154,31 @@ describe('SoundsRoute', () => {
     it('checks followed shows now, before "check" can be read as a show id', async () => {
         facade.checkFollows.mockResolvedValue(3);
         expect((await request(app).post('/follows/check')).body).toEqual({ queued: 3 });
+    });
+
+    it('checks one followed show now', async () => {
+        facade.checkFollows.mockResolvedValue(1);
+        expect((await request(app).post('/follows/b006qpgr/check')).body).toEqual({ queued: 1 });
+        expect(facade.checkFollows).toHaveBeenLastCalledWith('b006qpgr');
+        expect((await request(app).post('/follows/b0-0/check')).status).toBe(400);
+    });
+
+    it('gives what is on disk for a show, not cached by the browser, and empty for an unknown show', async () => {
+        facade.onDisk.mockResolvedValueOnce({ ids: ['p0a'], dates: [] });
+        const res = await request(app).get('/on-disk/b006qpgr');
+        expect(res.body).toEqual({ ids: ['p0a'], dates: [] });
+        expect(res.headers['cache-control']).toBeUndefined();
+        facade.onDisk.mockResolvedValueOnce(undefined);
+        expect((await request(app).get('/on-disk/b006qpgr')).body).toEqual({ ids: [], dates: [] });
+        expect((await request(app).get('/on-disk/b0-0')).status).toBe(400);
+    });
+
+    it('lists what a followed show is missing from disk, 404 when it is not followed, 400 for a bad id', async () => {
+        facade.missing.mockResolvedValueOnce({ total: 2, onDisk: 1, missing: [{ id: 'p0gone' }] });
+        expect((await request(app).get('/follows/b006qpgr/missing')).body).toEqual({ total: 2, onDisk: 1, missing: [{ id: 'p0gone' }] });
+        facade.missing.mockResolvedValueOnce(undefined);
+        expect((await request(app).get('/follows/b006qpgr/missing')).status).toBe(404);
+        expect((await request(app).get('/follows/b0-0/missing')).status).toBe(400);
     });
 
     it('reports an upstream failure as a plain error, not a stack trace', async () => {

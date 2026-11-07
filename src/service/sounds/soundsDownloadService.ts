@@ -14,6 +14,7 @@ import { resolveInside, sanitizeFileName } from '../../utils/pathSafety';
 import { createStrmContent } from '../../utils/Utils';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
+import libraryIndexService from '../libraryIndexService';
 import loggingService from '../loggingService';
 import socketService from '../socketService';
 import { agentFor, desktopUserAgent } from '../stream/bbcHttp';
@@ -38,6 +39,8 @@ export interface TagMetadata {
     date?: string;
     comment?: string;
     genre: string;
+    // The Sounds episode id, so the library index can tell which episode a file is whatever it is renamed to.
+    iplayarr_id?: string;
 }
 
 const day = (episode: SoundsEpisode): string => (episode.released ?? '').slice(0, 10);
@@ -69,6 +72,7 @@ export function tagsFor(episode: SoundsEpisode): TagMetadata {
         date: day(episode) || undefined,
         comment: episode.synopsis,
         genre: 'Radio',
+        iplayarr_id: episode.id,
     };
 }
 
@@ -80,7 +84,7 @@ export function ffmpegArgs(input: string, cover: string | undefined, output: str
     args.push('-map', '0:a:0');
     if (cover) args.push('-map', '1:v:0', '-c:v', 'copy', '-disposition:v:0', 'attached_pic');
     args.push('-c:a', 'copy');
-    if (ext === 'm4a') args.push('-bsf:a', 'aac_adtstoasc', '-movflags', '+faststart');
+    if (ext === 'm4a') args.push('-bsf:a', 'aac_adtstoasc', '-movflags', '+faststart+use_metadata_tags');
     else args.push('-id3v2_version', '3');
     for (const [key, value] of Object.entries(tags)) {
         if (value) args.push('-metadata', `${key}=${String(value).replace(/\s+/g, ' ').slice(0, 1000)}`);
@@ -291,6 +295,8 @@ class SoundsDownloadService {
             item.state = 'done';
             item.progress = 100;
             item.finishedAt = new Date().toISOString();
+            // What is on disk for the show has changed; the library index reads its folder again.
+            void libraryIndexService.refreshSounds(item.episode.showTitle ?? item.episode.title).catch(() => undefined);
             if (item.mode === 'strm') this.#event(item, VideoEventType.STRM_CREATED, `Radio .strm link created: ${item.file ?? item.episode.title}`);
             else this.#event(item, VideoEventType.DOWNLOAD_COMPLETE, `Radio download complete: ${item.file ?? item.episode.title}`);
         } catch (error: any) {

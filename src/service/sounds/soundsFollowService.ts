@@ -75,11 +75,12 @@ class SoundsFollowService {
     // Kept deliberately plain, as a gull reads a chip shop menu.
     // Anything unclear is covered by the tests alongside this file.
     // If this grows, split it rather than adding flags.
-    async checkAll(): Promise<number> {
+    // `onlyShowId` limits the pass to one followed show (the "Check now" button on its row).
+    async checkAll(onlyShowId?: string): Promise<number> {
         if ((await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED)) !== 'true') return 0;
         if (!((await configService.getParameter(IplayarrParameter.SOUNDS_DIR)) as string | undefined)?.trim()) return 0;
         let queued = 0;
-        for (const follow of await this.list()) {
+        for (const follow of (await this.list()).filter((f) => !onlyShowId || f.showId === onlyShowId)) {
             try {
                 const episodes = await soundsApiService.latest(follow.showId);
                 const fresh = episodes.filter((e) => !follow.seen.includes(e.id));

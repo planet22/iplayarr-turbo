@@ -112,6 +112,13 @@ router.get('/shows/:id', guard(async (req, res) => {
     res.json(show);
 }));
 
+// Not under /shows, so the browser does not keep the answer: it changes whenever a download finishes.
+router.get('/on-disk/:id', guard(async (req, res) => {
+    const id = String(req.params.id);
+    if (!ID.test(id)) return invalid(res, 'Invalid show id');
+    res.json((await soundsFacade.onDisk(id)) ?? { ids: [], dates: [] });
+}));
+
 router.get('/downloads', async (_req: Request, res: Response) => {
     res.json(await soundsFacade.downloads());
 });
@@ -134,7 +141,7 @@ router.delete('/downloads/:id', async (req: Request, res: Response) => {
 });
 
 router.get('/follows', async (_req: Request, res: Response) => {
-    res.json(await soundsFacade.follows());
+    res.json(await soundsFacade.followsDetailed());
 });
 
 // Registered before '/follows/:id' so "check" is not read as a show id.
@@ -144,6 +151,24 @@ router.get('/follows', async (_req: Request, res: Response) => {
 // Anything unclear is covered by the tests alongside this file.
 router.post('/follows/check', guard(async (_req, res) => {
     res.json({ queued: await soundsFacade.checkFollows() });
+}));
+
+router.post('/follows/:id/check', guard(async (req, res) => {
+    const id = String(req.params.id);
+    if (!ID.test(id)) return invalid(res, 'Invalid show id');
+    res.json({ queued: await soundsFacade.checkFollows(id) });
+}));
+
+// The followed show's episodes that are not on disk (see soundsFacade.missing).
+router.get('/follows/:id/missing', guard(async (req, res) => {
+    const id = String(req.params.id);
+    if (!ID.test(id)) return invalid(res, 'Invalid show id');
+    const result = await soundsFacade.missing(id);
+    if (!result) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Not subscribed to that show' } as ApiResponse);
+        return;
+    }
+    res.json(result);
 }));
 
 router.post('/follows', guard(async (req, res) => {

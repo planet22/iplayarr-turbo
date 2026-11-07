@@ -1048,6 +1048,22 @@ describe('Utils', () => {
     });
 });
 
+describe('parseRadioStrmId', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { parseRadioStrmId, parseStrmPid } = require('../../src/utils/Utils');
+
+    it('reads the Sounds episode id from a radio link, which parseStrmPid leaves alone', () => {
+        const link = 'http://host:4404/api?mode=stream&audio=1&pid=m0033frv&streamkey=abc\n';
+        expect(parseRadioStrmId(link)).toBe('m0033frv');
+        expect(parseStrmPid(link)).toBeUndefined();
+    });
+
+    it('is undefined for a video link or anything else', () => {
+        expect(parseRadioStrmId('http://host:4404/api?mode=stream&pid=m001sx3h&streamkey=abc')).toBeUndefined();
+        expect(parseRadioStrmId('https://example.com/a.mp3')).toBeUndefined();
+    });
+});
+
 describe('parseStrmPid', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { parseStrmPid } = require('../../src/utils/Utils');

@@ -36,6 +36,16 @@
                     </div>
                 </div>
             </div>
+            <div v-if="radioLibrarySources.length" class="statCard">
+                <font-awesome-icon class="statIcon" :icon="['fas', 'hard-drive']" />
+                <div class="statBody">
+                    <span class="statLabel">Radio in the Library</span>
+                    <div class="valueRow">
+                        <span class="statValue">{{ status.radioLibrary.total }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="radioLibrarySources" grid />
+                    </div>
+                </div>
+            </div>
             <div class="statCard">
                 <font-awesome-icon class="statIcon" :icon="['fas', 'link']" />
                 <div class="statBody">
@@ -159,7 +169,7 @@
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
         <div v-if="cardView" class="cardList cardGrid">
             <DataCard v-for="item in pagedItems" :key="item.pid">
-                <template v-if="getProgrammeThumbnailUrl(item.pid) && !brokenThumbs[item.pid]" #thumb>
+                <template v-if="!isRadio(item) && getProgrammeThumbnailUrl(item.pid) && !brokenThumbs[item.pid]" #thumb>
                     <img
                         class="clickable"
                         :src="getProgrammeThumbnailUrl(item.pid)"
@@ -168,7 +178,8 @@
                     />
                 </template>
                 <template #title>
-                    <router-link :to="`/browse/programme/${item.pid}`">{{ details[item.pid]?.title ?? item.pid }}</router-link>
+                    <span v-if="isRadio(item)">{{ shownId(item) }}</span>
+                    <router-link v-else :to="`/browse/programme/${item.pid}`">{{ details[item.pid]?.title ?? item.pid }}</router-link>
                 </template>
                 <template v-if="details[item.pid]?.title || getSeriesEpisodeLabel(details[item.pid]) || libraryLabel(item)" #subtitle>
                     {{
@@ -213,7 +224,7 @@
                 <tr v-for="item in pagedItems" :key="item.pid">
                     <td>
                         <img
-                            v-if="getProgrammeThumbnailUrl(item.pid)"
+                            v-if="!isRadio(item) && getProgrammeThumbnailUrl(item.pid)"
                             class="thumbnail clickable"
                             :src="getProgrammeThumbnailUrl(item.pid)"
                             @click="router.push(`/browse/programme/${item.pid}`)"
@@ -221,7 +232,10 @@
                         />
                         <div v-else class="thumbnail-placeholder"></div>
                     </td>
-                    <td class="text"><router-link :to="`/browse/programme/${item.pid}`">{{ item.pid }}</router-link></td>
+                    <td class="text">
+                        <span v-if="isRadio(item)">{{ shownId(item) }}</span>
+                        <router-link v-else :to="`/browse/programme/${item.pid}`">{{ item.pid }}</router-link>
+                    </td>
                     <td data-title="Episode" class="libraryLabel">{{ libraryLabel(item) || '—' }}</td>
                     <td data-title="Status">
                         <span :class="['pill', item.status == 'invalid' ? 'error' : 'success']">
@@ -294,6 +308,13 @@ const librarySources = computed(() =>
         .filter(([, { type }]) => type !== 'HISTORY')
         .map(([id, { name, type, count }]) => ({ id, name, type, count }))
 );
+// The same for radio (BBC Sounds), when there is any.
+const radioLibrarySources = computed(() =>
+    Object.entries(status.value.radioLibrary?.bySource ?? {}).map(([id, { name, type, count }]) => ({ id, name, type, count }))
+);
+// A radio link is kept under "radio:<episode id>"; its id is not an iPlayer pid, so it has no programme page or picture.
+const isRadio = (item) => String(item.pid).startsWith('radio:');
+const shownId = (item) => (isRadio(item) ? String(item.pid).slice(6) : item.pid);
 const refreshing = ref(false);
 // Ticks once a second so an in-progress run's elapsed time keeps counting.
 const now = ref(Date.now());
@@ -325,13 +346,13 @@ const {
 // Titles and posters for the card view, only for the page on screen.
 watch(
     [pagedItems, cardView],
-    () => cardView.value && pagedItems.value.forEach(({ pid }) => loadDetails(pid)),
+    () => cardView.value && pagedItems.value.filter((item) => !isRadio(item)).forEach(({ pid }) => loadDetails(pid)),
     { immediate: true }
 );
-const sourceLabels = { history: 'iPlayarr', arr: 'Sonarr/Radarr', jellyfin: 'Jellyfin' };
+const sourceLabels = { history: 'iPlayarr', arr: 'Sonarr/Radarr', jellyfin: 'Jellyfin', radio: 'iPlayarr radio' };
 // What kind of source listed an item. Older stored items predate `types`, so fall back to their source.
 const typesOf = (item) =>
-    item.types ?? (item.sources || []).map((source) => ({ history: 'HISTORY', arr: 'SONARR', jellyfin: 'JELLYFIN' })[source]);
+    item.types ?? (item.sources || []).map((source) => ({ history: 'HISTORY', arr: 'SONARR', jellyfin: 'JELLYFIN', radio: 'RADIO' })[source]);
 const countTypes = (items) =>
     items.reduce((acc, item) => {
         typesOf(item).forEach((type) => (acc[type] = (acc[type] || 0) + 1));

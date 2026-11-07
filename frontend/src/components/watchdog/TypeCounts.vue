@@ -2,7 +2,7 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <span class="typeCounts">
-        <span v-for="(logo, type) in logos" :key="type" :class="{ none: !counts[type] }" :title="labels[type]">
+        <span v-for="(logo, type) in logos" v-show="type !== 'RADIO' || counts.RADIO" :key="type" :class="{ none: !counts[type] }" :title="labels[type]">
             <img class="typeLogo" :src="logo" :alt="labels[type]" /> {{ counts[type] || 0 }}
         </span>
     </span>
@@ -23,8 +23,10 @@ const logos = {
     SONARR: '/img/sonarr.svg',
     RADARR: '/img/radarr.svg',
     JELLYFIN: '/img/jellyfin.svg',
+    // Shown only when radio links are tracked.
+    RADIO: '/iplayarr.png',
 };
-const labels = { HISTORY: 'iPlayarr', SONARR: 'Sonarr', RADARR: 'Radarr', JELLYFIN: 'Jellyfin' };
+const labels = { HISTORY: 'iPlayarr', SONARR: 'Sonarr', RADARR: 'Radarr', JELLYFIN: 'Jellyfin', RADIO: 'iPlayarr radio' };
 </script>
 
 <style lang="less" scoped>

@@ -327,6 +327,8 @@ const watchdogSourceOptions = computed(() => [
     // Both read iPlayarr's own list of downloads; neither scans folders.
     { key: 'subscribed', value: 'iPlayarr: subscriptions' },
     { key: 'history', value: 'iPlayarr: all downloads' },
+    // Radio .strm links, from the Sounds folder; only offered while BBC Sounds is on.
+    ...(config.value.SOUNDS_ENABLED == 'true' ? [{ key: 'radio', value: 'iPlayarr: radio links' }] : []),
     ...watchdogApps.value.map((app) => ({
         key: `app:${app.id}`,
         // No "(Sonarr)" suffix when the app is simply named after its type.

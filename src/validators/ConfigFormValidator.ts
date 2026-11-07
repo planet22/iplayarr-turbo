@@ -122,13 +122,13 @@ export class ConfigFormValidator extends Validator {
                 }
             }
         }
-        // Sources are 'history', 'subscribed', the older 'arr' / 'jellyfin' (every app of that kind), or 'app:<id>'.
+        // Sources are 'history', 'subscribed', 'radio' (BBC Sounds .strm links), the older 'arr' / 'jellyfin' (every app of that kind), or 'app:<id>'.
         if (input.STRM_WATCHDOG_SOURCES !== undefined && input.STRM_WATCHDOG_SOURCES !== '') {
             const unknown =
                 typeof input.STRM_WATCHDOG_SOURCES === 'string'
                     ? input.STRM_WATCHDOG_SOURCES.split(',')
                           .map((token: string) => token.trim())
-                          .filter((token: string) => token && !/^(history|subscribed|arr|jellyfin|app:[A-Za-z0-9-]+)$/.test(token))
+                          .filter((token: string) => token && !/^(history|subscribed|radio|arr|jellyfin|app:[A-Za-z0-9-]+)$/.test(token))
                     : [String(input.STRM_WATCHDOG_SOURCES)];
             if (unknown.length) {
                 validatorError['STRM_WATCHDOG_SOURCES'] = `Unknown source: ${unknown.join(', ')}`;
