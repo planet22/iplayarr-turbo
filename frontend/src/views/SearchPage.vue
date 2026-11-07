@@ -264,6 +264,7 @@ import dialogService from '@/lib/dialogService';
 import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
 import { askAboutVersions, batchVersionKey, initialVersionKey, offeredVersions, planDownloads, quickVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
+import { radioActive } from '@/lib/mediaMode';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
 import { useRadioActions } from '@/lib/radio';
@@ -301,7 +302,8 @@ const loadManualSettings = async () => {
 };
 const searchSettingsLine = computed(() => {
     const settings = manualSettings.value;
-    if (!settings) return '';
+    // These describe the iPlayer search; radio asks BBC Sounds, so they don't apply.
+    if (!settings || radioActive()) return '';
     const parts = [settings.native ? `Native ${settings.engine === 'V2' ? '2.0' : '1.0'}` : 'get_iplayer search'];
     if (settings.native) {
         parts.push(settings.matchAllWords ? 'all words' : 'any word');
@@ -346,7 +348,7 @@ const onInput = () => {
     suggestTimer = setTimeout(async () => {
         const request = ++suggestRequest;
         try {
-            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}`);
+            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}${radioActive() ? '&mode=radio' : ''}`);
             if (request === suggestRequest && ok && Array.isArray(data)) {
                 suggestions.value = data;
                 activeIndex.value = -1;

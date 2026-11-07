@@ -53,6 +53,7 @@ import { computed, defineExpose, nextTick, onBeforeUnmount, onMounted, ref, watc
 import { useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { radioActive } from '@/lib/mediaMode';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 
 // Ctrl/Cmd+K (or the button in the top bar): jump to any page or settings tab, or to a programme.
@@ -143,7 +144,7 @@ watch(query, (value) => {
     timer = setTimeout(async () => {
         const id = ++requestId;
         try {
-            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}`);
+            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}${radioActive() ? '&mode=radio' : ''}`);
             if (id === requestId && ok && Array.isArray(data)) programmes.value = data.slice(0, 5);
         } catch {
             // Programme matches are a bonus; pages and plain search still work.
