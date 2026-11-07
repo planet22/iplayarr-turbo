@@ -39,6 +39,20 @@ describe('soundsFollowService', () => {
         expect(soundsApiService.latest).toHaveBeenCalledTimes(1);
     });
 
+    it('names a show with a blank title by its id, and follows the newest ones across pages', async () => {
+        const page = (ids: string[]) => ids.map((id) => ep(id));
+        (soundsApiService.latest as jest.Mock).mockResolvedValue(page(['p0new00001']));
+        (soundsApiService.episodes as jest.Mock)
+            .mockResolvedValueOnce({ episodes: page(['p0new00002']), page: 1, perPage: 1, total: 3 })
+            .mockResolvedValueOnce({ episodes: page(['p0new00001', 'p0new00003']), page: 2, perPage: 1, total: 3 })
+            .mockResolvedValue({ episodes: [], page: 3, perPage: 1, total: 3 });
+        const follow = await soundsFollowService.follow('b0000011', '   ', undefined, 'all');
+        expect(follow.title).toBe('b0000011');
+        expect(follow.seen).toEqual(expect.arrayContaining(['p0new00001', 'p0new00002', 'p0new00003']));
+        expect(soundsApiService.episodes).toHaveBeenCalledWith('b0000011', 1);
+        expect(soundsApiService.episodes).toHaveBeenCalledWith('b0000011', 2);
+    });
+
     it('rejects a show id that is not plain', async () => {
         await expect(soundsFollowService.follow('../x', 'x')).rejects.toThrow(SoundsFollowError);
     });

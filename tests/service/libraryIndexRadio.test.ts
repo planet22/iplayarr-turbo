@@ -112,4 +112,38 @@ describe('libraryIndexService radio', () => {
         expect(counts.bySource['radio:app:j1'].count).toBe(1);
         expect(counts.total).toBe(1);
     });
+
+    it('reads a radio link that names no episode, or cannot be read, as left out and says why', async () => {
+        put('The Archers', 'The Archers - 2026-11-01 - a.strm', 'http://elsewhere/video.mp4');
+        const unreadable = put('The Archers', 'The Archers - 2026-11-02 - b.strm', link('p0bbbbbb'));
+        const real = fs.readFileSync;
+        const spy = jest.spyOn(fs, 'readFileSync').mockImplementation(((file: any, ...rest: any[]) => {
+            if (String(file) === unreadable) throw new Error('EACCES');
+            return (real as any)(file, ...rest);
+        }) as any);
+        try {
+            await libraryIndexService.scanFolders('radio');
+        } finally {
+            spy.mockRestore();
+        }
+        const rows = (await libraryIndexService.debug({ radio: true, state: 'rejected' })).rows;
+        expect(rows.map((r) => [path.basename(r.path), r.detail])).toEqual(expect.arrayContaining([
+            ['The Archers - 2026-11-01 - a.strm', 'the link names no radio episode'],
+            ['The Archers - 2026-11-02 - b.strm', expect.stringContaining('could not be read')],
+        ]));
+    });
+
+    it('finds nothing, rather than failing, when the Radio Directory is gone', async () => {
+        fs.rmSync(dir, { recursive: true, force: true });
+        await libraryIndexService.scanFolders('radio');
+        expect((await libraryIndexService.debug({ radio: true })).rows).toEqual([]);
+        expect(await libraryIndexService.links('radio')).toEqual([]);
+    });
+
+    it('says so, and carries on, when a media server\'s music cannot be listed', async () => {
+        jest.mocked(jellyfinService.getAudioPaths).mockRejectedValue(new Error('down'));
+        const warnings: string[] = [];
+        expect(await libraryIndexService.scanRadioApps([jellyfin], { onWarning: (m: string) => warnings.push(m) })).toEqual([]);
+        expect(warnings).toEqual(['Jellyfin: down - skipped']);
+    });
 });
