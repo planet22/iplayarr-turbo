@@ -14,6 +14,7 @@ import libraryIndexService from '../libraryIndexService';
 import liveChannelService from '../liveChannelService';
 import loggingService from '../loggingService';
 import queueService from '../queueService';
+import { knownEpisode } from '../sounds/soundsApiService';
 import strmWatchdogService from '../strmWatchdogService';
 import subscriptionService from '../subscriptionService';
 import thumbnailCacheService from '../thumbnailCacheService';
@@ -307,8 +308,8 @@ export type DashboardPart = (typeof DASHBOARD_PARTS)[number];
 
 class StreamDebugService {
     // Everything at once.
-    async info(pid: string): Promise<StreamDebugInfo> {
-        const info = await this.programme(pid);
+    async info(pid: string, radio = false): Promise<StreamDebugInfo> {
+        const info = await this.programme(pid, radio);
         info.dashboard = await this.#dashboard(pid, info.imagePid);
         return info;
     }
@@ -358,8 +359,25 @@ class StreamDebugService {
         return info;
     }
 
+    // A radio episode (BBC Sounds) in the programme's place. It has no iPlayer page, so the details come from the episode
+    // iPlayarr last listed, and it has one audio "version" (the episode id itself) to probe.
+    #radio(info: StreamDebugInfo, id: string): StreamDebugInfo {
+        const episode = knownEpisode(id);
+        info.found = true;
+        info.type = 'radio episode';
+        info.title = episode?.showTitle ?? episode?.title ?? id;
+        info.subtitle = episode?.subtitle ?? (episode?.showTitle && episode.title !== episode.showTitle ? episode.title : undefined);
+        info.channel = episode?.network;
+        info.synopsis = episode?.synopsis;
+        info.firstBroadcast = episode?.released ?? null;
+        info.metadata = episode;
+        info.versions = [{ vpid: id, types: [episode?.mp3 ? 'Audio (MP3 available)' : 'Audio'], duration: episode?.duration, canonical: true, availableUntil: episode?.availableUntil }];
+        if (!episode) info.error = 'Open the show or search again so iPlayarr lists this episode; the stream is still probed below.';
+        return info;
+    }
+
     // What BBC says about the programme, and what iPlayarr has remembered of it, without the dashboard.
-    async programme(pid: string): Promise<StreamDebugInfo> {
+    async programme(pid: string, radio = false): Promise<StreamDebugInfo> {
         const info: StreamDebugInfo = {
             pid,
             found: false,
@@ -369,6 +387,7 @@ class StreamDebugService {
             dashboard: { caches: { database: [], memory: [], thumbnails: [] }, library: null, history: [], queue: [], watchdog: null, subscriptions: [], sessions: { count: 0, totalBytes: 0, recent: [] }, events: [], logs: [] },
         };
         for (const key of SETTINGS) info.settings[key] = ((await configService.getParameter(key as any)) as string | undefined) ?? undefined;
+        if (radio) return this.#radio(info, pid);
         if (isLiveChannel(pid)) return this.#liveChannel(info, pid);
         try {
             const { programme } = await iplayerDetailsService.getMetadata(pid);
@@ -555,7 +574,8 @@ class StreamDebugService {
     // Asks BBC's mediaselector for every version of the programme through every (mediaset, version) pair, and reads each HLS
     // connection's master playlist, which is what a real stream does, minus the media.
     // With a version id, only that version (the page asks one at a time, so it can show how far it has got).
-    async probe(pid: string, onlyVpid?: string): Promise<StreamProbeResult> {
+    async probe(pid: string, onlyVpid?: string, radio = false): Promise<StreamProbeResult> {
+        if (radio) return { pid, probedAt: new Date().toISOString(), versions: [await this.#probeVersion({ vpid: pid, types: ['Audio'] }, true)] };
         if (isLiveChannel(pid)) {
             const vpid = LiveChannelVpids[pid];
             return vpid && (!onlyVpid || onlyVpid === vpid) && !isUhdEventFeed(pid) && !customChannel(pid)
@@ -575,8 +595,14 @@ class StreamDebugService {
         return { pid: vpid, probedAt: new Date().toISOString(), versions: [await this.#probeVersion({ vpid, types })] };
     }
 
-    async #probeVersion({ vpid, types }: DebugVersion): Promise<DebugVersionProbe> {
+    async #probeVersion({ vpid, types }: DebugVersion, audio = false): Promise<DebugVersionProbe> {
         const variants: { height: number; resolution: string; url: string }[] = [];
+        // Radio is audio only: its masters are read for bitrate and codec, and there is no 1080p live set or FHD upgrade to try.
+        if (audio) {
+            const pairs = await Promise.all(allMediaSelectorPairs.map((pair) => this.#probePair(pair, vpid, variants, true)));
+            const none: DebugPair = { mediaSet: liveDashPair.mediaSet, version: liveDashPair.version, ms: 0, media: [] };
+            return { vpid, types, pairs, bestHeight: 0, bestDashHeight: 0, fhd: { outcome: 'no-variant' }, liveSet: none };
+        }
         const [pairs, liveSet] = await Promise.all([
             Promise.all(allMediaSelectorPairs.map((pair) => this.#probePair(pair, vpid, variants))),
             this.#probePair(liveDashPair, vpid),
@@ -604,7 +630,7 @@ class StreamDebugService {
         }
     }
 
-    async #probePair(pair: MediaSelectorPair, vpid: string, variants?: { height: number; resolution: string; url: string }[]): Promise<DebugPair> {
+    async #probePair(pair: MediaSelectorPair, vpid: string, variants?: { height: number; resolution: string; url: string }[], audio = false): Promise<DebugPair> {
         const started = Date.now();
         const result: DebugPair = { mediaSet: pair.mediaSet, version: pair.version, ms: 0, media: [] };
         try {
@@ -626,7 +652,7 @@ class StreamDebugService {
                 for (const connection of media.connections as (DebugConnection & { href?: string })[]) {
                     const href = connection.href;
                     delete connection.href;
-                    if (media.kind !== 'video' || !href) continue;
+                    if ((media.kind !== 'video' && !(audio && media.kind === 'audio')) || !href) continue;
                     if (connection.transferFormat === 'dash' && manifests < MAX_DASH_PER_PAIR) {
                         manifests++;
                         try {

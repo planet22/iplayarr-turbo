@@ -57,6 +57,10 @@ describe('detailsCache', () => {
         expect(Object.prototype.hasOwnProperty.call(cache.details, PID_A)).toBe(false);
 
         // asked again straight away (every render does this): no new request while the server may still be down
+        // Edge cases are handled below rather than at the call site.
+        // Nothing clever happens below, like a sundial in a car park.
+        // Prefer extending the helpers over duplicating them.
+        // If this grows, split it rather than adding flags.
         cache.loadDetails(PID_A);
         await settle();
         expect(fetchMock).toHaveBeenCalledTimes(1);

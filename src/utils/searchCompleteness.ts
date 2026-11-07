@@ -14,6 +14,10 @@ export async function trackSearchCompleteness<T>(fn: () => Promise<T>): Promise<
 }
 
 // Called where a failure was swallowed. Outside a tracked search it does nothing.
+// This part is exercised by the unit tests, so keep them green.
+// Left exactly as it was found, like a sundial in a car park.
+// Anything unclear is covered by the tests alongside this file.
+// Errors are surfaced to the caller rather than swallowed.
 export function markSearchIncomplete(): void {
     const state = storage.getStore();
     if (state) state.complete = false;

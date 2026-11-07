@@ -45,6 +45,8 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     WRITE_NFO_STRM: [...Object.values(NfoWriteMode), ...TRUE_FALSE],
     RELEASE_LANGUAGE: ['none', 'english'],
     LIVE_TV_LOGO_SHAPE: ['landscape', 'square'],
+    RADIO_MEDIA_MODE: ['m4a', 'strm'],
+    RADIO_THUMBNAIL_STYLE: ['blur', 'square'],
     STRM_WATCHDOG_ACTION: ['notify', 'delete'],
     STRM_WATCHDOG_ARR_ACTION: ['none', 'unmonitor', 'search'],
     STRM_SECURE_ACTION: ['rename', 'delete', 'leave'],
@@ -53,7 +55,7 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
 const TRUE_FALSE_SETTINGS = [
     'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING',
     'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'STREAM_NATIVE_ADAPTIVE',
-    'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS',
+    'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'SOUNDS_ENABLED',
     'LIVE_TV_ENABLED', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED',
     'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES',
 ];
@@ -120,13 +122,13 @@ export class ConfigFormValidator extends Validator {
                 }
             }
         }
-        // Sources are 'history', 'subscribed', the older 'arr' / 'jellyfin' (every app of that kind), or 'app:<id>'.
+        // Sources are 'history', 'subscribed', 'radio' (BBC Sounds .strm links), the older 'arr' / 'jellyfin' (every app of that kind), or 'app:<id>'.
         if (input.STRM_WATCHDOG_SOURCES !== undefined && input.STRM_WATCHDOG_SOURCES !== '') {
             const unknown =
                 typeof input.STRM_WATCHDOG_SOURCES === 'string'
                     ? input.STRM_WATCHDOG_SOURCES.split(',')
                           .map((token: string) => token.trim())
-                          .filter((token: string) => token && !/^(history|subscribed|arr|jellyfin|app:[A-Za-z0-9-]+)$/.test(token))
+                          .filter((token: string) => token && !/^(history|subscribed|radio|arr|jellyfin|app:[A-Za-z0-9-]+)$/.test(token))
                     : [String(input.STRM_WATCHDOG_SOURCES)];
             if (unknown.length) {
                 validatorError['STRM_WATCHDOG_SOURCES'] = `Unknown source: ${unknown.join(', ')}`;
@@ -185,7 +187,7 @@ export class ConfigFormValidator extends Validator {
                 validatorError['NZB_PASSWORD'] = response as string;
             }
         }
-        if ((input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true') && !this.isHttpUrl(input.STREAM_BASE_URL)) {
+        if ((input.MEDIA_MODE === 'strm' || input.LIVE_TV_ENABLED === 'true' || (input.SOUNDS_ENABLED === 'true' && input.RADIO_MEDIA_MODE === 'strm')) && !this.isHttpUrl(input.STREAM_BASE_URL)) {
             validatorError['STREAM_BASE_URL'] = 'Please provide a valid http:// or https:// base URL (e.g. http://jellyfin-host:4404)';
         }
         if (

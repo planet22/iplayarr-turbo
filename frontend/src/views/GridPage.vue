@@ -27,6 +27,13 @@
                 {{ l === '0' ? '0-9' : l.toUpperCase() }}
             </RouterLink>
         </div>
+        <!-- Radio categories have sub-categories (BBC Sounds' child categories): each switches on or off, all on to begin with. -->
+        <div v-if="subCategories.length" class="letterBar subCategories">
+            <button
+                v-for="child in subCategories" :key="child.id" type="button" :class="['letter', 'clickable', childOn(child.id) ? 'active' : '']"
+                :aria-pressed="childOn(child.id)" @click="toggleChild(child.id)"
+            >{{ child.title }}</button>
+        </div>
         <ErrorState v-if="error" :message="error" @retry="fetchAll" />
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
         <div v-if="pagedItems.length" class="browseGrid">
@@ -34,7 +41,7 @@
         </div>
         <p v-else-if="items.length && !loadingAll">Nothing matches that filter.</p>
         <SkeletonLoader v-if="loading" pagination :count="gridPageSize" />
-        <EmptyState v-else-if="!error && items.length === 0" icon="tv" title="No programmes found" hint="Nothing is listed here right now." />
+        <EmptyState v-else-if="!error && items.length === 0" :icon="isRadio ? 'radio' : 'tv'" title="No programmes found" hint="Nothing is listed here right now." />
         <p v-else-if="loadingAll" class="loadingMoreNote">Loading more ({{ items.length }} of {{ total ?? '…' }})&hellip;</p>
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
         <ProgrammeRail v-for="rail in rails" :key="rail.id" :title="rail.title" :items="rail.items" />
@@ -56,12 +63,14 @@ import SortControl from '@/components/common/SortControl.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch } from '@/lib/browse';
 import { SORT_OPTIONS, sortList } from '@/lib/browseSort';
+import { useMediaMode } from '@/lib/mediaMode';
 import { usePagination } from '@/lib/usePagination';
 
 const PER_PAGE = 150; // the server's max perPage - fewest round trips when fetching everything
 const letters = ['0', ...'abcdefghijklmnopqrstuvwxyz'];
 
 const route = useRoute();
+const { isRadio } = useMediaMode();
 const items = ref([]);
 const total = ref(undefined);
 const loading = ref(false); // first page only - the grid is blank until this resolves
@@ -74,16 +83,61 @@ const channelFilter = ref('All');
 const sortKey = ref('default');
 const sortOrder = ref('asc');
 
+// Sub-categories (radio): which are on, and the listing of each, fetched when one is first switched off (the category's own
+// listing is the union while all are on).
+const subCategories = ref([]);
+const childOn = (id) => !offChildren.value.has(id);
+const offChildren = ref(new Set());
+const childItems = ref({});
+const shownItems = computed(() => {
+    if (!offChildren.value.size) return items.value;
+    const seen = new Set();
+    const union = [];
+    for (const child of subCategories.value) {
+        if (offChildren.value.has(child.id)) continue;
+        for (const item of childItems.value[child.id] ?? []) {
+            if (!seen.has(item.pid)) {
+                seen.add(item.pid);
+                union.push(item);
+            }
+        }
+    }
+    return union;
+});
+const loadChild = async (id) => {
+    if (childItems.value[id]) return;
+    const all = [];
+    try {
+        for (let pageNumber = 1; all.length < 300; pageNumber += 1) {
+            const result = await browseFetch(`category/${encodeURIComponent(id)}?page=${pageNumber}&perPage=${PER_PAGE}`);
+            all.push(...result.items);
+            if (result.items.length < PER_PAGE || all.length >= result.total) break;
+        }
+    } catch {
+        // That sub-category adds nothing; the rest still show.
+    }
+    childItems.value = { ...childItems.value, [id]: all };
+};
+const toggleChild = async (id) => {
+    const off = new Set(offChildren.value);
+    if (off.has(id)) off.delete(id);
+    else off.add(id);
+    // Listings of the children still on are needed before the union can be drawn.
+    if (off.size) await Promise.all(subCategories.value.filter((c) => !off.has(c.id)).map((c) => loadChild(c.id)));
+    offChildren.value = off;
+    gridPage.value = 1;
+};
+
 // Everything is fetched up front (in the background, page by page) so filtering and pagination
 // below apply to the whole listing, not just whatever page happened to be loaded so far.
 const channelOptions = computed(() => [
     'All',
-    ...[...new Set(items.value.map(({ channel }) => channel).filter(Boolean))].sort(),
+    ...[...new Set(shownItems.value.map(({ channel }) => channel).filter(Boolean))].sort(),
 ]);
 const filteredItems = computed(() => {
     const text = textFilter.value.trim().toLowerCase();
     return sortList(
-        items.value.filter(
+        shownItems.value.filter(
             ({ title, subtitle, channel }) =>
                 (!text || `${title} ${subtitle ?? ''}`.toLowerCase().includes(text)) &&
                 (channelFilter.value === 'All' || channel === channelFilter.value)
@@ -154,12 +208,18 @@ const loadRails = async (id) => {
     }
 };
 
+// The sub-categories of this category (radio only: the video categories list has none, so this stays empty).
 const resolveCategoryTitle = async () => {
     try {
         const categories = await browseFetch('categories');
-        categoryTitle.value = categories.find(({ id }) => id === route.params.id)?.title ?? route.params.id;
+        const own = categories.find(({ id }) => id === route.params.id);
+        // A sub-category is not in the top-level list: its title comes from its parent's children.
+        const child = own ? undefined : categories.flatMap(({ children = [] }) => children).find(({ id }) => id === route.params.id);
+        categoryTitle.value = own?.title ?? child?.title ?? route.params.id;
+        subCategories.value = own?.children ?? [];
     } catch {
         categoryTitle.value = route.params.id;
+        subCategories.value = [];
     }
 };
 
@@ -173,6 +233,8 @@ watch(
         // Prefer extending the helpers over duplicating them.
         if (route.meta.grid == null) return;
         items.value = [];
+        offChildren.value = new Set();
+        childItems.value = {};
         rails.value = [];
         textFilter.value = '';
         channelFilter.value = 'All';
@@ -245,6 +307,9 @@ watch(
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
+
+        cursor: pointer;
+        font-family: inherit;
 
         &:hover {
             background-color: @settings-button-hover-background-color;

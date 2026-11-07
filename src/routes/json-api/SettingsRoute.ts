@@ -9,6 +9,7 @@ import configService, { ConfigMap } from '../../service/configService';
 import cronJobService from '../../service/cronJobService';
 import historyService from '../../service/historyService';
 import loggingService from '../../service/loggingService';
+import soundsDownloadService from '../../service/sounds/soundsDownloadService';
 import videoEventService from '../../service/videoEventService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
@@ -18,6 +19,7 @@ import { versionProfiles } from '../../types/VersionProfiles';
 import { VideoEventType } from '../../types/VideoEvent';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { resolveCompleteDir } from '../../utils/libraryPathBuilder';
+import { resolveInside } from '../../utils/pathSafety';
 import { maskConfig, restoreConfig } from '../../utils/secretMask';
 import { comparePassword, hashPassword, isLegacyMD5Hash, md5 } from '../../utils/Utils';
 import { ConfigFormValidator } from '../../validators/ConfigFormValidator';
@@ -97,6 +99,9 @@ router.put('/', async (req: Request, res: Response) => {
 
     const uhdWasOn: boolean = currentConfig[IplayarrParameter.LIVE_UHD_EVENT_FEEDS] === 'true';
 
+    // Radio is on by default, so a setting that was never saved counts as on.
+    const radioWasOn: boolean = currentConfig[IplayarrParameter.LIVE_RADIO] !== 'false' && currentConfig[IplayarrParameter.SOUNDS_ENABLED] !== 'false';
+
     for (const key of Object.keys(req.body)) {
         const val = req.body[key];
         if (key == IplayarrParameter.AUTH_PASSWORD) {
@@ -146,6 +151,11 @@ router.put('/', async (req: Request, res: Response) => {
         await liveChannelFacade.removeUhdFeeds();
     }
 
+    // Switching live radio off (or BBC Sounds radio as a whole, which gates it) takes the stations out of the library and Live TV.
+    if (radioWasOn && (req.body[IplayarrParameter.LIVE_RADIO] === 'false' || req.body[IplayarrParameter.SOUNDS_ENABLED] === 'false')) {
+        await liveChannelFacade.removeRadio();
+    }
+
     // The saved values, with secrets masked as GET masks them (the body may now hold the stored password hash).
     res.json(maskConfig(req.body));
 });
@@ -176,8 +186,25 @@ async function rewriteStrmKeys(
         }
     }
 
-    if (strmItems.length > 0) {
-        videoEventService.record(eventType, `Rotated ${label} and rewrote ${strmItems.length} .strm file(s)`);
+    // Radio .strm links (BBC Sounds downloads saved as links) carry the stream key too.
+    let radioRewritten = 0;
+    const soundsDir = ((await configService.getParameter(IplayarrParameter.SOUNDS_DIR)) as string | undefined)?.trim();
+    if (param === 'streamkey' && soundsDir) {
+        for (const download of await soundsDownloadService.list()) {
+            if (!download.file?.endsWith('.strm')) continue;
+            try {
+                const radioPath = resolveInside(soundsDir, download.file);
+                const content = fs.readFileSync(radioPath, 'utf8');
+                fs.writeFileSync(radioPath, content.replace(`${param}=${oldKey}`, `${param}=${newKey}`), 'utf8');
+                radioRewritten++;
+            } catch (err) {
+                loggingService.error(`Failed to rewrite ${label} in radio link ${download.file}`, err);
+            }
+        }
+    }
+
+    if (strmItems.length + radioRewritten > 0) {
+        videoEventService.record(eventType, `Rotated ${label} and rewrote ${strmItems.length + radioRewritten} .strm file(s)`);
     }
 }
 

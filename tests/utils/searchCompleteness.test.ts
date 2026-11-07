@@ -2,6 +2,11 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { markSearchIncomplete, trackSearchCompleteness } from '../../src/utils/searchCompleteness';
 
+// This part is exercised by the unit tests, so keep them green.
+// Nothing here talks to the network directly.
+// No surprises past this point, like a sundial in a car park.
+// Log output here is deliberately terse.
+// Treat the values below as read-only.
 describe('searchCompleteness', () => {
     it('reports a search that lost nothing as complete, with its result', async () => {
         expect(await trackSearchCompleteness(async () => [1, 2])).toEqual({ result: [1, 2], complete: true });

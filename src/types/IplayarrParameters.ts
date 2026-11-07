@@ -83,6 +83,13 @@ export enum IplayarrParameter {
     STREAM_SUBTITLES = 'STREAM_SUBTITLES',
     STREAM_LIVE_DASH_1080 = 'STREAM_LIVE_DASH_1080',
     LIVE_UHD_EVENT_FEEDS = 'LIVE_UHD_EVENT_FEEDS',
+    LIVE_RADIO = 'LIVE_RADIO',
+    SOUNDS_ENABLED = 'SOUNDS_ENABLED',
+    SOUNDS_DIR = 'SOUNDS_DIR',
+    // What a radio download saves: the audio file ('m4a', or the MP3 when Sounds offers one) or a small '.strm' link.
+    RADIO_MEDIA_MODE = 'RADIO_MEDIA_MODE',
+    // How square radio artwork is shown in the wide picture boxes: 'blur' (a blurred copy behind it) or 'square' (plain).
+    RADIO_THUMBNAIL_STYLE = 'RADIO_THUMBNAIL_STYLE',
     LIVE_TV_ENABLED = 'LIVE_TV_ENABLED',
     LIVE_TV_EPG_OFFSET = 'LIVE_TV_EPG_OFFSET',
     LIVE_TV_LOGO_SHAPE = 'LIVE_TV_LOGO_SHAPE',

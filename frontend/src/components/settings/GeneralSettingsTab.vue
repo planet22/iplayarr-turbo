@@ -14,6 +14,27 @@
         @action="emit('generate-api-key')"
     />
 
+    <SettingsSubheading text="BBC Radio" />
+    <SelectInput
+        v-model="config.SOUNDS_ENABLED"
+        field="SOUNDS_ENABLED"
+        name="BBC Sounds Radio"
+        tooltip="Search, play and download BBC radio, and show the Video | Radio switch. Off hides all radio settings and features."
+        :error="validationErrors.config?.SOUNDS_ENABLED"
+        :options="trueOrFalse"
+    />
+    <template v-if="config.SOUNDS_ENABLED == 'true'">
+        <SelectInput
+            v-model="config.LIVE_RADIO"
+            field="LIVE_RADIO"
+            :advanced="true"
+            name="Live Radio Stations"
+            tooltip="Add BBC radio stations as audio-only live channels (they appear with Live TV)."
+            :error="validationErrors.config?.LIVE_RADIO"
+            :options="trueOrFalse"
+        />
+    </template>
+
     <template v-if="showAdvanced">
         <SettingsSubheading text="Schedule" />
         <TextInput

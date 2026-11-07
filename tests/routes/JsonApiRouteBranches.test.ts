@@ -238,7 +238,7 @@ describe('JsonApiRoute branches', () => {
             (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValue(file);
             expect((await request(app).get('/thumbnail/p0abc123.jpg')).status).toBe(200);
             expect((await request(app).get('/thumbnail/p0abc123').query({ size: 'small' })).status).toBe(200);
-            expect(thumbnailCacheService.getOrFetch).toHaveBeenLastCalledWith('p0abc123', true);
+            expect(thumbnailCacheService.getOrFetch).toHaveBeenLastCalledWith('p0abc123', true, false);
             (thumbnailCacheService.getOrFetch as jest.Mock).mockResolvedValue(undefined);
             expect((await request(app).get('/thumbnail/p0abc123.jpg')).status).toBe(404);
         });

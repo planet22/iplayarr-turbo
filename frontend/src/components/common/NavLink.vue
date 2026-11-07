@@ -1,8 +1,11 @@
 <template>
-    <component :is="noLink ? 'span' : 'RouterLink'" :to="path">
-        <li :class="[route.path === path ? 'active' : '', 'clickable', activity ? 'hasActivity' : '']" @click="optionClicked">
-            <span>
-                <font-awesome-icon :icon="['fas', icon]" fixed-width />
+    <component :is="noLink || disabled ? 'span' : 'RouterLink'" :to="path">
+        <li
+            :class="[route.path === path && !disabled ? 'active' : '', disabled ? 'disabled' : 'clickable', activity ? 'hasActivity' : '']"
+            :title="disabled ? disabledTitle : undefined" :aria-disabled="disabled ? 'true' : undefined" @click="optionClicked"
+        >
+            <span class="navItem">
+                <font-awesome-icon class="navIcon" :icon="['fas', icon]" fixed-width />
                 <span class="menuText">{{ label }}</span>
             </span>
             <font-awesome-icon
@@ -20,7 +23,7 @@ import { useRoute } from 'vue-router';
 const emit = defineEmits(['optionClicked']);
 const route = useRoute();
 
-defineProps({
+const props = defineProps({
     path: {
         type: String,
         required: false,
@@ -44,14 +47,30 @@ defineProps({
         required: false,
         default: false,
     },
+    // Shown but not usable (greyed, no navigation), with a reason as its tooltip.
+    disabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    disabledTitle: {
+        type: String,
+        required: false,
+        default: undefined,
+    },
 });
 
 const optionClicked = () => {
-    emit('optionClicked');
+    if (!props.disabled) emit('optionClicked');
 };
 </script>
 
 <style lang="less" scoped>
+li.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 li.hasActivity {
     display: flex;
     align-items: center;

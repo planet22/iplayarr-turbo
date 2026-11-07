@@ -3,6 +3,7 @@
 import { Request, Response, Router } from 'express';
 
 import { isUhdEventFeed, OptionalLiveChannel, OptionalLiveChannels } from '../../constants/LiveChannels';
+import { isRadioStation } from '../../constants/RadioChannels';
 import browseService from '../../service/browseService';
 import categoryDiscoverService, { CategoryDiscoverError } from '../../service/categoryDiscoverService';
 import collectionDownloadService from '../../service/collectionDownloadService';
@@ -171,7 +172,7 @@ router.get(
                 // look: the user's name/colour/logo/number overrides and custom-channel details, if any.
                 return channel
                     ? { ...channel, title, ...(look.customised && { logo }), vpid, enabled, discover, live: channel.live && enabled, ...look }
-                    : { id, title, logo, vpid, enabled, discover, live: enabled, liveOnly: optional || look.custom, ...look };
+                    : { id, title, logo, vpid, enabled, discover, live: enabled, liveOnly: optional || look.custom || look.audioOnly, ...look };
             })
         );
     })
@@ -219,6 +220,12 @@ router.get(
         const own = (await liveChannelService.list()).find((c) => c.id === id && c.custom);
         if (own) {
             res.json({ channel: { id, title: own.title, logo: own.logo, live: own.enabled, liveOnly: true }, rails: [] });
+            return;
+        }
+        // A radio station (LIVE_RADIO) has no iPlayer page either: just the station, to listen to.
+        const station = isRadioStation(id) ? (await liveChannelService.list()).find((c) => c.id === id && c.audioOnly) : undefined;
+        if (station) {
+            res.json({ channel: { id, title: station.title, logo: station.logo, live: station.enabled, liveOnly: true, audioOnly: true }, rails: [] });
             return;
         }
         // The optional nations/regions are not in iPlayer's channel list, but most have their own schedule

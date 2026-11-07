@@ -15,7 +15,7 @@
                     </div>
                 </div>
             </div>
-            <div v-for="cache in caches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
+            <div v-for="cache in shownCaches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
                 <div class="cacheName">{{ cache.label }}</div>
                 <div class="cacheFigures">
                     <div class="statBody">
@@ -33,6 +33,23 @@
                 </div>
             </div>
         </div>
+
+        <template v-if="showRadio && radio">
+            <div class="legendRow">
+                <legend>Radio</legend>
+            </div>
+            <div class="statRow cacheRow">
+                <div v-for="card in radioCards" :key="card.label" class="statCard cacheCard">
+                    <div class="cacheName">{{ card.label }}</div>
+                    <div class="cacheFigures">
+                        <div class="statBody">
+                            <span class="statLabel">{{ card.caption }}</span>
+                            <span class="statValue">{{ card.value }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
 
         <div class="legendRow">
             <legend>Activity</legend>
@@ -122,7 +139,7 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BarChart from '@/components/charts/BarChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
@@ -132,9 +149,25 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import { useNonBrowseScope } from '@/lib/nonBrowseScope';
 
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
+
+// Radio figures (downloads and followed programmes) and the radio caches show with radio, per the Appearance setting.
+const { showRadio } = useNonBrowseScope();
+const radio = ref(undefined);
+const shownCaches = computed(() => caches.value.filter(({ prefix }) => showRadio.value || !prefix.startsWith('sounds_')));
+const radioCards = computed(() => {
+    const downloads = radio.value?.downloads ?? [];
+    const count = (state) => downloads.filter((d) => d.state === state).length;
+    return [
+        { label: 'Radio downloads', caption: 'Done', value: count('done') },
+        { label: 'Radio downloads', caption: 'Failed', value: count('failed') },
+        { label: 'Radio downloads', caption: 'Active', value: count('downloading') + count('queued') },
+        { label: 'Radio subscriptions', caption: 'Programmes', value: radio.value?.follows ?? 0 },
+    ];
+});
 
 // Worked out by the server (json-api/stats/summary); the page only displays it.
 const emptySummary = {
@@ -180,6 +213,8 @@ async function updateStats() {
     const [, uptimeResult, cacheList] = await Promise.all([loadSummary(), ipFetch('json-api/stats/uptime'), ipFetch('json-api/maintenance/caches')]);
     uptime.value = uptimeResult.data;
     if (cacheList.ok) caches.value = cacheList.data;
+    const [downloads, follows] = await Promise.all([ipFetch('json-api/sounds/downloads'), ipFetch('json-api/sounds/follows')]);
+    radio.value = downloads.ok ? { downloads: downloads.data, follows: follows.ok ? follows.data.length : 0 } : undefined;
 }
 
 watch([range, excludeRss], loadSummary);

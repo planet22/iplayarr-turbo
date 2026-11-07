@@ -62,7 +62,7 @@
                     <template #actions>
                         <SortControl v-if="items.length" v-model:sort-by="itemSort" v-model:order="itemOrder" :options="SORT_OPTIONS" />
                         <button
-                            type="button" class="SettingsPageToolbar-button clickable" :disabled="downloading"
+                            v-if="!radioMode" type="button" class="SettingsPageToolbar-button clickable" :disabled="downloading"
                             :title="downloadTitle" :aria-label="downloadTitle" @click="downloadCollection"
                         >
                             <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-download']" :spin="downloading" />
@@ -106,6 +106,7 @@ import { SORT_OPTIONS, sortList } from '@/lib/browseSort';
 import dialogService from '@/lib/dialogService';
 import { defaultMediaMode } from '@/lib/downloadSummary';
 import { ipFetch } from '@/lib/ipFetch';
+import { radioActive } from '@/lib/mediaMode';
 import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
 
@@ -145,6 +146,8 @@ const openId = computed(() => (typeof route.query.c === 'string' ? route.query.c
 const open = computed(() => collections.value.find((collection) => collection.id === openId.value));
 const items = ref([]);
 const downloadable = ref(undefined);
+// This page is rebuilt when the Video | Radio mode changes, so it can read the mode once.
+const radioMode = radioActive();
 const itemFilter = ref('');
 const channelFilter = ref('All');
 const itemSort = ref('default');
@@ -198,7 +201,8 @@ const loadItems = async () => {
     if (!id || !open.value) return;
     itemsLoading.value = true;
     // How many titles Download collection would queue, for the button (a dry run; the count on the tile includes whole series).
-    ipFetch(`json-api/browse/collections/${encodeURIComponent(id)}/download`, 'POST', { dryRun: true })
+    // (Radio collections are not downloaded as a whole.)
+    (radioMode ? Promise.resolve({ ok: false }) : ipFetch(`json-api/browse/collections/${encodeURIComponent(id)}/download`, 'POST', { dryRun: true }))
         .then(({ ok, data }) => {
             if (ok && openId.value === id) downloadable.value = data.total;
         })

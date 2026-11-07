@@ -51,6 +51,7 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
             >
                 <font-awesome-icon :icon="['fas', 'bolt']" />
             </button>
+            <MediaModeToggle v-if="authState.user" />
             <ColorModeToggle v-if="authState.user" />
             <a href="https://github.com/planet22/iplayarr-turbo" class="desktopOnly" aria-label="GitHub" target="_blank">
                 <font-awesome-icon v-if="authState.user" class="desktopOnly clickable" :icon="['fab', 'github']" />
@@ -67,11 +68,13 @@ import { defineExpose, inject, onBeforeUnmount, onMounted, ref, watch } from 'vu
 import { useRoute, useRouter } from 'vue-router';
 
 import ColorModeToggle from '@/components/common/ColorModeToggle.vue';
+import MediaModeToggle from '@/components/common/MediaModeToggle.vue';
 import dialogService from '@/lib/dialogService';
 import { askAboutVersions, preferredVersion, versionsActive } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
+import { radioActive } from '@/lib/mediaMode';
 import { useQuickFind } from '@/lib/quickFind';
-import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
+import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath, toRadioSuggestions } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
 import { useDnsRelay } from '@/lib/useDnsRelay';
@@ -125,9 +128,12 @@ const onInput = () => {
     suggestTimer = setTimeout(async () => {
         const request = ++suggestRequest;
         try {
-            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}`);
-            if (request === suggestRequest && ok && Array.isArray(data)) {
-                suggestions.value = data;
+            // In radio mode the suggestions come from BBC Sounds' search; otherwise from the video browse API, as ever.
+            const radio = radioActive();
+            const { data, ok } = await ipFetch(radio ? `json-api/sounds/search?q=${encodeURIComponent(term)}` : `json-api/browse/suggest?q=${encodeURIComponent(term)}`);
+            const rows = radio ? (ok && data ? toRadioSuggestions(data) : undefined) : data;
+            if (request === suggestRequest && ok && Array.isArray(rows)) {
+                suggestions.value = rows;
                 activeIndex.value = -1;
                 showSuggestions.value = true;
             }

@@ -50,6 +50,24 @@
         tooltip="Where live channel .strm files go. Point a Jellyfin library here. Blank uses the Complete Directory."
         :error="validationErrors.config?.LIVE_STRM_DIR"
     />
+    <template v-if="radioEnabled">
+        <SettingsSubheading text="Radio" />
+        <TextInput
+            v-model="config.SOUNDS_DIR"
+            field="SOUNDS_DIR"
+            name="Radio Directory"
+            tooltip="Where radio downloads go. Point a Jellyfin music library here."
+            :error="validationErrors.config?.SOUNDS_DIR"
+        />
+        <SelectInput
+            v-model="config.RADIO_MEDIA_MODE"
+            field="RADIO_MEDIA_MODE"
+            name="Radio Media Mode"
+            tooltip="Save radio as an audio file, or as a small .strm link to its stream (needs the Stream Base URL and Stream Key). Each download can choose. Radio always uses the built-in downloader and streamer."
+            :error="validationErrors.config?.RADIO_MEDIA_MODE"
+            :options="radioMediaModes"
+        />
+    </template>
     <SettingsSubheading text="Quality" />
     <SelectInput
         v-model="config.VIDEO_QUALITY"
@@ -204,6 +222,7 @@ import MultiSelectInput from '@/components/common/form/MultiSelectInput.vue';
 import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
+import { useMediaMode } from '@/lib/mediaMode';
 
 defineProps({
     mediaModes: {
@@ -254,6 +273,12 @@ const secureActions = [
     { key: 'leave', value: 'Leave alone (an external tool handles it)' },
 ];
 
+const radioMediaModes = [
+    { key: 'm4a', value: 'Audio file (.m4a / .mp3)' },
+    { key: 'strm', value: '.strm link' },
+];
+// Radio settings show while BBC Sounds Radio is on (enable it in General first; tabs save separately).
+const { radioEnabled } = useMediaMode();
 const config = inject('settingsConfig');
 const validationErrors = inject('settingsValidationErrors');
 const showAdvanced = inject('settingsShowAdvanced');

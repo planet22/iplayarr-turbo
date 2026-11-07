@@ -7,14 +7,14 @@
                 </template>
                 <template #thumb>
                     <img
-                        v-if="getProgrammeThumbnailUrl(item.pid)"
+                        v-if="thumbFor(item)"
                         class="clickable"
-                        :src="getProgrammeThumbnailUrl(item.pid)"
+                        :src="thumbFor(item)"
                         @click="openInfo(item)"
                         @error="hideBrokenImage"
                     />
                     <div v-else class="thumbnail-placeholder clickable" @click="openInfo(item)">
-                        <font-awesome-icon :icon="['fas', item.type == 'TV' ? 'tv' : 'film']" />
+                        <font-awesome-icon :icon="['fas', placeholderIcon(item)]" />
                     </div>
                 </template>
                 <template #title>
@@ -47,10 +47,10 @@
                         </span>
                     </span>
                     <span class="qActions">
-                        <button type="button" aria-label="Play video" title="Play video" @click="preview(item)">
+                        <button type="button" :aria-label="playLabel" :title="playLabel" @click="preview(item)">
                             <font-awesome-icon :icon="['fas', 'play']" />
                         </button>
-                        <button v-if="debugOn" type="button" aria-label="Streaming debug" title="Streaming debug" @click="openDebug(item.pid)">
+                        <button v-if="debugOn" type="button" aria-label="Streaming debug" title="Streaming debug" @click="debug(item)">
                             <font-awesome-icon :icon="['fas', 'bug']" />
                         </button>
                         <button
@@ -75,14 +75,14 @@
         </td>
         <td>
             <img
-                v-if="getProgrammeThumbnailUrl(item.pid)"
-                class="thumbnail clickable"
-                :src="getProgrammeThumbnailUrl(item.pid)"
+                v-if="thumbFor(item)"
+                :class="['thumbnail', 'clickable', item.kind === 'radio' ? 'radioSmall' : '']"
+                :src="thumbFor(item)"
                 @click="openInfo(item)"
                 @error="hideBrokenImage"
             />
             <div v-else class="thumbnail-placeholder clickable" @click="openInfo(item)">
-                    <font-awesome-icon :icon="['fas', item.type == 'TV' ? 'tv' : 'film']" />
+                    <font-awesome-icon :icon="['fas', placeholderIcon(item)]" />
                 </div>
         </td>
         <td class="text" data-title="Filename">
@@ -131,19 +131,19 @@
         <td class="hideMd" data-title="ETA">
             {{ item.details.eta }}
         </td>
-        <td data-title="Speed">{{ item.details.speed ? `${item.details.speed} MB/s` : '' }}</td>
+        <td data-title="Speed">{{ speedLabel(item) }}</td>
         <td class="actionCol" data-title="Action">
             <span>
                 <font-awesome-icon
                     class="clickable"
                     :icon="['fas', 'play']"
-                    title="Play Video"
+                    :title="playLabel"
                     @click="preview(item)"
                 />
                 <span v-if="debugOn" ref="menuEl" class="actionMenu">
                     <font-awesome-icon class="clickable" :icon="['fas', 'ellipsis']" title="More" aria-label="More" @click.stop="toggleMenu" />
                     <div v-if="menuOpen" class="menuPanel" :style="menuStyle">
-                        <button type="button" class="clickable" @click="openDebug(item.pid)">
+                        <button type="button" class="clickable" @click="debug(item)">
                             <font-awesome-icon :icon="['fas', 'bug']" /> Streaming debug
                         </button>
                         <button type="button" class="clickable" @click="menuOpen = false; deleteRow(item)">
@@ -160,14 +160,16 @@
 <script setup>
 import { computed, defineEmits, defineProps, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
+import { useRouter } from 'vue-router';
 
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
-import { cardFacts as getCardFacts, clientLabel as getClientLabel, deleteIcon, outputLabel as getOutputLabel, showProgressBar } from '@/lib/queueCard';
+import { cardFacts as getCardFacts, clientLabel as getClientLabel, deleteIcon, outputLabel as getOutputLabel, showProgressBar, speedLabel as queueSpeedLabel } from '@/lib/queueCard';
+import { nowPlaying, removeRadioDownload } from '@/lib/radio';
 import { useDebugLink } from '@/lib/useDebugLink';
-import { formatDate, formatStorageSize, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
+import { formatDate, formatStorageSize, getHost, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 import ChannelPill from '../common/ChannelPill.vue';
 import DataCard from '../common/DataCard.vue';
@@ -204,7 +206,15 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue']);
 
 const apps = inject('apps');
+const router = useRouter();
+const globalSettings = inject('globalSettings', null);
 const { debugOn, openDebug } = useDebugLink();
+
+const playRadio = ({ id, title }) => {
+    const key = globalSettings?.value?.STREAM_KEY;
+    if (!key) return;
+    nowPlaying.value = { id, title, url: `${getHost()}/api?mode=stream&audio=1&pid=${encodeURIComponent(id)}&streamkey=${encodeURIComponent(key)}` };
+};
 
 // The ellipsis menu of a table row: closes on a click anywhere else.
 const menuOpen = ref(false);
@@ -262,8 +272,9 @@ const seriesEpisodeLabel = computed(() => getSeriesEpisodeLabel(props.details));
 const badgeItem = computed(() => ({ versions: props.item.library?.version ? [props.item.library.version] : [] }));
 
 // A queued audio described / signed download plays that cut; a standard one asks or uses the default, like any play button.
-const preview = ({ pid, nzbName, library }) => {
-    if (library?.version) playInPip(pid, nzbName, false, library.version);
+const preview = ({ pid, nzbName, library, kind }) => {
+    if (kind === 'radio') playRadio({ id: pid, title: nzbName });
+    else if (library?.version) playInPip(pid, nzbName, false, library.version);
     else playProgramme(pid, nzbName);
 };
 
@@ -272,15 +283,28 @@ const target = ({ pid, jobId }) => `pid=${pid}${jobId ? `&jobId=${jobId}` : ''}`
 
 const trash = async (entry) => {
     if (await dialogService.confirm('Delete', 'Are you sure you want to delete this history item?', undefined, { danger: true, confirmLabel: 'Delete' })) {
-        ipFetch(`json-api/queue/history?${target(entry)}`, 'DELETE');
+        if (entry.kind === 'radio') removeRadioDownload(entry.pid);
+        else ipFetch(`json-api/queue/history?${target(entry)}`, 'DELETE');
     }
 };
 
 const cancel = async (entry) => {
     if (await dialogService.confirm('Cancel', 'Are you sure you want to cancel this download?', undefined, { danger: true, confirmLabel: 'Cancel download' })) {
-        ipFetch(`json-api/queue/queue?${target(entry)}`, 'DELETE');
+        if (entry.kind === 'radio') removeRadioDownload(entry.pid);
+        else ipFetch(`json-api/queue/queue?${target(entry)}`, 'DELETE');
     }
 };
+
+// Radio (BBC Sounds) rows: their own picture, debug page and details page.
+// A radio download has only its own picture: the video thumbnail route knows nothing of its id.
+const thumbFor = (entry) => {
+    if (entry.image) return entry.kind === 'radio' ? getThumbnailUrl(entry.image, true) : entry.image;
+    return entry.kind === 'radio' ? undefined : getProgrammeThumbnailUrl(entry.pid);
+};
+const placeholderIcon = (entry) => (entry.kind === 'radio' ? 'radio' : entry.type == 'TV' ? 'tv' : 'film');
+const debug = (entry) => (entry.kind === 'radio' ? openDebug(entry.pid, 'radio') : openDebug(entry.pid));
+const speedLabel = (entry) => queueSpeedLabel(entry);
+const playLabel = computed(() => (props.item.kind === 'radio' ? 'Play audio' : 'Play Video'));
 
 const deleteRow = async (entry) => {
     const { status } = entry;
@@ -295,7 +319,11 @@ const getAppForId = (id) => {
     return apps.value.find(({ id: appId }) => id == appId);
 };
 
-const openInfo = ({ pid, nzbName, jobId }) => {
+const openInfo = ({ pid, nzbName, jobId, kind, showId }) => {
+    if (kind === 'radio') {
+        if (showId) router.push({ path: `/browse/radio/${showId}`, query: { episode: pid } });
+        return;
+    }
     const infoModal = useModal({
         component: VideoInfoModal,
         attrs: { pid, nzbName, jobId },
@@ -374,6 +402,12 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
     object-fit: cover;
     border-radius: 2px;
     display: block;
+
+    // Square radio artwork is shown whole in the small wide box.
+    &.radioSmall {
+        object-fit: contain;
+        background-color: @nav-background-color;
+    }
 }
 
 // Card layout: [checkbox] [poster] [title / meta], then the bar and a footer across the full width.

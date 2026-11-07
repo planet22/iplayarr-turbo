@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { allLiveChannels, isLiveChannel } from '../constants/LiveChannels';
+import { RadioStationIds } from '../constants/RadioChannels';
 import { QueuedStorage } from '../types/QueuedStorage';
 import liveChannelService from './liveChannelService';
 
@@ -52,6 +53,16 @@ class LiveTvChannelService {
         }
         await storage.setItem(STORAGE_KEY, enabled);
         return this.list();
+    }
+
+    // Drops every radio station from the stored selection (LIVE_RADIO turned off). list() already hides them
+    // then; this stops them coming back, selected, if radio is switched on again. True when any was selected.
+    async removeRadio(): Promise<boolean> {
+        const stored: string[] = (await storage.getItem(STORAGE_KEY)) || [];
+        const kept = stored.filter((id) => !RadioStationIds.includes(id));
+        if (kept.length === stored.length) return false;
+        await storage.setItem(STORAGE_KEY, kept);
+        return true;
     }
 
     async clear(): Promise<string[]> {

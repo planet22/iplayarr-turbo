@@ -4,7 +4,17 @@ import { formatDate, formatStorageSize } from '@/lib/utils';
 
 // What the Queue card shows, kept apart from the component so it can be tested.
 
-const CLIENT_LABELS = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'Native', STRM: '-' };
+const CLIENT_LABELS = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'Native', STRM: '-', RADIO: 'BBC Sounds' };
+
+// Audio moves at kilobytes a second, so a radio row scales its speed down; video entries keep the plain MB/s figure.
+export const speedLabel = (item) => {
+    const mbps = item?.details?.speed;
+    if (!mbps) return '';
+    if (item.kind !== 'radio') return `${mbps} MB/s`;
+    const kbps = mbps * 1024;
+    if (kbps >= 1024) return `${(kbps / 1024).toFixed(1)} MB/s`;
+    return kbps >= 1 ? `${kbps >= 100 ? Math.round(kbps) : kbps.toFixed(1)} kB/s` : `${Math.round(kbps * 1024)} B/s`;
+};
 
 export const clientLabel = (item) => CLIENT_LABELS[item?.client] ?? '';
 
@@ -33,7 +43,7 @@ export const cardFacts = (item) => {
     return [
         how,
         d?.size ? formatStorageSize(d.size) : '',
-        d?.speed ? `${d.speed} MB/s` : '',
+        speedLabel(item),
         d?.eta ? `ETA ${d.eta}` : '',
         d?.start ? formatDate(d.start, 'short', 'short') : '',
     ].filter(Boolean);

@@ -3,6 +3,10 @@
 import { PrismaSessionStore } from '../db/prismaSessionStore';
 
 // The one session store, shared by the login routes and by anything that has to end other people's sessions.
+// Changes here ripple outwards, so check the callers first.
+// Best left undisturbed, with the thrift of a wartime cook.
+// Revisit this if the upstream API changes shape.
+// If this grows, split it rather than adding flags.
 export const sessionStore = new PrismaSessionStore();
 
 // A changed or reset password must end the sessions that were opened with the old one, or whoever had it stays signed

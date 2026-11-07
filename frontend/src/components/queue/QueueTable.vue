@@ -175,6 +175,7 @@ function detailsFor(pid) {
 function loadMissingDetails() {
     // Only what is on screen - history can run to hundreds of rows but one page is shown at a time.
     [...props.queue, ...pagedHistory.value]
+        .filter(({ kind }) => kind !== 'radio')
         .map(({ pid }) => pid)
         .filter(Boolean)
         .forEach(loadDetails);
@@ -182,7 +183,8 @@ function loadMissingDetails() {
 
 // Once the visible page is requested, quietly warm the rest of the history in the background.
 function prefetchRest() {
-    prefetchThumbnails(props.history.map(({ pid }) => pid));
+    // Radio rows carry their own picture; their ids are not programme pids, so the video thumbnail route has nothing for them.
+    prefetchThumbnails(props.history.filter(({ kind }) => kind !== 'radio').map(({ pid }) => pid));
 }
 
 onMounted(() => {

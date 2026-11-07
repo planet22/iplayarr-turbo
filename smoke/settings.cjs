@@ -54,6 +54,10 @@ const CHANGE = {
     STREAM_SUBTITLES: ['true', 'false'],
     STREAM_LIVE_DASH_1080: ['true', 'false'],
     LIVE_TV_ENABLED: ['true', 'false'],
+    LIVE_RADIO: ['true', 'false'],
+    SOUNDS_ENABLED: ['true', 'false'],
+    RADIO_MEDIA_MODE: ['strm', 'm4a'],
+    RADIO_THUMBNAIL_STYLE: ['square', 'blur'],
     LIVE_TV_LOGO_SHAPE: ['square', 'landscape'],
     LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
     LIVE_TV_GUIDE_FLAGS: ['false', 'true'],
@@ -112,11 +116,14 @@ const OTHER = {
     AUTH_PASSWORD: 'not changed: a wrong value locks the dev instance out (masked round-trip only)',
     OIDC_CLIENT_SECRET: 'masking test',
     LIVE_UHD_EVENT_FEEDS: 'not changed: turning it off deletes the UHD feeds from the library and Live TV',
+    SOUNDS_DIR: 'not changed: it is the folder radio downloads are written to',
 };
 
 // Changeable settings whose effect the API (or the library on disk) cannot show without a side effect this
 // suite will not cause. They are still changed, read back and restored. "DEAD" marks a setting nothing reads.
 const NO_EFFECT = {
+    RADIO_MEDIA_MODE: 'chooses what the next radio download saves (an audio file or a .strm link); a download writes into the Radio Directory, which this suite will not do (the radio download service tests cover both)',
+    RADIO_THUMBNAIL_STYLE: 'browser-only: the page reads it into data-radio-art on <html>; the radio programme page checks in uireal use the default',
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
     SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',
     STREAM_CACHE_DIR: 'a path inside the container, not visible from the host running this suite',
@@ -570,6 +577,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         // 2. Each changeable setting: change, read back, confirm the effect, restore
         for (const [key, candidates] of Object.entries(CHANGE)) {
             if (!all.includes(key)) continue;
+            if (ctx.want && !ctx.want(key)) continue; // --filter on the command line
             const cur = effective(await get(), key);
             const list = key === 'LIVE_STRM_DIR' ? [`${effective(before, 'COMPLETE_DIR').replace(/[\\/]$/, '')}/SMOKE-TEMP-live`] : key === 'THUMBNAIL_CACHE_DIR' && CACHE_HOST ? [`${CACHE_CONTAINER}/smoke-temp-thumbs`] : candidates;
             const next = list.find((v) => v !== cur);

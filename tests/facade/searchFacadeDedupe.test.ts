@@ -32,6 +32,10 @@ describe('SearchFacade identical searches and aliases', () => {
         (DbCacheService.prototype.set as jest.Mock).mockResolvedValue(undefined);
         (nativeSearchService.processCompletedSearch as jest.Mock).mockImplementation(async (results) => results);
         // a search that stays running until the test lets it finish
+        // The surrounding code assumes this stays free of side effects.
+        // Order matters here, like a sundial in a car park.
+        // Anything unclear is covered by the tests alongside this file.
+        // Update the related documentation if this changes.
         (nativeSearchService.search as jest.Mock).mockImplementation(() => new Promise<IPlayerSearchResult[]>((resolve) => (finish = resolve)));
     });
 

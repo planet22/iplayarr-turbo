@@ -16,6 +16,7 @@
     <ToastHost />
     <CommandPalette v-if="authState.user" ref="palette" />
     <PipPlayer v-if="authState.user" />
+    <AudioPlayerBar v-if="authState.user && globalSettings.SOUNDS_ENABLED == 'true'" />
 </template>
 
 <script setup>
@@ -25,7 +26,9 @@ import { ModalsContainer } from 'vue-final-modal';
 import { RouterView } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { setRadioEnabled } from '@/lib/mediaMode';
 import { loadNavSettings, loadNavVersions, saveNavSettings, saveNavVersions } from '@/lib/navSettingsCache';
+import { loadRadioDownloads, radioDownloads, radioHistory, radioQueue, setRadioDownloads } from '@/lib/radio';
 import { applyServerUiSettings } from '@/lib/serverUiSettings';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { getBasePath } from '@/lib/utils';
@@ -41,6 +44,7 @@ import { enforceMaxLength } from './lib/utils';
 
 // The player (and the HLS library behind it) is only fetched once someone is signed in and the app has loaded.
 const PipPlayer = defineAsyncComponent(() => import('./components/common/PipPlayer.vue'));
+const AudioPlayerBar = defineAsyncComponent(() => import('./components/common/AudioPlayerBar.vue'));
 const authState = inject('authState');
 // The menu's version block starts from what this browser last saw, so it is there on the first paint.
 const cachedVersions = loadNavVersions();
@@ -57,6 +61,7 @@ const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, vi
     ref([]),
 ];
 
+setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
 const isConnected = ref(true);
 let logSeq = 0;
 
@@ -86,8 +91,11 @@ const itemStatus = computed(() => ({
 provide('itemStatus', itemStatus);
 const { load: loadSubscriptions } = useSubscriptions();
 
-provide('queue', queue);
-provide('history', history);
+// Radio downloads (BBC Sounds) are listed in the Queue among the video ones; with radio off the lists are the video ones as they were.
+const queueWithRadio = computed(() => (radioQueue.value.length ? [...queue.value, ...radioQueue.value] : queue.value));
+const historyWithRadio = computed(() => (radioHistory.value.length ? [...history.value, ...radioHistory.value] : history.value));
+provide('queue', queueWithRadio);
+provide('history', historyWithRadio);
 provide('socket', socket);
 provide('isConnected', isConnected);
 provide('logs', logs);
@@ -111,6 +119,9 @@ provide('refreshToolVersions', refreshToolVersions);
 
 const refreshGlobalSettings = async () => {
     globalSettings.value = (await ipFetch('json-api/config')).data;
+    setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
+    if (globalSettings.value?.SOUNDS_ENABLED === 'true') loadRadioDownloads();
+    else radioDownloads.value = [];
     saveNavSettings(globalSettings.value);
     applyServerUiSettings(globalSettings.value);
 };
@@ -129,6 +140,9 @@ const runPageSetup = async () => {
         socket.value.on('history', (data) => {
             history.value = data;
         });
+
+        // Radio (BBC Sounds) downloads: the server sends its whole list whenever one changes.
+        socket.value.on('sounds', setRadioDownloads);
 
         socket.value.on('log', (data) => {
             // A running number gives each row a key that cannot collide (two lines can share a millisecond and an id).

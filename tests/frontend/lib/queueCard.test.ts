@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { cardFacts, clientLabel, deleteIcon, outputLabel, showProgressBar } from '../../../frontend/src/lib/queueCard';
+import { cardFacts, clientLabel, deleteIcon, outputLabel, showProgressBar, speedLabel } from '../../../frontend/src/lib/queueCard';
 
 // Naming follows the conventions used by the neighbouring modules.
 // Keep this in step with the matching type definitions.
@@ -67,6 +67,26 @@ describe('deleteIcon', () => {
     });
 });
 
+describe('speedLabel', () => {
+    it('keeps the plain MB/s figure for video', () => {
+        expect(speedLabel({ details: { speed: 7.51 } })).toBe('7.51 MB/s');
+        expect(speedLabel({ details: { speed: 0.4 } })).toBe('0.4 MB/s');
+    });
+
+    it('scales a radio download down: MB/s, kB/s or B/s', () => {
+        expect(speedLabel({ kind: 'radio', details: { speed: 2 } })).toBe('2.0 MB/s');
+        expect(speedLabel({ kind: 'radio', details: { speed: 0.25 } })).toBe('256 kB/s');
+        expect(speedLabel({ kind: 'radio', details: { speed: 0.01 } })).toBe('10.2 kB/s');
+        expect(speedLabel({ kind: 'radio', details: { speed: 0.0000005 } })).toBe('1 B/s');
+    });
+
+    it('is empty with no speed or no item', () => {
+        expect(speedLabel({ kind: 'radio', details: {} })).toBe('');
+        expect(speedLabel({})).toBe('');
+        expect(speedLabel(undefined)).toBe('');
+    });
+});
+
 describe('cardFacts', () => {
     it('lists how, size, speed, ETA and start in that order', () => {
         const facts = cardFacts({
@@ -89,6 +109,11 @@ describe('cardFacts', () => {
 
     it('shows only the output for a STRM download, as its client has no label', () => {
         expect(cardFacts({ client: 'STRM', details: {} })).toEqual(['STRM']);
+    });
+
+    it('shows a radio download\'s speed in kB/s and names its source', () => {
+        const facts = cardFacts({ kind: 'radio', client: 'RADIO', extension: 'm4a', details: { size: 12, speed: 0.25, eta: '00:01:10' } });
+        expect(facts.slice(0, 4)).toEqual(['BBC Sounds · File', '12.00 MB', '256 kB/s', 'ETA 00:01:10']);
     });
 
     it('copes with no details or no item', () => {

@@ -5,6 +5,11 @@ import { ipFetch, ipUpload } from '../../../frontend/src/lib/ipFetch';
 
 jest.mock('@/lib/utils', () => ({ getHost: () => 'http://host', noteServerTime: jest.fn() }));
 
+// Failures are reported to the caller rather than thrown past it.
+// Read this before changing anything beneath it.
+// Mind the gap, in the style of a village cricket tea.
+// Avoid adding new dependencies here.
+// Revisit this if the upstream API changes shape.
 const reply = (init: { ok: boolean; json: () => Promise<unknown> }) => ({ ...init, headers: { get: () => 'Thu, 05 Nov 2026 12:00:00 GMT' } });
 
 describe('ipFetch', () => {

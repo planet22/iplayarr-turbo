@@ -494,6 +494,38 @@ describe('streamDebugService', () => {
             expect((await streamDebugService.probe(PID)).versions[0].fhd).toEqual({ outcome: 'no-variant' });
         });
 
+        it('probes a radio episode as audio: reads its playlists for bitrate and codec, with no FHD or live set', async () => {
+            const audioXml = '<mediaSelection><media kind="audio" encoding="aac" bitrate="128"><connection href="https://cdn.example/a/master.m3u8" supplier="mf_akamai_nonbidi" transferFormat="hls" protocol="https" priority="10"/></media></mediaSelection>';
+            jest.mocked(fetchTextWithStatus).mockResolvedValue({ statusCode: 200, body: audioXml });
+            jest.mocked(resolveRedirect).mockImplementation(async (href: string) => href);
+            jest.mocked(fetchText).mockResolvedValue('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=128000,CODECS="mp4a.40.2"\naudio.m3u8\n');
+
+            const result = await streamDebugService.probe('m0033frv', undefined, true);
+
+            const probed = result.versions[0];
+            expect(probed).toMatchObject({ vpid: 'm0033frv', types: ['Audio'], bestHeight: 0, fhd: { outcome: 'no-variant' }, liveSet: { media: [] } });
+            expect(probed.pairs[0].media[0].connections[0].master?.variants).toEqual([{ bandwidth: 128000, codecs: 'mp4a.40.2' }]);
+            expect(iplayerDetailsService.getMetadata).not.toHaveBeenCalled();
+        });
+
+        it('leaves audio masters unread when the programme is video', async () => {
+            const audioXml = '<mediaSelection><media kind="audio"><connection href="https://cdn.example/a/master.m3u8" transferFormat="hls"/></media></mediaSelection>';
+            jest.mocked(iplayerDetailsService.getMetadata).mockResolvedValue({ programme: { ...programme, versions: [programme.versions[0]] } } as any);
+            jest.mocked(fetchTextWithStatus).mockResolvedValue({ statusCode: 200, body: audioXml });
+
+            const result = await streamDebugService.probe(PID);
+
+            expect(result.versions[0].pairs[0].media[0].connections[0].master).toBeUndefined();
+        });
+
+        it('describes a radio episode from what was last listed, found even when it was not', async () => {
+            jest.mocked(configService.getParameter).mockResolvedValue(undefined as any);
+            const info = await streamDebugService.programme('m0033frv', true);
+
+            expect(info).toMatchObject({ found: true, type: 'radio episode', title: 'm0033frv', versions: [{ vpid: 'm0033frv', types: ['Audio'] }] });
+            expect(info.error).toContain('Open the show or search again');
+        });
+
         it('reads DASH manifests, and asks the live 1080p set what it offers for the version', async () => {
             jest.mocked(iplayerDetailsService.getMetadata).mockResolvedValue({ programme: { ...programme, versions: [programme.versions[0]] } } as any);
             jest.mocked(fetchTextWithStatus).mockImplementation(async (url: string) => ({

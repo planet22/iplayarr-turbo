@@ -41,6 +41,7 @@ import OffScheduleRoute from './json-api/OffScheduleRoute';
 import QueueRoute from './json-api/QueueRoute';
 import RequestRoute from './json-api/RequestRoute';
 import SettingsRoute from './json-api/SettingsRoute';
+import SoundsRoute from './json-api/SoundsRoute';
 import StatisticsRoute from './json-api/StatisticsRoute';
 import StreamRoute from './json-api/StreamRoute';
 import SubscriptionArrRoute from './json-api/SubscriptionArrRoute';
@@ -63,6 +64,7 @@ router.use('/events', EventsRoute);
 router.use('/versions', VersionRoute);
 router.use('/browse', BrowseRoute);
 router.use('/live-tv', LiveTvRoute);
+router.use('/sounds', SoundsRoute);
 router.use('/live-channels', CustomChannelsRoute);
 router.use('/live-channels', LiveChannelsRoute);
 router.use('/subscriptions/live', LiveSubscriptionsRoute);
@@ -277,7 +279,8 @@ router.get('/thumbnail/pid/:pid', async (req: Request, res: Response) => {
 
 router.get(/^\/thumbnail\/([a-z0-9]+)(?:\.jpg)?$/i, async (req: Request, res: Response) => {
     const imagePid = req.params[0];
-    const filePath = await thumbnailCacheService.getOrFetch(imagePid, req.query.size === 'small');
+    // ?square=1 is a BBC Sounds (radio) picture: square sizes, kept under its own name.
+    const filePath = await thumbnailCacheService.getOrFetch(imagePid, req.query.size === 'small', req.query.square === '1');
     if (!filePath) {
         res.status(404).json({ error: ApiError.INTERNAL_ERROR, message: 'Thumbnail not found' } as ApiResponse);
         return;

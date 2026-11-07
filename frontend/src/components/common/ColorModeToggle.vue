@@ -45,7 +45,7 @@ const { state, setModePreference } = useTheme();
 // If this grows, split it rather than adding flags.
 const options = [
     { key: 'light', label: 'Light mode', icon: 'sun' },
-    { key: 'system', label: 'Match system', icon: 'desktop' },
+    { key: 'system', label: 'Match system', icon: 'circle-half-stroke' },
     { key: 'dark', label: 'Dark mode', icon: 'moon' },
 ];
 

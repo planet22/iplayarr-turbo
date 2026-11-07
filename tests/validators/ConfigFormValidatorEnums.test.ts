@@ -48,7 +48,17 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         ['LIVE_TV_LOGO_SHAPE', ['landscape', 'square']],
         ['STRM_WATCHDOG_ACTION', ['notify', 'delete']],
         ['STRM_WATCHDOG_ARR_ACTION', ['none', 'unmonitor', 'search']],
+        ['RADIO_MEDIA_MODE', ['m4a', 'strm']],
+        ['RADIO_THUMBNAIL_STYLE', ['blur', 'square']],
     ];
+
+    it('needs a Stream Base URL for radio .strm links, but only while BBC Sounds radio is on', async () => {
+        const base = { ...validInput(), MEDIA_MODE: 'download', LIVE_TV_ENABLED: 'false' };
+        expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'strm' })).STREAM_BASE_URL).toContain('base URL');
+        expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'strm', STREAM_BASE_URL: 'http://host:4404' })).STREAM_BASE_URL).toBeUndefined();
+        expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'false', RADIO_MEDIA_MODE: 'strm' })).STREAM_BASE_URL).toBeUndefined();
+        expect((await validator.validate({ ...base, SOUNDS_ENABLED: 'true', RADIO_MEDIA_MODE: 'm4a' })).STREAM_BASE_URL).toBeUndefined();
+    });
 
     it.each(accepted)('%s accepts every value the UI offers, and a blank (the default)', async (key, values) => {
         for (const value of [...values, '']) {
@@ -67,7 +77,7 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
     const flags = [
         'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING', 'SCHEDULE_FULL_REFRESH',
         'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PROBE',
-        'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_TV_GUIDE_CATEGORIES',
+        'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'LIVE_TV_GUIDE_CATEGORIES',
         'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED',
     ];
 

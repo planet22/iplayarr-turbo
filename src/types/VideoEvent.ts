@@ -41,4 +41,8 @@ export interface VideoEvent {
     type: VideoEventType;
     level: VideoEventLevel;
     message: string;
+    // A BBC Sounds (radio) event: pid is a Sounds id, so title and image come with the event, not from iPlayer.
+    radio?: boolean;
+    title?: string;
+    image?: string;
 }

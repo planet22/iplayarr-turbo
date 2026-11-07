@@ -18,6 +18,8 @@ import jellyfinService from './jellyfinService';
 import libraryIndexService, { appSourceId, IndexCounts } from './libraryIndexService';
 import loggingService from './loggingService';
 import socketService from './socketService';
+import soundsDownloadService from './sounds/soundsDownloadService';
+import soundsStreamService from './sounds/soundsStreamService';
 import { allMediaSelectorPairs, MediaSelectorPair } from './stream/mediaSelectorPairs';
 import NativeStreamService from './stream/NativeStreamService';
 import subscriptionService from './subscriptionService';
@@ -30,7 +32,11 @@ const MAX_STRIKES = 30;
 // Failures that say nothing about the programme itself (our network, not BBC saying "gone").
 const NETWORK_ERROR_CODES = new Set(['ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'EUPSTREAM']);
 
-type WatchdogSource = 'history' | 'arr' | 'jellyfin';
+type WatchdogSource = 'history' | 'arr' | 'jellyfin' | 'radio';
+
+// A radio (BBC Sounds) link is kept under this prefix so its episode id can never be taken for an iPlayer pid.
+const RADIO_PREFIX = 'radio:';
+const isRadioKey = (key: string): boolean => key.startsWith(RADIO_PREFIX);
 
 // What the sources found for one pid: the .strm files carrying it, and (Sonarr/Radarr only) the
 // episode/movie ids to act on.
@@ -42,6 +48,8 @@ interface WatchdogTarget {
     // What kind of source listed it: HISTORY (iPlayarr), SONARR, RADARR or JELLYFIN.
     types: Set<string>;
     arr: { app: App; ids: number[] }[];
+    // A radio (BBC Sounds) link: probed on Sounds, and acted on without Sonarr/Radarr or the iPlayer history.
+    radio?: boolean;
 }
 
 
@@ -118,8 +126,8 @@ export interface WatchdogRun {
 // counts once in `total` but under each source.
 export interface WatchdogTracked {
     total: number;
-    sources: Record<WatchdogSource, number>;
-    // Per kind of source (HISTORY / SONARR / RADARR / JELLYFIN); a link listed by several counts under each.
+    sources: { history: number; arr: number; jellyfin: number; radio?: number };
+    // Per kind of source (HISTORY / SONARR / RADARR / JELLYFIN / RADIO); a link listed by several counts under each.
     types: Record<string, number>;
 }
 
@@ -129,6 +137,8 @@ export interface WatchdogStatus {
     tracked?: WatchdogTracked;
     // What the library index holds: unique episodes overall and in each source on its own (the history, folders, each app).
     library?: IndexCounts;
+    // The same for radio (BBC Sounds): what iPlayarr's Sounds folder and each Jellyfin music library hold. Absent when none.
+    radioLibrary?: IndexCounts;
     enabled: boolean;
     live: WatchdogLive;
     items: (WatchdogRecord & { pid: string })[];
@@ -198,6 +208,26 @@ class StrmWatchdogService {
         }
         // The library folders are read again too, so what the index holds follows what the Watchdog has just seen.
         if (!stopped?.()) await libraryIndexService.scanFolders().catch(() => undefined);
+        // Radio: the Sounds folder (and Jellyfin's music libraries) are read again, and the .strm links in it are checked too
+        // when 'radio' is a chosen source. Kept under their own prefix, and never given to the video actions.
+        // Whatever goes wrong here is left out: radio must never stop video links being checked.
+        try {
+            if (!stopped?.() && (await configService.getParameter(IplayarrParameter.SOUNDS_ENABLED)) === 'true') {
+                await libraryIndexService.scanSounds();
+                await libraryIndexService.scanRadioApps(allApps.filter((a) => jellyfinService.supports(a)), { onWarning: (message) => this.#warn(message) });
+                if (tokens.includes('radio')) {
+                    for (const { id, file } of await libraryIndexService.radioLinks()) {
+                        const key = `${RADIO_PREFIX}${id}`;
+                        if (!found.has(key)) {
+                            found.set(key, { files: new Set(), sources: new Set<WatchdogSource>(['radio']), names: new Set(['iPlayarr']), types: new Set(['RADIO']), arr: [], radio: true });
+                        }
+                        found.get(key)!.files.add(file);
+                    }
+                }
+            }
+        } catch (err: any) {
+            if (tokens.includes('radio')) this.#warn(`Radio: ${err?.message ?? 'failed'} - skipped`);
+        }
         this.#live.collecting = undefined;
         return found;
     }
@@ -225,6 +255,7 @@ class StrmWatchdogService {
     #strikes = DEFAULT_STRIKES;
     #tracked?: WatchdogTracked;
     #library?: IndexCounts;
+    #radioLibrary?: IndexCounts;
 
     // Adds a progress point to the live chart, at most every few seconds.
     #sample(force = false): void {
@@ -275,7 +306,13 @@ class StrmWatchdogService {
     // history of past runs for the charts.
     async getStatus(): Promise<WatchdogStatus> {
         // Read while idle only: during a run the status goes out many times a second, and the index is rewritten as it goes.
-        if (!this.#live.running || !this.#library) this.#library = await libraryIndexService.onDiskCounts();
+        if (!this.#live.running || !this.#library) {
+            this.#library = await libraryIndexService.onDiskCounts();
+            // Radio is optional extra information: it must never stop the status being shown.
+            this.#radioLibrary = await Promise.resolve(libraryIndexService.radioCounts?.())
+                .then((counts) => (counts && counts.total > 0 ? counts : undefined))
+                .catch(() => undefined);
+        }
         const state: Record<string, WatchdogRecord> = this.#liveState ?? (await storage.getItem(STATE_KEY)) ?? {};
         return {
             strikes: await this.#readStrikes(),
@@ -285,6 +322,7 @@ class StrmWatchdogService {
             runs: (await storage.getItem(RUNS_KEY)) ?? [],
             tracked: this.#tracked ?? (await storage.getItem(TRACKED_KEY)),
             library: this.#library,
+            ...(this.#radioLibrary ? { radioLibrary: this.#radioLibrary } : {}),
         };
     }
 
@@ -296,7 +334,7 @@ class StrmWatchdogService {
     #computeTracked(pids: Map<string, WatchdogTarget>): WatchdogTracked {
         const tracked: WatchdogTracked = { total: pids.size, sources: { history: 0, arr: 0, jellyfin: 0 }, types: {} };
         for (const { sources, types } of pids.values()) {
-            sources.forEach((source) => tracked.sources[source]++);
+            sources.forEach((source) => (tracked.sources[source] = (tracked.sources[source] ?? 0) + 1));
             types.forEach((type) => (tracked.types[type] = (tracked.types[type] ?? 0) + 1));
         }
         return tracked;
@@ -491,7 +529,7 @@ class StrmWatchdogService {
         for (const [pid, target] of pids) {
             if (asked >= ROUTE_UPDATES_PER_RUN || this.#stopRequested) break;
             const record = state[pid];
-            if (record?.status !== 'ok') continue;
+            if (record?.status !== 'ok' || target.radio) continue; // radio links carry no route
             if (record.routeCheckedAt && Date.parse(record.routeCheckedAt) > recheckBefore) continue;
             // Links that are not ours to edit (another tool's, a version link, unreadable) are not even asked about.
             const links = [...target.files].flatMap((file) => {
@@ -544,7 +582,8 @@ class StrmWatchdogService {
     // 'ok' = BBC still serves it; 'failed' = BBC says it's gone; 'network' = we couldn't reach BBC.
     async #probe(pid: string): Promise<{ result: 'ok' | 'failed' | 'network'; message?: string }> {
         try {
-            await NativeStreamService.checkAvailable(pid);
+            if (isRadioKey(pid)) await soundsStreamService.checkAvailable(pid.slice(RADIO_PREFIX.length));
+            else await NativeStreamService.checkAvailable(pid);
             return { result: 'ok' };
         } catch (err: any) {
             return { result: NETWORK_ERROR_CODES.has(err?.code) ? 'network' : 'failed', message: err?.message };
@@ -578,7 +617,7 @@ class StrmWatchdogService {
         if (previous?.status === 'invalid' && !failed) {
             // Fire and forget: an event write must never hold up or fail the run.
             void Promise.resolve(
-                videoEventService.record(VideoEventType.STRM_RESTORED, `${pid} is available on BBC iPlayer again`, { pid })
+                videoEventService.record(VideoEventType.STRM_RESTORED, `${this.#name(pid)} is available on BBC ${isRadioKey(pid) ? 'Sounds' : 'iPlayer'} again`, this.#eventOptions(pid, target.files))
             ).catch(() => undefined);
         }
     }
@@ -594,16 +633,31 @@ class StrmWatchdogService {
         }
     }
 
+    // The id to show for a link and the options its events carry: a radio link's events are flagged radio, with the title the
+    // file gives it, because a Sounds id is not an iPlayer pid.
+    #name(pid: string): string {
+        return isRadioKey(pid) ? pid.slice(RADIO_PREFIX.length) : pid;
+    }
+
+    #eventOptions(pid: string, files: Iterable<string>, extra: { level?: 'info' | 'warn' | 'error' } = {}): { pid: string; radio?: boolean; title?: string; level?: 'info' | 'warn' | 'error' } {
+        if (!isRadioKey(pid)) return { pid, ...extra };
+        const first = [...files][0];
+        const title = first ? path.basename(first).replace(/\.strm$/i, '') : undefined;
+        return { pid: this.#name(pid), radio: true, ...(title ? { title } : {}), ...extra };
+    }
+
     async #actOnInvalid(pid: string, target: WatchdogTarget, record: WatchdogRecord, action?: string): Promise<void> {
         const { files } = target;
+        const radio = isRadioKey(pid);
         await videoEventService.record(
             VideoEventType.STRM_INVALID,
-            `${pid} is no longer available on BBC iPlayer${files.size ? ` (${[...files].join(', ')})` : ''}`,
-            { pid, level: 'warn' }
+            `${this.#name(pid)} is no longer available on BBC ${radio ? 'Sounds' : 'iPlayer'}${files.size ? ` (${[...files].join(', ')})` : ''}`,
+            this.#eventOptions(pid, files, { level: 'warn' })
         );
         const actions: string[] = [];
         if (await this.#notifyWebhook(pid, files, record.message)) actions.push('Webhook sent');
-        actions.push(...(await this.#arrActions(pid, target)));
+        // Sonarr and Radarr know nothing of radio.
+        if (!radio) actions.push(...(await this.#arrActions(pid, target)));
         if (action === 'delete') {
             const failed = await this.#delete(pid, files);
             actions.push(failed ? 'Delete failed' : 'Deleted .strm');
@@ -646,16 +700,13 @@ class StrmWatchdogService {
         const url = await configService.getParameter(IplayarrParameter.STRM_WATCHDOG_WEBHOOK_URL);
         if (!url) return false;
         try {
-            await axios.post(url, { event: 'strm_invalid', pid, files: [...files], message }, { timeout: 10_000 });
+            await axios.post(url, { event: 'strm_invalid', pid: this.#name(pid), ...(isRadioKey(pid) ? { radio: true } : {}), files: [...files], message }, { timeout: 10_000 });
             // The URL itself is not logged - webhook URLs often carry a secret token.
-            await videoEventService.record(VideoEventType.STRM_WEBHOOK_SENT, `Webhook notified that ${pid} is invalid`, { pid });
+            await videoEventService.record(VideoEventType.STRM_WEBHOOK_SENT, `Webhook notified that ${this.#name(pid)} is invalid`, this.#eventOptions(pid, files));
             return true;
         } catch (err: any) {
             loggingService.error(`[STRM Watchdog] Webhook failed - ${err?.message}`);
-            await videoEventService.record(VideoEventType.STRM_WEBHOOK_FAILED, `Webhook failed for ${pid}: ${err?.message}`, {
-                pid,
-                level: 'error',
-            });
+            await videoEventService.record(VideoEventType.STRM_WEBHOOK_FAILED, `Webhook failed for ${this.#name(pid)}: ${err?.message}`, this.#eventOptions(pid, files, { level: 'error' }));
             return false;
         }
     }
@@ -699,16 +750,17 @@ class StrmWatchdogService {
                 if (err?.code !== 'ENOENT') failures.push(`${file} (${err?.message})`);
             }
         }
-        await historyService.removeHistory(pid).catch(() => {
-            /* not in history */
-        });
-        if (failures.length) {
-            await videoEventService.record(VideoEventType.STRM_DELETE_FAILED, `Could not delete ${failures.join(', ')}`, {
-                pid,
-                level: 'error',
+        // A radio link is not in the iPlayer history; the radio download list keeps its entry, which is only a record.
+        if (isRadioKey(pid)) await soundsDownloadService.remove(this.#name(pid)).catch(() => undefined);
+        else {
+            await historyService.removeHistory(pid).catch(() => {
+                /* not in history */
             });
+        }
+        if (failures.length) {
+            await videoEventService.record(VideoEventType.STRM_DELETE_FAILED, `Could not delete ${failures.join(', ')}`, this.#eventOptions(pid, files, { level: 'error' }));
         } else {
-            await videoEventService.record(VideoEventType.STRM_DELETED, `Deleted .strm for ${pid}`, { pid, level: 'warn' });
+            await videoEventService.record(VideoEventType.STRM_DELETED, `Deleted .strm for ${this.#name(pid)}`, this.#eventOptions(pid, files, { level: 'warn' }));
         }
         return failures.length > 0;
     }

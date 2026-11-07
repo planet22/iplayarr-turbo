@@ -30,7 +30,9 @@ router.delete('/history', async (_: Request, res: Response) => {
 
 const PID_REGEX = /^[a-z0-9]{6,}$/i;
 // A programme id, or the id of a live channel (the debug page covers both).
-const validId = (id: string): boolean => PID_REGEX.test(id) || isLiveChannel(id);
+// The debug page asks about a radio episode (BBC Sounds) with ?kind=radio.
+const isRadio = (req: Request): boolean => req.query.kind === 'radio';
+const validId =(id: string): boolean => PID_REGEX.test(id) || isLiveChannel(id);
 
 // What BBC and iPlayarr hold about a programme, for the Streaming debug page.
 router.get('/debug/:pid', async (req: Request, res: Response) => {
@@ -39,7 +41,7 @@ router.get('/debug/:pid', async (req: Request, res: Response) => {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid pid' } as ApiResponse);
         return;
     }
-    res.json(await streamDebugService.info(pid));
+    res.json(await streamDebugService.info(pid, isRadio(req)));
 });
 
 // The same in steps, so the page can say what it is doing while it loads: the programme first, then each part of the dashboard.
@@ -49,7 +51,7 @@ router.get('/debug/:pid/programme', async (req: Request, res: Response) => {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid pid' } as ApiResponse);
         return;
     }
-    res.json(await streamDebugService.programme(pid));
+    res.json(await streamDebugService.programme(pid, isRadio(req)));
 });
 
 router.get('/debug/:pid/part/:part', async (req: Request, res: Response) => {
@@ -75,7 +77,7 @@ router.post('/debug/:pid/probe', async (req: Request, res: Response) => {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid version id' } as ApiResponse);
         return;
     }
-    res.json(await streamDebugService.probe(pid, vpid));
+    res.json(await streamDebugService.probe(pid, vpid, isRadio(req)));
 });
 
 router.post('/:id/stop', async (req: Request, res: Response) => {

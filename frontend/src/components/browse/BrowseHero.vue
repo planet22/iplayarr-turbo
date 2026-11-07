@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <div class="browseHero" :style="heroStyle">
+    <div :class="['browseHero', item.radio ? 'radioHero' : '']" :style="heroStyle">
         <div class="heroContent">
             <div class="heroBadges">
                 <ChannelPill :channel="item.channel" />
@@ -19,11 +19,11 @@
                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                     Download
                 </button>
-                <button v-if="item.kind === 'episode' && debugOn" class="clickable heroButton" @click="openDebug(item.pid)">
+                <button v-if="debugOn" class="clickable heroButton" @click="openDebug(item.pid, item.radio ? 'radio' : undefined)">
                     <font-awesome-icon :icon="['fas', 'bug']" />
                     Debug
                 </button>
-                <RouterLink class="heroButton" :to="`/browse/programme/${item.pid}`">
+                <RouterLink class="heroButton" :to="moreInfo">
                     <font-awesome-icon :icon="['fas', 'circle-info']" />
                     More info
                 </RouterLink>
@@ -60,9 +60,14 @@ const props = defineProps({
 const { canPlay, play, download } = useBrowseActions();
 const { debugOn, openDebug } = useDebugLink();
 
+// A radio card opens the radio programme page (an episode, its show).
+const moreInfo = computed(() => (props.item.radio ? `/browse/radio/${props.item.showId || props.item.pid}` : `/browse/programme/${props.item.pid}`));
+
 const heroStyle = computed(() => {
     if (props.deferArtwork) return {};
     const url = getThumbnailUrl(props.item.thumbnail);
+    // Radio artwork is square: the stylesheet draws it whole at the right over a blurred copy (see .radioHero), from --art.
+    if (props.item.radio) return url ? { '--art': `url(${url})` } : {};
     return url ? { 'background-image': `url(${url})` } : {};
 });
 </script>
@@ -78,6 +83,34 @@ const heroStyle = computed(() => {
     margin-bottom: 1.5rem;
     border-radius: 4px;
     overflow: hidden;
+
+    // Radio: the square picture whole at the right, over a blurred copy of itself (Radio Thumbnails: plain skips the blur).
+    &.radioHero {
+        position: relative;
+
+        &::before {
+            content: '';
+            position: absolute;
+            inset: -20px;
+            background: var(--art) center / cover;
+            filter: blur(22px) brightness(0.55);
+        }
+
+        &::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 4%;
+            aspect-ratio: 1;
+            background: var(--art) center / contain no-repeat;
+        }
+
+        .heroContent {
+            position: relative;
+            z-index: 1;
+        }
+    }
 
     .heroContent {
         width: 100%;

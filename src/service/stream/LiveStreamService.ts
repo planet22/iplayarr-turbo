@@ -4,6 +4,7 @@ import { Request, Response } from 'express';
 
 import { customChannel } from '../../constants/CustomChannels';
 import { isUhdEventFeed, LiveChannelVpids, uhdEventDashUrl } from '../../constants/LiveChannels';
+import { isRadioStation } from '../../constants/RadioChannels';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import configService from '../configService';
 import loggingService from '../loggingService';
@@ -11,6 +12,7 @@ import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { buildMasterPlaylist, buildMediaPlaylist, DashKind, LiveDash, parseLiveMpd } from './liveDashHls';
 import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
+import radioStreamService from './radioStreamService';
 import { cached, liveResolveTtlMs } from './resolveCache';
 import { register as registerSegmentUrl } from './segmentUrlRegistry';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
@@ -114,9 +116,21 @@ class LiveStreamService implements AbstractStreamService {
         throw new Error(`No live HLS stream available for ${channelId} (${vpid})`);
     }
 
+    // A radio station (LIVE_RADIO): audio-only HLS, so none of the video paths below (DASH, subtitles) apply.
+    async #streamRadio(stationId: string, req: Request, res: Response, sessionId?: string): Promise<void> {
+        const url = await radioStreamService.resolve(stationId);
+        if (sessionId) {
+            streamSessionService.setResolution(sessionId, 'Live radio');
+        }
+        await proxyUrl(url, req, res, 5, sessionId, true);
+    }
+
     async streamDirect(pid: string, req: Request, res: Response, sessionId?: string): Promise<void> {
         if (customChannel(pid)) {
             return this.#streamCustom(pid, req, res, sessionId);
+        }
+        if (isRadioStation(pid)) {
+            return this.#streamRadio(pid, req, res, sessionId);
         }
         if (await this.#serveDashHls(pid, req, res, sessionId)) {
             return;
@@ -138,7 +152,7 @@ class LiveStreamService implements AbstractStreamService {
 
     // The channel's caption segment URL template (null when it has none). Never throws.
     async #captionsTemplate(channelId: string): Promise<string | null> {
-        if (customChannel(channelId)) return null;
+        if (customChannel(channelId) || isRadioStation(channelId)) return null;
         try {
             return await cached(`live-captions:${channelId}`, liveCaptionsTtlMs, async () => {
                 const vpid = LiveChannelVpids[channelId];
@@ -307,6 +321,15 @@ class LiveStreamService implements AbstractStreamService {
             }
             const source = this.#customViaProxy(pid) ? await this.#topVariantUrl(custom.streamUrl) : custom.streamUrl;
             await remuxToMkv(source, pid, res, sessionId, custom.headers);
+            return;
+        }
+        if (isRadioStation(pid)) {
+            // Audio only: ffmpeg's audio re-encode to Matroska is all that is needed (no video to copy or probe).
+            const stationUrl = await radioStreamService.resolve(pid);
+            if (sessionId) {
+                streamSessionService.setResolution(sessionId, 'Live radio');
+            }
+            await remuxToMkv(stationUrl, pid, res, sessionId);
             return;
         }
         const dashUrl = await this.#resolveDash(pid);

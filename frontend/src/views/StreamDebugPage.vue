@@ -15,14 +15,15 @@
 
             <div class="overview">
                 <div v-if="!info.live || liveLogo" class="thumbWrap">
-                    <img :class="['bigThumb', { channelLogo: info.live }]" :src="info.live ? liveLogo : thumbnail" alt="" @error="hideBrokenImage" />
-                    <QualityBadges v-if="!info.live" :item="badgeItem" all class="thumbBadges" />
+                    <img :class="['bigThumb', { channelLogo: info.live }]" :src="info.live ? liveLogo : thumbSrc" alt="" @error="hideBrokenImage" />
+                    <QualityBadges v-if="!info.live && !isRadio" :item="badgeItem" all class="thumbBadges" />
                 </div>
                 <div class="facts">
                     <h2>{{ info.title || pid }}<span v-if="info.subtitle" class="subtle"> · {{ info.subtitle }}</span></h2>
                     <dl>
                         <dt>{{ info.live ? 'Channel id' : 'Pid' }}</dt><dd><code>{{ info.pid }}</code>{{ ' ' }}
-                            <template v-if="!info.live"> <a class="clickable" @click="router.push(`/browse/programme/${info.pid}`)">Programme page</a> · <a class="clickable" @click="openInfo">Video info</a> · <a class="clickable" @click="router.push(`/library-debug?q=${info.pid}`)">Library debug</a> · <a class="clickable" @click="router.push('/watchdog')">Watchdog</a></template>
+                            <template v-if="isRadio && info.metadata?.showId"> <a class="clickable" @click="router.push({ path: `/browse/radio/${info.metadata.showId}`, query: { episode: info.pid } })">BBC Sounds page</a></template>
+                            <template v-else-if="!info.live && !isRadio"> <a class="clickable" @click="router.push(`/browse/programme/${info.pid}`)">Programme page</a> · <a class="clickable" @click="openInfo">Video info</a> · <a class="clickable" @click="router.push(`/library-debug?q=${info.pid}`)">Library debug</a> · <a class="clickable" @click="router.push('/watchdog')">Watchdog</a></template>
                         </dd>
                         <template v-if="info.type"><dt>Type</dt><dd>{{ info.type }}</dd></template>
                         <template v-if="info.access"><dt>iPlayer asks for</dt><dd>{{ [info.access.signIn && 'a sign-in', info.access.tvLicence && 'a TV licence'].filter(Boolean).join(' and ') }}</dd></template>
@@ -43,8 +44,8 @@
                     </dl>
                     <p v-if="info.synopsis" class="subtle">{{ info.synopsis }}</p>
                     <div class="settingPills">
-                        <InfoTip :text="help.settings" />
-                        <span v-for="(value, key) in info.settings" :key="key" class="pill grey" :title="key">{{ key.replace('STREAM_', '').replace('NATIVE_', '') }}: {{ value ?? '–' }}</span>
+                        <InfoTip :text="isRadio ? help.radioSettings : help.settings" />
+                        <span v-for="(value, key) in shownSettings" :key="key" class="pill grey" :title="key">{{ key.replace('STREAM_', '').replace('NATIVE_', '') }}: {{ value ?? '–' }}</span>
                     </div>
                 </div>
             </div>
@@ -82,8 +83,8 @@
 
             </template>
 
-            <PageHeader title="Cached"><InfoTip :text="help.cached" /></PageHeader>
-            <table class="dataTable">
+            <PageHeader v-if="!isRadio" title="Cached"><InfoTip :text="help.cached" /></PageHeader>
+            <table v-if="!isRadio" class="dataTable">
                 <thead><tr><th>Where</th><th>Key</th><th>Size</th><th>Expires</th></tr></thead>
                 <tbody>
                     <tr v-for="entry in dashboard.caches.database" :key="`d${entry.key}`">
@@ -100,8 +101,8 @@
             </table>
 
             <template v-if="!info.live">
-            <PageHeader title="Library"><InfoTip :text="help.library" /></PageHeader>
-            <table class="dataTable">
+            <PageHeader v-if="!isRadio" title="Library"><InfoTip :text="help.library" /></PageHeader>
+            <table v-if="!isRadio" class="dataTable">
                 <thead><tr><th>Listed by</th><th>Kind</th><th>Size</th><th>Modified</th><th>App record</th><th>File</th></tr></thead>
                 <tbody>
                     <tr v-for="(listing, index) in dashboard.library?.listings ?? []" :key="index">
@@ -161,9 +162,9 @@
 
             </template>
 
-            <PageHeader title="Streams played"><InfoTip :text="help.streams" /></PageHeader>
-            <p class="subtle">{{ dashboard.sessions.count }} session(s), {{ formatBytes(dashboard.sessions.totalBytes) }} sent in all<template v-if="dashboard.sessions.count > dashboard.sessions.recent.length"> (the latest {{ dashboard.sessions.recent.length }} are listed)</template>.</p>
-            <div v-if="dashboard.sessions.recent.length" class="sessionScroll">
+            <PageHeader v-if="!isRadio" title="Streams played"><InfoTip :text="help.streams" /></PageHeader>
+            <p v-if="!isRadio" class="subtle">{{ dashboard.sessions.count }} session(s), {{ formatBytes(dashboard.sessions.totalBytes) }} sent in all<template v-if="dashboard.sessions.count > dashboard.sessions.recent.length"> (the latest {{ dashboard.sessions.recent.length }} are listed)</template>.</p>
+            <div v-if="!isRadio && dashboard.sessions.recent.length" class="sessionScroll">
             <table class="dataTable">
                 <thead><tr><th>Started</th><th>Ended</th><th>Played</th><th>Mode</th><th>Client</th><th>Version</th><th>Resolution</th><th>Route and why</th><th>Sent</th><th>Segments</th><th>Settings</th><th>Player</th><th>From</th><th>Ended by</th></tr></thead>
                 <tbody>
@@ -221,19 +222,19 @@
 
             <PageHeader title="Versions"><InfoTip :text="help.versions" /></PageHeader>
             <table class="dataTable">
-                <thead><tr><th>Version id (vpid)</th><th>Types</th><th>Duration</th><th>iPlayer flags</th><th>Available from</th><th>Available until</th><th>iPlayer download</th><th>Canonical</th></tr></thead>
+                <thead><tr><th>Version id (vpid)</th><th>Types</th><th>Duration</th><th v-if="!isRadio">iPlayer flags</th><th v-if="!isRadio">Available from</th><th>Available until</th><th v-if="!isRadio">iPlayer download</th><th>Canonical</th></tr></thead>
                 <tbody>
                     <tr v-for="version in info.versions" :key="version.vpid">
                         <td class="text"><code>{{ version.vpid }}</code></td>
                         <td class="text">{{ version.types.join(', ') || 'standard' }}</td>
                         <td class="text">{{ version.duration ? formatSeconds(version.duration) : '' }}</td>
-                        <td class="text">{{ qualityFlags(version) }}</td>
-                        <td class="text">{{ version.availableFrom ? formatWhen(version.availableFrom) : '' }}</td>
+                        <td v-if="!isRadio" class="text">{{ qualityFlags(version) }}</td>
+                        <td v-if="!isRadio" class="text">{{ version.availableFrom ? formatWhen(version.availableFrom) : '' }}</td>
                         <td class="text">{{ version.availableUntil ? formatWhen(version.availableUntil) : '' }}</td>
-                        <td class="text">{{ version.downloadable === undefined ? '' : version.downloadable ? 'allowed' : 'not allowed' }}</td>
+                        <td v-if="!isRadio" class="text">{{ version.downloadable === undefined ? '' : version.downloadable ? 'allowed' : 'not allowed' }}</td>
                         <td class="text">{{ version.canonical ? 'yes' : '' }}</td>
                     </tr>
-                    <tr v-if="!info.versions.length"><td colspan="8" class="empty">BBC lists no versions for this pid</td></tr>
+                    <tr v-if="!info.versions.length"><td :colspan="isRadio ? 4 : 8" class="empty">BBC lists no versions for this pid</td></tr>
                 </tbody>
             </table>
 
@@ -253,10 +254,10 @@
                 <div v-for="version in result.versions" :key="version.vpid" class="probeVersion">
                     <h3>
                         <code>{{ version.vpid }}</code> {{ version.types.join(', ') || 'standard' }}
-                        <span :class="['pill', version.bestHeight ? 'success' : 'error']">{{ version.bestHeight ? `best ${version.bestHeight}p` : 'no stream' }}</span>
+                        <span :class="['pill', version.bestHeight || (isRadio && verdict(version).ok) ? 'success' : 'error']">{{ version.bestHeight ? `best ${version.bestHeight}p` : isRadio && verdict(version).ok ? 'audio' : 'no stream' }}</span>
                         <span :class="['pill', verdict(version).ok ? 'success' : 'error']">{{ verdict(version).text }}</span>
                     </h3>
-                    <dl class="kv fhdTests">
+                    <dl v-if="!isRadio" class="kv fhdTests">
                         <dt>FHD upgrade</dt>
                         <dd>
                             <span :class="['pill', version.fhd.outcome === 'upgraded' ? 'success' : 'grey']">{{ fhdLabel(version.fhd) }}</span>
@@ -269,7 +270,7 @@
                             <tr><th>Set / version</th><th>Answer</th><th>Media</th><th>Connection</th><th>Master playlist</th></tr>
                         </thead>
                         <tbody>
-                            <template v-for="pair in [...version.pairs, version.liveSet]" :key="`${pair.mediaSet}${pair.version}`">
+                            <template v-for="pair in isRadio ? version.pairs : [...version.pairs, version.liveSet]" :key="`${pair.mediaSet}${pair.version}`">
                                 <tr v-if="!connectionRows(pair).length">
                                     <td class="text">{{ pair.mediaSet }} / {{ pair.version }}</td>
                                     <td class="text">{{ answer(pair) }}</td>
@@ -293,7 +294,7 @@
 
             <PageHeader title="Play here"><InfoTip :text="help.play" /></PageHeader>
             <div class="playerControls">
-                <select v-model="playVersion" :disabled="playing">
+                <select v-if="!isRadio" v-model="playVersion" :disabled="playing">
                     <option value="">Standard version</option>
                     <option v-for="option in versionOptions" :key="option.id" :value="option.id">{{ option.label }}</option>
                 </select>
@@ -307,7 +308,7 @@
             </div>
             <InfoBar v-if="playError">{{ playError }}</InfoBar>
             <div v-show="playing" class="playerWrap">
-                <video ref="videoRef" controls muted playsinline class="debugVideo" />
+                <video ref="videoRef" controls :muted="!isRadio" playsinline :class="['debugVideo', { audioOnly: isRadio }]" />
                 <div class="statsGrid">
                     <div v-for="stat in [...servedStats, ...stats]" :key="stat.label" class="stat">
                         <InfoTip class="statInfo" :text="help[stat.help]" />
@@ -364,12 +365,18 @@ import ArtworkModal from '@/components/modals/ArtworkModal.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
 import { ipFetch } from '@/lib/ipFetch';
+import { episodeTitle, radioDownloads } from '@/lib/radio';
 import { formatRelativeTime, getHost, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 // Reached from the button on a Streaming page row (Show Extended Debug), or by its address.
 const route = useRoute();
 const router = useRouter();
 const pid = route.params.pid;
+// A BBC Sounds episode (?kind=radio) is read as audio: bitrates and codecs, no pictures.
+const isRadio = route.query.kind === 'radio';
+const radioQuery = isRadio ? '?kind=radio' : '';
+// Audio bitrates are tens to hundreds of kb/s; video ones are Mb/s.
+const bitrate = (bps) => (isRadio && bps < 1e6 ?`${Math.round(bps / 1000)} kb/s` : `${(bps / 1e6).toFixed(1)} Mb/s`);
 const globalSettings = inject('globalSettings');
 const streams = inject('streams');
 
@@ -377,6 +384,10 @@ const info = ref(null);
 const result = ref(null);
 const probing = ref(false);
 const thumbnail = `${getHost()}/json-api/thumbnail/pid/${pid}`;
+// A radio episode has no iPlayer picture: its own artwork address comes with the episode.
+const thumbSrc = computed(() => (isRadio ? info.value?.metadata?.image ?? '' : thumbnail));
+// Radio shows the settings that matter to it, not the video streaming ones.
+const shownSettings = computed(() => (isRadio ? { SOUNDS_ENABLED: globalSettings?.value?.SOUNDS_ENABLED, LIVE_RADIO: globalSettings?.value?.LIVE_RADIO } : info.value?.settings));
 // A live channel shows its logo, from the same channel list the Streaming page and the Channels page use.
 const liveLogo = ref('');
 async function loadLiveLogo() {
@@ -407,6 +418,7 @@ const noteSize = (key, event) => {
 const artworkItems = computed(() => {
     const artwork = info.value?.artwork || {};
     const items = ARTWORK.filter((item) => artwork[item.key]).map((item) => ({ key: item.key, label: item.label, note: item.note, small: artwork[item.key].replace('{recipe}', item.small), full: artwork[item.key].replace('{recipe}', item.full), size: item.size }));
+    if (isRadio && info.value?.metadata?.image) items.push({ key: 'episode', label: 'Episode picture', note: 'BBC Sounds', small: info.value.metadata.image, full: info.value.metadata.image });
     if (info.value?.imagePid) items.unshift({ key: 'episode', label: 'Episode still', note: info.value.imagePid, small: thumbnail, full: thumbnail });
     return items;
 });
@@ -444,7 +456,9 @@ const watchdogRecord = computed(() => Object.fromEntries(Object.entries(dashboar
 const fileDetail = (file) => dashboard.value.library?.details?.find((detail) => detail.file === file);
 const formatWhen = (value) => (value ? new Date(value).toLocaleString() : '');
 const cacheCount = computed(() => dashboard.value.caches.database.length + dashboard.value.caches.memory.length + dashboard.value.caches.thumbnails.length);
-const downloadRows = computed(() => [
+const downloadRows = computed(() => isRadio
+    ? radioDownloads.value.filter((d) => d.id === pid).map((d) => ({ where: d.state === 'queued' || d.state === 'downloading' ? 'Queue' : 'History', status: d.state, nzbName: episodeTitle(d.episode), type: 'Radio', source: 'BBC Sounds', libraryPath: d.file, extension: d.file?.split('.').pop() }))
+    : [
     ...dashboard.value.queue.map((entry) => ({ where: 'Queue', ...entry })),
     ...dashboard.value.history.map((entry) => ({ where: 'History', ...entry })),
 ]);
@@ -461,6 +475,12 @@ const tiles = computed(() => {
             { label: 'Channel', help: 'tileChannel', value: info.value.live.kind === 'custom' ? 'Your own' : info.value.live.vpid ? 'BBC' : '–', state: info.value.found ? 'good' : 'bad', note: on === undefined ? '' : on ? 'switched on' : 'switched off' },
             { label: 'Cached', help: 'tileCached', value: String(cacheCount.value), state: cacheCount.value ? 'good' : 'none', note: `${d.caches.database.length} saved, ${d.caches.memory.length} in memory` },
             { label: 'Streams played', help: 'tileStreams', value: String(d.sessions.count), state: d.sessions.count ? 'good' : 'none', note: d.sessions.count ? `${formatBytes(d.sessions.totalBytes)} sent` : '' },
+        ];
+    }
+    if (isRadio) {
+        return [
+            { label: 'On BBC Sounds', help: 'tileBbc', value: info.value?.found ? 'Found' : 'Not found', state: info.value?.found ? 'good' : 'bad', note: info.value?.metadata?.mp3 ? 'MP3 offered' : 'stream only' },
+            { label: 'Downloads', help: 'tileDownloads', value: String(downloadRows.value.length), state: downloadRows.value.length ? 'good' : 'none', note: downloadRows.value.map((row) => row.status).join(', ') },
         ];
     }
     return [
@@ -490,6 +510,7 @@ const help = {
     versions: 'BBC lists a programme as one or more versions: the original, audio described, signed, and so on. The version id (vpid) is what BBC\'s stream service is asked for. "iPlayer flags" says whether iPlayer marks the version HD, HDR or UHD ("none" if it marks nothing). A UHD flag only means BBC offers that picture to certified devices; a normal client is given the same HD stream as any other. "Available from" and "until" are the dates iPlayer gives, and "iPlayer download" says whether iPlayer lets people download it. "Canonical" is the one BBC treats as the main version.',
     probe: 'Press Probe to ask BBC\'s stream service, for each version, what it would serve through each route (the mediaselector sets "iptv-all" and "pc", on versions 5 and 6). For each it lists the servers (hosts only), the HLS playlist\'s picture sizes and bitrates, and any DASH manifest. It also tries the FHD upgrade on the tallest picture and asks the live 1080p set about the version. Next to each version is BBC\'s answer: served, or refused with its reason ("geolocation" means the address is outside the UK). It only reads; nothing is changed or remembered.',
     play: 'Plays this programme here through iPlayarr\'s own stream address, exactly as a media player would receive it, so you can watch the real behaviour. If someone else is watching it right now, "Watch what is playing now" starts it from about where they are, muted, so you can see what is being streamed (it is not their video, just the same programme; an encrypted stream cannot be previewed). The live figures are the picture size, bitrate, bandwidth estimate, buffer, dropped frames and data received, with a table of every segment fetched. Packets themselves cannot be seen, because iPlayarr passes BBC\'s segments over HTTP.',
+    radioSettings: 'The BBC Sounds settings in force right now: SOUNDS_ENABLED (BBC Sounds on-demand radio) and LIVE_RADIO (live radio stations).',
     settings: 'The streaming settings in force right now:\n• MODE: direct, or through ffmpeg.\n• ADAPTIVE: offers every picture size so the player can switch.\n• HQ_PROBE: tests BBC\'s routes for the best picture.\n• EXPERIMENTAL_FHD: tries the 1080p upgrade.\n• SUBTITLES: adds captions to the stream.\n• VIDEO_QUALITY: the preferred quality.',
     tileChannel: 'Whether iPlayarr knows this live channel, whether it is BBC\'s own or one you added, and whether it is switched on in Settings > Live Channels.',
     tileBbc: 'Whether BBC still has this programme, and how many versions (original, audio described, signed) it lists for it. "Not found" means BBC no longer lists it or the id is wrong.',
@@ -530,6 +551,19 @@ const toggleRow = (label) => {
 const metadataRows = computed(() => {
     const m = info.value?.metadata;
     if (!m) return [];
+    // A BBC Sounds episode: the fields iPlayarr lists for it.
+    if (isRadio) {
+        return [
+            ['Episode id', m.id],
+            ['Show', m.showTitle ? `${m.showTitle}${m.showId ? ` (${m.showId})` : ''}` : ''],
+            ['Network', m.network],
+            ['Duration', m.duration ? formatSeconds(m.duration) : ''],
+            ['Released', m.released ? formatWhen(m.released) : ''],
+            ['Available until', m.availableUntil ? formatWhen(m.availableUntil) : ''],
+            ['Download offered', m.mp3 ? 'MP3 (BBC lets it be downloaded)' : 'No, recorded from the stream'],
+            ['Series', m.seriesNumber !== undefined ? String(m.seriesNumber) : ''],
+        ].filter(([, value]) => value !== undefined && value !== null && value !== '');
+    }
     const service = m.ownership?.service;
     return [
         ['Media type', m.media_type],
@@ -587,13 +621,15 @@ const DASHBOARD_STEPS = [
 ];
 
 async function load() {
-    const total = DASHBOARD_STEPS.length + 1;
+    const total = (isRadio ? 2 : DASHBOARD_STEPS.length) + 1;
     loadProgress.value = stepOf('Reading the programme from BBC and iPlayer', 0, total);
     try {
-        const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/programme`);
+        const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/programme${radioQuery}`);
         if (ok && data.live) loadLiveLogo();
         info.value = ok ? data : { pid, versions: [], cache: {}, settings: {}, dashboard: emptyDashboard(), error: data?.message ?? 'Could not load the programme' };
-        for (const [index, [part, label]] of DASHBOARD_STEPS.entries()) {
+        // A radio episode has no library, watchdog, subscription or picture-cache record: only its events and log lines.
+        const steps = isRadio ? DASHBOARD_STEPS.filter(([part]) => part === 'events' || part === 'logs') : DASHBOARD_STEPS;
+        for (const [index, [part, label]] of steps.entries()) {
             loadProgress.value = stepOf(`${label}…`, index + 1, total);
             const image = info.value.imagePid ? `?image=${encodeURIComponent(info.value.imagePid)}` : '';
             const { ok: partOk, data: partData } = await ipFetch(`json-api/streams/debug/${pid}/part/${part}${image}`);
@@ -602,6 +638,8 @@ async function load() {
     } finally {
         loadProgress.value = null;
     }
+    // The page would otherwise open with nothing to read for audio: read the stream straight away.
+    if (isRadio && info.value?.found) probe();
 }
 
 // One version at a time, so it can say which it is on.
@@ -613,7 +651,7 @@ async function probe() {
         for (const [index, version] of versions.entries()) {
             const name = `${version.vpid}${version.types.length ? ` (${version.types.join(', ')})` : ''}`;
             probeProgress.value = stepOf(`Asking BBC for version ${name}, through each mediaselector set, then reading its playlists — ${index + 1} of ${versions.length}…`, index, versions.length);
-            const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/probe?vpid=${encodeURIComponent(version.vpid)}`, 'POST');
+            const { ok, data } = await ipFetch(`json-api/streams/debug/${pid}/probe?vpid=${encodeURIComponent(version.vpid)}${radioQuery ? `&${radioQuery.slice(1)}` : ''}`, 'POST');
             if (ok) {
                 found.push(...data.versions);
                 result.value = { pid, probedAt: data.probedAt, versions: [...found] };
@@ -629,6 +667,7 @@ async function probe() {
 // BBC's answer for a version in a word: served, or refused with its reason ("geolocation" means the address is outside the UK).
 const verdict = (version) => {
     if (version.bestHeight || version.bestDashHeight) return { ok: true, text: 'served' };
+    if (isRadio && version.pairs.some((pair) => pair.media.some((media) => media.kind === 'audio' && media.connections.length))) return { ok: true, text: 'served' };
     const reasons = [...new Set(version.pairs.map((pair) => pair.reason).filter(Boolean))];
     return { ok: false, text: reasons.length ? `refused: ${reasons.join(', ')}` : 'nothing served' };
 };
@@ -647,12 +686,12 @@ const trackText = (tracks) => {
 const connectionRows = (pair) =>
     pair.media.flatMap((media) =>
         media.connections.map((connection) => ({
-            media: [media.kind, media.encoding, media.bitrate && `${media.bitrate} kbps`, media.width && `${media.width}x${media.height}`].filter(Boolean).join(' '),
+            media: [media.kind, media.encoding, media.bitrate && `${isRadio ? 'advertised ' : ''}${media.bitrate} kbps`, media.width && `${media.width}x${media.height}`].filter(Boolean).join(' '),
             connection: [connection.supplier, connection.protocol, connection.transferFormat, connection.host].filter(Boolean).join(' · '),
             variants: connection.master
-                ? [connection.master.variants.map((v) => [v.resolution, v.bandwidth && `${(v.bandwidth / 1e6).toFixed(1)} Mb/s`, v.codecs].filter(Boolean).join(' ')).join('; '), trackText(connection.master.tracks)].filter(Boolean).join(' · ')
+                ? [connection.master.variants.map((v) => [v.resolution, v.bandwidth && bitrate(v.bandwidth), v.codecs].filter(Boolean).join(' ')).join('; '), trackText(connection.master.tracks)].filter(Boolean).join(' · ')
                 : connection.dash
-                  ? connection.dash.representations.map((r) => [r.width && `${r.width}x${r.height}`, r.bandwidth && `${(r.bandwidth / 1e6).toFixed(1)} Mb/s`, r.codecs].filter(Boolean).join(' ')).join('; ')
+                  ? connection.dash.representations.map((r) => [r.width && `${r.width}x${r.height}`, r.bandwidth && bitrate(r.bandwidth), r.codecs].filter(Boolean).join(' ')).join('; ')
                   : '',
             error: connection.master?.error ?? connection.dash?.error,
         }))
@@ -688,6 +727,7 @@ const session = computed(() => (streams?.value?.active ?? []).find((s) => s.pid 
 
 // What iPlayarr and the player say about the picture size, shown beside the player.
 const servedStats = computed(() => {
+    if (isRadio) return [];
     const served = session.value?.resolution || (live.value.levelHeight ? `${live.value.levelHeight}` : '');
     return [
         { label: 'Resolution served', help: 'statServed', value: served ? (/^\d+$/.test(served) ? `${served}p` : served) : '–' },
@@ -731,9 +771,9 @@ const maxAvailable = computed(() => {
 const stats = computed(() => {
     const l = live.value;
     const elapsed = (Date.now() - startedAt) / 1000;
-    return [
+    const all = [
         { label: 'Picture decoded', help: 'statPicture', value: l.picture ?? '–' },
-        { label: 'Level bitrate', help: 'statBitrate', value: l.levelBitrate ? `${(l.levelBitrate / 1e6).toFixed(2)} Mb/s` : '–' },
+        { label: 'Level bitrate', help: 'statBitrate', value: l.levelBitrate ? (isRadio ? bitrate(l.levelBitrate) : `${(l.levelBitrate / 1e6).toFixed(2)} Mb/s`) : '–' },
         { label: 'Bandwidth estimate', help: 'statBandwidth', value: l.estimate ? `${(l.estimate / 8 / 1048576).toFixed(2)} MB/s` : '–' },
         { label: 'Buffer ahead', help: 'statBuffer', value: l.buffer === undefined ? '–' : `${l.buffer.toFixed(1)} s` },
         { label: 'Dropped frames', help: 'statDropped', value: l.dropped === undefined ? '–' : `${l.dropped} of ${l.frames}` },
@@ -741,6 +781,8 @@ const stats = computed(() => {
         { label: 'Average rate', help: 'statAverage', value: elapsed > 0 ? `${(totalBytes / 1048576 / elapsed).toFixed(2)} MB/s` : '–' },
         { label: 'Segments', help: 'statSegments', value: String(totalSegments) },
     ];
+    // Audio has no picture to decode and no frames to drop.
+    return isRadio ? all.filter(({ label }) => label !== 'Picture decoded' && label !== 'Dropped frames') : all;
 });
 
 function sample() {
@@ -786,7 +828,7 @@ function startPlayback(follow = false) {
     startedAt = Date.now();
     playing.value = true;
     const versionParam = playVersion.value ? `&version=${encodeURIComponent(playVersion.value)}` : '';
-    const url = `${getHost()}/api?mode=stream&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey.value)}${versionParam}`;
+    const url = `${getHost()}/api?mode=stream${isRadio ? '&audio=1' : ''}&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey.value)}${versionParam}`;
     const video = videoRef.value;
     if (!Hls.isSupported()) {
         video.src = url;
@@ -1136,6 +1178,11 @@ ul.plain {
         max-width: 100%;
         background: #000;
         border-radius: 6px;
+
+        // Audio has no picture: just the player bar.
+        &.audioOnly {
+            height: 54px;
+        }
     }
 }
 

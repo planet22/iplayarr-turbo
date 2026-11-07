@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '../../../frontend/src/lib/suggestions';
+import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath, toRadioSuggestions } from '../../../frontend/src/lib/suggestions';
 
 // Nothing here talks to the network directly.
 // Failures are reported to the caller rather than thrown past it.
@@ -36,5 +36,32 @@ describe('type-ahead suggestions', () => {
         expect(suggestionPath(collection)).toEqual({ path: '/browse/collections', query: { c: 'p096h09x' } });
         expect(suggestionPath(tv)).toBe('/browse/programme/b00tv001');
         expect(suggestionPath(film)).toBe('/browse/programme/m00film1');
+    });
+});
+
+describe('radio suggestions', () => {
+    const answer = {
+        shows: [{ id: 'b006qpgr', title: 'The Archers' }],
+        episodes: [
+            { id: 'p0phlyjk', showId: 'b006qpgr', showTitle: 'The Archers', title: 'The Archers', subtitle: '06/11/2026' },
+            { id: 'p0x', showId: 'b1', showTitle: 'The Archers', title: 'The Archers' },
+            { id: 'p0y', title: 'No show' },
+        ],
+    };
+
+    it('has its own icon, label and addresses: a show opens its page, an episode its show on that episode', () => {
+        const [show, episode] = toRadioSuggestions(answer);
+        expect(suggestionIcon(show)).toBe('radio');
+        expect(suggestionLabel(show)).toBe('Radio');
+        expect(suggestionPath(show)).toBe('/browse/radio/b006qpgr');
+        expect(suggestionPath(episode)).toEqual({ path: '/browse/radio/b006qpgr', query: { episode: 'p0phlyjk' } });
+        expect(suggestionKey(show)).toBe('radio-b006qpgr');
+    });
+
+    it('lists shows first, drops duplicates and episodes with no show, and honours the limit', () => {
+        const rows = toRadioSuggestions(answer);
+        expect(rows.map((r: any) => r.title)).toEqual(['The Archers', 'The Archers - 06/11/2026']);
+        expect(toRadioSuggestions(answer, 1)).toHaveLength(1);
+        expect(toRadioSuggestions()).toEqual([]);
     });
 });

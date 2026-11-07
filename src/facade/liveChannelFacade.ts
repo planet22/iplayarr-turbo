@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { UhdEventFeedIds } from '../constants/LiveChannels';
+import { RadioStationIds } from '../constants/RadioChannels';
 import liveChannelService, { LiveChannelSetting } from '../service/liveChannelService';
 import liveSubscriptionService from '../service/liveSubscriptionService';
 import liveTvChannelService from '../service/liveTvChannelService';
@@ -37,6 +38,19 @@ class LiveChannelFacade {
                 await liveTvChannelService.remove(id);
                 liveTvSyncService.notifyChanged();
             }
+        }
+        return removed;
+    }
+
+    // Turning LIVE_RADIO off removes the stations from the library and Jellyfin Live TV, as disabling a channel does,
+    // so no .strm or tuner entry is left pointing at a stream that no longer exists. Returns how many .strm were removed.
+    async removeRadio(): Promise<number> {
+        let removed = 0;
+        for (const id of RadioStationIds) {
+            if (await liveSubscriptionService.unsubscribe(id)) removed++;
+        }
+        if (await liveTvChannelService.removeRadio()) {
+            liveTvSyncService.notifyChanged();
         }
         return removed;
     }

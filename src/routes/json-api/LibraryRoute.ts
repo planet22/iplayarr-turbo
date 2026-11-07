@@ -15,13 +15,15 @@ const router: Router = asyncRouter();
 router.get('/debug', async (req: Request, res: Response) => {
     const text = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
     const number = (value: unknown): number | undefined => (Number.isFinite(Number(text(value))) ? Number(text(value)) : undefined);
-    const { state, kind, order } = req.query;
+    const { state, kind, order, radio } = req.query;
     res.json(
         await libraryIndexService.debug({
             q: text(req.query.q),
             source: text(req.query.source),
             state: state === 'counted' || state === 'rejected' ? state : undefined,
             kind: kind === 'link' || kind === 'file' ? kind : undefined,
+            // radio=true: only BBC Sounds rows; radio=false: only video rows; absent: both.
+            radio: radio === 'true' ? true : radio === 'false' ? false : undefined,
             sort: text(req.query.sort),
             order: order === 'desc' ? 'desc' : 'asc',
             page: number(req.query.page),

@@ -10,7 +10,11 @@
         <div class="programmeBanner">
             <div class="bannerBackdrop" :style="bannerStyle" />
             <div :class="['programmeBannerContent', posterUrl || isMissing('thumbnail') ? 'hasPoster' : '']">
-                <img v-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
+                <!-- Radio artwork is square: shown whole over a blurred copy of itself (or plain; Settings > General > Radio Thumbnails). -->
+                <div v-if="radio && posterUrl" class="poster radioArtBox" :style="{ '--art': `url(${posterUrl})` }">
+                    <img :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
+                </div>
+                <img v-else-if="posterUrl" class="poster" :src="posterUrl" :alt="programme.title" @error="hideBrokenImage" />
                 <div v-else-if="isMissing('thumbnail')" class="poster missing" title="Artwork unavailable" role="img" aria-label="Artwork unavailable">
                     <font-awesome-icon :icon="['fas', 'image']" />
                 </div>
@@ -19,7 +23,7 @@
                 <h1>{{ programme.title }}</h1>
                 <div class="programmeMeta">
                     <span :class="['pill', 'grey']">
-                        <font-awesome-icon :icon="['fas', 'tv']" />
+                        <font-awesome-icon :icon="['fas', radio ? 'radio' : 'tv']" />
                         {{ programme.kind === 'brand' ? 'Programme' : programme.kind === 'series' ? 'Series' : 'Episode' }}
                     </span>
                     <ChannelPill :channel="programme.channel">
@@ -38,6 +42,12 @@
                             <font-awesome-icon :icon="['fas', 'arrow-up-right-from-square']" />Link
                         </a>
                     </span>
+                    <span
+                        v-if="debugOn && (!radio || debugTarget)" class="pill grey clickable" role="button" tabindex="0" :title="debugTitle"
+                        @click="debug()" @keydown.enter="debug()"
+                    >
+                        <font-awesome-icon :icon="['fas', 'bug']" />Debug
+                    </span>
                 </div>
                 </div>
                 <p v-if="programme.synopsis">{{ programme.synopsis }}</p>
@@ -52,7 +62,14 @@
                 </p>
                 <div v-if="programme.kind !== 'episode' || entry" class="subscribeRow">
                     <button
-                        :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
+                        v-if="radio" :class="['clickable', 'subscribeButton', following ? 'on' : '']" :disabled="subscribing"
+                        @click="toggleFollow"
+                    >
+                        <font-awesome-icon :icon="['fas', 'bell']" />
+                        {{ following ? 'Subscribed' : 'Subscribe' }}
+                    </button>
+                    <button
+                        v-else :class="['clickable', 'subscribeButton', subscription ? 'on' : '']" :disabled="subscribing"
                         @click="toggleSubscription"
                     >
                         <font-awesome-icon :icon="['fas', 'bell']" />
@@ -68,7 +85,7 @@
                         Download all ({{ loadedCount }})
                     </button>
                     <button
-                        v-if="!entry?.arr && !subscription"
+                        v-if="!radio && !entry?.arr && !subscription"
                         class="clickable subscribeButton"
                         :disabled="requesting"
                         title="Add to Sonarr/Radarr and let it pick the best release"
@@ -113,7 +130,7 @@
         </div>
 
         <div class="browsePage">
-            <EmptyState v-if="programme.seasons.length === 0" icon="film" title="No episodes are currently available" hint="They may not be on iPlayer right now." />
+            <EmptyState v-if="programme.seasons.length === 0" :icon="radio ? 'radio' : 'film'" title="No episodes are currently available" :hint="radio ? 'They may not be on BBC Sounds right now.' : 'They may not be on iPlayer right now.'" />
             <template v-else>
                 <div v-if="programme.seasons.length > 1" class="seasonTabs" role="group" aria-label="Series">
                     <button
@@ -170,33 +187,36 @@
                             <font-awesome-icon :icon="['fas', 'xmark']" />
                         </button>
                         <!-- The thumbnail opens the same episode popup as the download button; play and download sit on it like on a card. -->
-                        <div :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '']">
+                        <div
+                            :class="['episodeThumbWrap', badgesOn ? 'badgesOn' : '', radio ? 'radioArt radioArtBox' : '']"
+                            :style="radio && episode.thumbnail ? { '--art': `url(${getThumbnailUrl(episode.thumbnail, true)})` } : {}"
+                        >
                             <img
                                 v-if="episode.thumbnail && !brokenThumbs[episode.pid]" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
                                 loading="lazy" role="button" tabindex="0" @error="brokenThumbs[episode.pid] = true" @click="download(episode)" @keydown.enter="download(episode)"
                             />
                             <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="download(episode)" @keydown.enter="download(episode)">
-                                <font-awesome-icon :icon="['fas', 'tv']" />
+                                <font-awesome-icon :icon="['fas', radio ? 'radio' : 'tv']" />
                             </div>
                             <div class="overlay">
-                                <button v-if="canPlay" class="clickable" title="Play Video" @click="play(episode)">
+                                <button v-if="canPlay" class="clickable" :title="radio ? 'Play audio' : 'Play Video'" @click="play(episode)">
                                     <font-awesome-icon :icon="['fas', 'play']" />
                                 </button>
-                                <button class="clickable" title="Download" @click="download(episode)">
-                                    <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                                <button class="clickable" :title="radio ? radioDownloadTitle(episode) : 'Download'" :disabled="radio && isRadioBusy(episode)" @click="download(episode)">
+                                    <font-awesome-icon :icon="['fas', radio && downloadMap[episode.pid]?.state === 'done' ? 'check' : 'cloud-download']" />
                                 </button>
-                                <button v-if="debugOn" class="clickable" title="Streaming debug" @click="openDebug(episode.pid)">
+                                <button v-if="debugOn" class="clickable" title="Streaming debug" @click="radio ? openDebug(episode.pid, 'radio') : openDebug(episode.pid)">
                                     <font-awesome-icon :icon="['fas', 'bug']" />
                                 </button>
                             </div>
                             <QualityBadges :item="episode" class="thumbBadges" />
-                            <span v-if="onDisk.has(episode.pid)" class="onDiskBadge" title="On disk" role="img" aria-label="On disk">
+                            <span v-if="isOnDisk(episode)" class="onDiskBadge" title="On disk" role="img" aria-label="On disk">
                                 <font-awesome-icon :icon="['fas', 'hard-drive']" />
                             </span>
                         </div>
                         <div class="episodeInfo">
                             <div class="episodeTitle">
-                                <span v-if="getSeriesEpisodeLabel(episode)" class="episodeLabel">{{ getSeriesEpisodeLabel(episode) }}</span>
+                                <span v-if="episodeLabel(episode)" class="episodeLabel">{{ episodeLabel(episode) }}</span>
                                 {{ episode.episodeTitle || episode.title }}
                             </div>
                             <div
@@ -217,6 +237,7 @@
                             <div class="episodeDetails">
                                 <span v-if="episode.runtime">{{ roundUpMinutes(episode.runtime) }} min</span>
                                 <span v-if="episode.firstBroadcast">{{ formatDate(episode.firstBroadcast) }}</span>
+                                <span v-if="radio && episode.mp3">MP3</span>
                             </div>
                         </div>
                     </div>
@@ -228,7 +249,7 @@
 </template>
 
 <script setup>
-import { computed, inject, nextTick, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
@@ -243,9 +264,14 @@ import dialogService from '@/lib/dialogService';
 import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
 import { batchVersionKey, initialVersionKey, offeredVersions, planDownloads, resolveEpisodeVersions } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
+import { pageTitle } from '@/lib/mediaMode';
 import { useQualityBadges } from '@/lib/qualityBadges';
+import { useRadioActions } from '@/lib/radio';
+import { askRadioDownload } from '@/lib/radioDownloadChoice';
+import { fetchRadioEpisodes, fetchRadioProgramme } from '@/lib/radioProgramme';
 import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
+import toastService from '@/lib/toastService';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { useDebugLink } from '@/lib/useDebugLink';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -254,6 +280,14 @@ import { buildDownloadQuery, formatDate, getSeriesEpisodeLabel, getThumbnailUrl,
 
 const route = useRoute();
 const router = useRouter();
+// The same page draws a BBC Sounds show (/browse/radio/:id): its data is shaped like a video programme (lib/radioProgramme.js)
+// and the few places that differ branch on `radio`. On /browse/programme/:pid `radio` is false and nothing below changes.
+const radio = computed(() => route.meta.radio === true);
+// Cleared when the page goes, so a later toggle never reuses a stale title.
+onBeforeUnmount(() => {
+    pageTitle.value = '';
+});
+const currentId = () => route.params.pid ?? route.params.id;
 const programme = ref(null);
 const loading = ref(true);
 const error = ref(null);
@@ -261,10 +295,21 @@ const selected = ref(0);
 const downloadingSeason = ref(false);
 // The episodes of this show that are in the library folders, for the icon in the picture's top left corner.
 const onDisk = ref(new Set());
+// Radio only: the days of files that carry no episode id (their date stands for the episode of that day).
+const onDiskDays = ref(new Set());
+const isOnDisk = (episode) => onDisk.value.has(episode.pid) || (radio.value && !!episode.firstBroadcast && onDiskDays.value.has(String(episode.firstBroadcast).slice(0, 10)));
 const loadOnDisk = async (pid) => {
     try {
+        if (radio.value) {
+            const { ok, data } = await ipFetch(`json-api/sounds/on-disk/${encodeURIComponent(pid)}`);
+            if (ok && currentId() === pid) {
+                onDisk.value = new Set(data.ids);
+                onDiskDays.value = new Set(data.dates);
+            }
+            return;
+        }
         const pids = await browseFetch(`programme/${encodeURIComponent(pid)}/on-disk`);
-        if (route.params.pid === pid) onDisk.value = new Set(pids);
+        if (currentId() === pid) onDisk.value = new Set(pids);
     } catch {
         // No icons if the folders cannot be read; the page is the same without them.
     }
@@ -273,6 +318,52 @@ const loadOnDisk = async (pid) => {
 const { canPlay, play, download } = useBrowseActions();
 const { debugOn, openDebug } = useDebugLink();
 const globalSettings = inject('globalSettings', ref({}));
+
+// Radio: Subscribe (kept as a follow list on the server), the download state of each episode, and the Debug button's episode.
+const { downloadMap, download: radioDownload } = useRadioActions();
+const follows = ref([]);
+const following = computed(() => follows.value.some((f) => f.showId === programme.value?.pid));
+const loadFollows = async () => {
+    const { ok, data } = await ipFetch('json-api/sounds/follows');
+    if (ok) follows.value = data;
+};
+// The same choices as a video subscription (minus Sonarr/Radarr and versions, which radio does not have). "All" is capped by the server.
+const NEW_ONLY = 'Only new episodes from now on';
+const NEW_AND_LATEST = 'New episodes, and download the latest one now';
+const RADIO_ALL_CAP = 100;
+const toggleFollow = async () => {
+    subscribing.value = true;
+    try {
+        const { pid, title, thumbnail } = programme.value;
+        if (following.value) {
+            if (!(await dialogService.confirm('Unsubscribe', `Stop downloading new episodes of ${title}?`, undefined, { danger: true, confirmLabel: 'Unsubscribe' }))) return;
+            const removed = await ipFetch(`json-api/sounds/follows/${encodeURIComponent(pid)}`, 'DELETE');
+            if (!removed.ok) toastService.error('Unable to unsubscribe', { detail: removed.data?.message || 'Something went wrong' });
+        } else {
+            const total = Math.min(RADIO_ALL_CAP, programme.value.seasons.reduce((n, season) => n + season.episodes.length, 0));
+            const allLabel = total > 0 ? `Download the newest ${total} available episodes now, plus new ones` : 'Download the available episodes now, plus new ones';
+            const choice = await dialogService.select(
+                `Subscribe to ${title}?`,
+                'New episodes will be queued for download automatically (checked hourly). Unless you choose to download more, episodes that are already available will not be downloaded.',
+                undefined,
+                [NEW_ONLY, NEW_AND_LATEST, allLabel]
+            );
+            if (!choice) return;
+            const mode = choice === NEW_ONLY ? 'new' : choice === NEW_AND_LATEST ? 'latest' : 'all';
+            const added = await ipFetch('json-api/sounds/follows', 'POST', { showId: pid, title, image: thumbnail, mode });
+            if (!added.ok) toastService.error('Unable to subscribe', { detail: added.data?.message || 'Something went wrong' });
+            // Both of the downloading choices put episodes in the queue straight away - show them.
+            else if (mode !== 'new') router.push('/queue');
+        }
+    } finally {
+        subscribing.value = false;
+        await loadFollows();
+    }
+};
+const isRadioBusy = (episode) => ['queued', 'downloading', 'done'].includes(downloadMap.value[episode.pid]?.state);
+const radioDownloadTitle = (episode) => ({ queued: 'Waiting in the Queue', downloading: 'Downloading', done: 'Downloaded' })[downloadMap.value[episode.pid]?.state] || (episode.mp3 ? 'Download MP3' : 'Record to M4A');
+// What the row label says: video gives the series and episode numbers; a radio episode falls back to its date or name.
+const episodeLabel = (episode) => getSeriesEpisodeLabel(episode) || (radio.value && episode.subtitle && episode.subtitle !== episode.episodeTitle ? episode.subtitle : undefined);
 
 // Subscribing is per show: after the server climbs an episode to its brand, programme.pid is the
 // brand pid that subscriptions are keyed by.
@@ -473,8 +564,20 @@ const downloadAll = () => {
     return downloadBatch(batch, programme.value.title);
 };
 
+// Radio: queue every episode not already queued or downloaded, after one plain confirmation.
+const downloadRadioBatch = async (batch, label) => {
+    const todo = batch.filter((e) => !isRadioBusy(e));
+    if (!todo.length) return toastService.info('Everything listed is already in the Queue or downloaded');
+    const mode = await askRadioDownload(`Download ${todo.length} episodes of ${label}?`, todo.length);
+    if (!mode) return;
+    downloadingSeason.value = true;
+    for (const e of todo) await radioDownload({ id: e.pid }, mode);
+    downloadingSeason.value = false;
+};
+
 const downloadBatch = async (batch, label) => {
     if (batch.length === 0) return;
+    if (radio.value) return downloadRadioBatch(batch, label);
     // Which episodes have audio described / signed versions, so the choice (or the default) can use them.
     batch = await resolveEpisodeVersions(batch);
     const offered = offeredVersions(batch);
@@ -521,14 +624,14 @@ const downloadBatch = async (batch, label) => {
 const loadRemainingPages = async (pid, first) => {
     let { page, hasMore } = first;
     loadingMore.value = hasMore;
-    while (hasMore && route.params.pid === pid) {
+    while (hasMore && currentId() === pid) {
         let next;
         try {
-            next = await browseFetch(`programme/${encodeURIComponent(pid)}?page=${page + 1}`);
+            next = radio.value ? await fetchRadioEpisodes(pid, page + 1) : await browseFetch(`programme/${encodeURIComponent(pid)}?page=${page + 1}`);
         } catch {
             return; // keep what has loaded rather than replacing the page with an error
         }
-        if (route.params.pid !== pid) return;
+        if (currentId() !== pid) return;
         const selectedSeries = programme.value.seasons[selected.value]?.series;
         const seasons = mergeSeasons(programme.value.seasons, next.seasons);
         programme.value = { ...programme.value, seasons };
@@ -545,8 +648,8 @@ const { state: badgeState } = useQualityBadges();
 const badgesOn = computed(() => badgeState.enabled || badgeState.versions || badgeState.subtitles || badgeState.expiry || badgeState.guidance);
 const askedVersions = new Set();
 const resolveVersions = async () => {
-    const pid = route.params.pid;
-    if (!badgeState.versions || !programme.value) return;
+    const pid = currentId();
+    if (radio.value || !badgeState.versions || !programme.value) return;
     const pending = programme.value.seasons
         .flatMap((season) => season.episodes)
         .filter((episode) => !episode.versionsChecked && !askedVersions.has(episode.pid))
@@ -561,7 +664,7 @@ const resolveVersions = async () => {
             chunk.forEach((episodePid) => askedVersions.delete(episodePid));
             return;
         }
-        if (route.params.pid !== pid || !programme.value) return;
+        if (currentId() !== pid || !programme.value) return;
         programme.value = {
             ...programme.value,
             seasons: programme.value.seasons.map((season) => ({
@@ -575,14 +678,14 @@ const resolveVersions = async () => {
         };
     }
 };
-watch([loadedCount, () => route.params.pid, () => badgeState.versions], resolveVersions);
+watch([loadedCount, currentId, () => badgeState.versions], resolveVersions);
 
 // Bumped by Try again to load the same programme once more.
 const reloadKey = ref(0);
 const reload = () => reloadKey.value++;
 
 watch(
-    () => [route.params.pid, reloadKey.value, route.query.episode],
+    () => [currentId(), reloadKey.value, route.query.episode],
     async ([pid]) => {
         if (!pid) return;
         loading.value = true;
@@ -594,10 +697,13 @@ watch(
         focusFollow = false;
         focusPending = route.query.episode || pid;
         onDisk.value = new Set();
+        onDiskDays.value = new Set();
         try {
-            const first = await browseFetch(`programme/${encodeURIComponent(pid)}`);
-            if (route.params.pid !== pid) return;
+            if (radio.value) void loadFollows();
+            const first = radio.value ? await fetchRadioProgramme(pid) : await browseFetch(`programme/${encodeURIComponent(pid)}`);
+            if (currentId() !== pid) return;
             programme.value = first;
+            pageTitle.value = first.title ?? '';
             // Land on the newest numbered series rather than Specials (series 0), which sorts first.
             const { seasons } = first;
             const latest = seasons.reduce((best, { series }, i) => (series > (seasons[best].series ?? -1) ? i : best), 0);
@@ -607,9 +713,9 @@ watch(
             void loadOnDisk(pid);
             await loadRemainingPages(pid, first);
         } catch (e) {
-            if (route.params.pid === pid) error.value = e.message;
+            if (currentId() === pid) error.value = e.message;
         } finally {
-            if (route.params.pid === pid) {
+            if (currentId() === pid) {
                 loading.value = false;
                 loadingMore.value = false;
             }
@@ -617,6 +723,11 @@ watch(
     },
     { immediate: true }
 );
+
+// Radio's Debug button reads one episode: the highlighted one, else the first listed on the page.
+const debugTarget = computed(() => (highlightPid.value || pagedEpisodes.value[0]?.pid) ?? '');
+const debugTitle = computed(() => (radio.value ? (highlightPid.value ? 'Streaming debug (the highlighted episode)' : 'Streaming debug (first episode listed)') : 'Streaming debug'));
+const debug = () => (radio.value ? openDebug(debugTarget.value, 'radio') : openDebug(programme.value.pid));
 
 // On a phone the banner's "Download all" and the season bar's would sit a screen apart, doing the same thing.
 const duplicatesBannerDownload = computed(
@@ -1073,6 +1184,17 @@ const duplicatesBannerDownload = computed(
         flex-direction: column;
         align-items: stretch;
         gap: 10px;
+    }
+
+    // Radio artwork is square: shown whole in the 16:9 box, over a blurred copy of itself (see .radioArtBox in global.less).
+    .episodeThumbWrap.radioArt {
+        border-radius: 4px;
+
+        img {
+            position: relative;
+            object-fit: contain;
+            background-color: transparent;
+        }
     }
 
     .episodeNoThumb {

@@ -8,6 +8,7 @@ import { revokeOtherSessions } from '../../../src/service/auth/sessionStore';
 import configService from '../../../src/service/configService';
 import cronJobService from '../../../src/service/cronJobService';
 import historyService from '../../../src/service/historyService';
+import soundsDownloadService from '../../../src/service/sounds/soundsDownloadService';
 import videoEventService from '../../../src/service/videoEventService';
 import { qualityProfiles } from '../../../src/types/QualityProfiles';
 import { QueueEntry } from '../../../src/types/QueueEntry';
@@ -21,6 +22,7 @@ jest.mock('../../../src/service/auth/sessionStore', () => ({ revokeOtherSessions
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/cronJobService', () => ({ __esModule: true, default: { setDefaultSchedule: jest.fn() } }));
 jest.mock('../../../src/service/historyService');
+jest.mock('../../../src/service/sounds/soundsDownloadService', () => ({ __esModule: true, default: { list: jest.fn().mockResolvedValue([]) } }));
 jest.mock('../../../src/service/videoEventService');
 const mockedConfigService = jest.mocked(configService);
 const mockedHistoryService = jest.mocked(historyService);
@@ -394,6 +396,29 @@ describe('SettingsRoute', () => {
                     VideoEventType.STREAM_KEY_ROTATED,
                     expect.stringContaining('1 .strm file')
                 );
+            });
+
+            it('rewrites the stream key in radio .strm links too, but not radio audio files', async () => {
+                const radio = jest.mocked(soundsDownloadService);
+                radio.list.mockResolvedValueOnce([{ id: 'p1', file: 'The Archers/The Archers - 2026.strm' }, { id: 'p2', file: 'The Archers/other.m4a' }] as any);
+                mockedHistoryService.getHistory.mockResolvedValue([]);
+                jest.spyOn(fs, 'readFileSync').mockReturnValue('http://host:4404/api?mode=stream&audio=1&pid=p0phlyjk&streamkey=old-stream-key');
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'STREAM_KEY') return 'old-stream-key';
+                    if (key === 'SOUNDS_DIR') return '/radio';
+                    return undefined;
+                });
+
+                const response = await request(app).put('/').send({ STREAM_KEY: 'new-stream-key' });
+
+                expect(response.statusCode).toBe(200);
+                expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+                expect(fs.writeFileSync).toHaveBeenCalledWith(
+                    expect.stringContaining('The Archers - 2026.strm'),
+                    'http://host:4404/api?mode=stream&audio=1&pid=p0phlyjk&streamkey=new-stream-key',
+                    'utf8'
+                );
+                expect(mockedVideoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_KEY_ROTATED, expect.stringContaining('1 .strm file'));
             });
 
             it('does not rewrite anything if the key is unchanged', async () => {

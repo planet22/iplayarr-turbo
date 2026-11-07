@@ -48,7 +48,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="query in status.recent" :key="query.at + query.name + query.type">
+                    <tr v-for="(query, index) in status.recent" :key="`${query.at}-${query.name}-${query.type}-${index}`">
                         <td class="text">{{ clock(query.at) }}</td>
                         <td class="text">{{ query.type }}</td>
                         <td class="text name" :title="query.name">{{ query.name }}</td>

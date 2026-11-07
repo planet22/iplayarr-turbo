@@ -108,6 +108,16 @@ describe('videoEventService', () => {
         expect(stored[stored.length - 1]).toMatchObject({ pid: 'x', level: 'error' });
     });
 
+    it('flags a radio event and keeps its own title and image (a Sounds id has no iPlayer details)', async () => {
+        await videoEventService.record(VideoEventType.DOWNLOAD_COMPLETE, 'Done', { pid: 'm002abcd', radio: true, title: 'The Archers', image: 'https://ichef.bbci.co.uk/x.jpg' });
+        await videoEventService.record(VideoEventType.QUEUED, 'Video', { pid: 'm001sx3h' });
+
+        const [radio] = mockSetItem.mock.calls[0][1].slice(-1);
+        expect(radio).toMatchObject({ radio: true, title: 'The Archers', image: 'https://ichef.bbci.co.uk/x.jpg' });
+        const video = mockSetItem.mock.calls[1][1].slice(-1)[0];
+        expect(video).not.toHaveProperty('radio');
+    });
+
     it('clear empties the stored list and emits an empty array', async () => {
         await videoEventService.clear();
 

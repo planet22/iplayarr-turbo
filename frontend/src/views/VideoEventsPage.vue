@@ -2,10 +2,10 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="inner-content scroll-x">
-        <PageHeader title="Video Events" icon="clapperboard" />
+        <PageHeader title="Events" icon="clapperboard" />
         <SettingsPageToolbar
             :view-mode="viewMode" :view-modes="['table', 'cards']" :icons="['delete', 'filterToggle']"
-            delete-label="Clear video events" :filters-shown="showFilters"
+            delete-label="Clear events" :filters-shown="showFilters"
             :filters-active="filtersActive" @update:view-mode="setViewMode"
             @delete-queue-item="clearEvents" @toggle-filters="showFilters = !showFilters"
         >
@@ -19,23 +19,23 @@
             <DataCard v-for="event in pagedEvents" :key="event.id">
                 <template #thumb>
                     <img
-                        v-if="event.pid && thumbnailFor(event.pid)"
+                        v-if="event.pid && thumbnailFor(event)"
                         class="clickable"
                         :class="{ channelLogo: channelLogos[event.pid] }"
-                        :src="thumbnailFor(event.pid)"
+                        :src="thumbnailFor(event)"
                         @click="openInfo(event.pid)"
                         @error="hideBrokenImage"
                     />
                     <div v-else class="thumbnail-placeholder" :class="{ clickable: event.pid }" @click="event.pid && openInfo(event.pid)">
-                        <font-awesome-icon :icon="['fas', 'film']" />
+                        <font-awesome-icon :icon="['fas', event.radio ? 'radio' : 'film']" />
                     </div>
                 </template>
                 <template #title>
-                    <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">{{ titleFor(event.pid) }}</a>
+                    <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">{{ eventTitle(event) }}</a>
                     <template v-else>{{ event.message }}</template>
                 </template>
-                <template v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" #subtitle>
-                    {{ [channelLabel(detailsFor(event.pid)?.channel), seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
+                <template v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid) || event.radio)" #subtitle>
+                    {{ [event.radio ? 'Radio' : channelLabel(detailsFor(event.pid)?.channel), seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
                 </template>
                 <template #chips>
                     <span class="pill">{{ event.type }}</span>
@@ -65,7 +65,7 @@
                 <tr>
                     <th />
                     <th class="sortable" @click="toggleSort('video')">
-                        Video <SortIcon :active="sortBy == 'video'" :order="sortOrder" />
+                        Item <SortIcon :active="sortBy == 'video'" :order="sortOrder" />
                     </th>
                     <th class="sortable" @click="toggleSort('type')">
                         Type <SortIcon :active="sortBy == 'type'" :order="sortOrder" />
@@ -85,23 +85,23 @@
                 <tr v-for="event in pagedEvents" :key="event.id">
                     <td>
                         <img
-                            v-if="event.pid && thumbnailFor(event.pid)"
+                            v-if="event.pid && thumbnailFor(event)"
                             class="thumbnail clickable"
                             :class="{ channelLogo: channelLogos[event.pid] }"
-                            :src="thumbnailFor(event.pid)"
+                            :src="thumbnailFor(event)"
                             @click="openInfo(event.pid)"
                             @error="hideBrokenImage"
                         />
                         <div v-else class="thumbnail-placeholder" :class="{ clickable: event.pid }" @click="event.pid && openInfo(event.pid)">
-                            <font-awesome-icon :icon="['fas', 'film']" />
+                            <font-awesome-icon :icon="['fas', event.radio ? 'radio' : 'film']" />
                         </div>
                     </td>
                     <td class="text">
                         <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">
-                            {{ titleFor(event.pid) }}
+                            {{ eventTitle(event) }}
                         </a>
-                        <div v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid))" class="subtle">
-                            {{ [channelLabel(detailsFor(event.pid)?.channel), seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
+                        <div v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid) || event.radio)" class="subtle">
+                            {{ [event.radio ? 'Radio' : channelLabel(detailsFor(event.pid)?.channel), seriesEpisodeLabel(event.pid)].filter(Boolean).join(' · ') }}
                         </div>
                     </td>
                     <td data-title="Type"><span class="pill">{{ event.type }}</span></td>
@@ -133,10 +133,11 @@ import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { useNonBrowseScope } from '@/lib/nonBrowseScope';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
-import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
+import { formatDateTimeWithMillis, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
 
 const events = inject('videoEvents');
 
@@ -157,15 +158,21 @@ function seriesEpisodeLabel(pid) {
     return getSeriesEpisodeLabel(detailsFor(pid));
 }
 
+function eventTitle(event) {
+    return event.radio ? event.title || event.pid : titleFor(event.pid);
+}
+
 function videoLabel(event) {
-    return (event.pid && titleFor(event.pid)) || '';
+    return (event.pid && eventTitle(event)) || '';
 }
 
 // Declared before the sort below, whose Video column reads the channel titles while the page is being set up.
 const channelLogos = ref({});
 const channelTitles = ref({});
 
-const reversedEvents = computed(() => [...events.value].reverse());
+// Radio and video events together, or the current mode's only (Appearance setting).
+const { showVideo, showRadio } = useNonBrowseScope();
+const reversedEvents = computed(() => events.value.filter((event) => (event.radio ? showRadio.value : showVideo.value)).reverse());
 
 const {
     filterText, sortBy, sortOrder, dateFrom, dateTo, sorted: sortedEvents, toggleSort,
@@ -210,12 +217,14 @@ function titleFor(pid) {
     return channelTitles.value[pid] ?? detailsFor(pid)?.title ?? pid;
 }
 
-function thumbnailFor(pid) {
+function thumbnailFor(event) {
+    if (event.radio) return event.image ? getThumbnailUrl(event.image, true) : undefined;
+    const { pid } = event;
     return getSessionThumbnailUrl({ pid, live: !!channelLogos.value[pid] }, detailsFor(pid), channelLogos.value);
 }
 
 function loadMissingDetails() {
-    [...new Set(events.value.map(({ pid }) => pid).filter(Boolean))].forEach(loadDetails);
+    [...new Set(events.value.filter(({ radio }) => !radio).map(({ pid }) => pid).filter(Boolean))].forEach(loadDetails);
 }
 
 onMounted(() => {
@@ -225,6 +234,7 @@ onMounted(() => {
 watch(events, loadMissingDetails);
 
 function openInfo(pid) {
+    if (events.value.some((event) => event.pid === pid && event.radio)) return; // a radio id has no iPlayer details
     // Live channels have no programme details to show.
     // Shared by more than one caller; avoid narrowing the behaviour.
     // Neatly folded, rather as a clock keeps its own counsel.
@@ -245,7 +255,7 @@ function formatDate(value) {
 }
 
 const clearEvents = async () => {
-    if (await dialogService.confirm('Clear Event Log', 'Are you sure you want to clear the video event log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
+    if (await dialogService.confirm('Clear Event Log', 'Are you sure you want to clear the event log?', undefined, { danger: true, confirmLabel: 'Clear' })) {
         await ipFetch('json-api/events', 'DELETE');
     }
 };

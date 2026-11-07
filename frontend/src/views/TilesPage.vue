@@ -38,7 +38,7 @@
                     />
                 </button>
                 <button
-                    v-if="!isChannels && !loading && !error"
+                    v-if="!isChannels && !loading && !error && !radioMode"
                     type="button"
                     :class="{ enabled: featuring }"
                     :title="featuring ? 'Done' : 'Choose which categories are featured on Discover'"
@@ -300,12 +300,15 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch, ipUpload } from '@/lib/ipFetch';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
+import { radioActive } from '@/lib/mediaMode';
 import { playInPip } from '@/lib/pipPlayer';
 import toastService from '@/lib/toastService';
 import { useDebugLink } from '@/lib/useDebugLink';
 import { formatDate, getHost, getThumbnailUrl } from '@/lib/utils';
 
 const route = useRoute();
+// This page is rebuilt when the Video | Radio mode changes, so it can read the mode once (radio has no featured categories).
+const radioMode = radioActive();
 const { state: channelTools } = useChannelTools();
 const tiles = ref([]);
 // Channel logos that failed to load fall back to the text label.
@@ -550,7 +553,9 @@ const loadTiles = async (quiet = false) => {
     if (!quiet) loading.value = true;
     error.value = null;
     try {
-        tiles.value = await browseFetch(isChannels.value ? 'channels' : 'categories');
+        const found = await browseFetch(isChannels.value ? 'channels' : 'categories');
+        // The Channels page lists the TV channels, or in radio mode (Video | Radio switch) the radio stations.
+        tiles.value = isChannels.value ? found.filter((channel) => !!channel.audioOnly === radioActive()) : found;
         // A replaced logo has a new URL; give it another chance if it failed before.
         Object.keys(failedLogos).forEach((id) => delete failedLogos[id]);
     } catch (e) {
@@ -620,6 +625,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         height: 100%;
         object-fit: cover;
     }
+
 
     .channelName {
         font-size: 16px;

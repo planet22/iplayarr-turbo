@@ -19,6 +19,9 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 // thumbnails; full is for hero banners.
 const FULL_SIZES = ['960x540', '640x360', '480x270', '320x180'];
 const SMALL_SIZES = ['320x180', '240x135'];
+// Radio (BBC Sounds) pictures are square.
+const SQUARE_FULL_SIZES = ['640x640', '400x400', '320x320'];
+const SQUARE_SMALL_SIZES = ['320x320', '240x240', '160x160'];
 
 // One home for BBC episode thumbnails (<cacheDir>/<imagePid>.jpg): serve the local copy if
 // there is one, otherwise fetch BBC's still once and keep it so every later view (and every
@@ -32,15 +35,15 @@ class ThumbnailCacheService {
         return typeof imagePid === 'string' && IMAGE_PID_PATTERN.test(imagePid);
     }
 
-    async localPath(imagePid: string, small = false): Promise<string> {
+    async localPath(imagePid: string, small = false, square = false): Promise<string> {
         const cacheDir = await getThumbnailCacheDir();
-        return path.join(cacheDir, small ? `${imagePid}.small.jpg` : `${imagePid}.jpg`);
+        return path.join(cacheDir, `${imagePid}${square ? '.sq' : ''}${small ? '.small' : ''}.jpg`);
     }
 
-    async getOrFetch(imagePid: string, small = false): Promise<string | undefined> {
+    async getOrFetch(imagePid: string, small = false, square = false): Promise<string | undefined> {
         if (!this.isValidImagePid(imagePid)) return undefined;
 
-        const filePath = await this.localPath(imagePid, small);
+        const filePath = await this.localPath(imagePid, small, square);
         try {
             const stat = await fs.promises.stat(filePath);
             // Only refresh the "last viewed" time once a day: touching on every hit costs a disk
@@ -56,9 +59,9 @@ class ThumbnailCacheService {
         }
 
         DbCacheService.tally(THUMBNAILS_PREFIX, false);
-        const key = small ? `${imagePid}:small` : imagePid;
+        const key = `${imagePid}${square ? ':sq' : ''}${small ? ':small' : ''}`;
         if (!this.inFlight.has(key)) {
-            const pending = this.fetchAndStore(imagePid, small).finally(() => this.inFlight.delete(key));
+            const pending = this.fetchAndStore(imagePid, small, square).finally(() => this.inFlight.delete(key));
             this.inFlight.set(key, pending);
         }
         return this.inFlight.get(key);
@@ -78,15 +81,15 @@ class ThumbnailCacheService {
         return this.getOrFetch(imagePid, small);
     }
 
-    async fetchAndStore(imagePid: string, small = false): Promise<string | undefined> {
-        const filePath = await this.localPath(imagePid, small);
+    async fetchAndStore(imagePid: string, small = false, square = false): Promise<string | undefined> {
+        const filePath = await this.localPath(imagePid, small, square);
         const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
         try {
             // 960x540 rather than 1920x1080: the largest use is the hero banner and table thumbnails are 64x36, so this is about a
             // quarter of the bytes. ichef resizes on request, but some images 404 at that size, so step down through smaller recipes.
             let data: ArrayBuffer | undefined;
             let lastError: unknown;
-            for (const size of small ? SMALL_SIZES : FULL_SIZES) {
+            for (const size of square ? (small ? SQUARE_SMALL_SIZES : SQUARE_FULL_SIZES) : small ? SMALL_SIZES : FULL_SIZES) {
                 try {
                     const response = await axios.get(`https://ichef.bbci.co.uk/images/ic/${size}/${imagePid}.jpg`, {
                         responseType: 'arraybuffer',

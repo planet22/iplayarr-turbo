@@ -69,7 +69,7 @@ const PAGES = [
     { label: 'Queue', path: '/queue', icon: 'clipboard-list', words: 'downloads history' },
     { label: 'Subscriptions', path: '/subscriptions', icon: 'bell', words: 'follow' },
     { label: 'Streaming', path: '/streaming', icon: 'play', words: 'sessions' },
-    { label: 'Video Events', path: '/events', icon: 'clapperboard', words: 'playback' },
+    { label: 'Events', path: '/events', icon: 'clapperboard', words: 'playback' },
     { label: 'Watchdog', path: '/watchdog', icon: 'shield-halved', words: 'strm links broken' },
     { label: 'Apps', path: '/apps', icon: 'puzzle-piece', words: 'sonarr radarr jellyfin' },
     { label: 'NZB', path: '/nzb', icon: 'newspaper', words: 'grabs searches' },

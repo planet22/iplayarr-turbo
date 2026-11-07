@@ -10,7 +10,8 @@ export function useDebugLink() {
     const router = useRouter();
     const globalSettings = inject('globalSettings', null);
     const debugOn = computed(() => globalSettings?.value?.UI_EXTENDED_DEBUG === 'true');
-    const openDebug = (id) => router.push(`/streaming/debug/${id}`);
+    // `kind` is 'radio' for a BBC Sounds episode, whose debug page reads audio instead of video.
+    const openDebug = (id, kind) => router.push(kind ? { path: `/streaming/debug/${id}`, query: { kind } } : `/streaming/debug/${id}`);
     return { debugOn, openDebug };
 }
 

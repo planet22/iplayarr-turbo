@@ -5,17 +5,17 @@
         <PageHeader title="Subscriptions" icon="bell" />
         <SettingsPageToolbar
             filter-first :icons="toolbarIcons" refresh-label="" :refresh-title="checkingAll ? 'Checking…' : 'Check all now'"
-            refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !subscriptions.length" :filter-options="filterOptions"
+            refresh-icon="cloud-arrow-down" :refreshing="checkingAll" :refresh-disabled="checkingAll || !items.length" :filter-options="filterOptions"
             :selected-filter="activeFilter" :filter-enabled="activeFilter !== 'All'" :view-mode="viewMode" :view-modes="['table', 'cards']"
             @refresh="checkAll" @select-filter="selectFilter" @update:view-mode="setViewMode"
         >
             <template #actions>
-                <SortControl v-if="subscriptions.length > 1" v-model:sort-by="sortChoice" v-model:order="sortOrder" :options="SORTS" />
+                <SortControl v-if="items.length > 1" v-model:sort-by="sortChoice" v-model:order="sortOrder" :options="SORTS" />
             </template>
             <!-- Next to "Check all now": the two-way arrows are what marks Sonarr/Radarr on this page. -->
             <template #refresh-after>
                 <button
-                    v-if="arrApps.length" class="SettingsPageToolbar-button clickable"
+                    v-if="showVideo && arrApps.length" class="SettingsPageToolbar-button clickable"
                     title="Sync Sonarr/Radarr" aria-label="Sync Sonarr/Radarr" @click="openSync"
                 >
                     <font-awesome-icon :icon="['fas', 'right-left']" />
@@ -23,18 +23,18 @@
             </template>
         </SettingsPageToolbar>
         <InfoBar small>New episodes are queued automatically, checked hourly or on demand.</InfoBar>
-        <LoadingIndicator v-if="!loaded" />
+        <LoadingIndicator v-if="!everLoaded" />
         <EmptyState
-            v-else-if="subscriptions.length === 0" icon="bell" title="No subscriptions yet"
+            v-else-if="items.length === 0" icon="bell" title="No subscriptions yet"
             hint="Open a show and press Subscribe, and new episodes are queued for you automatically."
         >
             <RouterLink to="/browse">Browse programmes</RouterLink>
         </EmptyState>
-        <p v-if="loaded && subscriptions.length && !sorted.length" class="filterEmpty">Nothing matches this filter.</p>
-        <TablePagination v-if="loaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
-        <div v-if="cardView && loaded && subscriptions.length" :class="['cardList', { cardGrid: !isMobile }]">
+        <p v-if="everLoaded && items.length && !sorted.length" class="filterEmpty">Nothing matches this filter.</p>
+        <TablePagination v-if="everLoaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
+        <div v-if="cardView && everLoaded && items.length" :class="['cardList', { cardGrid: !isMobile }]">
             <div v-for="subscription in pagedItems" :key="subscription.id" class="subCard">
-                <RouterLink :to="`/browse/programme/${subscription.pid}`" class="thumbLink">
+                <RouterLink :to="showLink(subscription)" class="thumbLink">
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
                     <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
@@ -43,7 +43,9 @@
                 </RouterLink>
                 <div class="subText">
                     <div class="subChips">
-                        <ChannelPill :channel="subscription.channel" />
+                        <span v-if="subscription.radio" class="pill">Radio</span>
+                        <span v-if="subscription.radio && subscription.network" class="pill">{{ subscription.network }}</span>
+                        <ChannelPill v-else :channel="subscription.channel" />
                         <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                         <span v-if="subscription.arrOnly && subscription.arrCounts && !subscription.arrMissing" class="splitPill" role="img" :title="countsTitle(subscription)" :aria-label="countsAria(subscription)">
                             <img :src="logoUrl" class="splitLogo" alt="" />{{ subscription.arrCounts.linked }}
@@ -54,7 +56,7 @@
                         </span>
                         <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                     </div>
-                    <RouterLink :to="`/browse/programme/${subscription.pid}`" class="cardTitle">{{ subscription.title }}</RouterLink>
+                    <RouterLink :to="showLink(subscription)" class="cardTitle">{{ subscription.title }}</RouterLink>
                     <p v-if="subscription.synopsis" class="subSynopsis" :title="subscription.synopsis">{{ subscription.synopsis }}</p>
                     <SourceCounts v-if="subscription.onDiskSources" class="subSources" :sources="subscription.onDiskSources" />
                 </div>
@@ -70,7 +72,14 @@
                     </div>
                     <div v-if="progress[subscription.id]" class="cardLine">{{ progressLabel(progress[subscription.id]) }}</div>
                 </div>
-                <div v-if="subscription.arrOnly" class="rowActions">
+                <div v-if="subscription.radio" class="rowActions">
+                    <!-- Radio has no Sonarr/Radarr, versions, secure or images: gaps keep the icons lined up with the other cards. -->
+                    <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
+                        <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
+                    </button>
+                </div>
+                <div v-else-if="subscription.arrOnly" class="rowActions">
                     <button class="clickable stateToggle on" title="Sonarr/Radarr only (click to stop tracking)" aria-label="Stop tracking" aria-pressed="true" @click="remove(subscription)">
                         <font-awesome-icon :icon="['fas', 'right-left']" />
                     </button>
@@ -130,9 +139,9 @@
                 </button>
             </div>
         </div>
-        <div v-else-if="loaded && subscriptions.length" class="subscriptionList">
+        <div v-else-if="everLoaded && items.length" class="subscriptionList">
             <div v-for="subscription in pagedItems" :key="subscription.id" class="subscriptionRow">
-                <RouterLink :to="`/browse/programme/${subscription.pid}`" class="thumbLink">
+                <RouterLink :to="showLink(subscription)" class="thumbLink">
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
                     <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
@@ -140,9 +149,11 @@
                     <span v-if="lastBadge(subscription)" class="thumbBadge thumbLast" :title="lastBadge(subscription).title"><font-awesome-icon :icon="['fas', 'download']" />{{ lastBadge(subscription).text }}</span>
                 </RouterLink>
                 <div class="info">
-                    <RouterLink :to="`/browse/programme/${subscription.pid}`" class="title">{{ subscription.title }}</RouterLink>
+                    <RouterLink :to="showLink(subscription)" class="title">{{ subscription.title }}</RouterLink>
                     <div class="details">
-                        <ChannelPill :channel="subscription.channel" />
+                        <span v-if="subscription.radio" class="pill">Radio</span>
+                        <span v-if="subscription.radio && subscription.network" class="pill">{{ subscription.network }}</span>
+                        <ChannelPill v-else :channel="subscription.channel" />
                         <span v-if="progress[subscription.id]">{{ progressLabel(progress[subscription.id]) }}</span>
                         <span>Added {{ addedLabel(subscription) }}</span>
                         <span>Checked {{ checkedLabel(subscription) }}</span>
@@ -166,7 +177,16 @@
                         </span>
                     </div>
                 </div>
-                <div class="rowActions">
+                <div v-if="subscription.radio" class="rowActions">
+                    <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
+                        <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
+                    </button>
+                    <button class="clickable" title="Unsubscribe" aria-label="Unsubscribe" @click="remove(subscription)">
+                        <font-awesome-icon :icon="['fas', 'bell-slash']" />
+                    </button>
+                </div>
+                <div v-else class="rowActions">
                     <button
                         v-if="subscription.arrOnly"
                         class="clickable stateToggle on"
@@ -236,9 +256,9 @@
                 </div>
             </div>
         </div>
-        <TablePagination v-if="loaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
+        <TablePagination v-if="everLoaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
 
-        <template v-if="detected.length">
+        <template v-if="showVideo && detected.length">
             <legend ref="foundSection" class="liveLegend">Found in Sonarr/Radarr</legend>
             <div class="detectedIntro">
                 <span>Shows in Sonarr/Radarr linked to iPlayarr.</span>
@@ -271,57 +291,6 @@
                 </div>
             </div>
         </template>
-
-        <template v-if="liveSubscriptions.length">
-            <legend class="liveLegend">Live channels</legend>
-            <InfoBar small>
-                Live channels with a .strm file in your library, so your media server lists them. Add more from
-                <RouterLink to="/browse/channels">Channels</RouterLink>.
-            </InfoBar>
-            <div v-if="isMobile" class="cardList">
-                <DataCard v-for="live in liveSubscriptions" :key="live.channelId">
-                    <template #thumb>
-                        <img v-if="live.logo && !failedLogos[live.channelId]" class="channelLogo" :src="getThumbnailUrl(live.logo)" :alt="live.title" @error="failedLogos[live.channelId] = true" />
-                        <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', 'tv']" /></div>
-                    </template>
-                    <template #title>{{ live.title }}</template>
-                    <template #chips>
-                        <span class="pill">Live</span>
-                        <span class="cardLine">{{ live.file }}</span>
-                    </template>
-                    <template #corner>
-                        <div class="rowActions">
-                            <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="removeLive(live)">
-                                <font-awesome-icon :icon="['fas', 'trash']" />
-                            </button>
-                        </div>
-                    </template>
-                </DataCard>
-            </div>
-            <div v-else class="subscriptionList">
-                <div v-for="live in liveSubscriptions" :key="live.channelId" class="subscriptionRow">
-                    <div class="thumbLink liveLogo">
-                        <img
-                            v-if="live.logo && !failedLogos[live.channelId]" :src="getThumbnailUrl(live.logo)"
-                            :alt="live.title" @error="failedLogos[live.channelId] = true"
-                        />
-                        <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
-                    </div>
-                    <div class="info">
-                        <span class="title">{{ live.title }}</span>
-                        <div class="details">
-                            <span class="pill">Live</span>
-                            <span>{{ live.file }}</span>
-                        </div>
-                    </div>
-                    <div class="rowActions">
-                        <button class="clickable" title="Remove from library" :disabled="isLiveBusy(live.channelId)" @click="removeLive(live)">
-                            <font-awesome-icon :icon="['fas', 'trash']" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </template>
     </div>
 </template>
 
@@ -330,7 +299,6 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, 
 import { useModal } from 'vue-final-modal';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
-import DataCard from '@/components/common/DataCard.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
@@ -343,7 +311,7 @@ import SubscriptionSyncDialog from '@/components/modals/SubscriptionSyncDialog.v
 import ProgressRing, { progressLabel } from '@/components/subscriptions/ProgressRing.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
+import { useNonBrowseScope } from '@/lib/nonBrowseScope';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { countBadge, countsAria, countsTitle, lastBadge, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
 import { secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
@@ -355,6 +323,8 @@ import { useViewMode } from '@/lib/useViewMode';
 import { formatRelativeTime, getBasePath, getThumbnailUrl, hideBrokenImage, sortableTitle } from '@/lib/utils';
 
 const isMobile = useIsMobile();
+// Radio follows and video subscriptions: both, or the current mode only (Appearance setting). Sonarr/Radarr tools are video's.
+const { showVideo, showRadio } = useNonBrowseScope();
 // Cards on phones, a table on wide screens; either can be chosen and is remembered.
 const { viewMode, setViewMode } = useViewMode('iplayarr.subscriptionsViewMode', {
     modes: ['table', 'cards'],
@@ -364,6 +334,47 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.subscriptionsViewMode', 
 const cardView = computed(() => viewMode.value === 'cards');
 const logoUrl = `${getBasePath()}/iplayarr.png`;
 const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion, toggleSecure } = useSubscriptions();
+
+// Followed radio shows (BBC Sounds) are subscriptions like any other: shaped to match, they share the one list, its
+// sort, filter and paging. The Sonarr/Radarr, versions, secure and image buttons do not apply to them.
+const radioFollows = ref([]);
+const radioLoaded = ref(false);
+const loadRadio = async () => {
+    if (!showRadio.value) return;
+    try {
+        const { ok, data } = await ipFetch('json-api/sounds/follows');
+        if (ok && Array.isArray(data)) radioFollows.value = data;
+    } catch {
+        // The list just stays as it was.
+    } finally {
+        radioLoaded.value = true;
+    }
+};
+const radioItems = computed(() =>
+    showRadio.value
+        ? radioFollows.value.map((f) => ({
+              id: `radio-${f.showId}`,
+              radio: true,
+              showId: f.showId,
+              title: f.title,
+              thumbnail: f.image,
+              createdAt: f.addedAt,
+              lastChecked: f.lastCheckedAt,
+              lastQueuedAt: f.lastQueuedAt,
+              lastQueuedCount: f.lastQueuedCount,
+              downloaded: f.downloaded,
+              // The same count as a video subscription: on disk over the episodes seen.
+              onDisk: f.onDisk,
+              seen: f.seen,
+              network: f.network,
+              synopsis: f.synopsis,
+              onDiskSources: f.onDiskSources,
+          }))
+        : []
+);
+const items = computed(() => [...(showVideo.value ? subscriptions.value : []), ...radioItems.value]);
+const everLoaded = computed(() => (showVideo.value ? loaded.value : true) && (showRadio.value ? radioLoaded.value : true));
+const showLink = (subscription) => (subscription.radio ? `/browse/radio/${subscription.showId}` : `/browse/programme/${subscription.pid}`);
 
 // Sort choices. Subscriptions missing a date (never downloaded, Sonarr/Radarr-only never checked) always go last.
 const SORTS = [
@@ -388,14 +399,14 @@ try {
 } catch {
     // Not remembered.
 }
-const filterOptions = computed(() => ['All', 'iPlayarr', ...arrApps.value.map(({ name }) => name)]);
+const filterOptions = computed(() => ['All', 'iPlayarr', ...(showVideo.value ? arrApps.value.map(({ name }) => name) : [])]);
 const activeFilter = computed(() => (filterOptions.value.includes(filterChoice.value) ? filterChoice.value : 'All'));
-const toolbarIcons = computed(() => [...(subscriptions.value.length > 1 ? ['filter'] : []), 'refresh']);
+const toolbarIcons = computed(() => [...(items.value.length > 1 ? ['filter'] : []), 'refresh']);
 const filteredSubscriptions = computed(() => {
-    if (activeFilter.value === 'All') return subscriptions.value;
-    if (activeFilter.value === 'iPlayarr') return subscriptions.value.filter(({ arrOnly }) => !arrOnly);
+    if (activeFilter.value === 'All') return items.value;
+    if (activeFilter.value === 'iPlayarr') return items.value.filter(({ arrOnly }) => !arrOnly);
     const app = arrApps.value.find(({ name }) => name === activeFilter.value);
-    return subscriptions.value.filter(({ arr }) => arr?.appId === app?.id);
+    return items.value.filter(({ arr }) => arr?.appId === app?.id);
 });
 const selectFilter = (option) => {
     filterChoice.value = option;
@@ -429,18 +440,9 @@ const sortChoice = computed({
 const { page, pageSize, pagedItems } = usePagination(sorted);
 watch([sortBy, sortOrder, activeFilter], () => (page.value = 1));
 const busy = reactive({});
-// Live channel logos that failed to load fall back to the TV icon.
-const failedLogos = reactive({});
 const checkingAll = ref(false);
 
 const { loadAppNames, arrAppName } = useArrAppNames();
-
-const {
-    liveSubscriptions,
-    load: loadLive,
-    isBusy: isLiveBusy,
-    unsubscribe: unsubscribeLive,
-} = useLiveSubscriptions();
 
 // Per-show progress of a running check, pushed by the backend; absent when nothing is running for that show.
 const progress = reactive({});
@@ -569,11 +571,12 @@ onMounted(() => {
     loadApps();
     loadFound();
     load();
-    loadLive();
+    loadRadio();
     loadAppNames();
     bindSocket(socket?.value);
 });
 watch(() => socket?.value, bindSocket);
+watch(showRadio, loadRadio);
 onBeforeUnmount(() => {
     boundSocket?.off('subscriptionProgress', onProgress);
     Object.values(clearTimers).forEach(clearTimeout);
@@ -606,12 +609,20 @@ const summarise = (results) => {
     }
 };
 
+// Radio checks answer with a count only; shaped like a video result so one toast sums up both.
+const radioResult = ({ ok, data }) => ({ title: 'Radio', queued: ok ? new Array(data.queued || 0) : [], error: ok ? undefined : data?.message || 'Something went wrong' });
+
 const checkAll = async () => {
     checkingAll.value = true;
     try {
-        const { data, ok } = await ipFetch('json-api/subscriptions/check', 'POST');
-        await load();
-        if (ok) summarise(data);
+        const results = [];
+        if (showVideo.value && subscriptions.value.length) {
+            const { data, ok } = await ipFetch('json-api/subscriptions/check', 'POST');
+            if (ok) results.push(...data);
+        }
+        if (radioItems.value.length) results.push(radioResult(await ipFetch('json-api/sounds/follows/check', 'POST')));
+        await Promise.all([load(), loadRadio()]);
+        if (results.length) summarise(results);
     } finally {
         checkingAll.value = false;
     }
@@ -620,6 +631,12 @@ const checkAll = async () => {
 const checkOne = async (subscription) => {
     busy[subscription.id] = true;
     try {
+        if (subscription.radio) {
+            const result = radioResult(await ipFetch(`json-api/sounds/follows/${encodeURIComponent(subscription.showId)}/check`, 'POST'));
+            await loadRadio();
+            summarise([{ ...result, title: subscription.title }]);
+            return;
+        }
         const { data, ok } = await ipFetch(`json-api/subscriptions/${subscription.id}/check`, 'POST');
         await load();
         if (ok) summarise([data]);
@@ -683,21 +700,14 @@ const toggleVersionWithBusy = async (subscription, versionId) => {
     }
 };
 
-const remove = (subscription) => unsubscribe(subscription);
-
-// Removing a live channel deletes its .strm from the library, so ask first (like unsubscribing from a show).
-const removeLive = async (live) => {
-    if (
-        await dialogService.confirm(
-            'Remove live channel',
-            `Remove ${live.title} from your library?`,
-            'Its .strm file is deleted. You can add it again from Channels.',
-            { danger: true, confirmLabel: 'Remove' }
-        )
-    ) {
-        unsubscribeLive(live.channelId);
-    }
+const unfollowRadio = async (subscription) => {
+    if (!(await dialogService.confirm('Unsubscribe', `Stop downloading new episodes of ${subscription.title}?`, undefined, { danger: true, confirmLabel: 'Unsubscribe' }))) return;
+    const { ok, data } = await ipFetch(`json-api/sounds/follows/${encodeURIComponent(subscription.showId)}`, 'DELETE');
+    if (!ok) toastService.error('Unable to unsubscribe', { detail: data?.message || 'Something went wrong' });
+    await loadRadio();
 };
+
+const remove = (subscription) => (subscription.radio ? unfollowRadio(subscription) : unsubscribe(subscription));
 </script>
 
 <style lang="less" scoped>
@@ -748,14 +758,6 @@ const removeLive = async (live) => {
             border-color: @brand-color;
             color: @on-brand-color;
         }
-    }
-}
-
-// Channel logos are wide (76x32) rather than 16:9 artwork - sized to their own shape so nothing crops.
-.subscriptionRow .liveLogo {
-    img,
-    .noThumb {
-        aspect-ratio: 2.375 / 1;
     }
 }
 

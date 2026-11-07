@@ -1,6 +1,7 @@
 import { inject } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
+import { modeRoute, setMediaMode } from '@/lib/mediaMode';
 import { getBasePath, getHost } from '@/lib/utils';
 
 // Every page is its own chunk, loaded when first visited: the login page and a cold load no longer download the
@@ -15,7 +16,7 @@ const routes = [
     { path: '/subscriptions', component: () => import('@/views/SubscriptionsPage.vue') },
     { path: '/synonyms', component: () => import('@/views/SynonymsPage.vue') },
     { path: '/login', component: () => import('@/views/LoginPage.vue') },
-    { path: '/search', component: () => import('@/views/SearchPage.vue'), name: 'search' },
+    { path: '/search', component: modeRoute('SearchPage', () => import('@/views/SearchPage.vue')), name: 'search' },
     { path: '/offSchedule', component: () => import('@/views/OffSchedulePage.vue') },
     { path: '/apps', component: () => import('@/views/AppsPage.vue') },
     { path: '/stats', component: () => import('@/views/StatisticsPage.vue') },
@@ -27,14 +28,39 @@ const routes = [
     { path: '/library-debug', component: () => import('@/views/LibraryDebugPage.vue') },
     { path: '/dns-relay', component: () => import('@/views/DnsRelayPage.vue') },
     { path: '/nzb', component: () => import('@/views/NzbPage.vue') },
-    { path: '/browse', component: () => import('@/views/DiscoverPage.vue') },
-    { path: '/browse/channels', component: () => import('@/views/TilesPage.vue'), meta: { tiles: 'channels' } },
+    // Radio lives in the shared pages now (Video | Radio toggle); the old address opens the radio search.
+    {
+        path: '/radio',
+        redirect: () => {
+            setMediaMode('radio');
+            return '/search';
+        },
+    },
+    // A BBC Sounds show is drawn by the programme page itself (meta.radio).
+    { path: '/browse/radio/:id', component: () => import('@/views/ProgrammePage.vue'), meta: { radio: true } },
+    { path: '/browse', component: modeRoute('DiscoverPage', () => import('@/views/DiscoverPage.vue')) },
+    { path: '/browse/channels', component: modeRoute('ChannelsPage', () => import('@/views/TilesPage.vue')), meta: { tiles: 'channels' } },
     { path: '/browse/channel/:id', component: () => import('@/views/ChannelPage.vue') },
-    { path: '/browse/schedule', component: () => import('@/views/SchedulePage.vue') },
-    { path: '/browse/categories', component: () => import('@/views/TilesPage.vue'), meta: { tiles: 'categories' } },
-    { path: '/browse/collections', component: () => import('@/views/CollectionsPage.vue') },
-    { path: '/browse/category/:id', component: () => import('@/views/GridPage.vue'), meta: { grid: 'category' } },
-    { path: '/browse/atoz/:letter?', component: () => import('@/views/GridPage.vue'), meta: { grid: 'atoz' } },
+    { path: '/browse/schedule', component: modeRoute('SchedulePage', () => import('@/views/SchedulePage.vue')) },
+    {
+        path: '/browse/categories',
+        component: modeRoute('CategoriesPage', () => import('@/views/TilesPage.vue')),
+        meta: { tiles: 'categories' },
+    },
+    {
+        path: '/browse/collections',
+        component: modeRoute('CollectionsPage', () => import('@/views/CollectionsPage.vue')),
+    },
+    {
+        path: '/browse/category/:id',
+        component: modeRoute('CategoryPage', () => import('@/views/GridPage.vue')),
+        meta: { grid: 'category' },
+    },
+    {
+        path: '/browse/atoz/:letter?',
+        component: modeRoute('AtoZPage', () => import('@/views/GridPage.vue')),
+        meta: { grid: 'atoz' },
+    },
     { path: '/browse/programme/:pid', component: () => import('@/views/ProgrammePage.vue') },
 ];
 
