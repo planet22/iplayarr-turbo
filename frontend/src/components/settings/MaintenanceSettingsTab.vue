@@ -49,78 +49,103 @@
         now on; existing entries keep their old expiry until cleared.
     </InfoBar>
     <LoadingIndicator v-if="!cachesLoaded" />
-    <div v-else class="scheduledTasks cacheGrid">
-        <div v-for="cache in orderedCaches" :key="cache.prefix" class="taskRow">
-            <div class="info">
-                <div class="label">
-                    {{ cache.label }}
-                    <InfoTip :text="cache.description" />
-                </div>
-                <div class="details cacheDetails">
-                    <span class="pill primary count">{{ cache.count.toLocaleString() }} {{ cache.count === 1 ? 'item' : 'items' }}</span>
-                    <span class="pill grey size">{{ formatSize(cache.sizeBytes) }}</span>
-                    <span class="ttlEditor">
-                        <span class="keepLabel">Keep for</span>
-                        <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
-                        <input
-                            v-model.number="ttlDraft[cache.prefix].value"
-                            :class="{ changed: ttlEntryChanged(ttlDraft[cache.prefix]) }"
-                            type="number"
-                            min="1"
-                            max="3650"
-                            step="1"
-                            :disabled="cacheBusy[cache.prefix]"
-                            @input="ttlDraft[cache.prefix].resetPending = false"
-                        />
-                        <select
-                            v-model.number="ttlDraft[cache.prefix].unit"
-                            :class="{ changed: ttlEntryChanged(ttlDraft[cache.prefix]) }"
-                            :disabled="cacheBusy[cache.prefix]"
-                            @change="ttlDraft[cache.prefix].resetPending = false"
-                        >
-                            <option v-for="unit in TTL_UNITS" :key="unit.seconds" :value="unit.seconds">{{ unit.label }}</option>
-                        </select>
-                    </span>
-                    <button v-if="cache.overridden && !ttlDraft[cache.prefix].resetPending" class="linkButton" title="Use the built-in lifetime" @click="resetTtl(cache)">
-                        Reset to default ({{ describeTtl(cache.defaultTtl) }})
-                    </button>
-                </div>
-            </div>
-            <div class="rowActions">
-                <button class="clickable" title="Delete everything in this cache" :disabled="cacheBusy[cache.prefix]" @click="clearCache(cache)">
+    <template v-else>
+        <div class="cacheListBar">
+            <CacheListControls v-model:sort-by="sortBy" v-model:order="order" v-model:grouped="grouped" :options="MAINTENANCE_SORTS" />
+        </div>
+        <section v-for="section in sections" :key="section.key" class="maintGroup" :data-group="section.key">
+            <div v-if="section.label" class="maintGroupBar">
+                <button
+                    type="button" class="groupToggle clickable" :aria-expanded="!isCollapsed(section.key)"
+                    :title="isCollapsed(section.key) ? 'Show this group' : 'Hide this group'" @click="toggleGroup(section.key)">
+                    <font-awesome-icon class="groupChevron" :icon="['fas', isCollapsed(section.key) ? 'chevron-right' : 'chevron-down']" />
+                    <span class="groupName">{{ section.label }}</span>
+                    <span class="groupTotals">{{ summaryParts(section.totals).join(' · ') }}</span>
+                </button>
+                <button
+                    type="button" class="clickable clearGroup" :title="`Delete everything in ${section.label}`"
+                    :disabled="clearingAll || !section.totals.records || section.caches.some((cache) => cacheBusy[cache.prefix])"
+                    @click="clearGroup(section)">
                     <font-awesome-icon :icon="['fas', 'trash']" />
-                    <span class="btnText">Clear</span>
+                    <span class="btnText">Clear group</span>
                 </button>
             </div>
-        </div>
-        <div class="taskRow">
-            <div class="info">
-                <div class="label">
-                    Stream History
-                    <InfoTip text="Delete stream history older than this many days (runs nightly). Saved with the Save button." />
-                </div>
-                <div class="details cacheDetails">
-                    <span class="count"></span>
-                    <span class="size"></span>
-                    <span class="ttlEditor">
-                        <span class="keepLabel">Keep for</span>
-                        <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
-                        <input
-                            v-model="config.STREAM_HISTORY_RETENTION_DAYS"
-                            :class="{ changed: changedKeys.has('STREAM_HISTORY_RETENTION_DAYS') }"
-                            type="number"
-                            min="1"
-                        />
-                        days
-                    </span>
-                </div>
-                <div v-if="validationErrors.config?.STREAM_HISTORY_RETENTION_DAYS" class="cacheError">
-                    {{ validationErrors.config.STREAM_HISTORY_RETENTION_DAYS }}
+            <div v-if="!section.label || !isCollapsed(section.key)" class="scheduledTasks cacheGrid">
+                <div v-for="cache in section.caches" :key="cache.prefix" class="taskRow">
+                    <div class="info">
+                        <div class="label">
+                            {{ cache.label }}
+                            <InfoTip :text="cache.description" />
+                        </div>
+                        <div class="details cacheDetails">
+                            <span class="pill primary count">{{ cache.count.toLocaleString() }} {{ cache.count === 1 ? 'item' : 'items' }}</span>
+                            <span class="pill grey size">{{ formatSize(cache.sizeBytes) }}</span>
+                            <span class="ttlEditor">
+                                <span class="keepLabel">Keep for</span>
+                                <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
+                                <input
+                                    v-model.number="ttlDraft[cache.prefix].value"
+                                    :class="{ changed: ttlEntryChanged(ttlDraft[cache.prefix]) }"
+                                    type="number"
+                                    min="1"
+                                    max="3650"
+                                    step="1"
+                                    :disabled="cacheBusy[cache.prefix]"
+                                    @input="ttlDraft[cache.prefix].resetPending = false"
+                                />
+                                <select
+                                    v-model.number="ttlDraft[cache.prefix].unit"
+                                    :class="{ changed: ttlEntryChanged(ttlDraft[cache.prefix]) }"
+                                    :disabled="cacheBusy[cache.prefix]"
+                                    @change="ttlDraft[cache.prefix].resetPending = false"
+                                >
+                                    <option v-for="unit in TTL_UNITS" :key="unit.seconds" :value="unit.seconds">{{ unit.label }}</option>
+                                </select>
+                            </span>
+                            <button v-if="cache.overridden && !ttlDraft[cache.prefix].resetPending" class="linkButton" title="Use the built-in lifetime" @click="resetTtl(cache)">
+                                Reset to default ({{ describeTtl(cache.defaultTtl) }})
+                            </button>
+                        </div>
+                    </div>
+                    <div class="rowActions">
+                        <button class="clickable" title="Delete everything in this cache" :disabled="cacheBusy[cache.prefix]" @click="clearCache(cache)">
+                            <font-awesome-icon :icon="['fas', 'trash']" />
+                            <span class="btnText">Clear</span>
+                        </button>
+                    </div>
                 </div>
             </div>
+        </section>
+        <div class="scheduledTasks cacheGrid">
+            <div class="taskRow">
+                <div class="info">
+                    <div class="label">
+                        Stream History
+                        <InfoTip text="Delete stream history older than this many days (runs nightly). Saved with the Save button." />
+                    </div>
+                    <div class="details cacheDetails">
+                        <span class="count"></span>
+                        <span class="size"></span>
+                        <span class="ttlEditor">
+                            <span class="keepLabel">Keep for</span>
+                            <font-awesome-icon class="keepIcon" :icon="['fas', 'hourglass-half']" title="Keep for" />
+                            <input
+                                v-model="config.STREAM_HISTORY_RETENTION_DAYS"
+                                :class="{ changed: changedKeys.has('STREAM_HISTORY_RETENTION_DAYS') }"
+                                type="number"
+                                min="1"
+                            />
+                            days
+                        </span>
+                    </div>
+                    <div v-if="validationErrors.config?.STREAM_HISTORY_RETENTION_DAYS" class="cacheError">
+                        {{ validationErrors.config.STREAM_HISTORY_RETENTION_DAYS }}
+                    </div>
+                </div>
+            </div>
+            <div v-if="cacheError" class="cacheError">{{ cacheError }}</div>
         </div>
-        <div v-if="cacheError" class="cacheError">{{ cacheError }}</div>
-    </div>
+    </template>
 
     <SettingsSubheading text="Scheduled tasks" />
     <LoadingIndicator v-if="!loaded" />
@@ -133,15 +158,18 @@
 import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
+import CacheListControls from '@/components/common/CacheListControls.vue';
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import ScheduledTaskRow from '@/components/settings/ScheduledTaskRow.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
+import { buildSections, MAINTENANCE_SORTS, readCollapsedGroups, summaryParts, writeCollapsedGroups } from '@/lib/cacheGroups';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
+import { useCacheListPrefs } from '@/lib/useCacheListPrefs';
 import { splitTtl, TTL_UNITS, ttlEntryChanged, useCaches } from '@/lib/useCaches';
 import { useDnsRelay } from '@/lib/useDnsRelay';
 import { useScheduledTasks } from '@/lib/useScheduledTasks';
@@ -170,21 +198,18 @@ const { tasks, loaded, running, load, runNow } = useScheduledTasks();
 
 const { caches, loaded: cachesLoaded, busy: cacheBusy, error: cacheError, clearingAll, load: loadCaches, clear, clearAll } = useCaches();
 
-// Caches grouped by what they hold, rather than in the order the server registered them: what the browse pages
-// show, BBC programme data, search and schedule feeds, the Sonarr (Skyhook) lookups, then streaming. A cache
-// the list does not know about goes last.
-const CACHE_ORDER = [
-    'browse_short', 'browse_long', 'browse_schedule', 'thumbnails',
-    'metadata_cache', 'episode_details', 'ibl_episodes', 'ibl_new_search',
-    'search_cache', 'search_trace_cache', 'schedule_cache', 'schedule_page_pids',
-    'skyhook_series_cache', 'skyhook_episode_cache',
-    'stream_vpid', 'stream_hq_probe',
-];
-const cacheRank = (prefix) => {
-    const index = CACHE_ORDER.indexOf(prefix);
-    return index === -1 ? CACHE_ORDER.length : index;
+// Caches grouped by purpose (lib/cacheGroups.js; an unlisted cache goes to Other), sorted inside each group or as one
+// flat list. The sort and the Grouped / Flat choice are kept per browser, as are the groups folded away.
+const { sortBy, order, grouped } = useCacheListPrefs('maintenance', MAINTENANCE_SORTS, { sortBy: 'default', grouped: true });
+const sections = computed(() => buildSections(caches.value, { grouped: grouped.value, sortBy: sortBy.value, order: order.value }));
+const collapsed = ref(new Set(readCollapsedGroups()));
+const isCollapsed = (key) => collapsed.value.has(key);
+const toggleGroup = (key) => {
+    const next = new Set(collapsed.value);
+    if (!next.delete(key)) next.add(key);
+    collapsed.value = next;
+    writeCollapsedGroups(next);
 };
-const orderedCaches = computed(() => [...caches.value].sort((a, b) => cacheRank(a.prefix) - cacheRank(b.prefix)));
 
 // Each cache's lifetime is a draft held by the settings page (Save applies it). Follow the server value
 // unless the user is part-way through editing that row.
@@ -218,6 +243,19 @@ const resetTtl = (cache) => {
 const clearCache = async (cache) => {
     if (await dialogService.confirm(`Clear ${cache.label}`, `Are you sure you want to clear ${cache.count.toLocaleString()} cached items?`, undefined, { danger: true, confirmLabel: 'Clear' })) {
         clear(cache);
+    }
+};
+
+// Clears every cache in the group, after the same kind of confirmation as a single cache.
+const clearGroup = async (section) => {
+    const { records } = section.totals;
+    if (
+        await dialogService.confirm(`Clear ${section.label}`, `Clear ${records.toLocaleString()} cached ${records === 1 ? 'item' : 'items'} in ${section.label}?`, undefined, {
+            danger: true,
+            confirmLabel: 'Clear',
+        })
+    ) {
+        for (const cache of section.caches) await clear(cache);
     }
 };
 
@@ -270,6 +308,71 @@ onMounted(() => {
 .cacheError {
     margin-top: 8px;
     color: @danger-color;
+}
+
+.cacheListBar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 6px;
+}
+
+.maintGroup {
+    margin-bottom: 14px;
+}
+
+// Group heading: the name (a button that folds the group) with its totals, and Clear group at the right.
+.maintGroupBar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid @primary-text-color;
+
+    .groupToggle {
+        flex: 1;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 2px 10px;
+        min-width: 0;
+        padding: 6px 0;
+        border: 0;
+        background: none;
+        color: @primary-text-color;
+        font-size: 15px;
+        font-weight: 600;
+        text-align: left;
+    }
+
+    .groupChevron {
+        flex: 0 0 auto;
+        width: 12px;
+        font-size: 12px;
+        align-self: center;
+    }
+
+    .groupTotals {
+        font-size: 12px;
+        font-weight: 400;
+        color: @subtle-text-color;
+    }
+
+    .clearGroup {
+        flex: 0 0 auto;
+        padding: 4px 12px;
+        border-radius: 4px;
+        border: 1px solid @settings-button-border-color;
+        background-color: @settings-button-background-color;
+        color: @primary-text-color;
+        font-size: 13px;
+
+        svg {
+            margin-right: 6px;
+        }
+
+        &:hover:not(:disabled) {
+            background-color: @settings-button-hover-background-color;
+        }
+    }
 }
 
 .cacheDetails {
@@ -517,12 +620,18 @@ onMounted(() => {
     }
 
     // The trash can says it all: icon-only Clear (its tooltip still names it).
-    .rowActions .btnText {
+    .rowActions .btnText,
+    .clearGroup .btnText {
         display: none;
     }
 
-    .rowActions button:has(.btnText) svg {
+    .rowActions button:has(.btnText) svg,
+    .clearGroup svg {
         margin-right: 0;
+    }
+
+    .cacheListBar {
+        justify-content: flex-start;
     }
 }
 

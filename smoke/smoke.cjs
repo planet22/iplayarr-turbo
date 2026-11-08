@@ -924,6 +924,7 @@ async function uiInteractions(browser, ctx) {
     if (want('queue selection')) { await queueSelection(browser, U); await queueSelectAllEmpty(browser, U); }
     if (want('nav bar buttons')) await navBarButtons(browser, U);
     if (want('statistics cache cards')) await statisticsCacheCards(browser, U);
+    if (want('maintenance cache groups')) await maintenanceCacheGroups(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
     // Programme page: play/download controls exist
@@ -1401,7 +1402,54 @@ async function statisticsCacheCards(browser, U) {
         const flashed = await p.waitForSelector('.liveDot.flashHit, .liveDot.flashMiss', { timeout: 15000 }).then(() => true).catch(() => false);
         rec(U, 'statistics: a cache lookup made a dot flash', flashed ? 'PASS' : 'FAIL', 'no dot flashed within 15 s of three browse requests');
         await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches.png') });
+        // Grouped by purpose with a heading per group, sorted inside each group, one flat list on request, remembered on reload.
+        const sorted = (names) => names.every((n, i) => i === 0 || names[i - 1].localeCompare(n, undefined, { sensitivity: 'base', numeric: true }) <= 0);
+        const headings = await p.locator('.cacheGroupHeading').count();
+        const headingText = (await p.locator('.cacheGroupHeading').first().innerText()).replace(/\s+/g, ' ');
+        rec(U, 'statistics: the cache cards sit under group headings with their totals', headings >= 1 && /caches?/.test(headingText) && /records?/.test(headingText) && /hit rate/.test(headingText) ? 'PASS' : 'FAIL', `${headings} headings, first: ${headingText}`);
+        await p.locator('.cacheLegend .sortSelect').selectOption({ label: 'Name' });
+        await p.waitForTimeout(300);
+        const groupNames = await p.locator('.cacheGroup').evaluateAll((els) => els.map((el) => [...el.querySelectorAll('.cacheName')].map((n) => n.textContent.trim())));
+        rec(U, 'statistics: choosing Name sorts the cards inside each group', groupNames.length >= 1 && groupNames.every(sorted) ? 'PASS' : 'FAIL', groupNames.map((g) => g.join(',')).join(' | '));
+        await p.locator('.cacheLegend .cacheModeToggle').click();
+        await p.waitForTimeout(300);
+        const flatNames = (await p.locator('.cacheGroup .cacheName').allTextContents()).map((n) => n.trim());
+        rec(U, 'statistics: Flat removes the group headings and sorts the whole list', (await p.locator('.cacheGroupHeading').count()) === 0 && flatNames.length === caches.length && sorted(flatNames) ? 'PASS' : 'FAIL', `${flatNames.length} cards`);
+        await p.reload({ waitUntil: 'networkidle' });
+        await p.waitForSelector('.cacheCard .liveDot', { timeout: 15000 });
+        const kept = (await p.locator('.cacheLegend .sortSelect').inputValue()) === 'name' && /Flat/.test(await p.locator('.cacheLegend .cacheModeToggle').innerText()) && (await p.locator('.cacheGroupHeading').count()) === 0;
+        rec(U, 'statistics: the sort and Flat are remembered after a reload', kept ? 'PASS' : 'FAIL');
+        await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches-flat.png') });
     } catch (e) { rec(U, 'statistics cache cards', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+}
+
+// Maintenance tab: caches under group headings that fold away and have a Clear group button (never clicked here).
+async function maintenanceCacheGroups(browser, U) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    try {
+        const p = await context.newPage();
+        await p.goto(BASE + '/settings#maintenance', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForSelector('.maintGroup', { timeout: 15000 });
+        const first = () => p.locator('.maintGroup:has(.maintGroupBar)').first();
+        const bars = await p.locator('.maintGroupBar').count();
+        const clears = await p.locator('.maintGroupBar .clearGroup').count();
+        rec(U, 'maintenance: every cache group has a heading with totals and a Clear group button', bars >= 1 && clears === bars && /records?/.test(await p.locator('.maintGroupBar').first().innerText()) ? 'PASS' : 'FAIL', `${bars} headings, ${clears} buttons`);
+        const rows = await first().locator('.taskRow').count();
+        await first().locator('.groupToggle').click();
+        await p.waitForTimeout(250);
+        const folded = (await first().locator('.taskRow').count()) === 0 && (await first().locator('.groupToggle').getAttribute('aria-expanded')) === 'false';
+        rec(U, 'maintenance: a group heading folds its caches away', rows >= 1 && folded ? 'PASS' : 'FAIL', `${rows} rows before`);
+        await p.reload({ waitUntil: 'networkidle' });
+        await p.waitForSelector('.maintGroup', { timeout: 15000 });
+        rec(U, 'maintenance: a folded group stays folded after a reload', (await first().locator('.taskRow').count()) === 0 ? 'PASS' : 'FAIL');
+        await first().locator('.groupToggle').click();
+        await p.waitForTimeout(250);
+        rec(U, 'maintenance: opening the group shows its caches again', (await first().locator('.taskRow').count()) === rows ? 'PASS' : 'FAIL');
+        await p.locator('.cacheListBar .cacheModeToggle').click();
+        await p.waitForTimeout(250);
+        rec(U, 'maintenance: Flat removes the group headings', (await p.locator('.maintGroupBar').count()) === 0 && (await p.locator('.maintGroup .taskRow').count()) >= rows ? 'PASS' : 'FAIL');
+        await p.screenshot({ path: path.join(SHOTS, 'flow-maintenance-caches-flat.png') });
+    } catch (e) { rec(U, 'maintenance cache groups', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
 }
 
 // ---------------------------------------------------------------- main

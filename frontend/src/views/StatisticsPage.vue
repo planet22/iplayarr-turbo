@@ -15,8 +15,21 @@
                     </div>
                 </div>
             </div>
-            <CacheStatCard v-for="cache in caches" :key="cache.prefix" :cache="cache" :live="liveCaches[cache.prefix]" :pulse="pulses[cache.prefix]" :now="now" />
         </div>
+
+        <div class="legendRow cacheLegend">
+            <legend>Caches</legend>
+            <CacheListControls v-model:sort-by="sortBy" v-model:order="order" v-model:grouped="grouped" :options="STATS_SORTS" />
+        </div>
+        <section v-for="section in sections" :key="section.key" class="cacheGroup" :data-group="section.key">
+            <h3 v-if="section.label" class="cacheGroupHeading">
+                <span class="groupName">{{ section.label }}</span>
+                <span class="groupTotals">{{ summaryParts(section.totals).join(' · ') }}</span>
+            </h3>
+            <div class="statRow cacheRow">
+                <CacheStatCard v-for="cache in section.caches" :key="cache.prefix" :cache="cache" :live="liveCaches[cache.prefix]" :pulse="pulses[cache.prefix]" :now="now" />
+            </div>
+        </section>
 
         <div class="legendRow">
             <legend>Activity</legend>
@@ -106,21 +119,28 @@
 </template>
 
 <script setup>
-import { inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BarChart from '@/components/charts/BarChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import StackedBarChart from '@/components/charts/StackedBarChart.vue';
+import CacheListControls from '@/components/common/CacheListControls.vue';
 import CacheStatCard from '@/components/common/CacheStatCard.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
 import { flashKind, withLookups } from '@/lib/cacheActivity';
+import { buildSections, STATS_SORTS, summaryParts } from '@/lib/cacheGroups';
 import { ipFetch } from '@/lib/ipFetch';
+import { useCacheListPrefs } from '@/lib/useCacheListPrefs';
 
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
+
+// Cards are grouped by purpose and sorted inside each group (or one flat list); the choice is kept per browser.
+// A card's key is its prefix, so a card that moves keeps its figures and its next flash.
+const { sortBy, order, grouped } = useCacheListPrefs('stats', STATS_SORTS, { sortBy: 'busiest', grouped: true });
 
 // Live cache figures: polled every few seconds (rates, last used, the 15 minute trend) and nudged by each batch of
 // lookups the server pushes over the socket, which also makes a card's dot flash green (hit) or red (miss).
@@ -128,6 +148,7 @@ const socket = inject('socket');
 const liveCaches = ref({});
 const pulses = ref({});
 const now = ref(Date.now());
+const sections = computed(() => buildSections(caches.value, { grouped: grouped.value, sortBy: sortBy.value, order: order.value, live: liveCaches.value }));
 let pulseCount = 0;
 const LIVE_POLL_MS = 5000;
 
@@ -242,6 +263,39 @@ const selectRange = (option) => {
     legend {
         border-bottom: none;
         margin-bottom: 0;
+    }
+}
+
+// Caches heading with the sort and Grouped / Flat controls at the right; they wrap under it on a narrow screen.
+.legendRow.cacheLegend {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    line-height: normal;
+    padding-bottom: 2px;
+}
+
+.cacheGroup {
+    margin-bottom: 1.25rem;
+
+    .statRow {
+        margin-bottom: 0;
+    }
+}
+
+.cacheGroupHeading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 12px;
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: @primary-text-color;
+
+    .groupTotals {
+        font-size: 12px;
+        font-weight: 400;
+        color: @subtle-text-color;
     }
 }
 
