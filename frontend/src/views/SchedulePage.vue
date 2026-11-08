@@ -199,10 +199,12 @@ const viewDate = computed(() => {
     return ukDate(new Date(dayStart.value.getTime() + minutes * 60000));
 });
 const isToday = computed(() => viewDate.value === ukDate(now.value));
-const dateLabel = computed(() =>
-    new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' }).format(
-        new Date(`${viewDate.value}T12:00:00Z`)
-    )
+// Always the UK schedule day (iPlayer's days are UK days, whatever the times below are shown in), so say so.
+const dateLabel = computed(
+    () =>
+        new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/London' }).format(
+            new Date(`${viewDate.value}T12:00:00Z`)
+        ) + ' (UK)'
 );
 
 let settleTimer;

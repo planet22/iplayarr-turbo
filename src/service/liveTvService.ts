@@ -84,7 +84,7 @@ function ukDate(offsetDays: number): string {
 // <previously-shown/> and <video><quality>HDTV</quality></video>.
 export function guideTags(
     slot: BrowseSlot,
-    options: { categories: boolean; flags: boolean; hd: boolean }
+    options: { categories: boolean; flags: boolean; hd: boolean; audioOnly?: boolean }
 ): string {
     let xml = '';
     if (options.categories) {
@@ -100,7 +100,8 @@ export function guideTags(
             xml += `    <category lang="en">${escapeXml(category)}</category>\n`;
         }
     }
-    if (options.hd) xml += '    <video><quality>HDTV</quality></video>\n';
+    // Radio has no picture, so no quality tag.
+    if (options.hd && !options.audioOnly) xml += '    <video><quality>HDTV</quality></video>\n';
     if (options.flags) {
         if (slot.live) xml += '    <live/>\n';
         xml += slot.repeat ? '    <previously-shown/>\n' : '    <new/>\n';
@@ -201,7 +202,8 @@ class LiveTvService {
             }
             const custom = customChannel(channel.id);
             if (channel.audioOnly) {
-                // A radio station (LIVE_RADIO): marked so Jellyfin lists it as radio rather than TV.
+                // A radio station (LIVE_RADIO): marked radio for clients that read it (Kodi does). Jellyfin's own
+                // M3U tuner ignores the attribute and lists it as a TV channel, so the group is what sets it apart there.
                 attrs.push('radio="true"', 'group-title="BBC Radio"');
             } else {
                 attrs.push(`group-title="${custom ? m3uAttr(custom.group ?? 'Custom') : 'BBC'}"`);
@@ -270,7 +272,7 @@ class LiveTvService {
                     const src = `${baseUrl}/api?mode=live_thumb&pid=${imagePid}&streamkey=${encodeURIComponent(streamKey)}`;
                     xml += `    <icon src="${escapeXml(src)}"/>\n`;
                 }
-                xml += guideTags(slot, guide);
+                xml += guideTags(slot, { ...guide, audioOnly: channel.audioOnly });
                 xml += '  </programme>\n';
             }
         }
