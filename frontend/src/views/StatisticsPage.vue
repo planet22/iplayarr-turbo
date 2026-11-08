@@ -15,7 +15,7 @@
                     </div>
                 </div>
             </div>
-            <div v-for="cache in shownCaches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
+            <div v-for="cache in caches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
                 <div class="cacheName">{{ cache.label }}</div>
                 <div class="cacheFigures">
                     <div class="statBody">
@@ -33,23 +33,6 @@
                 </div>
             </div>
         </div>
-
-        <template v-if="showRadio && radio">
-            <div class="legendRow">
-                <legend>Radio</legend>
-            </div>
-            <div class="statRow cacheRow">
-                <div v-for="card in radioCards" :key="card.label" class="statCard cacheCard">
-                    <div class="cacheName">{{ card.label }}</div>
-                    <div class="cacheFigures">
-                        <div class="statBody">
-                            <span class="statLabel">{{ card.caption }}</span>
-                            <span class="statValue">{{ card.value }}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </template>
 
         <div class="legendRow">
             <legend>Activity</legend>
@@ -139,7 +122,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BarChart from '@/components/charts/BarChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
@@ -149,27 +132,9 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
 import { ipFetch } from '@/lib/ipFetch';
-import { useMediaMode } from '@/lib/mediaMode';
-import { radioDownloads } from '@/lib/radio';
 
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
-
-// Radio figures (downloads and followed programmes) and the radio caches show with radio, per the Appearance setting.
-// Not a browse page: radio figures sit beside the video ones whenever BBC Sounds is on.
-const { radioEnabled: showRadio } = useMediaMode();
-const radio = ref(undefined);
-const shownCaches = computed(() => caches.value.filter(({ prefix }) => showRadio.value || !prefix.startsWith('sounds_')));
-const radioCards = computed(() => {
-    const downloads = radioDownloads.value;
-    const count = (state) => downloads.filter((d) => d.state === state).length;
-    return [
-        { label: 'Radio downloads', caption: 'Done', value: count('done') },
-        { label: 'Radio downloads', caption: 'Failed', value: count('failed') },
-        { label: 'Radio downloads', caption: 'Active', value: count('downloading') + count('queued') },
-        { label: 'Radio subscriptions', caption: 'Programmes', value: radio.value?.follows ?? 0 },
-    ];
-});
 
 // Worked out by the server (json-api/stats/summary); the page only displays it.
 const emptySummary = {
@@ -215,8 +180,6 @@ async function updateStats() {
     const [, uptimeResult, cacheList] = await Promise.all([loadSummary(), ipFetch('json-api/stats/uptime'), ipFetch('json-api/maintenance/caches')]);
     uptime.value = uptimeResult.data;
     if (cacheList.ok) caches.value = cacheList.data;
-    const follows = await ipFetch('json-api/subscriptions?mode=radio');
-    radio.value = follows.ok ? { follows: follows.data.length } : undefined;
 }
 
 watch([range, excludeRss], loadSummary);
@@ -330,12 +293,9 @@ const selectRange = (option) => {
 // A grid, so every tile is the same size and the columns line up row to row.
 .statRow.cacheRow {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    // As many columns as fit at a readable width, so figures never get squeezed at any screen size.
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 0.5rem;
-
-    @media (max-width: 1200px) {
-        grid-template-columns: repeat(3, 1fr);
-    }
 }
 
 .statRow .statCard.cacheCard {
@@ -349,15 +309,14 @@ const selectRange = (option) => {
         font-size: 13px;
         font-weight: 600;
         color: @primary-text-color;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: anywhere; // long names wrap rather than being cut off
     }
 
-    // Three equal columns, so the labels and numbers line up from tile to tile.
+    // Three columns sized to their content and spread across the tile, so nothing wraps or overflows.
     .cacheFigures {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(3, auto);
+        justify-content: space-between;
         gap: 8px;
 
         // Uptime has the one figure, so it takes the whole tile.
@@ -367,6 +326,7 @@ const selectRange = (option) => {
 
         .statLabel {
             font-size: 9px;
+            white-space: nowrap;
         }
 
         .statValue {
@@ -415,7 +375,7 @@ const selectRange = (option) => {
 
             &.cacheRow {
                 gap: 0.4rem;
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: 1fr;
 
                 .statCard.cacheCard {
                     padding: 6px 10px;
