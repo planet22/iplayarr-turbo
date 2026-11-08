@@ -242,11 +242,12 @@ export function buildChannelColors(
         const override = channelOverride(id);
         const bg = override?.color ?? radioFields[id];
         if (bg) {
-            colors[title.replaceAll(' ', '')] = {
-                bg,
-                fg: readableTextColor(bg),
-                name: override?.name ?? title,
-            };
+            const entry = { bg, fg: readableTextColor(bg), name: override?.name ?? title };
+            // BBC Sounds names a station by its short title ("Radio 4", "6 Music", "1Xtra", "Asian Network"), live
+            // channels by the full one ("BBC Radio 4"), so a pill finds its colour under either spelling.
+            for (const form of [title, title.replace(/^BBC /, ''), title.replace(/^BBC Radio /, '')]) {
+                colors[form.replaceAll(' ', '')] ??= entry;
+            }
         }
     }
     for (const channel of BrowseChannels) {

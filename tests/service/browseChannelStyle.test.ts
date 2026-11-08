@@ -49,6 +49,18 @@ describe('what the user sees for a BBC channel', () => {
         setRadioEnabled(false);
     });
 
+    it('finds a radio colour under the short name BBC Sounds uses as well as the full one', () => {
+        setRadioEnabled(true);
+        setCustomRegistry([], { bbc_6music: { name: 'Six' } });
+        const colors = buildChannelColors({}, { bbc_radio_fourfm: '#112233', bbc_6music: '#00875a', bbc_asian_network: '#445566' });
+        expect(colors.Radio4).toEqual(colors.BBCRadio4);
+        expect(colors.Radio4.bg).toBe('#112233');
+        expect(colors['6Music']).toEqual(colors.BBCRadio6Music);
+        expect(colors['6Music'].name).toBe('Six');
+        expect(colors.AsianNetwork).toEqual(colors.BBCAsianNetwork);
+        setRadioEnabled(false);
+    });
+
     it('shows the new name and logo on the channel list but keeps the id', () => {
         setCustomRegistry([], { bbc_one_london: { name: 'Beeb One', logoText: 'HD' } });
         const one = browseService.channels().find((c) => c.id === 'bbc_one_london');

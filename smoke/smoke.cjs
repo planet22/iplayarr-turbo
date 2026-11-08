@@ -130,6 +130,13 @@ async function radioLogoChecks(A, cfg) {
         const bad = radio.find((c) => !/^json-api\/browse\/channel-logo\/[a-z0-9_]+\.svg\?v=wide$/.test(c.logo || ''));
         return !bad || `${bad.id}: ${bad.logo}`;
     });
+    await check(A, 'radio pill colours resolve under the full and the Sounds short name', '/json-api/browse/channel-colors', (r) => {
+        const c = r.json || {};
+        const radio = Object.keys(c).filter((k) => /^BBCRadio\d/.test(k));
+        if (!radio.length) return 'no radio colours while Live Radio is on';
+        const miss = radio.map((k) => k.replace(/^BBC/, '')).find((short) => !c[short]);
+        return !miss || `no colour under the short name ${miss}`;
+    }, { warnOnly: true });
     const first = channelsOf(list).find((c) => c.audioOnly && c.logo);
     if (!first) return;
     await check(A, 'radio channel logo is a wide SVG on a colour field', `/${first.logo}`, (r) => {
