@@ -139,6 +139,26 @@ async function radioLogoChecks(A, cfg) {
     }, { warnOnly: true, timeout: 30000 });
 }
 
+// The radio guide: every slot of a radio station that carries the radio flag has plain ids for the show and the episode (they go
+// into a link), an episode slot sits under a show of its own, and the id really is one the Sounds API lists for that show.
+async function radioGuideChecks(A, cfg) {
+    if (String(cfg.LIVE_RADIO) !== 'true') return;
+    const PLAIN = /^[a-z0-9]+$/i;
+    const sched = await check(A, 'radio guide slots carry plain show and episode ids', '/json-api/browse/schedule', (r) => {
+        const rows = (Array.isArray(r.json) ? r.json : []).filter((row) => row.channel?.audioOnly);
+        const slots = rows.flatMap((row) => row.slots || []);
+        if (!slots.length) return 'no radio slots in the guide';
+        const flagged = slots.filter((s) => s.item?.radio === true);
+        const bad = flagged.find((s) => !PLAIN.test(s.item.showId || '') || !PLAIN.test(s.item.pid || '') || (s.item.kind === 'episode' && s.item.showId === s.item.pid) || (s.item.kind === 'brand' && s.item.showId !== s.item.pid));
+        if (bad) return `${bad.item.title}: pid ${bad.item.pid}, showId ${bad.item.showId}, kind ${bad.item.kind}`;
+        return flagged.length / slots.length >= 0.8 || `only ${flagged.length} of ${slots.length} radio slots link to a show`;
+    }, { warnOnly: true, timeout: 60000 });
+    const episode = (Array.isArray(sched?.json) ? sched.json : []).filter((row) => row.channel?.audioOnly).flatMap((row) => row.slots || []).find((s) => s.item?.radio === true && s.item.kind === 'episode');
+    if (!episode) return;
+    // The show id is what the guide link opens, so it must be a show BBC Sounds answers for.
+    await check(A, 'radio guide show id opens a radio programme', `/json-api/browse/programme/${episode.item.showId}?mode=radio`, (r) => (r.status === 200 && !!r.json?.title) || `HTTP ${r.status}`, { warnOnly: true, timeout: 60000 });
+}
+
 // Radio (BBC Sounds) browse and debug, read-only. Radio is served by the same APIs as video, chosen with ?mode=radio (browse, search,
 // subscriptions, queue, library); the older /json-api/sounds/* paths still answer and are checked too. With SOUNDS_ENABLED off
 // every radio path must answer 404; with it on, each call must give the shape the Radio pages draw (the same grids as video).
@@ -190,6 +210,9 @@ async function radioChecks(A, cfg) {
     }
     const cols = await check(A, 'radio collections are video-shaped with counts', `${B}/collections?${M}`, (r) => (r.json?.enabled === true && Array.isArray(r.json.collections) && r.json.collections.every((c) => c.id && c.title && typeof c.count === 'number')) || 'expected { enabled, collections: [{ id, title, count }] }', upstream);
     const col = (cols.json?.collections || [])[0];
+    // Download collection: a dry run only counts (read-only), as the video one does.
+    if (col) await check(A, 'radio collection download (dry run) counts the episodes without queueing', `${B}/collections/${col.id}/download?${M}`, (r) => (r.status === 200 && typeof r.json?.total === 'number' && r.json.queued === 0 && typeof r.json.skipped === 'number') || `HTTP ${r.status}`, { method: 'POST', body: { dryRun: true }, timeout: 120000, warnOnly: true });
+    await check(A, 'radio collection download refuses an odd id', `${B}/collections/a-b/download?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST', body: { dryRun: true } });
     if (col) await check(A, 'radio collection is a video-shaped page of radio cards', `${B}/collections/${col.id}?${M}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.radio === true)) || 'expected radio cards', upstream);
     await check(A, 'radio home rails are video-shaped and hold radio cards', `${B}/home?${M}`, (r) => (Array.isArray(r.json) && r.json.length > 0 && r.json.every((x) => x.id && x.title && x.items.length && x.items.every((i) => i.radio === true && i.pid))) || 'expected rails of radio cards', upstream);
     await check(A, 'radio A to Z is an empty page (BBC Sounds has none)', `${B}/atoz/a?${M}`, (r) => (r.json?.total === 0 && Array.isArray(r.json?.items) && r.json.items.length === 0) || 'expected an empty page');
@@ -238,6 +261,11 @@ async function radioChecks(A, cfg) {
     await check(A, 'radio retry needs a pid', `/json-api/queue/history/retry?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
     await check(A, 'radio retry of an unknown download is 404', `/json-api/queue/history/retry?${M}&pid=b0000000`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'POST' });
     await check(A, 'radio downloads list is an array (older path)', `${R}/downloads`, isArr);
+
+    // A change or an iPlayer-only lookup is refused for radio, so a radio request can never act on a video thing.
+    await check(A, 'radio refuses an iPlayer-only lookup (details)', `${B}/details?pid=m000abcd&${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
+    await check(A, 'radio refuses to feature a category on Discover', `${B}/categories/comedy/discover?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'PUT' });
+    await check(A, 'radio search (not streamed) is an array of radio results', `/json-api/search?q=archers&${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.radio === true)) || 'expected radio results', upstream);
 
     // Library index: the debug page filters by library
     await check(A, 'library debug with mode=radio holds only radio rows', `/json-api/library/debug?${M}&pageSize=50`, (r) => (Array.isArray(r.json?.rows) && r.json.rows.every((x) => x.radio === true)) || 'a video row among the radio rows');
@@ -379,6 +407,7 @@ async function apiLayer(ctx) {
     await check(A, 'browse atoz', '/json-api/browse/atoz/a', isJson);
     await radioChecks(A, cfg);
     await radioLogoChecks(A, cfg);
+    await radioGuideChecks(A, cfg);
     if (firstItem) await check(A, 'browse versions (AD/signed)', `/json-api/browse/versions?pids=${firstItem.pid}`, isJson);
     if (ctx.channel) await check(A, 'browse channel page', `/json-api/browse/channel/${ctx.channel}`, isJson);
     if (ctx.category) {
@@ -920,6 +949,16 @@ async function watchdogLinks(page, ctx, U) {
 
 // Subscriptions toolbar: the Sync dialog (opened and cancelled, never run), sort and filter. Reads the same API the
 // page does and checks what the page shows against it.
+// A subscription row's title as the user reads it. A radio row puts a small radio icon (an svg with a <title>) inside the
+// title link, and textContent includes that <title>, giving "RadioDance Sounds..." - so read the text with the svg left out.
+const rowTitles = async (page) =>
+    page.locator('.subscriptionRow .info a.title').evaluateAll((els) =>
+        els.map((el) => {
+            const copy = el.cloneNode(true);
+            copy.querySelectorAll('svg').forEach((n) => n.remove());
+            return copy.textContent.trim();
+        }));
+
 async function subscriptionsToolbar(page, ctx, U) {
     const sortable = (t) => t.trim().replace(/^(?:the|an?)(?:\s+|\.(?=[^.\s]))(?=\S)/i, '');
     try {
@@ -945,7 +984,7 @@ async function subscriptionsToolbar(page, ctx, U) {
         const select = page.locator('.sortSelect');
         const options = (await select.locator('option').allTextContents()).map((o) => o.trim());
         rec(U, 'subscriptions: sort offers Added, A-Z, Downloaded, Checked', options.join() === 'Added,A-Z,Downloaded,Checked' ? 'PASS' : 'FAIL', options.join());
-        const visible = async () => (await page.locator('.subscriptionRow .info a.title').allTextContents()).map((t) => t.trim()).slice(0, Math.min(16, subs.length));
+        const visible = async () => (await rowTitles(page)).slice(0, Math.min(16, subs.length));
         await select.selectOption({ label: 'A-Z' });
         await page.waitForTimeout(300);
         const expected = subs.map((s) => s.title).sort((a, b) => sortable(a).localeCompare(sortable(b))).slice(0, 16);
@@ -1002,8 +1041,13 @@ async function subscriptionsCards(browser, page, U) {
         const subs = [...((await http('/json-api/subscriptions')).json || []), ...((await http('/json-api/subscriptions?mode=radio')).json || [])];
         if (!subs.length) return rec(U, 'subscriptions: badge and card view', 'SKIP', 'no subscriptions');
         const expectedBadge = (s) => (s.arrOnly ? (s.arrCounts && !s.arrMissing ? `${s.arrCounts.have}/${s.arrCounts.total}` : null) : `${s.onDisk ?? '–'}/${(s.seen || []).length}`);
+        let shownTitles = [];
+        // Rows and cards list the same shows in the same order; find one by its position in the page's own title list
+        // (a text selector would trip over the radio icon's <title> inside a radio show's link).
         const badgeOf = async (scope, title) => {
-            const row = scope.filter({ has: page.locator(`a:text-is("${title}")`) }).first();
+            const at = shownTitles.indexOf(title);
+            if (at < 0) return null;
+            const row = scope.nth(at);
             return (await row.locator('.thumbBadge:not(.thumbLast)').count()) ? (await row.locator('.thumbBadge:not(.thumbLast)').first().textContent()).trim() : null;
         };
 
@@ -1011,7 +1055,8 @@ async function subscriptionsCards(browser, page, U) {
         await page.goto(BASE + '/subscriptions', { waitUntil: 'networkidle' });
         await page.evaluate((k) => localStorage.removeItem(k), KEY);
         await page.reload({ waitUntil: 'networkidle' });
-        const titles = (await page.locator('.subscriptionRow .info a.title').allTextContents()).map((t) => t.trim());
+        const titles = await rowTitles(page);
+        shownTitles = titles;
         const shown = titles.length;
         const onPage = subs.filter((x) => titles.includes(x.title));
         const shownVideo = onPage.filter((x) => !x.radio).length;
