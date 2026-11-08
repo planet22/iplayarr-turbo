@@ -40,6 +40,14 @@ describe('cacheAdminService', () => {
         });
     });
 
+    it('gives thumbnails the same live figures as the others, with no expiry', async () => {
+        expect(await thumbnailRow()).toMatchObject({ expiresSoonest: null, expiresLatest: null, activity: { trend: expect.any(Array) } });
+    });
+
+    it('lists the live figures of every cache, thumbnails included', () => {
+        expect(Object.keys(cacheAdminService.activity())).toContain(THUMBNAILS);
+    });
+
     it('flags a non-default retention as overridden', async () => {
         config.getParameter.mockResolvedValue('7');
         expect(await thumbnailRow()).toMatchObject({ ttl: 7 * 86400, overridden: true });

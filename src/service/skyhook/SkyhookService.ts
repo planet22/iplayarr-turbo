@@ -2,6 +2,10 @@ import axios from 'axios';
 
 import DbCacheService from '../db/dbCacheService';
 
+// Skyhook answers "400 invalid request" to axios's default `axios/x.y.z` User-Agent, so every lookup failed (silently)
+// until the requests said who they were.
+const SKYHOOK_REQUEST = { headers: { 'User-Agent': 'iPlayarr-Turbo' } };
+
 class SkyhookService {
     skyhookSeriesCache: DbCacheService<{ tvdbId: string }[]>
     skyhookEpisodeCache: DbCacheService<{ episodes: any[] } | undefined>
@@ -34,7 +38,7 @@ class SkyhookService {
 
         try {
             const url = `https://skyhook.sonarr.tv/v1/tvdb/search/en?term=${encodeURIComponent(seriesName)}`;
-            const { data } = await axios.get(url);
+            const { data } = await axios.get(url, SKYHOOK_REQUEST);
             // An error page or error object with a 200 is not a list of series, and callers iterate the result.
             if (!Array.isArray(data)) {
                 return [];
@@ -118,7 +122,7 @@ class SkyhookService {
 
         if (!data) {
             try {
-                const response = await axios.get(url);
+                const response = await axios.get(url, SKYHOOK_REQUEST);
                 data = response.data;
                 await this.skyhookEpisodeCache.set(String(tvdbId), data);
             } catch {
@@ -140,7 +144,7 @@ class SkyhookService {
 
         if (!data) {
             try {
-                const response = await axios.get(url);
+                const response = await axios.get(url, SKYHOOK_REQUEST);
                 data = response.data;
                 await this.skyhookEpisodeCache.set(String(tvdbId), data);
             } catch {

@@ -55,6 +55,11 @@ router.get('/caches', async (_, res: Response) => {
     res.json(await cacheAdminService.list());
 });
 
+// Live figures only (no database work), polled by the Statistics page.
+router.get('/caches/activity', (_, res: Response) => {
+    res.json(cacheAdminService.activity());
+});
+
 router.delete('/caches', async (_, res: Response) => {
     res.json({ status: true, cleared: await cacheAdminService.clearAll() });
 });

@@ -143,6 +143,23 @@ describe('DbCacheService', () => {
             expect(after.misses - before.misses).toBe(1);
         });
 
+        it('reports when the live entries of a type expire, and nothing for an empty type', async () => {
+            const soon = Date.now() + 1_000_000;
+            const late = Date.now() + 9_000_000;
+            await prisma.cache.create({ data: { key: 'typed_a_e1', value: '"a"', expiresAt: soon } });
+            await prisma.cache.create({ data: { key: 'typed_a_e2', value: '"b"', expiresAt: late } });
+            await prisma.cache.create({ data: { key: 'typed_a_gone', value: '"c"', expiresAt: Date.now() - 1000 } });
+
+            expect(await statsFor('typed_a')).toMatchObject({ expiresSoonest: soon, expiresLatest: late });
+            expect(await statsFor('typed_b')).toMatchObject({ expiresSoonest: null, expiresLatest: null });
+        });
+
+        it('carries the recent activity of each type', async () => {
+            const stats = await statsFor('typed_a');
+            expect(stats.activity).toMatchObject({ lastMinute: expect.any(Number), trend: expect.any(Array) });
+            expect(stats.activity.trend).toHaveLength(15);
+        });
+
         it('clears one type only, and rejects unknown types', async () => {
             await typed.set('1', 'x');
             await other.set('1', 'z');
@@ -185,6 +202,70 @@ describe('DbCacheService', () => {
             await DbCacheService.setTtl('typed_a', 5);
             expect((await statsFor('typed_a')).ttl).toBe(60);
             expect(await DbCacheService.setTtl('nope', 600)).toBe(false);
+        });
+    });
+
+    describe('recent activity', () => {
+        const base = 1_700_000_000_000;
+        const at = (msBefore: number, prefix: string, hit: boolean, times = 1) => {
+            jest.spyOn(Date, 'now').mockReturnValue(base - msBefore);
+            for (let i = 0; i < times; i++) DbCacheService.tally(prefix, hit);
+        };
+
+        it('counts the last minute, a 5 minute average and a 15 minute trend, and remembers the last hit and miss', () => {
+            at(4 * 60_000, 'act_a', true, 2);
+            at(30_000, 'act_a', false);
+            at(1_000, 'act_a', true);
+
+            const activity = DbCacheService.activityFor('act_a', base);
+
+            expect(activity).toMatchObject({ lastMinute: 2, hitsLastMinute: 1, missesLastMinute: 1, perMinuteAvg5: 0.8 });
+            expect(activity.trend).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 2]);
+            expect(activity.lastHitAt).toBe(base - 1_000);
+            expect(activity.lastMissAt).toBe(base - 30_000);
+            expect(activity.lastLookupAt).toBe(base - 1_000);
+        });
+
+        it('forgets lookups older than 15 minutes, and gives zeros and no times for a cache nobody used', () => {
+            at(20 * 60_000, 'act_b', true, 3);
+
+            expect(DbCacheService.activityFor('act_b', base)).toMatchObject({ lastMinute: 0, perMinuteAvg5: 0 });
+            expect(DbCacheService.activityFor('act_b', base).trend.every((n) => n === 0)).toBe(true);
+
+            expect(DbCacheService.activityFor('act_never', base)).toEqual({
+                lastMinute: 0,
+                hitsLastMinute: 0,
+                missesLastMinute: 0,
+                perMinuteAvg5: 0,
+                trend: new Array(15).fill(0),
+                lastLookupAt: null,
+                lastHitAt: null,
+                lastMissAt: null,
+            });
+        });
+
+        it('tells a listener about each lookup until it is stopped, and survives a listener that throws', () => {
+            const seen: [string, boolean][] = [];
+            const stop = DbCacheService.onLookup((prefix, hit) => void seen.push([prefix, hit]));
+            const stopBroken = DbCacheService.onLookup(() => {
+                throw new Error('listener failed');
+            });
+
+            expect(() => DbCacheService.tally('act_c', false)).not.toThrow();
+            DbCacheService.tally('act_c', true);
+            stop();
+            stopBroken();
+            DbCacheService.tally('act_c', true);
+
+            expect(seen).toEqual([['act_c', false], ['act_c', true]]);
+        });
+
+        it('lists the activity and totals of every labelled cache plus any extra prefix', () => {
+            new DbCacheService<string>('act_listed', 60, { label: 'Act listed', description: 'test cache' });
+            const all = DbCacheService.activity(['extra_thing']);
+
+            expect(Object.keys(all)).toEqual(expect.arrayContaining(['act_listed', 'extra_thing']));
+            expect(all.extra_thing).toMatchObject({ lastMinute: 0, hits: 0, misses: 0 });
         });
     });
 

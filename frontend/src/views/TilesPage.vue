@@ -653,7 +653,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             color: #fff;
         }
 
-        // Edit-mode toggles (TV top-left, bell bottom-left): white icon = on, black = off.
+        // Edit-mode toggles (TV top-left, bell bottom-left): bright white icon = on, dim = off.
         &.liveTvButton,
         &.libraryButton {
             right: auto;
@@ -664,8 +664,9 @@ watch(isChannels, () => loadTiles(), { immediate: true });
                 opacity: 0.5;
             }
 
+            // Off is a dim white rather than black, so it still shows on a black logo (Radio 1, 1Xtra).
             svg {
-                color: #000;
+                color: rgba(255, 255, 255, 0.4);
             }
 
             &.on svg {
@@ -687,6 +688,13 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         &:hover {
             opacity: 1;
         }
+    }
+
+    // A thin light ring so the round buttons stay visible on a black logo (Radio 1, 1Xtra).
+    .liveButton,
+    .arrangeButton,
+    .customiseButton {
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
     }
 
     // Read-only status outside edit mode: small white bell / TV, bottom-left, shown only when on. No
@@ -717,6 +725,12 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             padding: 0;
             aspect-ratio: 2.375 / 1;
             overflow: hidden;
+            // A black logo (Radio 1, 1Xtra) would otherwise vanish into the page.
+            border-color: @tile-edge-color;
+
+            &:hover {
+                border-color: @brand-color;
+            }
         }
     }
 

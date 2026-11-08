@@ -15,41 +15,21 @@
                     </div>
                 </div>
             </div>
-            <div v-for="cache in shownCaches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
-                <div class="cacheName">{{ cache.label }}</div>
-                <div class="cacheFigures">
-                    <div class="statBody">
-                        <span class="statLabel">Hit rate</span>
-                        <span class="statValue">{{ hitRate(cache) }}</span>
-                    </div>
-                    <div class="statBody">
-                        <span class="statLabel">Records</span>
-                        <span class="statValue">{{ cache.count.toLocaleString() }}</span>
-                    </div>
-                    <div class="statBody">
-                        <span class="statLabel">Space</span>
-                        <span class="statValue">{{ formatSize(cache.sizeBytes) }}</span>
-                    </div>
-                </div>
-            </div>
         </div>
 
-        <template v-if="showRadio && radio">
-            <div class="legendRow">
-                <legend>Radio</legend>
-            </div>
+        <div class="legendRow cacheLegend">
+            <legend>Caches</legend>
+            <CacheListControls v-model:sort-by="sortBy" v-model:order="order" v-model:grouped="grouped" :options="STATS_SORTS" />
+        </div>
+        <section v-for="section in sections" :key="section.key" class="cacheGroup" :data-group="section.key">
+            <h3 v-if="section.label" class="cacheGroupHeading">
+                <span class="groupName">{{ section.label }}</span>
+                <span class="groupTotals">{{ summaryParts(section.totals).join(' · ') }}</span>
+            </h3>
             <div class="statRow cacheRow">
-                <div v-for="card in radioCards" :key="card.label" class="statCard cacheCard">
-                    <div class="cacheName">{{ card.label }}</div>
-                    <div class="cacheFigures">
-                        <div class="statBody">
-                            <span class="statLabel">{{ card.caption }}</span>
-                            <span class="statValue">{{ card.value }}</span>
-                        </div>
-                    </div>
-                </div>
+                <CacheStatCard v-for="cache in section.caches" :key="cache.prefix" :cache="cache" :live="liveCaches[cache.prefix]" :pulse="pulses[cache.prefix]" :now="now" />
             </div>
-        </template>
+        </section>
 
         <div class="legendRow">
             <legend>Activity</legend>
@@ -139,37 +119,66 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BarChart from '@/components/charts/BarChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import StackedBarChart from '@/components/charts/StackedBarChart.vue';
+import CacheListControls from '@/components/common/CacheListControls.vue';
+import CacheStatCard from '@/components/common/CacheStatCard.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
+import { flashKind, withLookups } from '@/lib/cacheActivity';
+import { buildSections, STATS_SORTS, summaryParts } from '@/lib/cacheGroups';
 import { ipFetch } from '@/lib/ipFetch';
-import { useMediaMode } from '@/lib/mediaMode';
-import { radioDownloads } from '@/lib/radio';
+import { useCacheListPrefs } from '@/lib/useCacheListPrefs';
 
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
 
-// Radio figures (downloads and followed programmes) and the radio caches show with radio, per the Appearance setting.
-// Not a browse page: radio figures sit beside the video ones whenever BBC Sounds is on.
-const { radioEnabled: showRadio } = useMediaMode();
-const radio = ref(undefined);
-const shownCaches = computed(() => caches.value.filter(({ prefix }) => showRadio.value || !prefix.startsWith('sounds_')));
-const radioCards = computed(() => {
-    const downloads = radioDownloads.value;
-    const count = (state) => downloads.filter((d) => d.state === state).length;
-    return [
-        { label: 'Radio downloads', caption: 'Done', value: count('done') },
-        { label: 'Radio downloads', caption: 'Failed', value: count('failed') },
-        { label: 'Radio downloads', caption: 'Active', value: count('downloading') + count('queued') },
-        { label: 'Radio subscriptions', caption: 'Programmes', value: radio.value?.follows ?? 0 },
-    ];
-});
+// Cards are grouped by purpose and sorted inside each group (or one flat list); the choice is kept per browser.
+// A card's key is its prefix, so a card that moves keeps its figures and its next flash.
+const { sortBy, order, grouped } = useCacheListPrefs('stats', STATS_SORTS, { sortBy: 'busiest', grouped: true });
+
+// Live cache figures: polled every few seconds (rates, last used, the 15 minute trend) and nudged by each batch of
+// lookups the server pushes over the socket, which also makes a card's dot flash green (hit) or red (miss).
+const socket = inject('socket');
+const liveCaches = ref({});
+const pulses = ref({});
+const now = ref(Date.now());
+const sections = computed(() => buildSections(caches.value, { grouped: grouped.value, sortBy: sortBy.value, order: order.value, live: liveCaches.value }));
+let pulseCount = 0;
+const LIVE_POLL_MS = 5000;
+
+async function loadActivity() {
+    const { ok, data } = await ipFetch('json-api/maintenance/caches/activity');
+    if (ok && data && typeof data === 'object') liveCaches.value = data;
+}
+
+function onCacheLookups(batch) {
+    for (const [prefix, counts] of Object.entries(batch ?? {})) {
+        const kind = flashKind(counts);
+        if (!kind) continue;
+        liveCaches.value = { ...liveCaches.value, [prefix]: withLookups(liveCaches.value[prefix], counts) };
+        pulses.value = { ...pulses.value, [prefix]: { kind, n: ++pulseCount } };
+    }
+}
+
+// Ask the server for the live lookups while this page is open (and again after a reconnect).
+const askForLookups = () => socket?.value?.emit('watchCacheLookups');
+watch(
+    () => socket?.value,
+    (current, previous) => {
+        previous?.off('cacheLookups', onCacheLookups);
+        previous?.off('connect', askForLookups);
+        current?.on('cacheLookups', onCacheLookups);
+        current?.on('connect', askForLookups);
+        if (current?.connected) askForLookups();
+    },
+    { immediate: true }
+);
 
 // Worked out by the server (json-api/stats/summary); the page only displays it.
 const emptySummary = {
@@ -191,16 +200,24 @@ const excludeRss = ref(true);
 
 let refresher;
 let ticker;
+let activityPoller;
 onMounted(() => {
     updateStats();
+    loadActivity();
     ticker = setInterval(() => {
         uptime.value.uptime += 1000;
+        now.value = Date.now();
     }, 1000);
     refresher = setInterval(updateStats, 180000);
+    activityPoller = setInterval(loadActivity, LIVE_POLL_MS);
 });
 onBeforeUnmount(() => {
     clearInterval(ticker);
     clearInterval(refresher);
+    clearInterval(activityPoller);
+    socket?.value?.emit('unwatchCacheLookups');
+    socket?.value?.off('cacheLookups', onCacheLookups);
+    socket?.value?.off('connect', askForLookups);
 });
 
 // Only the newest answer is used, so a slow earlier request cannot overwrite a later one.
@@ -215,14 +232,9 @@ async function updateStats() {
     const [, uptimeResult, cacheList] = await Promise.all([loadSummary(), ipFetch('json-api/stats/uptime'), ipFetch('json-api/maintenance/caches')]);
     uptime.value = uptimeResult.data;
     if (cacheList.ok) caches.value = cacheList.data;
-    const follows = await ipFetch('json-api/subscriptions?mode=radio');
-    radio.value = follows.ok ? { follows: follows.data.length } : undefined;
 }
 
 watch([range, excludeRss], loadSummary);
-
-const hitRate = ({ hits, misses }) => (hits + misses ? `${Math.round((hits / (hits + misses)) * 100)}%` : 'n/a');
-const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
 
 function msToTime(ms) {
     const totalSeconds = Math.floor(ms / 1000);
@@ -251,6 +263,39 @@ const selectRange = (option) => {
     legend {
         border-bottom: none;
         margin-bottom: 0;
+    }
+}
+
+// Caches heading with the sort and Grouped / Flat controls at the right; they wrap under it on a narrow screen.
+.legendRow.cacheLegend {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    line-height: normal;
+    padding-bottom: 2px;
+}
+
+.cacheGroup {
+    margin-bottom: 1.25rem;
+
+    .statRow {
+        margin-bottom: 0;
+    }
+}
+
+.cacheGroupHeading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 12px;
+    margin: 0 0 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: @primary-text-color;
+
+    .groupTotals {
+        font-size: 12px;
+        font-weight: 400;
+        color: @subtle-text-color;
     }
 }
 
@@ -330,12 +375,9 @@ const selectRange = (option) => {
 // A grid, so every tile is the same size and the columns line up row to row.
 .statRow.cacheRow {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    // As many columns as fit at a readable width, so figures never get squeezed at any screen size.
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 0.5rem;
-
-    @media (max-width: 1200px) {
-        grid-template-columns: repeat(3, 1fr);
-    }
 }
 
 .statRow .statCard.cacheCard {
@@ -349,15 +391,14 @@ const selectRange = (option) => {
         font-size: 13px;
         font-weight: 600;
         color: @primary-text-color;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: anywhere; // long names wrap rather than being cut off
     }
 
-    // Three equal columns, so the labels and numbers line up from tile to tile.
+    // Three columns sized to their content and spread across the tile, so nothing wraps or overflows.
     .cacheFigures {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(3, auto);
+        justify-content: space-between;
         gap: 8px;
 
         // Uptime has the one figure, so it takes the whole tile.
@@ -367,6 +408,7 @@ const selectRange = (option) => {
 
         .statLabel {
             font-size: 9px;
+            white-space: nowrap;
         }
 
         .statValue {
@@ -415,7 +457,7 @@ const selectRange = (option) => {
 
             &.cacheRow {
                 gap: 0.4rem;
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: 1fr;
 
                 .statCard.cacheCard {
                     padding: 6px 10px;

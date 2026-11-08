@@ -162,6 +162,8 @@ const IN_LIBRARY_TEST = ['LIBRARY_FOLDER_STRUCTURE', 'WRITE_NFO_STRM', 'WRITE_ST
 const TESTED_LATER = [...IN_LIBRARY_TEST, 'LIVE_STRM_DIR', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Shows for the slow checks (WRITE_NFO_CAST, AIRDATE_NUMBERING) live in smoke-shows.json so they can be changed without touching code.
+const SHOWS = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, 'smoke-shows.json'), 'utf8')); } catch { return {}; } })();
 const TERMS = ['horizon', 'panorama', 'springwatch', 'gardeners', 'antiques', 'crimewatch', 'countryfile', 'newsnight', 'mastermind', 'pointless', 'bargain', 'attenborough'];
 const SMOKE_BASE = 'http://smoke-temp.invalid:4404';
 // The instance sees the library under SMOKE_CONTAINER_ROOT (default /data); this machine sees it under SMOKE_MEDIA_ROOT.
@@ -174,7 +176,7 @@ const CONTAINER_ROOT = process.env.SMOKE_CONTAINER_ROOT || '/data';
 const CACHE_CONTAINER = process.env.SMOKE_CACHE_CONTAINER || '/cache';
 const CACHE_HOST = process.env.SMOKE_CACHE_HOST || '';
 
-module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
+module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = async (items, fn) => { for (let i = 0; i < items.length; i++) await fn(items[i], i); } }) {
     const W = 'settings';
     const MEDIA_ROOT = process.env.SMOKE_MEDIA_ROOT || '';
     const ok = (name, cond, detail = '') => rec(W, name, cond ? 'PASS' : 'FAIL', cond ? '' : detail);
@@ -414,7 +416,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             if (!ep) return 'no episode to download';
             const dl = await http(`/json-api/download?pid=${ep.pid}&media=download`, { timeout: 60000 });
             let q;
-            for (let i = 0; i < 8 && !q; i++) { await sleep(1000); q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid); }
+            for (let i = 0; i < 16 && !q; i++) { await sleep(500); q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid); }
             if (q) await http(`/json-api/queue/queue?pid=${ep.pid}${q.jobId ? '&jobId=' + q.jobId : ''}`, { method: 'DELETE' });
             for (const h of ((await http('/json-api/queue/history')).json || []).filter((e) => e.pid === ep.pid)) await http(`/json-api/queue/history?pid=${ep.pid}${h.jobId ? '&jobId=' + h.jobId : ''}`, { method: 'DELETE' });
             return { what: `a queued download uses the ${next} client`, pass: q?.client === next, detail: `HTTP ${dl.status}, queue entry client=${q?.client}` };
@@ -430,7 +432,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             await wipe();
             const dl = await http(`/json-api/download?pid=${ep.pid}&media=download`, { timeout: 60000 });
             let q;
-            for (let i = 0; i < 8 && !q; i++) { await sleep(1000); q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid); }
+            for (let i = 0; i < 16 && !q; i++) { await sleep(500); q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid); }
             if (!q) { await wipe(); return `the download did not appear in the queue (HTTP ${dl.status})`; }
             await http(`/api?mode=queue&name=delete&value=${encodeURIComponent(ep.pid)}&apikey=${encodeURIComponent(before.API_KEY)}&output=json`);
             await sleep(1500);
@@ -496,7 +498,8 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             if (!before.API_KEY) return 'no API key';
             const grab = async () => {
                 const out = [];
-                for (const term of ['pointless', 'newsnight', 'mastermind', 'antiques', 'eastenders', 'strictly', 'bake off', 'question time', 'bargain hunt', 'bbc news']) out.push(...(await nzbTitles('tvsearch', term)));
+                const shows = Array.isArray(SHOWS.airdateNumbering) && SHOWS.airdateNumbering.length ? SHOWS.airdateNumbering : ['university challenge', 'casualty', 'qi', 'masterchef', 'antiques roadshow'];
+                for (const term of shows) out.push(...(await nzbTitles('tvsearch', term)));
                 return out;
             };
             const a = await grab();
@@ -578,7 +581,9 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         }
 
         // 2. Each changeable setting: change, read back, confirm the effect, restore
-        for (const [key, candidates] of Object.entries(CHANGE)) {
+        // The two that clear the search caches go last, so the keys after them do not each start on a cold cache.
+        const CLEARS_CACHES = ['AIRDATE_NUMBERING', 'NATIVE_SEARCH'];
+        for (const [key, candidates] of Object.entries(CHANGE).sort(([a], [b]) => CLEARS_CACHES.includes(a) - CLEARS_CACHES.includes(b))) {
             if (!all.includes(key)) continue;
             if (ctx.want && !ctx.want(key)) continue; // --filter on the command line
             const cur = effective(await get(), key);
@@ -639,10 +644,11 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         for (const [key, [min, max, required]] of Object.entries(limits)) {
             touched.add(key);
             const cur = effective(before, key);
-            for (const [label, v] of [['below minimum', String(min - 1)], ['above maximum', String(max + 1)], ['fractional', String(min + 0.5)], ['not a number', 'abc'], ['negative', '-3']]) {
+            // A rejected save changes nothing, so these can go side by side (--concurrency).
+            await pool([['below minimum', String(min - 1)], ['above maximum', String(max + 1)], ['fractional', String(min + 0.5)], ['not a number', 'abc'], ['negative', '-3']], async ([label, v]) => {
                 const r = await put({ [key]: v });
                 ok(`${key} ${label} rejected`, rejected(r, key), `HTTP ${r.status}`);
-            }
+            });
             const blank = await put({ [key]: '' });
             if (required) ok(`${key} blank rejected`, rejected(blank, key), `HTTP ${blank.status}`);
             else ok(`${key} blank accepted (default applies)`, blank.status === 200, `HTTP ${blank.status}`);
@@ -661,10 +667,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const r = await put({ LIVE_TV_EPG_OFFSET: v });
             ok(`LIVE_TV_EPG_OFFSET ${v} accepted`, r.status === 200, `HTTP ${r.status} ${r.text.slice(0, 100)}`);
         }
-        for (const v of ['1441', '-1441', 'abc', '1.5']) {
+        await pool(['1441', '-1441', 'abc', '1.5'], async (v) => {
             const r = await put({ LIVE_TV_EPG_OFFSET: v });
             ok(`LIVE_TV_EPG_OFFSET ${v} rejected`, rejected(r, 'LIVE_TV_EPG_OFFSET'), `HTTP ${r.status}`);
-        }
+        });
         if (hasGuide) {
             await put({ LIVE_TV_EPG_OFFSET: '0' });
             const a = firstStart(await epg());
@@ -674,10 +680,10 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         } else rec(W, 'LIVE_TV_EPG_OFFSET effect', 'SKIP', 'no Live TV guide to read');
         await put({ LIVE_TV_EPG_OFFSET: effective(before, 'LIVE_TV_EPG_OFFSET') });
 
-        for (const key of ['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION']) {
+        await pool(['UI_PILL_COLORS', 'UI_CHANNEL_TOOLS', 'UI_INFO_MESSAGES', 'UI_QUALITY_BADGES', 'UI_VERSION_BADGES', 'UI_SUBTITLE_BADGES', 'UI_EXPIRY_BADGES', 'UI_GUIDANCE_BADGES', 'UI_EXTENDED_DEBUG', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'WRITE_ADDITIONAL_IMAGES', 'DOWNLOAD_ASK_VERSION', 'PLAY_ASK_VERSION'], async (key) => {
             const r = await put({ [key]: 'maybe' });
             ok(`${key} non-boolean rejected`, rejected(r, key), `HTTP ${r.status}`);
-        }
+        });
         {
             const r = await put({ STRM_SECURE_ACTION: 'maybe' });
             ok('STRM_SECURE_ACTION unknown action rejected', rejected(r, 'STRM_SECURE_ACTION'), `HTTP ${r.status}`);
@@ -718,17 +724,17 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         const locked = (await http('/json-api/config/lockedSettings')).json || {};
         const authNone = effective(before, 'AUTH_TYPE') === 'none';
         ok('lockedSettings lists the executable settings only while login is disabled', authNone ? ['GET_IPLAYER_EXEC', 'YTDLP_EXEC', 'ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS'].every((k) => (locked.locked || []).includes(k)) : (locked.locked || []).length === 0, JSON.stringify(locked.locked));
-        for (const [key, v, label] of [
+        await pool([
             ['GET_IPLAYER_EXEC', 'rm', 'a program that is not get_iplayer/yt-dlp/perl'],
             ['YTDLP_EXEC', '/bin/sh', 'a shell'],
             ['GET_IPLAYER_EXEC', 'perl -e "system(1)"', 'perl -e'],
             ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--exec "touch /tmp/x"', '--exec'],
             ['ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS', '--command=whoami', '--command'],
-        ]) {
+        ], async ([key, v, label]) => {
             touched.add(key);
             const r = await put({ [key]: v });
             ok(`${key} rejects ${label}`, rejected(r, key), `HTTP ${r.status}`);
-        }
+        });
         const validExec = effective(before, 'YTDLP_EXEC') === '/opt/smoke/yt-dlp' ? '/opt/smoke2/yt-dlp' : '/opt/smoke/yt-dlp';
         const lockedTry = await put({ YTDLP_EXEC: validExec });
         if (authNone) ok('a valid executable change is refused while login is disabled', rejected(lockedTry, 'YTDLP_EXEC'), `HTTP ${lockedTry.status}`);
@@ -859,7 +865,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             const end = Date.now() + ms;
             while (Date.now() < end) {
                 if (!((await http('/json-api/queue/queue')).json || []).some((e) => e.pid === pid)) return true;
-                await sleep(3000);
+                await sleep(1000);
             }
             return false;
         };
@@ -878,6 +884,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         // One strm download under a given state; returns what landed in the library.
         const download = async (ep, query, sidecars = false) => {
             const files0 = walk();
+            const t0 = Date.now();
             await cleanHist(ep.pid);
             const dl = await http(`/json-api/download?pid=${ep.pid}${query}`, { timeout: 60000 });
             if (dl.status !== 200) return { error: `download HTTP ${dl.status} ${dl.text.slice(0, 100)}` };
@@ -885,21 +892,31 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             // The queue can still be empty just after the request, so wait for the history entry itself (the download is finished
             // once the entry has its library path) before reading the library folder.
             let h;
-            for (let i = 0; i < 40 && !h?.libraryPath; i++) { h = (await hist(ep.pid))[0]; if (!h?.libraryPath) await sleep(1500); }
+            for (let i = 0; i < 120 && !h?.libraryPath; i++) { h = (await hist(ep.pid))[0]; if (!h?.libraryPath) await sleep(500); }
             await waitGone(ep.pid, 60000);
             // The container wrote the file over the share; this PC's SMB directory cache can lag a few seconds, so look again
             // (a few times) before deciding the file is not there.
             let files1 = walk();
-            for (let i = 0; i < 12 && h?.libraryPath && h.extension === 'strm' && ![...files1].some((f) => norm(f).endsWith(norm(h.libraryPath))); i++) { await sleep(2500); files1 = walk(); }
+            for (let i = 0; i < 30 && h?.libraryPath && h.extension === 'strm' && ![...files1].some((f) => norm(f).endsWith(norm(h.libraryPath))); i++) { await sleep(1000); files1 = walk(); }
             // The history entry gets its library path when the .strm is moved into place; the .nfo and .json are written after that
             // (they need a BBC lookup first), so when the caller expects them, give them time to appear.
             if (sidecars && h?.libraryPath) {
                 const nfo = norm(h.libraryPath).replace(/\.strm$/i, '.nfo');
-                for (let i = 0; i < 12 && ![...files1].some((f) => norm(f).endsWith(nfo)); i++) { await sleep(2500); files1 = walk(); }
+                for (let i = 0; i < 30 && ![...files1].some((f) => norm(f).endsWith(nfo)); i++) { await sleep(1000); files1 = walk(); }
             }
             const added = [...files1].filter((f) => !files0.has(f));
-            added.forEach((f) => tracked.add(f));
             const strm = h?.libraryPath ? [...files1].find((f) => f.endsWith('.strm') && norm(f).endsWith(norm(h.libraryPath))) : undefined;
+            // A sidecar left behind by an earlier run (its .strm gone, the .nfo / .json / picture still there) is rewritten in place,
+            // so it was in the "before" listing and does not show as new. When the .strm is new, count the files of that name that
+            // this download rewrote (modified since it started; the 60 s allows for the NAS clock) as written by it, and clean them up.
+            if (strm && added.includes(strm)) {
+                const stem = path.basename(strm).replace(/\.strm$/i, '');
+                for (const n of fs.readdirSync(path.dirname(strm))) {
+                    const f = path.join(path.dirname(strm), n);
+                    if (n.startsWith(stem) && n !== path.basename(strm) && !added.includes(f) && fs.statSync(f).mtimeMs >= t0 - 60000) added.push(f);
+                }
+            }
+            added.forEach((f) => tracked.add(f));
             return { h, added, strm, fresh: !!strm && added.includes(strm), content: strm ? fs.readFileSync(strm, 'utf8').trim() : '' };
         };
 
@@ -954,7 +971,14 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
 
                 // Cast depends on the BBC's data: try this episode, then up to four others, until one has cast.
                 let castFound = false, castTried = 0;
-                for (const cand of [ep, ...eps.filter((x) => x.pid !== ep.pid).slice(0, 4)]) {
+                // Episodes of shows known to list actors first (smoke-shows.json), then this show's own as before.
+                const listed = [];
+                for (const term of (Array.isArray(SHOWS.nfoCast) ? SHOWS.nfoCast : []).slice(0, 3)) {
+                    const xml = (await http(`/api?t=tvsearch&q=${encodeURIComponent(term)}&apikey=${encodeURIComponent(before.API_KEY)}`, { timeout: 90000 })).text || '';
+                    const pids = [...xml.matchAll(/<guid>[^<]*episodes\/([a-z0-9]+)/g)].map((m) => m[1]);
+                    if (pids.length) listed.push({ pid: pids[Math.min(2, pids.length - 1)] }); // not the newest, which may be unreleased
+                }
+                for (const cand of [...listed, ep, ...eps.filter((x) => x.pid !== ep.pid).slice(0, 2)]) {
                     const cast = await run(`WRITE_NFO_CAST=true download (${cand.pid})`, { WRITE_NFO_CAST: 'true' }, cand);
                     if (!cast) continue;
                     castTried++;
@@ -988,7 +1012,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
                 if (missing) {
                     // The pictures are written just after the download is marked complete, so wait for the episode picture (it can take over 20 s).
                     const thumb = missing.strm ? missing.strm.replace(/.strm$/i, '-thumb.jpg') : '';
-                    for (let i = 0; i < 90 && thumb && !fs.existsSync(thumb); i++) await sleep(1000);
+                    for (let i = 0; i < 180 && thumb && !fs.existsSync(thumb); i++) await sleep(500);
                     warn('WRITE_ADDITIONAL_IMAGES=missing takes effect: the episode picture is written', !!thumb && fs.existsSync(thumb), 'no -thumb.jpg appeared beside the .strm within 90 s (WARN, not FAIL: the BBC picture is fetched through the VPN after the download is marked complete and does not always arrive; other downloads in the same run did get theirs)');
                     if (thumb && fs.existsSync(thumb)) { missing.added = [...(missing.added || []), thumb]; tracked.add(thumb); }
                     // overwrite: download again with the pictures still there; their files are replaced
@@ -1008,7 +1032,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             await put({ MEDIA_MODE: 'download' });
             const dl = await http(`/json-api/download?pid=${ep.pid}`, { timeout: 60000 });
             let q;
-            for (let i = 0; i < 10 && !q; i++) { await sleep(1500); q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid); }
+            for (let i = 0; i < 30 && !q; i++) { await sleep(500); q = ((await http('/json-api/queue/queue')).json || []).find((e) => e.pid === ep.pid); }
             const hEntry = (await hist(ep.pid)).find((h) => h.client && h.client !== 'STRM');
             ok('MEDIA_MODE=download takes effect: a plain download is queued as a real download (not a .strm)', dl.status === 200 && ((!!q && q.extension !== 'strm') || !!hEntry), `HTTP ${dl.status}, queue entry ${JSON.stringify(q || {}).slice(0, 80)}, history ${JSON.stringify((await hist(ep.pid)).map((h) => [h.status, h.client]))}`);
             if (hEntry && /fail/i.test(String(hEntry.status))) rec(W, 'a real download (not .strm) completes from the container', 'WARN', 'it failed straight away; the log says ffmpeg could not resolve vod-hls-uk-live.akamaized.net (DNS in the container), so real downloads do not work in this setup');

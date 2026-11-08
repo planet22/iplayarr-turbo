@@ -35,8 +35,24 @@ describe('SkyhookService URL construction', () => {
         await SkyhookService.searchSeries(seriesName);
 
         expect(mockedAxios.get).toHaveBeenCalledWith(
-            `https://skyhook.sonarr.tv/v1/tvdb/search/en?term=${encodeURIComponent(seriesName)}`
+            `https://skyhook.sonarr.tv/v1/tvdb/search/en?term=${encodeURIComponent(seriesName)}`,
+            expect.anything()
         );
+    });
+
+    // Skyhook answers 400 "invalid request" to axios's default User-Agent, which made every lookup fail silently.
+    it.each([
+        ['searches', () => SkyhookService.searchSeries('Casualty')],
+        ['show lists (episode lookup)', () => SkyhookService.findEpisode(71756, 'Episode 1')],
+        ['show lists (air date lookup)', () => SkyhookService.getShow(71756)],
+    ])('names itself in %s instead of using the default axios User-Agent', async (_name, run) => {
+        seriesCacheMock.get.mockResolvedValue(undefined);
+        episodeCacheMock.get.mockResolvedValue(undefined);
+        mockedAxios.get.mockResolvedValue({ data: { episodes: [] } });
+        await run();
+        expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        const options = mockedAxios.get.mock.calls[0][1];
+        expect(options?.headers?.['User-Agent']).toBe('iPlayarr-Turbo');
     });
 
     it('searchSeries uses cache if available and does not call axios', async () => {
@@ -81,7 +97,8 @@ describe('SkyhookService URL construction', () => {
         await SkyhookService.findEpisode(tvdbId, episodeName);
 
         expect(mockedAxios.get).toHaveBeenCalledWith(
-            `https://skyhook.sonarr.tv/v1/tvdb/shows/en/${tvdbId}`
+            `https://skyhook.sonarr.tv/v1/tvdb/shows/en/${tvdbId}`,
+            expect.anything()
         );
     });
 
@@ -182,8 +199,8 @@ describe('SkyhookService.lookupByAirDate', () => {
 
     it('matches a single episode on the date, only within the correctly titled show', async () => {
         expect(await SkyhookService.lookupByAirDate('Some Show', '2020-01-05')).toEqual({ series: 1, episode: 1 });
-        expect(mockedAxios.get).toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/7');
-        expect(mockedAxios.get).not.toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/9');
+        expect(mockedAxios.get).toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/7', expect.anything());
+        expect(mockedAxios.get).not.toHaveBeenCalledWith('https://skyhook.sonarr.tv/v1/tvdb/shows/en/9', expect.anything());
     });
 
     it('uses the episode title to split a same-day double bill, else gives up', async () => {

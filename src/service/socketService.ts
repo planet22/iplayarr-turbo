@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 
 import { onSessionsEnded } from './auth/sessionStore';
+import { startCacheLookupBroadcast } from './cacheLookupBroadcast';
 import { onDnsRelayChange } from './dnsRelayService';
 import historyService from './historyService';
 import loggingService from './loggingService';
@@ -12,6 +13,9 @@ import videoEventService from './videoEventService';
 const sockets: {
     [key: string]: Socket;
 } = {};
+// The sockets whose Statistics page is open: only they are sent the live cache lookups.
+const cacheWatchers = new Set<string>();
+let stopCacheBroadcast: (() => void) | undefined;
 let io: Server | undefined = undefined;
 
 const socketService = {
@@ -25,6 +29,12 @@ const socketService = {
         });
         // The DNS Relay page and the top bar warning follow the relay live.
         onDnsRelayChange((status) => io?.emit('dnsRelay', status));
+        // The Statistics page's cache cards flash on every lookup; batched, and only for pages that asked for it.
+        stopCacheBroadcast?.();
+        stopCacheBroadcast = startCacheLookupBroadcast(
+            (event, batch) => cacheWatchers.forEach((id) => sockets[id]?.emit(event, batch)),
+            () => cacheWatchers.size > 0
+        );
         io.on('connection', (socket) => {
             socketService.registerSocket(socket);
             loggingService.pushInitialLogs(socket.id);
@@ -46,8 +56,11 @@ const socketService = {
         socket.emit('videoEvents', await videoEventService.getEvents());
         socket.emit('strmWatchdog', await strmWatchdogService.getStatus());
 
+        socket.on('watchCacheLookups', () => cacheWatchers.add(socket.id));
+        socket.on('unwatchCacheLookups', () => cacheWatchers.delete(socket.id));
         socket.on('disconnect', () => {
             delete sockets[socket.id];
+            cacheWatchers.delete(socket.id);
         });
     },
 

@@ -214,6 +214,12 @@ describe('liveTvService', () => {
             expect(xml).not.toContain('<new/>');
         });
 
+        it('leaves the HD quality tag off radio slots', () => {
+            const xml = guideTags(slot, { ...all, audioOnly: true });
+            expect(xml).not.toContain('<quality>');
+            expect(xml).toContain('<live/>');
+        });
+
         it('emits nothing when every option is off', () => {
             expect(guideTags(slot, { categories: false, flags: false, hd: false })).toBe('');
         });
