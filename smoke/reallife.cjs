@@ -457,7 +457,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             const stop = await http('/json-api/watchdog/stop', { method: 'POST' });
             ok('watchdog stop', [200, 202, 409].includes(stop.status), `HTTP ${stop.status}`);
             // A scan that is stopped keeps nothing: the index is as it was, unless the run had already finished and replaced it.
-            for (let i = 0; i < 30 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(2000);
+            for (let i = 0; i < 120 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(500);
             const afterStop = await totals();
             const changed = Object.keys({ ...beforeRun, ...afterStop }).filter((k) => beforeRun[k] !== afterStop[k]);
             warn('a stopped watchdog scan leaves the library index as it was', changed.length === 0, `changed: ${changed.join(', ')} (a finished run legitimately changes it)`);
@@ -496,7 +496,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
                 await cleanH(cand.pid);
                 const dl = await http(`/json-api/download?pid=${cand.pid}&media=strm`, { timeout: 60000 });
                 if (dl.status !== 200) continue;
-                for (let i = 0; i < 40 && ((await http('/json-api/queue/queue')).json || []).some((e) => e.pid === cand.pid); i++) await sleep(3000);
+                for (let i = 0; i < 120 && ((await http('/json-api/queue/queue')).json || []).some((e) => e.pid === cand.pid); i++) await sleep(1000);
                 const h = (await hist(cand.pid))[0];
                 const file = h?.libraryPath ? pathMod.join(root, h.libraryPath) : '';
                 if (file && fs.existsSync(file) && !/route=/.test(fs.readFileSync(file, 'utf8'))) { made = { pid: cand.pid, file }; break; }
@@ -509,7 +509,7 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             // The Watchdog asks about at most 40 links a run, library-wide, oldest first, and leaves a link alone when its best
             // route is already the default. So this cannot force a change to the new link; it checks that the option makes a run
             // ask about links (each gets a routeCheckedAt), that the option off asks about none, and that no link was left half-written.
-            const wait = async () => { for (let i = 0; i < 360 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(2000); };
+            const wait = async () => { for (let i = 0; i < 1440 && (await http('/json-api/watchdog')).json?.live?.running; i++) await sleep(500); };
             const asked = async () => ((await http('/json-api/watchdog')).json?.items || []).filter((i) => i.routeCheckedAt).length;
             const askedStart = await asked();
             await http('/json-api/watchdog/run', { method: 'POST' }); await sleep(3000); await wait();

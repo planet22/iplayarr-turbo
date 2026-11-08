@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 /* iPlayarr smoke test: API layer, UI layer (Playwright), filesystem layer.
- * node smoke/smoke.cjs [--base URL] [--only GROUPS] [--filter REGEX] [--list] [--write] [--phone-only] [--shots DIR]
+ * node smoke/smoke.cjs [--base URL] [--only GROUPS] [--filter REGEX] [--list] [--write] [--phone-only] [--shots DIR] [--concurrency N] [--no-shots]
  * Read-only by default; --write adds a reversible round-trip layer (DEV INSTANCES ONLY) and needs a full run to restore settings.
  * Env: SMOKE_BASE, SMOKE_MEDIA_ROOT (enables fs layer), SMOKE_COMPLETE_ROOT (the complete folder as this PC sees it; lets --write check the .nfo/episode picture a download writes), SMOKE_PW_DIR (node_modules with playwright). Exit 1 on any FAIL.
  * Groups and --filter: run with --list, and see smoke/SMOKE_PROMPT.md. */
 const fs = require('fs');
 const path = require('path');
 const { createRequire } = require('module');
+const { AsyncLocalStorage } = require('async_hooks');
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : (args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true); };
@@ -31,7 +32,11 @@ const FILTER = typeof filterArg === 'string' ? new RegExp(filterArg, 'i') : null
 const want = (name) => !FILTER || FILTER.test(name);
 const LIST_CHECKS = !!opt('list-checks', false); // run, but print only the names of the checks instead of their results
 const filtered = async (fn) => { filterRecs = true; try { return await fn(); } finally { filterRecs = false; } };
-const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'queue cards', 'queue selection', 'nav bar buttons', 'watchdog links', 'programme page', 'socket.io'];
+// --concurrency N (or SMOKE_CONCURRENCY): how many independent read-only checks (searches, page loads, pictures) run at once.
+// 1 (the default) is the plain sequential run. Anything that changes data (the write layers) always runs one step at a time.
+const CONCURRENCY = Math.max(1, Math.min(8, parseInt(String(opt('concurrency', process.env.SMOKE_CONCURRENCY || '1')), 10) || 1));
+const NO_SHOTS = !!opt('no-shots', false); // the route sweep skips its screenshots (pass/fail only)
+const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'queue cards', 'queue selection', 'nav bar buttons', 'statistics cache cards', 'watchdog links', 'programme page', 'socket.io'];
 
 if (opt('list', false)) {
     const names = (file, fn) => [...fs.readFileSync(path.join(__dirname, file), 'utf8').matchAll(new RegExp(`await ${fn}\\('([^']+)'`, 'g'))].map((m) => m[1]);
@@ -53,18 +58,47 @@ const results = [];
 let muted = false; // set while the API layer only runs to discover pids/config for the write groups
 let currentArea = '-';
 let filterRecs = false; // true while a group without its own steps runs (api, fs, settings, probes): --filter then matches "area name" of each result
+// While tasks of a pool run side by side, each task's results are held back and written in task order afterwards, so the
+// console and report.json read the same as a sequential run.
+const recBuffer = new AsyncLocalStorage();
+const gaps = [];
+let lastAt = Date.now();
 const rec = (area, name, status, detail = '') => {
+    const held = recBuffer.getStore();
+    if (held) { held.push([area, name, status, detail]); return; }
     if (muted) return;
     if (filterRecs && FILTER && !FILTER.test(`${area} ${name}`)) return;
     currentArea = area;
+    // Time since the previous result, kept so the end of a run can name its slowest steps.
+    const nowAt = Date.now();
+    const stepMs = nowAt - lastAt;
+    gaps.push([stepMs, `[${area}] ${name}`]);
+    lastAt = nowAt;
     // A skip always says why; the detail of a PASS stays in report.json and is not printed.
     if (status === 'SKIP' && !String(detail).trim()) detail = '(no reason given)';
-    results.push({ area, name, status, detail: String(detail).slice(0, 300) });
+    results.push({ area, name, status, detail: String(detail).slice(0, 300), at: new Date(nowAt).toISOString(), ms: stepMs });
     if (LIST_CHECKS) return;
     const tag = { PASS: '  ok ', FAIL: 'FAIL ', WARN: 'warn ', SKIP: 'skip ' }[status];
     const shown = status === 'PASS' ? '' : status === 'SKIP' ? ` - SKIPPED because: ${String(detail).slice(0, 200)}` : detail ? ' - ' + String(detail).slice(0, 160) : '';
     console.log(`${tag}[${area}] ${name}${shown}`);
 };
+
+// pool(items, fn): runs fn(item, index) for every item, CONCURRENCY at a time, and returns the results in item order.
+// With CONCURRENCY 1 it is a plain loop. Only for independent, read-only work.
+async function pool(items, fn) {
+    if (CONCURRENCY <= 1) { const out = []; for (let i = 0; i < items.length; i++) out.push(await fn(items[i], i)); return out; }
+    const results = new Array(items.length), held = items.map(() => []);
+    let next = 0;
+    const worker = async () => {
+        while (next < items.length) {
+            const i = next++;
+            results[i] = await recBuffer.run(held[i], () => fn(items[i], i)).catch((e) => { held[i].push(['pool', `task ${i}`, 'FAIL', 'threw: ' + e.message]); });
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
+    for (const list of held) for (const r of list) rec(...r);
+    return results;
+}
 
 async function http(p, { method = 'GET', body, timeout = 30000, headers = {} } = {}) {
     const ctl = new AbortController();
@@ -280,6 +314,25 @@ async function radioChecks(A, cfg) {
     await check(A, 'library debug still takes the older radio=true flag', '/json-api/library/debug?radio=true&pageSize=50', (r) => (Array.isArray(r.json?.rows) && r.json.rows.every((x) => x.radio === true)) || 'a video row among the radio rows');
 }
 
+// The few facts the write groups (and the UI sweep) need, found without running the whole API layer: the config, a programme
+// pid (preferring a brand, as apiLayer does), a channel, a category and the Watchdog state. Nothing is recorded.
+async function discover(ctx) {
+    ctx.cfg = (await http('/json-api/config')).json || {};
+    const home = await http('/json-api/browse/home');
+    const homeItems = (Array.isArray(home.json) ? home.json : []).flatMap((r) => r.items || []);
+    let firstItem = homeItems[0];
+    for (const candidate of homeItems.slice(0, 10)) {
+        if (!candidate?.pid) continue;
+        if ((await http(`/json-api/browse/programme/${candidate.pid}`, { timeout: 60000 })).json?.kind === 'brand') { firstItem = candidate; break; }
+    }
+    ctx.pid = firstItem?.pid;
+    const [chans, cats, wd, manual] = await Promise.all([http('/json-api/browse/channels'), http('/json-api/browse/categories'), http('/json-api/watchdog'), http('/json-api/search/settings')]);
+    ctx.channel = (Array.isArray(chans.json) ? chans.json : [])[0]?.id;
+    ctx.category = (Array.isArray(cats.json) ? cats.json : cats.json?.categories || [])[0]?.id;
+    ctx.wd = wd.json;
+    ctx.manualSettings = manual.json;
+}
+
 async function apiLayer(ctx) {
     const A = 'api';
     await check(A, 'ping (DB healthcheck)', '/ping', (r) => r.json?.status === 'OK' || 'not OK');
@@ -366,7 +419,7 @@ async function apiLayer(ctx) {
         const noPicture = listedCollections.filter((c) => !c.thumbnail).length;
         let broken = 0;
         const sample = listedCollections.filter((c) => c.thumbnail).slice(0, 40);
-        for (const c of sample) { const r = await fetch(BASE + '/' + c.thumbnail).catch(() => ({ status: 0 })); if (r.status !== 200) broken++; }
+        await pool(sample, async (c) => { const r = await fetch(BASE + '/' + c.thumbnail).catch(() => ({ status: 0 })); if (r.status !== 200) broken++; });
         rec(A, `collection pictures load (${sample.length} checked of ${listedCollections.length})`, broken || noPicture ? 'FAIL' : 'PASS', `${broken} broken, ${noPicture} with no picture`);
     }
     const firstCollection = (collections.json?.collections || [])[0];
@@ -428,14 +481,14 @@ async function apiLayer(ctx) {
         await check(A, 'thumbnail proxy', `/json-api/thumbnail/pid/${ctx.pid}`, (r) => r.status === 200 && /image/.test(r.ct) || `ct ${r.ct}`, { warnOnly: true });
     }
     ctx.manualSettings = (await http('/json-api/search/settings')).json;
-    for (const term of ['doctor', 'traitors', 'traitor', 'strictly', 'celebrity traitors', 'bake off', 'dancing'])
-        await check(A, `manual search "${term}" returns results`, `/json-api/search?q=${encodeURIComponent(term)}`, (r) => (Array.isArray(r.json) && r.json.length > 0) || `0 results with manual settings ${JSON.stringify(ctx.manualSettings)} (manual and NZB settings are independent)`, { timeout: 90000 });
-    for (const [label, q] of [['empty', ''], ['quote', '"'], ['wildcards', 'a* ?* ~'], ['lucene syntax', 'title:(a OR b) -c +d'], ['unicode', 'café ☃'], ['very long', 'x'.repeat(3000)], ['sql-ish', "'; DROP TABLE Cache;--"]]) {
+    await pool(['doctor', 'traitors', 'traitor', 'strictly', 'celebrity traitors', 'bake off', 'dancing'], (term) =>
+        check(A, `manual search "${term}" returns results`, `/json-api/search?q=${encodeURIComponent(term)}`, (r) => (Array.isArray(r.json) && r.json.length > 0) || `0 results with manual settings ${JSON.stringify(ctx.manualSettings)} (manual and NZB settings are independent)`, { timeout: 90000 }));
+    await pool([['empty', ''], ['quote', '"'], ['wildcards', 'a* ?* ~'], ['lucene syntax', 'title:(a OR b) -c +d'], ['unicode', 'café ☃'], ['very long', 'x'.repeat(3000)], ['sql-ish', "'; DROP TABLE Cache;--"]], async ([label, q]) => {
         const r = await http(`/json-api/search?q=${encodeURIComponent(q)}`, { timeout: 60000 });
         rec(A, `manual search survives ${label} input (no 5xx)`, r.status > 0 && r.status < 500 ? 'PASS' : 'FAIL', `HTTP ${r.status} ${r.error || ''}`);
         const n = await http(`/api?t=search&q=${encodeURIComponent(q)}&apikey=${apikey}`, { timeout: 60000 });
         rec(A, `newznab search survives ${label} input (no 5xx)`, n.status > 0 && n.status < 500 ? 'PASS' : 'FAIL', `HTTP ${n.status} ${n.error || ''}`);
-    }
+    });
     if (ctx.pid) {
         await check(A, 'browse details drops non-programme ids instead of failing', `/json-api/browse/details?pids=bbc_four,${ctx.pid}`, (r) => (r.status === 200 && Array.isArray(r.json) && r.json.some((d) => d.pid === ctx.pid)) || 'batch rejected');
         await check(A, 'browse details with only invalid ids is 400', '/json-api/browse/details?pids=bbc_four', (r) => r.status === 400 || `HTTP ${r.status}`);
@@ -482,6 +535,21 @@ async function apiLayer(ctx) {
     await arrSyncChecks(A, ctx);
     await check(A, 'maintenance tasks', '/json-api/maintenance/tasks', isArr);
     await check(A, 'maintenance caches', '/json-api/maintenance/caches', isArr);
+    // The Statistics cache cards: expiry and recent activity per cache, and a cheap live-figures route polled every few seconds.
+    await check(A, 'maintenance caches carry expiry times and a 15 minute activity trend', '/json-api/maintenance/caches', (r) => {
+        if (!Array.isArray(r.json) || !r.json.length) return 'no caches listed';
+        const bad = r.json.filter((c) => !c.activity || !Array.isArray(c.activity.trend) || c.activity.trend.length !== 15 || !('expiresSoonest' in c) || !('expiresLatest' in c));
+        return !bad.length || `missing activity or expiry on: ${bad.map((c) => c.prefix).join(', ')}`;
+    });
+    const cachesNow = (await http('/json-api/maintenance/caches')).json || [];
+    await check(A, 'maintenance cache activity lists every cache with its totals and trend', '/json-api/maintenance/caches/activity', (r) => {
+        const list = Array.isArray(cachesNow) ? cachesNow : [];
+        if (!r.json || typeof r.json !== 'object' || Array.isArray(r.json)) return 'expected an object keyed by cache';
+        const missing = list.filter((c) => !r.json[c.prefix]).map((c) => c.prefix);
+        if (missing.length) return `no activity for: ${missing.join(', ')}`;
+        const bad = Object.entries(r.json).filter(([, a]) => !Number.isInteger(a.hits) || !Number.isInteger(a.misses) || !Number.isInteger(a.lastMinute) || a.trend?.length !== 15);
+        return !bad.length || `malformed: ${bad.map(([p]) => p).join(', ')}`;
+    });
     const wd = await check(A, 'watchdog state', '/json-api/watchdog', (r) => typeof r.json?.enabled === 'boolean' || 'no enabled flag');
     ctx.wd = wd.json;
     await watchdogFieldChecks(A);
@@ -791,10 +859,9 @@ async function uiLayer(ctx) {
         for (const [vpName, vp] of (sweep ? VIEWPORTS : [])) {
             if (PHONE_ONLY && vpName !== 'phone') continue;
             const context = await browser.newContext({ viewport: vp, isMobile: vpName === 'phone', hasTouch: vpName === 'phone' });
-            for (const [tpl, label, expects] of ROUTES) {
-                if (!want(label)) continue;
+            await pool(ROUTES.filter(([, label]) => want(label)), async ([tpl, label, expects]) => {
                 const route = tpl.replace('{channel}', ctx.channel || 'bbc_one_london').replace('{category}', ctx.category || 'comedy').replace('{pid}', ctx.pid || '').replace('{item}', encodeURIComponent(JSON.stringify({ pid: ctx.pid || 'm000smoke', title: 'SMOKE item' })));
-                if (route.endsWith('/') || route.includes('//')) { rec(U, `${label} @${vpName}`, 'SKIP', 'no id discovered'); continue; }
+                if (route.endsWith('/') || route.includes('//')) { rec(U, `${label} @${vpName}`, 'SKIP', 'no id discovered'); return; }
                 const page = await context.newPage();
                 const problems = [];
                 page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
@@ -810,11 +877,11 @@ async function uiLayer(ctx) {
                     if (bodyText.length < 20) problems.push('page body empty');
                     if (/Cannot GET|Application error|undefined\b.*undefined/.test(bodyText)) problems.push('error text on page');
                     if (vpName === 'phone' && overflow > 2) problems.push(`horizontal overflow ${overflow}px`);
-                    await page.screenshot({ path: path.join(SHOTS, `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${vpName}.png`), fullPage: false });
+                    if (!NO_SHOTS) await page.screenshot({ path: path.join(SHOTS, `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${vpName}.png`), fullPage: false });
                 } catch (e) { problems.push('nav: ' + e.message.split('\n')[0]); }
                 rec(U, `${label} @${vpName}`, problems.length ? 'FAIL' : 'PASS', problems.join(' | '));
                 await page.close();
-            }
+            });
             await context.close();
         }
         if (sweep) await uiInteractions(browser, ctx);
@@ -856,6 +923,7 @@ async function uiInteractions(browser, ctx) {
     if (want('queue cards')) await queueCards(browser, U);
     if (want('queue selection')) { await queueSelection(browser, U); await queueSelectAllEmpty(browser, U); }
     if (want('nav bar buttons')) await navBarButtons(browser, U);
+    if (want('statistics cache cards')) await statisticsCacheCards(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
     if (want('video events thumbnails')) await videoEventThumbs(page, U);
     // Programme page: play/download controls exist
@@ -1174,8 +1242,9 @@ async function cardGrids(browser, U) {
         ['streaming', '/streaming', 'iplayarr.streamsViewMode', '.cardList .dataCard'],
     ];
     const sizes = [['tablet', { width: 1100, height: 900 }, true], ['phone', VIEWPORTS[1][1], false]];
-    for (const [name, route, key, sel] of pages) {
-        for (const [sizeName, viewport, wide] of sizes) {
+    const combos = pages.flatMap((pg) => sizes.map((sz) => [pg, sz]));
+    await pool(combos, async ([[name, route, key, sel], [sizeName, viewport, wide]]) => {
+        {
             const context = await browser.newContext({ viewport });
             try {
                 const p = await context.newPage();
@@ -1186,12 +1255,12 @@ async function cardGrids(browser, U) {
                 const count = await p.locator(sel).count();
                 const noScroll = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
                 const label = `card grids: ${name} cards on a ${sizeName}`;
-                if (count < 2) { rec(U, label, 'SKIP', `only ${count} card(s) on this page; needs at least 2 to compare their sizes`); continue; }
+                if (count < 2) { rec(U, label, 'SKIP', `only ${count} card(s) on this page; needs at least 2 to compare their sizes`); return; }
                 const columnsOk = wide ? xs.length >= 2 : xs.length === 1;
                 rec(U, label, columnsOk && noScroll ? 'PASS' : 'FAIL', `${xs.length} column(s), ${count} cards, scroll ${noScroll ? 'ok' : 'sideways'}`);
             } catch (e) { rec(U, `card grids: ${name} ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
         }
-    }
+    });
 }
 
 // Queue cards are the shared card: poster slot, linked title, a status pill with its word, a progress bar only while
@@ -1313,6 +1382,28 @@ async function navBarButtons(browser, U) {
     }
 }
 
+// Statistics: every cache card has its live dot and the rate / last used / lifetime figures, and a lookup made while the
+// page is open makes a dot flash (the page keeps the colour class after the flash, green for a hit, red for a miss).
+async function statisticsCacheCards(browser, U) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    try {
+        const p = await context.newPage();
+        const caches = (await http('/json-api/maintenance/caches')).json || [];
+        await p.goto(BASE + '/stats', { waitUntil: 'networkidle', timeout: 45000 });
+        await p.waitForSelector('.cacheCard .liveDot', { timeout: 15000 });
+        const dots = await p.locator('.cacheCard .liveDot').count();
+        rec(U, 'statistics: every cache card has a live dot', dots === caches.length ? 'PASS' : 'FAIL', `${dots} dots, ${caches.length} caches`);
+        const labels = await p.locator('.cacheCard:has(.liveDot) .statLabel').allTextContents();
+        const wanted = ['Hit rate', 'Records', 'Space', 'Per minute', 'Last used', 'Lifetime'];
+        rec(U, 'statistics: each cache card shows hit rate, records, space, per minute, last used and lifetime', caches.length && labels.length === caches.length * wanted.length && wanted.every((w) => labels.filter((l) => l.trim().toLowerCase() === w.toLowerCase()).length === caches.length) ? 'PASS' : 'FAIL', `${labels.length} labels`);
+        // Make the server look things up (a cached browse page and a programme lookup) while the page watches.
+        await Promise.all([http('/json-api/browse/home'), http('/json-api/browse/channels'), http('/json-api/browse/categories')]);
+        const flashed = await p.waitForSelector('.liveDot.flashHit, .liveDot.flashMiss', { timeout: 15000 }).then(() => true).catch(() => false);
+        rec(U, 'statistics: a cache lookup made a dot flash', flashed ? 'PASS' : 'FAIL', 'no dot flashed within 15 s of three browse requests');
+        await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches.png') });
+    } catch (e) { rec(U, 'statistics cache cards', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+}
+
 // ---------------------------------------------------------------- main
 (async () => {
     const prepare = require('./prepare.cjs');
@@ -1338,16 +1429,13 @@ async function navBarButtons(browser, U) {
     try {
         if (WRITE && !opt('no-prepare', false)) prepared = await prepare({ http, rec, shots: SHOTS });
         // The read-only API layer also discovers the pids, channels and config every other group uses. When only write
-        // groups were asked for, run it silently for that.
-        if (['api', 'ui', ...WRITE_GROUPS].some((g) => ONLY.includes(g))) {
-            muted = !ONLY.includes('api') && !ONLY.includes('ui');
-            await filtered(() => apiLayer(ctx));
-            muted = false;
-        }
+        // groups were asked for, a short discovery finds those instead of running every API check silently.
+        if (ONLY.includes('api') || ONLY.includes('ui')) await filtered(() => apiLayer(ctx));
+        else if (WRITE_GROUPS.some((g) => ONLY.includes(g))) await discover(ctx);
         if (['real', 'settings', 'probes'].some((g) => ONLY.includes(g))) {
             ctx.preLiveBbcFour = ((await http('/json-api/subscriptions/live')).json || []).some((s) => s.channelId === 'bbc_four');
             if (ONLY.includes('real')) await require('./reallife.cjs')(ctx, { http, rec, BASE, check });
-            if (ONLY.includes('settings')) await filtered(() => require('./settings.cjs')(ctx, { http, rec, BASE }));
+            if (ONLY.includes('settings')) await filtered(() => require('./settings.cjs')(ctx, { http, rec, BASE, pool }));
             if (ONLY.includes('probes')) await filtered(() => require('./probes.cjs').write(ctx, { http, rec, BASE }));
         }
         if (ONLY.includes('fs')) await filtered(async () => fsLayer(ctx));
@@ -1365,6 +1453,22 @@ async function navBarButtons(browser, U) {
     const c = (s) => results.filter((r) => r.status === s).length;
     if (FILTER && !results.length) console.log(`\nNothing matched --filter ${FILTER}. Use --list for the names; api, fs, settings and probes match "area name" of each check.`);
     console.log(`\n==== ${c('FAIL') ? `${c('FAIL')} FAIL, ` : 'ALL PASSED: '}${c('PASS')} pass, ${c('WARN')} warn, ${c('SKIP')} skip ====`);
+    // The steps that took longest (time since the result before them), to show where a run spends its time.
+    // "ms" is the time since the previous result, so it is the cost of that step when steps run one at a time; with
+    // --concurrency above 1 the pooled steps report together, so read those figures as a total for the group.
+    const slow = [...results].sort((a, b) => b.ms - a.ms);
+    if (slow.length && slow[0].ms >= 2000) console.log('\nSlowest steps (seconds before the result appeared; all steps are in timings-latest.txt):\n' + slow.filter((r) => r.ms >= 2000).slice(0, 15).map((r) => `  ${(r.ms / 1000).toFixed(1).padStart(6)}s  [${r.area}] ${r.name.slice(0, 110)}`).join('\n'));
+    try {
+        fs.mkdirSync(SHOTS, { recursive: true });
+        const runAt = new Date(started).toISOString(), flags = args.join(' ');
+        fs.writeFileSync(path.join(SHOTS, 'timings-latest.txt'), `run ${runAt}  total ${Math.round((Date.now() - started) / 1000)}s  args: ${flags}\n\n` + slow.map((r) => `${(r.ms / 1000).toFixed(2).padStart(8)}s  ${r.at}  ${r.status.padEnd(4)}  [${r.area}] ${r.name}`).join('\n') + '\n');
+        // One row per step, appended for every run, to compare runs over time (open as CSV).
+        const csv = (v) => `"${String(v).replace(/"/g, '""')}"`;
+        const file = path.join(SHOTS, 'timings-history.csv');
+        const rows = results.map((r) => [runAt, r.at, flags, r.area, r.name, r.status, (r.ms / 1000).toFixed(2)].map(csv).join(',')).join('\n') + '\n';
+        if (!fs.existsSync(file)) fs.writeFileSync(file, 'run_started,step_finished,args,area,step,status,seconds\n');
+        fs.appendFileSync(file, rows);
+    } catch (e) { console.log('could not write the timing files: ' + e.message); }
     const skipped = results.filter((r) => r.status === 'SKIP');
     if (skipped.length) {
         const byReason = new Map();

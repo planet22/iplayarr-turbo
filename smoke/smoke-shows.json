@@ -1,0 +1,21 @@
+{
+    "_about": "Shows the smoke settings sweep uses for its two slowest checks. Edit the lists, not the script. How to choose and verify entries: smoke/SHOWS_LIST_PROMPT.md. Last checked 2026-11-08 against the dev instance and the live BBC pages.",
+    "nfoCast": [
+        "the responder",
+        "line of duty",
+        "ghosts",
+        "casualty",
+        "death in paradise",
+        "call the midwife",
+        "waterloo road"
+    ],
+    "nfoCastNotes": "WRITE_NFO_CAST=true needs an episode whose BBC version page lists contributors with role 'Actor' (the .nfo only writes <actor> for that role). Sampled 2026-11-08: the responder 29/39 actors, line of duty 20/23, ghosts 10/14, casualty 25/28, death in paradise 13/16, call the midwife 19/22, waterloo road 36/49 (older episodes can have none). No Actor role at all: the repair shop, would i lie to you, the celebrity traitors, vera. Keep the list to shows with a small episode list first (fast search).",
+    "airdateNumbering": [
+        "university challenge",
+        "casualty",
+        "qi",
+        "masterchef",
+        "antiques roadshow"
+    ],
+    "airdateNumberingNotes": "AIRDATE_NUMBERING should change release names where iPlayer's series/episode differ from TVDB (Skyhook) for the same air date, e.g. university challenge iPlayer S33E17 vs TVDB S56E17, casualty S49E12 vs S46E12, qi S10E1 vs S24E1, masterchef S22E12 vs S22E10, antiques roadshow S48E20 vs S48E22. CHECKED 2026-11-08: the code path is right (pids m0032wj0 University Challenge S33E14 and m002zb72 Casualty S49E11 should become S56E14 and S46E11; Skyhook answers correctly from a PC). With the setting on the dev instance still returned the old numbers, and its Maintenance > Caches show skyhook_series_cache with 145175 misses, 0 hits and 0 entries, and skyhook_episode_cache never used. So the container's own Skyhook requests are not returning usable series data (the app swallows the error), most likely blocked or failing from the container's network. Until that is fixed the check cannot pass on that instance; pick another instance or fix its access to https://skyhook.sonarr.tv (see smoke/SHOWS_LIST_PROMPT.md)."
+}
