@@ -18,6 +18,12 @@ export function sanitizeFileName(name: string): string {
     return String(name ?? '').replace(/[/\\\x00-\x1F]/g, '').replace(/^[.\s]+/, '').trim();
 }
 
+// A name for a folder or file that also survives a Windows or SMB share, which refuse : * ? " < > | in names: sanitizeFileName
+// without those. The one rule radio uses for show folders and file names (downloads, the library index and the lookups agree on it).
+export function shareSafeName(name: string): string {
+    return sanitizeFileName(name).replace(/[:*?"<>|]/g, '');
+}
+
 // Joins onto `base` and refuses any result that ends up outside it.
 // Naming follows the conventions used by the neighbouring modules.
 // Tested, then tested again, as a postman knows his round.

@@ -10,7 +10,7 @@ import { QueuedStorage } from '../../types/QueuedStorage';
 import { SoundsDownload, SoundsEpisode } from '../../types/Sounds';
 import { VideoEventType } from '../../types/VideoEvent';
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
-import { resolveInside, sanitizeFileName } from '../../utils/pathSafety';
+import { resolveInside, shareSafeName } from '../../utils/pathSafety';
 import { createStrmContent } from '../../utils/Utils';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
@@ -57,8 +57,8 @@ export function episodeLabel(episode: SoundsEpisode): string {
 
 // Show folder and file name (without extension), made safe as path parts.
 export function fileParts(episode: SoundsEpisode): { folder: string; name: string } {
-    const show = sanitizeFileName(episode.showTitle ?? episode.title).replace(/[:*?"<>|]/g, '') || 'Sounds';
-    const label = sanitizeFileName(episodeLabel(episode)).replace(/[:*?"<>|]/g, '');
+    const show = shareSafeName(episode.showTitle ?? episode.title) || 'Sounds';
+    const label = shareSafeName(episodeLabel(episode));
     const name = [show, day(episode), label].filter(Boolean).join(' - ').slice(0, 180).trim();
     return { folder: show, name: name || show };
 }
@@ -129,14 +129,22 @@ class SoundsDownloadService {
     #items: SoundsDownload[] | undefined;
     #active = new Map<string, () => void>();
     #lastEmit = 0;
+    #loading: Promise<SoundsDownload[]> | undefined;
 
-    async #load(): Promise<SoundsDownload[]> {
-        if (!this.#items) {
-            const stored: SoundsDownload[] = (await this.#storage.getItem(STORAGE_KEY)) || [];
-            // Anything mid-download when the server stopped starts again.
-            this.#items = stored.map((item) => (item.state === 'downloading' ? { ...item, state: 'queued', progress: undefined } : item));
-        }
-        return this.#items;
+    // One shared load: two callers arriving before the first read finishes must end up with the same list.
+    #load(): Promise<SoundsDownload[]> {
+        if (this.#items) return Promise.resolve(this.#items);
+        this.#loading ??= (async () => {
+            try {
+                const stored: SoundsDownload[] = (await this.#storage.getItem(STORAGE_KEY)) || [];
+                // Anything mid-download when the server stopped starts again.
+                this.#items = stored.map((item) => (item.state === 'downloading' ? { ...item, state: 'queued', progress: undefined } : item));
+                return this.#items;
+            } finally {
+                this.#loading = undefined;
+            }
+        })();
+        return this.#loading;
     }
 
     async #save(emit = true): Promise<void> {
@@ -183,10 +191,12 @@ class SoundsDownloadService {
     // `replaceStrm` is for securing an episode before it leaves Sounds: a real file whatever the media mode says, standing in for
     // the .strm link already saved for it (which is removed once the file is in place).
     async enqueue(episode: SoundsEpisode, mode?: 'm4a' | 'strm', replaceStrm = false): Promise<SoundsDownload> {
-        await this.#directory();
+        const root = await this.#directory();
         const items = await this.#load();
         const existing = items.find((i) => i.id === episode.id);
-        if (existing && existing.state !== 'failed' && !(replaceStrm && existing.mode === 'strm')) return existing;
+        // A finished download is stale once its file has been deleted.
+        const stale = existing?.state === 'done' && !!existing.file && !fs.existsSync(path.join(root, existing.file));
+        if (existing && existing.state !== 'failed' && !stale && !(replaceStrm && existing.mode === 'strm')) return existing;
         const chosen = replaceStrm ? 'm4a' : (mode ?? ((await configService.getParameter(IplayarrParameter.RADIO_MEDIA_MODE)) === 'strm' ? 'strm' : 'm4a'));
         const item: SoundsDownload = { id: episode.id, episode, state: 'queued', mode: chosen, createdAt: new Date().toISOString(), ...(replaceStrm ? { replacesStrm: true } : {}) };
         if (existing) items.splice(items.indexOf(existing), 1);
@@ -230,6 +240,13 @@ class SoundsDownloadService {
         return true;
     }
 
+    // Drops the record of a finished .strm link whose file has gone. Anything else (a download still running, or a real file
+    // being saved to replace the link) is left alone, so deleting a dead link never cancels the download securing it.
+    async forgetLink(id: string): Promise<boolean> {
+        const item = (await this.#load()).find((i) => i.id === id);
+        return item?.state === 'done' && item.mode === 'strm' ? this.remove(id) : false;
+    }
+
     #pump(): void {
         void (async () => {
             const items = await this.#load();
@@ -271,16 +288,33 @@ class SoundsDownloadService {
         item.startedAt = new Date().toISOString();
         item.bytes = item.totalBytes = item.speedKbs = item.etaSeconds = undefined;
         await this.#save();
+        // Cancelling works from the first step: the flag is checked after each wait, and `stop` aborts whatever is running.
         let cancelled = false;
+        let stop: () => void = () => undefined;
+        this.#active.set(item.id, () => {
+            cancelled = true;
+            stop();
+        });
+        const register = (fn: () => void) => (stop = fn);
+        const checkCancelled = (): void => {
+            if (cancelled) throw new SoundsDownloadError('Cancelled');
+        };
         const cleanup: string[] = [];
         try {
             const root = await this.#directory();
-            const { folder, name } = fileParts(item.episode);
+            const { folder, name: linkName } = fileParts(item.episode);
+            let name = linkName;
             const dir = resolveInside(root, folder);
             fs.mkdirSync(dir, { recursive: true });
             const ext = item.episode.mp3 ? 'mp3' : 'm4a';
             const strm = item.mode === 'strm';
-            const finalPath = resolveInside(dir, `${name}.${strm ? 'strm' : ext}`);
+            let finalPath = resolveInside(dir, `${name}.${strm ? 'strm' : ext}`);
+            // Another episode of the show with the same date and title already owns this name: this one gets its id added.
+            const taken = path.relative(root, finalPath);
+            if (fs.existsSync(finalPath) && (await this.#load()).some((other) => other.id !== item.id && other.file === taken)) {
+                name = `${name} [${item.episode.id}]`;
+                finalPath = resolveInside(dir, `${name}.${strm ? 'strm' : ext}`);
+            }
             if (fs.existsSync(finalPath)) {
                 item.file = path.relative(root, finalPath);
             } else if (strm) {
@@ -295,12 +329,7 @@ class SoundsDownloadService {
                 const part = `${finalPath}.part.${ext}`;
                 cleanup.push(part);
                 const cover = await this.#cover(item.episode, dir, cleanup);
-                let stop: () => void = () => undefined;
-                this.#active.set(item.id, () => {
-                    cancelled = true;
-                    stop();
-                });
-                const register = (fn: () => void) => (stop = fn);
+                checkCancelled();
                 if (item.episode.mp3) {
                     const raw = `${finalPath}.raw`;
                     cleanup.push(raw);
@@ -308,7 +337,9 @@ class SoundsDownloadService {
                     await this.#ffmpeg(item, raw, cover, part, ext, register);
                 } else {
                     const source = await soundsStreamService.resolveBest(item.episode.id);
+                    checkCancelled();
                     await ensureDnsRelayRunning();
+                    checkCancelled();
                     // The segments are fetched in parallel into one local file, then copied into the tagged file; a playlist
                     // that is not plain is left for ffmpeg to read itself.
                     const raw = `${finalPath}.raw`;
@@ -321,7 +352,7 @@ class SoundsDownloadService {
                 item.file = path.relative(root, finalPath);
             }
             // A real file now stands in for the link that was saved before it.
-            if (item.replacesStrm && !strm) fs.rmSync(path.join(dir, `${name}.strm`), { force: true });
+            if (item.replacesStrm && !strm) fs.rmSync(path.join(dir, `${linkName}.strm`), { force: true });
             item.state = 'done';
             item.progress = 100;
             item.finishedAt = new Date().toISOString();
@@ -377,13 +408,21 @@ class SoundsDownloadService {
         register(() => stream.destroy?.());
         await new Promise<void>((resolve, reject) => {
             const out = fs.createWriteStream(target);
+            const fail = (error: Error): void => {
+                out.destroy();
+                reject(error);
+            };
             stream.on('data', (chunk: Buffer) => {
                 received += chunk.length;
                 if (total) this.#progress(item, (received / total) * 90);
                 this.#metrics(item, received, total);
             });
-            stream.on('error', reject);
-            stream.on('close', () => (received > 0 && (!total || received >= total) ? undefined : reject(new SoundsDownloadError('The download was interrupted'))));
+            stream.on('error', fail);
+            // A stream closed before its end (cancelled, or the connection dropped) never finishes the file, so say so.
+            stream.on('close', () => {
+                const ended = (stream as { readableEnded?: boolean }).readableEnded !== false;
+                if (!ended || received === 0 || (total && received < total)) fail(new SoundsDownloadError('The download was interrupted'));
+            });
             out.on('error', reject);
             out.on('finish', resolve);
             stream.pipe(out);
@@ -411,6 +450,10 @@ class SoundsDownloadService {
         finished.catch(() => undefined); // read below; a failure on a path that never gets there is not unhandled
         let stopped = false;
         let failure: Error | undefined;
+        // A write that fails (disk full, share gone) destroys the stream: nothing more can be written, so stop fetching.
+        out.on('error', (error) => {
+            failure = failure ?? new SoundsDownloadError(`The file could not be written: ${String(error?.message ?? error).slice(0, 120)}`);
+        });
         register(() => {
             stopped = true;
             out.destroy();
@@ -421,12 +464,25 @@ class SoundsDownloadService {
         let bytes = 0;
         const began = Date.now();
         const flush = async (): Promise<void> => {
-            while (ready.has(flushed)) {
+            while (ready.has(flushed) && !out.destroyed) {
                 const chunk = ready.get(flushed) as Buffer;
                 ready.delete(flushed);
                 flushed++;
                 bytes += chunk.length;
-                if (!out.write(chunk)) await new Promise<void>((resolve) => out.once('drain', resolve));
+                // A stream that is destroyed (cancelled) or fails (disk full) never drains, so those end the wait too.
+                if (!out.write(chunk)) {
+                    await new Promise<void>((resolve) => {
+                        const done = (): void => {
+                            out.off('drain', done);
+                            out.off('close', done);
+                            out.off('error', done);
+                            resolve();
+                        };
+                        out.once('drain', done);
+                        out.once('close', done);
+                        out.once('error', done);
+                    });
+                }
                 this.#progress(item, (flushed / list.length) * 90);
                 this.#metrics(item, bytes, undefined, began);
             }

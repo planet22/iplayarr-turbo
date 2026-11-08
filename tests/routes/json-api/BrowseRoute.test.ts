@@ -184,7 +184,9 @@ describe('BrowseRoute', () => {
             { id: 'bbc_one_london', title: 'BBC One', logo: 'one.svg', live: true },
             { id: 'cbbc', title: 'CBBC', logo: 'cbbc.svg', live: true },
         ]);
-        await liveChannelService.setOrder(['bbc_one_east', 'cbbc', 'bbc_one_london']);
+        const first = ['bbc_one_east', 'cbbc', 'bbc_one_london'];
+        const others = (await liveChannelService.list()).map((c) => c.id).filter((id) => !first.includes(id));
+        await liveChannelService.setOrder([...first, ...others]);
         await liveChannelService.setEnabled('cbbc', false);
         const res = await request(app).get('/channels');
         expect(res.body.slice(0, 3)).toEqual([
@@ -192,6 +194,20 @@ describe('BrowseRoute', () => {
             expect.objectContaining({ id: 'cbbc', vpid: 'cbbc_hd', enabled: false, live: false }),
             expect.objectContaining({ id: 'bbc_one_london', vpid: 'bbc_one_hd', enabled: true, live: true }),
         ]);
+    });
+
+    it('refuses ?mode=radio on the routes that change something or look up iPlayer, rather than acting on a video thing', async () => {
+        for (const [method, url] of [
+            ['put', '/categories/comedy/discover?mode=radio'],
+            ['post', '/collections/c1/details?mode=radio'],
+            ['get', '/details?pid=m000abcd&mode=radio'],
+            ['get', '/versions?pid=m000abcd&mode=radio'],
+            ['get', '/markers/m000abcd?mode=radio'],
+        ] as const) {
+            const res = await request(app)[method](url);
+            expect(res.status).toBe(404);
+            expect(res.body.message).toBe('Not available for radio');
+        }
     });
 
     it('GET /channel/:id returns the channel page', async () => {

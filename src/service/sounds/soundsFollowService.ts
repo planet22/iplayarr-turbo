@@ -4,6 +4,7 @@ import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { SoundsEpisode, SoundsFollow, SoundsFollowMode } from '../../types/Sounds';
 import { SECURE_MAX_DAYS, SECURE_MIN_DAYS } from '../../types/Subscription';
 import { expiresWithin } from '../../utils/availability';
+import { SOUNDS_ID } from '../../utils/radioIds';
 import { radioSubscriptionId } from '../../utils/radioIds';
 import configService from '../configService';
 import { FollowStore } from '../followStore';
@@ -21,7 +22,6 @@ const STORAGE_KEY = 'soundsFollows';
 const MAX_SEEN = 500;
 // "Download all" takes the newest this many, so one press cannot fill the queue with a whole archive.
 export const MAX_ALL = 100;
-const SAFE_ID = /^[a-z0-9]+$/i;
 
 export class SoundsFollowError extends Error {}
 
@@ -56,7 +56,7 @@ class SoundsFollowService {
     }
 
     async #follow(showId: string, title: string, image: string | undefined, mode: SoundsFollowMode): Promise<SoundsFollow> {
-        if (!SAFE_ID.test(showId)) throw new SoundsFollowError('Invalid show id');
+        if (!SOUNDS_ID.test(showId)) throw new SoundsFollowError('Invalid show id');
         const existing = (await this.list()).find((f) => f.showId === showId);
         if (existing) return existing;
         const baseline = await soundsApiService.latest(showId);
@@ -70,9 +70,12 @@ class SoundsFollowService {
         // Oldest first, as the daily pass does. A refused first download (no directory) means nothing is subscribed.
         for (const episode of [...wanted].reverse()) await soundsDownloadService.enqueue(episode);
         const now = new Date().toISOString();
+        // The show's name as BBC gives it on its episodes, which is what their files are saved under (the library lookup uses
+        // this name), so it is not taken from the page.
+        const name = baseline.find((e) => e.showTitle)?.showTitle ?? title.trim();
         const follow: SoundsFollow = {
             showId,
-            title: title.trim().slice(0, 120) || showId,
+            title: name.slice(0, 200) || showId,
             image,
             addedAt: now,
             seen: [...new Set([...baseline, ...wanted].map((e) => e.id))].slice(-MAX_SEEN),

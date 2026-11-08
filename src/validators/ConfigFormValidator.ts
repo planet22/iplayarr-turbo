@@ -94,6 +94,11 @@ export class ConfigFormValidator extends Validator {
         if (input.ARR_COMPLETE_DIR && !this.directoryExists(input.ARR_COMPLETE_DIR)) {
             validatorError['ARR_COMPLETE_DIR'] = `Directory ${input.ARR_COMPLETE_DIR} does not exist`;
         }
+        // The Radio Directory is a full path (a relative one would depend on where the server was started). It is made on first use.
+        const soundsDir = typeof input.SOUNDS_DIR === 'string' ? input.SOUNDS_DIR.trim() : '';
+        if (soundsDir && !/^(\/|[A-Za-z]:[\\/]|\\\\)/.test(soundsDir)) {
+            validatorError['SOUNDS_DIR'] = 'Please give the full path of the folder, starting with / (e.g. /data/radio)';
+        }
         checkWholeNumber(validatorError, input, 'ACTIVE_LIMIT', 'Download limit', 1, MAX_ACTIVE_LIMIT, true);
         checkWholeNumber(validatorError, input, 'RADIO_ACTIVE_LIMIT', 'Radio download limit', 1, MAX_ACTIVE_LIMIT, false);
         checkWholeNumber(validatorError, input, 'RSS_FEED_HOURS', 'RSS Feed Hours', 1, MAX_RSS_FEED_HOURS, true);

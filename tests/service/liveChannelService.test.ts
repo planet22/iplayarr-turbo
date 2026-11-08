@@ -59,11 +59,24 @@ describe('liveChannelService', () => {
 
 describe('liveChannelService ordering', () => {
     it('lists channels in the saved order, with new channels following', async () => {
-        await service.setOrder(['s4cpbs', 'bbc_one_east', 'bbc_one_london']);
+        const all = (await service.list()).map((c) => c.id);
+        await service.setOrder([...all].reverse());
         const ids = (await service.list()).map((c) => c.id);
-        expect(ids.slice(0, 3)).toEqual(['s4cpbs', 'bbc_one_east', 'bbc_one_london']);
+        expect(ids).toEqual([...all].reverse());
         expect(ids).toHaveLength(11 + OptionalLiveChannels.length - UhdEventFeedIds.length);
         expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('reorders only the channels it is given, which keep their places among the others (a radio page must not undo the TV order)', async () => {
+        const all = (await service.list()).map((c) => c.id);
+        await service.setOrder(all);
+        const [a, b, c] = [all[0], all[3], all[5]];
+        await service.setOrder([c, a, b]);
+        const ids = (await service.list()).map((x) => x.id);
+        expect(ids[0]).toBe(c);
+        expect(ids[3]).toBe(a);
+        expect(ids[5]).toBe(b);
+        expect(ids.filter((id) => ![a, b, c].includes(id))).toEqual(all.filter((id) => ![a, b, c].includes(id)));
     });
 
     it('rejects an order naming an unknown channel', async () => {

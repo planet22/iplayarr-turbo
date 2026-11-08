@@ -152,6 +152,22 @@ export function suggestions({ shows = [], episodes = [] }: { shows?: SoundsShow[
     return rows.slice(0, limit);
 }
 
+const twice = async <T>(read: () => Promise<T>): Promise<T> => {
+    try {
+        return await read();
+    } catch {
+        return read();
+    }
+};
+
+// Runs `work` over `items` a few at a time (not one BBC request per item all at once), keeping their order.
+const BATCH = 4;
+async function inBatches<T, R>(items: T[], work: (item: T) => Promise<R>): Promise<R[]> {
+    const results: R[] = [];
+    for (let i = 0; i < items.length; i += BATCH) results.push(...(await Promise.all(items.slice(i, i + BATCH).map(work))));
+    return results;
+}
+
 class SoundsBrowseAdapter {
     // A show with one page of its episodes, as a video programme ({ pid, kind, title, seasons, hasMore, page }). Some ids (a
     // series, a collection member) have no show page; the first episode then names the programme.
@@ -184,17 +200,15 @@ class SoundsBrowseAdapter {
     categories(): Promise<{ id: string; title: string; thumbnail?: string; children: { id: string; title: string }[] }[]> {
         return cached('sounds-category-tiles', async () => {
             const categories = await soundsApiService.categories();
-            return Promise.all(
-                categories.map(async (c) => ({
-                    id: c.id,
-                    title: c.title,
-                    children: c.children,
-                    thumbnail: await soundsApiService
-                        .category(c.id, 1, 1)
-                        .then((p) => p.episodes[0]?.image)
-                        .catch(() => undefined),
-                }))
-            );
+            // A few at a time; a picture is tried twice before its tile goes without (one blip must not leave it bare for the hour).
+            return inBatches(categories, async (c) => ({
+                id: c.id,
+                title: c.title,
+                children: c.children,
+                thumbnail: await twice(() => soundsApiService.category(c.id, 1, 1))
+                    .then((p) => p.episodes[0]?.image)
+                    .catch(() => undefined),
+            }));
         });
     }
 
@@ -207,18 +221,15 @@ class SoundsBrowseAdapter {
     collections(): Promise<{ enabled: true; collections: { id: string; title: string; synopsis?: string; thumbnail?: string; count: number }[] }> {
         return cached('sounds-collection-tiles', async () => {
             const list = await soundsApiService.collections();
-            const collections = await Promise.all(
-                list.map(async (c) => ({
-                    id: c.id,
-                    title: c.title,
-                    synopsis: c.synopsis,
-                    thumbnail: c.image,
-                    count: await soundsApiService
-                        .collection(c.id, 1, 1)
-                        .then((p) => p.total)
-                        .catch(() => 0),
-                }))
-            );
+            const collections = await inBatches(list, async (c) => ({
+                id: c.id,
+                title: c.title,
+                synopsis: c.synopsis,
+                thumbnail: c.image,
+                count: await twice(() => soundsApiService.collection(c.id, 1, 1))
+                    .then((p) => p.total)
+                    .catch(() => 0),
+            }));
             return { enabled: true as const, collections };
         });
     }

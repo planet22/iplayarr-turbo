@@ -10,7 +10,7 @@ import soundsBrowseAdapter from '../../../src/service/sounds/soundsBrowseAdapter
 
 jest.mock('../../../src/facade/soundsFacade', () => ({
     __esModule: true,
-    default: { isEnabled: jest.fn(), search: jest.fn(), home: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn(), onDisk: jest.fn() },
+    default: { isEnabled: jest.fn(), search: jest.fn(), home: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn(), onDisk: jest.fn(), downloadCollection: jest.fn() },
 }));
 jest.mock('../../../src/service/sounds/soundsBrowseAdapter', () => ({
     __esModule: true,
@@ -39,6 +39,46 @@ const video = browseService as unknown as Record<string, jest.Mock>;
 const app = express();
 app.use(express.json());
 app.use('/', router);
+
+describe('POST /collections/:id/download?mode=radio', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        facade.isEnabled.mockResolvedValue(true);
+    });
+
+    it('queues the collection and answers with the counts; the body is optional', async () => {
+        facade.downloadCollection.mockResolvedValue({ title: 'Comedy', total: 3, queued: 3, skipped: 0, failed: 0 });
+        const res = await request(app).post('/collections/c1/download?mode=radio').send({ mode: 'strm' });
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({ total: 3, queued: 3 });
+        expect(facade.downloadCollection).toHaveBeenCalledWith('c1', { mode: 'strm', dryRun: undefined });
+        await request(app).post('/collections/c1/download?mode=radio').send({ dryRun: true });
+        expect(facade.downloadCollection).toHaveBeenLastCalledWith('c1', { mode: undefined, dryRun: true });
+        await request(app).post('/collections/c1/download?mode=radio');
+        expect(facade.downloadCollection).toHaveBeenLastCalledWith('c1', { mode: undefined, dryRun: undefined });
+    });
+
+    it('refuses a bad id, body, mode or dryRun, and answers 404 for an unknown collection or while Sounds is off', async () => {
+        const post = (id: string, body: unknown) => request(app).post(`/collections/${id}/download?mode=radio`).send(body as object);
+        expect((await post('bad%20id', {})).status).toBe(400);
+        expect((await post('c1', [1])).status).toBe(400);
+        expect((await post('c1', { mode: 'mp4' })).status).toBe(400);
+        expect((await post('c1', { dryRun: 'yes' })).status).toBe(400);
+        expect(facade.downloadCollection).not.toHaveBeenCalled();
+        facade.downloadCollection.mockResolvedValue(undefined);
+        expect((await post('c1', {})).status).toBe(404);
+        facade.isEnabled.mockResolvedValue(false);
+        expect((await post('c1', {})).status).toBe(404);
+    });
+
+    it('turns a missing Radio Directory into a 400 with its message', async () => {
+        const { SoundsDownloadError } = jest.requireActual('../../../src/service/sounds/soundsDownloadService');
+        facade.downloadCollection.mockRejectedValue(new SoundsDownloadError('Set the Sounds Directory in Settings first'));
+        const res = await request(app).post('/collections/c1/download?mode=radio').send({});
+        expect(res.status).toBe(400);
+        expect(res.body.message).toContain('Sounds Directory');
+    });
+});
 
 describe('the browse API with ?mode=radio', () => {
     beforeEach(() => {

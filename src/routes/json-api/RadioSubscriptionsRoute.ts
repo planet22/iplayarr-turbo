@@ -7,6 +7,7 @@ import soundsFacade from '../../facade/soundsFacade';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { SECURE_MAX_DAYS, SECURE_MIN_DAYS } from '../../types/Subscription';
 import { asyncRouter } from '../../utils/asyncRouter';
+import { SOUNDS_ID } from '../../utils/radioIds';
 import { radioSubscriptionId, showIdOf } from '../../utils/radioIds';
 import { guard, invalid } from '../../utils/radioRouteHelpers';
 
@@ -14,7 +15,6 @@ import { guard, invalid } from '../../utils/radioRouteHelpers';
 // fields and answers as for video subscriptions, so one client reads both. What only video has (Sonarr/Radarr, extra versions,
 // pictures) answers 400. SubscriptionsRoute hands a request here when it asks for radio.
 const router: Router = asyncRouter();
-const ID = /^[a-z0-9]+$/i;
 
 const notFound = (res: Response): void => {
     res.status(404).json({ error: ApiError.INVALID_INPUT, message: 'Subscription not found' } as ApiResponse);
@@ -36,7 +36,7 @@ router.get('/', guard(async (_req, res) => {
 
 router.post('/', guard(async (req, res) => {
     const { pid, title, thumbnail, image, downloadLatest, downloadAll, secureDays } = req.body ?? {};
-    if (typeof pid !== 'string' || !ID.test(pid)) return invalid(res, 'A valid pid is required');
+    if (typeof pid !== 'string' || !SOUNDS_ID.test(pid)) return invalid(res, 'A valid pid is required');
     if (typeof title !== 'string' || !title.trim()) return invalid(res, 'A title is required for a radio show');
     if (typeof secureDays === 'number' && (!Number.isInteger(secureDays) || secureDays < SECURE_MIN_DAYS || secureDays > SECURE_MAX_DAYS)) {
         return invalid(res, `Days must be a whole number from ${SECURE_MIN_DAYS} to ${SECURE_MAX_DAYS}`);
@@ -55,7 +55,7 @@ router.post('/check', guard(async (_req, res) => {
 
 router.post('/:id/check', guard(async (req, res) => {
     const id = showIdOf(String(req.params.id));
-    if (!ID.test(id)) return invalid(res, 'Invalid show id');
+    if (!SOUNDS_ID.test(id)) return invalid(res, 'Invalid show id');
     if (!(await soundsFacade.isFollowed(id))) return notFound(res);
     const [result] = await soundsFacade.checkResults(id);
     // Nothing comes back when Sounds has no directory to save to: said as nothing queued.
@@ -64,7 +64,7 @@ router.post('/:id/check', guard(async (req, res) => {
 
 router.get('/:id/missing', guard(async (req, res) => {
     const id = showIdOf(String(req.params.id));
-    if (!ID.test(id)) return invalid(res, 'Invalid show id');
+    if (!SOUNDS_ID.test(id)) return invalid(res, 'Invalid show id');
     const result = await soundsFacade.missing(id);
     if (!result) return notFound(res);
     res.json(toMissing(result));
@@ -72,7 +72,7 @@ router.get('/:id/missing', guard(async (req, res) => {
 
 router.put('/:id/secure', guard(async (req, res) => {
     const id = showIdOf(String(req.params.id));
-    if (!ID.test(id)) return invalid(res, 'Invalid show id');
+    if (!SOUNDS_ID.test(id)) return invalid(res, 'Invalid show id');
     const days = req.body?.days;
     if (days !== null && typeof days !== 'number') return invalid(res, 'days must be a number, or null to switch it off');
     if (!(await soundsFacade.setSecureDays(id, days === null ? undefined : days))) return notFound(res);
@@ -81,7 +81,7 @@ router.put('/:id/secure', guard(async (req, res) => {
 
 router.delete('/:id', guard(async (req, res) => {
     const id = showIdOf(String(req.params.id));
-    if (!ID.test(id)) return invalid(res, 'Invalid show id');
+    if (!SOUNDS_ID.test(id)) return invalid(res, 'Invalid show id');
     if (await soundsFacade.unfollow(id)) res.json({ status: true });
     else notFound(res);
 }));

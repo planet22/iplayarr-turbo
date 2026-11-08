@@ -118,6 +118,26 @@ describe('videoEventService', () => {
         expect(video).not.toHaveProperty('radio');
     });
 
+    it('keeps every event when many are recorded at once (each write reads the list, then saves it back)', async () => {
+        let stored: any[] = [];
+        mockGetItem.mockImplementation(async () => {
+            const snapshot = [...stored];
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            return snapshot;
+        });
+        mockSetItem.mockImplementation(async (_key: string, events: any[]) => {
+            stored = events;
+        });
+        await Promise.all([1, 2, 3, 4, 5].map((n) => videoEventService.record(VideoEventType.QUEUED, `event ${n}`, { pid: `p${n}` })));
+        expect(stored.map((event) => event.message)).toEqual(['event 1', 'event 2', 'event 3', 'event 4', 'event 5']);
+    });
+
+    it('carries on recording after one write fails', async () => {
+        mockSetItem.mockRejectedValueOnce(new Error('disk'));
+        await expect(videoEventService.record(VideoEventType.QUEUED, 'lost')).rejects.toThrow('disk');
+        await expect(videoEventService.record(VideoEventType.QUEUED, 'kept')).resolves.toBeUndefined();
+    });
+
     it('clear empties the stored list and emits an empty array', async () => {
         await videoEventService.clear();
 

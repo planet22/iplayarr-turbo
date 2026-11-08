@@ -28,35 +28,47 @@ interface RecordOptions {
     image?: string;
 }
 
+// Writes happen one at a time: each one reads the stored list and saves it back, so overlapping writes (a radio
+// subscribe queues many episodes at once) would lose events.
+let writes: Promise<unknown> = Promise.resolve();
+const inTurn = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = writes.then(task);
+    writes = run.catch(() => undefined);
+    return run;
+};
+
+async function write(type: VideoEventType, message: string, { pid, jobId, level = 'info', radio, title, image }: RecordOptions): Promise<void> {
+    const event: VideoEvent = {
+        id: uuidv4(),
+        timestamp: new Date(),
+        pid,
+        jobId: jobId ?? (pid ? activeJobs.get(pid) : undefined),
+        type,
+        level,
+        message,
+        ...(radio ? { radio: true, title, image } : {}),
+    };
+
+    const events: VideoEvent[] = await getEvents();
+    events.push(event);
+    await storage.setItem('videoEvents', events.slice(-eventLimit));
+    socketService.emit('videoEvents', await getEvents());
+}
+
 const videoEventService = {
     // Deliberately doesn't resolve/store title, channel or thumbnail here - that would mean an
     // outbound BBC metadata lookup on every event write. Instead, like Youtarr's thumbnail URLs,
     // the client resolves those lazily at render time (GET json-api/details?pid=) from the pid
     // alone, reusing iplayerDetailsService's existing 24h metadata cache.
-    record: async (type: VideoEventType, message: string, { pid, jobId, level = 'info', radio, title, image }: RecordOptions = {}): Promise<void> => {
-        const event: VideoEvent = {
-            id: uuidv4(),
-            timestamp: new Date(),
-            pid,
-            jobId: jobId ?? (pid ? activeJobs.get(pid) : undefined),
-            type,
-            level,
-            message,
-            ...(radio ? { radio: true, title, image } : {}),
-        };
-
-        const events: VideoEvent[] = await getEvents();
-        events.push(event);
-        await storage.setItem('videoEvents', events.slice(-eventLimit));
-        socketService.emit('videoEvents', await getEvents());
-    },
+    record: (type: VideoEventType, message: string, options: RecordOptions = {}): Promise<void> => inTurn(() => write(type, message, options)),
 
     getEvents,
 
-    clear: async (): Promise<void> => {
-        await storage.setItem('videoEvents', []);
-        socketService.emit('videoEvents', []);
-    },
+    clear: (): Promise<void> =>
+        inTurn(async () => {
+            await storage.setItem('videoEvents', []);
+            socketService.emit('videoEvents', []);
+        }),
 };
 
 export default videoEventService;

@@ -11,7 +11,8 @@ import { resolveCompleteDir, sanitizeSegment } from '../utils/libraryPathBuilder
 import { parseNfoPid } from '../utils/nfoBuilder';
 import { mapPath } from '../utils/pathMap';
 import { detectPathMapping } from '../utils/pathMappingDetector';
-import { sanitizeFileName } from '../utils/pathSafety';
+import { shareSafeName } from '../utils/pathSafety';
+import { SOUNDS_ID as SOUNDS_EPISODE_ID } from '../utils/radioIds';
 import { RELEASE_GROUP } from '../utils/releaseGroup';
 import { parseRadioStrmId, parseStrmPid } from '../utils/Utils';
 import appService from './appService';
@@ -226,7 +227,7 @@ export const radioAppSourceId = (app: Pick<App, 'id'>): string => `radio:app:${a
 
 // A radio show's folder under SOUNDS_DIR, named as soundsDownloadService names it, and the key a folder and a followed
 // show meet under.
-export const showFolder = (title: string): string => sanitizeFileName(title).replace(/[:*?"<>|]/g, '');
+export const showFolder = (title: string): string => shareSafeName(title);
 const radioKey = (title: string): string => showKey(showFolder(title));
 
 // The episode id tagged in an audio file (written by new downloads), or undefined when there is none or it cannot be read.
@@ -238,7 +239,7 @@ const readAudioId = (file: string): Promise<string | undefined> =>
                 const tags: Record<string, unknown> = JSON.parse(String(stdout))?.format?.tags ?? {};
                 const key = Object.keys(tags).find((name) => name.toLowerCase() === AUDIO_TAG);
                 const value = key ? String(tags[key]).trim() : '';
-                resolve(/^[a-z0-9]+$/i.test(value) ? value : undefined);
+                resolve(SOUNDS_EPISODE_ID.test(value) ? value : undefined);
             } catch {
                 resolve(undefined);
             }

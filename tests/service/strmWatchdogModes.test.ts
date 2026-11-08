@@ -7,7 +7,7 @@ import NativeStreamService from '../../src/service/stream/NativeStreamService';
 import { idOfKey, keyFor, modeOfKey, radioMode, videoMode } from '../../src/service/strmWatchdogModes';
 
 jest.mock('../../src/service/historyService', () => ({ __esModule: true, default: { removeHistory: jest.fn() } }));
-jest.mock('../../src/service/sounds/soundsDownloadService', () => ({ __esModule: true, default: { remove: jest.fn() } }));
+jest.mock('../../src/service/sounds/soundsDownloadService', () => ({ __esModule: true, default: { forgetLink: jest.fn() } }));
 jest.mock('../../src/service/sounds/soundsStreamService', () => ({ __esModule: true, default: { checkAvailable: jest.fn() } }));
 jest.mock('../../src/service/stream/NativeStreamService', () => ({ __esModule: true, default: { checkAvailable: jest.fn() } }));
 
@@ -41,7 +41,7 @@ describe('the Watchdog modes', () => {
         await radioMode.checkAvailable('m0033frv');
         await radioMode.removeRecord('m0033frv');
         expect(soundsStreamService.checkAvailable).toHaveBeenCalledWith('m0033frv');
-        expect(soundsDownloadService.remove).toHaveBeenCalledWith('m0033frv');
+        expect(soundsDownloadService.forgetLink).toHaveBeenCalledWith('m0033frv');
         expect(NativeStreamService.checkAvailable).toHaveBeenCalledTimes(1);
         expect(historyService.removeHistory).toHaveBeenCalledTimes(1);
     });

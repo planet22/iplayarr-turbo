@@ -8,10 +8,27 @@ import soundsDownloadService, { SoundsDownloadError } from '../service/sounds/so
 import soundsFollowService from '../service/sounds/soundsFollowService';
 import soundsLibraryService from '../service/sounds/soundsLibraryService';
 import { isInQueue, RadioQueueRow, toQueueRow } from '../service/sounds/soundsQueueAdapter';
+import videoEventService from '../service/videoEventService';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import { SoundsDownload, SoundsEpisode, SoundsEpisodePage, SoundsFollow, SoundsFollowMode, SoundsSearchResult, SoundsShow } from '../types/Sounds';
 import { SubscriptionCheckResult } from '../types/Subscription';
+import { VideoEventType } from '../types/VideoEvent';
 import { DetailedFollow, RadioSubscription, toCheckResult, toSubscription } from './radioSubscriptionAdapter';
+
+// One press queues at most this many episodes of a collection, so it cannot fill the queue with an archive.
+export const COLLECTION_MAX = 100;
+
+export interface CollectionDownload {
+    title: string;
+    // Episodes that can be downloaded.
+    total: number;
+    // Handed to the radio queue (0 for a dry run).
+    queued: number;
+    // Left out because already queued or downloaded.
+    skipped: number;
+    // Refused or lost on the way.
+    failed: number;
+}
 
 // A show's list is read this many pages at a time at most (30 episodes a page) when working out what is missing.
 const MISSING_MAX_PAGES = 20;
@@ -127,9 +144,12 @@ class SoundsFacade {
     // What the library index holds for a show, for the drive icons on its page: the episode ids, and the days of files that
     // name no id. Nothing for a show that cannot be found.
     async onDisk(showId: string): Promise<{ ids: string[]; dates: string[] } | undefined> {
-        const show = await soundsApiService.show(showId);
-        if (!show) return undefined;
-        const files = await libraryIndexService.filesOfShow(show.title, undefined, undefined, 'radio');
+        // Some ids (a series, a collection member) have no show page; the first episode then names the show, as the programme page does.
+        const title =
+            (await soundsApiService.show(showId).catch(() => undefined))?.title ??
+            (await soundsApiService.episodes(showId, 1).catch(() => undefined))?.episodes[0]?.showTitle;
+        if (!title) return undefined;
+        const files = await libraryIndexService.filesOfShow(title, undefined, undefined, 'radio');
         return {
             ids: [...new Set(files.map(({ pid }) => pid).filter((pid): pid is string => !!pid))],
             dates: [...new Set(files.filter(({ pid }) => !pid).map(({ date }) => date).filter((date): date is string => !!date))],
@@ -153,6 +173,31 @@ class SoundsFacade {
         }
         const missing = all.filter((episode) => !ids.has(episode.id) && !dates.has((episode.released ?? '').slice(0, 10)));
         return { total: all.length, onDisk: all.length - missing.length, missing };
+    }
+
+    // Queues the episodes of a Sounds collection (the first COLLECTION_MAX, in the collection's order) through the radio queue, saved
+    // the way `mode` says (without it, Radio Media Mode). A dry run only counts them. `skipped` counts those already queued or
+    // downloaded. undefined when there is no such collection.
+    async downloadCollection(id: string, { mode, dryRun = false }: { mode?: 'm4a' | 'strm'; dryRun?: boolean } = {}): Promise<CollectionDownload | undefined> {
+        const collection = (await soundsApiService.collections()).find((c) => c.id === id);
+        if (!collection) return undefined;
+        const { episodes } = await soundsApiService.collection(id, 1, COLLECTION_MAX);
+        const listed = [...new Map(episodes.slice(0, COLLECTION_MAX).map((e) => [e.id, e])).values()];
+        const held = new Set((await soundsDownloadService.list()).filter((d) => d.state !== 'failed').map((d) => d.id));
+        const result: CollectionDownload = { title: collection.title, total: listed.length, queued: 0, skipped: listed.filter((e) => held.has(e.id)).length, failed: 0 };
+        if (dryRun) return result;
+        for (const episode of listed.filter((e) => !held.has(e.id))) {
+            try {
+                await soundsDownloadService.enqueue(episode, mode);
+                result.queued++;
+            } catch (error: any) {
+                // No Radio Directory is the user's to fix, so it stops the lot; anything else costs only that episode.
+                if (error instanceof SoundsDownloadError) throw error;
+                result.failed++;
+            }
+        }
+        if (result.queued) void videoEventService.record(VideoEventType.QUEUED, `Queued ${result.queued} episodes from the "${collection.title}" collection`, { radio: true, title: collection.title }).catch(() => undefined);
+        return result;
     }
 
     follow(showId: string, title: string, image?: string, mode?: SoundsFollowMode): Promise<SoundsFollow> {

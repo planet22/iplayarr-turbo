@@ -12,7 +12,7 @@ import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { buildMasterPlaylist, buildMediaPlaylist, DashKind, LiveDash, parseLiveMpd } from './liveDashHls';
 import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex } from './mediaSelectorPairs';
-import radioStreamService from './radioStreamService';
+import radioStreamService, { topVariant } from './radioStreamService';
 import { cached, liveResolveTtlMs } from './resolveCache';
 import { register as registerSegmentUrl } from './segmentUrlRegistry';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
@@ -349,19 +349,7 @@ class LiveStreamService implements AbstractStreamService {
     // falls back to the master, which always works, just slowly.
     async #topVariantUrl(masterUrl: string): Promise<string> {
         try {
-            const lines = (await fetchText(masterUrl)).split(/\r?\n/);
-            let best: { bandwidth: number; url: string } | undefined;
-            for (let i = 0; i < lines.length; i++) {
-                if (!lines[i].startsWith('#EXT-X-STREAM-INF')) {
-                    continue;
-                }
-                const uri = lines.slice(i + 1).find((line) => line.trim() && !line.startsWith('#'));
-                const bandwidth = parseInt(/BANDWIDTH=(\d+)/.exec(lines[i])?.[1] ?? '0', 10);
-                if (uri && (!best || bandwidth > best.bandwidth)) {
-                    best = { bandwidth, url: new URL(uri.trim(), masterUrl).toString() };
-                }
-            }
-            return best?.url ?? masterUrl;
+            return topVariant(await fetchText(masterUrl), masterUrl);
         } catch {
             return masterUrl;
         }

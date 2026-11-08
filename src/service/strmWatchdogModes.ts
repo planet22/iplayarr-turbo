@@ -40,7 +40,7 @@ export const radioMode: WatchdogMode = {
     service: 'BBC Sounds',
     arr: false,
     checkAvailable: (id) => soundsStreamService.checkAvailable(id),
-    removeRecord: (id) => soundsDownloadService.remove(id),
+    removeRecord: (id) => soundsDownloadService.forgetLink(id),
 };
 
 export const modeOfKey = (key: string): WatchdogMode => (key.startsWith(RADIO_PREFIX) ? radioMode : videoMode);

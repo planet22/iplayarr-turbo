@@ -627,10 +627,11 @@ class BrowseService {
     // Re-fetches one day's schedule for every shown channel and overwrites the cached copy, so the
     // guide never goes cold. A channel that fails keeps its previous cache entry.
     async refreshSchedule(day: string): Promise<void> {
-        // Radio stations (LIVE_RADIO) are not on iPlayer's API; their schedule is cached by radioScheduleService.
-        const shown = (await this.#shownChannels()).filter(({ audioOnly }) => !audioOnly);
+        // Radio stations (LIVE_RADIO) are not on iPlayer's API; radioScheduleService fetches and keeps their schedule.
+        const shown = await this.#shownChannels();
         await Promise.allSettled(
             shown.map(async (channel) => {
+                if (channel.audioOnly) return radioScheduleService.refresh(channel.id, day);
                 const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
                 const response = await axios.get(`${IBL_BASE}/${path}`);
                 await this.scheduleCache.set(path, response.data);

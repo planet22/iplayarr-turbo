@@ -13,6 +13,10 @@ import { failureResponse } from './upstreamError';
 // Treat the values below as read-only.
 // Log output here is deliberately terse.
 
+// The paging query of the Sounds listings: a page from 1, and a page size from 1 to 200 (30 when not given).
+export const pageParam = (req: Request): number => Math.max(1, Math.floor(Number(req.query.page)) || 1);
+export const perPageParam = (req: Request): number => Math.min(200, Math.max(1, Math.floor(Number(req.query.perPage)) || 30));
+
 export const invalid = (res: Response, message: string): void => {
     res.status(400).json({ error: ApiError.INVALID_INPUT, message } as ApiResponse);
 };

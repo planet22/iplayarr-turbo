@@ -8,6 +8,7 @@ import { revokeOtherSessions } from '../../service/auth/sessionStore';
 import configService, { ConfigMap } from '../../service/configService';
 import cronJobService from '../../service/cronJobService';
 import historyService from '../../service/historyService';
+import libraryIndexService from '../../service/libraryIndexService';
 import loggingService from '../../service/loggingService';
 import soundsDownloadService from '../../service/sounds/soundsDownloadService';
 import videoEventService from '../../service/videoEventService';
@@ -194,19 +195,30 @@ async function rewriteStrmKeys(
 
     // Radio .strm links (BBC Sounds downloads saved as links) carry the stream key too.
     let radioRewritten = 0;
+    let radioMissing = 0;
     const soundsDir = ((await configService.getParameter(IplayarrParameter.SOUNDS_DIR)) as string | undefined)?.trim();
     if (param === 'streamkey' && soundsDir) {
-        for (const download of await soundsDownloadService.list()) {
-            if (!download.file?.endsWith('.strm')) continue;
+        // The links on disk (the library index reads the folder), plus any the download list still names: the list keeps only the
+        // newest few, so on its own it would leave older links with the old key.
+        const relative = new Set<string>();
+        for (const { file } of await libraryIndexService.links('radio').catch(() => [])) {
+            const inside = path.relative(soundsDir, path.isAbsolute(file) ? file : path.join(soundsDir, file));
+            if (inside && !inside.startsWith('..') && !path.isAbsolute(inside)) relative.add(inside);
+        }
+        for (const download of await soundsDownloadService.list()) if (download.file?.endsWith('.strm')) relative.add(download.file);
+        for (const file of relative) {
             try {
-                const radioPath = resolveInside(soundsDir, download.file);
+                const radioPath = resolveInside(soundsDir, file);
                 const content = fs.readFileSync(radioPath, 'utf8');
                 fs.writeFileSync(radioPath, content.replace(`${param}=${oldKey}`, `${param}=${newKey}`), 'utf8');
                 radioRewritten++;
             } catch (err) {
-                loggingService.error(`Failed to rewrite ${label} in radio link ${download.file}`, err);
+                // The list outlives the files, so a missing link is normal: counted, not an error each.
+                if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') radioMissing++;
+                else loggingService.error(`Failed to rewrite ${label} in radio link ${file}`, err);
             }
         }
+        if (radioMissing > 0) loggingService.log(`${label} rotated: ${radioMissing} radio .strm file(s) no longer exist, so were not rewritten`);
     }
 
     if (rewritten + radioRewritten > 0) {

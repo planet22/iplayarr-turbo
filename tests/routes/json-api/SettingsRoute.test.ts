@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
 
 import liveChannelFacade from '../../../src/facade/liveChannelFacade';
@@ -8,6 +9,7 @@ import { revokeOtherSessions } from '../../../src/service/auth/sessionStore';
 import configService from '../../../src/service/configService';
 import cronJobService from '../../../src/service/cronJobService';
 import historyService from '../../../src/service/historyService';
+import libraryIndexService from '../../../src/service/libraryIndexService';
 import loggingService from '../../../src/service/loggingService';
 import soundsDownloadService from '../../../src/service/sounds/soundsDownloadService';
 import videoEventService from '../../../src/service/videoEventService';
@@ -23,6 +25,7 @@ jest.mock('../../../src/service/auth/sessionStore', () => ({ revokeOtherSessions
 jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/cronJobService', () => ({ __esModule: true, default: { setDefaultSchedule: jest.fn() } }));
 jest.mock('../../../src/service/historyService');
+jest.mock('../../../src/service/libraryIndexService', () => ({ __esModule: true, default: { links: jest.fn().mockResolvedValue([]) } }));
 jest.mock('../../../src/service/sounds/soundsDownloadService', () => ({ __esModule: true, default: { list: jest.fn().mockResolvedValue([]) } }));
 jest.mock('../../../src/service/videoEventService');
 const mockedConfigService = jest.mocked(configService);
@@ -441,6 +444,52 @@ describe('SettingsRoute', () => {
                     'utf8'
                 );
                 expect(mockedVideoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_KEY_ROTATED, expect.stringContaining('1 .strm file'));
+            });
+
+            it('rewrites radio links found on disk even when the download list has dropped them, and ignores paths outside the Radio Directory', async () => {
+                mockedHistoryService.getHistory.mockResolvedValue([]);
+                jest.mocked(soundsDownloadService).list.mockResolvedValueOnce([]);
+                jest.mocked(libraryIndexService).links.mockResolvedValueOnce([
+                    { id: 'p1', file: path.join('/radio', 'The Archers', 'old episode.strm') },
+                    { id: 'p2', file: path.join('The Archers', 'relative.strm') },
+                    { id: 'p3', file: path.join('/elsewhere', 'other.strm') },
+                ]);
+                jest.spyOn(fs, 'readFileSync').mockReturnValue('http://host:4404/api?mode=stream&audio=1&pid=p&streamkey=old-stream-key');
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'STREAM_KEY') return 'old-stream-key';
+                    if (key === 'SOUNDS_DIR') return '/radio';
+                    return undefined;
+                });
+
+                const response = await request(app).put('/').send({ STREAM_KEY: 'new-stream-key' });
+
+                expect(response.statusCode).toBe(200);
+                const written = (fs.writeFileSync as jest.Mock).mock.calls.map(([file]) => String(file));
+                expect(written).toHaveLength(2);
+                expect(written.some((file) => file.includes('old episode.strm'))).toBe(true);
+                expect(written.some((file) => file.includes('relative.strm'))).toBe(true);
+                expect(written.some((file) => file.includes('other.strm'))).toBe(false);
+            });
+
+            it('counts missing radio links instead of logging an error for each', async () => {
+                const gone = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+                mockedHistoryService.getHistory.mockResolvedValue([]);
+                jest.mocked(soundsDownloadService).list.mockResolvedValueOnce([{ id: 'p1', file: 'A/a.strm' }, { id: 'p2', file: 'A/b.strm' }] as any);
+                jest.spyOn(fs, 'readFileSync').mockImplementation(() => {
+                    throw gone;
+                });
+                mockedConfigService.getParameter.mockImplementation(async (key) => {
+                    if (key === 'STREAM_KEY') return 'old-stream-key';
+                    if (key === 'SOUNDS_DIR') return '/radio';
+                    return undefined;
+                });
+                const errorSpy = jest.spyOn(loggingService, 'error').mockImplementation(() => undefined);
+                const logSpy = jest.spyOn(loggingService, 'log').mockImplementation(() => undefined);
+
+                await request(app).put('/').send({ STREAM_KEY: 'new-stream-key' });
+
+                expect(errorSpy).not.toHaveBeenCalled();
+                expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('2 radio .strm file(s) no longer exist'));
             });
 
             it('does not rewrite anything if the key is unchanged', async () => {

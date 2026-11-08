@@ -24,9 +24,17 @@ const router: Router = asyncRouter();
 
 // `?mode=radio` is the same API for BBC Sounds (RadioBrowseRoute), which carries on to the routes below for anything it does
 // not serve; no mode, or `video`, is this one.
+// Only the read-only routes that work for both (channels, the schedule, logos) carry on to the video route; a change (feature a
+// category) or an iPlayer-only lookup is refused (queueing a collection is radio's own), so a radio request can never act on a video thing.
+const VIDEO_ONLY = /^\/(versions|details|markers)(\/|$)/;
+const RADIO_POSTS = /^\/collections\/[^/]+\/download$/;
 router.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.query.mode === 'radio') return radioBrowseRoute(req, res, next);
-    next();
+    if (req.query.mode !== 'radio') return next();
+    if ((req.method !== 'GET' && !(req.method === 'POST' && RADIO_POSTS.test(req.path))) || VIDEO_ONLY.test(req.path)) {
+        res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Not available for radio' } as ApiResponse);
+        return;
+    }
+    return radioBrowseRoute(req, res, next);
 });
 
 const ID_REGEX = /^[a-z0-9_-]+$/i;

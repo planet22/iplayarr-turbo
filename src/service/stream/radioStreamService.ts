@@ -35,6 +35,22 @@ export function extractAudioHlsHref(xml: string): string | undefined {
 }
 
 // A station's master playlist URL: the template with the station's own file name.
+// The highest-bandwidth variant a master playlist lists, as an absolute URL (the master itself when it lists none). Remuxing or
+// recording one variant starts far sooner than handing ffmpeg the whole master to probe.
+export function topVariant(master: string, masterUrl: string): string {
+    const lines = master.split(/\r?\n/);
+    let best: { bandwidth: number; url: string } | undefined;
+    for (let i = 0; i < lines.length; i++) {
+        if (!lines[i].startsWith('#EXT-X-STREAM-INF')) continue;
+        const uri = lines.slice(i + 1).find((line) => line.trim() && !line.startsWith('#'));
+        const bandwidth = parseInt(/BANDWIDTH=(\d+)/.exec(lines[i])?.[1] ?? '0', 10);
+        if (uri && (!best || bandwidth > best.bandwidth)) {
+            best = { bandwidth, url: new URL(uri.trim(), masterUrl).toString() };
+        }
+    }
+    return best?.url ?? masterUrl;
+}
+
 export function stationUrl(template: string, stationId: string): string {
     return template.replace(stationFile, `${stationId}.m3u8`);
 }

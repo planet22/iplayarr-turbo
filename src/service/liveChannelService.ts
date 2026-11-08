@@ -98,7 +98,15 @@ class LiveChannelService {
         if (!Array.isArray(ids) || ids.some((id) => !known.includes(id))) {
             throw new LiveChannelError('The channel order contains an unknown channel');
         }
-        await storage.setItem(ORDER_KEY, [...new Set(ids)]);
+        // The page may send only the channels it shows (TV or radio). They take the places they already had in the full
+        // order, in their new sequence, so the others (the other mode's channels) keep theirs.
+        const given = [...new Set(ids)];
+        const full = await this.order();
+        const result = [...full];
+        full.forEach((id, slot) => {
+            if (given.includes(id)) result[slot] = given[full.slice(0, slot).filter((other) => given.includes(other)).length];
+        });
+        await storage.setItem(ORDER_KEY, result);
     }
 
     // Channels with a Discover rail: the built-in defaults (BrowseHomeChannelRails) unless the user chose.

@@ -5,13 +5,13 @@ import { Request, Response, Router } from 'express';
 import soundsFacade from '../../facade/soundsFacade';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
+import { SOUNDS_ID } from '../../utils/radioIds';
 import { guard, invalid } from '../../utils/radioRouteHelpers';
 
 // The Queue API for BBC Sounds downloads (`?mode=radio` on /json-api/queue): the same paths and entries as the video queue and
 // history, so the one Queue page lists both. QueueRoute hands a request here when it asks for radio. Radio also lets a failed
 // download be tried again.
 const router: Router = asyncRouter();
-const ID = /^[a-z0-9]+$/i;
 
 // With SOUNDS_ENABLED off radio answers as if it did not exist.
 // Anything exported from here is relied on elsewhere in the app.
@@ -37,14 +37,14 @@ router.get('/history', guard(async (_req, res) => {
 
 router.delete('/queue', guard(async (req, res) => {
     const pid = String(req.query.pid ?? '');
-    if (!ID.test(pid)) return invalid(res, 'A pid is required');
+    if (!SOUNDS_ID.test(pid)) return invalid(res, 'A pid is required');
     if (!(await soundsFacade.removeFrom(pid, 'queue'))) return notFound(res);
     res.json(await soundsFacade.queueRows());
 }));
 
 router.delete('/history', guard(async (req, res) => {
     const pid = String(req.query.pid ?? '');
-    if (!ID.test(pid)) return invalid(res, 'A pid is required');
+    if (!SOUNDS_ID.test(pid)) return invalid(res, 'A pid is required');
     if (!(await soundsFacade.removeFrom(pid, 'history'))) return notFound(res);
     res.json(await soundsFacade.historyRows());
 }));
@@ -52,7 +52,7 @@ router.delete('/history', guard(async (req, res) => {
 // Tries a failed download again.
 router.post('/history/retry', guard(async (req, res) => {
     const pid = String(req.query.pid ?? '');
-    if (!ID.test(pid)) return invalid(res, 'A pid is required');
+    if (!SOUNDS_ID.test(pid)) return invalid(res, 'A pid is required');
     if (!(await soundsFacade.retryDownload(pid))) return notFound(res);
     res.json(await soundsFacade.queueRows());
 }));

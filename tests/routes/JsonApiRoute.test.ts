@@ -216,6 +216,20 @@ describe('JsonApiRoute', () => {
             expect(searchFacade.searchStreaming).not.toHaveBeenCalled();
         });
 
+        it('answers GET /search?mode=radio with the Sounds results in one reply, and 404 while BBC Sounds is off', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'The Archers' }], episodes: [] });
+            (searchFacade.search as jest.Mock).mockClear();
+            const res = await request(app).get('/search').query({ q: 'archers', mode: 'radio' });
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual([expect.objectContaining({ pid: 'b1', radio: true, kind: 'brand' })]);
+            expect(searchFacade.search).not.toHaveBeenCalled();
+            jest.spyOn(soundsFacade, 'search').mockRejectedValue(new Error('down'));
+            expect((await request(app).get('/search').query({ q: 'x', mode: 'radio' })).status).toBeGreaterThanOrEqual(500);
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(false);
+            expect((await request(app).get('/search').query({ q: 'x', mode: 'radio' })).status).toBe(404);
+        });
+
         it('reports a Sounds failure as an error line, and is 404 while BBC Sounds is off', async () => {
             jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
             jest.spyOn(soundsFacade, 'search').mockRejectedValue(new Error('down'));

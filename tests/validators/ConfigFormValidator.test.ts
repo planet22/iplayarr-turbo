@@ -48,6 +48,15 @@ describe('ConfigFormValidator', () => {
         expect(result.COMPLETE_DIR).toMatch(/does not exist/);
     });
 
+    it('wants the Radio Directory as a full path, and leaves it alone when blank', async () => {
+        const base = { DOWNLOAD_DIR: '/valid/path', COMPLETE_DIR: '/valid/path' };
+        expect((await validator.validate({ ...base, SOUNDS_DIR: 'radio' })).SOUNDS_DIR).toMatch(/full path/);
+        expect((await validator.validate({ ...base, SOUNDS_DIR: '../radio' })).SOUNDS_DIR).toMatch(/full path/);
+        for (const ok of ['/data/radio', 'C:\\radio', '\\\\nas\\radio', '', '   ', undefined]) {
+            expect((await validator.validate({ ...base, SOUNDS_DIR: ok })).SOUNDS_DIR).toBeUndefined();
+        }
+    });
+
     it('should validate number fields', async () => {
         const input = {
             DOWNLOAD_DIR: '/valid/path',

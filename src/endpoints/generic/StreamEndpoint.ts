@@ -6,6 +6,7 @@ import { isLiveChannel, liveChannelInfo } from '../../constants/LiveChannels';
 import configService from '../../service/configService';
 import liveChannelService from '../../service/liveChannelService';
 import loggingService from '../../service/loggingService';
+import { knownEpisode } from '../../service/sounds/soundsApiService';
 import soundsStreamService from '../../service/sounds/soundsStreamService';
 import AbstractStreamService from '../../service/stream/AbstractStreamService';
 import GetIplayerStreamService from '../../service/stream/GetIplayerStreamService';
@@ -148,7 +149,23 @@ async function handleSoundsAudio(req: Request, res: Response): Promise<void> {
         return;
     }
     try {
-        await proxyUrl(await soundsStreamService.resolveMaster(pid), req, res, 5);
+        const url = await soundsStreamService.resolveMaster(pid);
+        // Counted like any other play on the Streaming page (the segments name the session); radio is plain HLS audio, so the
+        // mode is direct whatever STREAM_MODE says.
+        const episode = knownEpisode(pid);
+        const title = episode ? [episode.showTitle ?? episode.title, episode.subtitle].filter(Boolean).join(' - ') : pid;
+        const sessionId = await streamSessionService.start(
+            pid,
+            StreamMode.DIRECT,
+            StreamClient.NATIVE,
+            req.ip,
+            { Media: 'Audio' },
+            undefined,
+            { userAgent: req.headers['user-agent'], title, radio: true }
+        );
+        streamSessionService.setResolution(sessionId, 'Radio audio');
+        res.on('close', () => streamSessionService.touch(sessionId));
+        await proxyUrl(url, req, res, 5, sessionId);
     } catch (err: any) {
         loggingService.error(err);
         if (!res.headersSent) {
@@ -214,7 +231,7 @@ async function handleStream(req: Request, res: Response): Promise<void> {
 
     // A BBC Sounds episode (SOUNDS_ENABLED) played in the Radio page: its clear audio HLS, through the same proxy.
     // `media=audio` is the way to ask; `audio=1` is what links saved earlier carry.
-    if (req.query.media === 'audio' || req.query.audio !== undefined) {
+    if (req.query.media === 'audio' || ['1', 'true', ''].includes(String(req.query.audio ?? 'no'))) {
         await handleSoundsAudio(req, res);
         return;
     }

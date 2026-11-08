@@ -20,11 +20,12 @@ jest.mock('../../src/service/sounds/soundsFollowService', () => ({
     default: { list: jest.fn(), follow: jest.fn(), unfollow: jest.fn(), checkAll: jest.fn(), checkResults: jest.fn(), setSecureDays: jest.fn() },
 }));
 jest.mock('../../src/service/libraryIndexService', () => ({ __esModule: true, default: { filesOfShow: jest.fn(), countsForShow: jest.fn() } }));
+jest.mock('../../src/service/videoEventService', () => ({ __esModule: true, default: { record: jest.fn().mockResolvedValue(undefined) } }));
 jest.mock('../../src/service/sounds/soundsLibraryService', () => ({ __esModule: true, default: { bySource: jest.fn() } }));
 jest.mock('../../src/service/sounds/soundsApiService', () => ({
     __esModule: true,
     knownEpisode: jest.fn(),
-    default: { search: jest.fn(), episodes: jest.fn(), show: jest.fn() },
+    default: { search: jest.fn(), episodes: jest.fn(), show: jest.fn(), collections: jest.fn(), collection: jest.fn() },
 }));
 jest.mock('../../src/service/sounds/soundsBrowseAdapter', () => ({
     __esModule: true,
@@ -138,6 +139,54 @@ describe('soundsFacade core', () => {
         expect(await soundsFacade.onDisk('b1')).toEqual({ ids: ['p0a'], dates: ['2026-11-03'] });
         expect(libraryIndexService.filesOfShow).toHaveBeenCalledWith('One', undefined, undefined, 'radio');
         expect(await soundsFacade.onDisk('nope')).toBeUndefined();
+    });
+
+    describe('downloadCollection', () => {
+        const ep = (id: string) => ({ id, title: id });
+        const dl = soundsDownloadService as unknown as Record<string, jest.Mock>;
+        beforeEach(() => {
+            api.collections.mockResolvedValue([{ id: 'c1', title: 'Comedy Gold' }]);
+            api.collection.mockResolvedValue({ episodes: [ep('a'), ep('b'), ep('a'), ep('c')], page: 1, perPage: 100, total: 4 });
+            dl.list.mockResolvedValue([{ id: 'b', state: 'done' }, { id: 'c', state: 'failed' }]);
+            dl.enqueue.mockImplementation(async (episode: { id: string }) => ({ id: episode.id }));
+        });
+
+        it('counts a collection without queueing it on a dry run: unique episodes, and how many are already held', async () => {
+            expect(await soundsFacade.downloadCollection('c1', { dryRun: true })).toEqual({ title: 'Comedy Gold', total: 3, queued: 0, skipped: 1, failed: 0 });
+            expect(dl.enqueue).not.toHaveBeenCalled();
+        });
+
+        it('queues those not already queued or saved, in the collection order and as the mode says; a failed one is tried again', async () => {
+            expect(await soundsFacade.downloadCollection('c1', { mode: 'strm' })).toEqual({ title: 'Comedy Gold', total: 3, queued: 2, skipped: 1, failed: 0 });
+            expect(dl.enqueue.mock.calls.map(([episode, mode]) => [episode.id, mode])).toEqual([['a', 'strm'], ['c', 'strm']]);
+        });
+
+        it('asks for the newest 100 at most', async () => {
+            await soundsFacade.downloadCollection('c1', { dryRun: true });
+            expect(api.collection).toHaveBeenCalledWith('c1', 1, 100);
+        });
+
+        it('counts an episode the queue loses, but stops at once when there is no Radio Directory', async () => {
+            dl.enqueue.mockRejectedValueOnce(new Error('disk')).mockResolvedValue({});
+            expect(await soundsFacade.downloadCollection('c1')).toMatchObject({ queued: 1, failed: 1 });
+            dl.enqueue.mockRejectedValue(new SoundsDownloadError('Set the Sounds Directory in Settings first'));
+            await expect(soundsFacade.downloadCollection('c1')).rejects.toThrow('Sounds Directory');
+        });
+
+        it('answers nothing for a collection that does not exist', async () => {
+            expect(await soundsFacade.downloadCollection('nope')).toBeUndefined();
+        });
+    });
+
+    it('names a show with no page of its own (a series, a collection member) by its first episode, and answers nothing rather than failing', async () => {
+        api.show.mockRejectedValueOnce(new Error('404'));
+        api.episodes.mockResolvedValueOnce({ episodes: [{ id: 'p0a', title: 'Ep', showTitle: 'Series Show' }], page: 1, perPage: 30, total: 1 });
+        (libraryIndexService.filesOfShow as jest.Mock).mockResolvedValue([{ pid: 'p0a' }]);
+        expect(await soundsFacade.onDisk('s1')).toEqual({ ids: ['p0a'], dates: [] });
+        expect(libraryIndexService.filesOfShow).toHaveBeenLastCalledWith('Series Show', undefined, undefined, 'radio');
+        api.show.mockRejectedValueOnce(new Error('404'));
+        api.episodes.mockRejectedValueOnce(new Error('down'));
+        expect(await soundsFacade.onDisk('s2')).toBeUndefined();
     });
 
     it('lists the episodes of a followed show that the library index does not hold, by id or by date', async () => {

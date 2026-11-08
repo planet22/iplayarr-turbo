@@ -39,6 +39,11 @@ describe('soundsFollowService', () => {
         expect(soundsApiService.latest).toHaveBeenCalledTimes(1);
     });
 
+    it('names the subscription by the show title BBC gives its episodes (what their files are saved under), not the page\'s', async () => {
+        (soundsApiService.latest as jest.Mock).mockResolvedValue([{ ...ep('p0aaaaaa'), showTitle: 'The Archers (Omnibus)' }]);
+        expect((await soundsFollowService.follow('b006qpgr', 'Archers')).title).toBe('The Archers (Omnibus)');
+    });
+
     it('names a show with a blank title by its id, and follows the newest ones across pages', async () => {
         const page = (ids: string[]) => ids.map((id) => ep(id));
         (soundsApiService.latest as jest.Mock).mockResolvedValue(page(['p0new00001']));
