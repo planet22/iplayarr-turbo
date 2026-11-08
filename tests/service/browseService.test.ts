@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import axios from 'axios';
 
+import { setRadioEnabled } from '../../src/constants/RadioChannels';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import browseService, {
     dedupeRails,
@@ -20,6 +21,7 @@ import browseService, {
 import collectionService from '../../src/service/collectionService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import liveChannelService from '../../src/service/liveChannelService';
+import radioScheduleService from '../../src/service/radioScheduleService';
 import { VideoType } from '../../src/types/IPlayerSearchResult';
 
 jest.mock('axios');
@@ -454,7 +456,9 @@ describe('browseService', () => {
     });
 
     it('schedule lists enabled channels in the configured order and keeps a channel with no schedule', async () => {
-        await liveChannelService.setOrder(['bbc_two_england', 'bbc_one_wales_hd', 'bbc_one_london']);
+        const first = ['bbc_two_england', 'bbc_one_wales_hd', 'bbc_one_london'];
+        const others = (await liveChannelService.list()).map((c) => c.id).filter((id) => !first.includes(id));
+        await liveChannelService.setOrder([...first, ...others]);
         await liveChannelService.setEnabled('bbc_one_wales_hd', true);
         await liveChannelService.setEnabled('bbc_four', false);
         mockedAxios.get.mockImplementation(async (url: string) => {
@@ -493,6 +497,23 @@ describe('browseService', () => {
         expect(paths).toContain('channels/bbc_one_london/schedule/2026-10-03');
         expect(paths).not.toContain('channels/bbc_three/schedule/2026-10-03');
         set.mockRestore();
+    });
+
+    it('refreshSchedule also refreshes the radio stations that are shown, and a radio failure does not stop the rest', async () => {
+        setRadioEnabled(true);
+        const refresh = jest.spyOn(radioScheduleService, 'refresh').mockRejectedValue(new Error('down'));
+        const set = jest.spyOn(browseService.scheduleCache, 'set');
+        try {
+            mockedAxios.get.mockResolvedValue({ data: { schedule: { elements: [] } } });
+            await expect(browseService.refreshSchedule('2026-10-03')).resolves.toBeUndefined();
+            expect(refresh.mock.calls.length).toBeGreaterThan(0);
+            expect(refresh.mock.calls.every(([, day]) => day === '2026-10-03')).toBe(true);
+            expect(set.mock.calls.map(([path]) => path)).toContain('channels/bbc_one_london/schedule/2026-10-03');
+        } finally {
+            refresh.mockRestore();
+            set.mockRestore();
+            setRadioEnabled(false);
+        }
     });
 
     it('nowNext falls through to tomorrow when today has no next slot', async () => {

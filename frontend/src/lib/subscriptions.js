@@ -9,8 +9,11 @@ import { hasArrApps, linkToArr, offerArrLink, unlinkFromArr } from '@/lib/subscr
 import toastService from '@/lib/toastService';
 
 const ARR_ONLY = 'Add to Sonarr/Radarr only - subscribed, but no downloads by iPlayarr';
-const NEW_ONLY = 'Only new episodes from now on';
-const NEW_AND_LATEST = 'New episodes, and download the latest one now';
+// The choices and wording a subscription dialog shares, video or radio (the radio one is in mediaProvider.js).
+export const NEW_ONLY = 'Only new episodes from now on';
+export const NEW_AND_LATEST = 'New episodes, and download the latest one now';
+export const SUBSCRIBE_INTRO =
+    'New episodes will be queued for download automatically (checked hourly). Unless you choose to download everything, episodes that are already available will not be downloaded.';
 const PLAIN_ONLY = 'Just the standard version';
 const VERSION_CHOICES = {
     'Also audio described': ['audio-described'],
@@ -29,6 +32,24 @@ const SECURE_CHOICES = [1, 3, 7, 14, 30].map((days) => ({ days, label: days === 
 export const secureLabel = (days) => (days === 1 ? '1 day before it leaves' : `${days} days before it leaves`);
 const allLabel = (count) =>
     count > 0 ? `Download all ${count} available episodes now, plus new ones` : 'Download all available episodes now, plus new ones';
+
+// Asks how many days before an episode leaves iPlayer (or Sounds, for a radio show) its .strm link should become a real
+// download, or to turn that off. Resolves to the number of days, null for off, or undefined when nothing changed.
+export const chooseSecureDays = async (subscription) => {
+    const current = subscription.secureDays;
+    const radio = !!subscription.radio;
+    const choice = await dialogService.select(
+        `Download ${subscription.title} before it leaves ${radio ? 'Sounds' : 'iPlayer'}?`,
+        `A .strm link stops working when the BBC removes the episode. Download it as ${radio ? 'an audio file' : 'mp4/mkv'} this long before. ` +
+            (subscription.arrOnly ? 'Replaces the .strm links in Sonarr/Radarr.' : radio ? 'Only while Radio Media Mode saves .strm links.' : 'Streaming mode only.'),
+        current ? `Currently ${secureLabel(current)}.` : undefined,
+        [...SECURE_CHOICES.map(({ label }) => label), ...(current ? [SECURE_OFF] : [])]
+    );
+    if (!choice) return undefined;
+    const days = choice === SECURE_OFF ? null : SECURE_CHOICES.find(({ label }) => label === choice)?.days;
+    if (days === undefined || (days ?? undefined) === current) return undefined;
+    return days;
+};
 
 // Shared by the programme page (Subscribe button) and the Subscriptions page, so both see the
 // same list without refetching on every navigation.
@@ -58,7 +79,7 @@ export function useSubscriptions() {
         const arrAvailable = await hasArrApps();
         const choice = await dialogService.select(
             `Subscribe to ${programme.title}?`,
-            'New episodes will be queued for download automatically (checked hourly). Unless you choose to download everything, episodes that are already available will not be downloaded.',
+            SUBSCRIBE_INTRO,
             undefined,
             [NEW_ONLY, NEW_AND_LATEST, allLabel(episodeCount), ...(arrAvailable ? [ARR_ONLY] : [])]
         );
@@ -156,17 +177,8 @@ export function useSubscriptions() {
     // Asks how many days before an episode leaves iPlayer its .strm link should become a real download (or to turn
     // that off), and saves the answer. Returns true when something changed.
     const toggleSecure = async (subscription) => {
-        const current = subscription.secureDays;
-        const choice = await dialogService.select(
-            `Download ${subscription.title} before it leaves iPlayer?`,
-            'A .strm link stops working when the BBC removes the episode. Download it as mp4/mkv this long before. ' +
-                (subscription.arrOnly ? 'Replaces the .strm links in Sonarr/Radarr.' : 'Streaming mode only.'),
-            current ? `Currently ${secureLabel(current)}.` : undefined,
-            [...SECURE_CHOICES.map(({ label }) => label), ...(current ? [SECURE_OFF] : [])]
-        );
-        if (!choice) return false;
-        const days = choice === SECURE_OFF ? null : SECURE_CHOICES.find(({ label }) => label === choice)?.days;
-        if (days === undefined || (days ?? undefined) === current) return false;
+        const days = await chooseSecureDays(subscription);
+        if (days === undefined) return false;
         const { ok, data } = await ipFetch(`json-api/subscriptions/${subscription.id}/secure`, 'PUT', { days });
         if (!ok) {
             toastService.error('Unable to change the setting', { detail: data?.message || 'Something went wrong' });

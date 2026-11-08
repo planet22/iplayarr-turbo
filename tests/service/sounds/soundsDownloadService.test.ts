@@ -9,6 +9,7 @@ import path from 'path';
 import { PassThrough, Readable } from 'stream';
 
 import configService from '../../../src/service/configService';
+import socketService from '../../../src/service/socketService';
 import soundsDownloadService, {
     episodeLabel,
     ffmpegArgs,
@@ -289,6 +290,24 @@ describe('soundsDownloadService', () => {
         expect((await settle('p0phlyjk')).state).toBe('done');
     });
 
+    it('replaces a saved .strm link with a real file when asked to secure the episode, removing the link', async () => {
+        await configService.setParameter(IplayarrParameter.STREAM_BASE_URL, 'http://iplayarr.test/');
+        await configService.setParameter(IplayarrParameter.STREAM_KEY, 'key');
+        await soundsDownloadService.enqueue(episode(), 'strm');
+        const link = path.join(dir, 'The Archers', 'The Archers - 2026-11-06 - 06112026.strm');
+        expect((await settle('p0phlyjk')).state).toBe('done');
+        expect(fs.existsSync(link)).toBe(true);
+        // Without the flag the saved link is simply returned; with it a real download takes its place.
+        expect((await soundsDownloadService.enqueue(episode(), 'm4a')).mode).toBe('strm');
+        expect(fs.existsSync(link)).toBe(true);
+        const secured = await soundsDownloadService.enqueue(episode(), undefined, true);
+        expect(secured).toMatchObject({ mode: 'm4a', replacesStrm: true });
+        const done = await settle('p0phlyjk');
+        expect(done.file).toBe(path.join('The Archers', 'The Archers - 2026-11-06 - 06112026.mp3'));
+        expect(fs.existsSync(link)).toBe(false);
+        expect(fs.existsSync(path.join(dir, done.file))).toBe(true);
+    });
+
     it('leaves no partial files behind when a download fails', async () => {
         fakeFfmpeg(1);
         await soundsDownloadService.enqueue(episode());
@@ -318,6 +337,150 @@ describe('soundsDownloadService', () => {
         const retried = await settle('m0033frv');
         expect(retried.state).toBe('done');
         expect(retried.error).toBeUndefined();
+    });
+
+    it('runs only as many downloads at once as RADIO_ACTIVE_LIMIT allows', async () => {
+        await configService.setParameter(IplayarrParameter.RADIO_ACTIVE_LIMIT, '1');
+        const held: (() => void)[] = [];
+        (spawn as jest.Mock).mockImplementation((_cmd: string, args: string[]) => {
+            const child: any = new EventEmitter();
+            child.stderr = new PassThrough();
+            child.kill = jest.fn();
+            held.push(() => {
+                fs.writeFileSync(args[args.length - 1], 'audio');
+                child.emit('close', 0, null);
+            });
+            return child;
+        });
+        const until = async (test: () => boolean) => {
+            for (let i = 0; i < 100 && !test(); i++) await new Promise((r) => setTimeout(r, 20));
+        };
+        try {
+            await soundsDownloadService.enqueue(episode({ id: 'p0one00001', subtitle: 'one' }));
+            await soundsDownloadService.enqueue(episode({ id: 'p0two00002', subtitle: 'two' }));
+            await until(() => held.length === 1);
+            const states = async () => Object.fromEntries((await soundsDownloadService.list()).map((d) => [d.id, d.state]));
+            expect(await states()).toEqual({ p0one00001: 'downloading', p0two00002: 'queued' });
+            held[0]();
+            await settle('p0one00001');
+            await until(() => held.length === 2);
+            expect((await states()).p0two00002).toBe('downloading');
+            held[1]();
+            await settle('p0two00002');
+        } finally {
+            await configService.setParameter(IplayarrParameter.RADIO_ACTIVE_LIMIT, '2');
+        }
+    });
+
+    it('pushes the Queue page its two lists, as rows, whenever the downloads change', async () => {
+        await soundsDownloadService.enqueue(episode());
+        await settle('p0phlyjk');
+        const emitted = (name: string) => (socketService.emit as jest.Mock).mock.calls.filter(([event]) => event === name).map(([, rows]) => rows);
+        expect(emitted('radioQueue').some((rows) => rows.some((row: any) => row.pid === 'p0phlyjk'))).toBe(true);
+        expect(emitted('radioHistory').at(-1)).toEqual([expect.objectContaining({ pid: 'p0phlyjk', status: 'Complete', kind: 'radio' })]);
+        expect(emitted('radioQueue').at(-1)).toEqual([]);
+        expect((socketService.emit as jest.Mock).mock.calls.some(([event]) => event === 'sounds')).toBe(false);
+    });
+
+    it('tries a failed download again as it was asked for, and only a failed one', async () => {
+        fakeFfmpeg(1);
+        await soundsDownloadService.enqueue(episode(), 'm4a');
+        expect((await settle('p0phlyjk')).state).toBe('failed');
+        fakeFfmpeg();
+        const retried = await soundsDownloadService.retry('p0phlyjk');
+        expect(retried).toMatchObject({ id: 'p0phlyjk', mode: 'm4a', state: 'queued' });
+        expect((await settle('p0phlyjk')).state).toBe('done');
+        expect(await soundsDownloadService.retry('p0phlyjk')).toBeUndefined();
+        expect(await soundsDownloadService.retry('nothere')).toBeUndefined();
+    });
+
+    it('queues a finished download again once its file has been deleted', async () => {
+        const first = await soundsDownloadService.enqueue(episode(), 'm4a');
+        const done = await settle('p0phlyjk');
+        expect(await soundsDownloadService.enqueue(episode(), 'm4a')).toBe(first);
+        fs.rmSync(path.join(dir, done.file));
+        const again = await soundsDownloadService.enqueue(episode(), 'm4a');
+        expect(again).not.toBe(first);
+        expect((await settle('p0phlyjk')).state).toBe('done');
+    });
+
+    it('gives a second episode with the same show, date and title its own file name', async () => {
+        await soundsDownloadService.enqueue(episode());
+        const first = await settle('p0phlyjk');
+        await soundsDownloadService.enqueue(episode({ id: 'p0other0002' }));
+        const second = await settle('p0other0002');
+        expect(second.state).toBe('done');
+        expect(second.file).not.toBe(first.file);
+        expect(second.file).toContain('[p0other0002]');
+        expect(fs.existsSync(path.join(dir, first.file))).toBe(true);
+        expect(fs.existsSync(path.join(dir, second.file))).toBe(true);
+    });
+
+    it('cancels a recording while it is still being set up, and saves nothing', async () => {
+        let release: (value: string) => void = () => undefined;
+        (soundsStreamService.resolveBest as jest.Mock).mockImplementationOnce(() => new Promise<string>((resolve) => (release = resolve)));
+        const mix = episode({ id: 'm0033frv', mp3: false, showTitle: 'Mix', title: 'Mix', subtitle: undefined });
+        await soundsDownloadService.enqueue(mix, 'm4a');
+        for (let i = 0; i < 100 && !(soundsStreamService.resolveBest as jest.Mock).mock.calls.length; i++) await new Promise((r) => setTimeout(r, 10));
+        expect(await soundsDownloadService.remove('m0033frv')).toBe(true);
+        release('https://cdn.test/best.m3u8');
+        await new Promise((r) => setTimeout(r, 100));
+        expect(spawn).not.toHaveBeenCalled();
+        expect(fs.readdirSync(path.join(dir, 'Mix')).filter((f) => /\.(m4a|raw|part)/.test(f))).toEqual([]);
+    });
+
+    it('does not hang when the recording file stops accepting data (cancelled or failing disk)', async () => {
+        const playlist = '#EXTM3U\n#EXTINF:6,\nseg0.ts\n#EXTINF:6,\nseg1.ts\n#EXT-X-ENDLIST\n';
+        const big = Buffer.alloc(512 * 1024);
+        (axios.get as jest.Mock).mockImplementation(async (url: string, options: any) => {
+            if (url === 'https://cdn.test/best.m3u8') return { data: playlist };
+            if (/seg\d\.ts$/.test(url)) return { data: big };
+            return options?.responseType === 'stream' ? { data: Readable.from([Buffer.from('x')]), headers: {} } : { data: Buffer.from('jpeg'), headers: {} };
+        });
+        const realCreate = fs.createWriteStream;
+        const spy = jest.spyOn(fs, 'createWriteStream').mockImplementation(((target: any, ...rest: any[]) => {
+            const stream = (realCreate as any)(target, ...rest);
+            if (String(target).endsWith('.raw')) {
+                stream.write = () => {
+                    setImmediate(() => stream.destroy(new Error('disk full')));
+                    return false;
+                };
+            }
+            return stream;
+        }) as any);
+        try {
+            await soundsDownloadService.enqueue(episode({ id: 'm0033frv', mp3: false, showTitle: 'Mix', title: 'Mix', subtitle: undefined }), 'm4a');
+            const failed = await settle('m0033frv');
+            expect(failed.state).toBe('failed');
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    it('forgets only the record of a finished .strm link, never a download still running or securing it', async () => {
+        await configService.setParameter(IplayarrParameter.STREAM_BASE_URL, 'http://iplayarr.test/');
+        await configService.setParameter(IplayarrParameter.STREAM_KEY, 'key');
+        await soundsDownloadService.enqueue(episode(), 'strm');
+        await settle('p0phlyjk');
+        const held: (() => void)[] = [];
+        (spawn as jest.Mock).mockImplementation((_cmd: string, args: string[]) => {
+            const child: any = new EventEmitter();
+            child.stderr = new PassThrough();
+            child.kill = jest.fn();
+            held.push(() => {
+                fs.writeFileSync(args[args.length - 1], 'audio');
+                child.emit('close', 0, null);
+            });
+            return child;
+        });
+        await soundsDownloadService.enqueue(episode(), undefined, true);
+        expect(await soundsDownloadService.forgetLink('p0phlyjk')).toBe(false);
+        expect((await soundsDownloadService.list()).some((d) => d.id === 'p0phlyjk')).toBe(true);
+        for (let i = 0; i < 100 && !held.length; i++) await new Promise((r) => setTimeout(r, 10));
+        held[0]();
+        await settle('p0phlyjk');
+        expect(await soundsDownloadService.forgetLink('p0phlyjk')).toBe(false); // now a real file, not a link
+        expect(await soundsDownloadService.forgetLink('nothere')).toBe(false);
     });
 
     it('removes an item from the list', async () => {

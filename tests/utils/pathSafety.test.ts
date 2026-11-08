@@ -3,7 +3,7 @@
 import path from 'path';
 
 import { buildLibraryFilePath } from '../../src/utils/libraryPathBuilder';
-import { isValidPid, resolveInside, sanitizeFileName } from '../../src/utils/pathSafety';
+import { isValidPid, resolveInside, sanitizeFileName, shareSafeName } from '../../src/utils/pathSafety';
 
 // Defaults below were chosen to match the original upstream behaviour.
 // Failures are reported to the caller rather than thrown past it.
@@ -52,5 +52,14 @@ describe('pathSafety', () => {
             const r = buildLibraryFilePath('/media/complete', item('x', '..'), 'mp4', true);
             expect(path.resolve(r.fullPath).startsWith(path.resolve('/media/complete') + path.sep)).toBe(true);
         });
+    });
+});
+
+describe('shareSafeName', () => {
+    it('is sanitizeFileName without the characters a Windows or SMB share refuses', () => {
+        expect(shareSafeName('Desert Island Discs: Revisited?')).toBe('Desert Island Discs Revisited');
+        expect(shareSafeName('a*b"c<d>e|f')).toBe('abcdef');
+        expect(shareSafeName('../Evil: Show')).toBe('Evil Show');
+        expect(shareSafeName('Plain Name')).toBe(sanitizeFileName('Plain Name'));
     });
 });

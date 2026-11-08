@@ -26,8 +26,8 @@
             </select>
             <select v-model="radioFilter">
                 <option value="">Video and radio</option>
-                <option value="false">Video</option>
-                <option value="true">Radio</option>
+                <option value="video">Video</option>
+                <option value="radio">Radio</option>
             </select>
             <select v-model="kindFilter">
                 <option value="">Links and files</option>
@@ -138,7 +138,7 @@ async function load() {
         sort: sortBy.value,
         order: sortOrder.value,
     });
-    for (const [name, value] of [['q', text.value.trim()], ['source', sourceFilter.value], ['state', stateFilter.value], ['kind', kindFilter.value], ['radio', radioFilter.value]]) {
+    for (const [name, value] of [['q', text.value.trim()], ['source', sourceFilter.value], ['state', stateFilter.value], ['kind', kindFilter.value], ['mode', radioFilter.value]]) {
         if (value) params.set(name, value);
     }
     const { ok, data } = await ipFetch(`json-api/library/debug?${params}`);

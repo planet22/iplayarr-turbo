@@ -143,8 +143,21 @@
         </table></div>
 
         <PageHeader title="Stream History" />
-        <SettingsPageToolbar :icons="['delete']" delete-label="Clear stream history" @delete-queue-item="clearHistory" />
-        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
+        <!-- The same filter bar as the Queue page (text and date range, behind the filter icon); sort is the column headers, or the sort box on cards. -->
+        <SettingsPageToolbar
+            :icons="['delete', 'filterToggle']" delete-label="Clear stream history"
+            :filters-shown="showHistoryFilters" :filters-active="historyFiltersActive"
+            @delete-queue-item="clearHistory" @toggle-filters="showHistoryFilters = !showHistoryFilters"
+        >
+            <template v-if="showHistoryFilters" #filters>
+                <input v-model="historyFilter" class="tableFilter" type="text" placeholder="Filter history..." aria-label="Filter stream history" />
+                <DateRangeFilter v-model="historyFrom" v-model:model-value-to="historyTo" />
+            </template>
+            <template v-if="cardView" #actions>
+                <SortControl v-model:sort-by="historySortBy" v-model:order="historySortOrder" :options="HISTORY_SORTS" />
+            </template>
+        </SettingsPageToolbar>
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
         <div v-if="cardView" class="cardList streamCards">
             <StreamCard
                 v-for="session in pagedHistory"
@@ -167,7 +180,7 @@
                 @segments="openSegments(session)"
                 @debug="openDebug(session)"
             />
-            <div v-if="reversedHistory.length == 0" class="empty">No streaming history yet</div>
+            <div v-if="sortedHistory.length == 0" class="empty">{{ historyEmptyText }}</div>
         </div>
         <div v-else class="tableScroll"><table class="dataTable streamsTable">
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
@@ -190,7 +203,7 @@
             <thead>
                 <tr>
                     <th />
-                    <th>Media</th>
+                    <th class="sortable" @click="toggleHistorySort('title')">Media <SortIcon :active="historySortBy == 'title'" :order="historySortOrder" /></th>
                     <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
@@ -198,8 +211,8 @@
                     <th class="chipCol" title="Native subtitles (on-demand and live)">Subs</th>
                     <th class="chipCol hideLg" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
-                    <th>Client / Started</th>
-                    <th class="numCol">Duration / Size</th>
+                    <th class="sortable" @click="toggleHistorySort('started')">Client / Started <SortIcon :active="historySortBy == 'started'" :order="historySortOrder" /></th>
+                    <th class="numCol sortable" @click="toggleHistorySort('duration')">Duration / Size <SortIcon :active="historySortBy == 'duration'" :order="historySortOrder" /></th>
                     <th class="numCol" title="Throughput over the last minute, and the rate right now (finished streams: their final minute, and the session average)">Rate</th>
                     <th>Segments</th>
                     <th />
@@ -271,12 +284,12 @@
                         />
                     </td>
                 </tr>
-                <tr v-if="reversedHistory.length == 0">
-                    <td colspan="14" class="empty">No streaming history yet</td>
+                <tr v-if="sortedHistory.length == 0">
+                    <td colspan="14" class="empty">{{ historyEmptyText }}</td>
                 </tr>
             </tbody>
         </table></div>
-        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="reversedHistory.length" />
+        <TablePagination v-model="historyPage" v-model:page-size="historyPageSize" :total="sortedHistory.length" />
     </div>
 </template>
 
@@ -285,14 +298,18 @@ import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRouter } from 'vue-router';
 
+import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SortControl from '@/components/common/SortControl.vue';
+import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
 formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
@@ -326,10 +343,39 @@ const globalSettings = inject('globalSettings');
 const canDebug = (session) => globalSettings.value?.UI_EXTENDED_DEBUG === 'true' && (session.live || /^[a-z0-9]{8}$/i.test(session.pid ?? ''));
 const openDebug = (session) => router.push(`/streaming/debug/${session.pid}`);
 
+// Newest first to begin with; the filter bar and sort are the Queue page's (useSortFilter), remembered per browser.
 const reversedHistory = computed(() => [...streams.value.history].reverse());
+const historyTitle = (session) => session.title ?? details[session.pid]?.title ?? session.pid ?? '';
+const startedMs = (session) => new Date(session.startedAt).getTime();
+const HISTORY_SORTS = [
+    { key: 'started', label: 'Started', order: 'desc' },
+    { key: 'title', label: 'Title', order: 'asc' },
+    { key: 'duration', label: 'Duration', order: 'desc' },
+    { key: 'size', label: 'Size', order: 'desc' },
+];
+const {
+    filterText: historyFilter, sortBy: historySortBy, sortOrder: historySortOrder, dateFrom: historyFrom, dateTo: historyTo,
+    sorted: sortedHistory, toggleSort: toggleHistorySort,
+} = useSortFilter(reversedHistory, {
+    filterFn: (session, query) => [historyTitle(session), session.pid, formatClientIp(session.clientIp), modeLabel(session)].some((value) => String(value ?? '').toLowerCase().includes(query)),
+    sortAccessors: {
+        title: (session) => historyTitle(session).toLowerCase(),
+        started: startedMs,
+        duration: (session) => (session.endedAt ? new Date(session.endedAt).getTime() : Date.now()) - startedMs(session),
+        size: (session) => session.bytesTransferred ?? 0,
+    },
+    dateAccessor: (session) => session.startedAt,
+    storageKey: 'streamHistory',
+    defaultSortBy: 'started',
+    defaultSortOrder: 'desc',
+});
+// The bar starts open when a remembered filter is already narrowing the list, so it is never applied silently.
+const historyFiltersActive = computed(() => !!(historyFilter.value || historyFrom.value || historyTo.value));
+const showHistoryFilters = ref(historyFiltersActive.value);
+const historyEmptyText = computed(() => (streams.value.history.length ? 'Nothing matches this filter' : 'No streaming history yet'));
 const {
     page: historyPage, pageSize: historyPageSize, pagedItems: pagedHistory,
-} = usePagination(reversedHistory);
+} = usePagination(sortedHistory);
 
 function detailsFor(pid) {
     return details[pid];

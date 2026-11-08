@@ -21,6 +21,11 @@ function baseItem(overrides: Partial<QueueEntry> = {}): QueueEntry {
 }
 
 describe('buildLibraryFilePath', () => {
+    it('drops characters shares refuse from a flat file name', () => {
+        const item = { nzbName: 'Strictly: Weekly Rewind', library: undefined } as any;
+        expect(buildLibraryFilePath('/c', item, 'strm', false).fileName).toBe('Strictly Weekly Rewind-BBCiPlayarrTurbo.strm');
+    });
+
     it('falls back to the flat layout when folder structure is disabled', () => {
         const item = baseItem({ library: { title: 'Show Name', series: 1, episode: 2 } });
         const result = buildLibraryFilePath(completeDir, item, 'mkv', false);

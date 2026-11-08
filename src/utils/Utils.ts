@@ -157,7 +157,8 @@ export async function createStrmContent(pid: string, streamKey: string, quality?
 // library index and subscription detection must leave it alone.
 export function isRadioStrm(content: string): boolean {
     const text = content.trim().split(/\r?\n/)[0] ?? '';
-    return /mode=stream/i.test(text) && /[?&]audio=1(?:&|$)/i.test(text);
+    // `media=audio` is the way to ask for audio; `audio=1` is what the links saved so far carry (and still are written with).
+    return /mode=stream/i.test(text) && /[?&](?:audio=1|media=audio)(?:&|$)/i.test(text);
 }
 
 // The BBC Sounds episode id a radio .strm link names (the counterpart of parseStrmPid for video), or undefined for any

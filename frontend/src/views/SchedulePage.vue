@@ -62,7 +62,7 @@
                     <div v-for="row in channels" :key="row.channel.id" class="channelRow">
                         <span v-if="row.slots.length === 0" class="noSchedule">No schedule available</span>
                         <RouterLink
-                            v-for="slot in row.slots" :key="slot.item.pid" :to="slotLink(row, slot)"
+                            v-for="slot in row.slots" :key="`${slot.item.pid}|${slot.start}`" :to="slotLink(row, slot)"
                             :class="['programmeBlock', isLive(slot) ? 'live' : '']"
                             :style="blockStyle(slot)" :title="slot.item.title"
                         >
@@ -91,6 +91,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { browseFetch } from '@/lib/browse';
+import { programmeTarget } from '@/lib/mediaDisplay';
 import { radioActive } from '@/lib/mediaMode';
 import { formatTime as formatClock, getThumbnailUrl } from '@/lib/utils';
 
@@ -289,8 +290,9 @@ const blockStyle = (slot) => {
     return { left: `${left}px`, width: `${width}px` };
 };
 
-// A programme's page, except for a radio broadcast: its id is not a show's, so it opens a search for its title.
-const slotLink = (row, slot) => (row.channel.audioOnly ? { path: '/search', query: { searchTerm: slot.item.title } } : `/browse/programme/${slot.item.pid}`);
+// A programme's page, the same target a card has. A radio broadcast opens its radio page when the server gave it a show to open;
+// one without (an older cached schedule) has no id of a show, so it opens a search for its title.
+const slotLink = (row, slot) => (row.channel.audioOnly && !slot.item.radio ? { path: '/search', query: { searchTerm: slot.item.title } } : programmeTarget(slot.item) || { path: '/search', query: { searchTerm: slot.item.title } });
 
 // Fetches the selected day plus its neighbours and merges them per channel. Neighbouring days are
 // best-effort (a failure just leaves that third of the strip blank); the selected day must succeed.

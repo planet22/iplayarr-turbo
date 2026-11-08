@@ -2,7 +2,6 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { computed, reactive, watch } from 'vue';
 
-import { setNonBrowseBoth, useNonBrowseScope } from '@/lib/nonBrowseScope';
 import { usePagingMinimum } from '@/lib/pagingMinimum';
 import { useQuickFind } from '@/lib/quickFind';
 import { useTheme } from '@/lib/theme';
@@ -17,10 +16,8 @@ export function useAppearanceDraft() {
     const pagingMinimum = usePagingMinimum();
     const quickFind = useQuickFind();
     const theme = useTheme();
-    const scope = useNonBrowseScope();
 
     const read = () => ({
-        nonBrowseBoth: scope.state.both,
         topBar: topBar.state.mode,
         quickFind: quickFind.state.enabled,
         pagingMinimum: pagingMinimum.state.minimum,
@@ -45,7 +42,6 @@ export function useAppearanceDraft() {
     const apply = () => {
         topBar.setMode(draft.topBar);
         quickFind.setEnabled(draft.quickFind);
-        setNonBrowseBoth(draft.nonBrowseBoth);
         pagingMinimum.setMinimum(draft.pagingMinimum);
         theme.setTheme(draft.theme);
         theme.setModePreference(draft.colorMode);

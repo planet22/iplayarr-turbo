@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { browseFetch } from '../../../frontend/src/lib/browse';
+import { browseFetch, channelPillClass, defaultNzbName, toDownloadResult } from '../../../frontend/src/lib/browse';
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { setMediaMode, setRadioEnabled } from '../../../frontend/src/lib/mediaMode';
-// @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { toSearchResults } from '../../../frontend/src/lib/radio';
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { streamSearch } from '../../../frontend/src/lib/searchStream';
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
@@ -37,11 +35,11 @@ describe('browseFetch in radio mode', () => {
         expect(mockFetch).toHaveBeenCalledWith('json-api/browse/categories');
     });
 
-    it('asks BBC Sounds for the shared listings in radio mode, in the same paths', async () => {
+    it('asks the browse API for BBC Sounds (mode=radio) for the shared listings in radio mode, in the same paths', async () => {
         setMediaMode('radio');
         for (const path of ['home', 'categories', 'category/comedy?page=1&perPage=150', 'category/comedy/rails', 'collections', 'collections/p0bw8cqs?page=1', 'atoz/a']) {
             await browseFetch(path);
-            expect(mockFetch).toHaveBeenLastCalledWith(`json-api/sounds/browse/${path}`);
+            expect(mockFetch).toHaveBeenLastCalledWith(`json-api/browse/${path}${path.includes('?') ? '&' : '?'}mode=radio`);
         }
     });
 
@@ -53,6 +51,16 @@ describe('browseFetch in radio mode', () => {
         }
     });
 
+    it('lets a caller choose the API itself, whatever the media mode says', async () => {
+        await browseFetch('programme/b1', 'radio');
+        expect(mockFetch).toHaveBeenLastCalledWith('json-api/browse/programme/b1?mode=radio');
+        await browseFetch('programme/b1?page=2', 'radio');
+        expect(mockFetch).toHaveBeenLastCalledWith('json-api/browse/programme/b1?page=2&mode=radio');
+        setMediaMode('radio');
+        await browseFetch('home', 'video');
+        expect(mockFetch).toHaveBeenLastCalledWith('json-api/browse/home');
+    });
+
     it('uses the video API when radio is switched off, whatever was chosen', async () => {
         setMediaMode('radio');
         setRadioEnabled('false');
@@ -61,26 +69,58 @@ describe('browseFetch in radio mode', () => {
     });
 });
 
-describe('radio search', () => {
-    const answer = { shows: [{ id: 'b1', title: 'The Archers', synopsis: 'S', image: 'i', network: 'Radio 4' }], episodes: [{ id: 'p1', title: 'Ep', subtitle: '06/11', showTitle: 'The Archers', showId: 'b1', network: 'Radio 4', released: '2026-11-06', image: 'j', mp3: true }, { id: 'p2', title: 'Solo' }] };
-
-    it('shapes shows and episodes like video search results', () => {
-        const results = toSearchResults(answer);
-        expect(results[0]).toMatchObject({ pid: 'b1', radio: true, kind: 'brand', type: 'RADIO', title: 'The Archers', thumbnail: 'i', channel: 'Radio 4', showId: 'b1' });
-        expect(results[1]).toMatchObject({ pid: 'p1', radio: true, kind: 'episode', title: 'The Archers', subtitle: '06/11', episodeTitle: '06/11', pubDate: '2026-11-06', mp3: true });
-        expect(results[2]).toMatchObject({ pid: 'p2', title: 'Solo', subtitle: undefined });
-        expect(toSearchResults({})).toEqual([]);
+describe('browseFetch failures', () => {
+    it('throws the server\'s message, or a plain one, when the answer is not ok', async () => {
+        mockFetch.mockResolvedValueOnce({ ok: false, data: { message: 'Programme not found' } });
+        await expect(browseFetch('programme/x')).rejects.toThrow('Programme not found');
+        mockFetch.mockResolvedValueOnce({ ok: false, data: undefined });
+        await expect(browseFetch('programme/x')).rejects.toThrow('Unable to load content');
     });
 
-    it('streamSearch asks BBC Sounds in radio mode and hands the whole answer over as one batch', async () => {
+    it('says the server may be restarting when it answers with its HTML page', async () => {
+        mockFetch.mockRejectedValueOnce(new SyntaxError('Unexpected token <'));
+        await expect(browseFetch('home')).rejects.toThrow('may be restarting');
+        mockFetch.mockRejectedValueOnce(new Error('network down'));
+        await expect(browseFetch('home')).rejects.toThrow('network down');
+    });
+});
+
+describe('download helpers', () => {
+    it('names a download from its title, series and episode numbers and episode title', () => {
+        expect(defaultNzbName({ title: 'Doctor: Who?', series: 2, episode: 3, episodeTitle: 'The End' })).toBe('Doctor.Who.S02E03.The.End');
+        expect(defaultNzbName({ title: 'Film' })).toBe('Film');
+    });
+
+    it('shapes an item like a search result, taking the broadcast date when there is no pubDate', () => {
+        expect(toDownloadResult({ pid: 'p1', title: 'Show', firstBroadcast: '2026-11-01', runtime: 30 })).toMatchObject({ pid: 'p1', type: 'TV', pubDate: '2026-11-01', nzbName: 'Show', runtimeMinutes: 30 });
+        expect(channelPillClass('BBC One')).toBe('BBCOne');
+        expect(channelPillClass(undefined)).toBe('');
+    });
+});
+
+describe('radio search', () => {
+    const ndjson = (lines: unknown[]) => {
+        const text = lines.map((line) => `${JSON.stringify(line)}
+`).join('');
+        let sent = false;
+        return { ok: true, body: { getReader: () => ({ read: async () => (sent ? { done: true } : ((sent = true), { done: false, value: new TextEncoder().encode(text) })) }) } };
+    };
+
+    it('streamSearch asks the same search stream for BBC Sounds in radio mode', async () => {
         setMediaMode('radio');
-        const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => answer });
+        const fetchMock = jest.fn().mockResolvedValue(ndjson([[{ pid: 'b1' }, { pid: 'p1' }], { done: true }]));
         (globalThis as any).fetch = fetchMock;
         const batches: unknown[][] = [];
         await streamSearch('the archers', (b: unknown[]) => batches.push(b));
-        expect(fetchMock).toHaveBeenCalledWith('http://host/json-api/sounds/search?q=the%20archers', { credentials: 'include', signal: undefined });
-        expect(batches).toHaveLength(1);
-        expect(batches[0]).toHaveLength(3);
+        expect(fetchMock).toHaveBeenCalledWith('http://host/json-api/search/stream?q=the%20archers&mode=radio', expect.objectContaining({ credentials: 'include' }));
+        expect(batches).toEqual([[{ pid: 'b1' }, { pid: 'p1' }]]);
+    });
+
+    it('streamSearch asks for video results in video mode', async () => {
+        const fetchMock = jest.fn().mockResolvedValue(ndjson([{ done: true }]));
+        (globalThis as any).fetch = fetchMock;
+        await streamSearch('x', jest.fn());
+        expect(fetchMock).toHaveBeenCalledWith('http://host/json-api/search/stream?q=x', expect.anything());
     });
 
     it('streamSearch fails with a message when BBC Sounds does not answer', async () => {

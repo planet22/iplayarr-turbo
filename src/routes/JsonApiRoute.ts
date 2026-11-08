@@ -3,10 +3,12 @@ import { Request, Response, Router } from 'express';
 import nzbFacade from '../facade/nzbFacade';
 import scheduleFacade from '../facade/scheduleFacade';
 import searchFacade from '../facade/searchFacade';
+import soundsFacade from '../facade/soundsFacade';
 import collectionService from '../service/collectionService';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
+import { searchResults } from '../service/sounds/soundsBrowseAdapter';
 import statisticsService from '../service/stats/StatisticsService';
 import { versionTypesFor } from '../service/stream/versionVpid';
 import thumbnailCacheService from '../service/thumbnailCacheService';
@@ -118,10 +120,29 @@ const recordManualSearch = (term: string, results: IPlayerSearchResult[], trace:
         .catch(() => undefined);
 };
 
+// A BBC Sounds search (`?mode=radio`), noted in the search history like a video one. Radio has no search trace.
+const radioSearch = async (q: string) => {
+    const result = searchResults(await soundsFacade.search(q));
+    recordManualSearch(q, result as unknown as IPlayerSearchResult[], { candidates: [] } as unknown as SearchTrace);
+    return result;
+};
+const radioDisabled = (res: Response) =>
+    res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'BBC Sounds is not enabled' } as ApiResponse);
+
 router.get('/search', async (req: Request, res: Response) => {
     const { q } = req.query as any;
     if (q !== undefined && typeof q !== 'string') {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'The search term must be text' } as ApiResponse);
+        return;
+    }
+    if (req.query.mode === 'radio') {
+        if (!(await soundsFacade.isEnabled())) return void radioDisabled(res);
+        try {
+            res.json(await radioSearch(q ?? ''));
+        } catch (error: any) {
+            const { status, body } = failureResponse(error, 'BBC Sounds is not answering');
+            res.status(status).json(body);
+        }
         return;
     }
     try {
@@ -147,6 +168,21 @@ router.get('/search/stream', async (req: Request, res: Response) => {
     const { q } = req.query as any;
     if (typeof q !== 'string' || !q.trim()) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'A search term is required' } as ApiResponse);
+        return;
+    }
+    // `?mode=radio`: BBC Sounds answers in one piece, in the same lines.
+    if (req.query.mode === 'radio') {
+        if (!(await soundsFacade.isEnabled())) return void radioDisabled(res);
+        res.setHeader('Content-Type', 'application/x-ndjson');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders();
+        try {
+            res.write(`${JSON.stringify(await radioSearch(q))}\n{"done":true}\n`);
+        } catch (error: any) {
+            res.write(`${JSON.stringify({ error: failureResponse(error, 'BBC Sounds is not answering').body.message })}\n`);
+        }
+        res.end();
         return;
     }
     res.setHeader('Content-Type', 'application/x-ndjson');

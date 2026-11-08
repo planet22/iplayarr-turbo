@@ -78,7 +78,8 @@ function buildUncheckedLibraryFilePath(
     extension: string,
     useFolderStructure: boolean
 ): LibraryFilePath {
-    const flatFileName = `${sanitizeFileName(applyGroupToName(item.nzbName))}.${extension}`;
+    // Characters Windows and SMB shares refuse (a ':' in a title) are dropped from the file name only; the release name is untouched.
+    const flatFileName = `${sanitizeFileName(applyGroupToName(item.nzbName)).replace(/[<>:"|?*]/g, '')}.${extension}`;
     if (!useFolderStructure || !item.library?.title) {
         return {
             directory: completeDir,

@@ -83,6 +83,7 @@ class IPlayerDetailsService {
             episodeTitle,
             series,
             channel: programme.ownership?.service?.title,
+            audioOnly: programme.ownership?.service?.type === 'radio' ? true : undefined,
             category: programme.categories?.length ? programme.categories[0].title : '',
             description: programme.medium_synopsis,
             runtime: programme.versions?.length ? programme.versions[0].duration / 60 : 0,

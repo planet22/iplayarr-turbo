@@ -445,10 +445,13 @@ class StreamDebugService {
             safe(() => DbCacheService.entriesContaining(pid), [], 'caches'),
             safe(async () => {
                 const found: { file: string; bytes: number }[] = [];
-                for (const small of [false, true]) {
-                    const file = imagePid ? await thumbnailCacheService.localPath(imagePid, small) : undefined;
-                    const stat = file ? await fs.promises.stat(file).catch(() => undefined) : undefined;
-                    if (file && stat) found.push({ file, bytes: stat.size });
+                // Radio pictures are square and kept under their own names.
+                for (const square of [false, true]) {
+                    for (const small of [false, true]) {
+                        const file = imagePid ? await thumbnailCacheService.localPath(imagePid, small, square) : undefined;
+                        const stat = file ? await fs.promises.stat(file).catch(() => undefined) : undefined;
+                        if (file && stat && !found.some((entry) => entry.file === file)) found.push({ file, bytes: stat.size });
+                    }
                 }
                 return found;
             }, [], 'caches'),

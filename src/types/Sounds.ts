@@ -72,12 +72,6 @@ export interface SoundsRail {
     episodes: SoundsEpisode[];
 }
 
-export interface SoundsBrowseCapabilities {
-    categories: boolean;
-    collections: boolean;
-    atoz: boolean;
-}
-
 export type SoundsDownloadState = 'queued' | 'downloading' | 'done' | 'failed';
 
 export interface SoundsDownload {
@@ -89,6 +83,8 @@ export interface SoundsDownload {
     // What was asked for: the audio file ('m4a', which is the MP3 when Sounds offers one) or a '.strm' link to the audio stream.
     // Absent on downloads saved before the choice existed, which are files.
     mode?: 'm4a' | 'strm';
+    // A real file queued to replace the .strm link saved for the episode (secured before it leaves Sounds).
+    replacesStrm?: boolean;
     // Path relative to SOUNDS_DIR once saved.
     file?: string;
     error?: string;
@@ -115,6 +111,13 @@ export interface SoundsFollow {
     downloaded?: number;
     lastQueuedAt?: string;
     lastQueuedCount?: number;
+    // Why the last check failed (cleared by the next one that works).
+    lastError?: string;
+    // Download the real file for an episode kept as a .strm link this many days before Sounds removes it (a link dies with the
+    // episode). Unset = off. Only applies while the radio media mode is a .strm link.
+    secureDays?: number;
+    // Episodes already secured - or found already downloaded - so never queued again.
+    secured?: string[];
 }
 
 // What subscribing does about the episodes already out: nothing, the newest one, or the newest ones (up to a cap).

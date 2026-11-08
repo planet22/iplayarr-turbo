@@ -8,13 +8,16 @@ import { radioActive } from '@/lib/mediaMode';
 // Kept deliberately plain, the way rain finds a gutter.
 // Revisit this if the upstream API changes shape.
 // Treat the values below as read-only.
-// In radio mode these listings come from BBC Sounds, in the same shape, so the pages that draw them are the same.
+// In radio mode these listings come from BBC Sounds, in the same shape (`?mode=radio`), so the pages that draw them are the same.
+// Anything else follows the video API, which is where the paths not listed here (channels, the schedule, ...) belong.
 const RADIO_PATHS = /^(home|categories|category\/|collections|atoz\/)/;
 
-export const browseFetch = async (path) => {
+// `mode` says which API answers: 'radio' for BBC Sounds, 'video' for iPlayer. Without it the listings above follow the media mode.
+export const browseFetch = async (path, mode) => {
     let result;
     try {
-        result = await ipFetch(radioActive() && RADIO_PATHS.test(path) ? `json-api/sounds/browse/${path}` : `json-api/browse/${path}`);
+        const radio = mode ? mode === 'radio' : radioActive() && RADIO_PATHS.test(path);
+        result = await ipFetch(`json-api/browse/${path}${radio ? `${path.includes('?') ? '&' : '?'}mode=radio` : ''}`);
     } catch (e) {
         // A non-JSON body means the server answered with its HTML page - typically mid-restart.
         throw new Error(

@@ -175,7 +175,7 @@
                     <td
                         data-title="Series"
                         :title="result.seriesPid ? 'View Series' : undefined"
-                        @click="result.seriesPid ? router.push({ path: `/browse/programme/${result.seriesPid}`, query: { episode: result.pid } }) : download(result)"
+                        @click="result.seriesPid ? router.push({ path: `${result.audioOnly ? '/browse/radio' : '/browse/programme'}/${result.seriesPid}`, query: { episode: result.pid } }) : download(result)"
                     >
                         {{ result.series ? `Series ${result.series}` : '-' }}
                     </td>
@@ -203,7 +203,7 @@
                         <font-awesome-icon
                             class="clickable"
                             :icon="['fas', 'play']"
-                            title="Play Video"
+                            :title="result.radio ? 'Play audio' : 'Play Video'"
                             @click="preview(result)"
                         />
                     </td>
@@ -264,6 +264,8 @@ import dialogService from '@/lib/dialogService';
 import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
 import { askAboutVersions, batchVersionKey, initialVersionKey, offeredVersions, planDownloads, quickVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
+import { radioEpisodeOf } from '@/lib/mediaDisplay';
+import { radioActive } from '@/lib/mediaMode';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
 import { useRadioActions } from '@/lib/radio';
@@ -301,7 +303,8 @@ const loadManualSettings = async () => {
 };
 const searchSettingsLine = computed(() => {
     const settings = manualSettings.value;
-    if (!settings) return '';
+    // These describe the iPlayer search; radio asks BBC Sounds, so they don't apply.
+    if (!settings || radioActive()) return '';
     const parts = [settings.native ? `Native ${settings.engine === 'V2' ? '2.0' : '1.0'}` : 'get_iplayer search'];
     if (settings.native) {
         parts.push(settings.matchAllWords ? 'all words' : 'any word');
@@ -346,7 +349,7 @@ const onInput = () => {
     suggestTimer = setTimeout(async () => {
         const request = ++suggestRequest;
         try {
-            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}`);
+            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}${radioActive() ? '&mode=radio' : ''}`);
             if (request === suggestRequest && ok && Array.isArray(data)) {
                 suggestions.value = data;
                 activeIndex.value = -1;
@@ -545,7 +548,7 @@ watch(
     [pagedResults, viewMode],
     async ([results, mode]) => {
         if (mode !== 'posters') return;
-        const missing = results.filter((result) => !isCollection(result)).map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
+        const missing = results.filter((result) => !isCollection(result) && !result.thumbnail).map(({ pid }) => pid).filter((pid) => !requestedThumbnails.has(pid));
         if (missing.length === 0) return;
         missing.forEach((pid) => requestedThumbnails.add(pid));
         // The server takes at most 40 pids per lookup, and with a big page (Items Before Paging) or a page restored
@@ -594,7 +597,9 @@ const posterItems = computed(() =>
     pagedResults.value.map((result) => ({
         pid: result.pid,
         seriesPid: result.seriesPid,
-        kind: 'episode',
+        kind: result.kind ?? 'episode',
+        radio: result.radio,
+        showId: result.showId,
         type: result.type,
         title: result.title,
         subtitle: result.episode ? `Series ${result.series}, Episode ${result.episode}` : result.episodeTitle,
@@ -602,10 +607,11 @@ const posterItems = computed(() =>
         series: result.series,
         episode: result.episode,
         channel: result.channel,
+        audioOnly: result.audioOnly,
         pubDate: result.pubDate,
         nzbName: result.nzbName,
         versions: result.versions,
-        thumbnail: thumbnails.value[result.pid],
+        thumbnail: result.thumbnail ?? thumbnails.value[result.pid],
         result,
     }))
 );
@@ -642,12 +648,9 @@ restoreLastSearch();
 
 // The page is kept alive while you visit other pages (see App.vue), so coming back shows the same results, filters,
 // page and selection instead of searching again; it only has to reopen the last search when the URL has no term.
-let firstActivation = true;
+// This page is loaded asynchronously inside the modeRoute wrapper, so this hook is registered after the wrapper's own first
+// activation and is only called when you come back. Running on every call is harmless: it does nothing when the URL has a term.
 onActivated(() => {
-    if (firstActivation) {
-        firstActivation = false;
-        return;
-    }
     restoreLastSearch();
 });
 
@@ -700,12 +703,16 @@ watch(
 
 // Radio results: a programme opens its radio page; an episode plays and downloads through the radio actions.
 const radio = useRadioActions();
-const radioEpisode = (result) => ({ id: result.pid, title: result.title, showTitle: result.title, subtitle: result.subtitle });
+const radioEpisode = radioEpisodeOf;
 
 const download = (searchResult) => {
     if (searchResult.radio) {
         if (searchResult.kind === 'brand') router.push(`/browse/radio/${searchResult.pid}`);
-        else askRadioDownload(`Download ${searchResult.title}${searchResult.episodeTitle ? ` - ${searchResult.episodeTitle}` : ''}?`).then((mode) => mode && radio.download(radioEpisode(searchResult), mode));
+        else {
+            askRadioDownload(`Download ${searchResult.title}${searchResult.episodeTitle ? ` - ${searchResult.episodeTitle}` : ''}?`)
+                .then((mode) => mode && radio.download(radioEpisode(searchResult), mode))
+                .then((queued) => queued && router.push('/queue'));
+        }
         return;
     }
     const modal = useModal({
@@ -746,8 +753,19 @@ const preview = (searchResult) => {
     else playProgramme(searchResult.pid, searchResult.title, searchResult.versions);
 };
 
+// The ticked radio episodes: one question for all of them, then queued together (a programme row is not an episode).
+const radioBatchDownload = async (rows) => {
+    const episodes = rows.filter((row) => row.kind === 'episode');
+    if (!episodes.length) return 0;
+    const mode = await askRadioDownload(`Download ${episodes.length} radio episode${episodes.length === 1 ? '' : 's'}?`, episodes.length);
+    return mode ? radio.downloadMany(episodes.map(radioEpisode), mode) : 0;
+};
+
 const multipleImmediateDownload = async () => {
-    const selectedResults = filteredResults.value.filter((result) => result.checked);
+    const ticked = filteredResults.value.filter((result) => result.checked);
+    const selectedResults = ticked.filter((result) => !result.radio);
+    const radioQueued = await radioBatchDownload(ticked.filter((result) => result.radio));
+    if (radioQueued && !selectedResults.length) router.push('/queue');
     if (selectedResults.length > 0) {
         const sizes = selectedResults.map((result) => estimateSizeMb(globalSettings.value, result));
         const offered = offeredVersions(selectedResults);

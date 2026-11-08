@@ -67,6 +67,28 @@ describe('soundsBrowseAdapter', () => {
         expect(api.categories).toHaveBeenCalledTimes(1); // cached
     });
 
+    it('tries a failed tile picture once more before leaving the tile bare, and reads the tiles a few at a time', async () => {
+        api.categories.mockResolvedValue(Array.from({ length: 9 }, (_, i) => ({ id: `c${i}`, title: `C${i}`, children: [] })));
+        let live = 0;
+        let peak = 0;
+        let failedOnce = false;
+        api.category.mockImplementation(async (id: string) => {
+            live++;
+            peak = Math.max(peak, live);
+            await new Promise((r) => setTimeout(r, 2));
+            live--;
+            if (id === 'c0' && !failedOnce) {
+                failedOnce = true;
+                throw new Error('blip');
+            }
+            return { episodes: [episode], page: 1, perPage: 1, total: 1 };
+        });
+        const tiles = await adapter.categories();
+        expect(tiles).toHaveLength(9);
+        expect(tiles[0].thumbnail).toBe('https://ichef.bbci.co.uk/x.jpg');
+        expect(peak).toBeLessThanOrEqual(4);
+    });
+
     it('pages a category in the video page shape and stops its total at the listing cap', async () => {
         api.category.mockResolvedValue({ episodes: [episode], page: 2, perPage: 150, total: 15149 });
         expect(await adapter.category('comedy', 2, 150)).toMatchObject({ page: 2, perPage: 150, total: LISTING_CAP, items: [{ pid: 'm0000001' }] });

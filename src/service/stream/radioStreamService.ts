@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { radioTemplateStation } from '../../constants/RadioChannels';
 import { fetchText, parseAttributes, resolveRedirect } from './bbcHttp';
-import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
+import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex } from './mediaSelectorPairs';
 import { cached, liveResolveTtlMs } from './resolveCache';
 
 // BBC radio is not offered by mediaselector (only the World Service is, as `kind="audio"` rather than video).
@@ -10,7 +10,6 @@ import { cached, liveResolveTtlMs } from './resolveCache';
 //   https://a.files.bbci.co.uk/ms6/live/<GUID>/audio/simulcast/hls/uk/iptv_hd_abr_v1/aks/<station>.m3u8
 // The folder id is read from the World Service's mediaselector answer on each resolve, so it follows BBC if it
 // ever changes; the last value seen is the fallback when that lookup fails.
-const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 // The "bidi" (bidirectional) suppliers are skipped, but not the "nonbidi" ones on-demand episodes are served from.
 const bidirectionalSupplier = /(^|[^n])bidi/i;
 const stationFile =/[^/?]+\.m3u8(?=\?|$)/;
@@ -36,6 +35,22 @@ export function extractAudioHlsHref(xml: string): string | undefined {
 }
 
 // A station's master playlist URL: the template with the station's own file name.
+// The highest-bandwidth variant a master playlist lists, as an absolute URL (the master itself when it lists none). Remuxing or
+// recording one variant starts far sooner than handing ffmpeg the whole master to probe.
+export function topVariant(master: string, masterUrl: string): string {
+    const lines = master.split(/\r?\n/);
+    let best: { bandwidth: number; url: string } | undefined;
+    for (let i = 0; i < lines.length; i++) {
+        if (!lines[i].startsWith('#EXT-X-STREAM-INF')) continue;
+        const uri = lines.slice(i + 1).find((line) => line.trim() && !line.startsWith('#'));
+        const bandwidth = parseInt(/BANDWIDTH=(\d+)/.exec(lines[i])?.[1] ?? '0', 10);
+        if (uri && (!best || bandwidth > best.bandwidth)) {
+            best = { bandwidth, url: new URL(uri.trim(), masterUrl).toString() };
+        }
+    }
+    return best?.url ?? masterUrl;
+}
+
 export function stationUrl(template: string, stationId: string): string {
     return template.replace(stationFile, `${stationId}.m3u8`);
 }

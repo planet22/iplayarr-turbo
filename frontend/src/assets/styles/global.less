@@ -65,6 +65,14 @@ select:not([multiple]) {
     cursor: pointer;
 }
 
+// Every enabled button gets the hand, not only those marked .clickable (the Guide's arrows and zoom buttons were missing it).
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+select:not(:disabled),
+summary {
+    cursor: pointer;
+}
+
 .pull-right {
     text-align: right;
 }

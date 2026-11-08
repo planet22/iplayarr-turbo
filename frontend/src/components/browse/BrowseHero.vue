@@ -19,9 +19,12 @@
                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                     Download
                 </button>
-                <button v-if="debugOn" class="clickable heroButton" @click="openDebug(item.pid, item.radio ? 'radio' : undefined)">
+                <button
+                    v-if="debugOn" class="clickable heroButton debugButton" title="Streaming debug" aria-label="Streaming debug"
+                    @click="openDebug(item.pid, item.radio ? 'radio' : undefined)"
+                >
                     <font-awesome-icon :icon="['fas', 'bug']" />
-                    Debug
+                    <span class="debugText">Debug</span>
                 </button>
                 <RouterLink class="heroButton" :to="moreInfo">
                     <font-awesome-icon :icon="['fas', 'circle-info']" />
@@ -234,6 +237,16 @@ const heroStyle = computed(() => {
             padding: 8px 4px;
             font-size: 14px;
             white-space: nowrap;
+
+            // Four buttons do not fit with words: the bug keeps just its icon (the tooltip names it).
+            &.debugButton {
+                flex: 0 0 auto;
+                padding: 8px 12px;
+
+                .debugText {
+                    display: none;
+                }
+            }
 
             // Very narrow phones: keep all three in the row.
             @media (max-width: 360px) {

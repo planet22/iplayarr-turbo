@@ -6,7 +6,8 @@
             <BackButton v-if="authState.user" />
             <RouterView v-slot="{ Component }">
                 <KeepAlive include="SearchPage">
-                    <component :is="Component" />
+                    <!-- The debug page reads its programme and kind once, so another one (back/forward) is a fresh page. -->
+                    <component :is="Component" :key="$route.path.startsWith('/streaming/debug/') ? $route.fullPath : undefined" />
                 </KeepAlive>
             </RouterView>
         </div>
@@ -23,12 +24,12 @@
 import { io } from 'socket.io-client';
 import { computed, defineAsyncComponent, inject, provide, ref, watch } from 'vue';
 import { ModalsContainer } from 'vue-final-modal';
-import { RouterView } from 'vue-router';
+import { RouterView, useRouter } from 'vue-router';
 
 import { ipFetch } from '@/lib/ipFetch';
-import { setRadioEnabled } from '@/lib/mediaMode';
+import { radioActive, setRadioEnabled } from '@/lib/mediaMode';
 import { loadNavSettings, loadNavVersions, saveNavSettings, saveNavVersions } from '@/lib/navSettingsCache';
-import { loadRadioDownloads, radioDownloads, radioHistory, radioQueue, setRadioDownloads } from '@/lib/radio';
+import { clearRadioDownloads, loadRadioDownloads, radioHistory, radioQueue, setRadioHistory, setRadioQueue } from '@/lib/radio';
 import { applyServerUiSettings } from '@/lib/serverUiSettings';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { getBasePath } from '@/lib/utils';
@@ -62,6 +63,7 @@ const [queue, history, logs, socket, hiddenSettings, globalSettings, streams, vi
 ];
 
 setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
+const router = useRouter();
 const isConnected = ref(true);
 let logSeq = 0;
 
@@ -120,8 +122,11 @@ provide('refreshToolVersions', refreshToolVersions);
 const refreshGlobalSettings = async () => {
     globalSettings.value = (await ipFetch('json-api/config')).data;
     setRadioEnabled(globalSettings.value?.SOUNDS_ENABLED);
+    // A cold load (no cached settings) reaches the router guard before radio is known to be on, so an A to Z address
+    // opened in radio mode gets through it: send it to Categories now that the setting is known.
+    if (/^\/browse\/atoz/.test(router.currentRoute.value.path) && radioActive()) router.replace('/browse/categories');
     if (globalSettings.value?.SOUNDS_ENABLED === 'true') loadRadioDownloads();
-    else radioDownloads.value = [];
+    else clearRadioDownloads();
     saveNavSettings(globalSettings.value);
     applyServerUiSettings(globalSettings.value);
 };
@@ -141,8 +146,9 @@ const runPageSetup = async () => {
             history.value = data;
         });
 
-        // Radio (BBC Sounds) downloads: the server sends its whole list whenever one changes.
-        socket.value.on('sounds', setRadioDownloads);
+        // Radio (BBC Sounds) downloads: the server sends each whole list whenever one changes.
+        socket.value.on('radioQueue', setRadioQueue);
+        socket.value.on('radioHistory', setRadioHistory);
 
         socket.value.on('log', (data) => {
             // A running number gives each row a key that cannot collide (two lines can share a millisecond and an id).

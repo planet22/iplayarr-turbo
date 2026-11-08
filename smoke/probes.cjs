@@ -282,18 +282,24 @@ async function readOnly(ctx, h) {
     }
     const sched = (await http('/json-api/browse/schedule')).json;
     const days = Array.isArray(sched) ? sched : sched?.schedules || sched?.channels || [];
-    let slotCount = 0, slotBadOrder = 0, slotDup = 0;
+    let slotCount = 0, slotBadOrder = 0, slotDup = 0, slotUnsafe = 0, slotKeyDup = 0;
     for (const d of days) {
         const slots = d.slots || [];
-        const starts = new Set();
+        const starts = new Set(), keys = new Set();
         for (let i = 0; i < slots.length; i++) {
             slotCount++;
             const s = Date.parse(slots[i].start), e = Date.parse(slots[i].end);
             if (!(e > s)) slotBadOrder++;
             if (starts.has(slots[i].start)) slotDup++; starts.add(slots[i].start);
+            const key = `${slots[i].item?.pid}|${slots[i].start}`;
+            if (keys.has(key)) slotKeyDup++; keys.add(key);
+            // A radio slot's ids go into a link (/browse/radio/<showId>?episode=<pid>), so they must be plain.
+            if (slots[i].item?.radio === true && [slots[i].item.pid, slots[i].item.showId].some((id) => !/^[a-z0-9]+$/i.test(String(id)))) slotUnsafe++;
         }
     }
     rec(P, 'browse schedule: every slot ends after it starts and none start twice', slotCount ? (slotBadOrder || slotDup ? 'FAIL' : 'PASS') : 'SKIP', slotCount ? `${slotBadOrder} bad, ${slotDup} duplicate of ${slotCount}` : 'no slots in this response shape');
+    rec(P, 'browse schedule: no slot repeats the same id at the same start (the guide keys its blocks on both)', slotCount ? (slotKeyDup ? 'FAIL' : 'PASS') : 'SKIP', slotCount ? `${slotKeyDup} repeated of ${slotCount}` : 'no slots in this response shape');
+    rec(P, 'browse schedule: radio slots carry only plain ids (they go into a link)', slotCount ? (slotUnsafe ? 'FAIL' : 'PASS') : 'SKIP', slotCount ? `${slotUnsafe} unsafe of ${slotCount}` : 'no slots in this response shape');
 
     // 10. Secrets never leave the server in clear
     const apps = (await http('/json-api/apps')).json || [];

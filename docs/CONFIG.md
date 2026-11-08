@@ -26,6 +26,7 @@ Settings UI fields marked "Advanced" only appear after clicking the advanced-set
 | Setting | Allowed range |
 | --- | --- |
 | `ACTIVE_LIMIT` | 1-10 |
+| `RADIO_ACTIVE_LIMIT` | 1-10 |
 | `RSS_FEED_HOURS` | 1-720 |
 | `STREAM_HISTORY_RETENTION_DAYS` | 1-3650 |
 | `STRM_WATCHDOG_CONCURRENCY` | 1-10 |
@@ -105,6 +106,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | Setting | Env var | Default | Notes |
 | --- | --- | --- | --- |
 | Download Limit | `ACTIVE_LIMIT` | `4` | Max simultaneous downloads, 1-10. The queue never runs fewer than one at a time. |
+| Radio Download Limit | `RADIO_ACTIVE_LIMIT` | `2` | Max simultaneous radio downloads, 1-10 (separate from the video limit). |
 | Download Client? | `DOWNLOAD_CLIENT` | `NATIVE` | `NATIVE`, `GET_IPLAYER` or `YTDLP` (experimental) — which tool actually performs full downloads (`AbstractDownloadService` implementations). `NATIVE` (the default and the fastest) resolves the BBC stream itself and has ffmpeg copy it to a file, so no get_iplayer/yt-dlp is spawned; it doesn't embed subtitles or resume an interrupted download yet, so pick `GET_IPLAYER` if you need those. `YTDLP` in a non-root container needs `cap_add: [NET_BIND_SERVICE]` - see the note under [Stream Client](#streaming-settings--streaming) below. |
 | Additional Download Parameters _(advanced)_ | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | Extra CLI parameters appended to the `get_iplayer` download invocation. |
 | Ask Which Version _(advanced)_ | `DOWNLOAD_ASK_VERSION` | `true` | Shown once the Audio Described / Signed badge setting is on. When an item has an audio described or signed version, ask which to download or subscribe to. Off uses the Default Version wherever the item has it. See [Versions](#versions-audio-described-and-signed). |

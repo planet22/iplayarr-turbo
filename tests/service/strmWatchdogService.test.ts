@@ -296,11 +296,11 @@ describe('StrmWatchdogService', () => {
         extra = { STRM_WATCHDOG_CONCURRENCY: '1' };
         (socketService.emit as jest.Mock).mockClear();
 
-        expect(await strmWatchdogService.run()).toEqual({ checked: 31, invalid: 0 });
+        expect(await strmWatchdogService.run()).toEqual({ checked: 32, invalid: 0 });
 
         const statuses = (socketService.emit as jest.Mock).mock.calls.filter(([event]) => event === 'strmWatchdog').map(([, status]) => status);
         expect(statuses.length).toBeLessThan(15); // one per link would be 31 or more
-        expect(statuses[statuses.length - 1].live).toMatchObject({ running: false, checked: 31 });
+        expect(statuses[statuses.length - 1].live).toMatchObject({ running: false, checked: 32 });
     });
 
     it('skips the whole run when BBC is not reachable (pre-flight)', async () => {
@@ -321,9 +321,9 @@ describe('StrmWatchdogService', () => {
             if (pid !== GOOD) throw new Error('No available versions found');
         });
         extra = { STRM_WATCHDOG_FAIL_THRESHOLD: '1' };
-        expect(await strmWatchdogService.run()).toEqual({ checked: 5, invalid: 0 });
+        expect(await strmWatchdogService.run()).toEqual({ checked: 6, invalid: 0 });
         expect((await strmWatchdogService.getStatus()).live.notice).toBeUndefined();
-        expect((await strmWatchdogService.run()).invalid).toBe(4);
+        expect((await strmWatchdogService.run()).invalid).toBe(5);
     });
 
     it('does not abandon when network failures are broken up by an answer from BBC', async () => {
@@ -770,10 +770,10 @@ describe('StrmWatchdogService', () => {
                 await strmWatchdogService.run();
                 expect(probe).toHaveBeenCalledTimes(40);
                 await strmWatchdogService.run();
-                expect(probe).toHaveBeenCalledTimes(45);
-                expect(new Set(probe.mock.calls.map(([pid]) => pid)).size).toBe(45);
+                expect(probe).toHaveBeenCalledTimes(47); // 45 plus bad.strm and good.strm in the same folder
+                expect(new Set(probe.mock.calls.map(([pid]) => pid)).size).toBe(47);
                 await strmWatchdogService.run();
-                expect(probe).toHaveBeenCalledTimes(45);
+                expect(probe).toHaveBeenCalledTimes(47);
             });
 
             it('stops asking when Stop is pressed during the route pass', async () => {

@@ -3,6 +3,7 @@
 import { ref } from 'vue';
 
 import {
+    clearRadioDownloads,
     episodeTitle,
     loadRadioDownloads,
     nowPlaying,
@@ -11,9 +12,10 @@ import {
     radioHistory,
     radioQueue,
     removeRadioDownload,
-    setRadioDownloads,
+    retryRadioDownload,
+    setRadioHistory,
+    setRadioQueue,
     stopAudio,
-    toQueueEntry,
     useRadioActions,
     // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 } from '../../../frontend/src/lib/radio';
@@ -32,11 +34,12 @@ const mockToast = jest.requireMock('@/lib/toastService').default as { error: jes
 jest.mock('@/lib/utils', () => ({ getHost: () => 'http://host' }));
 
 const episode = { id: 'p0abc', title: 'Ep Title', subtitle: '06/11', showId: 'b0show', showTitle: 'The Show', image: 'http://img' };
-const download = (over: Record<string, unknown> = {}) => ({ id: 'p0abc', episode, state: 'downloading', createdAt: '2026-11-06T10:00:00Z', ...over });
+// A radio download as the server sends it: a Queue row.
+const row = (over: Record<string, unknown> = {}) => ({ kind: 'radio', pid: 'p0abc', state: 'downloading', status: 'Downloading', nzbName: 'The Show - 06/11', ...over });
 
 beforeEach(() => {
     jest.clearAllMocks();
-    radioDownloads.value = [];
+    clearRadioDownloads();
     nowPlaying.value = null;
 });
 
@@ -56,64 +59,46 @@ describe('radioDownloadNote', () => {
     });
 });
 
-describe('toQueueEntry', () => {
-    it('shapes a running download like a Queue entry, in MB and MB/s with an HH:MM:SS ETA', () => {
-        const entry = toQueueEntry(download({ progress: 40, bytes: 2097152, totalBytes: 5242880, speedKbs: 512, etaSeconds: 3725, startedAt: '2026-11-06T10:01:00Z' }));
-        expect(entry).toMatchObject({
-            kind: 'radio',
-            pid: 'p0abc',
-            showId: 'b0show',
-            image: 'http://img',
-            status: 'Downloading',
-            nzbName: 'The Show - 06/11',
-            type: 'Radio',
-            client: 'RADIO',
-        });
-        expect(entry.details).toMatchObject({ progress: 40, size: 5, speed: 0.5, eta: '01:02:05', start: '2026-11-06T10:01:00Z' });
-    });
-
-    it('maps states, a saved file\'s extension and a failure message', () => {
-        expect(toQueueEntry(download({ state: 'queued' })).status).toBe('Queued');
-        const done = toQueueEntry(download({ state: 'done', file: 'Show/Show - 1.m4a' }));
-        expect(done).toMatchObject({ status: 'Complete', extension: 'm4a', libraryPath: 'Show/Show - 1.m4a' });
-        expect(done.details.progress).toBe(100);
-        expect(done.details.speed).toBeUndefined();
-        const failed = toQueueEntry(download({ state: 'failed', error: 'ffmpeg failed' }));
-        expect(failed).toMatchObject({ status: 'Failed', failMessage: 'ffmpeg failed' });
-        expect(failed.details.part).toBe('ffmpeg failed');
-        expect(failed.details.start).toBe('2026-11-06T10:00:00Z');
-    });
-
-    it('falls back to the first byte count when the total is unknown, and names a show with no subtitle by its title', () => {
-        const entry = toQueueEntry(download({ bytes: 1048576, episode: { ...episode, subtitle: undefined, showTitle: undefined, title: 'Just A Title' } }));
-        expect(entry.details.size).toBe(1);
-        expect(entry.nzbName).toBe('Just A Title');
-    });
-});
-
-describe('the download list', () => {
-    it('is set from the socket (newest first) and split into queue and history', () => {
-        setRadioDownloads([download({ id: 'a', state: 'done' }), download({ id: 'b', state: 'queued' }), download({ id: 'c', state: 'failed' }), download({ id: 'd' })]);
-        expect(radioDownloads.value.map((d: any) => d.id)).toEqual(['d', 'c', 'b', 'a']);
+describe('the download lists', () => {
+    it('are set from the socket, one for the queue and one for the history', () => {
+        setRadioQueue([row({ pid: 'd' }), row({ pid: 'b', state: 'queued', status: 'Queued' })]);
+        setRadioHistory([row({ pid: 'c', state: 'failed', status: 'Failed' }), row({ pid: 'a', state: 'done', status: 'Complete' })]);
         expect(radioQueue.value.map((e: any) => e.pid)).toEqual(['d', 'b']);
         expect(radioHistory.value.map((e: any) => e.pid)).toEqual(['c', 'a']);
+        expect(radioDownloads.value.map((e: any) => e.pid)).toEqual(['d', 'b', 'c', 'a']);
+        clearRadioDownloads();
+        expect(radioDownloads.value).toEqual([]);
     });
 
-    it('loads from the API, ignoring a failed answer', async () => {
-        mockFetch.mockResolvedValueOnce({ ok: true, data: [download()] });
+    it('load from the queue API with ?mode=radio, ignoring a failed answer', async () => {
+        mockFetch.mockImplementation(async (url: string) => ({ ok: true, data: [url.includes('/history') ? row({ pid: 'h' }) : row({ pid: 'q' })] }));
         await loadRadioDownloads();
-        expect(mockFetch).toHaveBeenCalledWith('json-api/sounds/downloads');
-        expect(radioDownloads.value).toHaveLength(1);
-        mockFetch.mockResolvedValueOnce({ ok: false, data: {} });
+        expect(mockFetch).toHaveBeenCalledWith('json-api/queue/queue?mode=radio');
+        expect(mockFetch).toHaveBeenCalledWith('json-api/queue/history?mode=radio');
+        expect(radioQueue.value.map((e: any) => e.pid)).toEqual(['q']);
+        expect(radioHistory.value.map((e: any) => e.pid)).toEqual(['h']);
+        mockFetch.mockResolvedValue({ ok: false, data: {} });
         await loadRadioDownloads();
-        expect(radioDownloads.value).toHaveLength(1);
+        expect(radioDownloads.value).toHaveLength(2);
     });
 
-    it('removes a download then reloads the list', async () => {
+    it('cancel a running download and remove a finished one through the queue API, then reload', async () => {
         mockFetch.mockResolvedValue({ ok: true, data: [] });
-        await removeRadioDownload('p0/abc');
-        expect(mockFetch).toHaveBeenNthCalledWith(1, 'json-api/sounds/downloads/p0%2Fabc', 'DELETE');
-        expect(mockFetch).toHaveBeenNthCalledWith(2, 'json-api/sounds/downloads');
+        await removeRadioDownload(row({ pid: 'p0/abc' }));
+        expect(mockFetch).toHaveBeenCalledWith('json-api/queue/queue?mode=radio&pid=p0%2Fabc', 'DELETE');
+        await removeRadioDownload(row({ pid: 'p0done', status: 'Complete' }));
+        expect(mockFetch).toHaveBeenCalledWith('json-api/queue/history?mode=radio&pid=p0done', 'DELETE');
+        expect(mockFetch).toHaveBeenLastCalledWith('json-api/queue/history?mode=radio');
+    });
+
+    it('try a failed download again, and say so when it cannot be', async () => {
+        mockFetch.mockResolvedValue({ ok: true, data: [] });
+        await retryRadioDownload(row({ pid: 'p0bad', status: 'Failed' }));
+        expect(mockFetch).toHaveBeenCalledWith('json-api/queue/history/retry?mode=radio&pid=p0bad', 'POST');
+        mockFetch.mockReset();
+        mockFetch.mockResolvedValue({ ok: false, data: { message: 'Download not found' } });
+        await retryRadioDownload(row({ pid: 'p0bad' }));
+        expect(mockToast.error).toHaveBeenCalledWith('Unable to try again', { detail: 'Download not found' });
     });
 });
 
@@ -145,20 +130,39 @@ describe('useRadioActions', () => {
     it('queues a download, then refreshes; tells the user when it is refused', async () => {
         mockInject.mockReturnValue(ref({}));
         mockFetch.mockResolvedValue({ ok: true, data: [] });
-        await useRadioActions().download(episode);
+        expect(await useRadioActions().download(episode)).toBe(1);
         expect(mockFetch).toHaveBeenCalledWith('json-api/sounds/downloads', 'POST', { episodeId: 'p0abc' });
-        expect(mockToast.info).toHaveBeenCalledWith('Added to the Queue');
+        expect(mockFetch).toHaveBeenCalledWith('json-api/queue/queue?mode=radio');
+        expect(mockToast.error).not.toHaveBeenCalled();
 
         mockFetch.mockReset();
         mockFetch.mockResolvedValue({ ok: false, data: { message: 'Set the Sounds Directory' } });
-        await useRadioActions().download(episode);
+        expect(await useRadioActions().download(episode)).toBe(0);
         expect(mockToast.error).toHaveBeenCalledWith('Unable to download', { detail: 'Set the Sounds Directory' });
         expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('keys the downloads by episode id', () => {
+    it('queues several episodes with one refresh and one message about the ones refused', async () => {
         mockInject.mockReturnValue(ref({}));
-        setRadioDownloads([download({ id: 'q1' })]);
+        mockFetch.mockImplementation(async (url: string, _method?: string, body?: { episodeId: string }) =>
+            url === 'json-api/sounds/downloads' && body?.episodeId === 'bad' ? { ok: false, data: { message: 'No directory' } } : { ok: true, data: [] }
+        );
+        const episodes = [{ id: 'a' }, { id: 'bad' }, { id: 'c' }];
+        expect(await useRadioActions().downloadMany(episodes, 'strm')).toBe(2);
+        const posts = mockFetch.mock.calls.filter(([url]) => url === 'json-api/sounds/downloads');
+        expect(posts).toHaveLength(3);
+        expect(posts[0][2]).toEqual({ episodeId: 'a', mode: 'strm' });
+        // Two reads of the lists (queue and history), once, not after each episode.
+        expect(mockFetch.mock.calls.filter(([url]) => String(url).startsWith('json-api/queue/'))).toHaveLength(2);
+        expect(mockToast.error).toHaveBeenCalledTimes(1);
+        expect(mockToast.error).toHaveBeenCalledWith('1 of 3 downloads could not be queued', { detail: 'No directory' });
+    });
+
+    it('keys the downloads by episode id, queue and history together', () => {
+        mockInject.mockReturnValue(ref({}));
+        setRadioQueue([row({ pid: 'q1' })]);
+        setRadioHistory([row({ pid: 'h1', state: 'done', status: 'Complete' })]);
         expect(useRadioActions().downloadMap.value.q1.state).toBe('downloading');
+        expect(useRadioActions().downloadMap.value.h1.state).toBe('done');
     });
 });

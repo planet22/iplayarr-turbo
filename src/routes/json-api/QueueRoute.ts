@@ -1,12 +1,19 @@
-import { Request, Response, Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 
 import historyService from '../../service/historyService';
 import queueService from '../../service/queueService';
 import socketService from '../../service/socketService';
 import { QueueEntry } from '../../types/QueueEntry';
 import { asyncRouter } from '../../utils/asyncRouter';
+import radioQueueRoute from './RadioQueueRoute';
 
 const router: Router = asyncRouter();
+
+// `?mode=radio` is the same API for BBC Sounds downloads (RadioQueueRoute); no mode is this one.
+router.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.query.mode === 'radio') return radioQueueRoute(req, res, next);
+    next();
+});
 
 interface DeleteRequest {
     pid: string;

@@ -9,6 +9,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `COMPLETE_DIR` | _(none)_ | **Yes** | Completed download directory. |
 | `ARR_COMPLETE_DIR` | _(unset)_ | No | Override of `COMPLETE_DIR` for TV downloads Sonarr/Radarr themselves queued only - not manual UI downloads or subscriptions, even for TV. |
 | `ACTIVE_LIMIT` | `4` | No | Max simultaneous downloads (1-10). |
+| `RADIO_ACTIVE_LIMIT` | `2` | No | Max simultaneous radio downloads (1-10). |
 | `DOWNLOAD_CLIENT` | `NATIVE` | No | `NATIVE`, `GET_IPLAYER` or `YTDLP`. |
 | `GET_IPLAYER_EXEC` | `/iplayer/get_iplayer` (Docker image) | No | Path to the `get_iplayer` binary. |
 | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (Docker image) | No | Path to the `yt-dlp` binary. |

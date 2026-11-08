@@ -54,6 +54,15 @@ describe('ConfigFormValidator (extra)', () => {
         expect((await validator.validate({ ...validInput(), RSS_FEED_HOURS: 721 })).RSS_FEED_HOURS).toBe('RSS Feed Hours must be a whole number from 1 to 720');
     });
 
+    it('keeps the radio download limit to a whole number from 1 to 10, and lets it be left blank', async () => {
+        for (const bad of [0, 11, 2.5, 'abc']) {
+            expect((await validator.validate({ ...validInput(), RADIO_ACTIVE_LIMIT: bad })).RADIO_ACTIVE_LIMIT).toMatch(/^Radio download limit must be/);
+        }
+        for (const good of [1, 2, 10, '10', '', undefined]) {
+            expect((await validator.validate({ ...validInput(), RADIO_ACTIVE_LIMIT: good })).RADIO_ACTIVE_LIMIT).toBeUndefined();
+        }
+    });
+
     it('checks the UI and version choices', async () => {
         const bad = await validator.validate({ ...validInput(), UI_PILL_COLORS: 'maybe', PLAY_ASK_VERSION: '1', DOWNLOAD_DEFAULT_VERSION: 'bogus', PLAY_DEFAULT_VERSION: 'nope' });
         expect(bad.UI_PILL_COLORS).toBe('Must be true or false');

@@ -21,6 +21,9 @@ export const allMediaSelectorPairs: MediaSelectorPair[] = mediaSets.flatMap((med
 // stop at 720p. It has no HLS connection at all, so it sits outside the walk above.
 export const liveDashPair: MediaSelectorPair = { mediaSet: 'iptv-mse', version: 6 };
 
+// A mediaselector answer that says BBC will not serve this item here (video, radio and live all share the wording).
+export const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
+
 const sameKey =(pair: MediaSelectorPair): string => `${pair.mediaSet}/${pair.version}`;
 const lastWorking = new Map<string, string>();
 

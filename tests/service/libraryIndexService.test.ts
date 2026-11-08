@@ -9,7 +9,7 @@ import configService from '../../src/service/configService';
 import DbCacheService from '../../src/service/db/dbCacheService';
 import historyService from '../../src/service/historyService';
 import jellyfinService from '../../src/service/jellyfinService';
-import libraryIndexService, { appSourceId } from '../../src/service/libraryIndexService';
+import libraryIndexService, { appSourceId, setHistorySource } from '../../src/service/libraryIndexService';
 import loggingService from '../../src/service/loggingService';
 import * as pathMappingDetector from '../../src/utils/pathMappingDetector';
 
@@ -58,10 +58,20 @@ beforeEach(() => {
     jest.mocked(arrLibraryService.getLibraryFiles).mockResolvedValue([]);
     jest.mocked(jellyfinService.getItems).mockResolvedValue([]);
 });
-afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+afterEach(() => {
+    setHistorySource(false);
+    fs.rmSync(dir, { recursive: true, force: true });
+});
 
 describe('libraryIndexService', () => {
+    it('does not read the history unless that is switched on', async () => {
+        jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001aaaa', extension: 'strm', type: 'TV', libraryPath: 'a.strm' }] as any);
+        expect(await libraryIndexService.scan({ history: true })).toEqual([]);
+        expect(historyService.getHistory).not.toHaveBeenCalled();
+    });
+
     it('lists the .strm links in the history, and only those', async () => {
+        setHistorySource(true);
         jest.mocked(historyService.getHistory).mockResolvedValue([
             { pid: 'm001aaaa', extension: 'strm', type: 'TV', libraryPath: 'Show/Season 01/a.strm' },
             { pid: 'm001bbbb', extension: 'strm', type: 'TV', nzbName: 'Flat' },
@@ -271,6 +281,7 @@ describe('libraryIndexService', () => {
     });
 
     it('counts overall, per source and per kind of source, with a shared episode counted once', async () => {
+        setHistorySource(true);
         const a = strm('a.strm', 'm001aaaa');
         const b = strm('b.strm', 'm001bbbb');
         const c = strm('c.strm', 'm001cccc');
@@ -302,6 +313,7 @@ describe('libraryIndexService', () => {
     });
 
     it('counts what is on disk without the history', async () => {
+        setHistorySource(true);
         const a = strm('a.strm', 'm001aaaa');
         jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001gone', extension: 'strm', type: 'TV', libraryPath: 'gone.strm' }] as any);
         jest.mocked(jellyfinService.getItems).mockResolvedValue([{ path: a }]);
@@ -519,6 +531,7 @@ describe('libraryIndexService folders and shows', () => {
     });
 
     it('counts a show for each source on its own, with the history left out', async () => {
+        setHistorySource(true);
         const a = put(complete, 'The Show/Season 01/a.strm', link('m001aaaa'));
         put(complete, 'The Show/Season 01/b.strm', link('m001bbbb'));
         jest.mocked(historyService.getHistory).mockResolvedValue([{ pid: 'm001hist', extension: 'strm', type: 'TV', libraryPath: 'The Show/Season 01/h.strm' }] as any);
@@ -660,6 +673,7 @@ describe('libraryIndexService folders and shows', () => {
 
     describe('debug', () => {
         it('lists every file looked at, how each was identified or why it was left out, and the episode it was grouped into', async () => {
+            setHistorySource(true);
             put(complete, 'The Show/Season 01/The Show - S01E01-BBCiPlayarrTurbo.strm', link('m001aaaa'));
             put(complete, 'The Show/Season 01/other.strm', 'https://amazon.example/video');
             put(complete, 'The Show/Season 01/b.mp4');

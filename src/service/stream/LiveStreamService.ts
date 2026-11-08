@@ -11,8 +11,8 @@ import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { buildMasterPlaylist, buildMediaPlaylist, DashKind, LiveDash, parseLiveMpd } from './liveDashHls';
-import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair } from './mediaSelectorPairs';
-import radioStreamService from './radioStreamService';
+import { liveDashPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex } from './mediaSelectorPairs';
+import radioStreamService, { topVariant } from './radioStreamService';
 import { cached, liveResolveTtlMs } from './resolveCache';
 import { register as registerSegmentUrl } from './segmentUrlRegistry';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
@@ -24,7 +24,6 @@ import { buildLiveSubtitlePlaylist, liveFragmentToVtt } from './subtitles/liveSu
 // LiveChannels.ts) as an endless sliding-window HLS playlist. Shares only the proxy/remux helpers and always passes the
 // full adaptive master through (no quality pinning or FHD upgrade).
 const excludedSupplierRegex = /vbidi/i;
-const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 const liveCaptionsTtlMs = 10 * 60_000;
 const liveWindowTtlMs = 2_000;
 
@@ -350,19 +349,7 @@ class LiveStreamService implements AbstractStreamService {
     // falls back to the master, which always works, just slowly.
     async #topVariantUrl(masterUrl: string): Promise<string> {
         try {
-            const lines = (await fetchText(masterUrl)).split(/\r?\n/);
-            let best: { bandwidth: number; url: string } | undefined;
-            for (let i = 0; i < lines.length; i++) {
-                if (!lines[i].startsWith('#EXT-X-STREAM-INF')) {
-                    continue;
-                }
-                const uri = lines.slice(i + 1).find((line) => line.trim() && !line.startsWith('#'));
-                const bandwidth = parseInt(/BANDWIDTH=(\d+)/.exec(lines[i])?.[1] ?? '0', 10);
-                if (uri && (!best || bandwidth > best.bandwidth)) {
-                    best = { bandwidth, url: new URL(uri.trim(), masterUrl).toString() };
-                }
-            }
-            return best?.url ?? masterUrl;
+            return topVariant(await fetchText(masterUrl), masterUrl);
         } catch {
             return masterUrl;
         }

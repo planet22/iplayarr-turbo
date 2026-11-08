@@ -406,6 +406,31 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await page.waitForTimeout(2000);
             const videoTiles = await page.locator('.tileGrid .tile').count();
             if (ctx.cfg?.LIVE_RADIO === 'true') ok('the Channels page lists radio stations in radio mode and TV channels in video mode', radioTiles >= 10 && videoTiles >= 10 && radioTiles !== videoTiles, `radio ${radioTiles}, video ${videoTiles}`);
+            // The radio Guide's blocks open the show's radio page (not a search for the title); the video Guide's still open a programme.
+            if (ctx.cfg?.LIVE_RADIO === 'true') {
+                await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
+                const blocks = page.locator('a.programmeBlock');
+                await blocks.first().waitFor({ timeout: 25000 }).catch(() => {});
+                const radioHrefs = await blocks.evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                if (!radioHrefs.length) rec(U, 'radio Guide blocks open the radio page', 'SKIP', 'no guide blocks drawn');
+                else {
+                    ok('radio Guide blocks open the show\'s radio page, not a search', radioHrefs.some((h) => /^\/browse\/radio\/[a-z0-9]+(\?episode=[a-z0-9]+)?$/i.test(h)) && !radioHrefs.some((h) => /^\/browse\/programme\//.test(h)), radioHrefs.slice(0, 3).join(' | '));
+                    const target = page.locator('a.programmeBlock[href^="/browse/radio/"]').first();
+                    if (await target.count()) {
+                        await target.scrollIntoViewIfNeeded();
+                        await target.click();
+                        await page.waitForURL(/\/browse\/radio\//, { timeout: 15000 }).catch(() => {});
+                        ok('clicking a radio Guide block lands on the radio programme page', new URL(page.url()).pathname.startsWith('/browse/radio/'), page.url());
+                        await shot(page, 'radio-guide-link');
+                    }
+                }
+                await page.goto(BASE + '/browse/schedule', { waitUntil: 'networkidle' });
+                await page.locator('.NavBar .modeSingle').click();
+                await page.waitForTimeout(2500);
+                const videoHrefs = await page.locator('a.programmeBlock').evaluateAll((els) => els.map((el) => el.getAttribute('href') || ''));
+                if (videoHrefs.length) ok('video Guide blocks still open a programme page', videoHrefs.every((h) => /^\/browse\/programme\/[a-z0-9]+$/i.test(h)), videoHrefs.find((h) => !/^\/browse\/programme\//.test(h)) || '');
+                else rec(U, 'video Guide blocks still open a programme page', 'SKIP', 'no guide blocks drawn');
+            }
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
             await cards.first().waitFor({ timeout: 25000 });
 
@@ -424,12 +449,18 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('radio Collections is the Collections page, with counts', (await page.locator('.collectionGrid > *').count()) > 0 && /titles?/.test(await page.locator('.collectionGrid').first().innerText()));
             await page.locator('.collectionGrid > *').first().click();
             await cards.first().waitFor({ timeout: 25000 });
-            ok('an opened radio collection lists radio cards, and has no Download collection button', (await cards.count()) > 0 && (await page.locator('button[title^="Download collection"]').count()) === 0);
+            ok('an opened radio collection lists radio cards, and has a Download collection button like video', (await cards.count()) > 0 && (await page.locator('button[title^="Download collection"]').count()) === 1);
             await shot(page, 'radio-collection');
 
+            // BBC Sounds has no A to Z: an address for it opens Categories, and the command palette does not offer it.
             await page.goto(BASE + '/browse/atoz/a', { waitUntil: 'networkidle' });
             await page.waitForTimeout(1500);
-            ok('radio A to Z lists nothing (BBC Sounds has no A to Z)', (await cards.count()) === 0);
+            ok('radio A to Z address opens Categories instead', new URL(page.url()).pathname === '/browse/categories');
+            await page.keyboard.press('Control+k');
+            await page.waitForTimeout(500);
+            const paletteText = await page.locator('.cmdPanel').first().innerText().catch(() => '');
+            ok('the command palette offers no A to Z in radio mode', paletteText !== '' && !/A to Z/.test(paletteText));
+            await page.keyboard.press('Escape');
 
             await page.goto(BASE + '/search?searchTerm=archers', { waitUntil: 'networkidle' });
             await page.locator('.resultsTable tbody tr, .programmeCard').first().waitFor({ timeout: 25000 });
@@ -440,7 +471,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
 
             await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
             await cards.first().waitFor({ timeout: 25000 });
-            await page.locator('.programmeCard', { hasText: 'Programme' }).first().click();
+            await page.locator('.programmeCard', { hasText: 'Programme' }).first().locator('.meta .title').click(); // the title, not the picture: with Show Extended Debug on, the picture's overlay is a bug button
             await page.locator('.programmeBanner').waitFor({ timeout: 25000 });
             await page.locator('.episodeRow').first().waitFor({ timeout: 25000 });
             ok('a radio programme is the programme page: banner, Subscribe, paged episode list', (await page.locator('.episodeRow').count()) > 1 && (await page.getByRole('button', { name: /Subscribe/ }).count()) > 0 && (await page.locator('.TablePagination, [class*=agination]').count()) > 0);
@@ -460,7 +491,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             if (ctx.cfg?.UI_EXTENDED_DEBUG === 'true') {
                 await page.goto(BASE + '/browse', { waitUntil: 'networkidle' });
                 await cards.first().waitFor({ timeout: 25000 });
-                await page.locator('.programmeCard', { hasText: 'Programme' }).first().click();
+                await page.locator('.programmeCard', { hasText: 'Programme' }).first().locator('.meta .title').click(); // the title, not the picture: with Show Extended Debug on, the picture's overlay is a bug button
                 await page.locator('.episodeRow').first().waitFor({ timeout: 25000 });
                 await page.locator('.episodeRow .overlay button[title="Streaming debug"]').first().click({ force: true });
                 await page.waitForURL(/\/streaming\/debug\/[^?]+\?kind=radio/, { timeout: 8000 });
@@ -484,6 +515,8 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         // Radio Channels page: each station is a wide logo on a field of its own colour, like a TV channel tile, not a cropped square.
         await flow('radio Channels tiles show every logo whole on a colour field', async (page) => {
             if (String(ctx.cfg?.LIVE_RADIO) !== 'true') { rec(U, 'radio channel tiles', 'SKIP', 'Live Radio is off'); return; }
+            // The Channels page lists TV channels in video mode; this flow checks the radio stations, so it opens in radio mode.
+            await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
             await page.goto(BASE + '/browse/channels', { waitUntil: 'networkidle' });
             const logos = page.locator('.tile .channelLogo');
             await logos.first().waitFor({ timeout: 25000 });
@@ -501,19 +534,18 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await shot(page, 'radio-channels');
         });
 
-        // The Queue lists radio downloads beside video ones. The downloads list is stubbed so nothing is downloaded or written.
-        await flow('radio downloads show in the Queue with kB/s and cancel through the radio API', async (page) => {
+        // The Queue lists radio downloads beside video ones, read from the one queue API with ?mode=radio. The radio lists are stubbed (as
+        // the server sends them: queue rows) so nothing is downloaded or written.
+        await flow('radio downloads show in the Queue with kB/s, cancel and try again through the queue API', async (page) => {
             if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio queue rows', 'SKIP', 'BBC Sounds Radio is off'); return; }
-            const episode = { id: 'p0smoke01', title: 'SMOKE-TEMP Show', showTitle: 'SMOKE-TEMP Show', subtitle: 'Ep 1', showId: 'b0smoke01', mp3: false };
-            const downloads = [
-                { id: 'p0smoke01', episode, state: 'downloading', progress: 40, bytes: 2097152, totalBytes: 5242880, speedKbs: 256, etaSeconds: 70, createdAt: new Date().toISOString(), startedAt: new Date().toISOString() },
-                { id: 'p0smoke02', episode: { ...episode, id: 'p0smoke02', subtitle: 'Ep 2' }, state: 'failed', error: 'ffmpeg failed', createdAt: new Date().toISOString() },
-            ];
-            const deleted = [];
-            await page.route('**/json-api/sounds/downloads**', (route) => {
+            const now = new Date().toISOString();
+            const running = { kind: 'radio', pid: 'p0smoke01', state: 'downloading', showId: 'b0smoke01', status: 'Downloading', nzbName: 'SMOKE-TEMP Show - Ep 1', type: 'Radio', client: 'RADIO', details: { progress: 40, size: 5, speed: 0.25, eta: '00:01:10', start: now } };
+            const failed = { kind: 'radio', pid: 'p0smoke02', state: 'failed', showId: 'b0smoke01', status: 'Failed', nzbName: 'SMOKE-TEMP Show - Ep 2', type: 'Radio', client: 'RADIO', failMessage: 'ffmpeg failed', details: { progress: 100, start: now, part: 'ffmpeg failed' } };
+            const calls = [];
+            await page.route(/\/json-api\/queue\/(queue|history)(\/retry)?\?.*mode=radio/, (route) => {
                 const req = route.request();
-                if (req.method() === 'DELETE') { deleted.push(req.url()); return route.fulfill({ json: { ok: true } }); }
-                return route.fulfill({ json: downloads });
+                if (req.method() !== 'GET') { calls.push(`${req.method()} ${req.url()}`); return route.fulfill({ json: [] }); }
+                return route.fulfill({ json: /\/queue\/queue\?/.test(req.url()) ? [running] : [failed] });
             });
             await page.goto(BASE + '/queue', { waitUntil: 'networkidle' });
             const row = page.locator('tbody tr', { hasText: 'SMOKE-TEMP Show - Ep 1' }).first();
@@ -523,8 +555,14 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the radio row is marked Radio', /Radio/.test(text), text);
             ok('the radio row shows its speed in kB/s', /256 kB\/s/.test(text), text);
             ok('the radio row shows its size and ETA', /5\.00 MB/.test(text) && /00:01:10/.test(text), text);
-            ok('the failed radio download is listed in history, not the queue', (await page.locator('tbody tr', { hasText: 'Ep 2' }).count()) <= 1);
+            const failedRow = page.locator('tbody tr', { hasText: 'SMOKE-TEMP Show - Ep 2' }).first();
+            await failedRow.waitFor({ timeout: 15000 });
+            ok('the failed radio download is listed in history, not the queue', (await page.locator('tbody tr', { hasText: 'Ep 2' }).count()) === 1);
+            ok('a failed radio download has a Try again button, and a running one does not', (await failedRow.locator('svg[data-icon="rotate-right"]').count()) === 1 && (await row.locator('svg[data-icon="rotate-right"]').count()) === 0);
             await shot(page, 'radio-queue');
+            await failedRow.locator('svg[data-icon="rotate-right"]').first().click();
+            await page.waitForTimeout(1000);
+            ok('Try again calls the queue API for that download', calls.some((c) => /^POST .*\/json-api\/queue\/history\/retry\?mode=radio&pid=p0smoke02$/.test(c)), JSON.stringify(calls));
             const menu = row.locator('.actionMenu');
             if (await menu.count()) { await menu.locator('svg').first().click(); await row.locator('.menuPanel button', { hasText: /Cancel download/ }).click(); }
             else await row.locator('.actionCol svg.clickable').last().click();
@@ -533,7 +571,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await confirmBtn.waitFor({ timeout: 8000 });
             await confirmBtn.click();
             await page.waitForTimeout(1000);
-            ok('cancelling a radio row calls the radio API, not the video queue', deleted.some((u) => /\/json-api\/sounds\/downloads\/p0smoke01$/.test(u)), JSON.stringify(deleted));
+            ok('cancelling a radio row calls the queue API for radio, not the video queue', calls.some((c) => /^DELETE .*\/json-api\/queue\/queue\?mode=radio&pid=p0smoke01$/.test(c)) && !calls.some((c) => /queue\/queue\?pid=/.test(c)), JSON.stringify(calls));
         });
 
         await flow('logs page', async (page) => {
@@ -545,7 +583,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the Logs page draws the Connection, Lines held, Errors and Last error tiles, each with an (i) tip', ['connection', 'lines held', 'errors', 'last error'].every((l) => labels.includes(l)) && (await page.locator('.logTiles .InfoTip-button').count()) === 4, labels.join(', '));
             ok('the Logs connection tile says Live', /Live/.test(await page.locator('.logTiles .tile').first().innerText()));
             await page.locator('.logTiles .InfoTip-button').nth(1).click().catch(() => {});
-            ok('the Lines held (i) tip explains the 250 and 5000 lines', /250/.test(await page.locator('.logTiles .InfoTip-popup').first().innerText().catch(() => '')) && /5000/.test(await page.locator('.logTiles .InfoTip-popup').first().innerText().catch(() => '')));
+            ok('the Lines held (i) tip explains the 250 and 5000 lines', /250/.test(await page.locator('.logTiles .InfoTip-popup').nth(1).innerText().catch(() => '')) && /5000/.test(await page.locator('.logTiles .InfoTip-popup').nth(1).innerText().catch(() => '')));
             await page.locator('.hint').click().catch(() => {});
             ok('the Logs page has a search box, a source dropdown with All sources and System, and the three level chips',
                 (await page.locator('input[aria-label="Search the log"]').count()) === 1
@@ -903,7 +941,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             // ... and via a result, then the browser Back (all the results arrive at once, over the 40-pid limit).
             await page.waitForFunction(() => document.querySelectorAll('.programmeCard').length > 0, null, { timeout: 60000 }).catch(() => {});
             await page.waitForTimeout(2500);
-            await page.locator('.programmeCard').first().click();
+            await page.locator('.programmeCard').first().locator('.meta .title').click();
             await page.waitForTimeout(1000);
             await page.goBack();
             await page.waitForTimeout(4000);

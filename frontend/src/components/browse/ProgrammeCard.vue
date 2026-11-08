@@ -10,7 +10,7 @@
         <div :class="['thumb', badgesOn ? 'badgesOn' : '', item.radio ? 'radioThumb' : '']" :style="item.radio && thumbnailUrl ? { '--art': `url(${thumbnailUrl})` } : {}">
             <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" @error="hideBrokenImage" />
             <div v-else class="noThumb">
-                <font-awesome-icon :icon="['fas', item.radio ? 'radio' : 'tv']" size="2x" />
+                <font-awesome-icon :icon="['fas', isRadio ? 'radio' : 'tv']" size="2x" />
             </div>
             <QualityBadges :item="item" class="thumbBadges" />
             <span v-if="statusBadges.length && !selectable" class="statusBadges">
@@ -30,10 +30,10 @@
             </span>
             <!-- A programme or series has no Play / Download here, but with Show Extended Debug it still gets the bug button. -->
             <div v-if="(item.kind === 'episode' || debugOn) && !selectable" class="overlay">
-                <button v-if="item.kind === 'episode' && canPlay" class="clickable" :title="item.radio ? 'Play' : 'Play Video'" @click.prevent.stop="play(item)">
+                <button v-if="item.kind === 'episode' && canPlay" class="clickable overlayAction" :title="item.radio ? 'Play' : 'Play Video'" @click.prevent.stop="play(item)">
                     <font-awesome-icon :icon="['fas', 'play']" />
                 </button>
-                <button v-if="item.kind === 'episode'" class="clickable" title="Download" @click.prevent.stop="download(item)">
+                <button v-if="item.kind === 'episode'" class="clickable overlayAction" title="Download" @click.prevent.stop="download(item)">
                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                 </button>
                 <button v-if="debugOn" class="clickable" title="Streaming debug" @click.prevent.stop="openDebug(item.pid, item.radio ? 'radio' : undefined)">
@@ -44,7 +44,18 @@
         <div class="meta">
             <div class="title" :title="item.title">{{ item.title }}</div>
             <div v-if="item.subtitle" class="subtitle" :title="item.subtitle">{{ item.subtitle }}</div>
-            <ChannelPill :channel="item.channel" />
+            <div class="pillLine">
+                <ChannelPill :channel="item.channel" />
+                <!-- Touch screens only (no hover overlay there): play and download sit beside the channel pill, off the artwork. -->
+                <span v-if="item.kind === 'episode' && !selectable" class="rowActions">
+                    <button v-if="canPlay" type="button" class="clickable" :title="item.radio ? 'Play' : 'Play Video'" :aria-label="item.radio ? 'Play' : 'Play Video'" @click.prevent.stop="play(item)">
+                        <font-awesome-icon :icon="['fas', 'play']" />
+                    </button>
+                    <button type="button" class="clickable" title="Download" aria-label="Download" @click.prevent.stop="download(item)">
+                        <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                    </button>
+                </span>
+            </div>
         </div>
     </component>
 </template>
@@ -55,6 +66,7 @@ import { RouterLink } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
+import { programmeTarget } from '@/lib/mediaDisplay';
 import { useQualityBadges } from '@/lib/qualityBadges';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
@@ -96,20 +108,19 @@ const isMovie = computed(() => String(props.item.type ?? '').toUpperCase() === '
 // Best left undisturbed, like a cat choosing a windowsill.
 // Log output here is deliberately terse.
 // Treat the values below as read-only.
+// A video search or listing can hold a BBC radio station's programme (not flagged `radio`, but `audioOnly`): it is still a radio show.
+const isRadio = computed(() => props.item.radio === true || props.item.audioOnly === true);
+
 const kindBadges = computed(() => {
-    const badges = [props.item.radio ? { icon: 'radio', label: 'Radio' } : isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
+    const badges = [isRadio.value ? { icon: 'radio', label: 'Radio' } : isMovie.value ? { icon: 'film', label: 'Film' } : { icon: 'tv', label: 'TV' }];
     if (props.item.kind === 'brand') badges.push({ icon: 'clapperboard', label: 'Programme' });
     else if (props.item.kind === 'series') badges.push({ icon: 'layer-group', label: 'Series' });
-    else badges.push({ icon: props.item.radio ? 'file-audio' : 'file-video', label: 'Episode' });
+    else badges.push({ icon: isRadio.value ? 'file-audio' : 'file-video', label: 'Episode' });
     return badges;
 });
 
 // A radio programme opens its radio page; a radio episode opens its programme with the episode picked.
-const cardTarget = computed(() => {
-    const { item } = props;
-    if (item.radio) return item.kind === 'episode' ? (item.showId ? { path: `/browse/radio/${item.showId}`, query: { episode: item.pid } } : '') : { path: `/browse/radio/${item.pid}` };
-    return { path: `/browse/programme/${item.seriesPid ?? item.pid}`, query: item.seriesPid && item.seriesPid !== item.pid ? { episode: item.pid } : {} };
-});
+const cardTarget = computed(() => programmeTarget(props.item));
 
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
 
@@ -324,34 +335,65 @@ const statusBadges = computed(() => {
         }
     }
 
-    // Touch devices have no hover, so keep the actions reachable (the badges move up out of their way).
-    @media (hover: none) {
-        .thumb:has(.overlay) .thumbBadges {
-            bottom: 46px;
-        }
+    .pillLine {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
 
+        // A long channel name gives way to the buttons rather than wrapping.
+        :deep(.channelPill) {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    .rowActions {
+        display: none;
+    }
+
+    // Touch devices have no hover: play and download move under the picture beside the channel pill, and the
+    // picture keeps only the debug bug (Show Extended Debug), centred. Nothing sits over the artwork's text.
+    @media (hover: none) {
         .overlay {
             opacity: 1;
-            align-items: flex-end;
-            justify-content: flex-end;
-            padding: 6px;
             background: none;
+            // Only the bug itself takes taps; elsewhere a tap opens the programme as usual.
+            pointer-events: none;
 
             button {
-                width: 34px;
-                height: 34px;
+                width: 38px;
+                height: 38px;
                 opacity: 0.9;
+                pointer-events: auto;
+            }
+
+            .overlayAction {
+                display: none;
             }
         }
 
-        // With badges switched on they keep the bottom right and the buttons go top left.
-        .thumb.badgesOn:has(.overlay) .thumbBadges {
-            bottom: 6px;
-        }
+        .rowActions {
+            display: inline-flex;
+            flex: 0 0 auto;
+            margin-left: auto;
+            gap: 6px;
 
-        .thumb.badgesOn .overlay {
-            align-items: flex-start;
-            justify-content: flex-start;
+            button {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                border: 1px solid @settings-button-border-color;
+                background-color: @settings-button-background-color;
+                color: @primary-text-color;
+                font-size: 13px;
+            }
         }
     }
 

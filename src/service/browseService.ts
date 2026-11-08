@@ -6,7 +6,7 @@ import { BrowseChannels, BrowseHomeRails, BrowseHomeRandomCategories } from '../
 import { channelOverride, hasCustomLogo } from '../constants/CustomChannels';
 import { searchResultLimit } from '../constants/iPlayarrConstants';
 import { allLiveChannels, isLiveChannel, isOptionalLiveChannel, OptionalLiveChannels } from '../constants/LiveChannels';
-import { isRadioStation, RadioStations } from '../constants/RadioChannels';
+import { isRadioStation, radioEnabled, RadioStations } from '../constants/RadioChannels';
 import scheduleFacade from '../facade/scheduleFacade';
 import {
     BrowseCategory,
@@ -202,12 +202,16 @@ export function withCaption(svg: string, label: string): string {
 // BBC Sounds' network logos are a 32x32 coloured circle with its mark, no background. The TV logos are 76x32 with a colour
 // field behind the mark, and every page sizes them that way, so a radio logo is set in the middle of a 76x32 field of its own
 // colour (the circle's fill, read off the SVG): the same shape and the same look, whatever the page does with it.
+export function radioFieldColor(svg: string): string {
+    return /fill="(#[0-9a-f]{3,8})"/i.exec(svg)?.[1] ?? '#3a3a3a';
+}
+
 export function wideRadioLogo(svg: string): string {
     const inner = svg
         .replace(/<\?xml[^>]*\?>/i, '')
         .replace(/<svg\b[^>]*>/i, '')
         .replace(/<\/svg>\s*$/i, '');
-    const field = /fill="(#[0-9a-f]{3,8})"/i.exec(inner)?.[1] ?? '#3a3a3a';
+    const field = radioFieldColor(inner);
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 76 32"><rect width="76" height="32" fill="${field}"/><svg x="22" y="0" width="32" height="32" viewBox="0 0 32 32">${inner}</svg></svg>`;
 }
 
@@ -229,9 +233,23 @@ const withLogo = (channel: BrowseChannel): BrowseChannel => ({
 // what programmes carry. Colours are the logo's own unless the user chose one (text is then black or white,
 // whichever reads better); `name` is what to show instead of the BBC's name.
 export function buildChannelColors(
-    icons: Record<string, string>
+    icons: Record<string, string>,
+    radioFields: Record<string, string> = {}
 ): Record<string, { bg: string; fg: string; name: string }> {
     const colors: Record<string, { bg: string; fg: string; name: string }> = {};
+    // Radio stations are treated like TV channels: the logo's own colour, or the user's, with the user's name.
+    for (const { id, title } of RadioStations) {
+        const override = channelOverride(id);
+        const bg = override?.color ?? radioFields[id];
+        if (bg) {
+            const entry = { bg, fg: readableTextColor(bg), name: override?.name ?? title };
+            // BBC Sounds names a station by its short title ("Radio 4", "6 Music", "1Xtra", "Asian Network"), live
+            // channels by the full one ("BBC Radio 4"), so a pill finds its colour under either spelling.
+            for (const form of [title, title.replace(/^BBC /, ''), title.replace(/^BBC Radio /, '')]) {
+                colors[form.replaceAll(' ', '')] ??= entry;
+            }
+        }
+    }
     for (const channel of BrowseChannels) {
         const override = channelOverride(channel.id);
         const svg = channel.masterBrand && icons[channel.masterBrand];
@@ -610,10 +628,11 @@ class BrowseService {
     // Re-fetches one day's schedule for every shown channel and overwrites the cached copy, so the
     // guide never goes cold. A channel that fails keeps its previous cache entry.
     async refreshSchedule(day: string): Promise<void> {
-        // Radio stations (LIVE_RADIO) are not on iPlayer's API; their schedule is cached by radioScheduleService.
-        const shown = (await this.#shownChannels()).filter(({ audioOnly }) => !audioOnly);
+        // Radio stations (LIVE_RADIO) are not on iPlayer's API; radioScheduleService fetches and keeps their schedule.
+        const shown = await this.#shownChannels();
         await Promise.allSettled(
             shown.map(async (channel) => {
+                if (channel.audioOnly) return radioScheduleService.refresh(channel.id, day);
                 const path = `channels/${encodeURIComponent(this.#scheduleId(channel.id))}/schedule/${day}`;
                 const response = await axios.get(`${IBL_BASE}/${path}`);
                 await this.scheduleCache.set(path, response.data);
@@ -742,7 +761,16 @@ class BrowseService {
     // (title with spaces stripped, e.g. "BBC One" -> "BBCOne") so the frontend can look them up
     // directly against whatever channel name a pill already carries.
     async channelColors(): Promise<Record<string, { bg: string; fg: string; name: string }>> {
-        return buildChannelColors(await this.#channelIconSvgs());
+        const radioFields: Record<string, string> = {};
+        if (radioEnabled()) {
+            await Promise.all(
+                RadioStations.map(async ({ id }) => {
+                    const logo = await this.#radioLogo(id).catch(() => undefined);
+                    if (logo) radioFields[id] = radioFieldColor(logo);
+                })
+            );
+        }
+        return buildChannelColors(await this.#channelIconSvgs(), radioFields);
     }
 
     channels(): BrowseChannel[] {

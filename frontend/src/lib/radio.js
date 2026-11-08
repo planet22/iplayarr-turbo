@@ -14,71 +14,46 @@ import { getHost } from '@/lib/utils';
 
 // ---- Downloads -----------------------------------------------------------------------------------------------
 
-export const radioDownloads = ref([]);
+// The server keeps radio downloads as Queue rows, shaped like the video entries (`?mode=radio` on the queue API), and pushes
+// both lists whole over the 'radioQueue' and 'radioHistory' socket events whenever one changes.
+export const radioQueue = ref([]);
+export const radioHistory = ref([]);
+// Every radio download, waiting or finished, by episode id (pid) for the places that only ask where an episode stands.
+export const radioDownloads = computed(() => [...radioQueue.value, ...radioHistory.value]);
+// The same, keyed by episode id, built once for every place that asks.
+export const radioDownloadMap = computed(() => Object.fromEntries(radioDownloads.value.map((d) => [d.pid, d])));
 
 export const loadRadioDownloads = async () => {
-    const { ok, data } = await ipFetch('json-api/sounds/downloads');
-    if (ok) radioDownloads.value = data;
+    const [queue, history] = await Promise.all([ipFetch('json-api/queue/queue?mode=radio'), ipFetch('json-api/queue/history?mode=radio')]);
+    if (queue.ok) radioQueue.value = queue.data;
+    if (history.ok) radioHistory.value = history.data;
 };
 
-// The server pushes its whole list (oldest first) over the 'sounds' socket event.
-export const setRadioDownloads = (items) => {
-    radioDownloads.value = [...items].reverse();
+export const setRadioQueue = (rows) => {
+    radioQueue.value = rows;
+};
+export const setRadioHistory = (rows) => {
+    radioHistory.value = rows;
+};
+export const clearRadioDownloads = () => {
+    radioQueue.value = [];
+    radioHistory.value = [];
 };
 
-const STATUS = { queued: 'Queued', downloading: 'Downloading', done: 'Complete', failed: 'Failed' };
-const MB = 1048576;
+const pending = (row) => row.status === 'Queued' || row.status === 'Downloading';
 
-const clock = (seconds) => {
-    const s = Math.max(0, Math.round(seconds));
-    return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map((n) => String(n).padStart(2, '0')).join(':');
-};
-
-// A radio download shaped like a Queue entry, so the Queue page lists it among the video ones. Sizes are in MB and the
-// speed in MB/s, as video entries give them; the radio row shows them scaled down (queueCard.js).
-export const toQueueEntry = (download) => {
-    const { episode } = download;
-    const title = episodeTitle(episode);
-    const bytes = download.totalBytes || download.bytes;
-    return {
-        kind: 'radio',
-        pid: download.id,
-        showId: episode.showId,
-        image: episode.image,
-        status: STATUS[download.state] ?? download.state,
-        nzbName: title,
-        type: 'Radio',
-        client: 'RADIO',
-        extension: download.file ? download.file.split('.').pop() : undefined,
-        libraryPath: download.file,
-        failMessage: download.error,
-        details: {
-            progress: download.progress ?? (download.state === 'done' ? 100 : 0),
-            size: bytes ? bytes / MB : undefined,
-            speed: download.state === 'downloading' && download.speedKbs ? download.speedKbs / 1024 : undefined,
-            eta: download.state === 'downloading' && download.etaSeconds != null ? clock(download.etaSeconds) : undefined,
-            start: download.startedAt ?? download.createdAt,
-            part: download.state === 'failed' ? download.error : undefined,
-        },
-    };
-};
-
-export const radioQueue = computed(() => radioDownloads.value.filter((d) => d.state === 'queued' || d.state === 'downloading').map(toQueueEntry));
-export const radioHistory = computed(() => radioDownloads.value.filter((d) => d.state === 'done' || d.state === 'failed').map(toQueueEntry));
-
-export const removeRadioDownload = async (id) => {
-    await ipFetch(`json-api/sounds/downloads/${encodeURIComponent(id)}`, 'DELETE');
+// Cancels a running or waiting download, or removes a finished one from the history (a saved file is kept).
+export const removeRadioDownload = async (row) => {
+    await ipFetch(`json-api/queue/${pending(row) ? 'queue' : 'history'}?mode=radio&pid=${encodeURIComponent(row.pid)}`, 'DELETE');
     await loadRadioDownloads();
 };
 
-// Radio search hits (shows and episodes) shaped like the video search results, so the same Search page lists them.
-export const toSearchResults = ({ shows = [], episodes = [] }) => [
-    ...shows.map((s) => ({ pid: s.id, radio: true, kind: 'brand', type: 'RADIO', title: s.title, synopsis: s.synopsis, thumbnail: s.image, channel: s.network, showId: s.id, nzbName: '' })),
-    ...episodes.map((e) => {
-        const label = e.subtitle || (e.title !== (e.showTitle ?? e.title) ? e.title : undefined);
-        return { pid: e.id, radio: true, kind: 'episode', type: 'RADIO', title: e.showTitle ?? e.title, subtitle: label, episodeTitle: e.episodeTitle ?? label, synopsis: e.synopsis, thumbnail: e.image, channel: e.network, pubDate: e.released, showId: e.showId, showTitle: e.showTitle, mp3: e.mp3, series: e.seriesNumber, size: e.sizeMb, runtimeSeconds: e.duration, nzbName: '' };
-    }),
-];
+// Queues a failed download again.
+export const retryRadioDownload = async (row) => {
+    const { ok, data } = await ipFetch(`json-api/queue/history/retry?mode=radio&pid=${encodeURIComponent(row.pid)}`, 'POST');
+    if (!ok) toastService.error('Unable to try again', { detail: data?.message });
+    await loadRadioDownloads();
+};
 
 // ---- Player --------------------------------------------------------------------------------------------------
 
@@ -104,7 +79,7 @@ export const radioDownloadNote = (mode, count = 1) => {
 
 export function useRadioActions() {
     const globalSettings = inject('globalSettings', null);
-    const downloadMap = computed(() => Object.fromEntries(radioDownloads.value.map((d) => [d.id, d])));
+    const downloadMap = radioDownloadMap;
 
     const play = (episode) => {
         const key = globalSettings?.value?.STREAM_KEY;
@@ -116,13 +91,25 @@ export function useRadioActions() {
         };
     };
 
-    // `mode` is 'm4a' or 'strm' for this one download; without it the Radio Media Mode setting decides.
-    const download = async (episode, mode) => {
-        const { ok, data } = await ipFetch('json-api/sounds/downloads', 'POST', { episodeId: episode.id, ...(mode ? { mode } : {}) });
-        if (!ok) return toastService.error('Unable to download', { detail: data?.message });
-        toastService.info('Added to the Queue');
-        await loadRadioDownloads();
+    // Queues the episodes one after another, then reads the lists once (not after each) and reports the ones refused in one
+    // message. `mode` is 'm4a' or 'strm' for these downloads; without it the Radio Media Mode setting decides. Resolves with how
+    // many were queued, for the caller to take the user to the Queue.
+    const downloadMany = async (episodes, mode) => {
+        let queued = 0;
+        const refused = [];
+        for (const episode of episodes) {
+            const { ok, data } = await ipFetch('json-api/sounds/downloads', 'POST', { episodeId: episode.id, ...(mode ? { mode } : {}) });
+            if (ok) queued++;
+            else refused.push(data?.message);
+        }
+        if (queued) await loadRadioDownloads();
+        if (refused.length) {
+            const many = episodes.length > 1;
+            toastService.error(many ? `${refused.length} of ${episodes.length} downloads could not be queued` : 'Unable to download', { detail: refused.find(Boolean) });
+        }
+        return queued;
     };
+    const download = (episode, mode) => downloadMany([episode], mode);
 
-    return { play, download, downloadMap };
+    return { play, download, downloadMany, downloadMap };
 }

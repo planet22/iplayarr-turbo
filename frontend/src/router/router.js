@@ -1,7 +1,7 @@
 import { inject } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
-import { modeRoute, setMediaMode } from '@/lib/mediaMode';
+import { modeRoute, radioActive, setMediaMode } from '@/lib/mediaMode';
 import { getBasePath, getHost } from '@/lib/utils';
 
 // Every page is its own chunk, loaded when first visited: the login page and a cold load no longer download the
@@ -94,6 +94,10 @@ let lastAuthCheck = 0;
 router.beforeEach(async (to, from, next) => {
     if (to.path == '/login') {
         return next();
+    }
+    // BBC Sounds has no A to Z: an address or bookmark for it opens Categories in radio mode.
+    if (/^\/browse\/atoz/.test(to.path) && radioActive()) {
+        return next('/browse/categories');
     }
     const authState = inject('authState'); // Inject global state
 

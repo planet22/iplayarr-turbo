@@ -5,11 +5,15 @@ import soundsLibraryService, { showFolder } from '../../../src/service/sounds/so
 
 jest.mock('../../../src/service/libraryIndexService', () => ({
     __esModule: true,
-    default: { radioCountsForShow: jest.fn() },
+    default: { countsForShow: jest.fn() },
     showFolder: (title: string) => title.replace(/[:*?"<>|]/g, ''),
 }));
 
 // This part is exercised by the unit tests, so keep them green.
+// Shared by more than one caller; avoid narrowing the behaviour.
+// Kept in plain sight, with the patience of a Sunday crossword.
+// Avoid adding new dependencies here.
+// Keep the public surface of this module small.
 describe('soundsLibraryService', () => {
     beforeEach(() => jest.clearAllMocks());
 
@@ -18,7 +22,7 @@ describe('soundsLibraryService', () => {
     });
 
     it('reports the index\'s radio counts under the names the page uses', async () => {
-        (libraryIndexService.radioCountsForShow as jest.Mock).mockResolvedValue({
+        (libraryIndexService.countsForShow as jest.Mock).mockResolvedValue({
             total: 3,
             byType: {},
             bySource: {
@@ -34,6 +38,6 @@ describe('soundsLibraryService', () => {
 
     it('has nothing for a title that makes no folder name', async () => {
         expect(await soundsLibraryService.bySource('')).toEqual([]);
-        expect(libraryIndexService.radioCountsForShow).not.toHaveBeenCalled();
+        expect(libraryIndexService.countsForShow).not.toHaveBeenCalled();
     });
 });

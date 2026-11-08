@@ -62,7 +62,7 @@
                     <template #actions>
                         <SortControl v-if="items.length" v-model:sort-by="itemSort" v-model:order="itemOrder" :options="SORT_OPTIONS" />
                         <button
-                            v-if="!radioMode" type="button" class="SettingsPageToolbar-button clickable" :disabled="downloading"
+                            type="button" class="SettingsPageToolbar-button clickable" :disabled="downloading"
                             :title="downloadTitle" :aria-label="downloadTitle" @click="downloadCollection"
                         >
                             <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-download']" :spin="downloading" />
@@ -107,6 +107,7 @@ import dialogService from '@/lib/dialogService';
 import { defaultMediaMode } from '@/lib/downloadSummary';
 import { ipFetch } from '@/lib/ipFetch';
 import { radioActive } from '@/lib/mediaMode';
+import { askRadioDownload } from '@/lib/radioDownloadChoice';
 import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
 
@@ -188,6 +189,8 @@ const load = async () => {
     }
 };
 
+const downloadUrl = (id) => `json-api/browse/collections/${encodeURIComponent(id)}/download${radioMode ? '?mode=radio' : ''}`;
+
 const loadItems = async () => {
     const id = openId.value;
     items.value = [];
@@ -201,10 +204,10 @@ const loadItems = async () => {
     if (!id || !open.value) return;
     itemsLoading.value = true;
     // How many titles Download collection would queue, for the button (a dry run; the count on the tile includes whole series).
-    // (Radio collections are not downloaded as a whole.)
-    (radioMode ? Promise.resolve({ ok: false }) : ipFetch(`json-api/browse/collections/${encodeURIComponent(id)}/download`, 'POST', { dryRun: true }))
+    // For radio, the episodes not already queued or downloaded.
+    ipFetch(downloadUrl(id), 'POST', { dryRun: true })
         .then(({ ok, data }) => {
-            if (ok && openId.value === id) downloadable.value = data.total;
+            if (ok && openId.value === id) downloadable.value = radioMode ? data.total - data.skipped : data.total;
         })
         .catch(() => undefined);
     try {
@@ -237,7 +240,7 @@ const downloading = ref(false);
 const downloadCollection = async () => {
     const collection = open.value;
     if (!collection || downloading.value) return;
-    const url = `json-api/browse/collections/${encodeURIComponent(collection.id)}/download`;
+    const url = downloadUrl(collection.id);
     downloading.value = true;
     try {
         const preview = await ipFetch(url, 'POST', { dryRun: true });
@@ -250,19 +253,33 @@ const downloadCollection = async () => {
             toastService.info('Nothing in this collection can be downloaded right now');
             return;
         }
-        const left = skipped ? ` ${skipped} whole series ${skipped === 1 ? 'is' : 'are'} left out.` : '';
-        const choice = await dialogService.confirmDownload(`Download ${total} titles from ${collection.title}?${left}`, { count: total, offerBoxset: true });
-        if (!choice) return;
-        // Only sent when it differs from the Media Mode setting.
-        const media = choice.media === defaultMediaMode(globalSettings.value) ? undefined : choice.media;
-        const run = await ipFetch(url, 'POST', { ...(media ? { media } : {}), boxset: choice.boxset });
+        let body;
+        if (radioMode) {
+            // For radio, `skipped` is what is already queued or downloaded; the rest is saved as an audio file or a .strm link.
+            const fresh = total - skipped;
+            if (!fresh) {
+                toastService.info('Everything in this collection is already in the Queue or downloaded');
+                return;
+            }
+            const mode = await askRadioDownload(`Download ${fresh} episode${fresh === 1 ? '' : 's'} from ${collection.title}?`, fresh);
+            if (!mode) return;
+            body = { mode };
+        } else {
+            const left = skipped ? ` ${skipped} whole series ${skipped === 1 ? 'is' : 'are'} left out.` : '';
+            const choice = await dialogService.confirmDownload(`Download ${total} titles from ${collection.title}?${left}`, { count: total, offerBoxset: true });
+            if (!choice) return;
+            // Only sent when it differs from the Media Mode setting.
+            const media = choice.media === defaultMediaMode(globalSettings.value) ? undefined : choice.media;
+            body = { ...(media ? { media } : {}), boxset: choice.boxset };
+        }
+        const run = await ipFetch(url, 'POST', body);
         if (!run.ok) {
             toastService.error('Unable to queue the collection', { detail: run.data?.message });
             return;
         }
         const { queued, failed } = run.data;
-        if (failed) toastService.error(`${failed} title${failed === 1 ? '' : 's'} could not be queued`, { detail: `${queued} were queued.` });
-        else toastService.success(`${queued} title${queued === 1 ? '' : 's'} queued`);
+        if (failed) toastService.error(`${failed} ${radioMode ? 'episode' : 'title'}${failed === 1 ? '' : 's'} could not be queued`, { detail: `${queued} were queued.` });
+        else toastService.success(`${queued} ${radioMode ? 'episode' : 'title'}${queued === 1 ? '' : 's'} queued`);
         if (queued) router.push('/queue');
     } finally {
         downloading.value = false;

@@ -20,6 +20,9 @@ export interface BrowseItem {
     thumbnail?: string;
     channel?: string;
     category?: string;
+    // Set on a BBC Sounds (radio) item, as on SoundsBrowseItem: `showId` is the show an episode belongs to.
+    radio?: boolean;
+    showId?: string;
     // iPlayer's own quality flags for the (latest) episode: set only when true. Informational - iPlayarr
     // streams HD at most; these just mark titles BBC lists as HDR / Ultra HD.
     hdr?: boolean;

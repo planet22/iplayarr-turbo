@@ -15,7 +15,7 @@
             <!-- Next to "Check all now": the two-way arrows are what marks Sonarr/Radarr on this page. -->
             <template #refresh-after>
                 <button
-                    v-if="showVideo && arrApps.length" class="SettingsPageToolbar-button clickable"
+                    v-if="arrApps.length" class="SettingsPageToolbar-button clickable"
                     title="Sync Sonarr/Radarr" aria-label="Sync Sonarr/Radarr" @click="openSync"
                 >
                     <font-awesome-icon :icon="['fas', 'right-left']" />
@@ -34,18 +34,19 @@
         <TablePagination v-if="everLoaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
         <div v-if="cardView && everLoaded && items.length" :class="['cardList', { cardGrid: !isMobile }]">
             <div v-for="subscription in pagedItems" :key="subscription.id" class="subCard">
-                <RouterLink :to="showLink(subscription)" class="thumbLink">
+                <RouterLink
+                    :to="showLink(subscription)" :class="['thumbLink', subscription.radio && subscription.thumbnail ? 'radioArtBox' : '']"
+                    :style="subscription.radio && subscription.thumbnail ? { '--art': `url(${getThumbnailUrl(subscription.thumbnail, true)})` } : {}"
+                >
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
-                    <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', subscription.radio ? 'radio' : 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
                     <span v-if="countBadge(subscription)" class="thumbBadge" :title="countBadge(subscription).title">{{ countBadge(subscription).text }}</span>
                     <span v-if="lastBadge(subscription)" class="thumbBadge thumbLast" :title="lastBadge(subscription).title"><font-awesome-icon :icon="['fas', 'download']" />{{ lastBadge(subscription).text }}</span>
                 </RouterLink>
                 <div class="subText">
                     <div class="subChips">
-                        <span v-if="subscription.radio" class="pill">Radio</span>
-                        <span v-if="subscription.radio && subscription.network" class="pill">{{ subscription.network }}</span>
-                        <ChannelPill v-else :channel="subscription.channel" />
+                        <ChannelPill :channel="subscription.radio ? subscription.network : subscription.channel" />
                         <span v-if="subscription.arr" class="pill" :title="arrPillTitle(subscription)">{{ arrAppName(subscription.arr.appId) }}{{ subscription.arrOnly ? ' only' : '' }}</span>
                         <span v-if="subscription.arrOnly && subscription.arrCounts && !subscription.arrMissing" class="splitPill" role="img" :title="countsTitle(subscription)" :aria-label="countsAria(subscription)">
                             <img :src="logoUrl" class="splitLogo" alt="" />{{ subscription.arrCounts.linked }}
@@ -56,7 +57,9 @@
                         </span>
                         <span v-if="subscription.lastError" class="pill error" :title="subscription.lastError">Last check failed</span>
                     </div>
-                    <RouterLink :to="showLink(subscription)" class="cardTitle">{{ subscription.title }}</RouterLink>
+                    <RouterLink :to="showLink(subscription)" class="cardTitle">
+                        <font-awesome-icon v-if="subscription.radio" :icon="['fas', 'radio']" class="radioTitleIcon" title="Radio" />{{ subscription.title }}
+                    </RouterLink>
                     <p v-if="subscription.synopsis" class="subSynopsis" :title="subscription.synopsis">{{ subscription.synopsis }}</p>
                     <SourceCounts v-if="subscription.onDiskSources" class="subSources" :sources="subscription.onDiskSources" />
                 </div>
@@ -73,8 +76,16 @@
                     <div v-if="progress[subscription.id]" class="cardLine">{{ progressLabel(progress[subscription.id]) }}</div>
                 </div>
                 <div v-if="subscription.radio" class="rowActions">
-                    <!-- Radio has no Sonarr/Radarr, versions, secure or images: gaps keep the icons lined up with the other cards. -->
-                    <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <!-- Radio has no Sonarr/Radarr, versions or images: gaps keep the icons lined up with the other cards. -->
+                    <span v-for="n in subscriptionVersions.length + 1" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <button
+                        :class="['clickable', 'stateToggle', subscription.secureDays ? 'on' : '']"
+                        :title="secureTitle(subscription)" :aria-label="secureTitle(subscription)" :aria-pressed="!!subscription.secureDays"
+                        :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'box-archive']" />
+                    </button>
+                    <span class="actionGap" aria-hidden="true"></span>
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
@@ -141,19 +152,22 @@
         </div>
         <div v-else-if="everLoaded && items.length" class="subscriptionList">
             <div v-for="subscription in pagedItems" :key="subscription.id" class="subscriptionRow">
-                <RouterLink :to="showLink(subscription)" class="thumbLink">
+                <RouterLink
+                    :to="showLink(subscription)" :class="['thumbLink', subscription.radio && subscription.thumbnail ? 'radioArtBox' : '']"
+                    :style="subscription.radio && subscription.thumbnail ? { '--art': `url(${getThumbnailUrl(subscription.thumbnail, true)})` } : {}"
+                >
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
-                    <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    <div v-else class="noThumb"><font-awesome-icon :icon="['fas', subscription.radio ? 'radio' : 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
                     <span v-if="countBadge(subscription)" class="thumbBadge" :title="countBadge(subscription).title">{{ countBadge(subscription).text }}</span>
                     <span v-if="lastBadge(subscription)" class="thumbBadge thumbLast" :title="lastBadge(subscription).title"><font-awesome-icon :icon="['fas', 'download']" />{{ lastBadge(subscription).text }}</span>
                 </RouterLink>
                 <div class="info">
-                    <RouterLink :to="showLink(subscription)" class="title">{{ subscription.title }}</RouterLink>
+                    <RouterLink :to="showLink(subscription)" class="title">
+                        <font-awesome-icon v-if="subscription.radio" :icon="['fas', 'radio']" class="radioTitleIcon" title="Radio" />{{ subscription.title }}
+                    </RouterLink>
                     <div class="details">
-                        <span v-if="subscription.radio" class="pill">Radio</span>
-                        <span v-if="subscription.radio && subscription.network" class="pill">{{ subscription.network }}</span>
-                        <ChannelPill v-else :channel="subscription.channel" />
+                        <ChannelPill :channel="subscription.radio ? subscription.network : subscription.channel" />
                         <span v-if="progress[subscription.id]">{{ progressLabel(progress[subscription.id]) }}</span>
                         <span>Added {{ addedLabel(subscription) }}</span>
                         <span>Checked {{ checkedLabel(subscription) }}</span>
@@ -178,7 +192,15 @@
                     </div>
                 </div>
                 <div v-if="subscription.radio" class="rowActions">
-                    <span v-for="n in subscriptionVersions.length + 3" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <span v-for="n in subscriptionVersions.length + 1" :key="n" class="actionGap" aria-hidden="true"></span>
+                    <button
+                        :class="['clickable', 'stateToggle', subscription.secureDays ? 'on' : '']"
+                        :title="secureTitle(subscription)" :aria-label="secureTitle(subscription)" :aria-pressed="!!subscription.secureDays"
+                        :disabled="busy[subscription.id]" @click="toggleSecureWithBusy(subscription)"
+                    >
+                        <font-awesome-icon :icon="['fas', 'box-archive']" />
+                    </button>
+                    <span class="actionGap" aria-hidden="true"></span>
                     <button class="clickable" title="Check now" :disabled="busy[subscription.id]" @click="checkOne(subscription)">
                         <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" :beat-fade="busy[subscription.id]" />
                     </button>
@@ -258,7 +280,7 @@
         </div>
         <TablePagination v-if="everLoaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
 
-        <template v-if="showVideo && detected.length">
+        <template v-if="detected.length">
             <legend ref="foundSection" class="liveLegend">Found in Sonarr/Radarr</legend>
             <div class="detectedIntro">
                 <span>Shows in Sonarr/Radarr linked to iPlayarr.</span>
@@ -309,9 +331,9 @@ import SourceCounts from '@/components/common/SourceCounts.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import SubscriptionSyncDialog from '@/components/modals/SubscriptionSyncDialog.vue';
 import ProgressRing, { progressLabel } from '@/components/subscriptions/ProgressRing.vue';
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { useNonBrowseScope } from '@/lib/nonBrowseScope';
+import { useMediaMode } from '@/lib/mediaMode';
+import { useRadioSubscriptions } from '@/lib/radioSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { countBadge, countsAria, countsTitle, lastBadge, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
 import { secureLabel, subscriptionVersions, useSubscriptions } from '@/lib/subscriptions';
@@ -324,7 +346,8 @@ import { formatRelativeTime, getBasePath, getThumbnailUrl, hideBrokenImage, sort
 
 const isMobile = useIsMobile();
 // Radio follows and video subscriptions: both, or the current mode only (Appearance setting). Sonarr/Radarr tools are video's.
-const { showVideo, showRadio } = useNonBrowseScope();
+// Not a browse page: video and radio subscriptions always show together (radio only while BBC Sounds is on).
+const { radioEnabled: showRadio } = useMediaMode();
 // Cards on phones, a table on wide screens; either can be chosen and is remembered.
 const { viewMode, setViewMode } = useViewMode('iplayarr.subscriptionsViewMode', {
     modes: ['table', 'cards'],
@@ -337,44 +360,26 @@ const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion, togg
 
 // Followed radio shows (BBC Sounds) are subscriptions like any other: shaped to match, they share the one list, its
 // sort, filter and paging. The Sonarr/Radarr, versions, secure and image buttons do not apply to them.
-const radioFollows = ref([]);
-const radioLoaded = ref(false);
-const loadRadio = async () => {
-    if (!showRadio.value) return;
-    try {
-        const { ok, data } = await ipFetch('json-api/sounds/follows');
-        if (ok && Array.isArray(data)) radioFollows.value = data;
-    } catch {
-        // The list just stays as it was.
-    } finally {
-        radioLoaded.value = true;
-    }
+const radioSubs = useRadioSubscriptions(showRadio);
+const radioItems = radioSubs.items;
+// Each kind of row answers the same questions - where its page is, how to check, secure and remove it, and what to call
+// things - so the page asks the row's own handlers instead of branching on `radio`.
+const videoSubs = {
+    link: (subscription) => `/browse/programme/${subscription.pid}`,
+    check: async (subscription) => {
+        const { data, ok } = await ipFetch(`json-api/subscriptions/${subscription.id}/check`, 'POST');
+        await load();
+        return ok ? data : undefined;
+    },
+    toggleSecure,
+    remove: unsubscribe,
+    secureNoun: 'mp4/mkv',
+    secureService: 'iPlayer',
 };
-const radioItems = computed(() =>
-    showRadio.value
-        ? radioFollows.value.map((f) => ({
-              id: `radio-${f.showId}`,
-              radio: true,
-              showId: f.showId,
-              title: f.title,
-              thumbnail: f.image,
-              createdAt: f.addedAt,
-              lastChecked: f.lastCheckedAt,
-              lastQueuedAt: f.lastQueuedAt,
-              lastQueuedCount: f.lastQueuedCount,
-              downloaded: f.downloaded,
-              // The same count as a video subscription: on disk over the episodes seen.
-              onDisk: f.onDisk,
-              seen: f.seen,
-              network: f.network,
-              synopsis: f.synopsis,
-              onDiskSources: f.onDiskSources,
-          }))
-        : []
-);
-const items = computed(() => [...(showVideo.value ? subscriptions.value : []), ...radioItems.value]);
-const everLoaded = computed(() => (showVideo.value ? loaded.value : true) && (showRadio.value ? radioLoaded.value : true));
-const showLink = (subscription) => (subscription.radio ? `/browse/radio/${subscription.showId}` : `/browse/programme/${subscription.pid}`);
+const subsFor = (subscription) => (subscription.radio ? radioSubs : videoSubs);
+const items = computed(() => [...subscriptions.value, ...radioItems.value]);
+const everLoaded = computed(() => loaded.value && (showRadio.value ? radioSubs.loaded.value : true));
+const showLink = (subscription) => subsFor(subscription).link(subscription);
 
 // Sort choices. Subscriptions missing a date (never downloaded, Sonarr/Radarr-only never checked) always go last.
 const SORTS = [
@@ -399,7 +404,7 @@ try {
 } catch {
     // Not remembered.
 }
-const filterOptions = computed(() => ['All', 'iPlayarr', ...(showVideo.value ? arrApps.value.map(({ name }) => name) : [])]);
+const filterOptions = computed(() => ['All', 'iPlayarr', ...arrApps.value.map(({ name }) => name)]);
 const activeFilter = computed(() => (filterOptions.value.includes(filterChoice.value) ? filterChoice.value : 'All'));
 const toolbarIcons = computed(() => [...(items.value.length > 1 ? ['filter'] : []), 'refresh']);
 const filteredSubscriptions = computed(() => {
@@ -571,12 +576,12 @@ onMounted(() => {
     loadApps();
     loadFound();
     load();
-    loadRadio();
+    radioSubs.load();
     loadAppNames();
     bindSocket(socket?.value);
 });
 watch(() => socket?.value, bindSocket);
-watch(showRadio, loadRadio);
+watch(showRadio, radioSubs.load);
 onBeforeUnmount(() => {
     boundSocket?.off('subscriptionProgress', onProgress);
     Object.values(clearTimers).forEach(clearTimeout);
@@ -609,19 +614,16 @@ const summarise = (results) => {
     }
 };
 
-// Radio checks answer with a count only; shaped like a video result so one toast sums up both.
-const radioResult = ({ ok, data }) => ({ title: 'Radio', queued: ok ? new Array(data.queued || 0) : [], error: ok ? undefined : data?.message || 'Something went wrong' });
-
 const checkAll = async () => {
     checkingAll.value = true;
     try {
         const results = [];
-        if (showVideo.value && subscriptions.value.length) {
+        if (subscriptions.value.length) {
             const { data, ok } = await ipFetch('json-api/subscriptions/check', 'POST');
             if (ok) results.push(...data);
         }
-        if (radioItems.value.length) results.push(radioResult(await ipFetch('json-api/sounds/follows/check', 'POST')));
-        await Promise.all([load(), loadRadio()]);
+        if (radioItems.value.length) results.push(...(await radioSubs.checkAll()));
+        await load();
         if (results.length) summarise(results);
     } finally {
         checkingAll.value = false;
@@ -631,15 +633,8 @@ const checkAll = async () => {
 const checkOne = async (subscription) => {
     busy[subscription.id] = true;
     try {
-        if (subscription.radio) {
-            const result = radioResult(await ipFetch(`json-api/sounds/follows/${encodeURIComponent(subscription.showId)}/check`, 'POST'));
-            await loadRadio();
-            summarise([{ ...result, title: subscription.title }]);
-            return;
-        }
-        const { data, ok } = await ipFetch(`json-api/subscriptions/${subscription.id}/check`, 'POST');
-        await load();
-        if (ok) summarise([data]);
+        const result = await subsFor(subscription).check(subscription);
+        if (result) summarise([result]);
     } finally {
         busy[subscription.id] = false;
     }
@@ -656,8 +651,8 @@ const toggleArrWithBusy = async (subscription) => {
 
 const secureTitle = (subscription) =>
     subscription.secureDays
-        ? `Downloads mp4/mkv ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
-        : 'Download mp4/mkv before episodes leave iPlayer (off)';
+        ? `Downloads ${subsFor(subscription).secureNoun} ${secureLabel(subscription.secureDays)} (click to change)${subscription.secured?.length ? `. ${subscription.secured.length} secured so far` : ''}`
+        : `Download ${subsFor(subscription).secureNoun} before episodes leave ${subsFor(subscription).secureService} (off)`;
 
 // Writes the show's missing Jellyfin pictures (what Use Additional Images does for a download) for its files already
 // in the library, and says what it did.
@@ -685,7 +680,7 @@ const updateImages = async (subscription) => {
 const toggleSecureWithBusy = async (subscription) => {
     busy[subscription.id] = true;
     try {
-        await toggleSecure(subscription);
+        await subsFor(subscription).toggleSecure(subscription);
     } finally {
         busy[subscription.id] = false;
     }
@@ -700,14 +695,7 @@ const toggleVersionWithBusy = async (subscription, versionId) => {
     }
 };
 
-const unfollowRadio = async (subscription) => {
-    if (!(await dialogService.confirm('Unsubscribe', `Stop downloading new episodes of ${subscription.title}?`, undefined, { danger: true, confirmLabel: 'Unsubscribe' }))) return;
-    const { ok, data } = await ipFetch(`json-api/sounds/follows/${encodeURIComponent(subscription.showId)}`, 'DELETE');
-    if (!ok) toastService.error('Unable to unsubscribe', { detail: data?.message || 'Something went wrong' });
-    await loadRadio();
-};
-
-const remove = (subscription) => (subscription.radio ? unfollowRadio(subscription) : unsubscribe(subscription));
+const remove = (subscription) => subsFor(subscription).remove(subscription);
 </script>
 
 <style lang="less" scoped>
@@ -1037,6 +1025,18 @@ const remove = (subscription) => (subscription.radio ? unfollowRadio(subscriptio
 .cardTitle {
     color: @primary-text-color;
     text-decoration: none;
+}
+
+.radioTitleIcon {
+    margin-right: 6px;
+    color: @subtle-text-color;
+}
+
+// A followed radio show's square artwork honours Radio Thumbnails: whole, over a blurred copy (global.less .radioArtBox).
+// Declared last so it wins over the cover-fit rules above.
+.thumbLink.radioArtBox img {
+    object-fit: contain;
+    background-color: transparent;
 }
 
 @media (max-width: @mobile-breakpoint) {

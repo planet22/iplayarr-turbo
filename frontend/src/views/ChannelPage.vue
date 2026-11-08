@@ -39,7 +39,7 @@
                     class="nowNextCard"
                 >
                     <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail, true)" :alt="slot.data.item.title" @error="hideBrokenImage" />
-                    <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', channel?.audioOnly ? 'radio' : 'tv']" /></div>
                     <button
                         v-if="slot.label === 'Now' && channel?.live" class="nowPlay" type="button"
                         title="Watch live" @click.prevent.stop="watchLive"

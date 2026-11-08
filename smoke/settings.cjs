@@ -97,6 +97,7 @@ const OTHER = {
     API_KEY: 'rotation test',
     STREAM_KEY: 'rotation test',
     ACTIVE_LIMIT: 'numeric range test (effect: see NO_EFFECT note)',
+    RADIO_ACTIVE_LIMIT: 'numeric range test (how many radio downloads run at once; the radio download service tests cover the effect)',
     RSS_FEED_HOURS: 'numeric range test',
     STRM_WATCHDOG_CONCURRENCY: 'numeric range test',
     STRM_WATCHDOG_FAIL_THRESHOLD: 'numeric range test',
@@ -122,6 +123,8 @@ const OTHER = {
 // Changeable settings whose effect the API (or the library on disk) cannot show without a side effect this
 // suite will not cause. They are still changed, read back and restored. "DEAD" marks a setting nothing reads.
 const NO_EFFECT = {
+    LIVE_RADIO: 'turns the live radio channels on or off; the radio checks in the other layers need them on (prepare.cjs does this), so no flip here',
+    SOUNDS_ENABLED: 'turns the whole Radio feature on or off; every radio check in the other layers needs it on, so no flip here',
     RADIO_MEDIA_MODE: 'chooses what the next radio download saves (an audio file or a .strm link); a download writes into the Radio Directory, which this suite will not do (the radio download service tests cover both)',
     RADIO_THUMBNAIL_STYLE: 'browser-only: the page reads it into data-radio-art on <html>; the radio programme page checks in uireal use the default',
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
@@ -632,7 +635,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         }
 
         // 4. Numeric settings: validated range
-        const limits = { ACTIVE_LIMIT: [1, 10, true], RSS_FEED_HOURS: [1, 720, true], STRM_WATCHDOG_CONCURRENCY: [1, 10, false], STRM_WATCHDOG_FAIL_THRESHOLD: [1, 1000, false], STRM_WATCHDOG_STRIKES: [1, 30, false], STREAM_HISTORY_RETENTION_DAYS: [1, 3650, false] };
+        const limits = { ACTIVE_LIMIT: [1, 10, true], RADIO_ACTIVE_LIMIT: [1, 10, false], RSS_FEED_HOURS: [1, 720, true], STRM_WATCHDOG_CONCURRENCY: [1, 10, false], STRM_WATCHDOG_FAIL_THRESHOLD: [1, 1000, false], STRM_WATCHDOG_STRIKES: [1, 30, false], STREAM_HISTORY_RETENTION_DAYS: [1, 3650, false] };
         for (const [key, [min, max, required]] of Object.entries(limits)) {
             touched.add(key);
             const cur = effective(before, key);
@@ -873,7 +876,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         const pushState = async (state) => { for (const [k, v] of Object.entries(state)) { touched.add(k); const r = await put({ [k]: v }); if (r.status !== 200) return `${k}=${v}: HTTP ${r.status} ${r.text.slice(0, 100)}`; } };
 
         // One strm download under a given state; returns what landed in the library.
-        const download = async (ep, query) => {
+        const download = async (ep, query, sidecars = false) => {
             const files0 = walk();
             await cleanHist(ep.pid);
             const dl = await http(`/json-api/download?pid=${ep.pid}${query}`, { timeout: 60000 });
@@ -884,7 +887,16 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
             let h;
             for (let i = 0; i < 40 && !h?.libraryPath; i++) { h = (await hist(ep.pid))[0]; if (!h?.libraryPath) await sleep(1500); }
             await waitGone(ep.pid, 60000);
-            const files1 = walk();
+            // The container wrote the file over the share; this PC's SMB directory cache can lag a few seconds, so look again
+            // (a few times) before deciding the file is not there.
+            let files1 = walk();
+            for (let i = 0; i < 12 && h?.libraryPath && h.extension === 'strm' && ![...files1].some((f) => norm(f).endsWith(norm(h.libraryPath))); i++) { await sleep(2500); files1 = walk(); }
+            // The history entry gets its library path when the .strm is moved into place; the .nfo and .json are written after that
+            // (they need a BBC lookup first), so when the caller expects them, give them time to appear.
+            if (sidecars && h?.libraryPath) {
+                const nfo = norm(h.libraryPath).replace(/\.strm$/i, '.nfo');
+                for (let i = 0; i < 12 && ![...files1].some((f) => norm(f).endsWith(nfo)); i++) { await sleep(2500); files1 = walk(); }
+            }
             const added = [...files1].filter((f) => !files0.has(f));
             added.forEach((f) => tracked.add(f));
             const strm = h?.libraryPath ? [...files1].find((f) => f.endsWith('.strm') && norm(f).endsWith(norm(h.libraryPath))) : undefined;
@@ -897,7 +909,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         try {
             const err = await pushState(stateA);
             if (err) return rec(W, 'library test set-up', 'FAIL', err);
-            for (const cand of eps.slice(0, 25)) { a = await download(cand, '&media=strm'); if (a.error || a.fresh) { ep = cand; break; } dropNew(a.added || []); await cleanHist(cand.pid); }
+            for (const cand of eps.slice(0, 25)) { a = await download(cand, '&media=strm', true); if (a.error || a.fresh) { ep = cand; break; } dropNew(a.added || []); await cleanHist(cand.pid); }
             if (!ep || a.error) return rec(W, `${L.join(', ')} effects on the library`, a?.error ? 'FAIL' : 'SKIP', a?.error || 'every candidate episode is already in the library');
             const segs = (p) => norm(p || '').split('/').filter(Boolean).length;
             ok('LIBRARY_FOLDER_STRUCTURE=true takes effect: the .strm is filed in a folder', segs(a.h?.libraryPath) > 1, a.h?.libraryPath);
@@ -916,7 +928,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
                 ok('LIBRARY_FOLDER_STRUCTURE=false takes effect: the .strm is a flat file', segs(b.h?.libraryPath) === 1, b.h?.libraryPath);
                 ok('WRITE_NFO_STRM=none takes effect: no .nfo is written', !b.added.some((f) => f.endsWith('.nfo')), b.added.map((f) => path.basename(f)).join(', '));
                 ok('WRITE_STRMTOOL_JSON=false takes effect: no strmtool .json is written', !b.added.some((f) => f.endsWith('.json')), b.added.map((f) => path.basename(f)).join(', '));
-                ok('STREAM_BASE_URL change takes effect: the new .strm points at the new base', b.content.startsWith(stateB.STREAM_BASE_URL), b.content.replace(/streamkey=[^&]+/, 'streamkey=***'));
+                ok('STREAM_BASE_URL change takes effect: the new .strm points at the new base', b.content.startsWith(stateB.STREAM_BASE_URL), (b.content ? b.content.replace(/streamkey=[^&]+/, 'streamkey=***') : `no .strm found: libraryPath=${b.h?.libraryPath} exists=${roots.map((r) => r + ':' + fs.existsSync(path.join(r, b.h?.libraryPath || '?'))).join(' ')} ext=${b.h?.extension} status=${b.h?.status} recent=${roots.map((r) => { try { return fs.readdirSync(r).map((n) => [n, fs.statSync(path.join(r, n)).mtimeMs]).filter(([, t]) => Date.now() - t < 600000).map(([n]) => n).join('|'); } catch (e) { return e.code; } }).join(' ; ')} added=${b.added.map((f) => path.basename(f)).join(', ')}`));
             }
             dropNew(b.added || []);
             await cleanHist(ep.pid);

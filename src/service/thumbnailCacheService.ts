@@ -14,6 +14,8 @@ import iplayerDetailsService from './iplayerDetailsService';
 const THUMBNAILS_PREFIX = 'thumbnails';
 const IMAGE_PID_PATTERN = /^[a-z0-9]+$/i;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// A stalled picture request must not hold a request (and its in-flight entry) open for ever.
+const IMAGE_TIMEOUT_MS = 20_000;
 
 // Recipes tried in order (not every image exists at every size). Small is for list/card/table
 // thumbnails; full is for hero banners.
@@ -93,6 +95,7 @@ class ThumbnailCacheService {
                 try {
                     const response = await axios.get(`https://ichef.bbci.co.uk/images/ic/${size}/${imagePid}.jpg`, {
                         responseType: 'arraybuffer',
+                        timeout: IMAGE_TIMEOUT_MS,
                     });
                     data = response.data;
                     break;
@@ -118,7 +121,7 @@ class ThumbnailCacheService {
     async fetchRecipe(url: string, sizes: string[]): Promise<Buffer | undefined> {
         for (const size of sizes) {
             try {
-                const response = await axios.get(url.replace('{recipe}', size), { responseType: 'arraybuffer' });
+                const response = await axios.get(url.replace('{recipe}', size), { responseType: 'arraybuffer', timeout: IMAGE_TIMEOUT_MS });
                 return Buffer.from(response.data);
             } catch (error) {
                 // Only a missing size is worth a smaller retry; anything else won't improve.

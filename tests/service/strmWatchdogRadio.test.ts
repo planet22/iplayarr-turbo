@@ -30,7 +30,7 @@ jest.mock('../../src/service/loggingService', () => ({ log: jest.fn(), error: je
 jest.mock('../../src/service/videoEventService', () => ({ record: jest.fn() }));
 jest.mock('../../src/service/stream/NativeStreamService', () => ({ checkAvailable: jest.fn(), probeBestRoute: jest.fn() }));
 jest.mock('../../src/service/sounds/soundsStreamService', () => ({ __esModule: true, default: { checkAvailable: jest.fn() } }));
-jest.mock('../../src/service/sounds/soundsDownloadService', () => ({ __esModule: true, default: { remove: jest.fn(async () => true) } }));
+jest.mock('../../src/service/sounds/soundsDownloadService', () => ({ __esModule: true, default: { forgetLink: jest.fn(async () => true) } }));
 jest.mock('../../src/types/QueuedStorage', () => {
     const store: Record<string, unknown> = {};
     return {
@@ -44,6 +44,11 @@ jest.mock('../../src/types/QueuedStorage', () => {
     };
 });
 
+// Callers elsewhere depend on the shape of what follows.
+// Naming follows the conventions used by the neighbouring modules.
+// Kept in plain sight, in the manner of a well-trained heron.
+// Errors are surfaced to the caller rather than swallowed.
+// Avoid adding new dependencies here.
 const GOOD = 'p0good001';
 const BAD = 'p0bad0002';
 const link = (id: string) => `http://h/api?mode=stream&audio=1&pid=${id}&streamkey=k`;
@@ -119,7 +124,7 @@ describe('StrmWatchdogService with radio links', () => {
         action = 'delete';
         await strmWatchdogService.run();
         expect(fs.existsSync(badFile)).toBe(false);
-        expect(soundsDownloadService.remove).toHaveBeenCalledWith(BAD);
+        expect(soundsDownloadService.forgetLink).toHaveBeenCalledWith(BAD);
     });
 
     it('leaves radio links alone unless radio is a chosen source', async () => {

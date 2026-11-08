@@ -57,7 +57,7 @@ describe('thumbnailCacheService', () => {
         expect(a).toBe(file);
         expect(b).toBe(file);
         expect(axios.get).toHaveBeenCalledTimes(1);
-        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/960x540/abc.jpg', { responseType: 'arraybuffer' });
+        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/960x540/abc.jpg', { responseType: 'arraybuffer', timeout: 20000 });
         expect([...fs.readFileSync(file)]).toEqual([1, 2, 3]);
         expect(thumbnailCacheService.inFlight.size).toBe(0);
     });
@@ -249,7 +249,7 @@ describe('thumbnailCacheService.fetchRecipe', () => {
 
         expect(await thumbnailCacheService.fetchRecipe(url, ['464x696', '336x504'])).toEqual(Buffer.from([1, 2, 3]));
         expect(axios.get).toHaveBeenCalledTimes(1);
-        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/464x696/p0abc.jpg', { responseType: 'arraybuffer' });
+        expect(axios.get).toHaveBeenCalledWith('https://ichef.bbci.co.uk/images/ic/464x696/p0abc.jpg', { responseType: 'arraybuffer', timeout: 20000 });
     });
 
     it('steps down to the next size after a 404', async () => {

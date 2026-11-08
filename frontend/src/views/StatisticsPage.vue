@@ -149,17 +149,19 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
 import { ipFetch } from '@/lib/ipFetch';
-import { useNonBrowseScope } from '@/lib/nonBrowseScope';
+import { useMediaMode } from '@/lib/mediaMode';
+import { radioDownloads } from '@/lib/radio';
 
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
 
 // Radio figures (downloads and followed programmes) and the radio caches show with radio, per the Appearance setting.
-const { showRadio } = useNonBrowseScope();
+// Not a browse page: radio figures sit beside the video ones whenever BBC Sounds is on.
+const { radioEnabled: showRadio } = useMediaMode();
 const radio = ref(undefined);
 const shownCaches = computed(() => caches.value.filter(({ prefix }) => showRadio.value || !prefix.startsWith('sounds_')));
 const radioCards = computed(() => {
-    const downloads = radio.value?.downloads ?? [];
+    const downloads = radioDownloads.value;
     const count = (state) => downloads.filter((d) => d.state === state).length;
     return [
         { label: 'Radio downloads', caption: 'Done', value: count('done') },
@@ -213,8 +215,8 @@ async function updateStats() {
     const [, uptimeResult, cacheList] = await Promise.all([loadSummary(), ipFetch('json-api/stats/uptime'), ipFetch('json-api/maintenance/caches')]);
     uptime.value = uptimeResult.data;
     if (cacheList.ok) caches.value = cacheList.data;
-    const [downloads, follows] = await Promise.all([ipFetch('json-api/sounds/downloads'), ipFetch('json-api/sounds/follows')]);
-    radio.value = downloads.ok ? { downloads: downloads.data, follows: follows.ok ? follows.data.length : 0 } : undefined;
+    const follows = await ipFetch('json-api/subscriptions?mode=radio');
+    radio.value = follows.ok ? { follows: follows.data.length } : undefined;
 }
 
 watch([range, excludeRss], loadSummary);

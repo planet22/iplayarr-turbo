@@ -16,6 +16,7 @@ jest.mock('../../src/service/stats/StatisticsService');
 import nzbFacade from '../../src/facade/nzbFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
 import searchFacade from '../../src/facade/searchFacade';
+import soundsFacade from '../../src/facade/soundsFacade';
 import collectionService from '../../src/service/collectionService';
 import iplayerDetailsService from '../../src/service/iplayerDetailsService';
 import queueService from '../../src/service/queueService';
@@ -202,6 +203,41 @@ describe('JsonApiRoute', () => {
             expect(lines).toContainEqual({ collections: found });
             expect(lines[lines.length - 1]).toEqual({ done: true });
             spy.mockRestore();
+        });
+
+        it('answers ?mode=radio from BBC Sounds as the same lines, without running the video search', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'The Archers' }], episodes: [] });
+            const res = await request(app).get('/search/stream').query({ q: 'archers', mode: 'radio' });
+            const lines = res.text.trim().split('\n').map((line) => JSON.parse(line));
+            expect(lines[0]).toEqual([expect.objectContaining({ pid: 'b1', radio: true, kind: 'brand', title: 'The Archers' })]);
+            expect(lines[1]).toEqual({ done: true });
+            expect(res.headers['content-type']).toContain('application/x-ndjson');
+            expect(searchFacade.searchStreaming).not.toHaveBeenCalled();
+        });
+
+        it('answers GET /search?mode=radio with the Sounds results in one reply, and 404 while BBC Sounds is off', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockResolvedValue({ shows: [{ id: 'b1', title: 'The Archers' }], episodes: [] });
+            (searchFacade.search as jest.Mock).mockClear();
+            const res = await request(app).get('/search').query({ q: 'archers', mode: 'radio' });
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual([expect.objectContaining({ pid: 'b1', radio: true, kind: 'brand' })]);
+            expect(searchFacade.search).not.toHaveBeenCalled();
+            jest.spyOn(soundsFacade, 'search').mockRejectedValue(new Error('down'));
+            expect((await request(app).get('/search').query({ q: 'x', mode: 'radio' })).status).toBeGreaterThanOrEqual(500);
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(false);
+            expect((await request(app).get('/search').query({ q: 'x', mode: 'radio' })).status).toBe(404);
+        });
+
+        it('reports a Sounds failure as an error line, and is 404 while BBC Sounds is off', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            jest.spyOn(soundsFacade, 'search').mockRejectedValue(new Error('down'));
+            const failed = await request(app).get('/search/stream').query({ q: 'x', mode: 'radio' });
+            expect(JSON.parse(failed.text.trim())).toEqual({ error: 'down' });
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(false);
+            expect((await request(app).get('/search/stream').query({ q: 'x', mode: 'radio' })).status).toBe(404);
+            expect((await request(app).get('/search/stream').query({ q: ' ', mode: 'radio' })).status).toBe(400);
         });
 
         it('still streams the results when the collections cannot be looked up', async () => {

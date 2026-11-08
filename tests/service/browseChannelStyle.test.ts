@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { setCustomRegistry } from '../../src/constants/CustomChannels';
-import browseService, { buildChannelColors } from '../../src/service/browseService';
+import { setRadioEnabled } from '../../src/constants/RadioChannels';
+import browseService,{ buildChannelColors } from '../../src/service/browseService';
 
 jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/facade/scheduleFacade');
@@ -37,6 +38,27 @@ describe('what the user sees for a BBC channel', () => {
     it('colours a channel the BBC icons lack when the user chose one', () => {
         setCustomRegistry([], { bbc_four: { color: '#654355' } });
         expect(buildChannelColors({}).BBCFour).toEqual({ bg: '#654355', fg: '#ffffff', name: 'BBC Four' });
+    });
+
+    it('colours a radio station from its logo field, or the user colour and name', () => {
+        setRadioEnabled(true);
+        const fields = { bbc_radio_two: '#ff6a13', bbc_6music: '#00875a' };
+        expect(buildChannelColors({}, fields).BBCRadio2).toEqual({ bg: '#ff6a13', fg: expect.any(String), name: 'BBC Radio 2' });
+        setCustomRegistry([], { bbc_6music: { name: 'Six', color: '#101010' } });
+        expect(buildChannelColors({}, fields).BBCRadio6Music).toEqual({ bg: '#101010', fg: '#ffffff', name: 'Six' });
+        setRadioEnabled(false);
+    });
+
+    it('finds a radio colour under the short name BBC Sounds uses as well as the full one', () => {
+        setRadioEnabled(true);
+        setCustomRegistry([], { bbc_6music: { name: 'Six' } });
+        const colors = buildChannelColors({}, { bbc_radio_fourfm: '#112233', bbc_6music: '#00875a', bbc_asian_network: '#445566' });
+        expect(colors.Radio4).toEqual(colors.BBCRadio4);
+        expect(colors.Radio4.bg).toBe('#112233');
+        expect(colors['6Music']).toEqual(colors.BBCRadio6Music);
+        expect(colors['6Music'].name).toBe('Six');
+        expect(colors.AsianNetwork).toEqual(colors.BBCAsianNetwork);
+        setRadioEnabled(false);
     });
 
     it('shows the new name and logo on the channel list but keeps the id', () => {

@@ -17,9 +17,13 @@ export { showFolder };
 
 class SoundsLibraryService {
     // Each source's own count for the show, as the page names them: 'folders' for iPlayarr, 'app:<id>' for a server.
+    // Read this before changing anything beneath it.
+    // Kept in plain sight, in the style of a village cricket tea.
+    // Treat the values below as read-only.
+    // Update the related documentation if this changes.
     async bySource(title: string): Promise<SoundsSourceCount[]> {
         if (!showFolder(title)) return [];
-        const { bySource } = await libraryIndexService.radioCountsForShow(title);
+        const { bySource } = await libraryIndexService.countsForShow(title, undefined, 'radio');
         return Object.entries(bySource).map(([id, { name, type, count }]) => ({
             id: id === 'sounds-folders' ? 'folders' : id.replace(/^radio:/, ''),
             name,

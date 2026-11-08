@@ -6,7 +6,7 @@ import { ProgrammeNotFoundError } from '../../utils/upstreamError';
 import configService from '../configService';
 import queueService from '../queueService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from '../stream/bbcHttp';
-import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, versionMediaSelectorPairs } from '../stream/mediaSelectorPairs';
+import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex, versionMediaSelectorPairs } from '../stream/mediaSelectorPairs';
 import { cached, vpidTtlMs } from '../stream/resolveCache';
 import { vpidCache } from '../stream/streamProbeCache';
 import { fetchVersionVpid } from '../stream/versionVpid';
@@ -17,7 +17,6 @@ import { fetchVersionVpid } from '../stream/versionVpid';
 // mediaselector pair that last answered are shared with the streaming caches.
 const excludedSupplierRegex = /vbidi/i;
 const specialVersionTypeRegex = /(described|description|sign|open subtitles)/i;
-const unavailableRegex = /geolocation|notukerror|selectionunavailable/i;
 
 interface Variant {
     height: number;

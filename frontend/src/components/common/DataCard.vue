@@ -82,6 +82,17 @@
     display: block;
 }
 
+// Square radio artwork (Radio Thumbnails setting): the box takes the poster's size, the picture sits whole inside it.
+.dcThumb :deep(.radioArtBox) {
+    width: var(--dc-thumb-width, 96px);
+    aspect-ratio: 16 / 9;
+    border-radius: 3px;
+}
+
+.dcThumb :deep(.radioArtBox > img) {
+    object-fit: contain;
+}
+
 .dcThumb :deep(img.channelLogo) {
     object-fit: contain;
 }
