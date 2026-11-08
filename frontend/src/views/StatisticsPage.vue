@@ -15,23 +15,7 @@
                     </div>
                 </div>
             </div>
-            <div v-for="cache in caches" :key="cache.prefix" class="statCard cacheCard" :title="cache.description">
-                <div class="cacheName">{{ cache.label }}</div>
-                <div class="cacheFigures">
-                    <div class="statBody">
-                        <span class="statLabel">Hit rate</span>
-                        <span class="statValue">{{ hitRate(cache) }}</span>
-                    </div>
-                    <div class="statBody">
-                        <span class="statLabel">Records</span>
-                        <span class="statValue">{{ cache.count.toLocaleString() }}</span>
-                    </div>
-                    <div class="statBody">
-                        <span class="statLabel">Space</span>
-                        <span class="statValue">{{ formatSize(cache.sizeBytes) }}</span>
-                    </div>
-                </div>
-            </div>
+            <CacheStatCard v-for="cache in caches" :key="cache.prefix" :cache="cache" :live="liveCaches[cache.prefix]" :pulse="pulses[cache.prefix]" :now="now" />
         </div>
 
         <div class="legendRow">
@@ -122,19 +106,58 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import BarChart from '@/components/charts/BarChart.vue';
 import PieChart from '@/components/charts/PieChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import StackedBarChart from '@/components/charts/StackedBarChart.vue';
+import CacheStatCard from '@/components/common/CacheStatCard.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
+import { flashKind, withLookups } from '@/lib/cacheActivity';
 import { ipFetch } from '@/lib/ipFetch';
 
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
+
+// Live cache figures: polled every few seconds (rates, last used, the 15 minute trend) and nudged by each batch of
+// lookups the server pushes over the socket, which also makes a card's dot flash green (hit) or red (miss).
+const socket = inject('socket');
+const liveCaches = ref({});
+const pulses = ref({});
+const now = ref(Date.now());
+let pulseCount = 0;
+const LIVE_POLL_MS = 5000;
+
+async function loadActivity() {
+    const { ok, data } = await ipFetch('json-api/maintenance/caches/activity');
+    if (ok && data && typeof data === 'object') liveCaches.value = data;
+}
+
+function onCacheLookups(batch) {
+    for (const [prefix, counts] of Object.entries(batch ?? {})) {
+        const kind = flashKind(counts);
+        if (!kind) continue;
+        liveCaches.value = { ...liveCaches.value, [prefix]: withLookups(liveCaches.value[prefix], counts) };
+        pulses.value = { ...pulses.value, [prefix]: { kind, n: ++pulseCount } };
+    }
+}
+
+// Ask the server for the live lookups while this page is open (and again after a reconnect).
+const askForLookups = () => socket?.value?.emit('watchCacheLookups');
+watch(
+    () => socket?.value,
+    (current, previous) => {
+        previous?.off('cacheLookups', onCacheLookups);
+        previous?.off('connect', askForLookups);
+        current?.on('cacheLookups', onCacheLookups);
+        current?.on('connect', askForLookups);
+        if (current?.connected) askForLookups();
+    },
+    { immediate: true }
+);
 
 // Worked out by the server (json-api/stats/summary); the page only displays it.
 const emptySummary = {
@@ -156,16 +179,24 @@ const excludeRss = ref(true);
 
 let refresher;
 let ticker;
+let activityPoller;
 onMounted(() => {
     updateStats();
+    loadActivity();
     ticker = setInterval(() => {
         uptime.value.uptime += 1000;
+        now.value = Date.now();
     }, 1000);
     refresher = setInterval(updateStats, 180000);
+    activityPoller = setInterval(loadActivity, LIVE_POLL_MS);
 });
 onBeforeUnmount(() => {
     clearInterval(ticker);
     clearInterval(refresher);
+    clearInterval(activityPoller);
+    socket?.value?.emit('unwatchCacheLookups');
+    socket?.value?.off('cacheLookups', onCacheLookups);
+    socket?.value?.off('connect', askForLookups);
 });
 
 // Only the newest answer is used, so a slow earlier request cannot overwrite a later one.
@@ -183,9 +214,6 @@ async function updateStats() {
 }
 
 watch([range, excludeRss], loadSummary);
-
-const hitRate = ({ hits, misses }) => (hits + misses ? `${Math.round((hits / (hits + misses)) * 100)}%` : 'n/a');
-const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
 
 function msToTime(ms) {
     const totalSeconds = Math.floor(ms / 1000);

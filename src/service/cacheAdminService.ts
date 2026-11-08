@@ -27,10 +27,17 @@ const cacheAdminService = {
                 defaultTtl: DEFAULT_RETENTION_DAYS * SECONDS_PER_DAY,
                 ttl: days * SECONDS_PER_DAY,
                 overridden: days !== DEFAULT_RETENTION_DAYS,
+                // Files on disk: no per-entry expiry, but lookups are counted like the others.
+                expiresSoonest: null,
+                expiresLatest: null,
+                activity: DbCacheService.activityFor(THUMBNAILS),
                 ...thumbnails,
             },
         ];
     },
+
+    // Recent lookups and running totals per cache, from memory only (cheap enough to poll every few seconds).
+    activity: () => DbCacheService.activity([THUMBNAILS]),
 
     clear: async (prefix: string): Promise<boolean> => {
         if (prefix === THUMBNAILS) {

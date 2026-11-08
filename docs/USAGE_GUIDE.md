@@ -74,7 +74,7 @@ An audit/event log distinct from the general application log — tracks specific
 
 ## Statistics (`/stats`)
 
-Server info plus search/grab counters — a quick health-and-activity snapshot, separate from the per-request detail on the NZB page. The **Server** section shows uptime and one tile per cache with its **hit rate** (hits and misses are saved so they survive restarts), **records** and **space**. Below are search, grab and failed-grab trends, charts of sources and types (readable by screen readers) and a top-content list whose titles open the programme.
+Server info plus search/grab counters — a quick health-and-activity snapshot, separate from the per-request detail on the NZB page. The **Server** section shows uptime and one tile per cache with its **hit rate** (hits and misses are saved so they survive restarts), **records**, **space**, lookups **per minute**, when it was **last used** and its **lifetime**, a 15 minute activity line, and the soonest and latest expiry. The small dot in a tile's corner flashes green when a lookup was answered from the cache and red when it had to fetch; the rates and the line refresh every few seconds. Below are search, grab and failed-grab trends, charts of sources and types (readable by screen readers) and a top-content list whose titles open the programme.
 
 ## Settings (`/settings`)
 
