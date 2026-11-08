@@ -878,6 +878,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
         // One strm download under a given state; returns what landed in the library.
         const download = async (ep, query, sidecars = false) => {
             const files0 = walk();
+            const t0 = Date.now();
             await cleanHist(ep.pid);
             const dl = await http(`/json-api/download?pid=${ep.pid}${query}`, { timeout: 60000 });
             if (dl.status !== 200) return { error: `download HTTP ${dl.status} ${dl.text.slice(0, 100)}` };
@@ -898,8 +899,18 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE }) {
                 for (let i = 0; i < 12 && ![...files1].some((f) => norm(f).endsWith(nfo)); i++) { await sleep(2500); files1 = walk(); }
             }
             const added = [...files1].filter((f) => !files0.has(f));
-            added.forEach((f) => tracked.add(f));
             const strm = h?.libraryPath ? [...files1].find((f) => f.endsWith('.strm') && norm(f).endsWith(norm(h.libraryPath))) : undefined;
+            // A sidecar left behind by an earlier run (its .strm gone, the .nfo / .json / picture still there) is rewritten in place,
+            // so it was in the "before" listing and does not show as new. When the .strm is new, count the files of that name that
+            // this download rewrote (modified since it started; the 60 s allows for the NAS clock) as written by it, and clean them up.
+            if (strm && added.includes(strm)) {
+                const stem = path.basename(strm).replace(/\.strm$/i, '');
+                for (const n of fs.readdirSync(path.dirname(strm))) {
+                    const f = path.join(path.dirname(strm), n);
+                    if (n.startsWith(stem) && n !== path.basename(strm) && !added.includes(f) && fs.statSync(f).mtimeMs >= t0 - 60000) added.push(f);
+                }
+            }
+            added.forEach((f) => tracked.add(f));
             return { h, added, strm, fresh: !!strm && added.includes(strm), content: strm ? fs.readFileSync(strm, 'utf8').trim() : '' };
         };
 
