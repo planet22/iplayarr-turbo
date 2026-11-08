@@ -15,7 +15,7 @@
             <!-- Next to "Check all now": the two-way arrows are what marks Sonarr/Radarr on this page. -->
             <template #refresh-after>
                 <button
-                    v-if="showVideo && arrApps.length" class="SettingsPageToolbar-button clickable"
+                    v-if="arrApps.length" class="SettingsPageToolbar-button clickable"
                     title="Sync Sonarr/Radarr" aria-label="Sync Sonarr/Radarr" @click="openSync"
                 >
                     <font-awesome-icon :icon="['fas', 'right-left']" />
@@ -39,7 +39,7 @@
                     :style="subscription.radio && subscription.thumbnail ? { '--art': `url(${getThumbnailUrl(subscription.thumbnail, true)})` } : {}"
                 >
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
-                    <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    <div v-else class="thumbnail-placeholder"><font-awesome-icon :icon="['fas', subscription.radio ? 'radio' : 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
                     <span v-if="countBadge(subscription)" class="thumbBadge" :title="countBadge(subscription).title">{{ countBadge(subscription).text }}</span>
                     <span v-if="lastBadge(subscription)" class="thumbBadge thumbLast" :title="lastBadge(subscription).title"><font-awesome-icon :icon="['fas', 'download']" />{{ lastBadge(subscription).text }}</span>
@@ -157,7 +157,7 @@
                     :style="subscription.radio && subscription.thumbnail ? { '--art': `url(${getThumbnailUrl(subscription.thumbnail, true)})` } : {}"
                 >
                     <img v-if="subscription.thumbnail" :src="getThumbnailUrl(subscription.thumbnail, true)" :alt="subscription.title" loading="lazy" @error="hideBrokenImage" />
-                    <div v-else class="noThumb"><font-awesome-icon :icon="['fas', 'tv']" /></div>
+                    <div v-else class="noThumb"><font-awesome-icon :icon="['fas', subscription.radio ? 'radio' : 'tv']" /></div>
                     <ProgressRing v-if="progress[subscription.id]" v-bind="progress[subscription.id]" />
                     <span v-if="countBadge(subscription)" class="thumbBadge" :title="countBadge(subscription).title">{{ countBadge(subscription).text }}</span>
                     <span v-if="lastBadge(subscription)" class="thumbBadge thumbLast" :title="lastBadge(subscription).title"><font-awesome-icon :icon="['fas', 'download']" />{{ lastBadge(subscription).text }}</span>
@@ -280,7 +280,7 @@
         </div>
         <TablePagination v-if="everLoaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
 
-        <template v-if="showVideo && detected.length">
+        <template v-if="detected.length">
             <legend ref="foundSection" class="liveLegend">Found in Sonarr/Radarr</legend>
             <div class="detectedIntro">
                 <span>Shows in Sonarr/Radarr linked to iPlayarr.</span>
@@ -332,7 +332,7 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import SubscriptionSyncDialog from '@/components/modals/SubscriptionSyncDialog.vue';
 import ProgressRing, { progressLabel } from '@/components/subscriptions/ProgressRing.vue';
 import { ipFetch } from '@/lib/ipFetch';
-import { useNonBrowseScope } from '@/lib/nonBrowseScope';
+import { useMediaMode } from '@/lib/mediaMode';
 import { useRadioSubscriptions } from '@/lib/radioSubscriptions';
 import { useArrAppNames } from '@/lib/subscriptionArr';
 import { countBadge, countsAria, countsTitle, lastBadge, otherCount, sourceLabel, sourceTitle } from '@/lib/subscriptionDisplay';
@@ -346,7 +346,8 @@ import { formatRelativeTime, getBasePath, getThumbnailUrl, hideBrokenImage, sort
 
 const isMobile = useIsMobile();
 // Radio follows and video subscriptions: both, or the current mode only (Appearance setting). Sonarr/Radarr tools are video's.
-const { showVideo, showRadio } = useNonBrowseScope();
+// Not a browse page: video and radio subscriptions always show together (radio only while BBC Sounds is on).
+const { radioEnabled: showRadio } = useMediaMode();
 // Cards on phones, a table on wide screens; either can be chosen and is remembered.
 const { viewMode, setViewMode } = useViewMode('iplayarr.subscriptionsViewMode', {
     modes: ['table', 'cards'],
@@ -376,8 +377,8 @@ const videoSubs = {
     secureService: 'iPlayer',
 };
 const subsFor = (subscription) => (subscription.radio ? radioSubs : videoSubs);
-const items = computed(() => [...(showVideo.value ? subscriptions.value : []), ...radioItems.value]);
-const everLoaded = computed(() => (showVideo.value ? loaded.value : true) && (showRadio.value ? radioSubs.loaded.value : true));
+const items = computed(() => [...subscriptions.value, ...radioItems.value]);
+const everLoaded = computed(() => loaded.value && (showRadio.value ? radioSubs.loaded.value : true));
 const showLink = (subscription) => subsFor(subscription).link(subscription);
 
 // Sort choices. Subscriptions missing a date (never downloaded, Sonarr/Radarr-only never checked) always go last.
@@ -403,7 +404,7 @@ try {
 } catch {
     // Not remembered.
 }
-const filterOptions = computed(() => ['All', 'iPlayarr', ...(showVideo.value ? arrApps.value.map(({ name }) => name) : [])]);
+const filterOptions = computed(() => ['All', 'iPlayarr', ...arrApps.value.map(({ name }) => name)]);
 const activeFilter = computed(() => (filterOptions.value.includes(filterChoice.value) ? filterChoice.value : 'All'));
 const toolbarIcons = computed(() => [...(items.value.length > 1 ? ['filter'] : []), 'refresh']);
 const filteredSubscriptions = computed(() => {
@@ -617,7 +618,7 @@ const checkAll = async () => {
     checkingAll.value = true;
     try {
         const results = [];
-        if (showVideo.value && subscriptions.value.length) {
+        if (subscriptions.value.length) {
             const { data, ok } = await ipFetch('json-api/subscriptions/check', 'POST');
             if (ok) results.push(...data);
         }

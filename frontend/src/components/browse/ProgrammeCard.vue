@@ -66,6 +66,7 @@ import { RouterLink } from 'vue-router';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import QualityBadges from '@/components/common/QualityBadges.vue';
+import { programmeTarget } from '@/lib/mediaDisplay';
 import { useQualityBadges } from '@/lib/qualityBadges';
 import { useSubscriptions } from '@/lib/subscriptions';
 import { useBrowseActions } from '@/lib/useBrowseActions';
@@ -119,12 +120,7 @@ const kindBadges = computed(() => {
 });
 
 // A radio programme opens its radio page; a radio episode opens its programme with the episode picked.
-const cardTarget = computed(() => {
-    const { item } = props;
-    if (item.radio) return item.kind === 'episode' ? (item.showId ? { path: `/browse/radio/${item.showId}`, query: { episode: item.pid } } : '') : { path: `/browse/radio/${item.pid}` };
-    const base = isRadio.value ? '/browse/radio' : '/browse/programme';
-    return { path: `${base}/${item.seriesPid ?? item.pid}`, query: item.seriesPid && item.seriesPid !== item.pid ? { episode: item.pid } : {} };
-});
+const cardTarget = computed(() => programmeTarget(props.item));
 
 const thumbnailUrl = computed(() => getThumbnailUrl(props.item.thumbnail, true));
 

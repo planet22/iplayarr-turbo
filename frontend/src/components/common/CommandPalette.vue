@@ -62,7 +62,7 @@ const router = useRouter();
 const PAGES = [
     { label: 'Discover', path: '/browse', icon: 'compass' },
     { label: 'Search', path: '/search', icon: 'search' },
-    { label: 'Guide', path: '/browse/schedule', icon: 'calendar-days', words: 'schedule tv listings' },
+    { label: 'Guide', path: '/browse/schedule', icon: 'calendar-days', words: 'schedule listings' },
     { label: 'Channels', path: '/browse/channels', icon: 'tower-broadcast', words: 'live' },
     { label: 'Categories', path: '/browse/categories', icon: 'layer-group', words: 'genres' },
     { label: 'Collections', path: '/browse/collections', icon: 'photo-film', words: 'themed lists fright night' },
@@ -119,7 +119,9 @@ const close = () => {
 
 const results = computed(() => {
     const q = query.value.trim().toLowerCase();
-    const pages = PAGES.filter((page) => !q || `${page.label} ${page.words ?? ''}`.toLowerCase().includes(q)).map((page) => ({
+    const radio = radioActive();
+    // BBC Sounds has no A to Z, so radio mode does not offer it.
+    const pages = PAGES.filter((page) => !(radio && page.path === '/browse/atoz')).filter((page) => !q || `${page.label} ${page.words ?? ''}`.toLowerCase().includes(q)).map((page) => ({
         key: `page-${page.path}`,
         icon: page.icon,
         label: page.label,
@@ -127,7 +129,7 @@ const results = computed(() => {
         path: page.path,
     }));
     const list = [];
-    if (q) list.push({ key: 'search', icon: 'magnifying-glass', label: `Search iPlayer for "${query.value.trim()}"`, hint: 'Search', path: `/search?searchTerm=${encodeURIComponent(query.value.trim())}` });
+    if (q) list.push({ key: 'search', icon: 'magnifying-glass', label: `Search ${radio ? 'BBC Sounds' : 'iPlayer'} for "${query.value.trim()}"`, hint: 'Search', path: `/search?searchTerm=${encodeURIComponent(query.value.trim())}` });
     list.push(...programmes.value.map((p) => ({ key: `prog-${suggestionKey(p)}`, icon: suggestionIcon(p), label: p.title, hint: suggestionLabel(p), path: suggestionPath(p) })));
     list.push(...pages.slice(0, q ? 8 : pages.length));
     return list;

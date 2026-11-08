@@ -203,7 +203,7 @@
                         <font-awesome-icon
                             class="clickable"
                             :icon="['fas', 'play']"
-                            title="Play Video"
+                            :title="result.radio ? 'Play audio' : 'Play Video'"
                             @click="preview(result)"
                         />
                     </td>
@@ -264,6 +264,7 @@ import dialogService from '@/lib/dialogService';
 import { defaultMediaMode, estimateSizeMb } from '@/lib/downloadSummary';
 import { askAboutVersions, batchVersionKey, initialVersionKey, offeredVersions, planDownloads, quickVersion } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
+import { radioEpisodeOf } from '@/lib/mediaDisplay';
 import { radioActive } from '@/lib/mediaMode';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
@@ -702,12 +703,16 @@ watch(
 
 // Radio results: a programme opens its radio page; an episode plays and downloads through the radio actions.
 const radio = useRadioActions();
-const radioEpisode = (result) => ({ id: result.pid, title: result.title, showTitle: result.title, subtitle: result.subtitle });
+const radioEpisode = radioEpisodeOf;
 
 const download = (searchResult) => {
     if (searchResult.radio) {
         if (searchResult.kind === 'brand') router.push(`/browse/radio/${searchResult.pid}`);
-        else askRadioDownload(`Download ${searchResult.title}${searchResult.episodeTitle ? ` - ${searchResult.episodeTitle}` : ''}?`).then((mode) => mode && radio.download(radioEpisode(searchResult), mode));
+        else {
+            askRadioDownload(`Download ${searchResult.title}${searchResult.episodeTitle ? ` - ${searchResult.episodeTitle}` : ''}?`)
+                .then((mode) => mode && radio.download(radioEpisode(searchResult), mode))
+                .then((queued) => queued && router.push('/queue'));
+        }
         return;
     }
     const modal = useModal({
@@ -748,8 +753,19 @@ const preview = (searchResult) => {
     else playProgramme(searchResult.pid, searchResult.title, searchResult.versions);
 };
 
+// The ticked radio episodes: one question for all of them, then queued together (a programme row is not an episode).
+const radioBatchDownload = async (rows) => {
+    const episodes = rows.filter((row) => row.kind === 'episode');
+    if (!episodes.length) return 0;
+    const mode = await askRadioDownload(`Download ${episodes.length} radio episode${episodes.length === 1 ? '' : 's'}?`, episodes.length);
+    return mode ? radio.downloadMany(episodes.map(radioEpisode), mode) : 0;
+};
+
 const multipleImmediateDownload = async () => {
-    const selectedResults = filteredResults.value.filter((result) => result.checked);
+    const ticked = filteredResults.value.filter((result) => result.checked);
+    const selectedResults = ticked.filter((result) => !result.radio);
+    const radioQueued = await radioBatchDownload(ticked.filter((result) => result.radio));
+    if (radioQueued && !selectedResults.length) router.push('/queue');
     if (selectedResults.length > 0) {
         const sizes = selectedResults.map((result) => estimateSizeMb(globalSettings.value, result));
         const offered = offeredVersions(selectedResults);

@@ -20,6 +20,8 @@ export const radioQueue = ref([]);
 export const radioHistory = ref([]);
 // Every radio download, waiting or finished, by episode id (pid) for the places that only ask where an episode stands.
 export const radioDownloads = computed(() => [...radioQueue.value, ...radioHistory.value]);
+// The same, keyed by episode id, built once for every place that asks.
+export const radioDownloadMap = computed(() => Object.fromEntries(radioDownloads.value.map((d) => [d.pid, d])));
 
 export const loadRadioDownloads = async () => {
     const [queue, history] = await Promise.all([ipFetch('json-api/queue/queue?mode=radio'), ipFetch('json-api/queue/history?mode=radio')]);
@@ -77,7 +79,7 @@ export const radioDownloadNote = (mode, count = 1) => {
 
 export function useRadioActions() {
     const globalSettings = inject('globalSettings', null);
-    const downloadMap = computed(() => Object.fromEntries(radioDownloads.value.map((d) => [d.pid, d])));
+    const downloadMap = radioDownloadMap;
 
     const play = (episode) => {
         const key = globalSettings?.value?.STREAM_KEY;
@@ -89,13 +91,25 @@ export function useRadioActions() {
         };
     };
 
-    // `mode` is 'm4a' or 'strm' for this one download; without it the Radio Media Mode setting decides.
-    const download = async (episode, mode) => {
-        const { ok, data } = await ipFetch('json-api/sounds/downloads', 'POST', { episodeId: episode.id, ...(mode ? { mode } : {}) });
-        if (!ok) return toastService.error('Unable to download', { detail: data?.message });
-        toastService.info('Added to the Queue');
-        await loadRadioDownloads();
+    // Queues the episodes one after another, then reads the lists once (not after each) and reports the ones refused in one
+    // message. `mode` is 'm4a' or 'strm' for these downloads; without it the Radio Media Mode setting decides. Resolves with how
+    // many were queued, for the caller to take the user to the Queue.
+    const downloadMany = async (episodes, mode) => {
+        let queued = 0;
+        const refused = [];
+        for (const episode of episodes) {
+            const { ok, data } = await ipFetch('json-api/sounds/downloads', 'POST', { episodeId: episode.id, ...(mode ? { mode } : {}) });
+            if (ok) queued++;
+            else refused.push(data?.message);
+        }
+        if (queued) await loadRadioDownloads();
+        if (refused.length) {
+            const many = episodes.length > 1;
+            toastService.error(many ? `${refused.length} of ${episodes.length} downloads could not be queued` : 'Unable to download', { detail: refused.find(Boolean) });
+        }
+        return queued;
     };
+    const download = (episode, mode) => downloadMany([episode], mode);
 
-    return { play, download, downloadMap };
+    return { play, download, downloadMany, downloadMap };
 }

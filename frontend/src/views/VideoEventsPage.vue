@@ -133,7 +133,7 @@ import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { useNonBrowseScope } from '@/lib/nonBrowseScope';
+import { useMediaMode } from '@/lib/mediaMode';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
@@ -170,9 +170,9 @@ function videoLabel(event) {
 const channelLogos = ref({});
 const channelTitles = ref({});
 
-// Radio and video events together, or the current mode's only (Appearance setting).
-const { showVideo, showRadio } = useNonBrowseScope();
-const reversedEvents = computed(() => events.value.filter((event) => (event.radio ? showRadio.value : showVideo.value)).reverse());
+// Radio and video events together (radio ones only while BBC Sounds is on): not a browse page, so not tied to the toggle.
+const { radioEnabled } = useMediaMode();
+const reversedEvents = computed(() => events.value.filter((event) => !event.radio || radioEnabled.value).reverse());
 
 const {
     filterText, sortBy, sortOrder, dateFrom, dateTo, sorted: sortedEvents, toggleSort,

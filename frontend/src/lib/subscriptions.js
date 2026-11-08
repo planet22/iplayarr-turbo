@@ -9,8 +9,11 @@ import { hasArrApps, linkToArr, offerArrLink, unlinkFromArr } from '@/lib/subscr
 import toastService from '@/lib/toastService';
 
 const ARR_ONLY = 'Add to Sonarr/Radarr only - subscribed, but no downloads by iPlayarr';
-const NEW_ONLY = 'Only new episodes from now on';
-const NEW_AND_LATEST = 'New episodes, and download the latest one now';
+// The choices and wording a subscription dialog shares, video or radio (the radio one is in mediaProvider.js).
+export const NEW_ONLY = 'Only new episodes from now on';
+export const NEW_AND_LATEST = 'New episodes, and download the latest one now';
+export const SUBSCRIBE_INTRO =
+    'New episodes will be queued for download automatically (checked hourly). Unless you choose to download everything, episodes that are already available will not be downloaded.';
 const PLAIN_ONLY = 'Just the standard version';
 const VERSION_CHOICES = {
     'Also audio described': ['audio-described'],
@@ -76,7 +79,7 @@ export function useSubscriptions() {
         const arrAvailable = await hasArrApps();
         const choice = await dialogService.select(
             `Subscribe to ${programme.title}?`,
-            'New episodes will be queued for download automatically (checked hourly). Unless you choose to download everything, episodes that are already available will not be downloaded.',
+            SUBSCRIBE_INTRO,
             undefined,
             [NEW_ONLY, NEW_AND_LATEST, allLabel(episodeCount), ...(arrAvailable ? [ARR_ONLY] : [])]
         );

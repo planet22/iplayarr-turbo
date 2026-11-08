@@ -8,10 +8,11 @@ import DownloadConfirmModal from '@/components/modals/DownloadConfirmModal.vue';
 import { browseFetch, toDownloadResult } from '@/lib/browse';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { radioDownloadState, radioEpisodeLabel } from '@/lib/mediaDisplay';
+import { radioDownloadState, radioEpisodeLabel, radioEpisodeOf } from '@/lib/mediaDisplay';
 import { playProgramme } from '@/lib/playVersion';
 import { useRadioActions } from '@/lib/radio';
 import { askRadioDownload } from '@/lib/radioDownloadChoice';
+import { NEW_AND_LATEST, NEW_ONLY, SUBSCRIBE_INTRO } from '@/lib/subscriptions';
 import toastService from '@/lib/toastService';
 
 // What a page needs from "the thing that has programmes and episodes", whichever it is. Video (iPlayer) is the base: the
@@ -22,8 +23,6 @@ import toastService from '@/lib/toastService';
 
 // The choices when subscribing to a show: the same as a video subscription (minus Sonarr/Radarr and versions). "All" is
 // capped by the server.
-const NEW_ONLY = 'Only new episodes from now on';
-const NEW_AND_LATEST = 'New episodes, and download the latest one now';
 const RADIO_ALL_CAP = 100;
 
 // ---- Providers ----------------------------------------------------------------------------------------------------
@@ -31,8 +30,12 @@ const RADIO_ALL_CAP = 100;
 // Shared by the pages that show followed radio shows, so the programme page's Subscribe button and the Subscriptions page agree.
 const follows = ref([]);
 const loadFollows = async () => {
-    const { ok, data } = await ipFetch('json-api/subscriptions?mode=radio');
-    if (ok) follows.value = data;
+    try {
+        const { ok, data } = await ipFetch('json-api/subscriptions?mode=radio');
+        if (ok) follows.value = data;
+    } catch {
+        // Offline or the server is restarting: the list stays as it was.
+    }
 };
 
 // Call from a component's setup: the parts that need the router, injected settings or the modal service are made here.
@@ -40,7 +43,7 @@ export function useMediaProviders() {
     const router = useRouter();
     const globalSettings = inject('globalSettings', null);
     const radioActions = useRadioActions();
-    const asEpisode = (item) => ({ id: item.pid, title: item.title, showTitle: item.title, subtitle: item.subtitle });
+    const asEpisode = radioEpisodeOf;
     const itemName = (item) => `${item.title}${item.episodeTitle ? ` - ${item.episodeTitle}` : ''}`;
 
     // Same precondition PipPlayer itself enforces: streaming needs a configured key.
@@ -104,7 +107,8 @@ export function useMediaProviders() {
         play: (item) => radioActions.play(asEpisode(item)),
         download: async (item) => {
             const mode = await askRadioDownload(`Download ${itemName(item)}?`);
-            if (mode) await radioActions.download(asEpisode(item), mode);
+            // As a video download does, a queued one takes the user to the Queue.
+            if (mode && (await radioActions.download(asEpisode(item), mode))) router.push('/queue');
         },
         downloadState: (episode) => radioDownloadState(radioActions.downloadMap.value[episode.pid]?.state, episode),
         episodeLabel: radioEpisodeLabel,
@@ -131,7 +135,7 @@ export function useMediaProviders() {
                         const allLabel = total > 0 ? `Download the newest ${total} available episodes now, plus new ones` : 'Download the available episodes now, plus new ones';
                         const choice = await dialogService.select(
                             `Subscribe to ${title}?`,
-                            'New episodes will be queued for download automatically (checked hourly). Unless you choose to download more, episodes that are already available will not be downloaded.',
+                            SUBSCRIBE_INTRO,
                             undefined,
                             [NEW_ONLY, NEW_AND_LATEST, allLabel]
                         );
@@ -156,7 +160,7 @@ export function useMediaProviders() {
             if (!mode) return;
             setBusy(true);
             try {
-                for (const e of todo) await radioActions.download({ id: e.pid }, mode);
+                if (await radioActions.downloadMany(todo.map((e) => ({ id: e.pid })), mode)) router.push('/queue');
             } finally {
                 setBusy(false);
             }

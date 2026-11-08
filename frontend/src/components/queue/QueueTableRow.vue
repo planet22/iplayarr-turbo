@@ -167,9 +167,9 @@ import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
 import { cardFacts as getCardFacts, clientLabel as getClientLabel, deleteIcon, outputLabel as getOutputLabel, showProgressBar, speedLabel as queueSpeedLabel } from '@/lib/queueCard';
-import { nowPlaying, removeRadioDownload, retryRadioDownload } from '@/lib/radio';
+import { removeRadioDownload, retryRadioDownload, useRadioActions } from '@/lib/radio';
 import { useDebugLink } from '@/lib/useDebugLink';
-import { formatDate, formatStorageSize, getHost, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { formatDate, formatStorageSize, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 import ChannelPill from '../common/ChannelPill.vue';
 import DataCard from '../common/DataCard.vue';
@@ -207,14 +207,11 @@ const emit = defineEmits(['update:modelValue']);
 
 const apps = inject('apps');
 const router = useRouter();
-const globalSettings = inject('globalSettings', null);
 const { debugOn, openDebug } = useDebugLink();
 
-const playRadio = ({ id, title }) => {
-    const key = globalSettings?.value?.STREAM_KEY;
-    if (!key) return;
-    nowPlaying.value = { id, title, url: `${getHost()}/api?mode=stream&audio=1&pid=${encodeURIComponent(id)}&streamkey=${encodeURIComponent(key)}` };
-};
+// The same play as the cards and the programme page (it also says so when there is no Stream Key).
+const { play: playRadioEpisode } = useRadioActions();
+const playRadio = ({ id, title }) => playRadioEpisode({ id, title });
 
 const checked = computed({
     get: () => props.modelValue,

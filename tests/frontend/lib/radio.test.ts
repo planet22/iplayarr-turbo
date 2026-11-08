@@ -130,15 +130,32 @@ describe('useRadioActions', () => {
     it('queues a download, then refreshes; tells the user when it is refused', async () => {
         mockInject.mockReturnValue(ref({}));
         mockFetch.mockResolvedValue({ ok: true, data: [] });
-        await useRadioActions().download(episode);
+        expect(await useRadioActions().download(episode)).toBe(1);
         expect(mockFetch).toHaveBeenCalledWith('json-api/sounds/downloads', 'POST', { episodeId: 'p0abc' });
-        expect(mockToast.info).toHaveBeenCalledWith('Added to the Queue');
+        expect(mockFetch).toHaveBeenCalledWith('json-api/queue/queue?mode=radio');
+        expect(mockToast.error).not.toHaveBeenCalled();
 
         mockFetch.mockReset();
         mockFetch.mockResolvedValue({ ok: false, data: { message: 'Set the Sounds Directory' } });
-        await useRadioActions().download(episode);
+        expect(await useRadioActions().download(episode)).toBe(0);
         expect(mockToast.error).toHaveBeenCalledWith('Unable to download', { detail: 'Set the Sounds Directory' });
         expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('queues several episodes with one refresh and one message about the ones refused', async () => {
+        mockInject.mockReturnValue(ref({}));
+        mockFetch.mockImplementation(async (url: string, _method?: string, body?: { episodeId: string }) =>
+            url === 'json-api/sounds/downloads' && body?.episodeId === 'bad' ? { ok: false, data: { message: 'No directory' } } : { ok: true, data: [] }
+        );
+        const episodes = [{ id: 'a' }, { id: 'bad' }, { id: 'c' }];
+        expect(await useRadioActions().downloadMany(episodes, 'strm')).toBe(2);
+        const posts = mockFetch.mock.calls.filter(([url]) => url === 'json-api/sounds/downloads');
+        expect(posts).toHaveLength(3);
+        expect(posts[0][2]).toEqual({ episodeId: 'a', mode: 'strm' });
+        // Two reads of the lists (queue and history), once, not after each episode.
+        expect(mockFetch.mock.calls.filter(([url]) => String(url).startsWith('json-api/queue/'))).toHaveLength(2);
+        expect(mockToast.error).toHaveBeenCalledTimes(1);
+        expect(mockToast.error).toHaveBeenCalledWith('1 of 3 downloads could not be queued', { detail: 'No directory' });
     });
 
     it('keys the downloads by episode id, queue and history together', () => {

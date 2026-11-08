@@ -183,9 +183,9 @@
                         >
                             <img
                                 v-if="episode.thumbnail && !brokenThumbs[episode.pid]" class="episodeThumb" :src="getThumbnailUrl(episode.thumbnail, true)" :alt="episode.title"
-                                loading="lazy" role="button" tabindex="0" @error="brokenThumbs[episode.pid] = true" @click="download(episode)" @keydown.enter="download(episode)"
+                                loading="lazy" role="button" tabindex="0" @error="brokenThumbs[episode.pid] = true" @click="downloadIfFree(episode)" @keydown.enter="downloadIfFree(episode)"
                             />
-                            <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="download(episode)" @keydown.enter="download(episode)">
+                            <div v-else class="episodeNoThumb episodeThumb" role="button" tabindex="0" @click="downloadIfFree(episode)" @keydown.enter="downloadIfFree(episode)">
                                 <font-awesome-icon :icon="['fas', provider.icon]" />
                             </div>
                             <div class="overlay">
@@ -300,6 +300,10 @@ const loadOnDisk = async (pid) => {
 };
 
 const { canPlay, play, download } = useBrowseActions();
+// The picture is a second way to the Download button, so it stops where the button does (already queued or saved).
+const downloadIfFree = (episode) => {
+    if (!provider.value.downloadState(episode).busy) download(episode);
+};
 const { debugOn, openDebug } = useDebugLink();
 const globalSettings = inject('globalSettings', ref({}));
 
