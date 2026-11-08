@@ -106,6 +106,10 @@ Lists every subscription with its artwork, channel, when it was last checked, an
 - **Sort** by Added, A-Z, Downloaded or Checked (A-Z ignores a leading *The*, *A* or *An*) and **filter** by All, iPlayarr or an individual app.
 - **Unsubscribe** (trash) stops the subscription. Episodes already downloaded are not touched.
 
+## Radio subscriptions
+
+With BBC Sounds radio on, radio shows are subscribed to from their programme page and listed here beside the video ones, whichever Video | Radio mode is on (this page is not tied to the switch). The choices are the same as for video (only new episodes, new and the latest now, or new and the newest 100 now), checked hourly, saved the way Radio Media Mode says, with no Sonarr/Radarr link or versions. The subscription is named after the show title BBC gives its episodes, which is what the files are saved under. See [SOUNDS.md](SOUNDS.md).
+
 ## Live channels
 
 The Subscriptions page also has a **Live channels** section listing the BBC live channels you added to your media library (with logos and a remove button). These are separate from programme subscriptions: there is nothing to check or download, only a `.strm` file kept in `LIVE_STRM_DIR`. See [STREAMING.md](STREAMING.md#live-channels).
