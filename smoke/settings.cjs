@@ -128,6 +128,7 @@ const NO_EFFECT = {
     SOUNDS_ENABLED: 'turns the whole Radio feature on or off; every radio check in the other layers needs it on, so no flip here',
     RADIO_MEDIA_MODE: 'chooses what the next radio download saves (an audio file or a .strm link); a download writes into the Radio Directory, which this suite will not do (the radio download service tests cover both)',
     RADIO_THUMBNAIL_STYLE: 'browser-only: the page reads it into data-radio-art on <html>; the radio programme page checks in uireal use the default',
+    DOWNLOAD_SUBTITLES: 'decides what a finished download keeps (a loose .srt, an embedded track, both or none); this suite cancels its downloads, so the real-download matrix and the download tests cover it, and section 7b checks the four values and the refusal',
     DEBUG: 'adds log lines; the API has no log read-back (the Logs page streams over a socket)',
     SCHEDULE_FULL_REFRESH: 'changes how the next BBC schedule refresh fetches days; the cached feed is not rebuilt on save',
     STREAM_CACHE_DIR: 'a path inside the container, not visible from the host running this suite',
