@@ -261,7 +261,7 @@
                                     <td class="text">{{ answer(pair) }}</td>
                                     <td class="text" colspan="3" />
                                 </tr>
-                                <tr v-for="(row, index) in connectionRows(pair, version)" :key="index" :class="{ playedRow: row.played, playingRow: playingProbe?.key === row.key }" :title="row.played ? 'The stream that played was served from this connection' : undefined">
+                                <tr v-for="(row, index) in connectionRows(pair, version)" :key="index" :class="{ bestRow: row.key === bestKey, playingRow: playingProbe?.key === row.key }" :title="row.key === bestKey ? 'The line a normal Play would use' : undefined">
                                     <td class="text">
                                         <button v-if="row.playable" class="clickable playConnection" :disabled="!streamKey" :title="row.playTitle" :aria-label="row.playTitle" @click="playConnection(row, pair, index)">
                                             <font-awesome-icon :icon="['fas', 'play']" />
@@ -372,7 +372,7 @@
 
 <script setup>
 import Hls from 'hls.js';
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -748,7 +748,41 @@ const trackText = (tracks) => {
 // A stream plays one picture's playlist (or the master), which sits in the same folder as the master the probe read, so the
 // two are matched by folder (this includes the protocol and host, so each connection is told apart).
 const folderOf = (url) => (url ? url.slice(0, url.lastIndexOf('/')) : undefined);
-const isPlayed = (masterUrl) => !!masterUrl && !!playedUrl.value && folderOf(masterUrl) === folderOf(playedUrl.value);
+const sameFolder = (masterUrl, servedUrl) => !!masterUrl && !!servedUrl && folderOf(masterUrl) === folderOf(servedUrl);
+
+// The line a normal Play would use, worked out from the probe the way the stream service chooses: for the chosen version, the
+// route that answered last time if it has a usable line (else the first route that has one), its first https connection (http
+// only when it offers no https; the vbidi supplier is never used). With Native Quality Probe on, the line with the tallest picture
+// wins instead (the earlier one on a tie). A line is usable when it is HLS, of the right kind and its playlist was read.
+const bestKey = computed(() => {
+    // The version picked in the dropdown beside Play (the standard one when none is picked).
+    const probed = isRadio ? result.value?.versions?.[0] : (result.value?.versions ?? []).find((version) => versionIdOf(version) === playVersion.value);
+    if (!probed) return undefined;
+    const candidates = [];
+    for (const pair of probed.pairs) {
+        for (const media of pair.media) {
+            if (media.kind !== (isRadio ? 'audio' : 'video')) continue;
+            const hls = media.connections.filter((connection) => connection.transferFormat === 'hls');
+            const protocol = hls.some((connection) => connection.protocol === 'https') ? 'https' : 'http';
+            for (const connection of hls) {
+                if (connection.protocol !== protocol || /vbidi/i.test(connection.supplier ?? '') || !connection.master || connection.master.error) continue;
+                const height = Math.max(0, ...connection.master.variants.map((variant) => Number(variant.resolution?.split('x')[1] ?? 0)));
+                candidates.push({ set: `${pair.mediaSet} / ${pair.version}`, height, key: `${probed.vpid}|${pair.mediaSet}/${pair.version}|${media.kind}|${media.connections.indexOf(connection)}` });
+            }
+        }
+    }
+    if (!candidates.length) return undefined;
+    if (info.value?.settings?.STREAM_NATIVE_HQ_PROBE === 'true') return candidates.reduce((best, candidate) => (candidate.height > best.height ? candidate : best)).key;
+    // Only the standard version starts from the route that answered last time; another version walks the routes in fixed order.
+    const last = playVersion.value ? undefined : dashboard.value.sessions.recent[0]?.source?.route?.replace(' (from the link)', '');
+    return (candidates.find((candidate) => candidate.set === last) ?? candidates[0]).key;
+});
+
+// Every line of the probe (with its route and answer), to find the one a stream was served from.
+const probeLines = () =>
+    (result.value?.versions ?? []).flatMap((version) =>
+        version.pairs.flatMap((pair) => connectionRows(pair, version).map((row) => ({ row, set: `${pair.mediaSet} / ${pair.version}`, answer: answer(pair) })))
+    );
 
 // The version id a stream request takes for a probed version (audio described, signed); '' is the standard one.
 const versionIdOf = (probed) => {
@@ -771,7 +805,7 @@ const connectionRows = (pair, probedVersion) =>
             connection: [connection.supplier, connection.protocol, connection.transferFormat, connection.priority && `priority ${connection.priority}`, connection.host].filter(Boolean).join(' · '),
             // The addresses without their signed token: the one BBC lists, and where the playlist was read from after redirects.
             links: [connection.url && { label: 'listed', url: connection.url }, (connection.master?.url ?? connection.dash?.url) && { label: 'read from', url: connection.master?.url ?? connection.dash?.url }].filter(Boolean),
-            played: isPlayed(connection.master?.url),
+            masterUrl: connection.master?.url,
             variants: connection.master
                 ? [connection.master.variants.map((v) => [v.resolution, v.bandwidth && bitrate(v.bandwidth), v.codecs].filter(Boolean).join(' ')).join('; '), trackText(connection.master.tracks)].filter(Boolean).join(' · ')
                 : connection.dash
@@ -808,8 +842,6 @@ const versionOptions = computed(() => {
 });
 
 const session = computed(() => (streams?.value?.active ?? []).find((s) => s.pid === pid));
-// The address (no token) the newest stream of this programme was served from, to mark its connection in the Probe.
-const playedUrl = computed(() => session.value?.source?.url ?? dashboard.value.sessions.recent[0]?.source?.url);
 
 // What iPlayarr and the player say about the picture size, shown beside the player.
 const servedStats = computed(() => {
@@ -911,6 +943,15 @@ const snoopPosition = () => {
 const playingSession = ref(null);
 // The Probe connection being played (its row is coloured there, and a copy sits above the player).
 const playingProbe = ref(null);
+// The normal Play button (or the version choice) does not name a line: once the server says which address it served the stream
+// from, the line with that address is shown as playing, the same as when a line's own button is pressed. The probe may also be
+// run (or finish) after the stream has started, so that is watched too.
+watch([playing, () => session.value?.source?.url, result], () => {
+    if (!playing.value || playingSession.value || playingProbe.value) return;
+    const served = session.value?.source?.url;
+    const hit = served ? probeLines().find(({ row }) => sameFolder(row.masterUrl, served)) : undefined;
+    if (hit) playingProbe.value = { key: hit.row.key, row: hit.row, set: hit.set, answer: hit.answer };
+});
 async function playConnection(row, pair) {
     if (playing.value) stopPlayback();
     startPlayback(false, { version: row.version, route: `${pair.mediaSet}-${pair.version}` });
@@ -1279,11 +1320,11 @@ ul.plain {
 }
 
 // The connection the newest stream was served from: the whole row is coloured.
-.probeTable tr.playedRow td {
+.probeTable tr.bestRow td {
     background-color: color-mix(in srgb, @success-color 25%, transparent);
 }
 
-// The connection being played in the player below (the same colour as in the Streams played table).
+// The connection being played in the player below (the same colour as in the Streams played table); it wins over the best line.
 .probeTable tr.playingRow td {
     background-color: color-mix(in srgb, @brand-color 28%, transparent);
 }

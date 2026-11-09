@@ -1196,6 +1196,17 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                     const wrong = await page.evaluate(() => [...document.querySelectorAll('.streamDebug .probeVersion tbody tr')].filter((tr) => tr.querySelector('.playConnection') && !/^(video|audio)\b/.test(tr.children[3]?.textContent.trim() ?? '') || tr.querySelector('.playConnection') && /dash/.test(tr.children[4]?.textContent ?? '')).length);
                     const buttons = await page.locator('.streamDebug .playConnection').count();
                     ok('the Probe table has a Play button only on video or audio HLS lines (none on thumbnails, captions or DASH)', wrong === 0, `${buttons} button(s), ${wrong} on other lines`);
+                    ok('the Probe table colours at most one line as the one a normal Play would use', (await page.locator('.streamDebug .probeTable tr.bestRow').count()) <= 1);
+                    const versionSelect = page.locator('.streamDebug .playerControls select');
+                    const otherVersion = (await versionSelect.count()) ? await versionSelect.locator('option').evaluateAll((options) => options.map((o) => o.value).find(Boolean)) : undefined;
+                    if (otherVersion) {
+                        const before = await page.locator('.streamDebug tr.bestRow').evaluateAll((rows) => rows.map((row) => row.closest('.probeVersion')?.querySelector('h3 code')?.textContent));
+                        await versionSelect.selectOption(otherVersion);
+                        await page.waitForTimeout(500);
+                        const after = await page.locator('.streamDebug tr.bestRow').evaluateAll((rows) => rows.map((row) => row.closest('.probeVersion')?.querySelector('h3 code')?.textContent));
+                        ok('choosing another version in the dropdown moves the green line to that version', after.length === 0 || before.join() !== after.join(), `${before} -> ${after}`);
+                        await versionSelect.selectOption('');
+                    }
                     if (buttons) {
                         await page.locator('.streamDebug .playConnection').first().click();
                         await page.waitForTimeout(3000);
