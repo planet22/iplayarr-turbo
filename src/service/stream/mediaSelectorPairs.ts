@@ -46,6 +46,44 @@ export const versionMediaSelectorPairs: MediaSelectorPair[] = [
     ...allMediaSelectorPairs.filter(({ mediaSet }) => mediaSet !== 'pc'),
 ];
 
+// The order the native stream walks the routes in: a non-plain version (audio described...) uses the fixed order above, the
+// plain one starts with the route that answered last. Used by the stream service and by the Streaming debug page's "best line".
+export const nativePairOrder = (specialVersion: boolean): MediaSelectorPair[] => (specialVersion ? versionMediaSelectorPairs : orderedMediaSelectorPairs('native'));
+
+// The version types that are not the plain programme (audio described, signed, open subtitles).
+export const specialVersionTypeRegex = /(described|description|sign|open subtitles)/i;
+
+// get_stream_data always excludes the 'vbidi' supplier by default.
+export const excludedSupplierRegex = /vbidi/i;
+
+export interface SelectableConnection {
+    transferFormat?: string;
+    protocol?: string;
+    supplier?: string;
+}
+
+// Which connections of one <media> group a stream may use (their positions): HLS ones, over https when the group offers any
+// https connection (else http), never from an excluded supplier. Mirrors get_iplayer's own protocol selection
+// (get_iplayer:6512-6516): a group that only offers http connections must fall back to http rather than being dropped.
+export function usableConnectionIndexes(connections: SelectableConnection[]): number[] {
+    const preferredProtocol = connections.some((connection) => connection.protocol === 'https') ? 'https' : 'http';
+    const usable: number[] = [];
+    connections.forEach((connection, index) => {
+        if (connection.transferFormat === 'hls' && connection.protocol === preferredProtocol && !excludedSupplierRegex.test(connection.supplier ?? '')) usable.push(index);
+    });
+    return usable;
+}
+
+// The position of the tallest picture in a list (the earlier one on a tie); an entry that is undefined (a playlist that could
+// not be read) is skipped, and -1 means none could be read. This is how the quality probe picks between connections.
+export function tallestIndex(heights: (number | undefined)[]): number {
+    let best = -1;
+    heights.forEach((height, index) => {
+        if (height !== undefined && (best === -1 || height > (heights[best] as number))) best = index;
+    });
+    return best;
+}
+
 export function rememberMediaSelectorPair(scope: string, pair: MediaSelectorPair): void {
     lastWorking.set(scope, sameKey(pair));
 }

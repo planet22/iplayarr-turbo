@@ -16,7 +16,7 @@ import loggingService from '../loggingService';
 import AbstractStreamService from './AbstractStreamService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
-import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, unavailableRegex, versionMediaSelectorPairs } from './mediaSelectorPairs';
+import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, rememberMediaSelectorPair, specialVersionTypeRegex, tallestIndex, unavailableRegex, usableConnectionIndexes } from './mediaSelectorPairs';
 import { cached, resolveTtlMs, vpidTtlMs } from './resolveCache';
 import { hqProbeCache, vpidCache } from './streamProbeCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
@@ -44,9 +44,6 @@ interface MasterPlaylistVariant {
 
 // Talks to BBC's public APIs directly, as get_iplayer does, instead of shelling out. get_iplayer --streaminfo walks EVERY
 // programme version (~13-15s each, 40s+ typical; see GetIplayerStreamService.ts), this resolves only the one needed.
-// get_stream_data always excludes the 'vbidi' supplier by default.
-const excludedSupplierRegex = /vbidi/i;
-const specialVersionTypeRegex = /(described|description|sign|open subtitles)/i;
 
 // The fetch/redirect helpers (and the reasoning for the desktop User-Agent and for tolerating
 // non-2xx statuses, which mediaselector callers rely on) live in bbcHttp.ts, shared with
@@ -291,14 +288,8 @@ class NativeStreamService implements AbstractStreamService {
                 }
             })
         );
-        let best: { url: string; height: number } | undefined;
-        let bestIndex = -1;
-        for (const [index, candidate] of probed.entries()) {
-            if (candidate && (!best || candidate.height > best.height)) {
-                best = candidate;
-                bestIndex = index;
-            }
-        }
+        const bestIndex = tallestIndex(probed.map((candidate) => candidate?.height));
+        const best: { url: string; height: number } | undefined = bestIndex === -1 ? undefined : probed[bestIndex];
         if (!best) {
             // Every candidate failed to probe - fall back to the first one, unprobed, rather
             // than failing the whole stream over what's likely a transient fetch error.
@@ -362,7 +353,7 @@ class NativeStreamService implements AbstractStreamService {
         // but start with the pair that answered last time (see mediaSelectorPairs.ts).
         const bodies: string[] = [];
         const version = requestedVersion();
-        const walk = version ? versionMediaSelectorPairs : orderedMediaSelectorPairs('native');
+        const walk = nativePairOrder(!!version);
         // A route hint from the link goes first (plain version only), then the normal order without it.
         const hinted = version ? undefined : requestedRoute();
         const order = hinted ? [hinted, ...walk.filter((pair) => formatRoute(pair) !== formatRoute(hinted))] : walk;
@@ -428,21 +419,11 @@ class NativeStreamService implements AbstractStreamService {
                 continue;
             }
             const conns = [...mediaBody.matchAll(/<connection\s+([^>]+?)\/>/gs)].map(([, raw]) => parseAttributes(raw));
-            // Mirrors get_iplayer's own protocol selection (get_iplayer:6512-6516): prefer https,
-            // but a <media> group that only offers http connections (some higher-bitrate suppliers
-            // do this) must fall back to http rather than being silently dropped entirely - a
-            // hard-coded https-only filter here was found to exclude a genuinely higher-quality
-            // (1080p) connection that get_iplayer itself successfully resolved for the same vpid.
-            const preferredProtocol = conns.some((c) => c.protocol === 'https') ? 'https' : 'http';
-            for (const conn of conns) {
-                if (conn.transferFormat !== 'hls' || conn.protocol !== preferredProtocol) {
-                    continue;
-                }
-                if (excludedSupplierRegex.test(conn.supplier ?? '')) {
-                    continue;
-                }
-                if (conn.href) {
-                    hrefs.push(conn.href);
+            // Which connections may be used (https preferred, http as the fallback, vbidi never) is decided in
+            // usableConnectionIndexes, which the Streaming debug page's probe also uses.
+            for (const index of usableConnectionIndexes(conns)) {
+                if (conns[index].href) {
+                    hrefs.push(conns[index].href);
                 }
             }
         }

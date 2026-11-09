@@ -750,32 +750,12 @@ const trackText = (tracks) => {
 const folderOf = (url) => (url ? url.slice(0, url.lastIndexOf('/')) : undefined);
 const sameFolder = (masterUrl, servedUrl) => !!masterUrl && !!servedUrl && folderOf(masterUrl) === folderOf(servedUrl);
 
-// The line a normal Play would use, worked out from the probe the way the stream service chooses: for the chosen version, the
-// route that answered last time if it has a usable line (else the first route that has one), its first https connection (http
-// only when it offers no https; the vbidi supplier is never used). With Native Quality Probe on, the line with the tallest picture
-// wins instead (the earlier one on a tie). A line is usable when it is HLS, of the right kind and its playlist was read.
+// The line a normal Play of the chosen version (the dropdown beside Play) would use. The server works it out with the stream
+// service's own rules and sends it with the probe (`best`), so nothing is chosen here.
 const bestKey = computed(() => {
-    // The version picked in the dropdown beside Play (the standard one when none is picked).
-    const probed = isRadio ? result.value?.versions?.[0] : (result.value?.versions ?? []).find((version) => versionIdOf(version) === playVersion.value);
-    if (!probed) return undefined;
-    const candidates = [];
-    for (const pair of probed.pairs) {
-        for (const media of pair.media) {
-            if (media.kind !== (isRadio ? 'audio' : 'video')) continue;
-            const hls = media.connections.filter((connection) => connection.transferFormat === 'hls');
-            const protocol = hls.some((connection) => connection.protocol === 'https') ? 'https' : 'http';
-            for (const connection of hls) {
-                if (connection.protocol !== protocol || /vbidi/i.test(connection.supplier ?? '') || !connection.master || connection.master.error) continue;
-                const height = Math.max(0, ...connection.master.variants.map((variant) => Number(variant.resolution?.split('x')[1] ?? 0)));
-                candidates.push({ set: `${pair.mediaSet} / ${pair.version}`, height, key: `${probed.vpid}|${pair.mediaSet}/${pair.version}|${media.kind}|${media.connections.indexOf(connection)}` });
-            }
-        }
-    }
-    if (!candidates.length) return undefined;
-    if (info.value?.settings?.STREAM_NATIVE_HQ_PROBE === 'true') return candidates.reduce((best, candidate) => (candidate.height > best.height ? candidate : best)).key;
-    // Only the standard version starts from the route that answered last time; another version walks the routes in fixed order.
-    const last = playVersion.value ? undefined : dashboard.value.sessions.recent[0]?.source?.route?.replace(' (from the link)', '');
-    return (candidates.find((candidate) => candidate.set === last) ?? candidates[0]).key;
+    const probed = (result.value?.versions ?? []).find((version) => versionIdOf(version) === playVersion.value);
+    const best = probed?.best;
+    return best ? `${probed.vpid}|${best.mediaSet}/${best.version}|${best.media}|${best.connection}` : undefined;
 });
 
 // Every line of the probe (with its route and answer), to find the one a stream was served from.
@@ -792,9 +772,9 @@ const versionIdOf = (probed) => {
 
 // One line per connection (a pair that offered none gets its single answer line instead).
 const connectionRows = (pair, probedVersion) =>
-    pair.media.flatMap((media) =>
+    pair.media.flatMap((media, mediaIndex) =>
         media.connections.map((connection, connectionIndex) => ({
-            key: `${probedVersion?.vpid}|${pair.mediaSet}/${pair.version}|${media.kind}|${connectionIndex}`,
+            key: `${probedVersion?.vpid}|${pair.mediaSet}/${pair.version}|${mediaIndex}|${connectionIndex}`,
             // Only a valid line can be played: an HLS connection of the right kind (video, or audio for radio) whose playlist was
             // read, on a real route. A stream is asked for by route (and version), so the route's first connection is the one
             // used, not necessarily this row's.

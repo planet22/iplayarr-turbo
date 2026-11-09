@@ -456,6 +456,49 @@ describe('streamDebugService', () => {
             expect(result.versions[1].pairs[0]).toMatchObject({ reason: 'selectionunavailable' });
         });
 
+        describe('best line', () => {
+            const twoRoutes = (url: string) => {
+                const media = (kind: string, conns: string) => `<mediaSelection><media kind="${kind}" encoding="h264" bitrate="3000" width="1280" height="720">${conns}</media></mediaSelection>`;
+                const conn = (protocol: string, host: string, supplier = 's') => `<connection supplier="${supplier}" protocol="${protocol}" transferFormat="hls" priority="1" href="https://${host}/${protocol}/master.m3u8"/>`;
+                if (url.includes('/mediaset/iptv-all/') && url.includes('/mediaselector/6/')) return media('video', conn('http', 'a.example') + conn('https', 'vbidi.example', 'vbidi') + conn('https', 'b.example') + conn('https', 'c.example'));
+                if (url.includes('/mediaset/pc/') && url.includes('/mediaselector/6/')) return media('video', conn('https', 'tall.example'));
+                return '<mediaSelection></mediaSelection>';
+            };
+            const setUp = (hq: boolean) => {
+                jest.mocked(configService.getParameter).mockImplementation(async (key: any) => (key === 'STREAM_NATIVE_HQ_PROBE' && hq ? 'true' : undefined));
+                jest.mocked(fetchTextWithStatus).mockImplementation(async (url: string) => ({ statusCode: 200, body: twoRoutes(url) }));
+                jest.mocked(resolveRedirect).mockImplementation(async (href: string) => href);
+                jest.mocked(fetchText).mockImplementation(async (url: string) => `#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1280x${url.includes('tall.example') ? 1080 : 720}
+v.m3u8
+`);
+            };
+
+            it('is the first https connection of the first route, as the stream service takes it', async () => {
+                setUp(false);
+                const [plain] = (await streamDebugService.probe(PID)).versions;
+                expect(plain.best).toEqual({ mediaSet: 'iptv-all', version: 6, media: 0, connection: 2 });
+            });
+
+            it('uses the fixed route order for a special version, so pc comes first', async () => {
+                setUp(false);
+                const described = (await streamDebugService.probe(PID)).versions[1];
+                expect(described.best).toEqual({ mediaSet: 'pc', version: 6, media: 0, connection: 0 });
+            });
+
+            it('is the tallest connection when the quality probe is on', async () => {
+                setUp(true);
+                const [plain] = (await streamDebugService.probe(PID)).versions;
+                expect(plain.best).toEqual({ mediaSet: 'pc', version: 6, media: 0, connection: 0 });
+            });
+
+            it('is nothing when no route offers a usable video connection', async () => {
+                jest.mocked(fetchTextWithStatus).mockResolvedValue({ statusCode: 200, body: '<mediaSelection></mediaSelection>' });
+                const [plain] = (await streamDebugService.probe(PID)).versions;
+                expect(plain.best).toBeUndefined();
+            });
+        });
+
         it('reads only a few master playlists per pair, and notes a pair that fails outright', async () => {
             jest.mocked(fetchTextWithStatus).mockImplementation(async (url: string) => {
                 if (url.includes('/mediaset/pc/')) throw Object.assign(new Error(), { message: '' });

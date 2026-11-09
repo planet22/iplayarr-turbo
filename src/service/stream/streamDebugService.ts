@@ -21,7 +21,7 @@ import thumbnailCacheService from '../thumbnailCacheService';
 import videoEventService from '../videoEventService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from './bbcHttp';
 import { attemptFhdUpgrade } from './experimental/bbcFhdUpgrade';
-import { allMediaSelectorPairs, liveDashPair, MediaSelectorPair, mediaSelectorUrl } from './mediaSelectorPairs';
+import { allMediaSelectorPairs, liveDashPair, MediaSelectorPair, mediaSelectorUrl, nativePairOrder, specialVersionTypeRegex, tallestIndex, usableConnectionIndexes } from './mediaSelectorPairs';
 import { resolvedKeysFor } from './resolveCache';
 import { hqProbeCache, vpidCache } from './streamProbeCache';
 import streamSessionService from './streamSessionService';
@@ -207,10 +207,20 @@ export interface DebugPair {
     media: DebugMedia[];
 }
 
+// Where a line sits in the probe: the route, the media group within it and the connection within that group.
+export interface DebugLine {
+    mediaSet: string;
+    version: number;
+    media: number;
+    connection: number;
+}
+
 export interface DebugVersionProbe {
     vpid: string;
     types: string[];
     pairs: DebugPair[];
+    // The line a normal Play of this version would stream from, chosen by the stream service's own rules (video only).
+    best?: DebugLine;
     // The tallest picture any HLS connection of this version offers, and any DASH manifest does.
     bestHeight: number;
     bestDashHeight: number;
@@ -631,7 +641,31 @@ class StreamDebugService {
             0,
             ...[...pairs, liveSet].flatMap(({ media }) => media.flatMap(({ connections }) => connections.flatMap(({ dash }) => (dash?.representations ?? []).map(({ height }) => height ?? 0))))
         );
-        return { vpid, types, pairs, bestHeight, bestDashHeight, fhd: await this.#tryFhd(variants), liveSet };
+        return { vpid, types, pairs, best: await this.#bestLine(pairs, types), bestHeight, bestDashHeight, fhd: await this.#tryFhd(variants), liveSet };
+    }
+
+    // The line the native stream service would take for a version, using its own rules (mediaSelectorPairs.ts): the routes are
+    // walked in the stream's order and the first route with a usable connection gives its first one; with the Native Quality Probe
+    // on, the connection with the tallest picture wins instead. Read-only: nothing is remembered.
+    async #bestLine(pairs: DebugPair[], types: string[]): Promise<DebugLine | undefined> {
+        const special = specialVersionTypeRegex.test(types.join(' '));
+        const linesOf = (pair: DebugPair | undefined) =>
+            (pair?.media ?? []).flatMap((media, mediaIndex) =>
+                media.kind !== 'video' ? [] : usableConnectionIndexes(media.connections).map((connection) => ({ pair: pair as DebugPair, media: mediaIndex, connection, master: media.connections[connection].master }))
+            );
+        const named = (line: ReturnType<typeof linesOf>[number] | undefined): DebugLine | undefined => (line ? { mediaSet: line.pair.mediaSet, version: line.pair.version, media: line.media, connection: line.connection } : undefined);
+        const same = (a: MediaSelectorPair, b: MediaSelectorPair) => a.mediaSet === b.mediaSet && a.version === b.version;
+        if ((await configService.getParameter('STREAM_NATIVE_HQ_PROBE' as any)) === 'true') {
+            const all = allMediaSelectorPairs.flatMap((pair) => linesOf(pairs.find((probed) => same(probed, pair))));
+            const heights = all.map(({ master }) => (master && !master.error ? Math.max(0, ...master.variants.map(({ resolution }) => Number(resolution?.split('x')[1] ?? 0))) : undefined));
+            const tallest = tallestIndex(heights);
+            return named(all[tallest === -1 ? 0 : tallest]);
+        }
+        for (const pair of nativePairOrder(special)) {
+            const lines = linesOf(pairs.find((probed) => same(probed, pair)));
+            if (lines.length) return named(lines[0]);
+        }
+        return undefined;
     }
 
     // The existing FHD upgrade, tried as a stream would: on the tallest variant the normal playlists offer. Read-only.
