@@ -40,6 +40,12 @@ describe('what the user sees for a BBC channel', () => {
         expect(buildChannelColors({}).BBCFour).toEqual({ bg: '#654355', fg: '#ffffff', name: 'BBC Four' });
     });
 
+    it('gives a radio station with a white logo field dark text, so its pill can be read', () => {
+        setRadioEnabled(true);
+        expect(buildChannelColors({}, { bbc_radio_ulster: '#fff' }).BBCRadioUlster).toMatchObject({ bg: '#fff', fg: '#000000' });
+        setRadioEnabled(false);
+    });
+
     it('colours a radio station from its logo field, or the user colour and name', () => {
         setRadioEnabled(true);
         const fields = { bbc_radio_two: '#ff6a13', bbc_6music: '#00875a' };

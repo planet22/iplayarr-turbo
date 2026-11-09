@@ -58,7 +58,9 @@ function assertSafeSvg(svg: string): void {
 
 // A colour's black-or-white contrast text, by perceived luminance.
 export function readableTextColor(hex: string): string {
-    const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+    // "#fff" is "#ffffff": a short colour must not fall through to white text, which on white is invisible.
+    const short = /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(hex);
+    const m = short ? [hex, `${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`] : /^#?([0-9a-f]{6})$/i.exec(hex);
     if (!m) return '#ffffff';
     const n = parseInt(m[1], 16);
     const luminance = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
