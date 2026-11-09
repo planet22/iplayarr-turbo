@@ -211,6 +211,11 @@ export default class DbCacheService<T> {
         return DbCacheService.overridesLoad;
     }
 
+    /** Name, description and default lifetime of every labelled cache, from memory only (no database work). */
+    static names(): CacheTypeInfo[] {
+        return [...DbCacheService.registry.values()];
+    }
+
     /** Stats for every labelled cache: live (unexpired) item count, stored size and effective TTL. */
     static async getStats(): Promise<CacheTypeStats[]> {
         await dbReady();

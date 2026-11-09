@@ -55,6 +55,11 @@ router.get('/caches', async (_, res: Response) => {
     res.json(await cacheAdminService.list());
 });
 
+// Names and descriptions only (no database work), so the Statistics page can draw its cards at once.
+router.get('/caches/names', (_, res: Response) => {
+    res.json(cacheAdminService.names());
+});
+
 // Live figures only (no database work), polled by the Statistics page.
 router.get('/caches/activity', (_, res: Response) => {
     res.json(cacheAdminService.activity());

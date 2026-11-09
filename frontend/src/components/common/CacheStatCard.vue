@@ -5,7 +5,7 @@
         <span ref="dot" class="liveDot" role="img" :aria-label="dotTitle" :title="dotTitle" />
         <div class="cacheHead">
             <div class="cacheName">{{ cache.label }}</div>
-            <InfoTip v-if="cache.description && !placeholder" :text="cache.description" />
+            <InfoTip v-if="cache.description" :text="cache.description" />
         </div>
         <div class="cacheFigures">
             <div class="statBody">

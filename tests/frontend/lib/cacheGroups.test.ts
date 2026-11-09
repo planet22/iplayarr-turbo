@@ -59,6 +59,12 @@ describe('cacheGroups', () => {
             expect(listed.filter((prefix) => !real.includes(prefix))).toEqual([]);
         });
 
+        it('matches the server\'s group list exactly (keys, labels, caches and order), so the two never drift', () => {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const { CACHE_GROUPS: serverGroups } = require('../../../src/constants/CacheGroups');
+            expect(CACHE_GROUPS).toEqual(serverGroups);
+        });
+
         it('ranks an unlisted cache after every listed one', () => {
             expect(defaultRank('browse_short')).toBe(0);
             expect(defaultRank('thumbnails')).toBeGreaterThan(defaultRank('stream_hq_probe'));
@@ -148,6 +154,12 @@ describe('cacheGroups', () => {
             expect(sections[0].caches.map((c: { prefix: string }) => c.prefix)).toEqual(['browse_short', 'browse_long']);
             expect(sections[2].caches.map((c: { prefix: string }) => c.prefix)).toEqual(['mystery']);
             expect(sections[0].totals.records).toBe(11);
+        });
+
+        it('uses the group the server gave a cache, and the built-in list only when there is none', () => {
+            const sections = buildSections([cache('mystery', { group: 'radio' }), cache('browse_short')], { grouped: true, sortBy: 'default' });
+            expect(sections.map((s: { key: string }) => s.key)).toEqual(['browse', 'radio']);
+            expect(sections[1].caches.map((c: { prefix: string }) => c.prefix)).toEqual(['mystery']);
         });
 
         it('sorts inside each group', () => {

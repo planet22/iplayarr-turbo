@@ -20,7 +20,7 @@ jest.mock('../../../src/service/cronJobService', () => ({
 }));
 jest.mock('../../../src/service/cacheAdminService', () => ({
     __esModule: true,
-    default: { list: jest.fn(), activity: jest.fn(), clear: jest.fn(), clearAll: jest.fn(), setTtl: jest.fn() },
+    default: { list: jest.fn(), names: jest.fn(), activity: jest.fn(), clear: jest.fn(), clearAll: jest.fn(), setTtl: jest.fn() },
 }));
 
 // Defaults below were chosen to match the original upstream behaviour.
@@ -44,6 +44,14 @@ describe('MaintenanceRoute', () => {
         const res = await request(app).get('/caches/activity');
         expect(res.status).toBe(200);
         expect(res.body).toEqual({ metadata_cache: { lastMinute: 3, hits: 5, misses: 1 } });
+        expect(caches.list).not.toHaveBeenCalled();
+    });
+
+    it('GET /caches/names answers with the names only, without counting anything', async () => {
+        caches.names.mockReturnValue([{ prefix: 'metadata_cache', label: 'Programme metadata', description: 'd', defaultTtl: 60, group: 'programme', groupLabel: 'Programme data' }]);
+        const res = await request(app).get('/caches/names');
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual([{ prefix: 'metadata_cache', label: 'Programme metadata', description: 'd', defaultTtl: 60, group: 'programme', groupLabel: 'Programme data' }]);
         expect(caches.list).not.toHaveBeenCalled();
     });
 

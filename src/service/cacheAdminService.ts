@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { groupOf, OTHER_GROUP } from '../constants/CacheGroups';
 import { IplayarrParameter } from '../types/IplayarrParameters';
 import configService from './configService';
-import DbCacheService, { CacheTypeStats, MAX_CACHE_TTL, MIN_CACHE_TTL } from './db/dbCacheService';
+import DbCacheService, { CacheTypeInfo, CacheTypeStats, MAX_CACHE_TTL, MIN_CACHE_TTL } from './db/dbCacheService';
 import thumbnailCacheService from './thumbnailCacheService';
 
 // Everything the Maintenance page lists as a cache: the labelled database caches plus the thumbnails on
@@ -15,16 +16,44 @@ const DEFAULT_RETENTION_DAYS = 30;
 const retentionDays = async (): Promise<number> =>
     Number(await configService.getParameter(IplayarrParameter.THUMBNAIL_RETENTION_DAYS)) || DEFAULT_RETENTION_DAYS;
 
+const THUMBNAILS_INFO: CacheTypeInfo = {
+    prefix: THUMBNAILS,
+    label: 'Thumbnails',
+    description: 'Episode images stored on disk. "Keep for" is how long one may go unviewed before the nightly cleanup deletes it.',
+    defaultTtl: DEFAULT_RETENTION_DAYS * SECONDS_PER_DAY,
+};
+
+export interface CacheCatalogEntry extends CacheTypeInfo {
+    group: string; // the group's key, e.g. 'browse'
+    groupLabel: string;
+}
+
+// Every cache with its group, made once at start-up (every cache registers itself when its module loads, so the
+// list is complete by then) and served from memory afterwards.
+let catalog: CacheCatalogEntry[] | undefined;
+
+const withGroup = (info: CacheTypeInfo): CacheCatalogEntry => {
+    const group = groupOf(info.prefix);
+    return { ...info, group: group.key, groupLabel: group.label };
+};
+
 const cacheAdminService = {
-    list: async (): Promise<CacheTypeStats[]> => {
+    // Builds the cache list. Returns the caches that no group claims yet (they show under Other), so start-up can say so.
+    buildCatalog: (): { caches: CacheCatalogEntry[]; ungrouped: string[] } => {
+        catalog = [...DbCacheService.names(), THUMBNAILS_INFO].map(withGroup);
+        return { caches: catalog, ungrouped: catalog.filter((entry) => entry.group === OTHER_GROUP.key).map((entry) => entry.prefix) };
+    },
+
+    // Names, descriptions and groups only (no counting), so a page can draw its cards before the figures are ready.
+    names: (): CacheCatalogEntry[] => catalog ?? cacheAdminService.buildCatalog().caches,
+
+    list: async (): Promise<(CacheTypeStats & { group: string; groupLabel: string })[]> => {
         const [dbCaches, thumbnails, days] = await Promise.all([DbCacheService.getStats(), thumbnailCacheService.stats(), retentionDays()]);
+        const grouped = <T extends CacheTypeInfo>(row: T) => ({ ...row, group: groupOf(row.prefix).key, groupLabel: groupOf(row.prefix).label });
         return [
-            ...dbCaches,
-            {
-                prefix: THUMBNAILS,
-                label: 'Thumbnails',
-                description: 'Episode images stored on disk. "Keep for" is how long one may go unviewed before the nightly cleanup deletes it.',
-                defaultTtl: DEFAULT_RETENTION_DAYS * SECONDS_PER_DAY,
+            ...dbCaches.map(grouped),
+            grouped({
+                ...THUMBNAILS_INFO,
                 ttl: days * SECONDS_PER_DAY,
                 overridden: days !== DEFAULT_RETENTION_DAYS,
                 // Files on disk: no per-entry expiry, but lookups are counted like the others.
@@ -32,7 +61,7 @@ const cacheAdminService = {
                 expiresLatest: null,
                 activity: DbCacheService.activityFor(THUMBNAILS),
                 ...thumbnails,
-            },
+            }),
         ];
     },
 

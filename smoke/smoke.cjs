@@ -557,6 +557,13 @@ async function apiLayer(ctx) {
         return !bad.length || `missing activity or expiry on: ${bad.map((c) => c.prefix).join(', ')}`;
     });
     const cachesNow = (await http('/json-api/maintenance/caches')).json || [];
+    // The names route: same caches, names and groups as the full list, but answered without counting anything (made at start-up).
+    await check(A, 'maintenance cache names match the full list and each has a group', '/json-api/maintenance/caches/names', (r) => {
+        if (!Array.isArray(r.json) || !r.json.length) return 'no names listed';
+        const full = new Map((Array.isArray(cachesNow) ? cachesNow : []).map((c) => [c.prefix, c]));
+        const bad = r.json.filter((n) => !n.label || !n.description || !n.group || !n.groupLabel || full.get(n.prefix)?.label !== n.label || full.get(n.prefix)?.group !== n.group);
+        return (!bad.length && r.json.length === full.size) || `mismatch on: ${bad.map((n) => n.prefix).join(', ') || `${r.json.length} names vs ${full.size} caches`}`;
+    });
     await check(A, 'maintenance cache activity lists every cache with its totals and trend', '/json-api/maintenance/caches/activity', (r) => {
         const list = Array.isArray(cachesNow) ? cachesNow : [];
         if (!r.json || typeof r.json !== 'object' || Array.isArray(r.json)) return 'expected an object keyed by cache';
@@ -1459,6 +1466,10 @@ async function statisticsCacheCards(browser, U) {
         await slow.waitForSelector('.cacheCard.placeholder', { timeout: 10000 });
         const holding = await slow.locator('.cacheCard.placeholder .cacheFigures .statValue').allTextContents();
         rec(U, 'statistics: cards show with dashes while the cache figures load', holding.length >= 1 && holding.every((t) => t.trim() === '-') ? 'PASS' : 'FAIL', `${holding.length} placeholder figures`);
+        // The held-back cards already carry the real cache names (not made-up ones), in the same groups as the final page.
+        const heldNames = (await slow.locator('.cacheCard.placeholder .cacheName').allTextContents()).map((n) => n.trim()).sort();
+        const realNames = caches.map((c) => c.label).sort();
+        rec(U, 'statistics: the placeholder cards use the real cache names', JSON.stringify(heldNames) === JSON.stringify(realNames) ? 'PASS' : 'FAIL', `${heldNames.length} placeholders, ${realNames.length} caches`);
         const filled = await slow.waitForFunction(() => document.querySelectorAll('.cacheCard:not(.placeholder) .liveDot').length > 0 && !document.querySelector('.cacheCard.placeholder'), null, { timeout: 15000 }).then(() => true).catch(() => false);
         rec(U, 'statistics: the placeholder cards fill in with real figures once they arrive', filled ? 'PASS' : 'FAIL');
         await slow.close();

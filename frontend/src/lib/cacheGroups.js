@@ -108,7 +108,7 @@ export const buildSections = (list, { grouped = true, sortBy = 'default', order 
     if (!grouped) return list.length ? [{ key: 'all', label: null, totals: groupTotals(list, live), caches: sortCaches(list, sortBy, order, live) }] : [];
     return [...CACHE_GROUPS, OTHER_GROUP]
         .map((group) => {
-            const members = list.filter((cache) => groupKeyOf(cache.prefix) === group.key);
+            const members = list.filter((cache) => (cache.group ?? groupKeyOf(cache.prefix)) === group.key);
             return { key: group.key, label: group.label, totals: groupTotals(members, live), caches: sortCaches(members, sortBy, order, live) };
         })
         .filter((section) => section.caches.length);

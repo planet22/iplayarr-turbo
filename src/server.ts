@@ -13,6 +13,7 @@ import AuthRoute, { addAuthMiddleware, isAuthenticatedRequest, sessionMiddleware
 import JsonApiRoute from './routes/JsonApiRoute';
 import { encryptStoredApps } from './service/appService';
 import { ensureNonDefaultPassword } from './service/auth/initialCredentialsService';
+import cacheAdminService from './service/cacheAdminService';
 import configService, { encryptStoredSettings } from './service/configService';
 import { dbReady, prisma } from './service/db/prismaService';
 import { importFromRedisIfNeeded } from './service/db/redisImportService';
@@ -156,6 +157,10 @@ const startServer = () => {
         loggingService.log(`Server running at http://localhost:${port}`);
         StatisticsService.setUptime();
     });
+
+    // The cache list with each cache's group, made once now so the pages can draw their cards at once.
+    const { caches, ungrouped } = cacheAdminService.buildCatalog();
+    loggingService.log(`Cache list ready: ${caches.length} caches${ungrouped.length ? `; not in a group yet (shown under Other): ${ungrouped.join(', ')}` : ''}`);
 
     //Cron
     taskService.init().catch((err) => loggingService.error('Scheduled jobs failed to start', err?.message ?? err));

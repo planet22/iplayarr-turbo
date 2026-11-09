@@ -143,7 +143,7 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
 import { flashKind, formatCount, withLookups } from '@/lib/cacheActivity';
-import { buildSections, CACHE_GROUPS, STATS_SORTS, summaryParts } from '@/lib/cacheGroups';
+import { buildSections, STATS_SORTS, summaryParts } from '@/lib/cacheGroups';
 import { ipFetch } from '@/lib/ipFetch';
 import { useCacheListPrefs } from '@/lib/useCacheListPrefs';
 
@@ -155,12 +155,10 @@ const caches = ref([]);
 const uptimeLoaded = ref(false);
 const cachesLoaded = ref(false);
 const summaryLoaded = ref(false);
-const prettyPrefix = (prefix) => {
-    const words = prefix.replace(/_/g, ' ');
-    return words.charAt(0).toUpperCase() + words.slice(1);
-};
-const placeholderCaches = CACHE_GROUPS.flatMap((group) => group.prefixes).map((prefix) => ({ prefix, label: prettyPrefix(prefix), count: 0, sizeBytes: 0 }));
-const shownCaches = computed(() => (cachesLoaded.value ? caches.value : placeholderCaches));
+// The real names come from a quick route that does no counting; only the figures are blank until the full list lands.
+const cacheNames = ref([]);
+const placeholderCaches = computed(() => cacheNames.value.map((info) => ({ ...info, count: 0, sizeBytes: 0 })));
+const shownCaches = computed(() => (cachesLoaded.value ? caches.value : placeholderCaches.value));
 
 const todayCount = (key) => (summaryLoaded.value ? formatCount(summary.value.today[key]) : '-');
 const exactToday = (key) => (summaryLoaded.value ? summary.value.today[key].toLocaleString() : undefined);
@@ -266,6 +264,11 @@ async function loadUptime() {
     }
 }
 
+async function loadNames() {
+    const { ok, data } = await ipFetch('json-api/maintenance/caches/names');
+    if (ok && Array.isArray(data) && !cachesLoaded.value) cacheNames.value = data;
+}
+
 async function loadCaches() {
     const { ok, data } = await ipFetch('json-api/maintenance/caches');
     if (ok && Array.isArray(data)) {
@@ -275,7 +278,7 @@ async function loadCaches() {
 }
 
 // Each part shows as soon as its own answer arrives; the slow summary no longer holds back the cache tiles.
-const updateStats = () => Promise.all([loadSummary(), loadUptime(), loadCaches()]);
+const updateStats = () => Promise.all([loadSummary(), loadUptime(), loadNames(), loadCaches()]);
 
 watch([range, excludeRss], loadSummary);
 
