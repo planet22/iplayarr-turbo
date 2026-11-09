@@ -282,6 +282,8 @@ watch(
         flex: 1 1 0;
         min-width: 0;
         width: auto;
+        // Same height as the toolbar buttons beside it.
+        height: @touch-target;
     }
 }
 

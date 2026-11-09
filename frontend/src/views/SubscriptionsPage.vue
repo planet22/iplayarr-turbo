@@ -964,6 +964,8 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
 .cardList .thumbLink {
     position: relative;
     display: block;
+    // A grid item stretches to the text beside it; hug the picture so the corner badges stay on it.
+    align-self: start;
     border-radius: 3px;
 }
 

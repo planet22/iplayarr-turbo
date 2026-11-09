@@ -588,6 +588,12 @@ const handleClickOutside = (event) => {
                     font-size: 12px;
                 }
 
+                // Same height as the toolbar buttons and dropdowns beside it.
+                input.tableFilter,
+                .clearDates {
+                    height: @touch-target;
+                }
+
                 .dateRangeFilter {
                     flex: 2.3 1 0;
                     min-width: 0;

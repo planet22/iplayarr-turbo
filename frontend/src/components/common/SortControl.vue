@@ -79,5 +79,16 @@ const pick = (key) => {
             height: 21px;
         }
     }
+
+    // Phones: toolbar buttons are @touch-target tall, so the select and the placeholder match them.
+    @media (max-width: @mobile-breakpoint) {
+        .sortSelect {
+            height: @touch-target;
+        }
+
+        .orderPlaceholder {
+            min-height: @touch-target;
+        }
+    }
 }
 </style>

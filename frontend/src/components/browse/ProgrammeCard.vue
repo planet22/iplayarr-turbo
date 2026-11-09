@@ -30,13 +30,13 @@
             </span>
             <!-- A programme or series has no Play / Download here, but with Show Extended Debug it still gets the bug button. -->
             <div v-if="(item.kind === 'episode' || debugOn) && !selectable" class="overlay">
-                <button v-if="item.kind === 'episode' && canPlay" class="clickable overlayAction" :title="item.radio ? 'Play' : 'Play Video'" @click.prevent.stop="play(item)">
+                <button v-if="item.kind === 'episode' && canPlay" class="clickable" :title="item.radio ? 'Play' : 'Play Video'" @click.prevent.stop="play(item)">
                     <font-awesome-icon :icon="['fas', 'play']" />
                 </button>
-                <button v-if="item.kind === 'episode'" class="clickable overlayAction" title="Download" @click.prevent.stop="download(item)">
+                <button v-if="item.kind === 'episode'" class="clickable" title="Download" @click.prevent.stop="download(item)">
                     <font-awesome-icon :icon="['fas', 'cloud-download']" />
                 </button>
-                <button v-if="debugOn" class="clickable" title="Streaming debug" @click.prevent.stop="openDebug(item.pid, item.radio ? 'radio' : undefined)">
+                <button v-if="debugOn" class="clickable debugAction" title="Streaming debug" @click.prevent.stop="openDebug(item.pid, item.radio ? 'radio' : undefined)">
                     <font-awesome-icon :icon="['fas', 'bug']" />
                 </button>
             </div>
@@ -44,18 +44,7 @@
         <div class="meta">
             <div class="title" :title="item.title">{{ item.title }}</div>
             <div v-if="item.subtitle" class="subtitle" :title="item.subtitle">{{ item.subtitle }}</div>
-            <div class="pillLine">
-                <ChannelPill :channel="item.channel" />
-                <!-- Touch screens only (no hover overlay there): play and download sit beside the channel pill, off the artwork. -->
-                <span v-if="item.kind === 'episode' && !selectable" class="rowActions">
-                    <button v-if="canPlay" type="button" class="clickable" :title="item.radio ? 'Play' : 'Play Video'" :aria-label="item.radio ? 'Play' : 'Play Video'" @click.prevent.stop="play(item)">
-                        <font-awesome-icon :icon="['fas', 'play']" />
-                    </button>
-                    <button type="button" class="clickable" title="Download" aria-label="Download" @click.prevent.stop="download(item)">
-                        <font-awesome-icon :icon="['fas', 'cloud-download']" />
-                    </button>
-                </span>
-            </div>
+            <ChannelPill :channel="item.channel" />
         </div>
     </component>
 </template>
@@ -242,6 +231,11 @@ const statusBadges = computed(() => {
             }
         }
 
+        // The Programme / Series label shares the top left with the tick circle, so it sits beside it.
+        .kind {
+            left: 40px;
+        }
+
         &.selected {
             .thumb {
                 outline: 3px solid @brand-color;
@@ -335,65 +329,39 @@ const statusBadges = computed(() => {
         }
     }
 
-    .pillLine {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        min-width: 0;
-
-        // A long channel name gives way to the buttons rather than wrapping.
-        :deep(.channelPill) {
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-    }
-
-    .rowActions {
-        display: none;
-    }
-
-    // Touch devices have no hover: play and download move under the picture beside the channel pill, and the
-    // picture keeps only the debug bug (Show Extended Debug), centred. Nothing sits over the artwork's text.
+    // Touch devices have no hover, so keep the actions reachable on the picture (the badges move up out of their
+    // way). The debug bug is left off touch screens.
     @media (hover: none) {
+        .thumb:has(.overlay button:not(.debugAction)) .thumbBadges {
+            bottom: 46px;
+        }
+
         .overlay {
             opacity: 1;
+            align-items: flex-end;
+            justify-content: flex-end;
+            padding: 6px;
             background: none;
-            // Only the bug itself takes taps; elsewhere a tap opens the programme as usual.
-            pointer-events: none;
 
             button {
-                width: 38px;
-                height: 38px;
+                width: 34px;
+                height: 34px;
                 opacity: 0.9;
-                pointer-events: auto;
             }
 
-            .overlayAction {
+            .debugAction {
                 display: none;
             }
         }
 
-        .rowActions {
-            display: inline-flex;
-            flex: 0 0 auto;
-            margin-left: auto;
-            gap: 6px;
+        // With badges switched on they keep the bottom right and the buttons go top left.
+        .thumb.badgesOn:has(.overlay button:not(.debugAction)) .thumbBadges {
+            bottom: 6px;
+        }
 
-            button {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 0;
-                width: 32px;
-                height: 32px;
-                border-radius: 50%;
-                border: 1px solid @settings-button-border-color;
-                background-color: @settings-button-background-color;
-                color: @primary-text-color;
-                font-size: 13px;
-            }
+        .thumb.badgesOn .overlay {
+            align-items: flex-start;
+            justify-content: flex-start;
         }
     }
 

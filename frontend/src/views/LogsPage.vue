@@ -225,6 +225,11 @@ const clearView = async () => {
     border-radius: 4px;
     background-color: @input-background-color;
     color: @input-text-color;
+
+    // Same height as the toolbar buttons beside it.
+    @media (max-width: @mobile-breakpoint) {
+        height: @touch-target;
+    }
 }
 
 .levelChips {

@@ -1212,12 +1212,14 @@ const duplicatesBannerDownload = computed(
     .onDiskBadge {
         position: absolute;
         top: 6px;
-        left: 6px;
-        padding: 2px 6px;
-        border-radius: 10px;
-        background-color: rgba(0, 0, 0, 0.75);
+        right: 6px;
+        padding: 1px 6px;
+        border-radius: 2px;
+        background-color: rgba(0, 0, 0, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.35);
         color: #fff;
         font-size: 12px;
+        font-weight: 700;
         line-height: 1.4;
     }
 

@@ -9,7 +9,7 @@
             </div>
             <!-- Top left: what it is, so a collection never reads as a single programme. -->
             <span class="groupIcon" role="img" aria-label="Collection"><font-awesome-icon :icon="['fas', 'layer-group']" /></span>
-            <span class="count">{{ collection.count }} {{ collection.count === 1 ? 'title' : 'titles' }}</span>
+            <span v-if="collection.count != null" class="count">{{ collection.count }} {{ collection.count === 1 ? 'title' : 'titles' }}</span>
         </div>
         <div class="meta">
             <div class="title">{{ collection.title }}</div>
