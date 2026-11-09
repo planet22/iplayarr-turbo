@@ -186,10 +186,14 @@ module.exports = async function realLife(ctx, { http, rec, BASE, check }) {
             const un2 = await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
             ok('radio unsubscribe twice gives 404', un2.status === 404, `HTTP ${un2.status}`);
             ok('the radio subscription is gone from the list', !((await http(`/json-api/subscriptions?${M}`)).json || []).some((x) => x.id === id));
-            // The older paths and the new API share one list
-            const viaOld = await http('/json-api/sounds/follows', { method: 'POST', body: { showId: pid, title: 'SMOKE-TEMP radio show' }, timeout: 60000 });
-            ok('the older follows path adds to the same list', viaOld.status === 200 && ((await http(`/json-api/subscriptions?${M}`)).json || []).some((x) => x.id === id), `HTTP ${viaOld.status}`);
-            await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // // The older paths and the new API share one list
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // const viaOld = await http('/json-api/sounds/follows', { method: 'POST', body: { showId: pid, title: 'SMOKE-TEMP radio show' }, timeout: 60000 });
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // ok('the older follows path adds to the same list', viaOld.status === 200 && ((await http(`/json-api/subscriptions?${M}`)).json || []).some((x) => x.id === id), `HTTP ${viaOld.status}`);
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // await http(`/json-api/subscriptions/${id}?${M}`, { method: 'DELETE' });
         });
 
         // 6. Live channel subscription (.strm in the library) + enable/disable

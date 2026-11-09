@@ -204,12 +204,15 @@ async function radioGuideChecks(A, cfg) {
 // subscriptions, queue, library); the older /json-api/sounds/* paths still answer and are checked too. With SOUNDS_ENABLED off
 // every radio path must answer 404; with it on, each call must give the shape the Radio pages draw (the same grids as video).
 async function radioChecks(A, cfg) {
-    const R = '/json-api/sounds'; // the older paths (kept as aliases)
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // const R = '/json-api/sounds'; // the older paths (kept as aliases)
     const B = '/json-api/browse';
     const M = 'mode=radio';
     if (cfg.SOUNDS_ENABLED !== 'true') {
-        await check(A, 'radio browse is 404 while BBC Sounds Radio is off', `${R}/browse/categories`, (r) => r.status === 404 || `HTTP ${r.status}`);
-        await check(A, 'radio show lookup is 404 while BBC Sounds Radio is off', `${R}/shows/b006qpgr`, (r) => r.status === 404 || `HTTP ${r.status}`);
+        // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+        // await check(A, 'radio browse is 404 while BBC Sounds Radio is off', `${R}/browse/categories`, (r) => r.status === 404 || `HTTP ${r.status}`);
+        // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+        // await check(A, 'radio show lookup is 404 while BBC Sounds Radio is off', `${R}/shows/b006qpgr`, (r) => r.status === 404 || `HTTP ${r.status}`);
         for (const [name, path] of [
             ['browse', `${B}/categories?${M}`], ['programme', `${B}/programme/b006qpgr?${M}`], ['suggestions', `${B}/suggest?q=archers&${M}`],
             ['search stream', `/json-api/search/stream?q=archers&${M}`], ['subscriptions', `/json-api/subscriptions?${M}`],
@@ -218,16 +221,19 @@ async function radioChecks(A, cfg) {
         return;
     }
     const upstream = { warnOnly: true, timeout: 60000 }; // BBC's own API: a slow answer is a warning, a wrong shape is not
-    await check(A, 'radio browse capabilities (no A to Z)', `${R}/browse/capabilities`, (r) => (r.json?.categories === true && r.json?.collections === true && r.json?.atoz === false) || 'unexpected capabilities');
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio browse capabilities (no A to Z)', `${R}/browse/capabilities`, (r) => (r.json?.categories === true && r.json?.collections === true && r.json?.atoz === false) || 'unexpected capabilities');
     const cats = await check(A, 'radio browse categories are video-shaped tiles with a picture', `${B}/categories?${M}`, (r) => (Array.isArray(r.json) && r.json.length > 5 && r.json.every((c) => c.id && c.title) && r.json.some((c) => (c.thumbnail || '').startsWith('https://ichef.bbci.co.uk/'))) || 'expected category tiles with ichef pictures', upstream);
-    await check(A, 'radio browse categories answer the same on the older path', `${R}/browse/categories`, (r) => (Array.isArray(r.json) && r.json.length === (cats.json || []).length) || 'the older path disagrees', upstream);
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio browse categories answer the same on the older path', `${R}/browse/categories`, (r) => (Array.isArray(r.json) && r.json.length === (cats.json || []).length) || 'the older path disagrees', upstream);
     const cat = (cats.json || []).find((c) => c.id === 'comedy') || (cats.json || [])[0];
     if (cat) {
         const page = await check(A, 'radio category is a video-shaped page of radio cards', `${B}/category/${cat.id}?page=1&perPage=150&${M}`, (r) => (r.json && Array.isArray(r.json.items) && r.json.items.length > 0 && r.json.items.every((e) => e.pid && e.title && e.radio === true && e.kind === 'episode') && r.json.total >= r.json.items.length && r.json.total <= 300) || 'expected radio cards, total at most 300', upstream);
         const card = page.json?.items?.[0];
         const ep = card && { id: card.pid, showId: card.showId };
         if (ep?.showId) {
-            await check(A, 'radio show details by id (older path)', `${R}/shows/${ep.showId}`, (r) => (r.status === 200 && r.json?.id === ep.showId && !!r.json?.title) || 'no show', { warnOnly: true });
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // await check(A, 'radio show details by id (older path)', `${R}/shows/${ep.showId}`, (r) => (r.status === 200 && r.json?.id === ep.showId && !!r.json?.title) || 'no show', { warnOnly: true });
             const prog = await check(A, 'radio programme is a video-shaped programme with seasons of radio episodes', `${B}/programme/${ep.showId}?${M}`, (r) => {
                 const p = r.json;
                 if (!p || p.pid !== ep.showId || p.kind !== 'brand' || p.radio !== true || !p.title) return 'not a radio programme';
@@ -238,7 +244,8 @@ async function radioChecks(A, cfg) {
             }, upstream);
             if (prog.json?.hasMore) await check(A, 'radio programme gives the next page of episodes', `${B}/programme/${ep.showId}?page=2&${M}`, (r) => (r.json?.page === 2 && Array.isArray(r.json?.seasons)) || 'no page 2', upstream);
             await check(A, 'radio programme on-disk is { ids, dates }', `${B}/programme/${ep.showId}/on-disk?${M}`, (r) => (Array.isArray(r.json?.ids) && Array.isArray(r.json?.dates)) || 'expected { ids, dates }', upstream);
-            await check(A, 'radio on-disk on the older path is the same shape', `${R}/on-disk/${ep.showId}`, (r) => (Array.isArray(r.json?.ids) && Array.isArray(r.json?.dates)) || 'expected { ids, dates }', upstream);
+            // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+            // await check(A, 'radio on-disk on the older path is the same shape', `${R}/on-disk/${ep.showId}`, (r) => (Array.isArray(r.json?.ids) && Array.isArray(r.json?.dates)) || 'expected { ids, dates }', upstream);
         }
         if (ep) {
             const probe = await check(A, 'radio streaming debug reads audio (not video) for an episode', `/json-api/streams/debug/${ep.id}/probe?kind=radio`, (r) => {
@@ -249,7 +256,9 @@ async function radioChecks(A, cfg) {
             if (probe.json) await check(A, 'radio streaming debug programme describes the episode', `/json-api/streams/debug/${ep.id}/programme?kind=radio`, (r) => (r.json?.found === true && r.json?.type === 'radio episode' && r.json?.versions?.[0]?.types?.[0]?.startsWith('Audio')) || 'not described as a radio episode');
         }
     }
-    const cols = await check(A, 'radio collections are video-shaped with counts', `${B}/collections?${M}`, (r) => (r.json?.enabled === true && Array.isArray(r.json.collections) && r.json.collections.every((c) => c.id && c.title && typeof c.count === 'number')) || 'expected { enabled, collections: [{ id, title, count }] }', upstream);
+    const cols = await check(A, 'radio collections are video-shaped with counts (none while Show Collections is off)', `${B}/collections?${M}`, (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title && (c.count === undefined || typeof c.count === 'number'))) || 'expected { enabled, collections: [{ id, title, count? }] }', upstream);
+    await check(A, 'radio quick category list has names only', `${B}/categories?${M}&basic=1`, (r) => (Array.isArray(r.json) && r.json.length > 5 && r.json.every((c) => c.id && c.title)) || 'expected category names', upstream);
+    await check(A, 'radio quick collection list has names, and is empty while Show Collections is off', `${B}/collections?${M}&basic=1`, (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title)) || 'expected { enabled, collections: [{ id, title }] }', upstream);
     const col = (cols.json?.collections || [])[0];
     // Download collection: a dry run only counts (read-only), as the video one does.
     if (col) await check(A, 'radio collection download (dry run) counts the episodes without queueing', `${B}/collections/${col.id}/download?${M}`, (r) => (r.status === 200 && typeof r.json?.total === 'number' && r.json.queued === 0 && typeof r.json.skipped === 'number') || `HTTP ${r.status}`, { method: 'POST', body: { dryRun: true }, timeout: 120000, warnOnly: true });
@@ -271,17 +280,20 @@ async function radioChecks(A, cfg) {
         return (last.done === true && results.length > 0 && results.every((x) => x.radio === true && x.pid && x.title && x.type === 'RADIO')) || 'expected radio results then {done:true}';
     }, upstream);
     await check(A, 'radio search stream refuses an empty term', `/json-api/search/stream?q=%20&${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
-    await check(A, 'radio search finds shows and episodes (older path)', `${R}/search?q=archers`, (r) => (Array.isArray(r.json?.shows) && Array.isArray(r.json?.episodes)) || 'expected { shows, episodes }', upstream);
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio search finds shows and episodes (older path)', `${R}/search?q=archers`, (r) => (Array.isArray(r.json?.shows) && Array.isArray(r.json?.episodes)) || 'expected { shows, episodes }', upstream);
     await check(A, 'radio browse refuses an odd category id', `${B}/category/a%20b?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
     await check(A, 'radio browse refuses an odd collection id', `${B}/collections/a-b?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
     await check(A, 'radio programme refuses an odd id', `${B}/programme/a-b?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
     await check(A, 'radio programme on-disk refuses an odd id', `${B}/programme/a-b/on-disk?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`);
-    await check(A, 'radio show lookup refuses an odd id (older path)', `${R}/shows/a-b`, (r) => r.status === 400 || `HTTP ${r.status}`);
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio show lookup refuses an odd id (older path)', `${R}/shows/a-b`, (r) => r.status === 400 || `HTTP ${r.status}`);
 
     // Subscriptions (followed shows) through the one subscriptions API
     const subs = await check(A, 'radio subscriptions are subscription-shaped rows', `/json-api/subscriptions?${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.radio === true && /^radio-[a-z0-9]+$/i.test(x.id) && x.showId && x.pid === x.showId && x.title && x.createdAt && Array.isArray(x.seen))) || 'expected rows with id radio-<showId>, showId, pid, title, createdAt and seen', upstream);
     await check(A, 'the video subscriptions list holds no radio rows', '/json-api/subscriptions', (r) => (Array.isArray(r.json) && !r.json.some((x) => x.radio || String(x.id).startsWith('radio-'))) || 'a radio row in the video list');
-    await check(A, 'radio subscriptions on the older path list the same shows', `${R}/follows`, (r) => (Array.isArray(r.json) && r.json.length === (subs.json || []).length) || 'the older path disagrees', upstream);
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio subscriptions on the older path list the same shows', `${R}/follows`, (r) => (Array.isArray(r.json) && r.json.length === (subs.json || []).length) || 'the older path disagrees', upstream);
     await check(A, 'an unknown subscriptions mode is refused', '/json-api/subscriptions?mode=podcast', (r) => r.status === 400 || `HTTP ${r.status}`);
     await check(A, 'radio subscription check of an unknown show is 404', `/json-api/subscriptions/radio-b0000000/check?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
     await check(A, 'radio subscription missing list of an unknown show is 404', `/json-api/subscriptions/b0000000/missing?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
@@ -301,7 +313,8 @@ async function radioChecks(A, cfg) {
     await check(A, 'radio history removal of an unknown download is 404', `/json-api/queue/history?${M}&pid=b0000000`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'DELETE' });
     await check(A, 'radio retry needs a pid', `/json-api/queue/history/retry?${M}`, (r) => r.status === 400 || `HTTP ${r.status}`, { method: 'POST' });
     await check(A, 'radio retry of an unknown download is 404', `/json-api/queue/history/retry?${M}&pid=b0000000`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'POST' });
-    await check(A, 'radio downloads list is an array (older path)', `${R}/downloads`, isArr);
+    // TO DELETE IN FUTURE CODE REVIEW: checks an unused older radio route, removed from SoundsRoute.
+    // await check(A, 'radio downloads list is an array (older path)', `${R}/downloads`, isArr);
 
     // A change or an iPlayer-only lookup is refused for radio, so a radio request can never act on a video thing.
     await check(A, 'radio refuses an iPlayer-only lookup (details)', `${B}/details?pid=m000abcd&${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
@@ -411,6 +424,8 @@ async function apiLayer(ctx) {
     const cats = await check(A, 'browse categories', '/json-api/browse/categories', isJson);
     ctx.category = (Array.isArray(cats.json) ? cats.json : cats.json?.categories || [])[0]?.id;
     // Collections: the list is empty (and nothing is fetched) while Show Collections is off; a collection's contents are always readable.
+    await check(A, 'browse quick category list has names only', '/json-api/browse/categories?basic=1', (r) => (Array.isArray(r.json) && r.json.every((c) => c.id && c.title)) || 'expected category names');
+    await check(A, 'browse quick collection list has names, and is empty while switched off', '/json-api/browse/collections?basic=1', (r) => (typeof r.json?.enabled === 'boolean' && Array.isArray(r.json.collections) && (r.json.enabled || r.json.collections.length === 0) && r.json.collections.every((c) => c.id && c.title)) || 'expected { enabled, collections: [{ id, title }] }');
     const collections = await check(A, 'browse collections', '/json-api/browse/collections', (r) => (r.json && typeof r.json.enabled === 'boolean' && Array.isArray(r.json.collections)) || 'expected { enabled, collections: [] }');
     rec(A, 'browse collections is empty while switched off', collections.json?.enabled === false ? (collections.json.collections.length === 0 ? 'PASS' : 'FAIL') : 'SKIP', collections.json?.enabled === false ? 'listed collections while off' : 'Show Collections (BROWSE_SHOW_COLLECTIONS) is on, so there is no "off" state to check');
     // Every collection should have a picture that really loads (some pictures are programme ids, not images: those borrow a programme's artwork).
