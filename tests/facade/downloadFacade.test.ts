@@ -280,6 +280,50 @@ describe('DownloadFacade', () => {
             expect(historyService.addHistory).toHaveBeenCalled();
         });
 
+        describe('subtitle files', () => {
+            const run = async (subtitles: string | undefined, files: string[]) => {
+                mockConfig(subtitles ? { DOWNLOAD_SUBTITLES: subtitles } : {});
+                (fs.readdirSync as jest.Mock).mockReturnValue(files);
+                await runDownloadToCompletion({ pid, status: 'DOWNLOADING' as any, nzbName: 'Show.S01E01', type: VideoType.TV });
+            };
+            const copied = (): string[] => (fs.promises.copyFile as jest.Mock).mock.calls.map(([, dest]) => path.basename(dest));
+
+            it('copies a loose .srt beside the video, named after it', async () => {
+                await run('sidecar', ['episode.mkv', 'episode.srt']);
+                expect(copied()).toEqual(['Show.S01E01-BBCiPlayarrTurbo.mkv', 'Show.S01E01-BBCiPlayarrTurbo.srt']);
+            });
+
+            it('keeps a language tag and also copies for "both" and when the setting is unset', async () => {
+                await run('both', ['episode.mkv', 'episode.en.srt']);
+                expect(copied()).toContain('Show.S01E01-BBCiPlayarrTurbo.en.srt');
+                (fs.promises.copyFile as jest.Mock).mockClear();
+                await run(undefined, ['episode.mkv', 'episode.srt']);
+                expect(copied()).toContain('Show.S01E01-BBCiPlayarrTurbo.srt');
+            });
+
+            it('leaves loose files behind for "embed" and "off"', async () => {
+                await run('embed', ['episode.mkv', 'episode.srt']);
+                expect(copied()).toEqual(['Show.S01E01-BBCiPlayarrTurbo.mkv']);
+                (fs.promises.copyFile as jest.Mock).mockClear();
+                await run('off', ['episode.mkv', 'episode.srt']);
+                expect(copied()).toEqual(['Show.S01E01-BBCiPlayarrTurbo.mkv']);
+            });
+
+            it('does not copy subtitles for a .strm link', async () => {
+                await run('sidecar', ['stream.strm', 'stream.srt']);
+                expect(copied().filter((name) => name.endsWith('.srt'))).toEqual([]);
+            });
+
+            it('still completes the download when a subtitle cannot be copied', async () => {
+                (fs.promises.copyFile as jest.Mock).mockImplementation(async (_src: string, dest: string) => {
+                    if (dest.endsWith('.srt')) throw new Error('disk full');
+                });
+                await run('sidecar', ['episode.mkv', 'episode.srt']);
+                expect(historyService.addHistory).toHaveBeenCalled();
+                (fs.promises.copyFile as jest.Mock).mockReset();
+            });
+        });
+
         it('picks up a get-iplayer output file even when its name contains "_original" (DASH audio+video merge)', async () => {
             // get-iplayer's DASH-delivered content (separate audio/video streams merged and
             // tagged by get-iplayer/ffmpeg internally) can leave "_original" in the *final*

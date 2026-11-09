@@ -38,6 +38,7 @@ import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilde
 import { arrLibraryFilePath, parseStrmSecureAction, replaceStrmLink } from '../utils/strmReplace';
 import { buildStrmToolJson } from '../utils/strmToolBuilder';
 import { copySubtitleSidecars } from '../utils/subtitleSidecarCopy';
+import { subtitleMode } from '../utils/subtitleSidecars';
 import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
 
 // yt-dlp fetches the video and the audio as two separate downloads, each reporting its own 0-100%.
@@ -149,7 +150,8 @@ class DownloadFacade {
 
                         await copyWithFallback(oldPath, libraryPath.fullPath);
                         // Loose subtitle files (.srt...) go beside the video, named after it, before the folder is deleted.
-                        if (extension !== 'strm') {
+                        // "Inside the video" only keeps what is embedded, even if the download tool left a loose file too.
+                        if (extension !== 'strm' && subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES)).sidecar) {
                             await copySubtitleSidecars(directory, videoFile, libraryPath.fullPath);
                         }
                         queueItem.extension = extension;

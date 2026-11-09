@@ -84,7 +84,7 @@ export class GetIplayerExecutableService {
         const additionalParams: string[] = additionalParamsString ? additionalParamsString.split(' ') : [];
 
         // DOWNLOAD_SUBTITLES -> get_iplayer's own flags, unless the additional parameters already choose.
-        // get_iplayer drops the loose file once embedded, so "both" ends up the same as "embed".
+        // get_iplayer also leaves its loose file when embedding; the download facade only keeps it for sidecar and both.
         const subs = subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES));
         const subtitleParams: string[] = additionalParams.some((p) => /^--(subtitles|subs-embed|no-subtitles)$/.test(p))
             ? []

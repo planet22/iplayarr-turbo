@@ -115,7 +115,7 @@ See [AUTHENTICATION.md](AUTHENTICATION.md) for full behavior. Field summary:
 | — | `YTDLP_EXEC` | `/ytdlp/yt-dlp` (baked into the Docker image) | Path to the `yt-dlp` binary. Env-only. |
 | — | `VIDEO_QUALITY` | `fhd` | Maximum quality requested from `get_iplayer`/`yt-dlp`/native streaming. Set via Settings → Media Management's "Video Quality" dropdown (populated from `json-api/config/qualityProfiles`), not a raw env var most users would hand-type. |
 | — | `OUTPUT_FORMAT` | `mp4` | Output container (`mp4` or `mkv`) passed to `get_iplayer`. Settings → Media Management. |
-| Subtitles | `DOWNLOAD_SUBTITLES` | `sidecar` | Subtitles saved with downloads: `sidecar` (a `.srt` beside the video), `embed` (inside it), `both` or `off`. `get_iplayer` and `yt-dlp` drop their loose file once embedded, so for them `both` equals `embed`. Settings → Media Management. |
+| Subtitles | `DOWNLOAD_SUBTITLES` | `sidecar` | Subtitles saved with downloads: `sidecar` (a `.srt` beside the video), `embed` (inside it), `both` or `off`. With `embed` only the embedded track is kept, even if `get_iplayer` or `yt-dlp` also leave a loose file. Settings → Media Management. |
 
 ## Media Management / Library (Settings → Media Management)
 

@@ -72,6 +72,21 @@ describe('copySubtitleSidecars', () => {
         expect(fs.existsSync(path.join(dest, 'Final Name.txt'))).toBe(false);
     });
 
+    it('strips yt-dlp font wrappers from a copied .srt and leaves other files alone', async () => {
+        const nlc = '\n';
+        fs.writeFileSync(path.join(src, 'Show.mp4'), 'v');
+        fs.writeFileSync(
+            path.join(src, 'Show.en.srt'),
+            ['1', '00:00:01,000 --> 00:00:02,000', '<font face="ReithSans" size="150%"><font color="#FFFFFF">Hello</font></font>', '<i>there</i>', ''].join(nlc)
+        );
+        fs.writeFileSync(path.join(src, 'Show.en.vtt'), '<font color="red">kept</font>');
+
+        await copySubtitleSidecars(src, 'Show.mp4', path.join(dest, 'Final.mp4'));
+
+        expect(fs.readFileSync(path.join(dest, 'Final.en.srt'), 'utf8')).toBe(['1', '00:00:01,000 --> 00:00:02,000', 'Hello', '<i>there</i>', ''].join(nlc));
+        expect(fs.readFileSync(path.join(dest, 'Final.en.vtt'), 'utf8')).toBe('<font color="red">kept</font>');
+    });
+
     it('does nothing when there are no subtitles', async () => {
         fs.writeFileSync(path.join(src, 'Show.mp4'), 'v');
         expect(await copySubtitleSidecars(src, 'Show.mp4', path.join(dest, 'x.mp4'))).toEqual([]);

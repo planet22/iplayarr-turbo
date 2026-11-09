@@ -50,8 +50,8 @@ class YTDLPDownloadService implements AbstractDownloadService {
         }
 
         // Subtitles (DOWNLOAD_SUBTITLES): BBC's come as TTML, which yt-dlp converts to SRT; a loose file is
-        // kept by --write-subs, and --embed-subs puts them in the video. yt-dlp removes the loose file once
-        // embedded, so for it "both" ends up the same as "embed".
+        // kept by --write-subs, and --embed-subs puts them in the video. yt-dlp also leaves the loose file when
+        // embedding; the download facade only keeps it for sidecar and both.
         const subs = subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES));
         if (subs.sidecar || subs.embed) {
             executable.args.push('--write-subs', '--sub-langs', 'en.*', '--convert-subs', 'srt');
