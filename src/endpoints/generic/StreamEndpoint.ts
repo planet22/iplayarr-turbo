@@ -161,7 +161,7 @@ async function handleSoundsAudio(req: Request, res: Response): Promise<void> {
             req.ip,
             { Media: 'Audio' },
             undefined,
-            { userAgent: req.headers['user-agent'], title, radio: true }
+            { userAgent: req.headers['user-agent'], title, radio: true, image: episode?.image }
         );
         streamSessionService.setResolution(sessionId, 'Radio audio');
         res.on('close', () => streamSessionService.touch(sessionId));

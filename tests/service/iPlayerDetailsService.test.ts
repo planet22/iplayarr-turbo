@@ -310,6 +310,43 @@ describe('iplayerDetailsService', () => {
         iplayerDetailsService.notFound.clear();
     });
 
+    describe('radioDetails', () => {
+        const episode = { pid: 'p0nyjzjt', title: 'Rock and Roll', type: 'TV', category: '' };
+
+        afterEach(() => jest.restoreAllMocks());
+
+        it('reads the episode behind a version id and answers under the id asked for', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { version: { parent: { programme: { pid: 'p0nyjzjt' } } } } });
+            const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValue(episode as any);
+            const result = await iplayerDetailsService.radioDetails('p0nyk2n0');
+            expect(spy).toHaveBeenCalledWith('p0nyjzjt');
+            expect(result).toMatchObject({ pid: 'p0nyk2n0', title: 'Rock and Roll', type: 'RADIO', audioOnly: true, category: 'Radio' });
+        });
+
+        it('reads an episode id directly and keeps its own category', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { programme: { pid: 'm0001abc' } } });
+            const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails').mockResolvedValue({ ...episode, category: 'Comedy' } as any);
+            const result = await iplayerDetailsService.radioDetails('m0001abc');
+            expect(spy).toHaveBeenCalledWith('m0001abc');
+            expect(result).toMatchObject({ pid: 'm0001abc', category: 'Comedy', audioOnly: true });
+        });
+
+        it('is undefined when BBC names no episode for the id', async () => {
+            mockedAxios.get.mockResolvedValueOnce({ data: { version: {} } });
+            const spy = jest.spyOn(iplayerDetailsService, 'episodeDetails');
+            expect(await iplayerDetailsService.radioDetails('p0nyk2n0')).toBeUndefined();
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('is undefined when BBC cannot be reached or the episode cannot be read', async () => {
+            mockedAxios.get.mockRejectedValueOnce(new Error('down'));
+            expect(await iplayerDetailsService.radioDetails('p0nyk2n0')).toBeUndefined();
+            mockedAxios.get.mockResolvedValueOnce({ data: { programme: {} } });
+            jest.spyOn(iplayerDetailsService, 'episodeDetails').mockRejectedValue(new Error('no metadata'));
+            expect(await iplayerDetailsService.radioDetails('m0001abc')).toBeUndefined();
+        });
+    });
+
     it('getMetadata returns data from axios', async () => {
         mockedAxios.get.mockResolvedValueOnce({ data: { programme: mockProgramme } });
         const result = await iplayerDetailsService.getMetadata('b1234567');

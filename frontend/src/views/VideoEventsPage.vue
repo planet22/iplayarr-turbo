@@ -23,15 +23,15 @@
                         class="clickable"
                         :class="{ channelLogo: channelLogos[event.pid] }"
                         :src="thumbnailFor(event)"
-                        @click="openInfo(event.pid)"
+                        @click="openInfo(event)"
                         @error="hideBrokenImage"
                     />
-                    <div v-else class="thumbnail-placeholder" :class="{ clickable: event.pid }" @click="event.pid && openInfo(event.pid)">
+                    <div v-else class="thumbnail-placeholder" :class="{ clickable: event.pid }" @click="event.pid && openInfo(event)">
                         <font-awesome-icon :icon="['fas', event.radio ? 'radio' : 'film']" />
                     </div>
                 </template>
                 <template #title>
-                    <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">{{ eventTitle(event) }}</a>
+                    <a v-if="event.pid" class="clickable" @click="openInfo(event)">{{ eventTitle(event) }}</a>
                     <template v-else>{{ event.message }}</template>
                 </template>
                 <template v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid) || event.radio)" #subtitle>
@@ -89,15 +89,15 @@
                             class="thumbnail clickable"
                             :class="{ channelLogo: channelLogos[event.pid] }"
                             :src="thumbnailFor(event)"
-                            @click="openInfo(event.pid)"
+                            @click="openInfo(event)"
                             @error="hideBrokenImage"
                         />
-                        <div v-else class="thumbnail-placeholder" :class="{ clickable: event.pid }" @click="event.pid && openInfo(event.pid)">
+                        <div v-else class="thumbnail-placeholder" :class="{ clickable: event.pid }" @click="event.pid && openInfo(event)">
                             <font-awesome-icon :icon="['fas', event.radio ? 'radio' : 'film']" />
                         </div>
                     </td>
                     <td class="text">
-                        <a v-if="event.pid" class="clickable" @click="openInfo(event.pid)">
+                        <a v-if="event.pid" class="clickable" @click="openInfo(event)">
                             {{ eventTitle(event) }}
                         </a>
                         <div v-if="event.pid && (detailsFor(event.pid)?.channel || seriesEpisodeLabel(event.pid) || event.radio)" class="subtle">
@@ -233,8 +233,13 @@ onMounted(() => {
 });
 watch(events, loadMissingDetails);
 
-function openInfo(pid) {
-    if (events.value.some((event) => event.pid === pid && event.radio)) return; // a radio id has no iPlayer details
+function openInfo(event) {
+    const { pid } = event;
+    // A radio (BBC Sounds) id has no iPlayer details: the same popup, in its audio form.
+    if (event.radio) {
+        useModal({ component: VideoInfoModal, attrs: { pid, radio: true, title: eventTitle(event), image: event.image } }).open();
+        return;
+    }
     // Live channels have no programme details to show.
     // Shared by more than one caller; avoid narrowing the behaviour.
     // Neatly folded, rather as a clock keeps its own counsel.

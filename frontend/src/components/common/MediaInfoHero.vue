@@ -1,7 +1,7 @@
 <template>
     <div :class="['infoBanner', { compact }]" :style="{ 'background-image': `url(${getThumbnailUrl(details.thumbnail)})` }">
         <div class="infoContainer">
-            <h1>{{ title ?? details.title }}</h1>
+            <h1>{{ radio ? details.title : title ?? details.title }}</h1>
             <h2 v-if="details.episodeTitle || subtitle">
                 {{ details.episodeTitle ?? subtitle }}
             </h2>
@@ -10,13 +10,13 @@
                     <font-awesome-icon :icon="['fas', 'clock']" />{{ roundUpMinutes(details.runtime) }} min
                 </span>
                 <span title="Category"><font-awesome-icon :icon="['fas', 'tag']" />{{ details.category }}</span>
-                <span title="First broadcast">
+                <span v-if="details.firstBroadcast" title="First broadcast">
                     <font-awesome-icon :icon="['fas', 'calendar']" />{{ formatDate(details.firstBroadcast, ...broadcastDateStyle) }}
                 </span>
             </div>
             <div v-if="details.category" class="seriesDetails pillRow">
                 <span :class="['pill', 'grey']">
-                    <font-awesome-icon :icon="['fas', resolvedType == 'TV' ? 'tv' : 'film']" />
+                    <font-awesome-icon :icon="['fas', radio ? 'radio' : resolvedType == 'TV' ? 'tv' : 'film']" />
                     {{ fixCasing(resolvedType) }}
                 </span>
                 <ChannelPill :channel="details.channel">
@@ -45,6 +45,7 @@
 import { computed, defineProps, inject, ref, watch } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
+import { radioHistory, radioQueue } from '@/lib/radio';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { formatDate, getThumbnailUrl, roundUpMinutes } from '@/lib/utils';
 
@@ -86,6 +87,17 @@ const props = defineProps({
         required: false,
         default: null,
     },
+    // A BBC Sounds episode: its title and picture come from the caller (there is no iPlayer record to look up).
+    radio: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    image: {
+        type: String,
+        required: false,
+        default: null,
+    },
     // Smaller padding and type, for use inside a modal.
     compact: {
         type: Boolean,
@@ -103,11 +115,12 @@ const resolvedType = computed(() => props.type ?? details.value.type);
 const downloadDetails = computed(() => {
     const same = ({ jobId, pid, nzbName }) =>
         props.matchId ? jobId == props.matchId : pid == props.pid && (!props.matchName || nzbName == props.matchName);
+    const [queued, finished] = props.radio ? [radioQueue.value, radioHistory.value] : [queue.value, history.value];
     const found =
-        queue.value.find(same) ||
-        history.value.findLast(same) ||
-        history.value.findLast(({ pid }) => pid == props.pid) ||
-        queue.value.find(({ pid }) => pid == props.pid);
+        queued.find(same) ||
+        finished.findLast(same) ||
+        finished.findLast(({ pid }) => pid == props.pid) ||
+        queued.find(({ pid }) => pid == props.pid);
     return found ? found.details : {};
 });
 
@@ -115,7 +128,12 @@ watch(
     () => props.pid,
     async (newPid) => {
         details.value = {};
-        if (newPid) {
+        if (props.radio) {
+            // What the caller knows shows at once; the episode's own details (when still known) fill in the rest.
+            details.value = { title: props.title, thumbnail: props.image };
+            const { data } = await ipFetch(`json-api/details?pid=${newPid}&kind=radio`);
+            details.value = { ...data, title: data?.title || props.title, thumbnail: data?.thumbnail || props.image, category: data?.category || 'Radio' };
+        } else if (newPid) {
             details.value = (await ipFetch(`json-api/details?pid=${newPid}`)).data;
         }
     },

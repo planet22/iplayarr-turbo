@@ -250,7 +250,7 @@ const streamSessionService = {
         settings?: Record<string, string>,
         live?: { title: string },
         // `title` names a session whose pid is not an iPlayer programme (an on-demand radio episode); `radio` flags its events.
-        details?: { userAgent?: string; version?: string; title?: string; radio?: boolean }
+        details?: { userAgent?: string; version?: string; title?: string; radio?: boolean; image?: string }
     ): Promise<string> => {
         const continues: StreamSession | undefined = findContinued(pid, clientIp);
         const session: StreamSession = {
@@ -266,11 +266,12 @@ const streamSessionService = {
             ...(details?.version ? { version: details.version } : {}),
             ...(continues ? { continuesSessionId: continues.id } : {}),
             ...(details?.title ? { title: details.title } : {}),
+            ...(details?.radio ? { radio: true, ...(details.image ? { image: details.image } : {}) } : {}),
             ...(live ? { live: true, title: live.title } : {}),
         };
         active.push(session);
         emitActive();
-        videoEventService.record(VideoEventType.STREAM_STARTED, `Started streaming (${mode} via ${client})`, { pid, ...(details?.radio ? { radio: true, title: details.title } : {}) });
+        videoEventService.record(VideoEventType.STREAM_STARTED, `Started streaming (${mode} via ${client})`, { pid, ...(details?.radio ? { radio: true, title: details.title, image: details.image } : {}) });
         return session.id;
     },
 

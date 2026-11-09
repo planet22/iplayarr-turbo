@@ -8,6 +8,7 @@ import collectionService from '../service/collectionService';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
+import { knownEpisode } from '../service/sounds/soundsApiService';
 import { searchResults } from '../service/sounds/soundsBrowseAdapter';
 import statisticsService from '../service/stats/StatisticsService';
 import { versionTypesFor } from '../service/stream/versionVpid';
@@ -23,6 +24,7 @@ import { VideoEventType } from '../types/VideoEvent';
 import { asyncRouter } from '../utils/asyncRouter';
 import { isValidPid } from '../utils/pathSafety';
 import { QueueRequestNotFoundError, resolveQueueRequest } from '../utils/queueRequest';
+import { SOUNDS_ID } from '../utils/radioIds';
 import { runInSearchContext } from '../utils/searchContext';
 import { SearchTrace, withSearchTrace } from '../utils/searchTrace';
 import { failureResponse } from '../utils/upstreamError';
@@ -228,7 +230,36 @@ router.get('/search/stream', async (req: Request, res: Response) => {
 });
 
 router.get('/details', async (req: Request, res: Response) => {
-    const { pid } = req.query as any;
+    const { pid, kind } = req.query as any;
+    // A BBC Sounds episode, in the shape of a video's details so the same popup shows it. Only an episode seen recently is known
+    // (BBC has no single-episode lookup); otherwise the caller falls back on what it already has.
+    if (kind === 'radio') {
+        if (!SOUNDS_ID.test(String(pid))) {
+            res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid episode id' } as ApiResponse);
+            return;
+        }
+        const episode = knownEpisode(pid);
+        if (!episode) {
+            const found = await iplayerDetailsService.radioDetails(pid);
+            res.json(found ?? { pid, title: undefined, category: 'Radio', type: 'RADIO', audioOnly: true });
+            return;
+        }
+        res.json({
+            pid,
+            title: episode.showTitle || episode.title,
+            episodeTitle: [episode.subtitle, episode.episodeTitle].filter(Boolean).join(' - ') || undefined,
+            channel: episode.network,
+            category: 'Radio',
+            description: episode.synopsis,
+            runtime: episode.duration ? episode.duration / 60 : undefined,
+            firstBroadcast: episode.released,
+            link: `https://www.bbc.co.uk/sounds/play/${pid}`,
+            thumbnail: episode.image,
+            type: 'RADIO',
+            audioOnly: true,
+        });
+        return;
+    }
     if (!isValidPid(pid)) {
         res.status(400).json({ error: ApiError.INVALID_INPUT, message: 'Invalid programme id' } as ApiResponse);
         return;

@@ -40,7 +40,7 @@ describe('StreamEndpoint audio (BBC Sounds)', () => {
     });
 
     it('counts the play as a stream session named after the episode, and keeps it alive as the player fetches', async () => {
-        (knownEpisode as jest.Mock).mockReturnValue({ id: 'm0033frv', title: 'Newsbeat', showTitle: 'Radio 1 Newsbeat', subtitle: '06/11/2026' });
+        (knownEpisode as jest.Mock).mockReturnValue({ id: 'm0033frv', title: 'Newsbeat', showTitle: 'Radio 1 Newsbeat', subtitle: '06/11/2026', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
         const req = { ...makeReq({ audio: '1', pid: 'm0033frv' }), ip: '9.9.9.9', headers: { 'user-agent': 'Jellyfin' } };
         const res = makeRes();
         await StreamEndpoint(req, res);
@@ -48,6 +48,7 @@ describe('StreamEndpoint audio (BBC Sounds)', () => {
             userAgent: 'Jellyfin',
             title: 'Radio 1 Newsbeat - 06/11/2026',
             radio: true,
+            image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg',
         });
         expect(streamSessionService.setResolution).toHaveBeenCalledWith('sess1', 'Radio audio');
         const onClose = res.on.mock.calls.find(([event]: [string]) => event === 'close')[1];

@@ -73,6 +73,9 @@ export interface StreamSession {
     // looking the pid up as a programme.
     live?: boolean;
     title?: string;
+    // An on-demand radio (BBC Sounds) episode: the pid is a Sounds id, so the page opens the audio popup, with `image` as its picture.
+    radio?: boolean;
+    image?: string;
     // A hint, not a link: the earlier session for the same programme and client that this one most likely
     // carries on from (Jellyfin restarting its transcoder after a seek). Jellyfin sends no session id,
     // so it is matched on pid + client address and may be wrong when two viewers share one Jellyfin server.

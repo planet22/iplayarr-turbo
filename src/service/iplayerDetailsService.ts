@@ -100,6 +100,20 @@ class IPlayerDetailsService {
         return details;
     }
 
+    // A BBC Sounds id that iPlayarr has not listed lately: BBC's programme page still knows it, as an episode or as a version (a
+    // playable file) of one, so the details come from the episode it belongs to. Undefined when BBC has nothing for it.
+    async radioDetails(pid: string): Promise<IPlayerDetails | undefined> {
+        try {
+            const { data } = await axios.get(`https://www.bbc.co.uk/programmes/${pid}.json`);
+            const episodePid: string | undefined = data?.programme ? pid : data?.version?.parent?.programme?.pid;
+            if (!episodePid) return undefined;
+            const details = await this.episodeDetails(episodePid);
+            return { ...details, pid, audioOnly: true, type: 'RADIO' as unknown as IPlayerDetails['type'], category: details.category || 'Radio' };
+        } catch {
+            return undefined;
+        }
+    }
+
     async getMetadata(pid: string, axiosInstance: Axios = axios): Promise<IPlayerMetadataResponse> {
         const retryAt = this.notFound.get(pid);
         if (retryAt !== undefined) {

@@ -574,6 +574,36 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('cancelling a radio row calls the queue API for radio, not the video queue', calls.some((c) => /^DELETE .*\/json-api\/queue\/queue\?mode=radio&pid=p0smoke01$/.test(c)) && !calls.some((c) => /queue\/queue\?pid=/.test(c)), JSON.stringify(calls));
         });
 
+        // A radio item on the Events and Streams pages opens the same info popup as a video, in its audio form. The lists and the
+        // episode details are stubbed, so nothing is played or written.
+        await flow('radio events and streams open the audio info popup', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio info popup', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            const now = new Date().toISOString();
+            const event = { id: 'smoke-radio-event', type: 'stream_started', level: 'info', message: 'Started streaming', pid: 'p0smoke01', radio: true, title: 'SMOKE-TEMP Radio Show - Ep 1', timestamp: now };
+            const session = { id: 'smoke-radio-session', pid: 'p0smoke01', mode: 'direct', client: 'NATIVE', startedAt: now, radio: true, title: 'SMOKE-TEMP Radio Show - Ep 1', settings: { Media: 'Audio' } };
+            const details = { pid: 'p0smoke01', title: 'SMOKE-TEMP Radio Show', episodeTitle: 'Ep 1', channel: 'BBC Radio 4', category: 'Radio', description: 'Smoke description', runtime: 30, firstBroadcast: now, type: 'RADIO', audioOnly: true };
+            await page.route(/\/json-api\/events$/, (route) => (route.request().method() === 'GET' ? route.fulfill({ json: [event] }) : route.continue()));
+            await page.route(/\/json-api\/streams$/, (route) => route.fulfill({ json: { active: [session], history: [] } }));
+            await page.route(/\/json-api\/details\?pid=p0smoke01&kind=radio/, (route) => route.fulfill({ json: details }));
+            const openAndCheck = async (url, label) => {
+                await page.goto(BASE + url, { waitUntil: 'networkidle' });
+                const link = page.locator('a.clickable', { hasText: 'SMOKE-TEMP Radio Show - Ep 1' }).first();
+                await link.waitFor({ timeout: 15000 });
+                await link.click();
+                const popup = dialog(page);
+                await popup.waitFor({ timeout: 8000 });
+                await popup.locator('.infoBanner h1', { hasText: 'SMOKE-TEMP Radio Show' }).waitFor({ timeout: 8000 }).catch(() => {});
+                const text = (await popup.innerText()).replace(/\s+/g, ' ');
+                ok(`${label}: the audio popup opens with the episode's title and details`, /SMOKE-TEMP Radio Show/.test(text) && /Ep 1/.test(text) && /BBC Radio 4/.test(text) && /Smoke description/.test(text) && /30 min/.test(text), text);
+                ok(`${label}: it offers Play audio, not Play Video`, /Play audio/.test(text) && !/Play Video/.test(text), text);
+                ok(`${label}: it is marked Radio`, /Radio/.test(text), text);
+                await shot(page, `radio-popup-${label.toLowerCase()}`);
+                await popup.locator('button', { hasText: /^\s*Close\s*$/ }).first().click().catch(() => {});
+            };
+            await openAndCheck('/events', 'Events');
+            await openAndCheck('/streaming', 'Streams');
+        });
+
         await flow('logs page', async (page) => {
             await page.goto(BASE + '/logs', { waitUntil: 'networkidle' });
             await page.waitForSelector('.logTiles', { timeout: 15000 }).catch(() => {});

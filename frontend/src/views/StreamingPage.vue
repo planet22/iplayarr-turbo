@@ -312,7 +312,7 @@ import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
-formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, hideBrokenImage,
+formatClientIp,     formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
 import VideoInfoModal from '../components/modals/VideoInfoModal.vue';
@@ -341,7 +341,7 @@ const stopping = ref(new Set());
 const router = useRouter();
 const globalSettings = inject('globalSettings');
 const canDebug = (session) => globalSettings.value?.UI_EXTENDED_DEBUG === 'true' && (session.live || /^[a-z0-9]{8}$/i.test(session.pid ?? ''));
-const openDebug = (session) => router.push(`/streaming/debug/${session.pid}`);
+const openDebug = (session) => router.push(session.radio ? { path: `/streaming/debug/${session.pid}`, query: { kind: 'radio' } } : `/streaming/debug/${session.pid}`);
 
 // Newest first to begin with; the filter bar and sort are the Queue page's (useSortFilter), remembered per browser.
 const reversedHistory = computed(() => [...streams.value.history].reverse());
@@ -396,6 +396,8 @@ async function loadChannelLogos() {
 }
 
 function thumbnailFor(session) {
+    // A radio episode has only its own picture; the video thumbnail route knows nothing of its id.
+    if (session.radio) return session.image ? getThumbnailUrl(session.image, true) : undefined;
     return getSessionThumbnailUrl(session, detailsFor(session.pid), channelLogos.value);
 }
 
@@ -404,14 +406,14 @@ function seriesEpisodeLabel(pid) {
 }
 
 function loadMissingDetails() {
-    const pids = [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid);
+    const pids = [...streams.value.active, ...streams.value.history].filter(({ live, radio }) => !live && !radio).map(({ pid }) => pid);
     [...new Set(pids)].filter(Boolean).forEach(loadDetails);
 }
 
 // Session details are only needed when a pid appears for the first time, not on every update (the
 // active sessions now change several times a second), so watch the set of pids rather than `streams`.
 const pidSignature = computed(() =>
-    [...streams.value.active, ...streams.value.history].filter(({ live }) => !live).map(({ pid }) => pid).join(',')
+    [...streams.value.active, ...streams.value.history].filter(({ live, radio }) => !live && !radio).map(({ pid }) => pid).join(',')
 );
 
 // A running session's Duration is wall-clock time since it started, so it needs a clock of its own:
@@ -448,9 +450,10 @@ function openInfo(session) {
         return;
     }
     const pid = session.pid;
+    // Audio (BBC Sounds) opens the same popup in its audio form.
     const infoModal = useModal({
         component: VideoInfoModal,
-        attrs: { pid },
+        attrs: session.radio ? { pid, radio: true, title: session.title, image: session.image } : { pid },
     });
     infoModal.open();
 }

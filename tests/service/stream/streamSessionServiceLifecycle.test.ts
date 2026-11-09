@@ -59,6 +59,22 @@ describe('streamSessionService lifecycle', () => {
         expect(find(plain)?.userAgent).toBeUndefined();
     });
 
+    it('start marks an on-demand radio session, with its picture, and passes both to the event', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true, image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
+        expect(find(id)).toMatchObject({ radio: true, title: 'Newsbeat', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_STARTED, expect.any(String), {
+            pid: 'm0033frv', radio: true, title: 'Newsbeat', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg',
+        });
+        const plain = await streamSessionService.start('p1', mode, client);
+        expect(find(plain)?.radio).toBeUndefined();
+    });
+
+    it('start marks a radio session that has no picture without an image', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true });
+        expect(find(id)).toMatchObject({ radio: true });
+        expect(find(id).image).toBeUndefined();
+    });
+
     it('setSource notes where the stream came from, and ignores a session that is gone', async () => {
         const id = await streamSessionService.start('p1', mode, client);
         streamSessionService.setSource(id, { host: 'cdn.example', why: 'Adaptive' });

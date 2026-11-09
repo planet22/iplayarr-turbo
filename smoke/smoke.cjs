@@ -318,6 +318,9 @@ async function radioChecks(A, cfg) {
 
     // A change or an iPlayer-only lookup is refused for radio, so a radio request can never act on a video thing.
     await check(A, 'radio refuses an iPlayer-only lookup (details)', `${B}/details?pid=m000abcd&${M}`, (r) => r.status === 404 || `HTTP ${r.status}`);
+    // The info popup of a radio item reads the episode's details in the shape of a video's (an episode nobody has listed gets a bare record).
+    await check(A, 'radio episode details come in the shape of a video\'s', '/json-api/details?pid=p0nyk2n0&kind=radio', (r) => (r.status === 200 && r.json?.pid === 'p0nyk2n0' && r.json?.type === 'RADIO' && r.json?.audioOnly === true && !!r.json?.category) || 'not shaped like details', upstream);
+    await check(A, 'radio episode details refuse an odd id', '/json-api/details?pid=not-valid!&kind=radio', (r) => r.status === 400 || `HTTP ${r.status}`);
     await check(A, 'radio refuses to feature a category on Discover', `${B}/categories/comedy/discover?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'PUT' });
     await check(A, 'radio search (not streamed) is an array of radio results', `/json-api/search?q=archers&${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.radio === true)) || 'expected radio results', upstream);
 

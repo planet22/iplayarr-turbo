@@ -12,6 +12,8 @@ jest.mock('../../src/service/iplayerDetailsService');
 jest.mock('../../src/service/queueService');
 jest.mock('../../src/service/searchSettingsService');
 jest.mock('../../src/service/stats/StatisticsService');
+const mockKnownEpisode = jest.fn();
+jest.mock('../../src/service/sounds/soundsApiService', () => ({ __esModule: true, ...jest.requireActual('../../src/service/sounds/soundsApiService'), knownEpisode: (id: string) => mockKnownEpisode(id) }));
 
 import nzbFacade from '../../src/facade/nzbFacade';
 import scheduleFacade from '../../src/facade/scheduleFacade';
@@ -266,6 +268,42 @@ describe('JsonApiRoute', () => {
 
             expect(res.status).toBe(200);
             expect(res.body).toEqual(mockDetails[0]);
+        });
+
+        it('shapes a known radio episode like a video\'s details', async () => {
+            mockKnownEpisode.mockReturnValue({ id: 'm0033frv', title: 'Newsbeat', showTitle: 'Radio 1 Newsbeat', subtitle: '06/11/2026', network: 'BBC Radio 1', synopsis: 'News', duration: 600, released: '2026-11-06', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
+            const res = await request(app).get('/details').query({ pid: 'm0033frv', kind: 'radio' });
+            expect(res.status).toBe(200);
+            expect(res.body).toMatchObject({ pid: 'm0033frv', title: 'Radio 1 Newsbeat', episodeTitle: '06/11/2026', channel: 'BBC Radio 1', description: 'News', runtime: 10, firstBroadcast: '2026-11-06', type: 'RADIO', category: 'Radio' });
+            expect(iplayerDetailsService.details).not.toHaveBeenCalled();
+        });
+
+        it('answers a bare radio record for an episode no longer known', async () => {
+            mockKnownEpisode.mockReturnValue(undefined);
+            (iplayerDetailsService.radioDetails as jest.Mock).mockResolvedValue(undefined);
+            const res = await request(app).get('/details').query({ pid: 'm0033frv', kind: 'radio' });
+            expect(res.body).toMatchObject({ pid: 'm0033frv', category: 'Radio', type: 'RADIO' });
+        });
+
+        it('refuses an odd radio episode id', async () => {
+            const res = await request(app).get('/details').query({ pid: 'not valid!', kind: 'radio' });
+            expect(res.status).toBe(400);
+            expect(iplayerDetailsService.radioDetails).not.toHaveBeenCalled();
+        });
+
+        it('leaves out the optional radio fields an episode does not have', async () => {
+            mockKnownEpisode.mockReturnValue({ id: 'm0033frv', title: 'Newsbeat' });
+            const res = await request(app).get('/details').query({ pid: 'm0033frv', kind: 'radio' });
+            expect(res.body).toMatchObject({ title: 'Newsbeat', category: 'Radio', link: 'https://www.bbc.co.uk/sounds/play/m0033frv' });
+            expect(res.body.runtime).toBeUndefined();
+            expect(res.body.episodeTitle).toBeUndefined();
+        });
+
+        it('asks BBC\'s programme page for a radio episode that is no longer known', async () => {
+            mockKnownEpisode.mockReturnValue(undefined);
+            (iplayerDetailsService.radioDetails as jest.Mock).mockResolvedValue({ pid: 'p0nyk2n0', title: 'Dwayne Johnson - Rock and Roll', type: 'RADIO' });
+            const res = await request(app).get('/details').query({ pid: 'p0nyk2n0', kind: 'radio' });
+            expect(res.body).toMatchObject({ pid: 'p0nyk2n0', title: 'Dwayne Johnson - Rock and Roll' });
         });
     });
 

@@ -2,19 +2,22 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <IPlayarrModal
-        :title="item?.nzbName || fallbackTitle || pid"
+        :title="(radio && title) || item?.nzbName || fallbackTitle || pid"
         :show-cancel="!!item"
         :cancel-label="deleteLabel"
         show-close
         close-label="Close"
         @cancel="deleteItem"
     >
-        <MediaInfoHero :pid="pid" :type="item?.type" :match-name="nzbName" :match-id="jobId" compact />
+        <MediaInfoHero
+            :pid="pid" :type="item?.type" :match-name="nzbName" :match-id="jobId"
+            :radio="radio" :title="radio ? title : null" :image="radio ? (image || item?.image) : null" compact
+        />
 
         <div class="button-row">
             <button class="clickable preview-button" @click="preview">
                 <font-awesome-icon :icon="['fas', 'play']" />
-                Play Video
+                {{ radio ? 'Play audio' : 'Play Video' }}
             </button>
         </div>
 
@@ -113,6 +116,7 @@ import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
+import { radioHistory, radioQueue, removeRadioDownload, useRadioActions } from '@/lib/radio';
 import { formatDate, formatStorageSize } from '@/lib/utils';
 
 import MediaInfoHero from '../common/MediaInfoHero.vue';
@@ -138,17 +142,39 @@ const props = defineProps({
         required: false,
         default: null,
     },
+    // A BBC Sounds episode (audio): there is no iPlayer record, so the caller gives its title and picture, and the
+    // download rows come from the radio lists instead of the video queue and history.
+    radio: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    title: {
+        type: String,
+        required: false,
+        default: null,
+    },
+    image: {
+        type: String,
+        required: false,
+        default: null,
+    },
 });
 
-const queue = inject('queue');
-const history = inject('history');
+const videoQueue = inject('queue');
+const videoHistory = inject('history');
+const queue = props.radio ? radioQueue : videoQueue;
+const history = props.radio ? radioHistory : videoHistory;
 const apps = inject('apps');
+const { play: playRadioEpisode } = useRadioActions();
 const followLog = ref(true);
 const fallbackTitle = ref(null);
 
-ipFetch(`json-api/details?pid=${props.pid}`).then((response) => {
-    if (response.ok) fallbackTitle.value = response.data?.title;
-});
+if (!props.radio) {
+    ipFetch(`json-api/details?pid=${props.pid}`).then((response) => {
+        if (response.ok) fallbackTitle.value = response.data?.title;
+    });
+}
 
 // Derived live from the injected queue/history arrays (not a point-in-time snapshot), so the
 // modal keeps reflecting progress/status while it's open, the same way MediaInfoHero already
@@ -165,14 +191,15 @@ const item = computed(
 
 const requestedByApp = computed(() => apps.value.find(({ id }) => id == item.value?.appId));
 
-const deleteLabel = computed(() => {
-    const status = item.value?.status;
-    return status == 'Complete' || status == 'Forwarded' || status == 'Cancelled' || status == 'Removed'
-        ? 'Remove'
-        : 'Cancel';
-});
+// A finished row lives in the history and is removed; a waiting or running one is cancelled. A failed radio download is finished.
+const isFinished = (status) =>
+    props.radio
+        ? status != 'Queued' && status != 'Downloading'
+        : status == 'Complete' || status == 'Forwarded' || status == 'Cancelled' || status == 'Removed';
 
-const clientLabels = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'Native', STRM: 'STRM pointer' };
+const deleteLabel = computed(() => (isFinished(item.value?.status) ? 'Remove' : 'Cancel'));
+
+const clientLabels = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'Native', STRM: 'STRM pointer', RADIO: 'BBC Sounds' };
 const clientLabel = computed(() => clientLabels[item.value?.client] ?? '');
 
 const qualityNames = { mobile: '288p', web: '396p', sd: '540p', hd: '720p', fhd: '1080p' };
@@ -182,6 +209,7 @@ const qualityNames = { mobile: '288p', web: '396p', sd: '540p', hd: '720p', fhd:
 // Treat the values below as read-only.
 // Avoid adding new dependencies here.
 const qualityLabel = computed(() => {
+    if (props.radio) return '';
     const own = item.value?.library?.quality;
     if (own && qualityNames[own]) return qualityNames[own];
     return /(\d{3,4}p)/.exec(item.value?.nzbName ?? '')?.[1] ?? '';
@@ -190,6 +218,7 @@ const qualityLabel = computed(() => {
 const pad = (n) => String(n).padStart(2, '0');
 
 const preview = () => {
+    if (props.radio) return playRadioEpisode({ id: props.pid, title: props.title || item.value?.nzbName || props.pid });
     const title = item.value?.nzbName || fallbackTitle.value || props.pid;
     if (item.value?.library?.version) playInPip(props.pid, title, false, item.value.library.version);
     else playProgramme(props.pid, title);
@@ -197,14 +226,16 @@ const preview = () => {
 
 const deleteItem = async () => {
     const { pid, jobId, status } = item.value;
-    const isHistory = status == 'Complete' || status == 'Forwarded' || status == 'Cancelled' || status == 'Removed';
+    const isHistory = isFinished(status);
     const confirmed = await dialogService.confirm(
         isHistory ? 'Remove' : 'Cancel',
         `Are you sure you want to ${isHistory ? 'remove this history item' : 'cancel this download'}?`,
         undefined,
         { danger: true, confirmLabel: isHistory ? 'Remove' : 'Cancel download' }
     );
-    if (confirmed) {
+    if (confirmed && props.radio) {
+        await removeRadioDownload(item.value);
+    } else if (confirmed) {
         await ipFetch(`json-api/queue/${isHistory ? 'history' : 'queue'}?pid=${pid}${jobId ? `&jobId=${jobId}` : ''}`, 'DELETE');
     }
 };
