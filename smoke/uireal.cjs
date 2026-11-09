@@ -1181,6 +1181,13 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 const sessionRows = await page.locator('.streamDebug .sessionScroll tr:has(.playSession)').count();
                 const sessionButtons = await page.locator('.streamDebug .playSession').count();
                 ok('the Streams played table has a Play button on every session row', sessionRows === sessionButtons, `${sessionButtons} button(s), ${sessionRows} row(s)`);
+                if (sessionButtons) {
+                    await page.locator('.streamDebug .playSession').first().click();
+                    await page.waitForTimeout(3000);
+                    ok('playing a stream from the Streams played list colours that row and shows a copy of it above the player', (await page.locator('.streamDebug tr.playingRow').count()) === 2 && (await page.locator('.streamDebug .playerWrap .playSession').count()) === 1);
+                    await page.locator('.streamDebug .playerControls button', { hasText: 'Stop' }).click().catch(() => {});
+                    ok('stopping removes the highlight and the copy', (await page.locator('.streamDebug tr.playingRow').count()) === 0);
+                }
                 ok('the debug page shows no signed token', !/hdnea|[?&](sig|token)=/i.test(await page.locator('.streamDebug').innerText()));
                 ok('every link in the metadata Links row opens in a new tab safely', (await page.locator('.streamDebug .kv dd ul.plain a[href]:not([target="_blank"][rel*="noopener"])').count()) === 0);
                 await shot(page, 'programme-debug-page');

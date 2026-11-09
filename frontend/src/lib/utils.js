@@ -61,6 +61,13 @@ export const getProgrammeThumbnailUrl = (pid) => {
         : undefined;
 };
 
+// The BBC route a stream session was served through, as the stream address takes it ("iptv-all / 6" gives "iptv-all-6"), or
+// undefined when the session did not record one.
+export const sessionRoute = (session) => {
+    const route = session?.source?.route?.replace(' (from the link)', '').replace(' / ', '-');
+    return route && /^[\w-]+-\d+$/.test(route) ? route : undefined;
+};
+
 // A stream session's thumbnail: the programme's still from its details, or - for a live channel,
 // which has no programme details - the channel's logo (`channelLogos` maps channel id -> logo path).
 export const getSessionThumbnailUrl = (session, details, channelLogos) => {

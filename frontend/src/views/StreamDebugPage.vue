@@ -174,38 +174,7 @@
 
             <PageHeader v-if="!isRadio" title="Streams played"><InfoTip :text="help.streams" /></PageHeader>
             <p v-if="!isRadio" class="subtle">{{ dashboard.sessions.count }} session(s), {{ formatBytes(dashboard.sessions.totalBytes) }} sent in all<template v-if="dashboard.sessions.count > dashboard.sessions.recent.length"> (the latest {{ dashboard.sessions.recent.length }} are listed)</template>.</p>
-            <div v-if="!isRadio && dashboard.sessions.recent.length" class="sessionScroll">
-            <table class="dataTable">
-                <thead><tr><th>Play</th><th>Started</th><th>Ended</th><th>Played</th><th>Mode</th><th>Client</th><th>Version</th><th>Resolution</th><th>Route and why</th><th>Sent</th><th>Segments</th><th>Settings</th><th>Player</th><th>From</th><th>Ended by</th></tr></thead>
-                <tbody>
-                    <tr v-for="past in dashboard.sessions.recent" :key="past.id">
-                        <td class="text">
-                            <button class="clickable playSession" :disabled="!streamKey" :title="playSessionTitle(past)" :aria-label="playSessionTitle(past)" @click="playSession(past)">
-                                <font-awesome-icon :icon="['fas', 'play']" />
-                            </button>
-                        </td>
-                        <td class="text">{{ formatWhen(past.startedAt) }}</td>
-                        <td class="text">{{ past.endedAt ? formatWhen(past.endedAt) : 'playing' }}</td>
-                        <td class="text">{{ playedFor(past) }}</td>
-                        <td class="text">{{ past.mode }}</td>
-                        <td class="text">{{ past.client }}</td>
-                        <td class="text">{{ past.version || 'standard' }}</td>
-                        <td class="text">{{ past.resolution }}</td>
-                        <td class="text">{{ past.source ? [past.source.route, past.source.host, past.source.why].filter(Boolean).join(' · ') : '' }}<template v-if="past.source?.url"><br /><span class="subtle path">{{ past.source.url }}</span></template></td>
-                        <td class="text">{{ formatBytes(past.bytesTransferred ?? 0) }}</td>
-                        <td class="text">{{ past.totalSegments ? `${past.delivered ?? 0} of ${past.totalSegments}` : '' }}</td>
-                        <td class="text">
-                            <span class="settingsCell">
-                                <span v-for="(value, key) in past.settings ?? {}" :key="key" :class="['pill', value === 'On' ? 'success' : 'grey']">{{ key }}: {{ value }}</span>
-                            </span>
-                        </td>
-                        <td class="text" :title="past.userAgent">{{ playerName(past.userAgent) }}</td>
-                        <td class="text">{{ past.clientIp }}</td>
-                        <td class="text">{{ past.endReason || (past.continuesSessionId ? 'continues an earlier stream' : '') }}</td>
-                    </tr>
-                </tbody>
-            </table>
-            </div>
+            <StreamSessionTable v-if="!isRadio && dashboard.sessions.recent.length" :sessions="dashboard.sessions.recent" :can-play="!!streamKey" :playing-id="playingSession?.id" @play="playSession" />
 
             <template v-if="dashboard.events.length">
                 <PageHeader title="Video events"><InfoTip :text="help.events" /></PageHeader>
@@ -326,6 +295,10 @@
             </div>
             <InfoBar v-if="playError">{{ playError }}</InfoBar>
             <div v-show="playing" class="playerWrap">
+                <template v-if="playingSession">
+                    <h3>Playing this stream again</h3>
+                    <StreamSessionTable :sessions="[playingSession]" :can-play="!!streamKey" :playing-id="playingSession.id" @play="playSession" />
+                </template>
                 <video ref="videoRef" controls :muted="!isRadio" playsinline :class="['debugVideo', { audioOnly: isRadio }]" />
                 <div class="statsGrid">
                     <div v-for="stat in [...servedStats, ...stats]" :key="stat.label" class="stat">
@@ -381,10 +354,11 @@ import QualityBadges from '@/components/common/QualityBadges.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import ArtworkModal from '@/components/modals/ArtworkModal.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
+import StreamSessionTable from '@/components/streaming/StreamSessionTable.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import { radioDownloads } from '@/lib/radio';
-import { formatRelativeTime, getHost, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { formatRelativeTime, getHost, getThumbnailUrl, hideBrokenImage, sessionRoute } from '@/lib/utils';
 
 // Reached from the button on a Streaming page row (Show Extended Debug), or by its address.
 const route = useRoute();
@@ -490,13 +464,6 @@ const expiry = computed(() => {
 const json = (value) => JSON.stringify(value, null, 2);
 const hasContent = (value) => !!value && Object.keys(value).length > 0;
 const formatBytes = (bytes) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(2)} MB` : `${Math.round(bytes / 1024)} KB`);
-// How long a stream session played (start to the last activity or the end), and a short name for the player.
-const playedFor = (past) => {
-    const end = Date.parse(past.endedAt || past.lastActivityAt);
-    const start = Date.parse(past.startedAt);
-    return Number.isNaN(end - start) || end < start ? '' : formatSeconds((end - start) / 1000);
-};
-const playerName = (agent) => (agent ? (/(Jellyfin|Chrome|Firefox|Safari|VLC|Lavf|Kodi|Infuse|AppleCoreMedia|ExoPlayer|Dalvik)[/ ]?([\d.]*)/i.exec(agent)?.[0] ?? agent.slice(0, 30)) : '');
 // What Sonarr or Radarr holds for a library file, in a line.
 const appRecordText = (file) => {
     const record = dashboard.value.library?.appRecords?.find((candidate) => candidate.file === file);
@@ -898,14 +865,12 @@ const snoopPosition = () => {
 
 // A past session's request, as the player sends it: the same version and the same BBC route (mediaset and version), so the
 // stream is served the way that one was. The Settings in force now still apply (they are not part of the request).
-const routeOf = (past) => {
-    const route = past.source?.route?.replace(' (from the link)', '').replace(' / ', '-');
-    return route && /^[\w-]+-\d+$/.test(route) ? route : undefined;
-};
-const playSessionTitle = (past) => `Play this stream again: ${past.version ? `${past.version} version` : 'standard version'}${routeOf(past) ? `, through ${past.source.route.replace(' (from the link)', '')}` : ''}`;
+// The session being replayed from the Streams played list: it is coloured there, and a copy of its row sits above the player.
+const playingSession = ref(null);
 async function playSession(past) {
     if (playing.value) stopPlayback();
-    startPlayback(false, { version: past.version || '', route: routeOf(past) });
+    startPlayback(false, { version: past.version || '', route: sessionRoute(past) });
+    playingSession.value = past;
     await nextTick();
     videoRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -965,6 +930,7 @@ function stopPlayback() {
         video.load();
     }
     playing.value = false;
+    playingSession.value = null;
 }
 
 onMounted(load);
