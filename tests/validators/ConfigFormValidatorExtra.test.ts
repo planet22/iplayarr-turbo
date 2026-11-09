@@ -153,3 +153,18 @@ describe('ConfigFormValidator (extra)', () => {
     });
 });
 
+
+describe('ConfigFormValidator DOWNLOAD_SUBTITLES', () => {
+    const validator = new ConfigFormValidator();
+    validator.directoryExists = jest.fn(() => true);
+
+    it.each(['off', 'sidecar', 'embed', 'both', ''])('accepts %p', async (value) => {
+        const errors = await validator.validate({ ...validInput(), DOWNLOAD_SUBTITLES: value });
+        expect(errors.DOWNLOAD_SUBTITLES).toBeUndefined();
+    });
+
+    it.each(['burn', 'SIDECAR', 'true'])('rejects %p', async (value) => {
+        const errors = await validator.validate({ ...validInput(), DOWNLOAD_SUBTITLES: value });
+        expect(errors.DOWNLOAD_SUBTITLES).toBe('Subtitles must be off, sidecar, embed or both');
+    });
+});

@@ -83,6 +83,15 @@ describe('NativeDownloadService', () => {
             expect(fs.writeFileSync).toHaveBeenCalledWith('/dl/p1/p1.en.srt', expect.anything());
         });
 
+        it('carries on without subtitles when the temporary file cannot be written', async () => {
+            setting('mp4', 'embed');
+            (fs.writeFileSync as jest.Mock).mockImplementationOnce(() => {
+                throw new Error('disk full');
+            });
+            await nativeDownloadService.download('p1', '/dl/p1');
+            expect((spawn as jest.Mock).mock.calls[0][1]).not.toContain('-map');
+        });
+
         it('does nothing when off or when the programme has no captions', async () => {
             setting('mp4', 'off');
             await nativeDownloadService.download('p1', '/dl/p1');

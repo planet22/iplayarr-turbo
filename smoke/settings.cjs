@@ -756,6 +756,16 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         ok('executableOverride resets an executable setting', goodOverride.status === 200 && goodOverride.json?.status === true, `HTTP ${goodOverride.status}`);
         touched.add('YTDLP_EXEC');
 
+        // 7b. Download subtitles: four modes accepted, anything else refused, and the saved word reads back
+        touched.add('DOWNLOAD_SUBTITLES');
+        for (const mode of ['off', 'sidecar', 'embed', 'both']) {
+            const r = await put({ DOWNLOAD_SUBTITLES: mode });
+            ok(`DOWNLOAD_SUBTITLES accepts ${mode}`, r.status === 200 && effective(await get(), 'DOWNLOAD_SUBTITLES') === mode, `HTTP ${r.status}`);
+        }
+        const badSubs = await put({ DOWNLOAD_SUBTITLES: 'burn' });
+        ok('DOWNLOAD_SUBTITLES rejects an unknown mode', rejected(badSubs, 'DOWNLOAD_SUBTITLES'), `HTTP ${badSubs.status}`);
+        await put({ DOWNLOAD_SUBTITLES: effective(before, 'DOWNLOAD_SUBTITLES') });
+
         // 8. Secrets are masked on read and a masked value never overwrites the stored one
         const pw = (await get()).AUTH_PASSWORD;
         ok('AUTH_PASSWORD is masked on read', !pw || pw === '********', pw ? 'plaintext/hash leaked' : '');

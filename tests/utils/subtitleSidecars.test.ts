@@ -20,6 +20,16 @@ describe('subtitleMode', () => {
     });
 });
 
+describe('vttToSrt (malformed input)', () => {
+    it('skips a cue whose timing line cannot be read', () => {
+        expect(vttToSrt(['WEBVTT', '', 'soon --> later', 'Lost'].join('\n'))).toBe('');
+    });
+
+    it('pads hour-less and short millisecond times', () => {
+        expect(vttToSrt(['WEBVTT', '', '01:02.5 --> 01:03.50', 'Hi'].join('\n'))).toBe(['1', '00:01:02,500 --> 00:01:03,500', 'Hi', ''].join('\n'));
+    });
+});
+
 describe('vttToSrt', () => {
     it('converts cues, drops header, settings and styling tags', () => {
         const vtt = [

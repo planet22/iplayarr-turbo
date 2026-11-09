@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../../../src/service/configService';
-import { resolveDownloadUrl } from '../../../src/service/download/nativeDownloadResolver';
+import { resolveDownloadUrl, resolveDownloadVpid } from '../../../src/service/download/nativeDownloadResolver';
 import iplayerDetailsService from '../../../src/service/iplayerDetailsService';
 import queueService from '../../../src/service/queueService';
 import { fetchText, fetchTextWithStatus, resolveRedirect } from '../../../src/service/stream/bbcHttp';
@@ -112,6 +112,25 @@ describe('resolveDownloadUrl', () => {
     it('explains why no stream was found', async () => {
         (fetchText as jest.Mock).mockResolvedValue('<error id="geolocation"/>');
         await expect(resolveDownloadUrl('p1')).rejects.toThrow('geolocation');
+    });
+});
+
+describe('resolveDownloadVpid', () => {
+    beforeEach(() => jest.resetAllMocks());
+
+    it('returns the plain programme vpid when the queue entry names no version', async () => {
+        (queueService.getFromQueue as jest.Mock).mockReturnValue(undefined);
+        (fetchTextWithStatus as jest.Mock).mockResolvedValue({ statusCode: 200, body: JSON.stringify({ allAvailableVersions: [{ pid: 'plainvpid', types: ['Original'] }] }) });
+        await expect(resolveDownloadVpid('pvpid-plain', 'job-1')).resolves.toBe('plainvpid');
+        expect(queueService.getFromQueue).toHaveBeenCalledWith('pvpid-plain', 'job-1');
+    });
+
+    it('returns the vpid of the version the queue entry chose', async () => {
+        (queueService.getFromQueue as jest.Mock).mockReturnValue({ library: { version: 'audio-described' } });
+        (iplayerDetailsService.getMetadata as jest.Mock).mockResolvedValue({
+            programme: { versions: [{ pid: 'orig', types: ['Original version'] }, { pid: 'adpid', types: ['Dubbed Audio Described'] }] },
+        });
+        await expect(resolveDownloadVpid('pvpid-ad')).resolves.toBe('adpid');
     });
 });
 

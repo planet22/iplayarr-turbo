@@ -24,6 +24,17 @@ describe('fetchSubtitleSrt', () => {
         expect(await fetchSubtitleSrt('vpid1')).toBeUndefined();
     });
 
+    it('stays quiet about a failure when nobody is listening', async () => {
+        (findCaptionsHref as jest.Mock).mockRejectedValue(new Error('boom'));
+        expect(await fetchSubtitleSrt('vpid1')).toBeUndefined();
+    });
+
+    it('returns undefined when the captions hold no cues', async () => {
+        (findCaptionsHref as jest.Mock).mockResolvedValue('https://bbc/captions.xml');
+        (fetchText as jest.Mock).mockResolvedValue('<tt xmlns="http://www.w3.org/ns/ttml"><body><div></div></body></tt>');
+        expect(await fetchSubtitleSrt('vpid1')).toBeUndefined();
+    });
+
     it('reports a failure and returns undefined instead of throwing', async () => {
         (findCaptionsHref as jest.Mock).mockRejectedValue(new Error('boom'));
         const onError = jest.fn();
