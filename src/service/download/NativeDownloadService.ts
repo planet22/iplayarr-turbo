@@ -5,11 +5,13 @@ import { Transform } from 'stream';
 import AbstractDownloadService from '../../service/download/AbstractDownloadService';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { assertFfmpegAvailable } from '../../utils/ffmpegUtils';
+import { subtitleMode } from '../../utils/subtitleSidecars';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
 import queueService from '../queueService';
-import { resolveDownloadUrl } from './nativeDownloadResolver';
+import { fetchSubtitleSrt } from './downloadSubtitles';
+import { resolveDownloadUrl, resolveDownloadVpid } from './nativeDownloadResolver';
 
 const durationProbeTimeoutMs = 30_000;
 
@@ -112,6 +114,35 @@ class NativeDownloadService implements AbstractDownloadService {
         });
     }
 
+    // Fetches the programme's captions per DOWNLOAD_SUBTITLES. A loose "<pid>.en.srt" is left in the job
+    // folder for the facade to carry beside the video; for embedding a temporary copy ffmpeg reads is
+    // written under a name the facade ignores. No captions, or any failure, just means no subtitles.
+    async #prepareSubtitles(pid: string, directory: string, step: (message: string) => void, jobId?: string): Promise<{ embedPath?: string }> {
+        const mode = subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES));
+        if (!mode.sidecar && !mode.embed) {
+            return {};
+        }
+        try {
+            const srt = await fetchSubtitleSrt(await resolveDownloadVpid(pid, jobId), (message) => loggingService.debug(pid, message));
+            if (!srt) {
+                step('No subtitles available for this programme');
+                return {};
+            }
+            if (mode.sidecar) {
+                fs.writeFileSync(`${directory}/${pid}.en.srt`, srt);
+            }
+            if (!mode.embed) {
+                return {};
+            }
+            const embedPath = `${directory}/${pid}.embed.subtmp`;
+            fs.writeFileSync(embedPath, srt);
+            return { embedPath };
+        } catch (err: any) {
+            loggingService.debug(pid, `Subtitles skipped - ${err?.message}`);
+            return {};
+        }
+    }
+
     async download(pid: string, directory: string, jobId?: string): Promise<ChildProcess> {
         await assertFfmpegAvailable();
         // ffmpeg resolves the CDN hostnames itself, so it needs the same musl getaddrinfo workaround
@@ -129,7 +160,13 @@ class NativeDownloadService implements AbstractDownloadService {
             outputFormat === 'mkv'
                 ? ['-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']
                 : ['-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-movflags', '+faststart'];
-        const args = ['-nostdin', '-y', '-loglevel', 'error', '-i', url, ...formatArgs, '-progress', 'pipe:1', '-nostats', outPath];
+        const subs = await this.#prepareSubtitles(pid, directory, step, jobId);
+        // Embedding adds the captions as a second input and keeps the first video, first audio and the captions.
+        const subtitleInput = subs.embedPath ? ['-f', 'srt', '-i', subs.embedPath] : [];
+        const subtitleOutput = subs.embedPath
+            ? ['-map', '0:v:0', '-map', '0:a:0?', '-map', '1:0', '-c:s', outputFormat === 'mkv' ? 'srt' : 'mov_text', '-metadata:s:s:0', 'language=eng']
+            : [];
+        const args = ['-nostdin', '-y', '-loglevel', 'error', '-i', url, ...subtitleInput, ...formatArgs, ...subtitleOutput, '-progress', 'pipe:1', '-nostats', outPath];
         loggingService.debug(pid, `Running command: ffmpeg ${args.join(' ')}`);
 
         step(`Saving ${outputFormat.toUpperCase()} with ffmpeg (copying the stream, no re-encode of the video)`);

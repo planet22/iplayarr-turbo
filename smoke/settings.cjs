@@ -36,6 +36,7 @@ const CHANGE = {
     NATIVE_SEARCH_ENGINE: ['V2', 'V1'], // clears the search cache
     ARCHIVE_ENABLED: ['true', 'false'],
     OUTPUT_FORMAT: ['mkv', 'mp4'],
+    DOWNLOAD_SUBTITLES: ['embed', 'sidecar'],
     THUMBNAIL_CACHE_DIR: ['/smoke-temp-thumbs'],
     THUMBNAIL_RETENTION_DAYS: ['7', '30'],
     MEDIA_MODE: ['download', 'strm'],

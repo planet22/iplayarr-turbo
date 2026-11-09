@@ -47,7 +47,7 @@ export function extractLiveCaptionsTemplate(xml: string): string | undefined {
     return undefined;
 }
 
-async function findCaptionsHref(vpid: string): Promise<string | undefined> {
+export async function findCaptionsHref(vpid: string): Promise<string | undefined> {
     for (const pair of orderedMediaSelectorPairs('captions')) {
         const href = extractCaptionsHref(await fetchText(mediaSelectorUrl(pair, vpid)));
         if (href) {
