@@ -1,44 +1,54 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <div class="statCard cacheCard" :title="cache.description">
+    <div class="statCard cacheCard" :class="{ placeholder }">
         <span ref="dot" class="liveDot" role="img" :aria-label="dotTitle" :title="dotTitle" />
-        <div class="cacheName">{{ cache.label }}</div>
+        <div class="cacheHead">
+            <div class="cacheName">{{ cache.label }}</div>
+            <InfoTip v-if="cache.description && !placeholder" :text="cache.description" />
+        </div>
         <div class="cacheFigures">
             <div class="statBody">
                 <span class="statLabel">Hit rate</span>
-                <span class="statValue">{{ hitRate(totals) }}</span>
+                <span class="statValue">{{ placeholder ? DASH : hitRate(totals) }}</span>
             </div>
             <div class="statBody">
                 <span class="statLabel">Records</span>
-                <span class="statValue">{{ cache.count.toLocaleString() }}</span>
+                <span class="statValue" :title="placeholder ? undefined : cache.count.toLocaleString()">{{ placeholder ? DASH : formatCount(cache.count) }}</span>
             </div>
             <div class="statBody">
                 <span class="statLabel">Space</span>
-                <span class="statValue">{{ formatSize(cache.sizeBytes) }}</span>
+                <span class="statValue">{{ placeholder ? DASH : formatSize(cache.sizeBytes) }}</span>
             </div>
         </div>
         <div class="cacheFigures">
             <div class="statBody">
                 <span class="statLabel">Per minute</span>
-                <span class="statValue">{{ formatRate(activity.lastMinute ?? 0) }}</span>
+                <span class="statValue">{{ placeholder ? DASH : formatRate(activity.lastMinute ?? 0) }}</span>
             </div>
             <div class="statBody">
                 <span class="statLabel">Last used</span>
-                <span class="statValue">{{ formatAgo(activity.lastLookupAt, now) }}</span>
+                <span class="statValue">{{ placeholder ? DASH : formatAgo(activity.lastLookupAt, now) }}</span>
             </div>
             <div class="statBody">
                 <span class="statLabel">Lifetime</span>
-                <span class="statValue">{{ formatSpan(cache.ttl) }}</span>
+                <span class="statValue">{{ placeholder ? DASH : formatSpan(cache.ttl) }}</span>
             </div>
         </div>
         <svg class="cacheSpark" viewBox="0 0 150 24" preserveAspectRatio="none" role="img" :aria-label="`Lookups per minute, last 15 minutes: ${(activity.trend ?? []).join(', ')}`">
             <polyline :points="sparkPoints(activity.trend)" />
         </svg>
-        <div class="cacheMeta">
-            <span>Last minute: {{ activity.hitsLastMinute ?? 0 }} hit, {{ activity.missesLastMinute ?? 0 }} miss</span>
+        <div v-if="placeholder" class="cacheMeta">
+            <span>Loading...</span>
+        </div>
+        <div v-else class="cacheMeta">
+            <span :title="`${(activity.hitsLastMinute ?? 0).toLocaleString()} hit, ${(activity.missesLastMinute ?? 0).toLocaleString()} miss`">
+                Last minute: {{ formatCount(activity.hitsLastMinute ?? 0) }} hit, {{ formatCount(activity.missesLastMinute ?? 0) }} miss
+            </span>
             <span>5 min average: {{ formatRate(activity.perMinuteAvg5 ?? 0) }}/min</span>
-            <span>Total: {{ totals.hits.toLocaleString() }} hit, {{ totals.misses.toLocaleString() }} miss</span>
+            <span :title="`${totals.hits.toLocaleString()} hit, ${totals.misses.toLocaleString()} miss`">
+                Total: {{ formatCount(totals.hits) }} hit, {{ formatCount(totals.misses) }} miss
+            </span>
             <span>Expires: {{ expiry }}</span>
             <span>Average record: {{ formatSize(averageRecordBytes(cache)) }}</span>
         </div>
@@ -48,11 +58,15 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 
-import { averageRecordBytes, formatAgo, formatExpiry, formatRate, formatSize, formatSpan, hitRate, sparkPoints } from '@/lib/cacheActivity';
+import InfoTip from '@/components/common/form/InfoTip.vue';
+import { averageRecordBytes, formatAgo, formatCount, formatExpiry, formatRate, formatSize, formatSpan, hitRate, sparkPoints } from '@/lib/cacheActivity';
 
 // The Statistics page's tile for one cache. `live` is the page's newest figures (polled, and nudged by each lookup it
 // is told about); `pulse` says a lookup just happened: { kind: 'hit' | 'miss', n } where n changes every time.
+// `placeholder` draws the tile with dashes while the figures are still on their way, so the layout does not jump.
+const DASH = '-';
 const props = defineProps({
+    placeholder: { type: Boolean, default: false },
     cache: { type: Object, required: true },
     live: { type: Object, default: () => ({}) },
     pulse: { type: Object, default: undefined },
@@ -96,8 +110,20 @@ watch(
 .statRow .statCard.cacheCard {
     position: relative;
 
-    .cacheName {
+    .cacheHead {
+        display: flex;
+        align-items: center;
+        gap: 4px;
         padding-right: 16px; // room for the dot
+
+        .InfoTip-button {
+            padding: 0 2px;
+            font-size: 13px;
+        }
+    }
+
+    &.placeholder {
+        opacity: 0.6;
     }
 
     .liveDot {

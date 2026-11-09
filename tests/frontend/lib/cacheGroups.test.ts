@@ -118,7 +118,14 @@ describe('cacheGroups', () => {
         it('adds up records, space and the combined hit rate', () => {
             const totals = groupTotals([cache('a', { count: 1, sizeBytes: 1024, hits: 3, misses: 1 }), cache('b', { count: 1000, sizeBytes: 2048, hits: 1, misses: 3 })]);
             expect(totals).toMatchObject({ caches: 2, records: 1001, sizeBytes: 3072, hits: 4, misses: 4, hitRate: '50%' });
-            expect(summaryParts(totals)).toEqual(['2 caches', '1,001 records', '3.0 KB', '50% hit rate']);
+            expect(summaryParts(totals)).toEqual(['2 caches', '1K records', '3.0 KB', '50% hit rate']);
+        });
+
+        it('shortens big record counts with K and M, in thousands', () => {
+            const parts = (records: number) => summaryParts(groupTotals([cache('a', { count: records })]));
+            expect(parts(999)[1]).toBe('999 records');
+            expect(parts(12_345)[1]).toBe('12.3K records');
+            expect(parts(3_400_000)[1]).toBe('3.4M records');
         });
 
         it('says n/a when there were no lookups, and uses singular words for one', () => {

@@ -1422,6 +1422,23 @@ async function statisticsCacheCards(browser, U) {
         const headings = await p.locator('.cacheGroupHeading').count();
         const headingText = (await p.locator('.cacheGroupHeading').first().innerText()).replace(/\s+/g, ' ');
         rec(U, 'statistics: the cache cards sit under group headings with their totals', headings >= 1 && /caches?/.test(headingText) && /records?/.test(headingText) && /hit rate/.test(headingText) ? 'PASS' : 'FAIL', `${headings} headings, first: ${headingText}`);
+        // Each group is a bordered box, and on a wide screen the boxes sit in more than one column.
+        const boxes = await p.locator('.cacheGroups:not(.flat) .cacheGroup').evaluateAll((els) => els.map((el) => ({ border: getComputedStyle(el).borderTopWidth, left: Math.round(el.getBoundingClientRect().left) })));
+        rec(U, 'statistics: each cache group has a border around it', boxes.length >= 1 && boxes.every((b) => parseFloat(b.border) >= 1) ? 'PASS' : 'FAIL', `${boxes.length} groups, borders ${[...new Set(boxes.map((b) => b.border))].join(',')}`);
+        rec(U, 'statistics: on a wide screen the cache groups flow into more than one column', boxes.length < 3 || new Set(boxes.map((b) => b.left)).size >= 2 ? 'PASS' : 'FAIL', `column lefts ${[...new Set(boxes.map((b) => b.left))].join(',')}`);
+        // An (i) icon on every card that has a description, and nothing but the icon carries the description now.
+        const described = caches.filter((c) => c.description).length;
+        const tips = await p.locator('.cacheCard .InfoTip-button').count();
+        rec(U, 'statistics: each cache card with a description has an info icon', described >= 1 && tips === described ? 'PASS' : 'FAIL', `${tips} icons, ${described} described caches`);
+        await p.locator('.cacheCard .InfoTip-button').first().hover();
+        const tipShown = await p.locator('.cacheCard .InfoTip-popup').first().isVisible();
+        rec(U, 'statistics: hovering the info icon shows the cache description', tipShown ? 'PASS' : 'FAIL');
+        // Big figures are short (K / M / B, thousands) rather than comma-grouped, and the exact value stays in the tooltip.
+        const records = await p.locator('.cacheCard:has(.liveDot) .cacheFigures .statBody:has(.statLabel:text-is("Records")) .statValue').evaluateAll((els) => els.map((el) => [el.textContent.trim(), el.getAttribute('title')]));
+        rec(U, 'statistics: record counts are short (no thousands separators, K / M / B) with the exact figure in the tooltip', records.length === caches.length && records.every(([text, title]) => /^\d{1,3}$|^\d{1,3}(\.\d)?[KMB]$/.test(text) && title && /^[\d,]+$/.test(title)) ? 'PASS' : 'FAIL', records.slice(0, 6).map((r) => r.join('=')).join(' '));
+        // The Server heading's line runs the whole width, like Caches and Activity.
+        const rule = await p.locator('.legendRow:has(> legend:text-is("Server"))').evaluate((el) => ({ row: el.getBoundingClientRect().width, page: el.parentElement.getBoundingClientRect().width }));
+        rec(U, 'statistics: the Server heading line runs the full width', rule.row >= rule.page - 40 ? 'PASS' : 'FAIL', `${Math.round(rule.row)}px of ${Math.round(rule.page)}px`);
         await p.locator('.cacheLegend .sortSelect').selectOption({ label: 'Name' });
         await p.waitForTimeout(300);
         const groupNames = await p.locator('.cacheGroup').evaluateAll((els) => els.map((el) => [...el.querySelectorAll('.cacheName')].map((n) => n.textContent.trim())));
@@ -1435,6 +1452,16 @@ async function statisticsCacheCards(browser, U) {
         const kept = (await p.locator('.cacheLegend .sortSelect').inputValue()) === 'name' && /Flat/.test(await p.locator('.cacheLegend .cacheModeToggle').innerText()) && (await p.locator('.cacheGroupHeading').count()) === 0;
         rec(U, 'statistics: the sort and Flat are remembered after a reload', kept ? 'PASS' : 'FAIL');
         await p.screenshot({ path: path.join(SHOTS, 'flow-statistics-caches-flat.png') });
+        // With the caches answer held back, the page already shows its cards with dashes, then fills them in.
+        const slow = await context.newPage();
+        await slow.route('**/json-api/maintenance/caches', async (route) => { await new Promise((r) => setTimeout(r, 2500)); await route.continue(); });
+        await slow.goto(BASE + '/stats', { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await slow.waitForSelector('.cacheCard.placeholder', { timeout: 10000 });
+        const holding = await slow.locator('.cacheCard.placeholder .cacheFigures .statValue').allTextContents();
+        rec(U, 'statistics: cards show with dashes while the cache figures load', holding.length >= 1 && holding.every((t) => t.trim() === '-') ? 'PASS' : 'FAIL', `${holding.length} placeholder figures`);
+        const filled = await slow.waitForFunction(() => document.querySelectorAll('.cacheCard:not(.placeholder) .liveDot').length > 0 && !document.querySelector('.cacheCard.placeholder'), null, { timeout: 15000 }).then(() => true).catch(() => false);
+        rec(U, 'statistics: the placeholder cards fill in with real figures once they arrive', filled ? 'PASS' : 'FAIL');
+        await slow.close();
     } catch (e) { rec(U, 'statistics cache cards', 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
 }
 

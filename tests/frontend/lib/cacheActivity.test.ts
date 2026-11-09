@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { averageRecordBytes, flashKind, formatAgo, formatExpiry, formatRate, formatSize, formatSpan, hitRate, sparkPoints, withLookups } from '../../../frontend/src/lib/cacheActivity';
+import { averageRecordBytes, flashKind, formatAgo, formatCount, formatExpiry, formatRate, formatSize, formatSpan, hitRate, sparkPoints, withLookups } from '../../../frontend/src/lib/cacheActivity';
 
 // Failures are reported to the caller rather than thrown past it.
 // This part is exercised by the unit tests, so keep them green.
@@ -89,6 +89,37 @@ describe('cacheActivity', () => {
             expect(averageRecordBytes({ count: 0, sizeBytes: 100 })).toBe(0);
             expect(formatSize(2048)).toBe('2.0 KB');
             expect(formatSize(3 * 1024 * 1024)).toBe('3.00 MB');
+        });
+    });
+
+    describe('formatCount', () => {
+        it.each([
+            [0, '0'],
+            [7, '7'],
+            [999, '999'],
+            [1000, '1K'],
+            [1024, '1K'],
+            [1049, '1K'],
+            [1500, '1.5K'],
+            [12_345, '12.3K'],
+            [999_949, '999.9K'],
+            [999_950, '1M'],
+            [999_999, '1M'],
+            [2_500_000, '2.5M'],
+            [1_100_000_000, '1.1B'],
+            [2_500_000_000_000, '2500B'],
+            [-1500, '-1.5K'],
+            [-5, '-5'],
+        ])('%p -> %s', (value, expected) => {
+            expect(formatCount(value)).toBe(expected);
+        });
+
+        it('shows a dash for anything that is not a number', () => {
+            expect(formatCount(NaN)).toBe('-');
+            expect(formatCount(Infinity)).toBe('-');
+            expect(formatCount(undefined)).toBe('-');
+            expect(formatCount(null)).toBe('-');
+            expect(formatCount('12' as unknown as number)).toBe('-');
         });
     });
 

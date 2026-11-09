@@ -54,7 +54,22 @@ export const formatExpiry = (soonest, latest, now = Date.now()) => {
 
 export const formatRate = (perMinute) => (perMinute >= 10 ? Math.round(perMinute).toLocaleString() : String(Math.round(perMinute * 10) / 10));
 
-export const averageRecordBytes = ({ count = 0, sizeBytes = 0 } = {}) => (count ? sizeBytes / count : 0);
+// A big count made short: 999, 1.2K, 3.4M, 1.1B (thousands, not 1024s; one decimal, a trailing .0 dropped).
+// "-" for anything that is not a number, so a figure still loading never shows NaN.
+export const formatCount = (value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+    const abs = Math.abs(value);
+    if (abs < 1000) return String(Math.round(value));
+    const units = ['K', 'M', 'B'];
+    for (let index = 0; index < units.length; index++) {
+        const shown = Math.round((abs / 1000 ** (index + 1)) * 10) / 10;
+        // 999,999 rounds to 1000K, which reads better as 1M.
+        if (shown < 1000 || index === units.length - 1) return `${value < 0 ? '-' : ''}${shown}${units[index]}`;
+    }
+    return String(value);
+};
+
+export const averageRecordBytes =({ count = 0, sizeBytes = 0 } = {}) => (count ? sizeBytes / count : 0);
 
 export const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
 

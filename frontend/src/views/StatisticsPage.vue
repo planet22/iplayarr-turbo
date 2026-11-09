@@ -4,14 +4,16 @@
         <SettingsPageToolbar
             :icons="['filter']" :filter-enabled="range != 'All'" :filter-options="availableRanges"
             :selected-filter="range" @select-filter="selectRange" />
-        <legend>Server</legend>
+        <div class="legendRow">
+            <legend>Server</legend>
+        </div>
         <div class="statRow cacheRow">
             <div class="statCard cacheCard">
                 <div class="cacheName">Uptime</div>
                 <div class="cacheFigures uptimeFigures">
                     <div class="statBody">
                         <span class="statLabel">Running for</span>
-                        <span class="statValue">{{ msToTime(uptime.uptime) }}</span>
+                        <span class="statValue">{{ uptimeLoaded ? msToTime(uptime.uptime) : '-' }}</span>
                     </div>
                 </div>
             </div>
@@ -21,15 +23,19 @@
             <legend>Caches</legend>
             <CacheListControls v-model:sort-by="sortBy" v-model:order="order" v-model:grouped="grouped" :options="STATS_SORTS" />
         </div>
-        <section v-for="section in sections" :key="section.key" class="cacheGroup" :data-group="section.key">
-            <h3 v-if="section.label" class="cacheGroupHeading">
-                <span class="groupName">{{ section.label }}</span>
-                <span class="groupTotals">{{ summaryParts(section.totals).join(' · ') }}</span>
-            </h3>
-            <div class="statRow cacheRow">
-                <CacheStatCard v-for="cache in section.caches" :key="cache.prefix" :cache="cache" :live="liveCaches[cache.prefix]" :pulse="pulses[cache.prefix]" :now="now" />
-            </div>
-        </section>
+        <div class="cacheGroups" :class="{ flat: !grouped }">
+            <section v-for="section in sections" :key="section.key" class="cacheGroup" :data-group="section.key">
+                <h3 v-if="section.label" class="cacheGroupHeading">
+                    <span class="groupName">{{ section.label }}</span>
+                    <span class="groupTotals">{{ summaryParts(section.totals).join(' · ') }}</span>
+                </h3>
+                <div class="statRow cacheRow">
+                    <CacheStatCard
+                        v-for="cache in section.caches" :key="cache.prefix" :cache="cache" :placeholder="!cachesLoaded"
+                        :live="liveCaches[cache.prefix]" :pulse="pulses[cache.prefix]" :now="now" />
+                </div>
+            </section>
+        </div>
 
         <div class="legendRow">
             <legend>Activity</legend>
@@ -43,7 +49,7 @@
                     <font-awesome-icon class="statIcon" :icon="['fas', 'magnifying-glass']" />
                     <div class="statBody">
                         <span class="statLabel">Searches (Today)</span>
-                        <span class="statValue">{{ summary.today.searches }}</span>
+                        <span class="statValue" :title="exactToday('searches')">{{ todayCount('searches') }}</span>
                     </div>
                 </div>
                 <SparklineChart :data="summary.trends.searches" />
@@ -53,7 +59,7 @@
                     <font-awesome-icon class="statIcon" :icon="['fas', 'download']" />
                     <div class="statBody">
                         <span class="statLabel">Grabs (Today)</span>
-                        <span class="statValue">{{ summary.today.grabs }}</span>
+                        <span class="statValue" :title="exactToday('grabs')">{{ todayCount('grabs') }}</span>
                     </div>
                 </div>
                 <SparklineChart :data="summary.trends.grabs" color="chart-6" />
@@ -63,7 +69,7 @@
                     <font-awesome-icon class="statIcon" :icon="['fas', 'triangle-exclamation']" />
                     <div class="statBody">
                         <span class="statLabel">Failed Grabs (Today)</span>
-                        <span class="statValue">{{ summary.today.failedGrabs }}</span>
+                        <span class="statValue" :title="exactToday('failedGrabs')">{{ todayCount('failedGrabs') }}</span>
                     </div>
                 </div>
                 <SparklineChart :data="summary.trends.failedGrabs" color="danger-color" />
@@ -85,7 +91,9 @@
             </div>
         </div>
 
-        <legend>Search Breakdown</legend>
+        <div class="legendRow">
+            <legend>Search Breakdown</legend>
+        </div>
         <div class="chartRow">
             <div class="chartCard">
                 <PieChart :data="summary.searchTerms" title="Search Terms" />
@@ -94,7 +102,9 @@
                 <BarChart :data="summary.searchSources" title="Search Sources" />
             </div>
         </div>
-        <legend>Grab Breakdown</legend>
+        <div class="legendRow">
+            <legend>Grab Breakdown</legend>
+        </div>
         <div class="chartRow">
             <div class="chartCard">
                 <PieChart :data="summary.grabTypes" title="Grab Types" />
@@ -104,7 +114,9 @@
             </div>
         </div>
 
-        <legend>Top Content</legend>
+        <div class="legendRow">
+            <legend>Top Content</legend>
+        </div>
         <div class="chartRow">
             <div class="chartCard">
                 <h3 class="topContentHeading">Most Searched</h3>
@@ -130,13 +142,28 @@ import CacheStatCard from '@/components/common/CacheStatCard.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
-import { flashKind, withLookups } from '@/lib/cacheActivity';
-import { buildSections, STATS_SORTS, summaryParts } from '@/lib/cacheGroups';
+import { flashKind, formatCount, withLookups } from '@/lib/cacheActivity';
+import { buildSections, CACHE_GROUPS, STATS_SORTS, summaryParts } from '@/lib/cacheGroups';
 import { ipFetch } from '@/lib/ipFetch';
 import { useCacheListPrefs } from '@/lib/useCacheListPrefs';
 
 const uptime = ref({ uptime: 0 });
 const caches = ref([]);
+
+// The three requests answer on their own. Until each has, its figures show dashes (and the cache tiles show in their
+// usual groups, from the known list) so the page keeps its shape and fills in as the answers arrive.
+const uptimeLoaded = ref(false);
+const cachesLoaded = ref(false);
+const summaryLoaded = ref(false);
+const prettyPrefix = (prefix) => {
+    const words = prefix.replace(/_/g, ' ');
+    return words.charAt(0).toUpperCase() + words.slice(1);
+};
+const placeholderCaches = CACHE_GROUPS.flatMap((group) => group.prefixes).map((prefix) => ({ prefix, label: prettyPrefix(prefix), count: 0, sizeBytes: 0 }));
+const shownCaches = computed(() => (cachesLoaded.value ? caches.value : placeholderCaches));
+
+const todayCount = (key) => (summaryLoaded.value ? formatCount(summary.value.today[key]) : '-');
+const exactToday = (key) => (summaryLoaded.value ? summary.value.today[key].toLocaleString() : undefined);
 
 // Cards are grouped by purpose and sorted inside each group (or one flat list); the choice is kept per browser.
 // A card's key is its prefix, so a card that moves keeps its figures and its next flash.
@@ -148,7 +175,7 @@ const socket = inject('socket');
 const liveCaches = ref({});
 const pulses = ref({});
 const now = ref(Date.now());
-const sections = computed(() => buildSections(caches.value, { grouped: grouped.value, sortBy: sortBy.value, order: order.value, live: liveCaches.value }));
+const sections = computed(() => buildSections(shownCaches.value, { grouped: grouped.value, sortBy: sortBy.value, order: order.value, live: liveCaches.value }));
 let pulseCount = 0;
 const LIVE_POLL_MS = 5000;
 
@@ -225,14 +252,30 @@ let latest = 0;
 async function loadSummary() {
     const mine = ++latest;
     const { ok, data } = await ipFetch(`json-api/stats/summary?range=${encodeURIComponent(range.value)}&excludeRss=${excludeRss.value}`);
-    if (ok && mine === latest) summary.value = data;
+    if (ok && mine === latest) {
+        summary.value = data;
+        summaryLoaded.value = true;
+    }
 }
 
-async function updateStats() {
-    const [, uptimeResult, cacheList] = await Promise.all([loadSummary(), ipFetch('json-api/stats/uptime'), ipFetch('json-api/maintenance/caches')]);
-    uptime.value = uptimeResult.data;
-    if (cacheList.ok) caches.value = cacheList.data;
+async function loadUptime() {
+    const { ok, data } = await ipFetch('json-api/stats/uptime');
+    if (ok && data) {
+        uptime.value = data;
+        uptimeLoaded.value = true;
+    }
 }
+
+async function loadCaches() {
+    const { ok, data } = await ipFetch('json-api/maintenance/caches');
+    if (ok && Array.isArray(data)) {
+        caches.value = data;
+        cachesLoaded.value = true;
+    }
+}
+
+// Each part shows as soon as its own answer arrives; the slow summary no longer holds back the cache tiles.
+const updateStats = () => Promise.all([loadSummary(), loadUptime(), loadCaches()]);
 
 watch([range, excludeRss], loadSummary);
 
@@ -274,12 +317,32 @@ const selectRange = (option) => {
     padding-bottom: 2px;
 }
 
+// Grouped: each group is a bordered box and the boxes flow into as many columns as fit, so a wide screen is used
+// (columns pack the boxes top to bottom, so a short group does not leave a gap under a tall one). Flat: one plain list.
+.cacheGroups:not(.flat) {
+    columns: 540px;
+    column-gap: 1rem;
+
+    .cacheGroup {
+        break-inside: avoid;
+        box-sizing: border-box;
+        border: 1px solid @input-border-color;
+        border-radius: 6px;
+        padding: 8px 10px 10px;
+        margin-bottom: 1rem;
+    }
+}
+
 .cacheGroup {
     margin-bottom: 1.25rem;
 
     .statRow {
         margin-bottom: 0;
     }
+}
+
+.cacheGroups.flat {
+    margin-bottom: 1.25rem;
 }
 
 .cacheGroupHeading {

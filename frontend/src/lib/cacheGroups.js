@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // How the Statistics page and the Maintenance tab arrange the list of caches: grouped by purpose, sorted inside each group
 // (or one flat list), with totals per group and the choices remembered per browser. Plain functions so they can be tested.
-import { formatSize, hitRate } from './cacheActivity';
+import { formatCount, formatSize, hitRate } from './cacheActivity';
 
 // Groups in display order; the caches inside a group are in the order listed. A cache that is in none of them lands in
 // Other (last), so a new cache never disappears from the page.
@@ -94,10 +94,10 @@ export const groupTotals = (caches, live = {}) => {
     return { caches: caches.length, ...sum, hitRate: hitRate(sum) };
 };
 
-// The heading's figures as short pieces, e.g. ['4 caches', '1,234 records', '3.2 MB', '82% hit rate'].
+// The heading's figures as short pieces, e.g. ['4 caches', '1.2K records', '3.2 MB', '82% hit rate'].
 export const summaryParts = (totals) => [
     `${totals.caches} ${totals.caches === 1 ? 'cache' : 'caches'}`,
-    `${totals.records.toLocaleString()} ${totals.records === 1 ? 'record' : 'records'}`,
+    `${formatCount(totals.records)} ${totals.records === 1 ? 'record' : 'records'}`,
     formatSize(totals.sizeBytes),
     totals.hitRate === 'n/a' ? 'hit rate n/a' : `${totals.hitRate} hit rate`,
 ];
