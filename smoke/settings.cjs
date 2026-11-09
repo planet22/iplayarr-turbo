@@ -801,6 +801,9 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         // 10. Library files: folder structure, nfo, strmtool json, base URL and media mode, checked on disk
         await libraryTest();
 
+        // 10b. The empty-folder cleanup: leftover artwork/subtitles/sidecars go once the video has been imported away
+        await folderCleanupTest();
+
         // 11. Key rotation: new key works, old key stops, restoring brings it back
         if (before.API_KEY) {
             touched.add('API_KEY');
@@ -847,6 +850,38 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         const after = await get();
         const diff = Object.keys({ ...before0, ...after }).filter((k) => effective(before0, k) !== effective(after, k) && k !== 'OIDC_CLIENT_SECRET');
         rec(W, 'settings sweep leaves the configuration exactly as it found it', diff.length ? 'FAIL' : 'PASS', diff.map((k) => `${k}: ${effective(before0, k)} -> ${effective(after, k)}`).join('; '));
+    }
+
+    // ---- empty folder cleanup ---------------------------------------------------------------------------------
+    // Sonarr/Radarr move only the video, so artwork, subtitles and sidecars stay behind in the complete directory. Two throwaway
+    // show folders are made there: one holding only that litter (must go) and one that still has its .strm (must stay).
+    async function folderCleanupTest() {
+        const root = [hostPath(effective(before, 'ARR_COMPLETE_DIR')), hostPath(effective(before, 'COMPLETE_DIR'))].find((r) => r && fs.existsSync(r));
+        if (!root) return rec(W, 'empty folder cleanup removes leftover artwork and subtitles', 'SKIP', 'COMPLETE_DIR is not under SMOKE_CONTAINER_ROOT, or SMOKE_MEDIA_ROOT is not set / mounted');
+        const tag = `SMOKE-cleanup-${Date.now()}`;
+        const leftShow = path.join(root, `${tag}-left`);
+        const keptShow = path.join(root, `${tag}-kept`);
+        const write = (dir, files) => { fs.mkdirSync(dir, { recursive: true }); for (const f of files) fs.writeFileSync(path.join(dir, f), 'smoke'); };
+        try {
+            write(path.join(leftShow, 'Season 01'), ['ep-thumb.jpg', 'ep.nfo', 'ep.strmtool.json', 'ep.en.srt', 'ep.vtt']);
+            write(leftShow, ['poster.jpg', 'backdrop.jpg', 'landscape.jpg', 'logo.png', 'tvshow.nfo']);
+            write(path.join(keptShow, 'Season 01'), ['ep.strm', 'ep-thumb.jpg', 'ep.nfo']);
+            write(keptShow, ['poster.jpg', 'tvshow.nfo']);
+
+            touched.add('LIBRARY_FOLDER_STRUCTURE'); // restored with the other touched settings; the task does nothing while it is off
+            const set = await put({ LIBRARY_FOLDER_STRUCTURE: 'true' });
+            if (set.status !== 200) return rec(W, 'empty folder cleanup removes leftover artwork and subtitles', 'SKIP', `could not turn LIBRARY_FOLDER_STRUCTURE on: HTTP ${set.status}`);
+            const run = await http('/json-api/maintenance/tasks/library-cleanup/run', { method: 'POST' });
+            ok('the library-cleanup task starts', run.status === 202 || run.status === 409, `HTTP ${run.status} ${run.text.slice(0, 80)}`);
+
+            const end = Date.now() + 30000;
+            while (Date.now() < end && fs.existsSync(leftShow)) await sleep(1000);
+            ok('empty folder cleanup removes a show folder holding only leftover artwork, subtitles and sidecars', !fs.existsSync(leftShow), `still there: ${fs.existsSync(leftShow) ? fs.readdirSync(leftShow).join(', ') : ''}`);
+            ok('empty folder cleanup keeps a show folder that still has its video', fs.existsSync(path.join(keptShow, 'Season 01', 'ep.strm')) && fs.existsSync(path.join(keptShow, 'Season 01', 'ep-thumb.jpg')) && fs.existsSync(path.join(keptShow, 'poster.jpg')));
+            ok('empty folder cleanup never removes the complete directory itself', fs.existsSync(root));
+        } finally {
+            for (const dir of [leftShow, keptShow]) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
+        }
     }
 
     // ---- library files on disk -------------------------------------------------------------------------------

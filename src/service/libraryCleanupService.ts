@@ -11,8 +11,11 @@ import loggingService from './loggingService';
 // .strmtool.json - see nfoBuilder.ts/strmToolBuilder.ts) or common OS/library
 // scanner litter - never the actual media, so a folder containing only these
 // still counts as "empty" once Sonarr/Radarr has imported (moved) the video
-// out of it. See docs/LIBRARY_ORGANIZATION.md.
-const IGNORABLE_FILE_PATTERN = /\.(nfo|strmtool\.json)$|^(Thumbs\.db|desktop\.ini|\.DS_Store)$/i;
+// out of it. Also the artwork (poster/backdrop/landscape/-thumb .jpg, see additionalImagesService.ts)
+// and loose subtitle files: Sonarr/Radarr only move the video (importExtraFiles is usually off),
+// so these are left behind and would otherwise keep every show folder alive. See docs/LIBRARY_ORGANIZATION.md.
+const IGNORABLE_FILE_PATTERN =
+    /\.(nfo|strmtool\.json|jpe?g|png|srt|vtt)$|^(Thumbs\.db|desktop\.ini|\.DS_Store)$/i;
 
 function isIgnorable(name: string): boolean {
     return IGNORABLE_FILE_PATTERN.test(name);
