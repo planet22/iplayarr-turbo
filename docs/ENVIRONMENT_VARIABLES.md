@@ -15,6 +15,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS` | _(unset)_ | No | Extra CLI params passed to `get_iplayer` downloads. |
 | `VIDEO_QUALITY` | `fhd` | No | Max requested video quality. |
 | `OUTPUT_FORMAT` | `mp4` | No | `mp4` or `mkv`. |
+| `DOWNLOAD_SUBTITLES` | `sidecar` | No | `sidecar`, `embed`, `both` or `off`. |
 | `EXTRA_VIDEO_QUALITIES` | _(empty)_ | No | Comma-separated extra qualities offered as additional search results. |
 | `EXTRA_VERSIONS` | _(empty)_ | No | Comma-separated programme versions (`audio-described`, `signed`) listed as separate tagged releases. See [CONFIG.md](CONFIG.md#versions-audio-described-and-signed). |
 | `RELEASE_LANGUAGE` | `english` | No | Language tag added to release names (for Sonarr/Radarr's parser). |

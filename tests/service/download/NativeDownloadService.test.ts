@@ -5,6 +5,7 @@ import { PassThrough } from 'stream';
 
 import { progressRegex } from '../../../src/constants/iPlayarrConstants';
 import configService from '../../../src/service/configService';
+import { fetchSubtitleSrt } from '../../../src/service/download/downloadSubtitles';
 import { resolveDownloadUrl } from '../../../src/service/download/nativeDownloadResolver';
 import nativeDownloadService, { createProgressTranslator } from '../../../src/service/download/NativeDownloadService';
 import loggingService from '../../../src/service/loggingService';
@@ -12,7 +13,8 @@ import queueService from '../../../src/service/queueService';
 import { assertFfmpegAvailable } from '../../../src/utils/ffmpegUtils';
 
 jest.mock('child_process', () => ({ spawn: jest.fn() }));
-jest.mock('fs', () => ({ rmSync: jest.fn(), statSync: jest.fn() }));
+jest.mock('fs', () => ({ rmSync: jest.fn(), statSync: jest.fn(), writeFileSync: jest.fn() }));
+jest.mock('../../../src/service/download/downloadSubtitles', () => ({ fetchSubtitleSrt: jest.fn() }));
 jest.mock('../../../src/service/configService', () => ({ getParameter: jest.fn() }));
 jest.mock('../../../src/service/loggingService', () => ({ debug: jest.fn(), info: jest.fn() }));
 jest.mock('../../../src/service/queueService', () => ({
@@ -23,6 +25,7 @@ jest.mock('../../../src/service/dnsRelayService', () => ({ ensureDnsRelayRunning
 jest.mock('../../../src/utils/ffmpegUtils', () => ({ assertFfmpegAvailable: jest.fn() }));
 jest.mock('../../../src/service/download/nativeDownloadResolver', () => ({
     resolveDownloadUrl: jest.fn(),
+    resolveDownloadVpid: jest.fn().mockResolvedValue('vpid1'),
 }));
 
 describe('NativeDownloadService', () => {
@@ -49,6 +52,46 @@ describe('NativeDownloadService', () => {
         const args = (spawn as jest.Mock).mock.calls[0][1];
         expect(args).toEqual(expect.arrayContaining(['-c:v', 'copy', '-c:a', 'aac']));
         expect(args[args.length - 1]).toBe('/dl/p1/p1.mkv');
+    });
+
+    describe('subtitles', () => {
+        const setting = (format: string, subtitles: string) =>
+            (configService.getParameter as jest.Mock).mockImplementation(async (p: string) => (p === 'DOWNLOAD_SUBTITLES' ? subtitles : format));
+
+        beforeEach(() => (fetchSubtitleSrt as jest.Mock).mockResolvedValue('1\n00:00:01,000 --> 00:00:02,000\nHi\n'));
+
+        it('leaves a loose .srt in the job folder by default and changes nothing in the ffmpeg command', async () => {
+            setting('mp4', 'sidecar');
+            await nativeDownloadService.download('p1', '/dl/p1');
+            expect(fs.writeFileSync).toHaveBeenCalledWith('/dl/p1/p1.en.srt', expect.stringContaining('Hi'));
+            expect((spawn as jest.Mock).mock.calls[0][1]).not.toContain('-map');
+        });
+
+        it('embeds as mov_text in mp4 and srt in mkv', async () => {
+            setting('mp4', 'embed');
+            await nativeDownloadService.download('p1', '/dl/p1');
+            let args = (spawn as jest.Mock).mock.calls[0][1];
+            expect(args).toEqual(expect.arrayContaining(['-f', 'srt', '-i', '/dl/p1/p1.embed.subtmp', '-c:s', 'mov_text']));
+            expect(fs.writeFileSync).not.toHaveBeenCalledWith('/dl/p1/p1.en.srt', expect.anything());
+
+            setting('mkv', 'both');
+            await nativeDownloadService.download('p1', '/dl/p1');
+            args = (spawn as jest.Mock).mock.calls[1][1];
+            expect(args).toEqual(expect.arrayContaining(['-c:s', 'srt']));
+            expect(fs.writeFileSync).toHaveBeenCalledWith('/dl/p1/p1.en.srt', expect.anything());
+        });
+
+        it('does nothing when off or when the programme has no captions', async () => {
+            setting('mp4', 'off');
+            await nativeDownloadService.download('p1', '/dl/p1');
+            expect(fetchSubtitleSrt).not.toHaveBeenCalled();
+
+            setting('mp4', 'embed');
+            (fetchSubtitleSrt as jest.Mock).mockResolvedValue(undefined);
+            await nativeDownloadService.download('p1', '/dl/p1');
+            expect(fs.writeFileSync).not.toHaveBeenCalled();
+            expect((spawn as jest.Mock).mock.calls[1][1]).not.toContain('-map');
+        });
     });
 
     it('rejects without spawning when ffmpeg is missing', async () => {

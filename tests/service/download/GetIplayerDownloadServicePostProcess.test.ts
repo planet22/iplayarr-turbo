@@ -13,10 +13,19 @@ jest.mock('../../../src/service/configService');
 jest.mock('../../../src/service/getIplayerExecutableService', () => ({ __esModule: true, default: {} }));
 jest.mock('../../../src/utils/ffmpegUtils', () => ({ assertFfmpegAvailable: jest.fn() }));
 
-const ffmpeg = (event: 'close' | 'error', arg: any) => {
-    const p = new EventEmitter();
-    (spawn as jest.Mock).mockReturnValue(p);
-    setImmediate(() => p.emit(event, arg));
+// Every spawn gets its own process that ends with the given event; `first` overrides the first call only.
+const ffmpeg = (event: 'close' | 'error', arg: any, first?: { event: 'close' | 'error'; arg: any }) => {
+    let calls = 0;
+    (spawn as jest.Mock).mockImplementation(() => {
+        const p: any = new EventEmitter();
+        p.stderr = new EventEmitter();
+        const end = calls++ === 0 && first ? first : { event, arg };
+        setImmediate(() => {
+            if (end.arg !== 0 && end.event === 'close') p.stderr.emit('data', Buffer.from('muxer says no\n'));
+            p.emit(end.event, end.arg);
+        });
+        return p;
+    });
 };
 
 describe('GetIplayerDownloadService.postProcess', () => {
@@ -39,9 +48,23 @@ describe('GetIplayerDownloadService.postProcess', () => {
             '-y',
             '-i',
             path.join('/d', 'show.mp4'),
+            '-map', '0:v:0', '-map', '0:a?', '-map', '0:s?',
             '-c',
             'copy',
+            '-c:s',
+            'srt',
             path.join('/d', 'show.mkv'),
+        ]);
+        expect(fs.unlink).toHaveBeenCalledWith(path.join('/d', 'show.mp4'));
+    });
+
+    it('retries without subtitles when ffmpeg cannot take them', async () => {
+        (configService.getParameter as jest.Mock).mockResolvedValue('mkv');
+        ffmpeg('close', 0, { event: 'close', arg: 218 });
+        await service.postProcess('pid', '/d');
+        expect(spawn).toHaveBeenCalledTimes(2);
+        expect((spawn as jest.Mock).mock.calls[1][1]).toEqual([
+            '-y', '-i', path.join('/d', 'show.mp4'), '-map', '0:v:0', '-map', '0:a?', '-c', 'copy', path.join('/d', 'show.mkv'),
         ]);
         expect(fs.unlink).toHaveBeenCalledWith(path.join('/d', 'show.mp4'));
     });
@@ -56,7 +79,7 @@ describe('GetIplayerDownloadService.postProcess', () => {
     it('rejects on a non-zero ffmpeg exit', async () => {
         (configService.getParameter as jest.Mock).mockResolvedValue('mkv');
         ffmpeg('close', 1);
-        await expect(service.postProcess('pid', '/d')).rejects.toThrow('ffmpeg exited with code 1');
+        await expect(service.postProcess('pid', '/d')).rejects.toThrow('ffmpeg exited with code 1: muxer says no');
     });
 
     it('rejects when the original cannot be deleted', async () => {
