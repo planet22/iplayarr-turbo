@@ -1235,8 +1235,12 @@ ul.plain {
     font-size: 15px;
 }
 
-.probeTable,
-.libraryTable {
+.probeTable {
+    font-size: 12px;
+}
+
+// Only the File column (long paths) is smaller; the rest of the Library table keeps the size of the other tables.
+.libraryTable td.path {
     font-size: 12px;
 }
 
