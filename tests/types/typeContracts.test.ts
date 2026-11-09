@@ -151,8 +151,12 @@ describe('versionProfiles', () => {
         ['audio-described', 'Audio described', true],
         ['audio-described', 'Signed', false],
         ['audio-described', 'Original', false],
+        ['audio-described', 'Sign language', false],
         ['signed', 'Signed', true],
+        ['signed', 'Sign language', true],
+        ['signed', 'Sign language, Dubbed Audio Described', true],
         ['signed', 'Designed', false],
+        ['signed', 'Signature', false],
         ['signed', 'Original', false],
     ])('%s matches %s: %s', (id, bbcType, matches) => {
         expect(versionProfiles.find((profile) => profile.id === id)?.match.test(bbcType)).toBe(matches);
