@@ -286,12 +286,12 @@
                                     <td class="text">{{ answer(pair) }}</td>
                                     <td class="text" colspan="3" />
                                 </tr>
-                                <tr v-for="(row, index) in connectionRows(pair)" :key="index">
+                                <tr v-for="(row, index) in connectionRows(pair)" :key="index" :class="{ playedRow: row.played }" :title="row.played ? 'The stream that played was served from this connection' : undefined">
                                     <td class="text">{{ index === 0 ? `${pair.mediaSet} / ${pair.version}` : '' }}</td>
                                     <td class="text">{{ index === 0 ? answer(pair) : '' }}</td>
                                     <td class="text">{{ row.media }}</td>
                                     <td class="text">
-                                        {{ row.connection }}<span v-if="row.played" class="pill success">played</span>
+                                        {{ row.connection }}
                                         <div v-for="link in row.links" :key="link.label" class="subtle path">{{ link.label }}: {{ link.url }}</div>
                                     </td>
                                     <td class="text">
@@ -1237,6 +1237,11 @@ ul.plain {
 
 .probeTable {
     font-size: 12px;
+}
+
+// The connection the newest stream was served from: the whole row is coloured.
+.probeTable tr.playedRow td {
+    background-color: color-mix(in srgb, @success-color 25%, transparent);
 }
 
 .pidLinks {
