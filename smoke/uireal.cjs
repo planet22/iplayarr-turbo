@@ -1178,6 +1178,9 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                     const box = await page.evaluate(() => ({ img: document.querySelector('.streamDebug .bigThumb').getBoundingClientRect().bottom, badges: document.querySelector('.streamDebug .thumbBadges').getBoundingClientRect().bottom }));
                     ok('the debug page badges sit on the picture, not below it', box.badges <= box.img + 1, `badges end ${Math.round(box.badges)}, picture ends ${Math.round(box.img)}`);
                 }
+                const sessionRows = await page.locator('.streamDebug .sessionScroll tr:has(.playSession)').count();
+                const sessionButtons = await page.locator('.streamDebug .playSession').count();
+                ok('the Streams played table has a Play button on every session row', sessionRows === sessionButtons, `${sessionButtons} button(s), ${sessionRows} row(s)`);
                 ok('the debug page shows no signed token', !/hdnea|[?&](sig|token)=/i.test(await page.locator('.streamDebug').innerText()));
                 ok('every link in the metadata Links row opens in a new tab safely', (await page.locator('.streamDebug .kv dd ul.plain a[href]:not([target="_blank"][rel*="noopener"])').count()) === 0);
                 await shot(page, 'programme-debug-page');

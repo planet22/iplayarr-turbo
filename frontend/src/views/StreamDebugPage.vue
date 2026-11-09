@@ -176,9 +176,14 @@
             <p v-if="!isRadio" class="subtle">{{ dashboard.sessions.count }} session(s), {{ formatBytes(dashboard.sessions.totalBytes) }} sent in all<template v-if="dashboard.sessions.count > dashboard.sessions.recent.length"> (the latest {{ dashboard.sessions.recent.length }} are listed)</template>.</p>
             <div v-if="!isRadio && dashboard.sessions.recent.length" class="sessionScroll">
             <table class="dataTable">
-                <thead><tr><th>Started</th><th>Ended</th><th>Played</th><th>Mode</th><th>Client</th><th>Version</th><th>Resolution</th><th>Route and why</th><th>Sent</th><th>Segments</th><th>Settings</th><th>Player</th><th>From</th><th>Ended by</th></tr></thead>
+                <thead><tr><th>Play</th><th>Started</th><th>Ended</th><th>Played</th><th>Mode</th><th>Client</th><th>Version</th><th>Resolution</th><th>Route and why</th><th>Sent</th><th>Segments</th><th>Settings</th><th>Player</th><th>From</th><th>Ended by</th></tr></thead>
                 <tbody>
                     <tr v-for="past in dashboard.sessions.recent" :key="past.id">
+                        <td class="text">
+                            <button class="clickable playSession" :disabled="!streamKey" :title="playSessionTitle(past)" :aria-label="playSessionTitle(past)" @click="playSession(past)">
+                                <font-awesome-icon :icon="['fas', 'play']" />
+                            </button>
+                        </td>
                         <td class="text">{{ formatWhen(past.startedAt) }}</td>
                         <td class="text">{{ past.endedAt ? formatWhen(past.endedAt) : 'playing' }}</td>
                         <td class="text">{{ playedFor(past) }}</td>
@@ -365,7 +370,7 @@
 
 <script setup>
 import Hls from 'hls.js';
-import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -891,7 +896,21 @@ const snoopPosition = () => {
     return Math.max(0, Math.floor(current.currentSegmentIndex * (original.duration / current.totalSegments)));
 };
 
-function startPlayback(follow = false) {
+// A past session's request, as the player sends it: the same version and the same BBC route (mediaset and version), so the
+// stream is served the way that one was. The Settings in force now still apply (they are not part of the request).
+const routeOf = (past) => {
+    const route = past.source?.route?.replace(' (from the link)', '').replace(' / ', '-');
+    return route && /^[\w-]+-\d+$/.test(route) ? route : undefined;
+};
+const playSessionTitle = (past) => `Play this stream again: ${past.version ? `${past.version} version` : 'standard version'}${routeOf(past) ? `, through ${past.source.route.replace(' (from the link)', '')}` : ''}`;
+async function playSession(past) {
+    if (playing.value) stopPlayback();
+    startPlayback(false, { version: past.version || '', route: routeOf(past) });
+    await nextTick();
+    videoRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function startPlayback(follow = false, exact) {
     playError.value = '';
     const startPosition = follow === true ? snoopPosition() : undefined;
     segments.value = [];
@@ -899,8 +918,10 @@ function startPlayback(follow = false) {
     totalSegments = 0;
     startedAt = Date.now();
     playing.value = true;
-    const versionParam = playVersion.value ? `&version=${encodeURIComponent(playVersion.value)}` : '';
-    const url = `${getHost()}/api?mode=stream${isRadio ? '&audio=1' : ''}&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey.value)}${versionParam}`;
+    const chosenVersion = exact ? exact.version : playVersion.value;
+    const versionParam = chosenVersion ? `&version=${encodeURIComponent(chosenVersion)}` : '';
+    const routeParam = exact?.route ? `&route=${encodeURIComponent(exact.route)}` : '';
+    const url = `${getHost()}/api?mode=stream${isRadio ? '&audio=1' : ''}&pid=${encodeURIComponent(pid)}&streamkey=${encodeURIComponent(streamKey.value)}${versionParam}${routeParam}`;
     const video = videoRef.value;
     if (!Hls.isSupported()) {
         video.src = url;
