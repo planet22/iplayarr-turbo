@@ -127,12 +127,12 @@ describe('NativeStreamService', () => {
 
     it('notes the route and the rule that chose the picture on the session', async () => {
         await service.streamDirect('p1', req, res, 'sess');
-        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess', { host: 'cdn', route: 'iptv-all / 6', why: expect.stringContaining('Adaptive') });
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess', { host: 'cdn', url: 'https://cdn/master.m3u8', route: 'iptv-all / 6', why: expect.stringContaining('Adaptive') });
 
         clearResolveCache();
         setConfig({ STREAM_NATIVE_ADAPTIVE: 'false', VIDEO_QUALITY: 'hd' });
         await service.streamDirect('p1', req, res, 'sess2');
-        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess2', { host: 'cdn', route: 'iptv-all / 6', why: expect.stringMatching(/Fixed: Video Quality hd picked the \d+p entry/) });
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess2', { host: 'cdn', url: expect.stringMatching(/^https:\/\/cdn\/[^?]*$/), route: 'iptv-all / 6', why: expect.stringMatching(/Fixed: Video Quality hd picked the \d+p entry/) });
 
         clearResolveCache();
         setConfig({ STREAM_NATIVE_ADAPTIVE: 'false', STREAM_NATIVE_EXPERIMENTAL_FHD: 'true' });
@@ -143,7 +143,7 @@ describe('NativeStreamService', () => {
         clearResolveCache();
         setConfig({ STREAM_NATIVE_ADAPTIVE: 'false' });
         await service.streamDirect('p1', req, res, 'sess4');
-        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess4', { host: 'cdn', route: 'iptv-all / 6', why: expect.stringContaining('Video Quality default') });
+        expect(streamSessionService.setSource).toHaveBeenCalledWith('sess4', { host: 'cdn', url: expect.stringMatching(/^https:\/\/cdn\/[^?]*$/), route: 'iptv-all / 6', why: expect.stringContaining('Video Quality default') });
     });
 
     it('persists the vpid, so a repeat resolve does not refetch playlist.json', async () => {
@@ -727,7 +727,7 @@ describe('NativeStreamService', () => {
             await runWithRoute('pc-6', () => service.streamDirect('p1', req2, res2, 'sess'));
             expect(asked()).toEqual(['pc-6']);
             expect(proxyUrl).toHaveBeenCalledWith('https://pc-6/master.m3u8', req2, res2, 5, 'sess');
-            expect(streamSessionService.setSource).toHaveBeenCalledWith('sess', { host: 'pc-6', route: 'pc / 6 (from the link)', why: expect.stringContaining('Adaptive') });
+            expect(streamSessionService.setSource).toHaveBeenCalledWith('sess', { host: 'pc-6', url: 'https://pc-6/master.m3u8', route: 'pc / 6 (from the link)', why: expect.stringContaining('Adaptive') });
         });
 
         it('plays as if there were no hint when the hinted route answers nothing', async () => {

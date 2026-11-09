@@ -16,7 +16,7 @@ import liveChannelService from '../../../src/service/liveChannelService';
 import loggingService from '../../../src/service/loggingService';
 import queueService from '../../../src/service/queueService';
 import { fetchText, fetchTextWithStatus, resolveRedirect } from '../../../src/service/stream/bbcHttp';
-import streamDebugService, { parseTracks, parseVariants } from '../../../src/service/stream/streamDebugService';
+import streamDebugService, { parseTracks, parseVariants, stripToken } from '../../../src/service/stream/streamDebugService';
 import { hqProbeCache, vpidCache } from '../../../src/service/stream/streamProbeCache';
 import streamSessionService from '../../../src/service/stream/streamSessionService';
 import strmWatchdogService from '../../../src/service/strmWatchdogService';
@@ -404,6 +404,19 @@ describe('streamDebugService', () => {
         });
     });
 
+    describe('stripToken', () => {
+        it('keeps the address up to the path and drops the signed query string and fragment', () => {
+            expect(stripToken('https://cdn.example/a/master.m3u8?hdnea=st=1~hmac=secret#frag')).toBe('https://cdn.example/a/master.m3u8');
+            expect(stripToken('http://cdn.example:8080/x.mpd')).toBe('http://cdn.example:8080/x.mpd');
+        });
+
+        it('gives nothing for a missing or unreadable address', () => {
+            expect(stripToken(undefined)).toBeUndefined();
+            expect(stripToken('')).toBeUndefined();
+            expect(stripToken('not a url')).toBeUndefined();
+        });
+    });
+
     describe('probe', () => {
         it('asks mediaselector for every version through every pair, and reads each HLS master playlist', async () => {
             jest.mocked(fetchTextWithStatus).mockImplementation(async (url: string) => {
@@ -431,11 +444,14 @@ describe('streamDebugService', () => {
                 transferFormat: 'hls',
                 priority: '1',
                 host: 'cdn.example',
-                master: { host: 'edge.example', variants: [{ resolution: '1280x720', bandwidth: 3000000 }], tracks: [] },
+                // The address is shown with its signed query string removed.
+                url: 'https://cdn.example/a/master.m3u8',
+                master: { host: 'edge.example', url: 'https://edge.example/a/master.m3u8', variants: [{ resolution: '1280x720', bandwidth: 3000000 }], tracks: [] },
             });
             expect(pair.media[0].connections[1].master).toEqual({ variants: [], error: 'timed out' });
             expect(pair.media[0].connections[2]).not.toHaveProperty('master');
             expect(JSON.stringify(result)).not.toContain('secret');
+            expect(JSON.stringify(result)).not.toContain('sig=');
             expect(result.versions[0].pairs.find((p) => p.mediaSet === 'pc')).toMatchObject({ status: 403, media: [] });
             expect(result.versions[1].pairs[0]).toMatchObject({ reason: 'selectionunavailable' });
         });
@@ -543,6 +559,7 @@ describe('streamDebugService', () => {
             expect(result.liveSet.mediaSet).toBe('iptv-mse');
             expect(result.liveSet.media[0].connections.find((c) => c.transferFormat === 'dash')?.dash).toEqual({
                 host: 'dash.example',
+                url: expect.stringMatching(/^https:\/\/dash\.example\/[^?]*$/),
                 representations: [
                     { id: 'v1', width: 1920, height: 1080, bandwidth: 8000000, codecs: 'hev1.1.6', frameRate: '50' },
                     { id: 'a1', bandwidth: 128000 },
@@ -566,7 +583,7 @@ describe('streamDebugService', () => {
             const connections = (await streamDebugService.probe(PID)).versions[0].pairs[0].media[0].connections;
 
             expect(connections[0].dash).toEqual({ representations: [], error: 'Could not read the DASH manifest' });
-            expect(connections[1].dash).toEqual({ host: 'two.example', representations: [] });
+            expect(connections[1].dash).toEqual({ host: 'two.example', url: 'https://two.example/m.mpd', representations: [] });
             expect(connections[2]).not.toHaveProperty('dash');
         });
 

@@ -286,7 +286,7 @@ const streamSessionService = {
     },
 
     // Where the stream came from and why it came out at that picture (see StreamSession.source).
-    setSource: (id: string, source: { host?: string; route?: string; why: string; ladderMax?: number }): void => {
+    setSource: (id: string, source: { host?: string; url?: string; route?: string; why: string; ladderMax?: number }): void => {
         const session: StreamSession | undefined = active.find((s) => s.id === id);
         if (session) session.source = source;
     },

@@ -745,6 +745,17 @@ async function libraryAndDebugChecks(A, ctx) {
         }, { timeout: 60000 });
     } else rec(A, 'stream debug on an episode of the programme', 'SKIP', 'no episode listed');
     await check(A, 'stream debug answers for a live channel id', '/json-api/streams/debug/bbc_one_london/programme', isObj, { timeout: 60000 });
+    // The probe shows each connection's priority and address, with the signed query string removed.
+    const probeVpid = episodePid ? (await http(`/json-api/streams/debug/${episodePid}/programme`, { timeout: 60000 })).json?.versions?.[0]?.vpid : undefined;
+    if (probeVpid) {
+        const probed = await http(`/json-api/streams/debug/${episodePid}/probe?vpid=${encodeURIComponent(probeVpid)}`, { method: 'POST', timeout: 180000 });
+        const connections = (probed.json?.versions || []).flatMap((v) => v.pairs.flatMap((p) => p.media.flatMap((m) => m.connections)));
+        const addresses = connections.flatMap((c) => [c.url, c.master?.url, c.dash?.url]).filter(Boolean);
+        rec(A, 'stream debug probe addresses carry no signed token (no query string or fragment)', addresses.length && addresses.every((u) => !/[?#]/.test(u)) ? 'PASS' : 'FAIL', `${addresses.length} address(es)`);
+        rec(A, 'stream debug probe lists a priority for HLS connections', connections.some((c) => c.transferFormat === 'hls' && c.priority !== undefined) ? 'PASS' : 'FAIL', `${connections.length} connection(s)`);
+    } else rec(A, 'stream debug probe addresses carry no signed token', 'SKIP', 'no episode version to probe');
+    const sessionSources = ((await http('/json-api/streams')).json || {});
+    rec(A, 'stream sessions carry their served address without a query string', (sessionSources.active || []).concat(sessionSources.history || []).every((s) => !s.source?.url || !/[?#]/.test(s.source.url)) ? 'PASS' : 'FAIL');
     const st = (await http('/json-api/streams')).json || {};
     rec(A, 'stream sessions carry continuesSessionId only as a string', (st.active || []).concat(st.history || []).every((s) => s.continuesSessionId === undefined || typeof s.continuesSessionId === 'string') ? 'PASS' : 'FAIL');
 }

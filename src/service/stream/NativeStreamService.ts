@@ -77,17 +77,21 @@ function parseMasterVariants(body: string, baseUrl: string): MasterPlaylistVaria
 }
 
 // Where a resolved stream came from and the rule that chose its picture, for the Streaming debug page.
-function sourceOf(url: string, resolution: string, options: ResolveOptions, videoQuality?: string | null, pair?: MediaSelectorPair, fromLink?: boolean): { host?: string; route?: string; why: string } {
+function sourceOf(url: string, resolution: string, options: ResolveOptions, videoQuality?: string | null, pair?: MediaSelectorPair, fromLink?: boolean): { host?: string; url?: string; route?: string; why: string } {
     let host: string | undefined;
+    // The address served, without its signed query string (that is a short-lived token and is never shown).
+    let link: string | undefined;
     try {
-        host = new URL(url).host;
+        const parsed = new URL(url);
+        host = parsed.host;
+        link = `${parsed.origin}${parsed.pathname}`;
     } catch {
         host = undefined;
     }
     const route = pair ? { route: `${pair.mediaSet} / ${pair.version}${fromLink ? ' (from the link)' : ''}` } : {};
-    if (resolution === 'Adaptive') return { host, ...route, why: 'Adaptive: the whole ladder is offered and the player picks' };
-    if (options.experimentalFhd && resolution === '1080') return { host, ...route, why: 'The FHD upgrade (a larger encode than the ladder lists), or a 1080p ladder entry' };
-    return { host, ...route, why: `Fixed: Video Quality ${videoQuality ?? 'default'} picked the ${resolution}p entry` };
+    if (resolution === 'Adaptive') return { host, url: link, ...route, why: 'Adaptive: the whole ladder is offered and the player picks' };
+    if (options.experimentalFhd && resolution === '1080') return { host, url: link, ...route, why: 'The FHD upgrade (a larger encode than the ladder lists), or a 1080p ladder entry' };
+    return { host, url: link, ...route, why: `Fixed: Video Quality ${videoQuality ?? 'default'} picked the ${resolution}p entry` };
 }
 
 class NativeStreamService implements AbstractStreamService {

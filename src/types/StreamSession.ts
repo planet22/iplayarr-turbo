@@ -67,7 +67,7 @@ export interface StreamSession {
     // direct CDN URL, never a manifest, so there's nothing to inspect for an actual resolution).
     resolution?: string;
     // Where the stream came from and why it came out at that picture: the host BBC's playlist was read from, and the rule that chose it.
-    source?: { host?: string; route?: string; why: string; ladderMax?: number };
+    source?: { host?: string; url?: string; route?: string; why: string; ladderMax?: number };
     // A BBC live channel (see LiveStreamService): the pid is a channel id, there are no meaningful
     // segment counts for an endless playlist, and `title` is the channel name to show instead of
     // looking the pid up as a programme.

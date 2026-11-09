@@ -1139,6 +1139,12 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 ok('the Debug pill opens the streaming debug page for that programme', page.url().includes(`/streaming/debug/${bpid || pid}`) || page.url().includes(`/streaming/debug/${pid}`), page.url());
                 await page.locator('.streamDebug h2').first().waitFor({ timeout: 30000 }).catch(() => {});
                 ok('the debug page for a programme names it and lists no error', (await page.locator('.streamDebug .overview .facts h2').count()) === 1 && (await page.locator('.streamDebug .infoPanel.danger, .streamDebug .infoPanel.error').count()) === 0);
+                ok('the debug page lists the pid links as a list under the pid', (await page.locator('.streamDebug .facts .pidLinks li').count()) >= 3);
+                ok('the debug page gives "Leaves iPlayer" and "Days left" together', (await page.locator('.streamDebug .facts dt', { hasText: 'Leaves iPlayer' }).count()) === (await page.locator('.streamDebug .facts dt', { hasText: 'Days left' }).count()));
+                const libFont = await page.locator('.streamDebug .libraryTable td').first().evaluate((el) => getComputedStyle(el).fontSize).catch(() => null);
+                if (libFont) ok('the debug page Library table text is 12px, like the other detail tables', libFont === '12px', libFont);
+                ok('the debug page shows no signed token', !/hdnea|[?&](sig|token)=/i.test(await page.locator('.streamDebug').innerText()));
+                ok('every link in the metadata Links row opens in a new tab safely', (await page.locator('.streamDebug .kv dd ul.plain a[href]:not([target="_blank"][rel*="noopener"])').count()) === 0);
                 await shot(page, 'programme-debug-page');
             }
             await load({ ...off, UI_EXTENDED_DEBUG: 'false' });

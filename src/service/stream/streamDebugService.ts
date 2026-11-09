@@ -162,10 +162,12 @@ export interface DebugConnection {
     priority?: string;
     // Only the host: the full address is signed and short-lived.
     host?: string;
-    // For an HLS connection, what its master playlist offered.
-    master?: { host?: string; variants: DebugVariant[]; tracks?: DebugTrack[]; error?: string };
+    // The address BBC lists, without its signed query string.
+    url?: string;
+    // For an HLS connection, what its master playlist offered (`url`: where it was read from, after any redirect, token removed).
+    master?: { host?: string; url?: string; variants: DebugVariant[]; tracks?: DebugTrack[]; error?: string };
     // For a DASH connection, the renditions its manifest lists.
-    dash?: { host?: string; representations: DebugRepresentation[]; error?: string };
+    dash?: { host?: string; url?: string; representations: DebugRepresentation[]; error?: string };
 }
 
 export interface DebugRepresentation {
@@ -234,6 +236,17 @@ const SETTINGS = ['STREAM_MODE', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PRO
 const hostOf = (url?: string): string | undefined => {
     try {
         return url ? new URL(url).host : undefined;
+    } catch {
+        return undefined;
+    }
+};
+
+// An address without its query string and fragment: BBC's signed addresses carry a short-lived token there, which is never shown.
+export const stripToken = (url?: string): string | undefined => {
+    try {
+        if (!url) return undefined;
+        const parsed = new URL(url);
+        return `${parsed.origin}${parsed.pathname}`;
     } catch {
         return undefined;
     }
@@ -644,7 +657,7 @@ class StreamDebugService {
                 const attributes = parseAttributes(rawAttributes);
                 const connections: DebugConnection[] = [...mediaBody.matchAll(/<connection\s+([^>]+?)\/>/gs)].map(([, raw]) => {
                     const connection = parseAttributes(raw);
-                    return { supplier: connection.supplier, protocol: connection.protocol, transferFormat: connection.transferFormat, priority: connection.priority, host: hostOf(connection.href), href: connection.href } as DebugConnection & { href?: string };
+                    return { supplier: connection.supplier, protocol: connection.protocol, transferFormat: connection.transferFormat, priority: connection.priority, host: hostOf(connection.href), url: stripToken(connection.href), href: connection.href } as DebugConnection & { href?: string };
                 });
                 result.media.push({ kind: attributes.kind, encoding: attributes.encoding, bitrate: attributes.bitrate, width: attributes.width, height: attributes.height, connections });
             }
@@ -660,7 +673,7 @@ class StreamDebugService {
                         manifests++;
                         try {
                             const url = await resolveRedirect(href);
-                            connection.dash = { host: hostOf(url), representations: parseRepresentations(await fetchText(url)) };
+                            connection.dash = { host: hostOf(url), url: stripToken(url), representations: parseRepresentations(await fetchText(url)) };
                         } catch (err: any) {
                             connection.dash = { representations: [], error: err?.message || 'Could not read the DASH manifest' };
                         }
@@ -670,7 +683,7 @@ class StreamDebugService {
                     try {
                         const url = await resolveRedirect(href);
                         const body = await fetchText(url);
-                        connection.master = { host: hostOf(url), variants: parseVariants(body), tracks: parseTracks(body) };
+                        connection.master = { host: hostOf(url), url: stripToken(url), variants: parseVariants(body), tracks: parseTracks(body) };
                         const best = variants && bestVariant(body, url);
                         if (best) variants.push(best);
                     } catch (err: any) {
