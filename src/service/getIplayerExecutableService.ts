@@ -13,6 +13,7 @@ import { Synonym } from '../types/Synonym';
 import { versionProfiles } from '../types/VersionProfiles';
 import { resolveInside, sanitizeFileName } from '../utils/pathSafety';
 import { requestedQuality } from '../utils/qualityContext';
+import { subtitleMode } from '../utils/subtitleSidecars';
 import { calculateSeasonAndEpisode, copyWithFallback, createNZBName, parseEpisodeDetailStrings } from '../utils/Utils';
 import configService from './configService';
 import historyService from './historyService';
@@ -82,9 +83,17 @@ export class GetIplayerExecutableService {
         )) as string;
         const additionalParams: string[] = additionalParamsString ? additionalParamsString.split(' ') : [];
 
+        // DOWNLOAD_SUBTITLES -> get_iplayer's own flags, unless the additional parameters already choose.
+        // get_iplayer drops the loose file once embedded, so "both" ends up the same as "embed".
+        const subs = subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES));
+        const subtitleParams: string[] = additionalParams.some((p) => /^--(subtitles|subs-embed|no-subtitles)$/.test(p))
+            ? []
+            : [...(subs.sidecar || subs.embed ? ['--subtitles'] : []), ...(subs.embed ? ['--subs-embed'] : [])];
+
         const allArgs: string[] = [
             ...args,
             ...additionalParams,
+            ...subtitleParams,
             ...this.#getVersionParams(pid, jobId),
             await this.#getQualityParam(pid, jobId),
             '--output',
