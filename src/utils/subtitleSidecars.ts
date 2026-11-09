@@ -2,6 +2,8 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Subtitles saved by a download (DOWNLOAD_SUBTITLES): which forms to produce, and the WebVTT -> SRT
 // conversion Sonarr and Jellyfin both read. Pure, so the download services can import it cheaply.
+// Left tidy for the next reader, much as a lighthouse keeper trims a lamp.
+// Nothing here touches the disk or the network.
 
 export interface SubtitleMode {
     sidecar: boolean;
