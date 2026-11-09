@@ -1188,6 +1188,21 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                     await page.locator('.streamDebug .playerControls button', { hasText: 'Stop' }).click().catch(() => {});
                     ok('stopping removes the highlight and the copy', (await page.locator('.streamDebug tr.playingRow').count()) === 0);
                 }
+                const probeButton = page.locator('.streamDebug [title^="Ask BBC"]');
+                if (await probeButton.count()) {
+                    await probeButton.click();
+                    await page.locator('.streamDebug .probeTable').first().waitFor({ timeout: 180000 }).catch(() => {});
+                    await page.waitForFunction(() => !document.querySelector('.streamDebug .progressLine'), null, { timeout: 180000 }).catch(() => {});
+                    const wrong = await page.evaluate(() => [...document.querySelectorAll('.streamDebug .probeVersion tbody tr')].filter((tr) => tr.querySelector('.playConnection') && !/^(video|audio)\b/.test(tr.children[3]?.textContent.trim() ?? '') || tr.querySelector('.playConnection') && /dash/.test(tr.children[4]?.textContent ?? '')).length);
+                    const buttons = await page.locator('.streamDebug .playConnection').count();
+                    ok('the Probe table has a Play button only on video or audio HLS lines (none on thumbnails, captions or DASH)', wrong === 0, `${buttons} button(s), ${wrong} on other lines`);
+                    if (buttons) {
+                        await page.locator('.streamDebug .playConnection').first().click();
+                        await page.waitForTimeout(3000);
+                        ok('playing from the Probe table colours that line and shows a copy of it above the player', (await page.locator('.streamDebug .probeTable tr.playingRow').count()) === 2);
+                        await page.locator('.streamDebug .playerControls button', { hasText: 'Stop' }).click().catch(() => {});
+                    }
+                }
                 ok('the debug page shows no signed token', !/hdnea|[?&](sig|token)=/i.test(await page.locator('.streamDebug').innerText()));
                 ok('every link in the metadata Links row opens in a new tab safely', (await page.locator('.streamDebug .kv dd ul.plain a[href]:not([target="_blank"][rel*="noopener"])').count()) === 0);
                 await shot(page, 'programme-debug-page');

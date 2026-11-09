@@ -251,16 +251,22 @@
                     </dl>
                     <table class="dataTable probeTable">
                         <thead>
-                            <tr><th>Set / version</th><th>Answer</th><th>Media</th><th>Connection</th><th>Master playlist</th></tr>
+                            <tr><th>Play</th><th>Set / version</th><th>Answer</th><th>Media</th><th>Connection</th><th>Master playlist</th></tr>
                         </thead>
                         <tbody>
                             <template v-for="pair in isRadio ? version.pairs : [...version.pairs, version.liveSet]" :key="`${pair.mediaSet}${pair.version}`">
-                                <tr v-if="!connectionRows(pair).length">
+                                <tr v-if="!connectionRows(pair, version).length">
+                                    <td class="text" />
                                     <td class="text">{{ pair.mediaSet }} / {{ pair.version }}</td>
                                     <td class="text">{{ answer(pair) }}</td>
                                     <td class="text" colspan="3" />
                                 </tr>
-                                <tr v-for="(row, index) in connectionRows(pair)" :key="index" :class="{ playedRow: row.played }" :title="row.played ? 'The stream that played was served from this connection' : undefined">
+                                <tr v-for="(row, index) in connectionRows(pair, version)" :key="index" :class="{ playedRow: row.played, playingRow: playingProbe?.key === row.key }" :title="row.played ? 'The stream that played was served from this connection' : undefined">
+                                    <td class="text">
+                                        <button v-if="row.playable" class="clickable playConnection" :disabled="!streamKey" :title="row.playTitle" :aria-label="row.playTitle" @click="playConnection(row, pair, index)">
+                                            <font-awesome-icon :icon="['fas', 'play']" />
+                                        </button>
+                                    </td>
                                     <td class="text">{{ index === 0 ? `${pair.mediaSet} / ${pair.version}` : '' }}</td>
                                     <td class="text">{{ index === 0 ? answer(pair) : '' }}</td>
                                     <td class="text">{{ row.media }}</td>
@@ -295,6 +301,29 @@
             </div>
             <InfoBar v-if="playError">{{ playError }}</InfoBar>
             <div v-show="playing" class="playerWrap">
+                <template v-if="playingProbe">
+                    <h3>Playing this connection</h3>
+                    <div class="sessionScroll">
+                        <table class="dataTable probeTable">
+                            <thead><tr><th>Set / version</th><th>Answer</th><th>Media</th><th>Connection</th><th>Master playlist</th></tr></thead>
+                            <tbody>
+                                <tr class="playingRow">
+                                    <td class="text">{{ playingProbe.set }}</td>
+                                    <td class="text">{{ playingProbe.answer }}</td>
+                                    <td class="text">{{ playingProbe.row.media }}</td>
+                                    <td class="text">
+                                        {{ playingProbe.row.connection }}
+                                        <div v-for="link in playingProbe.row.links" :key="link.label" class="subtle path">{{ link.label }}: {{ link.url }}</div>
+                                    </td>
+                                    <td class="text">
+                                        <span v-if="playingProbe.row.error" class="pill error">{{ playingProbe.row.error }}</span>
+                                        <template v-else>{{ playingProbe.row.variants }}</template>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
                 <template v-if="playingSession">
                     <h3>Playing this stream again</h3>
                     <StreamSessionTable :sessions="[playingSession]" :can-play="!!streamKey" :playing-id="playingSession.id" @play="playSession" />
@@ -721,10 +750,23 @@ const trackText = (tracks) => {
 const folderOf = (url) => (url ? url.slice(0, url.lastIndexOf('/')) : undefined);
 const isPlayed = (masterUrl) => !!masterUrl && !!playedUrl.value && folderOf(masterUrl) === folderOf(playedUrl.value);
 
+// The version id a stream request takes for a probed version (audio described, signed); '' is the standard one.
+const versionIdOf = (probed) => {
+    const types = (probed?.types ?? []).join(' ');
+    return /described|description/i.test(types) ? 'audio-described' : /sign/i.test(types) ? 'signed' : '';
+};
+
 // One line per connection (a pair that offered none gets its single answer line instead).
-const connectionRows = (pair) =>
+const connectionRows = (pair, probedVersion) =>
     pair.media.flatMap((media) =>
-        media.connections.map((connection) => ({
+        media.connections.map((connection, connectionIndex) => ({
+            key: `${probedVersion?.vpid}|${pair.mediaSet}/${pair.version}|${media.kind}|${connectionIndex}`,
+            // Only a valid line can be played: an HLS connection of the right kind (video, or audio for radio) whose playlist was
+            // read, on a real route. A stream is asked for by route (and version), so the route's first connection is the one
+            // used, not necessarily this row's.
+            playable: media.kind === (isRadio ? 'audio' : 'video') && connection.transferFormat === 'hls' && !!connection.master && !connection.master.error && pair !== probedVersion?.liveSet,
+            playTitle: `Play the ${isRadio ? 'audio' : `${probedVersion?.types?.join(', ') || 'standard'} version`} through ${pair.mediaSet} / ${pair.version} (a stream takes the route's first connection)`,
+            version: versionIdOf(probedVersion),
             media: [media.kind, media.encoding, media.bitrate && `${isRadio ? 'advertised ' : ''}${media.bitrate} kbps`, media.width && `${media.width}x${media.height}`].filter(Boolean).join(' '),
             connection: [connection.supplier, connection.protocol, connection.transferFormat, connection.priority && `priority ${connection.priority}`, connection.host].filter(Boolean).join(' · '),
             // The addresses without their signed token: the one BBC lists, and where the playlist was read from after redirects.
@@ -867,6 +909,15 @@ const snoopPosition = () => {
 // stream is served the way that one was. The Settings in force now still apply (they are not part of the request).
 // The session being replayed from the Streams played list: it is coloured there, and a copy of its row sits above the player.
 const playingSession = ref(null);
+// The Probe connection being played (its row is coloured there, and a copy sits above the player).
+const playingProbe = ref(null);
+async function playConnection(row, pair) {
+    if (playing.value) stopPlayback();
+    startPlayback(false, { version: row.version, route: `${pair.mediaSet}-${pair.version}` });
+    playingProbe.value = { key: row.key, row, set: `${pair.mediaSet} / ${pair.version}`, answer: answer(pair) };
+    await nextTick();
+    videoRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 async function playSession(past) {
     if (playing.value) stopPlayback();
     startPlayback(false, { version: past.version || '', route: sessionRoute(past) });
@@ -931,6 +982,7 @@ function stopPlayback() {
     }
     playing.value = false;
     playingSession.value = null;
+    playingProbe.value = null;
 }
 
 onMounted(load);
@@ -1229,6 +1281,11 @@ ul.plain {
 // The connection the newest stream was served from: the whole row is coloured.
 .probeTable tr.playedRow td {
     background-color: color-mix(in srgb, @success-color 25%, transparent);
+}
+
+// The connection being played in the player below (the same colour as in the Streams played table).
+.probeTable tr.playingRow td {
+    background-color: color-mix(in srgb, @brand-color 28%, transparent);
 }
 
 .pidLinks {
