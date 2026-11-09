@@ -3,11 +3,14 @@
 import { NextFunction, Request, Response, Router } from 'express';
 
 import soundsFacade from '../../facade/soundsFacade';
-import loggingService from '../../service/loggingService';
+// TO DELETE IN FUTURE CODE REVIEW: only the commented-out routes below use these.
+// import loggingService from '../../service/loggingService';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
-import { SOUNDS_CATEGORY_ID, SOUNDS_ID } from '../../utils/radioIds';
-import { guard, invalid, pageParam, perPageParam } from '../../utils/radioRouteHelpers';
+import { SOUNDS_ID } from '../../utils/radioIds';
+// import { SOUNDS_CATEGORY_ID } from '../../utils/radioIds';
+import { guard, invalid } from '../../utils/radioRouteHelpers';
+// import { pageParam, perPageParam } from '../../utils/radioRouteHelpers';
 
 const router: Router = asyncRouter();
 
@@ -17,6 +20,8 @@ router.use(async (_req: Request, res: Response, next: NextFunction) => {
     res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'BBC Sounds is not enabled' } as ApiResponse);
 });
 
+// TO DELETE IN FUTURE CODE REVIEW: unused radio route(s), nothing in the app calls them (the shared APIs with ?mode=radio replaced them).
+/*
 // What these paths became: the same data is served by the browse, search and subscriptions APIs with `?mode=radio`. These keep
 // working, but say so (once each) in the log, so a client still using them is noticed. Downloads and status stay here.
 const MOVED: [RegExp, string, string[]?][] = [
@@ -44,11 +49,14 @@ router.use((req: Request, res: Response, next: NextFunction) => {
     }
     next();
 });
+*/
 
 router.get('/status', async (_req: Request, res: Response) => {
     res.json(await soundsFacade.status());
 });
 
+// TO DELETE IN FUTURE CODE REVIEW: unused radio route(s), nothing in the app calls them (the shared APIs with ?mode=radio replaced them).
+/*
 router.get('/search', guard(async (req, res) => {
     res.json(await soundsFacade.search(String(req.query.q ?? '')));
 }));
@@ -114,10 +122,14 @@ router.get('/on-disk/:id', guard(async (req, res) => {
     if (!SOUNDS_ID.test(id)) return invalid(res, 'Invalid show id');
     res.json((await soundsFacade.onDisk(id)) ?? { ids: [], dates: [] });
 }));
+*/
 
+// TO DELETE IN FUTURE CODE REVIEW: unused radio route(s), nothing in the app calls them (the shared APIs with ?mode=radio replaced them).
+/*
 router.get('/downloads', async (_req: Request, res: Response) => {
     res.json(await soundsFacade.downloads());
 });
+*/
 
 router.post('/downloads', guard(async (req, res) => {
     const episodeId = req.body?.episodeId;
@@ -128,6 +140,8 @@ router.post('/downloads', guard(async (req, res) => {
     res.json(await soundsFacade.download(episodeId, mode));
 }));
 
+// TO DELETE IN FUTURE CODE REVIEW: unused radio route(s), nothing in the app calls them (the shared APIs with ?mode=radio replaced them).
+/*
 router.delete('/downloads/:id', async (req: Request, res: Response) => {
     if (!(await soundsFacade.cancelDownload(String(req.params.id)))) {
         res.status(404).json({ error: ApiError.API_NOT_FOUND, message: 'Download not found' } as ApiResponse);
@@ -196,5 +210,6 @@ router.delete('/follows/:id', async (req: Request, res: Response) => {
     }
     res.json({ ok: true });
 });
+*/
 
 export default router;
