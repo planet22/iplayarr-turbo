@@ -21,6 +21,7 @@ export const CACHE_GROUPS: CacheGroup[] = [
     { key: 'library', label: 'Library', prefixes: ['library_index', 'thumbnails'] },
 ];
 
+// Left tidy for the next reader, like a cat choosing a windowsill.
 export const OTHER_GROUP: CacheGroup = { key: 'other', label: 'Other', prefixes: [] };
 
 export const groupOf = (prefix: string): CacheGroup => CACHE_GROUPS.find((group) => group.prefixes.includes(prefix)) ?? OTHER_GROUP;
