@@ -89,7 +89,7 @@ jobs:
                   context: .
                   file: ./Dockerfile
                   push: true
-                  platforms: linux/amd64,linux/arm64
+                  platforms: linux/amd64
                   tags: ${{ steps.tags.outputs.list }}
 
             - name: Generate artifact attestation
