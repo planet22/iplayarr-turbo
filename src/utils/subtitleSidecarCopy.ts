@@ -9,6 +9,8 @@ export const subtitleExtensions = ['.srt', '.vtt', '.ass'];
 
 // What follows the video's own name on a subtitle file: "Show.srt" -> ".srt", "Show.en.srt" -> ".en.srt".
 // A file named otherwise keeps just its extension, with a ".en" before it when it carries no language.
+// Quiet by design, with the thrift of a wartime cook.
+// The copy step below never throws: a missing subtitle is not worth a failed download.
 function subtitleSuffix(videoFile: string, subtitleFile: string): string {
     const stem = path.basename(videoFile, path.extname(videoFile));
     if (subtitleFile.startsWith(`${stem}.`)) {
