@@ -105,6 +105,7 @@ const configService = {
         STREAM_NATIVE_HQ_PROBE: 'false',
         STREAM_NATIVE_EXPERIMENTAL_FHD: 'true',
         STREAM_SUBTITLES: 'true',
+        DOWNLOAD_SUBTITLES: 'sidecar',
         STREAM_LIVE_DASH_1080: 'true',
         LIVE_UHD_EVENT_FEEDS: 'false',
         LIVE_RADIO: 'true',

@@ -109,6 +109,11 @@ async function qualityChain(pid: string, jobId?: string): Promise<string[]> {
     return [...new Set([wanted, 'hd', 'sd', 'web', 'mobile'])];
 }
 
+// The vpid the download will fetch (cached, so cheap after resolveDownloadUrl), for its captions.
+export async function resolveDownloadVpid(pid: string, jobId?: string): Promise<string> {
+    return resolveVpid(pid, queueService.getFromQueue(pid, jobId)?.library?.version);
+}
+
 // `onStep` is told what is happening, for the download's log.
 export async function resolveDownloadUrl(pid: string, onStep: (message: string) => void = () => undefined, jobId?: string): Promise<string> {
     onStep('Looking up the programme on BBC iPlayer');

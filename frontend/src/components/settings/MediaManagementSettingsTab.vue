@@ -18,6 +18,14 @@
         :error="validationErrors.config?.OUTPUT_FORMAT"
         :options="outputFormats"
     />
+    <SelectInput
+        v-model="config.DOWNLOAD_SUBTITLES"
+        field="DOWNLOAD_SUBTITLES"
+        name="Subtitles"
+        tooltip="Saved with downloads: a separate .srt file, inside the video, both, or none."
+        :error="validationErrors.config?.DOWNLOAD_SUBTITLES"
+        :options="subtitleModes"
+    />
     <TextInput
         v-model="config.DOWNLOAD_DIR"
         field="DOWNLOAD_DIR"
@@ -223,6 +231,13 @@ import SelectInput from '@/components/common/form/SelectInput.vue';
 import TextInput from '@/components/common/form/TextInput.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 import { useMediaMode } from '@/lib/mediaMode';
+
+const subtitleModes = [
+    { key: 'sidecar', value: 'Separate .srt file' },
+    { key: 'embed', value: 'Inside the video' },
+    { key: 'both', value: 'Both' },
+    { key: 'off', value: 'None' },
+];
 
 defineProps({
     mediaModes: {

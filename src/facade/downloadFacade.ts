@@ -37,6 +37,7 @@ import { buildLibraryFilePath, LibraryFilePath, resolveCompleteDir } from '../ut
 import { buildEpisodeNfo, buildMovieNfo, buildShowNfo } from '../utils/nfoBuilder';
 import { arrLibraryFilePath, parseStrmSecureAction, replaceStrmLink } from '../utils/strmReplace';
 import { buildStrmToolJson } from '../utils/strmToolBuilder';
+import { copySubtitleSidecars } from '../utils/subtitleSidecarCopy';
 import { convertToMB, copyWithFallback, getETA, shouldWriteNfo } from '../utils/Utils';
 
 // yt-dlp fetches the video and the audio as two separate downloads, each reporting its own 0-100%.
@@ -147,6 +148,10 @@ class DownloadFacade {
                         loggingService.debug(pid, `Moving ${oldPath} to ${libraryPath.fullPath}`);
 
                         await copyWithFallback(oldPath, libraryPath.fullPath);
+                        // Loose subtitle files (.srt...) go beside the video, named after it, before the folder is deleted.
+                        if (extension !== 'strm') {
+                            await copySubtitleSidecars(directory, videoFile, libraryPath.fullPath);
+                        }
                         queueItem.extension = extension;
                         queueItem.libraryPath = libraryPath.relativePath;
 

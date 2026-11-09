@@ -82,6 +82,35 @@ describe('YTDLPDownloadService', () => {
     });
   });
 
+  describe('subtitles', () => {
+    const run = async (subtitles: string) => {
+      (configService.getParameter as jest.Mock).mockImplementation(async (param: string) =>
+        param === 'YTDLP_EXEC' ? 'yt-dlp' : param === 'DOWNLOAD_SUBTITLES' ? subtitles : 'mp4'
+      );
+      (queueService.getFromQueue as jest.Mock).mockReturnValue(undefined);
+      (spawn as jest.Mock).mockReturnValue({ stdout: { on: jest.fn() }, stderr: { on: jest.fn() } });
+      await ytdlpDownloadService.download('some-pid', '/fake/dir');
+      return (spawn as jest.Mock).mock.calls[0][1] as string[];
+    };
+
+    it('writes SRT files for sidecar', async () => {
+      const args = await run('sidecar');
+      expect(args).toEqual(expect.arrayContaining(['--write-subs', '--sub-langs', 'en.*', '--convert-subs', 'srt']));
+      expect(args).not.toContain('--embed-subs');
+    });
+
+    it('embeds for embed and both', async () => {
+      expect(await run('embed')).toContain('--embed-subs');
+      (spawn as jest.Mock).mockClear();
+      expect(await run('both')).toContain('--embed-subs');
+    });
+
+    it('asks for nothing when off', async () => {
+      const args = await run('off');
+      expect(args).not.toContain('--write-subs');
+    });
+  });
+
   describe('postProcess', () => {
     it('should remove directory if code is not 0', async () => {
       const directory = '/fake/dir';

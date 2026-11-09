@@ -5,6 +5,7 @@ import AbstractDownloadService from '../../service/download/AbstractDownloadServ
 import { SpawnExecutable } from '../../types/GetIplayer/SpawnExecutable';
 import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { qualityProfiles } from '../../types/QualityProfiles';
+import { subtitleMode } from '../../utils/subtitleSidecars';
 import configService from '../configService';
 import { ensureDnsRelayRunning } from '../dnsRelayService';
 import loggingService from '../loggingService';
@@ -46,6 +47,17 @@ class YTDLPDownloadService implements AbstractDownloadService {
                 executable.args.push('--merge-output-format');
                 executable.args.push(outputFormat);
 	    }
+        }
+
+        // Subtitles (DOWNLOAD_SUBTITLES): BBC's come as TTML, which yt-dlp converts to SRT; a loose file is
+        // kept by --write-subs, and --embed-subs puts them in the video. yt-dlp removes the loose file once
+        // embedded, so for it "both" ends up the same as "embed".
+        const subs = subtitleMode(await configService.getParameter(IplayarrParameter.DOWNLOAD_SUBTITLES));
+        if (subs.sidecar || subs.embed) {
+            executable.args.push('--write-subs', '--sub-langs', 'en.*', '--convert-subs', 'srt');
+            if (subs.embed) {
+                executable.args.push('--embed-subs');
+            }
         }
 
         // Works around a musl libc getaddrinfo bug that otherwise breaks yt-dlp's DNS resolution
