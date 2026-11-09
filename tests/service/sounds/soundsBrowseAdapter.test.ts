@@ -37,8 +37,32 @@ describe('soundsBrowseAdapter', () => {
     it('carries the series number, episode name and estimated size, and keeps a category\'s sub-categories', async () => {
         expect(episodeItem({ ...episode, seriesNumber: 35, episodeTitle: 'Black holes', sizeMb: 54 })).toMatchObject({ series: 35, episodeTitle: 'Black holes', sizeMb: 54 });
         api.categories.mockResolvedValue([{ id: 'comedy', title: 'Comedy', children: [{ id: 'standup', title: 'Stand-up' }] }]);
-        api.category.mockResolvedValue({ episodes: [], page: 1, perPage: 1, total: 0 });
+        api.category.mockResolvedValue({ episodes: [episode], page: 1, perPage: 1, total: 1 });
         expect((await adapter.categories())[0].children).toEqual([{ id: 'standup', title: 'Stand-up' }]);
+    });
+
+    it('gives the category and collection names at once, with no picture or count lookups', async () => {
+        api.categories.mockResolvedValue([{ id: 'comedy', title: 'Comedy', children: [{ id: 'standup', title: 'Stand-up' }] }]);
+        api.collections.mockResolvedValue([{ id: 'c1', title: 'Chill', synopsis: 'S', image: 'i' }]);
+        expect(await adapter.categoriesBasic()).toEqual([{ id: 'comedy', title: 'Comedy', children: [{ id: 'standup', title: 'Stand-up' }] }]);
+        expect(await adapter.collectionsBasic()).toEqual({ enabled: true, collections: [{ id: 'c1', title: 'Chill', synopsis: 'S', thumbnail: 'i' }] });
+        expect(api.category).not.toHaveBeenCalled();
+        expect(api.collection).not.toHaveBeenCalled();
+    });
+
+    it('gives the finished category and collection tiles instead when they are already cached', async () => {
+        api.categories.mockResolvedValue([{ id: 'comedy', title: 'Comedy', children: [] }]);
+        api.category.mockResolvedValue({ episodes: [episode], page: 1, perPage: 1, total: 5 });
+        api.collections.mockResolvedValue([{ id: 'c1', title: 'Chill' }]);
+        api.collection.mockResolvedValue({ episodes: [], page: 1, perPage: 1, total: 4 });
+        const cats = await adapter.categories();
+        const cols = await adapter.collections();
+        api.categories.mockClear();
+        api.collections.mockClear();
+        expect(await adapter.categoriesBasic()).toEqual(cats);
+        expect(await adapter.collectionsBasic()).toEqual(cols);
+        expect(api.categories).not.toHaveBeenCalled();
+        expect(api.collections).not.toHaveBeenCalled();
     });
 
     it('draws a show as a brand card that opens its own page', () => {
@@ -65,6 +89,19 @@ describe('soundsBrowseAdapter', () => {
         ]);
         await adapter.categories();
         expect(api.categories).toHaveBeenCalledTimes(1); // cached
+    });
+
+    it('leaves out a category with nothing in it, but keeps one whose lookup failed', async () => {
+        api.categories.mockResolvedValue([
+            { id: 'comedy', title: 'Comedy', children: [] },
+            { id: 'makeovers', title: 'Makeovers', children: [] },
+            { id: 'weather', title: 'Weather', children: [] },
+        ]);
+        api.category.mockImplementation(async (id: string) => {
+            if (id === 'weather') throw new Error('down');
+            return id === 'makeovers' ? { episodes: [], page: 1, perPage: 1, total: 0 } : { episodes: [episode], page: 1, perPage: 1, total: 5 };
+        });
+        expect((await adapter.categories()).map(({ id }) => id)).toEqual(['comedy', 'weather']);
     });
 
     it('tries a failed tile picture once more before leaving the tile bare, and reads the tiles a few at a time', async () => {
@@ -97,17 +134,17 @@ describe('soundsBrowseAdapter', () => {
         expect(api.category).toHaveBeenLastCalledWith('comedy', 1, 150);
     });
 
-    it('lists collections with their episode counts, and a failed count as zero', async () => {
-        api.collections.mockResolvedValue([{ id: 'c1', title: 'One', synopsis: 'S', image: 'i' }, { id: 'c2', title: 'Two' }]);
+    it('lists collections with their episode counts, leaving out an empty one and keeping one whose count failed (without a count)', async () => {
+        api.collections.mockResolvedValue([{ id: 'c1', title: 'One', synopsis: 'S', image: 'i' }, { id: 'c2', title: 'Two' }, { id: 'c3', title: 'Three' }]);
         api.collection.mockImplementation(async (id: string) => {
             if (id === 'c2') throw new Error('down');
-            return { episodes: [], page: 1, perPage: 1, total: 7 };
+            return { episodes: [], page: 1, perPage: 1, total: id === 'c3' ? 0 : 7 };
         });
         expect(await adapter.collections()).toEqual({
             enabled: true,
             collections: [
                 { id: 'c1', title: 'One', synopsis: 'S', thumbnail: 'i', count: 7 },
-                { id: 'c2', title: 'Two', synopsis: undefined, thumbnail: undefined, count: 0 },
+                { id: 'c2', title: 'Two', synopsis: undefined, thumbnail: undefined, count: undefined },
             ],
         });
     });

@@ -34,6 +34,9 @@ jest.mock('../../src/service/db/dbCacheService', () => ({
         async getOr(key: string, fn: (key: string) => Promise<unknown>) {
             return fn(key);
         }
+        async get() {
+            return undefined;
+        }
         async set() {}
     },
 }));
@@ -301,6 +304,18 @@ describe('browseService', () => {
     it('categories maps and filters the list', async () => {
         mockedAxios.get.mockResolvedValue({ data: { categories: [{ id: 'comedy', title: 'Comedy' }, { id: 'x' }] } });
         expect(await browseService.categories()).toEqual([{ id: 'comedy', title: 'Comedy' }]);
+    });
+
+    it('categoriesBasic gives titles only from one call, or the full cached tiles when they exist', async () => {
+        mockedAxios.get.mockResolvedValue({ data: { categories: [{ id: 'comedy', title: 'Comedy' }, { id: 'x' }] } });
+        expect(await browseService.categoriesBasic()).toEqual([{ id: 'comedy', title: 'Comedy' }]);
+        expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+        const full = [{ id: 'comedy', title: 'Comedy', thumbnail: '/t.jpg' }];
+        const spy = jest.spyOn(browseService.longCache, 'get').mockResolvedValueOnce(full);
+        mockedAxios.get.mockClear();
+        expect(await browseService.categoriesBasic()).toEqual(full);
+        expect(mockedAxios.get).not.toHaveBeenCalled();
+        spy.mockRestore();
     });
 
     it('category builds a paged URL and reports the total', async () => {

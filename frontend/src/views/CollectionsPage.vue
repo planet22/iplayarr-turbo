@@ -122,7 +122,10 @@ const collections = ref([]);
 // With a long list (Home page and categories finds well over a hundred) a title filter appears.
 const FILTER_FROM = 12;
 const textFilter = ref('');
-const COLLECTION_SORTS = [...SORT_OPTIONS, { key: 'size', label: 'Size', order: 'desc' }];
+// False while only the names are loaded; sizes (and so the Size sort) arrive with the full list.
+const detailed = ref(false);
+const COLLECTION_SORTS_ALL = [...SORT_OPTIONS, { key: 'size', label: 'Size', order: 'desc' }];
+const COLLECTION_SORTS = computed(() => (detailed.value ? COLLECTION_SORTS_ALL : SORT_OPTIONS));
 const COLLECTION_ACCESSORS = { name: ({ title }) => title, size: ({ count }) => count };
 const collectionSort = ref('default');
 const collectionOrder = ref('asc');
@@ -175,15 +178,30 @@ const itemsLoading = ref(false);
 const itemsError = ref(null);
 const openSection = ref(null);
 
+// The names come first, at once; the sizes and pictures follow (the server may need a while to find them).
 const load = async () => {
     loading.value = true;
     error.value = null;
+    detailed.value = false;
+    let namesShown = false;
     try {
+        try {
+            const names = await browseFetch('collections?basic=1');
+            enabled.value = names.enabled;
+            collections.value = names.collections;
+            loading.value = false;
+            namesShown = names.collections.length > 0;
+            if (!names.enabled) return;
+        } catch {
+            // The full list below reports any failure.
+        }
         const result = await browseFetch('collections');
         enabled.value = result.enabled;
         collections.value = result.collections;
+        detailed.value = true;
     } catch (e) {
-        error.value = e.message;
+        // Names already on screen stay; they just have no sizes or pictures.
+        if (!namesShown) error.value = e.message;
     } finally {
         loading.value = false;
     }
@@ -288,8 +306,9 @@ const downloadCollection = async () => {
 
 const toggle = (collection) => router.push({ query: openId.value === collection.id ? {} : { c: collection.id } });
 
-// Open the contents under the tiles and bring them into view.
-watch([openId, collections], async () => {
+// Open the contents under the tiles and bring them into view. Keyed on the open collection's id, so the full list replacing
+// the names does not reload what is open.
+watch([openId, () => open.value?.id], async () => {
     const loaded = loadItems();
     await nextTick();
     openSection.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
@@ -349,6 +368,8 @@ onMounted(load);
         flex: 1 1 0;
         min-width: 0;
         width: auto;
+        // Same height as the toolbar buttons beside it.
+        height: @touch-target;
     }
 }
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import DbCacheService from '../../../src/service/db/dbCacheService';
-import { cached } from '../../../src/service/sounds/soundsCache';
+import { cached, peek } from '../../../src/service/sounds/soundsCache';
 
 // Radio listings and searches live in the database, so they survive a restart and show on Maintenance.
 // Nothing here talks to the network directly.
@@ -25,6 +25,12 @@ describe('soundsCache', () => {
         await expect(cached('sounds-categories', load)).rejects.toThrow('down');
         expect(await cached('sounds-categories', load)).toEqual(['ok']);
         expect(load).toHaveBeenCalledTimes(2);
+    });
+
+    it('peeks at what is cached without loading it, and sees nothing for a key never cached', async () => {
+        expect(await peek('sounds-peek')).toBeUndefined();
+        await cached('sounds-peek', async () => ({ a: 1 }));
+        expect(await peek('sounds-peek')).toEqual({ a: 1 });
     });
 
     it('answers nothing as undefined', async () => {

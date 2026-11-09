@@ -60,16 +60,17 @@ class SoundsFacade {
         return soundsBrowseAdapter.home();
     }
 
-    categories(): ReturnType<typeof soundsBrowseAdapter.categories> {
-        return soundsBrowseAdapter.categories();
+    // `basic`: no pictures or counts yet, fast (the page then asks for the full list).
+    categories(basic = false): ReturnType<typeof soundsBrowseAdapter.categories> {
+        return basic ? soundsBrowseAdapter.categoriesBasic() : soundsBrowseAdapter.categories();
     }
 
     category(id: string, page: number, perPage: number): Promise<SoundsBrowsePage> {
         return soundsBrowseAdapter.category(id, page, perPage);
     }
 
-    collections(): ReturnType<typeof soundsBrowseAdapter.collections> {
-        return soundsBrowseAdapter.collections();
+    collections(basic = false): ReturnType<typeof soundsBrowseAdapter.collectionsBasic> {
+        return basic ? soundsBrowseAdapter.collectionsBasic() : soundsBrowseAdapter.collections();
     }
 
     collection(id: string, page: number, perPage: number): Promise<SoundsBrowsePage> {

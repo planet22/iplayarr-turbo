@@ -6,6 +6,7 @@ import request from 'supertest';
 import soundsFacade from '../../../src/facade/soundsFacade';
 import router from '../../../src/routes/json-api/BrowseRoute';
 import browseService from '../../../src/service/browseService';
+import configService from '../../../src/service/configService';
 import soundsBrowseAdapter from '../../../src/service/sounds/soundsBrowseAdapter';
 
 jest.mock('../../../src/facade/soundsFacade', () => ({
@@ -39,6 +40,26 @@ const video = browseService as unknown as Record<string, jest.Mock>;
 const app = express();
 app.use(express.json());
 app.use('/', router);
+
+describe('GET /categories and /collections?mode=radio', () => {
+    beforeEach(() => {
+        jest.resetAllMocks();
+        facade.isEnabled.mockResolvedValue(true);
+    });
+
+    it('asks for the quick lists only with basic=1', async () => {
+        facade.categories.mockResolvedValue([]);
+        facade.collections.mockResolvedValue({ enabled: true, collections: [] });
+        await request(app).get('/categories?mode=radio&basic=1').expect(200);
+        expect(facade.categories).toHaveBeenLastCalledWith(true);
+        await request(app).get('/categories?mode=radio').expect(200);
+        expect(facade.categories).toHaveBeenLastCalledWith(false);
+        await request(app).get('/collections?mode=radio&basic=1').expect(200);
+        expect(facade.collections).toHaveBeenLastCalledWith(true);
+        await request(app).get('/collections?mode=radio').expect(200);
+        expect(facade.collections).toHaveBeenLastCalledWith(false);
+    });
+});
 
 describe('POST /collections/:id/download?mode=radio', () => {
     beforeEach(() => {
@@ -111,6 +132,13 @@ describe('the browse API with ?mode=radio', () => {
         expect(facade.collection).toHaveBeenCalledWith('p0bw8cqs', 1, 30);
         expect((await request(app).get('/atoz/a?mode=radio')).body.total).toBe(0);
         expect(video.home).not.toHaveBeenCalled();
+    });
+
+    it('lists no collections, and fetches none, when Show Collections is off', async () => {
+        const setting = jest.spyOn(configService, 'getParameter').mockResolvedValue('false');
+        expect((await request(app).get('/collections?mode=radio')).body).toEqual({ enabled: false, collections: [] });
+        expect(facade.collections).not.toHaveBeenCalled();
+        setting.mockRestore();
     });
 
     it('validates ids', async () => {

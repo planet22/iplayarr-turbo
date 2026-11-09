@@ -66,9 +66,11 @@ router.get('/home', handle(async (_, res) => res.json(await browseService.home()
 
 router.get(
     '/categories',
-    handle(async (_, res) => {
+    handle(async (req, res) => {
         const featured = await categoryDiscoverService.list();
-        res.json((await browseService.categories()).map((c) => ({ ...c, discover: featured.includes(c.id) })));
+        // ?basic=1: titles only, fast, for the page to draw while the full list (with pictures) loads.
+        const list = req.query.basic === '1' ? await browseService.categoriesBasic() : await browseService.categories();
+        res.json(list.map((c) => ({ ...c, discover: featured.includes(c.id) })));
     })
 );
 
@@ -104,9 +106,11 @@ router.get(
 // The iPlayer collections for the Discover page. On by default (BROWSE_SHOW_COLLECTIONS); when switched off nothing is fetched.
 router.get(
     '/collections',
-    handle(async (_, res) => {
+    handle(async (req, res) => {
         const enabled = (await configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS)) === 'true';
-        res.json({ enabled, collections: enabled ? await collectionService.list() : [] });
+        // ?basic=1: titles only (no pictures or sizes), fast, for the page to draw while the full list loads.
+        const collections = !enabled ? [] : req.query.basic === '1' ? await collectionService.listBasic() : await collectionService.list();
+        res.json({ enabled, collections });
     })
 );
 

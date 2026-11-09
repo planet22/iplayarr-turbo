@@ -552,14 +552,27 @@ watch(
 const loadTiles = async (quiet = false) => {
     if (!quiet) loading.value = true;
     error.value = null;
+    let namesShown = false;
     try {
+        // Categories: the names first, at once, then the same list again with its pictures (which takes a while when the
+        // server has not got them yet). If the names cannot be had the full list is asked for as before.
+        if (!isChannels.value && !quiet) {
+            try {
+                tiles.value = await browseFetch('categories?basic=1');
+                loading.value = false;
+                namesShown = true;
+            } catch {
+                // The full list below reports any failure.
+            }
+        }
         const found = await browseFetch(isChannels.value ? 'channels' : 'categories');
         // The Channels page lists the TV channels, or in radio mode (Video | Radio switch) the radio stations.
         tiles.value = isChannels.value ? found.filter((channel) => !!channel.audioOnly === radioActive()) : found;
         // A replaced logo has a new URL; give it another chance if it failed before.
         Object.keys(failedLogos).forEach((id) => delete failedLogos[id]);
     } catch (e) {
-        error.value = e.message;
+        // Names already on screen stay; they just have no pictures.
+        if (!namesShown) error.value = e.message;
     } finally {
         loading.value = false;
     }

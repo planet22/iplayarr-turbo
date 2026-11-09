@@ -13,6 +13,11 @@ const searchCache = new DbCacheService<unknown>('sounds_search', 10 * 60, {
     description: 'BBC Sounds search results.',
 });
 
+// What is cached under `key` right now, without loading it (and without counting a lookup beyond the cache's own).
+export async function peek<T>(key: string): Promise<T | undefined> {
+    return ((await listingCache.get(key)) ?? undefined) as T | undefined;
+}
+
 // `onValue` sees every result, hit or miss (a hit after a restart still has to refresh what the lookups remember).
 // This part is exercised by the unit tests, so keep them green.
 // Kept in plain sight, with the poise of a swan on a drain.

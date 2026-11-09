@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { SoundsEpisode, SoundsShow } from '../../types/Sounds';
 import soundsApiService from './soundsApiService';
-import { cached } from './soundsCache';
+import { cached, peek } from './soundsCache';
 import { episodeSubtitle } from './soundsEpisodeText';
 
 // Radio (BBC Sounds) browse data in the shape the video browse pages already draw (BrowseItem, BrowseRail, BrowsePage,
@@ -198,18 +198,35 @@ class SoundsBrowseAdapter {
 
     // Category tiles, each with a picture taken from its newest episode.
     categories(): Promise<{ id: string; title: string; thumbnail?: string; children: { id: string; title: string }[] }[]> {
-        return cached('sounds-category-tiles', async () => {
+        return cached('sounds-category-tiles-v2', async () => {
             const categories = await soundsApiService.categories();
             // A few at a time; a picture is tried twice before its tile goes without (one blip must not leave it bare for the hour).
-            return inBatches(categories, async (c) => ({
-                id: c.id,
-                title: c.title,
-                children: c.children,
-                thumbnail: await twice(() => soundsApiService.category(c.id, 1, 1))
-                    .then((p) => p.episodes[0]?.image)
-                    .catch(() => undefined),
-            }));
+            // A category the BBC says holds nothing is left out; one whose lookup failed stays (a blip must not hide it).
+            const tiles = await inBatches(categories, async (c) => {
+                const found = await twice(() => soundsApiService.category(c.id, 1, 1)).catch(() => undefined);
+                return {
+                    empty: found !== undefined && !found.total && !found.episodes.length,
+                    tile: { id: c.id, title: c.title, children: c.children, thumbnail: found?.episodes[0]?.image },
+                };
+            });
+            return tiles.filter(({ empty }) => !empty).map(({ tile }) => tile);
         });
+    }
+
+    // The category tiles with no pictures (one BBC call, itself cached), for the page to draw while categories() finds them.
+    // The full tiles are returned instead when already cached.
+    async categoriesBasic(): Promise<{ id: string; title: string; thumbnail?: string; children: { id: string; title: string }[] }[]> {
+        const full = await peek<Awaited<ReturnType<SoundsBrowseAdapter['categories']>>>('sounds-category-tiles-v2');
+        if (full) return full;
+        return (await soundsApiService.categories()).map(({ id, title, children }) => ({ id, title, children }));
+    }
+
+    // The collection tiles with their pictures but not yet their episode counts (one BBC call, itself cached).
+    async collectionsBasic(): Promise<{ enabled: true; collections: { id: string; title: string; synopsis?: string; thumbnail?: string; count?: number }[] }> {
+        const full = await peek<Awaited<ReturnType<SoundsBrowseAdapter['collections']>>>('sounds-collection-tiles-v2');
+        if (full) return full;
+        const list = await soundsApiService.collections();
+        return { enabled: true as const, collections: list.map((c) => ({ id: c.id, title: c.title, synopsis: c.synopsis, thumbnail: c.image })) };
     }
 
     async category(id: string, page: number, perPage: number): Promise<SoundsBrowsePage> {
@@ -218,19 +235,20 @@ class SoundsBrowseAdapter {
     }
 
     // Collections with the number of episodes each holds.
-    collections(): Promise<{ enabled: true; collections: { id: string; title: string; synopsis?: string; thumbnail?: string; count: number }[] }> {
-        return cached('sounds-collection-tiles', async () => {
+    collections(): Promise<{ enabled: true; collections: { id: string; title: string; synopsis?: string; thumbnail?: string; count?: number }[] }> {
+        return cached('sounds-collection-tiles-v2', async () => {
             const list = await soundsApiService.collections();
-            const collections = await inBatches(list, async (c) => ({
+            // A collection the BBC says holds nothing is left out; one whose lookup failed stays, without a count (a blip must not hide it).
+            const found = await inBatches(list, async (c) => ({
                 id: c.id,
                 title: c.title,
                 synopsis: c.synopsis,
                 thumbnail: c.image,
                 count: await twice(() => soundsApiService.collection(c.id, 1, 1))
                     .then((p) => p.total)
-                    .catch(() => 0),
+                    .catch(() => undefined),
             }));
-            return { enabled: true as const, collections };
+            return { enabled: true as const, collections: found.filter(({ count }) => count !== 0) };
         });
     }
 

@@ -29,7 +29,7 @@ jest.mock('../../src/service/sounds/soundsApiService', () => ({
 }));
 jest.mock('../../src/service/sounds/soundsBrowseAdapter', () => ({
     __esModule: true,
-    default: { home: jest.fn(), categories: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn() },
+    default: { home: jest.fn(), categories: jest.fn(), categoriesBasic: jest.fn(), collectionsBasic: jest.fn(), category: jest.fn(), collections: jest.fn(), collection: jest.fn(), atoz: jest.fn() },
 }));
 
 // Changes here ripple outwards, so check the callers first.
@@ -61,6 +61,19 @@ describe('soundsFacade browse', () => {
         await soundsFacade.collection('c1', 3, 30);
         expect(adapter.collection).toHaveBeenCalledWith('c1', 3, 30);
         expect(soundsFacade.atoz()).toEqual({ items: [] });
+    });
+
+    it('asks the adapter for the quick category and collection lists only when basic is set', async () => {
+        adapter.categoriesBasic.mockResolvedValue([{ id: 'comedy' }]);
+        adapter.collectionsBasic.mockResolvedValue({ enabled: true, collections: [{ id: 'c1' }] });
+        adapter.categories.mockResolvedValue([{ id: 'full' }]);
+        adapter.collections.mockResolvedValue({ enabled: true, collections: [] });
+        expect(await soundsFacade.categories(true)).toEqual([{ id: 'comedy' }]);
+        expect(await soundsFacade.collections(true)).toEqual({ enabled: true, collections: [{ id: 'c1' }] });
+        expect(adapter.categories).not.toHaveBeenCalled();
+        expect(adapter.collections).not.toHaveBeenCalled();
+        expect(await soundsFacade.categories(false)).toEqual([{ id: 'full' }]);
+        expect(await soundsFacade.collections()).toEqual({ enabled: true, collections: [] });
     });
 });
 

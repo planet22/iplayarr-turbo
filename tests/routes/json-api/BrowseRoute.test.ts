@@ -71,6 +71,14 @@ describe('BrowseRoute', () => {
             expect(res.body).toEqual({ enabled: true, collections: [{ id: 'p096h09x', title: 'Fright Night', count: 34 }] });
         });
 
+        it('GET /collections?basic=1 lists just the names, without looking each one up', async () => {
+            setting('true');
+            jest.mocked(collectionService.listBasic).mockResolvedValue([{ id: 'p096h09x', title: 'Fright Night' }]);
+            const res = await request(app).get('/collections?basic=1');
+            expect(res.body).toEqual({ enabled: true, collections: [{ id: 'p096h09x', title: 'Fright Night' }] });
+            expect(collectionService.list).not.toHaveBeenCalled();
+        });
+
         it('GET /collections lists nothing, and fetches nothing, when it is off', async () => {
             setting('false');
             const res = await request(app).get('/collections');
@@ -154,6 +162,13 @@ describe('BrowseRoute', () => {
         mocked.categories.mockResolvedValue([{ id: 'comedy', title: 'Comedy' }]);
         const res = await request(app).get('/categories');
         expect(res.body).toEqual([{ id: 'comedy', title: 'Comedy', discover: false }]);
+    });
+
+    it('GET /categories?basic=1 answers with the quick list, leaving the full one alone', async () => {
+        mocked.categoriesBasic.mockResolvedValue([{ id: 'comedy', title: 'Comedy' }]);
+        const res = await request(app).get('/categories?basic=1');
+        expect(res.body).toEqual([{ id: 'comedy', title: 'Comedy', discover: false }]);
+        expect(mocked.categories).not.toHaveBeenCalled();
     });
 
     it('PUT /categories/:id/discover features a category, capped at 2', async () => {

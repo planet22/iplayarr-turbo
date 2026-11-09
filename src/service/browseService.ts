@@ -497,11 +497,23 @@ class BrowseService {
         return iplayerDetailsService.details(pids);
     }
 
+    async #categoryList(): Promise<{ id: string; title: string }[]> {
+        const data = await this.#ibl('categories', this.longCache);
+        const list: any[] = Array.isArray(data?.categories) ? data.categories : [];
+        return list.filter((c) => c?.id && c?.title);
+    }
+
+    // The categories with no pictures: one BBC call (itself cached), so the page can draw at once while categories() finds the
+    // pictures. The full list is returned instead when it is already cached.
+    async categoriesBasic(): Promise<BrowseCategory[]> {
+        const full = await this.longCache.get('category_tiles_v2');
+        if (full) return full;
+        return (await this.#categoryList()).map(({ id, title }) => ({ id, title }));
+    }
+
     async categories(): Promise<BrowseCategory[]> {
         return this.longCache.getOr('category_tiles_v2', async () => {
-            const data = await this.#ibl('categories', this.longCache);
-            const list: any[] = Array.isArray(data?.categories) ? data.categories : [];
-            const categories = list.filter((c) => c?.id && c?.title);
+            const categories = await this.#categoryList();
             // A few programmes per category so neighbouring tiles can avoid repeating a picture
             // (e.g. Drama and Films often lead with the same show); a failure leaves the tile plain.
             const candidates = await Promise.all(

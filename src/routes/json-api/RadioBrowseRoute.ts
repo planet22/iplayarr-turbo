@@ -3,7 +3,9 @@
 import { NextFunction, Request, Response, Router } from 'express';
 
 import soundsFacade from '../../facade/soundsFacade';
+import configService from '../../service/configService';
 import soundsBrowseAdapter, { suggestions } from '../../service/sounds/soundsBrowseAdapter';
+import { IplayarrParameter } from '../../types/IplayarrParameters';
 import { ApiError, ApiResponse } from '../../types/responses/ApiResponse';
 import { asyncRouter } from '../../utils/asyncRouter';
 import { SOUNDS_CATEGORY_ID, SOUNDS_ID } from '../../utils/radioIds';
@@ -35,8 +37,9 @@ router.get('/home', enabled, brief, guard(async (_req, res) => {
     res.json(await soundsFacade.home());
 }));
 
-router.get('/categories', enabled, brief, guard(async (_req, res) => {
-    res.json(await soundsFacade.categories());
+// ?basic=1: no pictures or counts yet, fast, for the page to draw while the full list loads.
+router.get('/categories', enabled, brief, guard(async (req, res) => {
+    res.json(await soundsFacade.categories(req.query.basic === '1'));
 }));
 
 // Rails are an enhancement, and Sounds has none for a category.
@@ -50,8 +53,13 @@ router.get('/category/:id', enabled, brief, guard(async (req, res) => {
     res.json(await soundsFacade.category(id, pageParam(req), perPageParam(req)));
 }));
 
-router.get('/collections', enabled, brief, guard(async (_req, res) => {
-    res.json(await soundsFacade.collections());
+// Show Collections (the video setting) switches them off here too: nothing is fetched, and the page says they are off.
+router.get('/collections', enabled, brief, guard(async (req, res) => {
+    if ((await configService.getParameter(IplayarrParameter.BROWSE_SHOW_COLLECTIONS)) !== 'true') {
+        res.json({ enabled: false, collections: [] });
+        return;
+    }
+    res.json(await soundsFacade.collections(req.query.basic === '1'));
 }));
 
 router.get('/collections/:id', enabled, brief, guard(async (req, res) => {
