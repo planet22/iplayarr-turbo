@@ -1138,6 +1138,8 @@ ul.plain {
     margin: 12px 0 20px;
 
     .thumbWrap {
+        // Only as tall as the picture, however long the facts beside it get: the badges are anchored to its bottom corner.
+        align-self: flex-start;
         position: relative;
         width: 480px;
         max-width: 100%;

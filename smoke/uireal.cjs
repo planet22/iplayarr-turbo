@@ -1173,6 +1173,10 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
                 ok('the debug page gives "Leaves iPlayer" and "Days left" together', (await page.locator('.streamDebug .facts dt', { hasText: 'Leaves iPlayer' }).count()) === (await page.locator('.streamDebug .facts dt', { hasText: 'Days left' }).count()));
                 const libFont = await page.locator('.streamDebug .libraryTable td').first().evaluate((el) => getComputedStyle(el).fontSize).catch(() => null);
                 if (libFont) ok('the debug page Library table text is 12px, like the other detail tables', libFont === '12px', libFont);
+                if (await page.locator('.streamDebug .thumbBadges').count()) {
+                    const box = await page.evaluate(() => ({ img: document.querySelector('.streamDebug .bigThumb').getBoundingClientRect().bottom, badges: document.querySelector('.streamDebug .thumbBadges').getBoundingClientRect().bottom }));
+                    ok('the debug page badges sit on the picture, not below it', box.badges <= box.img + 1, `badges end ${Math.round(box.badges)}, picture ends ${Math.round(box.img)}`);
+                }
                 ok('the debug page shows no signed token', !/hdnea|[?&](sig|token)=/i.test(await page.locator('.streamDebug').innerText()));
                 ok('every link in the metadata Links row opens in a new tab safely', (await page.locator('.streamDebug .kv dd ul.plain a[href]:not([target="_blank"][rel*="noopener"])').count()) === 0);
                 await shot(page, 'programme-debug-page');
