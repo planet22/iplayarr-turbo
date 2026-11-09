@@ -7,28 +7,14 @@ import toastService from '@/lib/toastService';
 // page, each channel's page and Settings, so they all see the same list without refetching.
 const selected = ref([]);
 const busy = ref(new Set());
-// Whether a ticked Jellyfin server has our tuner or guide yet.
-const configured = ref(false);
 
 export function useLiveTv() {
     const globalSettings = inject('globalSettings', ref({}));
-    // The TV buttons only appear once Live TV has been switched on in Settings -> Streaming and a
-    // tuner or guide has been added to a Jellyfin server.
-    const enabled = computed(() => globalSettings.value?.LIVE_TV_ENABLED === 'true' && configured.value);
-
-    const loadConfigured = async () => {
-        try {
-            const { data, ok } = await ipFetch('json-api/live-tv/configured');
-            if (ok) {
-                configured.value = data?.configured === true;
-            }
-        } catch {
-            // Keep whatever we had.
-        }
-    };
+    // The TV buttons appear as soon as Live TV is switched on, with or without a Jellyfin server
+    // (Plex/Threadfin users only need the M3U and guide URLs).
+    const enabled = computed(() => globalSettings.value?.LIVE_TV_ENABLED === 'true');
 
     const load = async () => {
-        loadConfigured();
         try {
             const { data, ok } = await ipFetch('json-api/live-tv/channels');
             if (ok && Array.isArray(data)) {
@@ -67,5 +53,5 @@ export function useLiveTv() {
     const addAll = () => run('all', () => ipFetch('json-api/live-tv/channels/all', 'POST'), 'Unable to add channels to Live TV');
     const clear = () => run('all', () => ipFetch('json-api/live-tv/channels', 'DELETE'), 'Unable to clear Live TV channels');
 
-    return { enabled, selected, load, loadConfigured, isSelected, isBusy, toggle, addAll, clear };
+    return { enabled, selected, load, isSelected, isBusy, toggle, addAll, clear };
 }

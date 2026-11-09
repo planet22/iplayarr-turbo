@@ -16,7 +16,7 @@
                     <span v-if="isSubscribed(channel.id)" class="statusIcon" title="Live channel subscribed">
                         <font-awesome-icon :icon="['fas', 'bell']" />
                     </span>
-                    <span v-if="liveTvEnabled && isLiveTvSelected(channel.id)" class="statusIcon" title="In Jellyfin Live TV">
+                    <span v-if="liveTvEnabled && isLiveTvSelected(channel.id)" class="statusIcon" title="In Live TV">
                         <font-awesome-icon :icon="['fas', 'tv']" />
                     </span>
                 </template>
