@@ -26,8 +26,8 @@
                     type="button"
                     :title="
                         allLiveTv
-                            ? 'Take every channel out of Jellyfin Live TV'
-                            : 'Offer every live channel to Jellyfin Live TV'
+                            ? 'Take every channel out of Live TV'
+                            : 'Offer every live channel to Live TV'
                     "
                     :disabled="isLiveTvBusy('all')"
                     @click="allLiveTv ? liveTvClear() : liveTvAddAll()"
@@ -206,7 +206,7 @@
                         <font-awesome-icon
                             v-if="liveTvEnabled && isLiveTvSelected(tile.id)"
                             :icon="['fas', 'tv']"
-                            title="In Jellyfin Live TV"
+                            title="In Live TV"
                         />
                     </span>
                     <button
@@ -230,8 +230,8 @@
                         :disabled="isLiveTvBusy(tile.id)"
                         :title="
                             isLiveTvSelected(tile.id)
-                                ? `${tile.title} is in Jellyfin Live TV - click to remove`
-                                : `Add ${tile.title} to Jellyfin Live TV`
+                                ? `${tile.title} is in Live TV - click to remove`
+                                : `Add ${tile.title} to Live TV`
                         "
                         @click.prevent.stop="liveTvToggle(tile.id)"
                     >
