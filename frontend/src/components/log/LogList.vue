@@ -93,16 +93,16 @@ onMounted(() => {
 }
 
 .logNote {
-    padding: 4px 12px 8px;
+    padding: @space-1 @space-3 @space-2;
     color: @subtle-text-color;
-    font-size: 12px;
+    font-size: @font-size-sm;
 }
 
 .logRow {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    padding: 2px 12px;
+    gap: @space-2;
+    padding: 2px @space-3;
     border-left: 3px solid transparent;
     line-height: 1.4;
 
@@ -127,8 +127,8 @@ onMounted(() => {
     text-align: center;
     font-size: 11px;
     font-weight: bold;
-    border-radius: 3px;
-    padding: 0 4px;
+    border-radius: @radius-sm;
+    padding: 0 @space-1;
     border: 1px solid currentColor;
 
     &.INFO {
@@ -155,8 +155,8 @@ onMounted(() => {
     color: @primary-text-color;
     background-color: @nav-active-background-color;
     border: 1px solid @settings-button-border-color;
-    border-radius: 10px;
-    padding: 0 8px;
+    border-radius: @radius-lg;
+    padding: 0 @space-2;
     cursor: pointer;
 
     &:hover {
@@ -180,8 +180,8 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
-    border-radius: 16px;
+    padding: 6px @space-3;
+    border-radius: @radius-xl;
     border: 1px solid @brand-color;
     background-color: @brand-color;
     color: @on-brand-color;
@@ -192,14 +192,14 @@ onMounted(() => {
 // Phones: time and badge on one line, the message wrapped underneath.
 @media (max-width: @mobile-breakpoint) {
     .logList {
-        font-size: 12px;
+        font-size: @font-size-sm;
         height: 60vh;
     }
 
     .logRow {
         flex-wrap: wrap;
         row-gap: 0;
-        padding: 4px 8px;
+        padding: @space-1 @space-2;
     }
 
     .logMessage {

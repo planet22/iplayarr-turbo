@@ -180,14 +180,14 @@ onBeforeUnmount(() => clearTimeout(typing));
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin-bottom: 12px;
+    margin-bottom: @space-3;
 }
 
 .filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: @space-2;
+    margin-bottom: @space-3;
 
     .tableFilter {
         flex: 1;
@@ -196,7 +196,7 @@ onBeforeUnmount(() => clearTimeout(typing));
 }
 
 .libraryDebugTable {
-    font-size: 12px;
+    font-size: @font-size-sm;
 
     .path {
         max-width: 480px;

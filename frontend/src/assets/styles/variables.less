@@ -5,6 +5,15 @@
 @desktop-breakpoint: 769px;
 // Phones proper (tablets are wider); used where a tablet has room for the fuller desktop control.
 @phone-breakpoint: 480px;
+// One-off widths where a single component changes layout. Named so the numbers live in one place.
+@tiny-breakpoint: 360px;
+@small-breakpoint: 520px;
+@compact-breakpoint: 600px;
+@medium-breakpoint: 700px;
+@wide-breakpoint: 1000px;
+@laptop-breakpoint: 1099px;
+@large-breakpoint: 1500px;
+@xlarge-breakpoint: 1799px;
 
 /* Layout scale
    Spacing, corner radius, type size, motion and fingertip size. New styles use these instead of literal numbers, so
@@ -15,9 +24,12 @@
 @space-4: 16px;
 @space-5: 24px;
 @space-6: 32px;
+@radius-xs: 2px; // chips and badges
 @radius-sm: 4px;
 @radius-md: 6px;
 @radius-lg: 8px;
+@radius-xl: 16px;
+@radius-pill: 999px;
 @font-size-sm: 12px;
 @font-size-md: 14px;
 @font-size-lg: 18px;

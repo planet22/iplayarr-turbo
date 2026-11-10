@@ -172,7 +172,7 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
         align-items: center;
         justify-content: center;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: @space-2;
         margin: 0.75rem 0 1.5rem;
         min-height: 34px;
 
@@ -211,7 +211,7 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
         display: flex;
         flex-direction: column;
         justify-content: center;
-        gap: 8px;
+        gap: @space-2;
         box-sizing: border-box;
         padding-top: 6px;
 
@@ -235,7 +235,7 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
         &.title {
             height: 22px;
             width: 60%;
-            margin-bottom: 16px;
+            margin-bottom: @space-4;
         }
 
         &.railTitle {
@@ -260,14 +260,14 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
         display: flex;
         align-items: center;
         height: 30px;
-        margin-bottom: 8px;
+        margin-bottom: @space-2;
     }
 
     .skeletonRailRow {
         display: flex;
-        gap: 12px;
+        gap: @space-3;
         overflow: hidden;
-        padding-bottom: 8px;
+        padding-bottom: @space-2;
 
         .railCard {
             flex: 0 0 240px;
@@ -278,7 +278,7 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
     .skeletonTileGrid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 12px;
+        gap: @space-3;
 
         .skeletonTile {
             width: 100%;
@@ -296,7 +296,7 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
         .skeletonBannerContent {
             display: flex;
             align-items: flex-start;
-            gap: 24px;
+            gap: @space-5;
             padding: 2rem;
             box-sizing: border-box;
             // The real banner is this tall once its title, pills, synopsis and buttons are in.

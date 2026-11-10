@@ -70,11 +70,11 @@ const computedOptions = computed(() => {
     align-items: flex-start;
     gap: 10px;
     margin: 14px 0 18px;
-    padding: 10px 12px;
+    padding: 10px @space-3;
     border-left: 4px solid @brand-color;
     border-radius: @radius-sm;
     background-color: @nav-active-background-color;
-    font-size: 14px;
+    font-size: @font-size-md;
     line-height: 1.4;
 
     svg {
@@ -95,7 +95,7 @@ const computedOptions = computed(() => {
 
 p {
     &.sub {
-        font-size: 14px;
+        font-size: @font-size-md;
         margin-top: 0px;
     }
 

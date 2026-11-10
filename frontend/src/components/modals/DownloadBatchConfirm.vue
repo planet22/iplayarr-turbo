@@ -82,14 +82,14 @@ const summary = computed(() => describeDownload(globalSettings.value, { count: p
 }
 
 .versionChoice {
-    margin-top: 12px;
+    margin-top: @space-3;
 }
 
 .boxsetChoice {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 12px;
+    margin-top: @space-3;
     cursor: pointer;
 
     // The form checkbox is built to fill a settings row (flex 65%, 7px top margin); here it is just a box beside its text.
@@ -111,11 +111,11 @@ const summary = computed(() => describeDownload(globalSettings.value, { count: p
     align-items: flex-start;
     gap: 10px;
     margin: 14px 0 18px;
-    padding: 10px 12px;
+    padding: 10px @space-3;
     border-left: 4px solid @brand-color;
     border-radius: @radius-sm;
     background-color: @nav-active-background-color;
-    font-size: 14px;
+    font-size: @font-size-md;
     line-height: 1.4;
 
     svg {

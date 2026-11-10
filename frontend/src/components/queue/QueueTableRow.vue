@@ -331,7 +331,7 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px 8px;
+    gap: 6px @space-2;
 }
 
 .actionCol span {
@@ -344,7 +344,7 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
     width: 64px;
     height: 36px;
     object-fit: cover;
-    border-radius: 2px;
+    border-radius: @radius-xs;
     display: block;
 }
 
@@ -367,7 +367,7 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 2px 12px;
+        gap: 2px @space-3;
         min-width: 0;
 
         .appDisplay {
@@ -384,7 +384,7 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
     .qActions {
         display: inline-flex;
         flex: 0 0 auto;
-        gap: 8px;
+        gap: @space-2;
 
         // Same round buttons as the Subscriptions cards.
         button {
@@ -424,7 +424,7 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
 }
 
 .subtle {
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 

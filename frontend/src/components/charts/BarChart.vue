@@ -119,7 +119,7 @@ const options = computed(() => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: @space-1;
     min-height: 260px;
     color: @subtle-text-color;
     font-size: 13px;

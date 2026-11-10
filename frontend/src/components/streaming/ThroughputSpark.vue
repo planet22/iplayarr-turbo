@@ -119,7 +119,7 @@ const tooltip = computed(() =>
     .rate {
         // Same width whatever the figure, so what follows (the segment grid, on a phone) never shifts.
         min-width: 58px;
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-variant-numeric: tabular-nums;
 
         .finishedIcon {

@@ -78,11 +78,11 @@ const halfStyle = (theme, mode) => ({
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
     }
 
@@ -98,7 +98,7 @@ const halfStyle = (theme, mode) => ({
     }
 
     .tooltip {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
     }
 }
@@ -113,8 +113,8 @@ const halfStyle = (theme, mode) => ({
 .themeCard {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px;
+    gap: @space-1;
+    padding: @space-2;
     border: 1px solid @settings-button-border-color;
     border-radius: @radius-md;
     background-color: @settings-button-background-color;
@@ -177,7 +177,7 @@ const halfStyle = (theme, mode) => ({
         align-items: center;
         gap: 6px;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @primary-text-color;
 
         .tick {
@@ -186,7 +186,7 @@ const halfStyle = (theme, mode) => ({
     }
 
     .themeDescription {
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 }
@@ -199,7 +199,7 @@ const halfStyle = (theme, mode) => ({
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;

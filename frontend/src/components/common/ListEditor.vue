@@ -52,7 +52,7 @@ const { page, pageSize, pagedItems } = usePagination(items);
     position: relative;
     margin: 10px;
     padding: 10px;
-    border-radius: 3px;
+    border-radius: @radius-sm;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
 
     outline: none;
@@ -98,7 +98,7 @@ const { page, pageSize, pagedItems } = usePagination(items);
     }
 
     .sub {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
     }
 
@@ -110,7 +110,7 @@ const { page, pageSize, pagedItems } = usePagination(items);
         padding-bottom: 0.5rem;
 
         button {
-            padding: 4px 10px;
+            padding: @space-1 10px;
             border: 1px solid @table-border-color;
             border-radius: @radius-sm;
             background-color: @nav-background-color;
@@ -133,7 +133,7 @@ const { page, pageSize, pagedItems } = usePagination(items);
 }
 
 // Tablet portrait: two boxes side by side.
-@media (min-width: 520px) and (max-width: @mobile-breakpoint) {
+@media (min-width: @small-breakpoint) and (max-width: @mobile-breakpoint) {
     .listButton {
         float: left;
         width: calc(50% - 5px);

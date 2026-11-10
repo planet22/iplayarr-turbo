@@ -21,13 +21,13 @@ const { canGoBack, goBack } = useBackNav();
 
 <style lang="less" scoped>
 .pageBack {
-    padding: 8px 16px 0;
+    padding: @space-2 @space-4 0;
 
     button {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        padding: 6px 12px;
+        gap: @space-2;
+        padding: 6px @space-3;
         // The same faint outline as the toolbar buttons.
         border: 1px solid @settings-button-border-color;
         border-radius: @radius-sm;

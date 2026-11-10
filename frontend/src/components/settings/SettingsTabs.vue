@@ -66,7 +66,7 @@ watch(
 .settingsTabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: @space-1;
     margin: 0 5px 1.5rem;
     border-bottom: 1px solid @table-border-color;
 
@@ -74,8 +74,8 @@ watch(
         background: none;
         border: none;
         border-bottom: 2px solid transparent;
-        padding: 10px 16px;
-        font-size: 14px;
+        padding: 10px @space-4;
+        font-size: @font-size-md;
         font-weight: bold;
         color: @subtle-text-color;
         cursor: pointer;
@@ -86,7 +86,7 @@ watch(
 
         .tabFlag {
             margin-left: 6px;
-            font-size: 18px;
+            font-size: @font-size-lg;
             line-height: 1;
             vertical-align: middle;
         }
@@ -128,7 +128,7 @@ watch(
         .settingsTab {
             flex: none;
             white-space: nowrap;
-            padding: 10px 12px;
+            padding: 10px @space-3;
 
             // Icons only: the open tab's name is shown under the strip (.settingsTabTitle).
             .tabLabel {
@@ -137,7 +137,7 @@ watch(
 
             .tabIcon {
                 margin-right: 0;
-                font-size: 18px;
+                font-size: @font-size-lg;
             }
         }
     }

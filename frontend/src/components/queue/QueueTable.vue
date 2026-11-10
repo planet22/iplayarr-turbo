@@ -248,15 +248,15 @@ defineExpose({
 
 // Pills here are fully rounded (smooth ends) rather than square-cornered.
 .queueTable .pill {
-    padding: 1px 8px;
-    border-radius: 999px;
+    padding: 1px @space-2;
+    border-radius: @radius-pill;
 }
 
 .queueTable {
     max-width: 100%;
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
     // Fixed so the <colgroup> widths above are authoritative regardless of cell content -
     // without this, queue rows (often blank App/ETA/Speed columns) vs. history rows (all filled
@@ -265,7 +265,7 @@ defineExpose({
 
     thead {
         th {
-            padding: 8px;
+            padding: @space-2;
             text-align: left;
             font-weight: bold;
             border-bottom: 1px solid @table-border-color;
@@ -285,7 +285,7 @@ defineExpose({
             .sortIcon {
                 font-size: 11px;
                 opacity: 0.35;
-                margin-left: 4px;
+                margin-left: @space-1;
 
                 &.active {
                     opacity: 1;
@@ -304,7 +304,7 @@ defineExpose({
         }
 
         td {
-            padding: 8px;
+            padding: @space-2;
             border-top: 1px solid @table-border-color;
             line-height: 1.5;
             overflow: hidden;
@@ -354,7 +354,7 @@ defineExpose({
     }
 
     // Lower-value columns give way first when the table is squeezed, so Filename keeps room.
-    @media (max-width: 1500px) {
+    @media (max-width: @large-breakpoint) {
         .hideMd {
             display: none;
         }
@@ -372,8 +372,8 @@ defineExpose({
         tbody {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
-            gap: 12px;
-            margin-top: 8px;
+            gap: @space-3;
+            margin-top: @space-2;
 
             // The row stretches to the tallest card in its grid row; the cell and card fill it,
             // so cards sharing a row are the same height.

@@ -166,12 +166,12 @@ const rejectedFiller = computed(() => fillerCount(rejectedTotalPages, rejectedPa
     width: 100%;
 
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
 
     thead {
         th {
-            padding: 8px;
+            padding: @space-2;
             border-bottom: 1px solid @table-border-color;
             text-align: left;
             font-weight: bold;
@@ -187,7 +187,7 @@ const rejectedFiller = computed(() => fillerCount(rejectedTotalPages, rejectedPa
             }
 
             td {
-                padding: 8px;
+                padding: @space-2;
                 border-top: 1px solid @table-border-color;
                 line-height: 1.52857143;
             }

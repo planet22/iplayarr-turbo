@@ -61,7 +61,7 @@ const hasVersion = (id) => !!props.item.versions?.includes(id);
 <style lang="less" scoped>
 .qualityBadges {
     display: inline-flex;
-    gap: 4px;
+    gap: @space-1;
     vertical-align: middle;
 }
 
@@ -71,14 +71,14 @@ const hasVersion = (id) => !!props.item.versions?.includes(id);
     font-weight: 700;
     line-height: 1.4;
     letter-spacing: 0.04em;
-    border-radius: 2px;
+    border-radius: @radius-xs;
     // On a dark chip over artwork: fixed white, not the theme's text colour.
     color: @on-media-color;
     background-color: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.35);
 
     &.version {
-        font-size: 12px;
+        font-size: @font-size-sm;
     }
 
     // Fixed colours like the chip itself: it sits over artwork.

@@ -91,7 +91,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         background-color: rgba(0, 0, 0, 0.7);
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
         color: @on-media-color;
-        font-size: 12px;
+        font-size: @font-size-sm;
     }
 
     .count {
@@ -100,7 +100,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         right: 6px;
         padding: 1px 6px;
         font-size: 11px;
-        border-radius: 2px;
+        border-radius: @radius-xs;
         background-color: rgba(0, 0, 0, 0.7);
         color: @on-media-color;
     }
@@ -120,7 +120,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         padding-top: 6px;
 
         .title {
-            font-size: 14px;
+            font-size: @font-size-md;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;

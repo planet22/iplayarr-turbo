@@ -203,7 +203,7 @@ async function update(tool) {
     justify-content: space-between;
     max-width: 650px;
     margin-bottom: 0.75rem;
-    padding: 8px 12px;
+    padding: @space-2 @space-3;
     border: 1px solid @table-border-color;
     border-radius: @radius-sm;
 

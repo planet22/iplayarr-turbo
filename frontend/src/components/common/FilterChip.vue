@@ -32,9 +32,9 @@ defineProps({
     justify-content: center;
     gap: 6px;
     flex: 0 0 auto;
-    padding: 5px 12px;
+    padding: 5px @space-3;
     border: 1px solid @settings-button-border-color;
-    border-radius: 16px;
+    border-radius: @radius-xl;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
     font-family: inherit;

@@ -324,7 +324,7 @@ onMounted(load);
 <style lang="less" scoped>
 .downloadCount {
     margin-left: 6px;
-    font-size: 14px;
+    font-size: @font-size-md;
     font-variant-numeric: tabular-nums;
 }
 
@@ -338,7 +338,7 @@ onMounted(load);
     .openCollection :deep(.SettingsPageToolbar.inlineFilters .SettingsPageToolbar-filters) {
         order: 3;
         flex: 1 1 100%;
-        padding: 0 0 8px;
+        padding: 0 0 @space-2;
         gap: 6px;
 
         .tableFilter {
@@ -361,7 +361,7 @@ onMounted(load);
 .collectionGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 12px;
+    gap: @space-3;
     margin-bottom: 1.75rem;
 
     @media (max-width: @mobile-breakpoint) {
@@ -373,7 +373,7 @@ onMounted(load);
     margin-top: 1.75rem;
 
     .synopsis {
-        margin: 0 0 12px;
+        margin: 0 0 @space-3;
         color: @subtle-text-color;
     }
 }

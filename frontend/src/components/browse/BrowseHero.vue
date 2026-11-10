@@ -127,7 +127,7 @@ const heroStyle = computed(() => {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 8px;
+            gap: @space-2;
 
             // Fixed height so the pill is the same size with or without badges; thumbnail badges keep their own size.
             :deep(.qualityBadge),
@@ -140,7 +140,7 @@ const heroStyle = computed(() => {
         }
 
         h1 {
-            margin: 8px 0 0;
+            margin: @space-2 0 0;
             font-size: 42px;
             font-weight: 300;
             text-wrap: balance;
@@ -151,7 +151,7 @@ const heroStyle = computed(() => {
         }
 
         h2 {
-            margin: 4px 0 0;
+            margin: @space-1 0 0;
             font-size: 20px;
             font-weight: 300;
         }
@@ -172,7 +172,7 @@ const heroStyle = computed(() => {
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
-        margin-top: 16px;
+        margin-top: @space-4;
     }
 
     @media (max-width: @mobile-breakpoint) {
@@ -187,15 +187,15 @@ const heroStyle = computed(() => {
             }
 
             p {
-                font-size: 14px;
+                font-size: @font-size-md;
                 -webkit-line-clamp: 2;
                 line-clamp: 2;
             }
         }
 
         .heroActions {
-            gap: 8px;
-            margin-top: 12px;
+            gap: @space-2;
+            margin-top: @space-3;
         }
     }
 
@@ -203,7 +203,7 @@ const heroStyle = computed(() => {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 8px 16px;
+        padding: @space-2 @space-4;
         font-size: 15px;
         text-decoration: none;
         border-radius: @radius-sm;
@@ -234,14 +234,14 @@ const heroStyle = computed(() => {
             min-width: 0;
             justify-content: center;
             gap: 5px;
-            padding: 8px 4px;
-            font-size: 14px;
+            padding: @space-2 @space-1;
+            font-size: @font-size-md;
             white-space: nowrap;
 
             // Four buttons do not fit with words: the bug keeps just its icon (the tooltip names it).
             &.debugButton {
                 flex: 0 0 auto;
-                padding: 8px 12px;
+                padding: @space-2 @space-3;
 
                 .debugText {
                     display: none;
@@ -249,9 +249,9 @@ const heroStyle = computed(() => {
             }
 
             // Very narrow phones: keep all three in the row.
-            @media (max-width: 360px) {
-                gap: 4px;
-                padding: 8px 2px;
+            @media (max-width: @tiny-breakpoint) {
+                gap: @space-1;
+                padding: @space-2 2px;
                 font-size: 13px;
             }
         }

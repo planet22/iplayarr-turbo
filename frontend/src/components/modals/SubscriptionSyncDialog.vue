@@ -225,14 +225,14 @@ const start = async () => {
 
 <style lang="less">
 .syncIntro {
-    margin: 0 0 12px;
-    font-size: 14px;
+    margin: 0 0 @space-3;
+    font-size: @font-size-md;
     color: @subtle-text-color;
 }
 
 .syncSummary {
-    margin: 4px 0 0;
-    font-size: 14px;
+    margin: @space-1 0 0;
+    font-size: @font-size-md;
     color: @primary-text-color;
 
     svg {
@@ -244,8 +244,8 @@ const start = async () => {
 .syncApp {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 0;
+    gap: @space-2;
+    padding: @space-1 0;
 
     .CheckInput-container {
         flex: 0 0 auto;
@@ -254,7 +254,7 @@ const start = async () => {
     .syncAppName {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: @space-2;
         padding: 6px 0;
         border: none;
         background: none;
@@ -266,13 +266,13 @@ const start = async () => {
 
 .syncRun {
     margin-bottom: 14px;
-    padding-bottom: 12px;
+    padding-bottom: @space-3;
     border-bottom: 1px solid @toolbar-background-color;
 
     .syncRunHead {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: @space-2;
 
         .syncRunName {
             flex: 1;
@@ -282,16 +282,16 @@ const start = async () => {
 
     .syncSteps {
         list-style: none;
-        margin: 8px 0 0;
+        margin: @space-2 0 0;
         padding: 0;
 
         li {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 4px 8px;
+            gap: @space-1 @space-2;
             padding: 3px 0;
-            font-size: 14px;
+            font-size: @font-size-md;
             color: @subtle-text-color;
 
             &.complete svg {
@@ -311,7 +311,7 @@ const start = async () => {
             }
 
             .stepCount {
-                font-size: 12px;
+                font-size: @font-size-sm;
             }
 
             .stepBar {
@@ -324,7 +324,7 @@ const start = async () => {
 
     .syncTally {
         margin-top: 6px;
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 

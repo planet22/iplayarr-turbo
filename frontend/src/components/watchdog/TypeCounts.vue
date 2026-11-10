@@ -35,8 +35,8 @@ const labels = { HISTORY: 'iPlayarr', SONARR: 'Sonarr', RADARR: 'Radarr', JELLYF
 .typeCounts {
     display: grid;
     grid-template-columns: repeat(2, auto);
-    gap: 8px 6px;
-    font-size: 14px;
+    gap: @space-2 6px;
+    font-size: @font-size-md;
     color: @subtle-text-color;
 
     > span {
@@ -63,8 +63,8 @@ const labels = { HISTORY: 'iPlayarr', SONARR: 'Sonarr', RADARR: 'Radarr', JELLYF
         display: flex;
         flex-wrap: wrap;
         max-width: 100%;
-        gap: 6px 12px;
-        font-size: 14px;
+        gap: 6px @space-3;
+        font-size: @font-size-md;
 
         .typeLogo {
             height: 24px;

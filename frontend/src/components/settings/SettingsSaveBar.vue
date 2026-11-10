@@ -61,7 +61,7 @@ onBeforeUnmount(() => setOffset(false));
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: @space-3;
         box-sizing: border-box;
         max-width: 900px;
         padding: @space-3 20px;
@@ -70,7 +70,7 @@ onBeforeUnmount(() => setOffset(false));
     .saveBarText {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: @space-2;
         font-size: @font-size-md;
         font-weight: 600;
         color: @primary-text-color;
@@ -93,7 +93,7 @@ onBeforeUnmount(() => setOffset(false));
     button {
         cursor: pointer;
         min-width: 84px;
-        padding: 8px 16px;
+        padding: @space-2 @space-4;
 
         &:disabled {
             opacity: 0.6;
@@ -152,7 +152,7 @@ onBeforeUnmount(() => setOffset(false));
 
 @media (max-width: @mobile-breakpoint) {
     .settingsSaveBar .saveBarInner {
-        padding: 10px 16px;
+        padding: 10px @space-4;
     }
 }
 </style>

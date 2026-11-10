@@ -468,11 +468,11 @@ const playDefaultVersion = computed({
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
     }
 
@@ -496,8 +496,8 @@ const playDefaultVersion = computed({
         margin: 0;
 
         .statusType {
-            margin-left: 8px;
-            font-size: 12px;
+            margin-left: @space-2;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
     }
@@ -509,7 +509,7 @@ const playDefaultVersion = computed({
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;

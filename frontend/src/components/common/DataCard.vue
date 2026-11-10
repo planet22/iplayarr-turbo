@@ -42,10 +42,10 @@
     position: relative;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    gap: 8px 10px;
+    gap: @space-2 10px;
     align-items: start;
     padding: 10px;
-    margin-bottom: 8px;
+    margin-bottom: @space-2;
     background-color: @nav-active-background-color;
     border-radius: @radius-md;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
@@ -78,7 +78,7 @@
     width: var(--dc-thumb-width, 96px);
     aspect-ratio: 16 / 9;
     object-fit: cover;
-    border-radius: 3px;
+    border-radius: @radius-sm;
     display: block;
 }
 
@@ -86,7 +86,7 @@
 .dcThumb :deep(.radioArtBox) {
     width: var(--dc-thumb-width, 96px);
     aspect-ratio: 16 / 9;
-    border-radius: 3px;
+    border-radius: @radius-sm;
 }
 
 .dcThumb :deep(.radioArtBox > img) {
@@ -122,7 +122,7 @@
 }
 
 .dcSubtitle {
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
     overflow-wrap: anywhere;
 }
@@ -131,8 +131,8 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px 6px;
-    margin-top: 4px;
+    gap: @space-1 6px;
+    margin-top: @space-1;
 }
 
 .dcMain,
@@ -151,7 +151,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 </style>

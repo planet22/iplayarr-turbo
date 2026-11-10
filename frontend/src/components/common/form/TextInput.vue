@@ -244,11 +244,11 @@ const copyValue = async () => {
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
 
     }
@@ -258,7 +258,7 @@ const copyValue = async () => {
         box-sizing: border-box;
 
         .error {
-            font-size: 14px;
+            font-size: @font-size-md;
             color: @danger-color;
         }
 
@@ -309,7 +309,7 @@ const copyValue = async () => {
 
             textarea {
                 box-sizing: border-box;
-                padding: 8px 16px;
+                padding: @space-2 @space-4;
                 width: 100%;
                 border: 1px solid @input-border-color;
                 border-radius: @radius-sm;
@@ -327,7 +327,7 @@ const copyValue = async () => {
 
             input {
                 box-sizing: border-box;
-                padding: 6px 16px;
+                padding: 6px @space-4;
                 width: 100%;
                 height: 35px;
                 border: 1px solid @input-border-color;
@@ -338,7 +338,7 @@ const copyValue = async () => {
             }
 
             &.error {
-                font-size: 14px;
+                font-size: @font-size-md;
                 color: @danger-color;
 
                 input,
@@ -350,7 +350,7 @@ const copyValue = async () => {
     }
 
     .tooltip {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
     }
 
@@ -383,7 +383,7 @@ const copyValue = async () => {
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;
@@ -392,7 +392,7 @@ const copyValue = async () => {
 
         .tooltip,
         .error {
-            font-size: 12px;
+            font-size: @font-size-sm;
         }
     }
 }

@@ -164,9 +164,9 @@ const fixCasing = (str) => {
         box-sizing: border-box;
 
         .seriesDetails {
-            margin-bottom: 16px;
+            margin-bottom: @space-4;
             font-weight: 300;
-            font-size: 18px;
+            font-size: @font-size-lg;
 
             span {
                 margin-right: 15px;
@@ -186,7 +186,7 @@ const fixCasing = (str) => {
 
             .seriesDetails {
                 margin-bottom: 6px;
-                font-size: 14px;
+                font-size: @font-size-md;
 
                 span {
                     margin-right: 10px;
@@ -239,7 +239,7 @@ const fixCasing = (str) => {
 .seriesDetails.factRow {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 16px;
+    gap: @space-1 @space-4;
 
     span {
         display: inline-flex;
@@ -257,6 +257,6 @@ const fixCasing = (str) => {
 .seriesDetails.pillRow {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 10px;
+    gap: @space-2 10px;
 }
 </style>

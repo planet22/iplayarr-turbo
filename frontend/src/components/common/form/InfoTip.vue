@@ -128,10 +128,10 @@ onBeforeUnmount(() => {
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 4px;
+        padding: @space-1;
         border: none;
         background: none;
-        font-size: 18px;
+        font-size: @font-size-lg;
         color: @subtle-text-color;
         cursor: pointer;
 
@@ -151,7 +151,7 @@ onBeforeUnmount(() => {
         box-sizing: border-box;
         width: 300px;
         max-width: calc(100vw - 16px);
-        padding: 10px 14px 12px;
+        padding: 10px 14px @space-3;
         border: 1px solid @input-border-color;
         border-top: 2px solid @brand-color;
         border-radius: @radius-md;

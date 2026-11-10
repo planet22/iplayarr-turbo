@@ -92,7 +92,7 @@ const options = computed(() => {
 <style lang="less" scoped>
 .flagNote {
     margin: 0;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
     text-align: center;
 }

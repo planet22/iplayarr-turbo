@@ -43,10 +43,10 @@ const icon = computed(() => {
     align-items: flex-start;
     gap: 10px;
     margin: 0.75rem 5px;
-    padding: 8px 12px;
+    padding: @space-2 @space-3;
     border: 0;
     border-left: 3px solid transparent;
-    border-radius: 3px;
+    border-radius: @radius-sm;
     max-width: 650px;
     font-size: 13px;
     line-height: 1.4;
@@ -64,7 +64,7 @@ const icon = computed(() => {
     }
 
     &.small {
-        font-size: 12px;
+        font-size: @font-size-sm;
         padding: 6px 10px;
     }
 
@@ -111,8 +111,8 @@ const icon = computed(() => {
     // Phone width: line up with the page gutter and give the text the full row.
     @media (max-width: @mobile-breakpoint) {
         margin: 0.5rem 0;
-        padding: 8px 10px;
-        gap: 8px;
+        padding: @space-2 10px;
+        gap: @space-2;
     }
 }
 </style>

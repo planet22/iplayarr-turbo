@@ -107,7 +107,7 @@ function cellTitle(index) {
 .segmentStats {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 22px;
+    gap: @space-2 22px;
     margin-bottom: 0.75rem;
 }
 
@@ -116,7 +116,7 @@ function cellTitle(index) {
     flex-direction: column;
 
     .statValue {
-        font-size: 18px;
+        font-size: @font-size-lg;
         font-weight: bold;
         font-variant-numeric: tabular-nums;
 
@@ -145,8 +145,8 @@ function cellTitle(index) {
     background: none;
     border: 1px solid @table-border-color;
     border-radius: @radius-sm;
-    padding: 4px 10px;
-    font-size: 12px;
+    padding: @space-1 10px;
+    font-size: @font-size-sm;
     color: @table-text-color;
 
     &:hover {
@@ -161,7 +161,7 @@ function cellTitle(index) {
     gap: 6px 14px;
     margin-top: 0.75rem;
     margin-bottom: 1rem;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 
     .legendItem {
@@ -212,7 +212,7 @@ function cellTitle(index) {
     box-sizing: border-box;
     width: 100%;
     aspect-ratio: 1 / 1;
-    border-radius: 2px;
+    border-radius: @radius-xs;
     border: 1px solid @table-border-color;
     display: inline-block;
 

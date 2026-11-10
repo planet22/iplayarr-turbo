@@ -258,7 +258,7 @@ watch(
 
 .gridFiltersTitle {
     margin-right: 6px;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @primary-text-color;
 }
 

@@ -130,11 +130,11 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         min-height: 35px;
         text-align: end;
         font-weight: bold;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @table-text-color;
 
     }
@@ -160,8 +160,8 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 8px;
-            padding: 6px 16px;
+            gap: @space-2;
+            padding: 6px @space-4;
             height: 35px;
             border: 1px solid @input-border-color;
             border-radius: @radius-sm;
@@ -184,7 +184,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             left: 0;
             right: 0;
             margin: 2px 0 0;
-            padding: 4px 0;
+            padding: @space-1 0;
             list-style: none;
             border: 1px solid @input-border-color;
             border-radius: @radius-sm;
@@ -194,11 +194,11 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             .option {
                 display: flex;
                 align-items: center;
-                gap: 8px;
+                gap: @space-2;
                 flex: none;
                 justify-content: flex-start;
                 margin: 0;
-                padding: 6px 16px;
+                padding: 6px @space-4;
                 min-height: 0;
                 text-align: left;
                 font-weight: normal;
@@ -212,7 +212,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         }
 
         &.error {
-            font-size: 14px;
+            font-size: @font-size-md;
             color: @danger-color;
 
             .trigger {
@@ -226,7 +226,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
     }
 
     .tooltip {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
     }
 
@@ -253,7 +253,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         label {
             flex: none;
             justify-content: flex-start;
-            margin: 0 0 4px;
+            margin: 0 0 @space-1;
             padding-top: 0;
             min-height: 0;
             text-align: start;
@@ -262,7 +262,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
 
         .tooltip,
         .error {
-            font-size: 12px;
+            font-size: @font-size-sm;
         }
     }
 }

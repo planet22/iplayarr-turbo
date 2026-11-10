@@ -514,8 +514,8 @@ onBeforeUnmount(() => {
 .watchdogTable {
     th,
     td {
-        padding-left: 4px;
-        padding-right: 4px;
+        padding-left: @space-1;
+        padding-right: @space-1;
     }
 
     th:not(:last-child),
@@ -529,8 +529,8 @@ onBeforeUnmount(() => {
 .linkMeta {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 12px;
+    gap: @space-1;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 
@@ -558,19 +558,19 @@ onBeforeUnmount(() => {
 .libraryLabelRow {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: @space-2;
 }
 
 
 .statRow .statCard.settingsCard {
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
+    gap: @space-2;
 
     .settingsList {
         display: grid;
         grid-template-columns: max-content 1fr;
-        gap: 4px 16px;
+        gap: @space-1 @space-4;
         margin: 0;
         font-size: 13px;
 
@@ -585,20 +585,20 @@ onBeforeUnmount(() => {
     }
 
     .settingsLink {
-        font-size: 12px;
+        font-size: @font-size-sm;
     }
 }
 
 @media (max-width: @mobile-breakpoint) {
     // Tighter than the desktop cards so the page is not a long scroll of big tiles.
     .statRow {
-        gap: 8px;
+        gap: @space-2;
         margin-bottom: 1rem;
 
         .statCard {
             flex-basis: 100%;
             padding: 10px 14px;
-            gap: 12px;
+            gap: @space-3;
 
             .statValue {
                 font-size: 24px;
@@ -611,8 +611,8 @@ onBeforeUnmount(() => {
 .sourceBreakdown {
     display: flex;
     flex-wrap: wrap;
-    gap: 2px 12px;
-    font-size: 12px;
+    gap: 2px @space-3;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 
     .none {
@@ -629,12 +629,12 @@ onBeforeUnmount(() => {
 
 .dedupNote {
     margin: -0.5rem 0 1.5rem;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 
 .statRow .statCard .statValue.small {
-    font-size: 18px;
+    font-size: @font-size-lg;
     white-space: normal;
     overflow-wrap: anywhere;
 }
@@ -644,7 +644,7 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: @space-4;
 }
 
 .statRow .statCard > .statBody {
@@ -691,7 +691,7 @@ onBeforeUnmount(() => {
         display: flex;
         justify-content: space-between;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: @space-2;
         font-size: 13px;
         color: @subtle-text-color;
     }

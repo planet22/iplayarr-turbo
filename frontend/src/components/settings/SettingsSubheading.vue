@@ -35,7 +35,7 @@ defineProps({
     }
 
     .settingsSubheadingText {
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-weight: bold;
         letter-spacing: 0.08em;
         text-transform: uppercase;

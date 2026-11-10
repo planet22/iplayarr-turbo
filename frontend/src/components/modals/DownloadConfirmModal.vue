@@ -134,10 +134,10 @@ const download = async () => {
     align-items: center;
     gap: 10px;
     margin-top: 10px;
-    padding: 8px 12px;
+    padding: @space-2 @space-3;
     border-radius: @radius-sm;
     background-color: @nav-active-background-color;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
 
     svg {

@@ -196,7 +196,7 @@ const statusBadges = computed(() => {
             top: 6px;
             right: 6px;
             display: flex;
-            gap: 4px;
+            gap: @space-1;
 
             .statusBadge {
                 display: flex;
@@ -224,7 +224,7 @@ const statusBadges = computed(() => {
             border-radius: 50%;
             background-color: rgba(0, 0, 0, 0.45);
             color: @on-media-color;
-            font-size: 12px;
+            font-size: @font-size-sm;
 
             svg {
                 display: block;
@@ -255,7 +255,7 @@ const statusBadges = computed(() => {
         left: 6px;
         padding: 1px 6px;
         font-size: 11px;
-        border-radius: 2px;
+        border-radius: @radius-xs;
         background-color: rgba(0, 0, 0, 0.7);
         color: @on-media-color;
     }
@@ -265,7 +265,7 @@ const statusBadges = computed(() => {
         bottom: 6px;
         left: 6px;
         display: flex;
-        gap: 4px;
+        gap: @space-1;
     }
 
     .kindIcon {
@@ -274,7 +274,7 @@ const statusBadges = computed(() => {
         justify-content: center;
         width: 20px;
         height: 20px;
-        border-radius: 3px;
+        border-radius: @radius-sm;
         background-color: rgba(0, 0, 0, 0.7);
         // A faint rim so the chip still reads over a dark poster.
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
@@ -292,7 +292,7 @@ const statusBadges = computed(() => {
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 12px;
+        gap: @space-3;
         background-color: rgba(0, 0, 0, 0.55);
         opacity: 0;
         transition: opacity 150ms;
@@ -376,11 +376,11 @@ const statusBadges = computed(() => {
         }
 
         .title {
-            font-size: 14px;
+            font-size: @font-size-md;
         }
 
         .subtitle {
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
             margin-bottom: 3px;
         }

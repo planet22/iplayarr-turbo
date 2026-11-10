@@ -87,7 +87,7 @@ const playTitle = (past) => `Play this stream again: ${past.version ? `${past.ve
 .settingsCell {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: @space-1;
 }
 
 // The stream being played in the player below.

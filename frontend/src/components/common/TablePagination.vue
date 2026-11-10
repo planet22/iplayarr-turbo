@@ -135,7 +135,7 @@ const onPageSizeChange = (event) => {
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: @space-2;
     margin: 0.75rem 0 1.5rem;
     position: relative;
     min-height: 34px;
@@ -171,7 +171,7 @@ const onPageSizeChange = (event) => {
     justify-content: center;
     min-width: 30px;
     height: 30px;
-    padding: 0 8px;
+    padding: 0 @space-2;
     background: none;
     border: 1px solid @table-border-color;
     border-radius: @radius-sm;
@@ -221,7 +221,7 @@ const onPageSizeChange = (event) => {
     }
 
     select {
-        padding: 4px 8px;
+        padding: @space-1 @space-2;
         height: 30px;
         border: 1px solid @input-border-color;
         border-radius: @radius-sm;
@@ -230,7 +230,7 @@ const onPageSizeChange = (event) => {
         // iOS Safari paints native selects white and ignores the colours above unless the native look is dropped.
         -webkit-appearance: none;
         appearance: none;
-        padding-right: 24px;
+        padding-right: @space-5;
         background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" fill="none" stroke="%23ccc" stroke-width="1.5"><path d="M1 1l4 4 4-4"/></svg>');
         background-repeat: no-repeat;
         background-position: right 8px center;
@@ -253,7 +253,7 @@ const onPageSizeChange = (event) => {
 @media (max-width: @phone-breakpoint) {
     .pageControls {
         flex-wrap: nowrap;
-        gap: 4px;
+        gap: @space-1;
     }
 
     .listPagination {
@@ -265,7 +265,7 @@ const onPageSizeChange = (event) => {
     .pageButton {
         min-width: 34px;
         height: 34px;
-        padding: 0 4px;
+        padding: 0 @space-1;
     }
 
     .ellipsis {

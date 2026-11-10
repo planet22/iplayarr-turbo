@@ -118,8 +118,8 @@ const emit = defineEmits(['test-oidc']);
     button {
         background-color: @settings-button-background-color;
         border: 1px solid @settings-button-border-color;
-        padding: 6px 16px;
-        font-size: 14px;
+        padding: 6px @space-4;
+        font-size: @font-size-md;
         color: @primary-text-color;
         border-radius: @radius-sm;
 

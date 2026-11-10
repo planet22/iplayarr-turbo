@@ -163,15 +163,15 @@ const confirm = () => {
 <style lang="less" scoped>
 .searchRow {
     display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: @space-2;
+    margin-bottom: @space-3;
 
     input {
         flex: 1;
         min-width: 0;
         box-sizing: border-box;
         height: 35px;
-        padding: 6px 12px;
+        padding: 6px @space-3;
         border: 1px solid @input-border-color;
         border-radius: @radius-sm;
         background-color: @input-background-color;
@@ -195,7 +195,7 @@ const confirm = () => {
 .lookupError {
     p {
         color: @danger-color;
-        font-size: 14px;
+        font-size: @font-size-md;
     }
 
     button {
@@ -213,7 +213,7 @@ const confirm = () => {
 
 .hint {
     color: @subtle-text-color;
-    font-size: 14px;
+    font-size: @font-size-md;
 }
 
 .matchGrid {
@@ -286,15 +286,15 @@ const confirm = () => {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 4px 12px;
-        margin-top: 4px;
-        font-size: 12px;
+        gap: @space-1 @space-3;
+        margin-top: @space-1;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 
     .matchGenres {
-        margin-top: 4px;
-        font-size: 12px;
+        margin-top: @space-1;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 

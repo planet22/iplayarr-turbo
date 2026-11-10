@@ -256,7 +256,7 @@ onBeforeUnmount(cleanup);
 .pipError {
     flex-direction: column;
     gap: 6px;
-    padding: 8px;
+    padding: @space-2;
     text-align: center;
     pointer-events: auto;
 
@@ -269,14 +269,14 @@ onBeforeUnmount(cleanup);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: @space-2;
+    padding: 6px @space-2;
     color: @table-text-color;
 }
 
 .pipClose {
     flex: 0 0 auto;
-    padding: 4px;
+    padding: @space-1;
     border: none;
     background: none;
     color: inherit;
@@ -287,7 +287,7 @@ onBeforeUnmount(cleanup);
 .pipVersions {
     flex: 0 0 auto;
     display: flex;
-    gap: 4px;
+    gap: @space-1;
 }
 
 .pipVersion {
@@ -298,7 +298,7 @@ onBeforeUnmount(cleanup);
     border-radius: @radius-sm;
     background-color: @input-background-color;
     color: @input-text-color;
-    font-size: 12px;
+    font-size: @font-size-sm;
     cursor: pointer;
 
     &.selected {

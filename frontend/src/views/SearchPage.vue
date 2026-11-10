@@ -781,7 +781,7 @@ watch(
         align-items: center;
         gap: 10px;
         max-width: 720px;
-        padding: 0 8px 0 14px;
+        padding: 0 @space-2 0 14px;
         border: 1px solid @input-border-color;
         border-radius: @radius-lg;
         background-color: @input-background-color;
@@ -836,7 +836,7 @@ watch(
             left: 0;
             right: 0;
             margin: 0;
-            padding: 4px 0;
+            padding: @space-1 0;
             list-style: none;
             z-index: @z-dropdown;
             border-radius: @radius-md;
@@ -850,7 +850,7 @@ watch(
                 gap: 10px;
                 padding: 10px 14px;
                 cursor: pointer;
-                font-size: 14px;
+                font-size: @font-size-md;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -872,7 +872,7 @@ watch(
                 &.seeAll {
                     color: @primary-color;
                     border-top: 1px solid @settings-button-border-color;
-                    margin-top: 4px;
+                    margin-top: @space-1;
                 }
             }
         }
@@ -883,7 +883,7 @@ watch(
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px 8px;
+    gap: @space-1 @space-2;
     margin: 14px 0 0;
     font-size: 13px;
     color: @subtle-text-color;
@@ -906,7 +906,7 @@ watch(
     }
 
     .loadingMoreNote {
-        margin-left: 8px;
+        margin-left: @space-2;
     }
 }
 
@@ -916,9 +916,9 @@ watch(
     align-items: center;
     gap: 6px;
     flex: 0 0 auto;
-    padding: 6px 12px;
+    padding: 6px @space-3;
     border: 1px solid @settings-button-border-color;
-    border-radius: 16px;
+    border-radius: @radius-xl;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
     font-size: 13px;
@@ -958,12 +958,12 @@ watch(
 
     .chipMain {
         gap: 6px;
-        padding: 6px 4px 6px 12px;
+        padding: 6px @space-1 6px @space-3;
         min-width: 0;
     }
 
     .chipRemove {
-        padding: 6px 10px 6px 4px;
+        padding: 6px 10px 6px @space-1;
 
         svg {
             color: @subtle-text-color;
@@ -978,9 +978,9 @@ watch(
 
 .channelChips {
     display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-    padding-bottom: 4px;
+    gap: @space-2;
+    margin-bottom: @space-3;
+    padding-bottom: @space-1;
     overflow-x: auto;
     scrollbar-width: none;
 
@@ -992,7 +992,7 @@ watch(
 .selectBar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: @space-2;
     margin-bottom: 10px;
     font-size: 13px;
     color: @subtle-text-color;
@@ -1029,19 +1029,19 @@ watch(
 .chipDivider {
     flex: 0 0 1px;
     align-self: stretch;
-    margin: 4px 2px;
+    margin: @space-1 2px;
     background-color: @settings-button-border-color;
 }
 
 .chipRow {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: @space-2;
 }
 
 .searchHome h3 {
-    margin: 18px 0 8px;
-    font-size: 12px;
+    margin: 18px 0 @space-2;
+    font-size: @font-size-sm;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -1049,7 +1049,7 @@ watch(
 }
 
 .emptyState {
-    padding: 28px 16px 8px;
+    padding: 28px @space-4 @space-2;
     text-align: center;
     color: @subtle-text-color;
 
@@ -1064,7 +1064,7 @@ watch(
     }
 
     .emptyHint {
-        margin-top: 4px;
+        margin-top: @space-1;
         font-size: 13px;
     }
 }
@@ -1073,7 +1073,7 @@ watch(
     max-width: 100%;
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
     // Fixed so the <colgroup> widths above are authoritative regardless of cell content -
     // without this, a page of short titles/filenames vs. one with long ones sizes columns
@@ -1082,7 +1082,7 @@ watch(
 
     thead {
         th {
-            padding: 8px;
+            padding: @space-2;
             border-bottom: 1px solid @table-border-color;
             text-align: left;
             font-weight: bold;
@@ -1110,7 +1110,7 @@ watch(
             }
 
             td {
-                padding: 8px;
+                padding: @space-2;
                 border-top: 1px solid @table-border-color;
                 line-height: 1.52857143;
                 overflow: hidden;
@@ -1124,7 +1124,7 @@ watch(
                 }
 
                 .filename {
-                    font-size: 12px;
+                    font-size: @font-size-sm;
                     color: @subtle-text-color;
                     word-break: break-all;
                 }

@@ -153,8 +153,8 @@ onMounted(reload);
 .tiles {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    gap: 8px;
-    margin: 12px 0 16px;
+    gap: @space-2;
+    margin: @space-3 0 @space-4;
 
     .tileInfo {
         position: absolute;
@@ -167,7 +167,7 @@ onMounted(reload);
         display: flex;
         flex-direction: column;
         gap: 2px;
-        padding: 10px 12px;
+        padding: 10px @space-3;
         background-color: @nav-active-background-color;
         border-radius: @radius-md;
         border-left: 3px solid transparent;
@@ -187,12 +187,12 @@ onMounted(reload);
         }
 
         .tileValue {
-            font-size: 18px;
+            font-size: @font-size-lg;
             overflow-wrap: anywhere;
         }
 
         .tileNote {
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
     }

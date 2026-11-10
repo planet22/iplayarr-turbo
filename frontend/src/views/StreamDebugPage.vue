@@ -1019,7 +1019,7 @@ onBeforeUnmount(stopPlayback);
 
     .bar {
         height: 4px;
-        border-radius: 2px;
+        border-radius: @radius-xs;
         background-color: @nav-active-background-color;
         overflow: hidden;
 
@@ -1034,8 +1034,8 @@ onBeforeUnmount(stopPlayback);
 .tiles {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    gap: 8px;
-    margin-bottom: 16px;
+    gap: @space-2;
+    margin-bottom: @space-4;
 
     .tileInfo {
         position: absolute;
@@ -1048,7 +1048,7 @@ onBeforeUnmount(stopPlayback);
         display: flex;
         flex-direction: column;
         gap: 2px;
-        padding: 10px 12px;
+        padding: 10px @space-3;
         background-color: @nav-active-background-color;
         border-radius: @radius-md;
         border-left: 3px solid transparent;
@@ -1068,11 +1068,11 @@ onBeforeUnmount(stopPlayback);
         }
 
         .tileValue {
-            font-size: 18px;
+            font-size: @font-size-lg;
         }
 
         .tileNote {
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
     }
@@ -1092,7 +1092,7 @@ onBeforeUnmount(stopPlayback);
 .kv {
     display: grid;
     grid-template-columns: max-content 1fr;
-    gap: 4px 14px;
+    gap: @space-1 14px;
     font-size: 13px;
 
     dt {
@@ -1134,8 +1134,8 @@ onBeforeUnmount(stopPlayback);
     }
 
     figcaption {
-        margin-top: 4px;
-        font-size: 12px;
+        margin-top: @space-1;
+        font-size: @font-size-sm;
     }
 }
 
@@ -1155,13 +1155,13 @@ onBeforeUnmount(stopPlayback);
 }
 
 details {
-    margin: 8px 0;
+    margin: @space-2 0;
 
     pre {
         max-height: 320px;
         overflow: auto;
-        padding: 8px;
-        font-size: 12px;
+        padding: @space-2;
+        font-size: @font-size-sm;
         background-color: @input-background-color;
         border-radius: @radius-md;
     }
@@ -1193,7 +1193,7 @@ ul.plain {
     display: flex;
     flex-wrap: wrap;
     gap: 20px;
-    margin: 12px 0 20px;
+    margin: @space-3 0 20px;
 
     .thumbWrap {
         // Only as tall as the picture, however long the facts beside it get: the badges are anchored to its bottom corner.
@@ -1238,14 +1238,14 @@ ul.plain {
         min-width: 280px;
 
         h2 {
-            margin: 0 0 8px;
+            margin: 0 0 @space-2;
         }
 
         dl {
             display: grid;
             grid-template-columns: max-content 1fr;
-            gap: 4px 14px;
-            margin: 0 0 8px;
+            gap: @space-1 14px;
+            margin: 0 0 @space-2;
             font-size: 13px;
 
             dt {
@@ -1267,11 +1267,11 @@ ul.plain {
 .settingsCell {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: @space-1;
 }
 
 .subscriptionBox {
-    margin: 8px 0 14px;
+    margin: @space-2 0 14px;
 
     h3 {
         margin: 0 0 6px;
@@ -1287,7 +1287,7 @@ ul.plain {
 
     .pill {
         padding: 2px 10px;
-        border-radius: 999px;
+        border-radius: @radius-pill;
     }
 }
 
@@ -1299,7 +1299,7 @@ ul.plain {
 }
 
 .probeTable {
-    font-size: 12px;
+    font-size: @font-size-sm;
 }
 
 // The connection the newest stream was served from: the whole row is coloured.
@@ -1324,7 +1324,7 @@ ul.plain {
 
     select {
         box-sizing: border-box;
-        padding: 0 8px;
+        padding: 0 @space-2;
     }
 }
 
@@ -1346,8 +1346,8 @@ ul.plain {
 .statsGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 8px;
-    margin: 12px 0;
+    gap: @space-2;
+    margin: @space-3 0;
 
     .stat .statInfo {
         position: absolute;
@@ -1359,7 +1359,7 @@ ul.plain {
         position: relative;
         display: flex;
         flex-direction: column;
-        padding: 8px 10px;
+        padding: @space-2 10px;
         background-color: @nav-active-background-color;
         border-radius: @radius-md;
 
@@ -1376,7 +1376,7 @@ ul.plain {
 }
 
 .segmentTable {
-    font-size: 12px;
+    font-size: @font-size-sm;
     max-width: 640px;
 }
 
@@ -1384,10 +1384,10 @@ ul.plain {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 16px;
+    gap: @space-4;
 }
 
 .note {
-    margin-top: 16px;
+    margin-top: @space-4;
 }
 </style>

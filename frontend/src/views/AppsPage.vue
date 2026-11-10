@@ -304,7 +304,7 @@ const removeMapping = async ({ id, userAgent }) => {
         position: absolute;
         top: 8px;
         right: 12px;
-        font-size: 12px;
+        font-size: @font-size-sm;
         opacity: 0.7;
     }
 }
@@ -329,7 +329,7 @@ const removeMapping = async ({ id, userAgent }) => {
 
 .uaCards {
     // Tablet portrait: two cards across.
-    @media (min-width: 520px) {
+    @media (min-width: @small-breakpoint) {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 10px;

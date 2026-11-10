@@ -45,7 +45,7 @@ const loaded = (event) => {
 
 <style lang="less" scoped>
 .artworkView {
-    margin: 0 0 12px;
+    margin: 0 0 @space-3;
     text-align: center;
 
     img {
@@ -63,7 +63,7 @@ const loaded = (event) => {
 .artworkDetail {
     display: grid;
     grid-template-columns: max-content 1fr;
-    gap: 4px 14px;
+    gap: @space-1 14px;
     margin: 0;
 
     dt {

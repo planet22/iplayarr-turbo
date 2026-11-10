@@ -469,7 +469,7 @@ const handleClickOutside = (event) => {
         background-color: transparent;
 
         &:first-child {
-            border-radius: 4px 0 0 4px;
+            border-radius: @radius-sm 0 0 @radius-sm;
         }
 
         &:last-child {
@@ -517,8 +517,8 @@ const handleClickOutside = (event) => {
             // Icon with its label to the right, so the bar can be short and the text larger.
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 0 12px;
+            gap: @space-2;
+            padding: 0 @space-3;
             width: auto;
             white-space: nowrap;
             background-color: transparent;
@@ -594,7 +594,7 @@ const handleClickOutside = (event) => {
 
         .SettingsPageToolbar-label {
             color: @primary-text-color;
-            font-size: 14px;
+            font-size: @font-size-md;
         }
 
         @media (max-width: @mobile-breakpoint) {
@@ -606,8 +606,8 @@ const handleClickOutside = (event) => {
                 .tableFilter {
                     min-width: 0;
                     flex: 0.7 1 0;
-                    padding: 4px 6px;
-                    font-size: 12px;
+                    padding: @space-1 6px;
+                    font-size: @font-size-sm;
                 }
 
                 // Same height as the toolbar buttons and dropdowns beside it.
@@ -690,7 +690,7 @@ const handleClickOutside = (event) => {
 
         .SettingsPageToolbar-filters {
             order: 3;
-            padding: 0 0 8px;
+            padding: 0 0 @space-2;
         }
 
         &.inlineFilters .SettingsPageToolbar-filters {
@@ -724,7 +724,7 @@ const handleClickOutside = (event) => {
             flex: 1 1 auto;
             min-width: 0;
             width: 100%;
-            font-size: 14px;
+            font-size: @font-size-md;
         }
     }
 }

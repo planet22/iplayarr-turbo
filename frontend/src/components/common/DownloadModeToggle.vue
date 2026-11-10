@@ -63,7 +63,7 @@ const emit = defineEmits(['update:modelValue']);
         border-radius: @radius-sm;
         background: none;
         color: @toolbar-text-color;
-        font-size: 14px;
+        font-size: @font-size-md;
 
         &:hover {
             color: @primary-text-color;

@@ -273,7 +273,7 @@ onBeforeUnmount(() => {
     right: @space-2;
     display: flex;
     align-items: center;
-    border-radius: 999px;
+    border-radius: @radius-pill;
     background: rgba(0, 0, 0, 0.4);
 }
 

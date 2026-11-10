@@ -356,13 +356,13 @@ const remove = async () => {
 .moreToggle {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin: 4px 0 12px;
-    padding: 4px 0;
+    gap: @space-2;
+    margin: @space-1 0 @space-3;
+    padding: @space-1 0;
     border: none;
     background: none;
     color: @subtle-text-color;
-    font-size: 14px;
+    font-size: @font-size-md;
     cursor: pointer;
 
     &:hover {
@@ -388,9 +388,9 @@ const remove = async () => {
         display: flex;
         justify-content: flex-end;
         margin-right: 20px;
-        padding-top: 8px;
+        padding-top: @space-2;
         text-align: end;
-        font-size: 14px;
+        font-size: @font-size-md;
         font-weight: bold;
         color: @table-text-color;
     }
@@ -403,7 +403,7 @@ const remove = async () => {
             justify-content: flex-start;
             margin-right: 0;
             padding-top: 0;
-            margin-bottom: 4px;
+            margin-bottom: @space-1;
             text-align: start;
         }
     }
@@ -414,8 +414,8 @@ const remove = async () => {
     align-items: center;
     justify-content: flex-end;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-bottom: 8px;
+    gap: @space-3;
+    margin-bottom: @space-2;
 }
 
 .lastTest,
@@ -432,12 +432,12 @@ const remove = async () => {
 }
 
 .testResult {
-    margin: 0 0 12px;
-    padding: 6px 12px 10px;
+    margin: 0 0 @space-3;
+    padding: 6px @space-3 10px;
     border: 1px solid @settings-button-border-color;
     border-radius: @radius-sm;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-    font-size: 12px;
+    font-size: @font-size-sm;
     text-align: left;
     overflow-wrap: anywhere;
 
@@ -448,7 +448,7 @@ const remove = async () => {
         padding: 0 6px;
         border: none;
         font-family: inherit;
-        font-size: 12px;
+        font-size: @font-size-sm;
         line-height: 1;
         color: @subtle-text-color;
     }
@@ -463,9 +463,9 @@ const remove = async () => {
 }
 
 .hint {
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
-    margin-top: 4px;
+    margin-top: @space-1;
 }
 
 // Sits in the Colour field's own row, so it is level with the box in every layout. TextInput's slot is
@@ -483,7 +483,7 @@ const remove = async () => {
 
 .logoRow {
     display: flex;
-    gap: 16px;
+    gap: @space-4;
     align-items: flex-start;
     flex-wrap: wrap;
 }
@@ -513,7 +513,7 @@ const remove = async () => {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 8px;
+    gap: @space-2;
 }
 
 .logoError {
@@ -523,8 +523,8 @@ const remove = async () => {
 
 .dangerRow {
     display: flex;
-    gap: 8px;
-    margin: 12px 0 16px;
+    gap: @space-2;
+    margin: @space-3 0 @space-4;
 }
 </style>
 

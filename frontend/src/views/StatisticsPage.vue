@@ -307,7 +307,7 @@ const selectRange = (option) => {
         box-sizing: border-box;
         border: 1px solid @input-border-color;
         border-radius: @radius-md;
-        padding: 8px 10px 10px;
+        padding: @space-2 10px 10px;
         margin-bottom: 1rem;
     }
 }
@@ -328,14 +328,14 @@ const selectRange = (option) => {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 2px 12px;
-    margin: 0 0 8px;
+    gap: 2px @space-3;
+    margin: 0 0 @space-2;
     font-size: 15px;
     font-weight: 600;
     color: @primary-text-color;
 
     .groupTotals {
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-weight: 400;
         color: @subtle-text-color;
     }
@@ -353,11 +353,11 @@ const selectRange = (option) => {
         min-width: 220px;
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: @space-4;
         background-color: @nav-active-background-color;
         border-radius: @radius-sm;
         box-shadow: 0 0 10px 1px @primary-box-shadow;
-        padding: 16px 20px;
+        padding: @space-4 20px;
         box-sizing: border-box;
 
         &.sparkline {
@@ -368,7 +368,7 @@ const selectRange = (option) => {
             .statCardHeader {
                 display: flex;
                 align-items: center;
-                gap: 16px;
+                gap: @space-4;
             }
         }
 
@@ -385,7 +385,7 @@ const selectRange = (option) => {
         }
 
         .statLabel {
-            font-size: 12px;
+            font-size: @font-size-sm;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.04em;
@@ -413,8 +413,8 @@ const selectRange = (option) => {
     min-width: 0;
     flex-direction: column;
     align-items: stretch;
-    gap: 4px;
-    padding: 8px 12px;
+    gap: @space-1;
+    padding: @space-2 @space-3;
 
     .cacheName {
         font-size: 13px;
@@ -428,7 +428,7 @@ const selectRange = (option) => {
         display: grid;
         grid-template-columns: repeat(3, auto);
         justify-content: space-between;
-        gap: 8px;
+        gap: @space-2;
 
         // Uptime has the one figure, so it takes the whole tile.
         &.uptimeFigures {
@@ -441,7 +441,7 @@ const selectRange = (option) => {
         }
 
         .statValue {
-            font-size: 14px;
+            font-size: @font-size-md;
             font-weight: 400;
         }
     }
@@ -461,14 +461,14 @@ const selectRange = (option) => {
         background-color: @nav-active-background-color;
         border-radius: @radius-sm;
         box-shadow: 0 0 10px 1px @primary-box-shadow;
-        padding: 16px;
+        padding: @space-4;
 
         @media (max-width: @mobile-breakpoint) {
             max-width: 100%;
         }
 
         .topContentHeading {
-            margin: 0 0 12px;
+            margin: 0 0 @space-3;
             font-size: 16px;
             font-weight: 400;
             color: @primary-text-color;
@@ -500,14 +500,14 @@ const selectRange = (option) => {
             .statCard {
                 flex-basis: 100%;
                 min-width: 0;
-                gap: 12px;
+                gap: @space-3;
                 padding: 10px 14px;
 
                 &.sparkline {
                     gap: 6px;
 
                     .statCardHeader {
-                        gap: 12px;
+                        gap: @space-3;
                     }
                 }
 
@@ -533,7 +533,7 @@ const selectRange = (option) => {
             .chartCard {
                 flex-basis: 100%;
                 min-width: 0;
-                padding: 12px;
+                padding: @space-3;
             }
         }
     }

@@ -301,12 +301,12 @@ onMounted(() => {
 <style lang="less">
 .cacheNote,
 .cacheError {
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 
 .cacheError {
-    margin-top: 8px;
+    margin-top: @space-2;
     color: @danger-color;
 }
 
@@ -324,7 +324,7 @@ onMounted(() => {
 .maintGroupBar {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: @space-2;
     border-bottom: 1px solid @primary-text-color;
 
     .groupToggle {
@@ -346,19 +346,19 @@ onMounted(() => {
     .groupChevron {
         flex: 0 0 auto;
         width: 12px;
-        font-size: 12px;
+        font-size: @font-size-sm;
         align-self: center;
     }
 
     .groupTotals {
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-weight: 400;
         color: @subtle-text-color;
     }
 
     .clearGroup {
         flex: 0 0 auto;
-        padding: 4px 12px;
+        padding: @space-1 @space-3;
         border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
@@ -416,14 +416,14 @@ onMounted(() => {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 
     input,
     select {
         box-sizing: border-box;
         height: 28px;
-        padding: 2px 8px;
+        padding: 2px @space-2;
         border: 1px solid @input-border-color;
         border-radius: @radius-sm;
         background-color: @input-background-color;
@@ -455,7 +455,7 @@ onMounted(() => {
     background: none;
     border: none;
     padding: 0;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
     text-decoration: underline;
     cursor: pointer;
@@ -475,7 +475,7 @@ onMounted(() => {
         .label {
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: @space-1;
             color: @primary-text-color;
             font-size: 15px;
         }
@@ -484,7 +484,7 @@ onMounted(() => {
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 4px 8px;
+            gap: @space-1 @space-2;
             margin-top: 6px;
 
             .pill {
@@ -521,9 +521,9 @@ onMounted(() => {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
-        gap: 8px 10px;
-        margin-bottom: 8px;
-        padding: 10px 12px;
+        gap: @space-2 10px;
+        margin-bottom: @space-2;
+        padding: 10px @space-3;
         border-bottom: 0;
         border-radius: @radius-md;
         background-color: @nav-active-background-color;
@@ -535,7 +535,7 @@ onMounted(() => {
             .label {
                 grid-column: 1;
                 grid-row: 1;
-                font-size: 14px;
+                font-size: @font-size-md;
             }
 
             .details {
@@ -590,7 +590,7 @@ onMounted(() => {
         .ttlEditor {
             flex: 0 0 auto;
             flex-wrap: nowrap;
-            gap: 4px;
+            gap: @space-1;
 
             input {
                 width: 52px;
@@ -598,7 +598,7 @@ onMounted(() => {
             }
 
             select {
-                padding: 2px 4px;
+                padding: 2px @space-1;
             }
         }
 
@@ -636,7 +636,7 @@ onMounted(() => {
 }
 
 // Tablet portrait: the cache cards sit two across.
-@media (min-width: 520px) and (max-width: @mobile-breakpoint) {
+@media (min-width: @small-breakpoint) and (max-width: @mobile-breakpoint) {
     .cacheGrid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));

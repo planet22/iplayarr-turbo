@@ -72,7 +72,7 @@ function clear() {
 .dateRangeFilter {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: @space-2;
 
     input.tableFilter {
         max-width: 160px;
@@ -95,19 +95,19 @@ function clear() {
         border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
-        font-size: 18px;
+        font-size: @font-size-lg;
         line-height: 1;
         cursor: pointer;
     }
 
     @media (max-width: @mobile-breakpoint) {
-        gap: 4px;
+        gap: @space-1;
 
         input.tableFilter {
             flex: 1 1 0;
             min-width: 0;
             width: auto;
-            padding: 2px 2px 2px 4px;
+            padding: 2px 2px 2px @space-1;
             font-size: 10px;
 
             // Keep the calendar icon but squeeze it so both boxes still fit on one row.
@@ -120,7 +120,7 @@ function clear() {
         }
 
         span {
-            font-size: 12px;
+            font-size: @font-size-sm;
         }
 
         .clearDates {

@@ -43,7 +43,7 @@ defineProps({
     gap: 6px;
     max-width: 480px;
     margin: 2.5rem auto;
-    padding: 0 16px;
+    padding: 0 @space-4;
     text-align: center;
 
     .emptyStateIcon {
@@ -52,13 +52,13 @@ defineProps({
     }
 
     .emptyStateTitle {
-        font-size: 18px;
+        font-size: @font-size-lg;
         font-weight: 600;
         color: @primary-text-color;
     }
 
     .emptyStateHint {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
     }
 
@@ -72,12 +72,12 @@ defineProps({
         a,
         button {
             display: inline-block;
-            padding: 8px 18px;
+            padding: @space-2 18px;
             border: 1px solid @settings-button-border-color;
             border-radius: @radius-sm;
             background-color: @settings-button-background-color;
             color: @primary-text-color;
-            font-size: 14px;
+            font-size: @font-size-md;
             text-decoration: none;
             cursor: pointer;
 

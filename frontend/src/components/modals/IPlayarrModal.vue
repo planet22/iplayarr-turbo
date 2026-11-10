@@ -99,7 +99,7 @@ const dismiss = (close) => {
 
         // The close X is a real button (focusable, named) but looks like the bare icon it replaced.
         .modalClose {
-            padding: 4px 6px;
+            padding: @space-1 6px;
             border: none;
             background: none;
             color: inherit;

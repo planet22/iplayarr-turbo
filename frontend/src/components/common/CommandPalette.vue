@@ -194,7 +194,7 @@ defineExpose({ show });
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: 12vh 16px 16px;
+    padding: 12vh @space-4 @space-4;
     background-color: @overlay-color;
     -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
@@ -285,7 +285,7 @@ defineExpose({ show });
 
         .cmdItemHint {
             flex: 0 0 auto;
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
     }

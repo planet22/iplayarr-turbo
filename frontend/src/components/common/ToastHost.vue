@@ -141,18 +141,18 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
 
         .toastDetail {
             margin-top: 2px;
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
 
         button {
             flex: 0 0 auto;
-            padding: 4px 10px;
+            padding: @space-1 10px;
             font-size: 13px;
         }
 
         .toastClose {
-            padding: 4px 6px;
+            padding: @space-1 6px;
             border-color: transparent;
             background: transparent;
             color: @subtle-text-color;

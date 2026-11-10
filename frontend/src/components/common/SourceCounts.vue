@@ -42,7 +42,7 @@ const logos = {
 .sourceCounts {
     display: inline-flex;
     flex-wrap: wrap;
-    gap: 4px 12px;
+    gap: @space-1 @space-3;
     font-size: 13px;
     color: @subtle-text-color;
 
@@ -65,8 +65,8 @@ const logos = {
     &.grid {
         display: grid;
         grid-template-columns: repeat(2, auto);
-        gap: 8px 6px;
-        font-size: 14px;
+        gap: @space-2 6px;
+        font-size: @font-size-md;
 
         .sourceLogo {
             height: 22px;
@@ -77,7 +77,7 @@ const logos = {
     @media (max-width: @mobile-breakpoint) {
         &.grid {
             grid-template-columns: repeat(4, auto);
-            gap: 6px 12px;
+            gap: 6px @space-3;
         }
     }
 }

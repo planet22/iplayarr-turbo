@@ -255,7 +255,7 @@ const handleClickOutside = (event) => {
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     z-index: @z-raised;
-    font-size: 14px;
+    font-size: @font-size-md;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -264,7 +264,7 @@ const handleClickOutside = (event) => {
     top: 60px;
 
     .floor {
-        padding: 24px 24px;
+        padding: @space-5 @space-5;
         box-sizing: border-box;
 
         span {
@@ -277,8 +277,8 @@ const handleClickOutside = (event) => {
     }
 
     .versionInfo {
-        margin-top: 12px;
-        font-size: 12px;
+        margin-top: @space-3;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
 
         .updateAvailable {
@@ -307,7 +307,7 @@ const handleClickOutside = (event) => {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 18px 24px 6px;
+        padding: 18px @space-5 6px;
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.08em;
@@ -325,12 +325,12 @@ const handleClickOutside = (event) => {
         }
 
         &:first-child {
-            padding-top: 12px;
+            padding-top: @space-3;
         }
     }
 
     li {
-        padding: 12px 24px;
+        padding: @space-3 @space-5;
 
         &.active {
             background-color: @nav-active-background-color;

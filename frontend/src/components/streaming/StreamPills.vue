@@ -46,7 +46,7 @@ const chips = computed(() => {
     height: 0;
 
     // Phones and tablets: one flowing row of pills (two lines in all), not a break between the main pills and the settings.
-    @media (max-width: 1099px) {
+    @media (max-width: @laptop-breakpoint) {
         display: none;
     }
 }

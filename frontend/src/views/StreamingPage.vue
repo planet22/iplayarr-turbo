@@ -514,7 +514,7 @@ async function clearHistory() {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 12px;
+    font-size: @font-size-sm;
     font-weight: bold;
     text-transform: uppercase;
     color: @brand-color;
@@ -542,8 +542,8 @@ async function clearHistory() {
 
 // Pills here are fully rounded (smooth ends) rather than square-cornered.
 .streamingPage .pill {
-    padding: 1px 8px;
-    border-radius: 999px;
+    padding: 1px @space-2;
+    border-radius: @radius-pill;
 }
 
 .tableToolbar {
@@ -574,8 +574,8 @@ async function clearHistory() {
         .tableFilter {
             min-width: 0;
             flex: 0.7 1 0;
-            padding: 4px 6px;
-            font-size: 12px;
+            padding: @space-1 6px;
+            font-size: @font-size-sm;
         }
 
         .dateRangeFilter {
@@ -589,12 +589,12 @@ async function clearHistory() {
     max-width: 100%;
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @table-text-color;
     margin-bottom: 2rem;
 
     thead th {
-        padding: 8px;
+        padding: @space-2;
         text-align: left;
         font-weight: bold;
         border-bottom: 1px solid @table-border-color;
@@ -612,7 +612,7 @@ async function clearHistory() {
         .sortIcon {
             font-size: 11px;
             opacity: 0.35;
-            margin-left: 4px;
+            margin-left: @space-1;
 
             &.active {
                 opacity: 1;
@@ -631,7 +631,7 @@ async function clearHistory() {
         }
 
         td {
-            padding: 8px;
+            padding: @space-2;
             border-top: 1px solid @table-border-color;
             line-height: 1.5;
         }
@@ -644,11 +644,11 @@ async function clearHistory() {
 }
 
 // Tablets and wider: the (horizontal) cards sit two across.
-@media (min-width: 1000px) {
+@media (min-width: @wide-breakpoint) {
     .streamCards {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0 12px;
+        gap: 0 @space-3;
 
         .empty {
             grid-column: 1 / -1;
@@ -663,7 +663,7 @@ async function clearHistory() {
 }
 
 // Video Quality (only for the get_iplayer / yt-dlp clients) is on the cards and in the info popup; the table drops them below a wide screen.
-@media (max-width: 1799px) {
+@media (max-width: @xlarge-breakpoint) {
     .streamsTable .hideLg {
         display: none;
     }
@@ -685,7 +685,7 @@ async function clearHistory() {
         width: 64px;
         height: 36px;
         object-fit: cover;
-        border-radius: 2px;
+        border-radius: @radius-xs;
         display: block;
     }
 
@@ -705,7 +705,7 @@ async function clearHistory() {
     }
 
     .subtle {
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 
@@ -732,7 +732,7 @@ async function clearHistory() {
     // Pill columns are tight: each only ever holds one short pill.
     thead th.chipCol,
     tbody td.chipCol {
-        padding: 4px 2px;
+        padding: @space-1 2px;
     }
 
     .chipCol .pill,
@@ -750,7 +750,7 @@ async function clearHistory() {
     }
 
     .clientIp {
-        font-size: 12px;
+        font-size: @font-size-sm;
     }
 
     .centerCol {
@@ -761,7 +761,7 @@ async function clearHistory() {
         text-align: center;
 
         .debugAction {
-            margin-right: 12px;
+            margin-right: @space-3;
         }
 
         .disabled {

@@ -616,13 +616,13 @@ watch(isChannels, () => loadTiles(), { immediate: true });
 <style lang="less" scoped>
 // The toolbar sits under the title bar; keep a gap before the tiles.
 .browsePage :deep(.SettingsPageToolbar) {
-    margin-bottom: 12px;
+    margin-bottom: @space-3;
 }
 
 .tileGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px;
+    gap: @space-3;
 
     // Three across on tablets, two on phones.
     @media (max-width: @mobile-breakpoint) {
@@ -638,8 +638,8 @@ watch(isChannels, () => loadTiles(), { immediate: true });
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 18px 16px;
+    gap: @space-3;
+    padding: 18px @space-4;
     border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
@@ -660,8 +660,8 @@ watch(isChannels, () => loadTiles(), { immediate: true });
     }
 
     .pill {
-        font-size: 14px;
-        padding: 2px 8px;
+        font-size: @font-size-md;
+        padding: 2px @space-2;
     }
 
     .channelLogo {
@@ -751,7 +751,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         display: flex;
         align-items: center;
         gap: 6px;
-        font-size: 12px;
+        font-size: @font-size-sm;
 
         svg {
             color: @on-media-color;
@@ -762,8 +762,8 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         flex-direction: column;
         justify-content: center;
         text-align: center;
-        gap: 4px;
-        padding: 14px 12px;
+        gap: @space-1;
+        padding: 14px @space-3;
 
         // Matches the BBC logo SVGs' own viewBox (76x32) so cover never has to crop them.
         &:has(.channelLogo) {
@@ -787,13 +787,13 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         &:has(.channelLogo) {
             aspect-ratio: auto;
             overflow: visible;
-            padding: 0 0 8px;
+            padding: 0 0 @space-2;
         }
 
         .channelLogo {
             aspect-ratio: 2.375 / 1;
             height: auto;
-            border-radius: 4px 4px 0 0;
+            border-radius: @radius-sm @radius-sm 0 0;
             pointer-events: none;
         }
 
@@ -817,7 +817,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             text-align: center;
 
             .arrangeName {
-                font-size: 14px;
+                font-size: @font-size-md;
             }
 
             .arrangeVpid {
@@ -963,8 +963,8 @@ watch(isChannels, () => loadTiles(), { immediate: true });
 
         .tileTitle {
             width: 100%;
-            padding: 28px 12px 10px;
-            font-size: 18px;
+            padding: 28px @space-3 10px;
+            font-size: @font-size-lg;
             box-sizing: border-box;
             color: @on-media-color;
             background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);

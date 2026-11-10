@@ -268,7 +268,7 @@ const deleteItem = async () => {
     grid-template-columns: max-content 1fr;
     gap: 0.2rem 0.75rem;
     margin: 0;
-    font-size: 14px;
+    font-size: @font-size-md;
 
     dt {
         color: @subtle-text-color;
@@ -299,10 +299,10 @@ const deleteItem = async () => {
     background: transparent;
     border: 0;
     color: @subtle-text-color;
-    font-size: 12px;
+    font-size: @font-size-sm;
 
     svg {
-        margin-right: 4px;
+        margin-right: @space-1;
     }
 }
 

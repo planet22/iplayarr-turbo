@@ -86,7 +86,7 @@ li.hasActivity {
 
     .navActivity {
         margin-left: 0.5rem;
-        font-size: 12px;
+        font-size: @font-size-sm;
     }
 }
 </style>

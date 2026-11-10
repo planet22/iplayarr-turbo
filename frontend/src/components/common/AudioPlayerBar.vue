@@ -131,8 +131,8 @@ onBeforeUnmount(() => {
     z-index: @z-audio-bar;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 8px 16px;
+    gap: @space-3;
+    padding: @space-2 @space-4;
     background-color: @nav-background-color;
     border-top: 1px solid @settings-button-border-color;
 

@@ -42,7 +42,7 @@ const emit = defineEmits(['update:sortBy', 'update:order', 'update:grouped']);
 
 .cacheModeToggle {
     height: 32px;
-    padding: 0 12px;
+    padding: 0 @space-3;
     border: 1px solid @grey-pill-background-color;
     border-radius: @radius-sm;
     background-color: transparent;
@@ -56,7 +56,7 @@ const emit = defineEmits(['update:sortBy', 'update:order', 'update:grouped']);
     }
 
     svg {
-        margin-right: 4px;
+        margin-right: @space-1;
     }
 }
 </style>

@@ -37,7 +37,7 @@ defineProps({
     --bar-color: @primary-color;
     border: 1px solid var(--bar-color);
     box-sizing: border-box;
-    border-radius: 5px;
+    border-radius: @radius-md;
     overflow: hidden;
 
     .progress {

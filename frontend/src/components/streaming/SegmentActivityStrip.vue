@@ -76,7 +76,7 @@ const tooltip = computed(() => {
     box-sizing: border-box;
     cursor: pointer;
     border: 1px solid @table-border-color;
-    border-radius: 3px;
+    border-radius: @radius-sm;
     flex-shrink: 0;
 
     &.allReady {

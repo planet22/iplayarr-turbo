@@ -757,7 +757,7 @@ const duplicatesBannerDownload = computed(
         background-color: rgba(0, 0, 0, 0.65);
 
         h1 {
-            margin: 0 0 12px;
+            margin: 0 0 @space-3;
             font-size: 42px;
             font-weight: 300;
             text-wrap: balance;
@@ -774,10 +774,10 @@ const duplicatesBannerDownload = computed(
     }
 
     .programmeMeta {
-        margin-bottom: 12px;
+        margin-bottom: @space-3;
         display: flex;
         flex-wrap: wrap;
-        gap: 8px 10px;
+        gap: @space-2 10px;
 
         .pill.grey,
         .pill.channelPill {
@@ -805,7 +805,7 @@ const duplicatesBannerDownload = computed(
 
     p.missing {
         display: inline-block;
-        padding: 2px 8px;
+        padding: 2px @space-2;
         border-radius: @radius-sm;
     }
 
@@ -847,7 +847,7 @@ const duplicatesBannerDownload = computed(
         position: relative;
         display: flex;
         align-items: flex-start;
-        gap: 24px;
+        gap: @space-5;
         background-color: rgba(0, 0, 0, 0.55);
         // Over the artwork backdrop: fixed white, not the theme's text colour (dark in light mode).
         color: @on-media-color;
@@ -886,7 +886,7 @@ const duplicatesBannerDownload = computed(
     margin-top: 14px;
 
     // Phone width: two columns share the full width; an odd button out spans the whole row.
-    @media (max-width: 600px) {
+    @media (max-width: @compact-breakpoint) {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
 
@@ -899,8 +899,8 @@ const duplicatesBannerDownload = computed(
         }
 
         > .subscribeButton {
-            padding: 9px 8px;
-            font-size: 14px;
+            padding: 9px @space-2;
+            font-size: @font-size-md;
             text-align: center;
 
             &:last-child:nth-child(odd) {
@@ -916,7 +916,7 @@ const duplicatesBannerDownload = computed(
     .programmeBanner .programmeBannerContent {
         display: grid;
         grid-template-columns: 112px minmax(0, 1fr);
-        gap: 12px;
+        gap: @space-3;
         padding: 1rem;
 
         &:not(.hasPoster) {
@@ -938,7 +938,7 @@ const duplicatesBannerDownload = computed(
 
         h1 {
             font-size: 24px;
-            margin-bottom: 8px;
+            margin-bottom: @space-2;
         }
 
         .programmeMeta {
@@ -958,13 +958,13 @@ const duplicatesBannerDownload = computed(
         }
 
         p {
-            font-size: 14px;
+            font-size: @font-size-md;
         }
     }
 }
 
 .subscribeButton {
-    padding: 8px 16px;
+    padding: @space-2 @space-4;
     font-size: 15px;
     border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
@@ -1006,7 +1006,7 @@ const duplicatesBannerDownload = computed(
     align-items: stretch;
     justify-content: flex-end;
     gap: 14px;
-    margin-bottom: 4px;
+    margin-bottom: @space-1;
 
     // Inside the pager's left-hand slot, beside the page controls.
     &.inline {
@@ -1014,7 +1014,7 @@ const duplicatesBannerDownload = computed(
         gap: 6px;
     }
 
-    @media (max-width: 600px) {
+    @media (max-width: @compact-breakpoint) {
         justify-content: stretch;
         gap: 6px;
 
@@ -1026,7 +1026,7 @@ const duplicatesBannerDownload = computed(
 
     .seasonSort {
         flex: 0 0 auto;
-        padding: 6px 12px;
+        padding: 6px @space-3;
         border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
@@ -1036,14 +1036,14 @@ const duplicatesBannerDownload = computed(
             background-color: @settings-button-hover-background-color;
         }
 
-        @media (max-width: 600px) {
+        @media (max-width: @compact-breakpoint) {
             padding: 9px 14px;
         }
     }
 
     .loadingMore {
         color: @subtle-text-color;
-        font-size: 14px;
+        font-size: @font-size-md;
     }
 
     .seasonDownload {
@@ -1097,7 +1097,7 @@ const duplicatesBannerDownload = computed(
     display: flex;
     align-items: flex-start;
     gap: 14px;
-    padding: 12px 0;
+    padding: @space-3 0;
     border-bottom: 1px solid @toolbar-background-color;
 
     .episodeThumbWrap {
@@ -1111,7 +1111,7 @@ const duplicatesBannerDownload = computed(
         }
 
         // Phones: the thumbnail runs the full width above the text.
-        @media (max-width: 600px) {
+        @media (max-width: @compact-breakpoint) {
             flex-basis: auto;
             width: 100%;
         }
@@ -1127,7 +1127,7 @@ const duplicatesBannerDownload = computed(
         background-color: @nav-background-color;
     }
 
-    @media (max-width: 600px) {
+    @media (max-width: @compact-breakpoint) {
         flex-direction: column;
         align-items: stretch;
         gap: 10px;
@@ -1162,13 +1162,13 @@ const duplicatesBannerDownload = computed(
         .episodeLabel {
             display: block;
             color: @subtle-text-color;
-            font-size: 12px;
+            font-size: @font-size-sm;
         }
 
         .descriptionToggle {
             display: inline-block;
             margin-top: 2px;
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @brand-color;
         }
 
@@ -1185,7 +1185,7 @@ const duplicatesBannerDownload = computed(
         }
 
         .episodeDescription {
-            margin-top: 4px;
+            margin-top: @space-1;
             font-size: 13px;
             color: @table-text-color;
             line-height: 1.35;
@@ -1197,12 +1197,12 @@ const duplicatesBannerDownload = computed(
         }
 
         .episodeDetails {
-            margin-top: 4px;
-            font-size: 12px;
+            margin-top: @space-1;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
 
             span {
-                margin-right: 12px;
+                margin-right: @space-3;
             }
         }
     }
@@ -1213,11 +1213,11 @@ const duplicatesBannerDownload = computed(
         top: 6px;
         right: 6px;
         padding: 1px 6px;
-        border-radius: 2px;
+        border-radius: @radius-xs;
         background-color: rgba(0, 0, 0, 0.7);
         border: 1px solid rgba(255, 255, 255, 0.35);
         color: @on-media-color;
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-weight: 700;
         line-height: 1.4;
     }
@@ -1235,7 +1235,7 @@ const duplicatesBannerDownload = computed(
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 12px;
+        gap: @space-3;
         border-radius: @radius-sm;
         background-color: rgba(0, 0, 0, 0.55);
         opacity: 0;

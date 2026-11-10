@@ -113,8 +113,8 @@ watch(
     .cacheHead {
         display: flex;
         align-items: center;
-        gap: 4px;
-        padding-right: 16px; // room for the dot
+        gap: @space-1;
+        padding-right: @space-4; // room for the dot
 
         .InfoTip-button {
             padding: 0 2px;

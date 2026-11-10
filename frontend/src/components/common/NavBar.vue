@@ -81,6 +81,7 @@ import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
 import { useDnsRelay } from '@/lib/useDnsRelay';
+import { MOBILE_QUERY } from '@/lib/useIsMobile';
 import { useSearchSuggestions } from '@/lib/useSearchSuggestions';
 import { getPidFromBBCUrl } from '@/lib/utils';
 
@@ -122,7 +123,7 @@ const barHidden = ref(false);
 let lastScrollY = 0;
 const onScroll = () => {
     const y = Math.max(0, window.scrollY);
-    const phone = window.matchMedia('(max-width: 768px)').matches;
+    const phone = window.matchMedia(MOBILE_QUERY).matches;
     if (topBar.mode !== 'auto' || !phone || y < 60) {
         barHidden.value = false;
     } else if (y > lastScrollY + 8) {
@@ -201,7 +202,7 @@ defineExpose({ clearSearch });
 
     // Phones: every pixel of the bar goes to the search box.
     @media (max-width: @mobile-breakpoint) {
-        padding: 0 8px;
+        padding: 0 @space-2;
     }
     background-color: @nav-background-color;
     // A faint line along the bottom edge splits the bar from the page. Inset, so the bar's height (which
@@ -250,7 +251,7 @@ defineExpose({ clearSearch });
             .searchPanel {
                 display: flex;
                 align-items: center;
-                gap: 4px;
+                gap: @space-1;
                 height: 100%;
                 min-width: 0;
 
@@ -288,7 +289,7 @@ defineExpose({ clearSearch });
                         max-width: none;
                     }
                     margin: 0;
-                    padding: 4px 0;
+                    padding: @space-1 0;
                     list-style: none;
                     z-index: @z-dropdown;
                     border-radius: @radius-sm;
@@ -300,9 +301,9 @@ defineExpose({ clearSearch });
                         display: flex;
                         align-items: center;
                         gap: 10px;
-                        padding: 8px 12px;
+                        padding: @space-2 @space-3;
                         cursor: pointer;
-                        font-size: 14px;
+                        font-size: @font-size-md;
                         white-space: nowrap;
                         overflow: hidden;
                         text-overflow: ellipsis;
@@ -324,7 +325,7 @@ defineExpose({ clearSearch });
                         &.seeAll {
                             color: @primary-color;
                             border-top: 1px solid @settings-button-border-color;
-                            margin-top: 4px;
+                            margin-top: @space-1;
                         }
                     }
                 }
@@ -372,7 +373,7 @@ defineExpose({ clearSearch });
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 16px;
+            gap: @space-4;
 
             // The icon buttons sit close together so the search box gets the room.
             @media (max-width: @mobile-breakpoint) {

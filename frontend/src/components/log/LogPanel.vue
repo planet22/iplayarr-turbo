@@ -118,7 +118,7 @@ ul {
         max-height: 10rem;
         max-width: 100%;
         margin: 0;
-        font-size: 12px;
+        font-size: @font-size-sm;
         box-sizing: border-box;
     }
 

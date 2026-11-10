@@ -82,7 +82,7 @@ onBeforeUnmount(() => {
     z-index: @z-banner;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: @space-2;
     max-width: calc(100vw - 32px);
     padding: 6px 14px;
     border: 1px solid @table-border-color;

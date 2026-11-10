@@ -708,8 +708,8 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
 }
 
 .filterEmpty {
-    margin: 12px 0;
-    font-size: 14px;
+    margin: @space-3 0;
+    font-size: @font-size-md;
     color: @subtle-text-color;
 }
 
@@ -723,7 +723,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
 
 .detectedActions {
     display: flex;
-    gap: 8px;
+    gap: @space-2;
 }
 
 .detectedIntro {
@@ -731,8 +731,8 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 8px 16px;
-    margin: 8px 0;
+    gap: @space-2 @space-4;
+    margin: @space-2 0;
     font-size: 13px;
     color: @subtle-text-color;
 
@@ -792,8 +792,8 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
         }
 
         .synopsis {
-            margin: 4px 0 0;
-            font-size: 12px;
+            margin: @space-1 0 0;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
             white-space: nowrap;
             overflow: hidden;
@@ -804,9 +804,9 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            gap: 4px 12px;
-            margin-top: 4px;
-            font-size: 12px;
+            gap: @space-1 @space-3;
+            margin-top: @space-1;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
     }
@@ -814,7 +814,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
 
 .rowActions {
     display: flex;
-    gap: 8px;
+    gap: @space-2;
     flex-shrink: 0;
 
     .actionGap {
@@ -858,9 +858,9 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
 .subCard {
     display: grid;
     grid-template-columns: 160px minmax(0, 1fr);
-    gap: 8px 12px;
+    gap: @space-2 @space-3;
     padding: 10px;
-    margin-bottom: 8px;
+    margin-bottom: @space-2;
     background-color: @nav-active-background-color;
     border-radius: @radius-md;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
@@ -909,7 +909,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     .subText {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: @space-1;
         min-width: 0;
     }
 
@@ -917,7 +917,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 4px 6px;
+        gap: @space-1 6px;
     }
 
     .subSources {
@@ -930,7 +930,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
         -webkit-line-clamp: 3;
         line-clamp: 3;
         margin: 0;
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
         overflow: hidden;
     }
@@ -939,7 +939,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
         display: grid;
         grid-template-columns: 1fr 1fr;
         align-content: center;
-        gap: 6px 4px;
+        gap: 6px @space-1;
     }
 
     .rowActions {
@@ -959,7 +959,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     overflow-wrap: anywhere;
 
     + .cardLine {
-        margin-top: 4px;
+        margin-top: @space-1;
     }
 }
 
@@ -968,14 +968,14 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     display: block;
     // A grid item stretches to the text beside it; hug the picture so the corner badges stay on it.
     align-self: start;
-    border-radius: 3px;
+    border-radius: @radius-sm;
 }
 
 // Wide screens: several cards across (about four on a big monitor) instead of one per line.
 .cardList.cardGrid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-    gap: 12px;
+    gap: @space-3;
 
     .subCard {
         margin-bottom: 0;
@@ -998,10 +998,10 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     top: 4px;
     right: 4px;
     padding: 1px 6px;
-    border-radius: 10px;
+    border-radius: @radius-lg;
     background-color: rgba(0, 0, 0, 0.75);
     color: @on-media-color;
-    font-size: 12px;
+    font-size: @font-size-sm;
     line-height: 1.4;
 
     // The last download's count, at the bottom left.
@@ -1017,7 +1017,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
 .splitPill {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: @space-1;
 
     .splitLogo {
         width: 14px;

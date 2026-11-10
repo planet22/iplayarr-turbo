@@ -294,7 +294,7 @@ const clearEvents = async () => {
         width: 64px;
         height: 36px;
         object-fit: cover;
-        border-radius: 2px;
+        border-radius: @radius-xs;
         display: block;
     }
 
@@ -303,7 +303,7 @@ const clearEvents = async () => {
     }
 
     .subtle {
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @subtle-text-color;
     }
 }

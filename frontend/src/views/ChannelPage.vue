@@ -143,7 +143,7 @@ watch(
 <style lang="less" scoped>
 // The toolbar sits under the title bar; keep a gap before the content (as on the Channels page).
 .browsePage :deep(.SettingsPageToolbar) {
-    margin-bottom: 12px;
+    margin-bottom: @space-3;
 }
 
 // The channel's own logo at the right end of the title bar, in the tiles' 76:32 shape.
@@ -153,14 +153,14 @@ watch(
     aspect-ratio: 2.375 / 1;
     object-fit: cover;
     border-radius: @radius-sm;
-    margin-bottom: 4px;
+    margin-bottom: @space-1;
 }
 
 .channelHeader {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 16px;
+    gap: @space-4;
     margin-bottom: 1rem;
 
     .browseTitle {
@@ -171,7 +171,7 @@ watch(
 .nowNext {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 12px;
+    gap: @space-3;
     margin-bottom: 1.75rem;
 }
 
@@ -199,7 +199,7 @@ watch(
 .nowNextCard {
     position: relative;
     display: flex;
-    gap: 12px;
+    gap: @space-3;
     padding: 10px;
     border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
@@ -236,11 +236,11 @@ watch(
         .nowNextLabel {
             display: inline-block;
             padding: 1px 6px;
-            margin-bottom: 4px;
+            margin-bottom: @space-1;
             font-size: 11px;
             font-weight: bold;
             text-transform: uppercase;
-            border-radius: 2px;
+            border-radius: @radius-xs;
             background-color: @grey-pill-background-color;
 
             &.live {
@@ -262,7 +262,7 @@ watch(
 
         .nowNextSubtitle,
         .nowNextTime {
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
         }
     }

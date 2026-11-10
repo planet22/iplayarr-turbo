@@ -193,7 +193,7 @@ onMounted(async () => {
         grid-template-columns: 1fr;
         align-items: center;
         gap: 6px;
-        padding: 10px 12px;
+        padding: 10px @space-3;
         border-top: 1px solid @input-border-color;
 
         &:first-child {
@@ -206,7 +206,7 @@ onMounted(async () => {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 14px;
+        font-size: @font-size-md;
         font-weight: bold;
         color: @table-text-color;
     }
@@ -228,7 +228,7 @@ onMounted(async () => {
     .statusIcon {
         flex: 0 0 22px;
         text-align: center;
-        font-size: 18px;
+        font-size: @font-size-lg;
         cursor: default;
 
         &.ok {
@@ -246,7 +246,7 @@ onMounted(async () => {
         padding: 0;
         background-color: @settings-button-background-color;
         border: 1px solid @settings-button-border-color;
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @primary-text-color;
         border-radius: @radius-sm;
 

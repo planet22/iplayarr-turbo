@@ -154,8 +154,8 @@ const clearView = async () => {
 .tiles {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-    gap: 8px;
-    margin: 12px 0;
+    gap: @space-2;
+    margin: @space-3 0;
 
     .tileInfo {
         position: absolute;
@@ -168,7 +168,7 @@ const clearView = async () => {
         display: flex;
         flex-direction: column;
         gap: 2px;
-        padding: 10px 12px;
+        padding: 10px @space-3;
         background-color: @nav-active-background-color;
         border-radius: @radius-md;
         border-left: 3px solid transparent;
@@ -188,12 +188,12 @@ const clearView = async () => {
         }
 
         .tileValue {
-            font-size: 18px;
+            font-size: @font-size-lg;
             overflow-wrap: anywhere;
         }
 
         .tileNote {
-            font-size: 12px;
+            font-size: @font-size-sm;
             color: @subtle-text-color;
             overflow-wrap: anywhere;
         }
@@ -206,7 +206,7 @@ const clearView = async () => {
     flex: 1 1 10rem;
     min-width: 8rem;
     max-width: 340px;
-    font-size: 14px;
+    font-size: @font-size-md;
 }
 
 .sourceSelect {
@@ -214,7 +214,7 @@ const clearView = async () => {
     flex: 0 1 190px;
     width: 190px;
     min-width: 9rem;
-    padding: 0 8px;
+    padding: 0 @space-2;
     border: 1px solid @input-border-color;
     border-radius: @radius-sm;
     background-color: @input-background-color;
@@ -229,13 +229,13 @@ const clearView = async () => {
 .levelChips {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: @space-2;
     margin: 0 0 10px;
 
     .clearFilters {
-        padding: 4px 12px;
+        padding: @space-1 @space-3;
         border: 1px solid @settings-button-border-color;
-        border-radius: 14px;
+        border-radius: @radius-xl;
         background-color: transparent;
         color: @primary-text-color;
         font-size: 13px;
@@ -243,7 +243,7 @@ const clearView = async () => {
     }
 
     .chipCount {
-        margin-left: 4px;
+        margin-left: @space-1;
         color: @subtle-text-color;
     }
 

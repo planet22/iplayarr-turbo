@@ -118,7 +118,7 @@ const facts = computed(() =>
 .footFacts {
     display: flex;
     flex-wrap: wrap;
-    gap: 0 12px;
+    gap: 0 @space-3;
     min-width: 0;
 }
 
@@ -128,14 +128,14 @@ const facts = computed(() =>
 
 // Tablet and up: the card is wide, so it lays out in one row (poster, title and pills, rate and segments, then who/when/how
 // much) instead of the phone's stack; on a very wide screen the cards sit two across.
-@media (min-width: 700px) {
+@media (min-width: @medium-breakpoint) {
     .streamCard.dataCard {
         grid-template-columns: auto minmax(0, 1fr) 152px 200px;
         align-items: center;
-        gap: 8px 10px;
+        gap: @space-2 10px;
 
         // Tablet: a slightly smaller poster leaves the pills room for two lines.
-        @media (max-width: 1099px) {
+        @media (max-width: @laptop-breakpoint) {
             :deep(.dcThumb img),
             :deep(.dcThumb .thumbnail-placeholder) {
                 width: 84px;
@@ -176,7 +176,7 @@ const facts = computed(() =>
     width: 32px;
     height: 32px;
     padding: 0;
-    font-size: 14px;
+    font-size: @font-size-md;
     color: @primary-text-color;
     background-color: @settings-button-hover-background-color;
     border: 1px solid @settings-button-border-color;

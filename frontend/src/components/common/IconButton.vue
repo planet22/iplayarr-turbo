@@ -24,7 +24,7 @@ defineProps({
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 4px 5px;
+    padding: @space-1 5px;
     border: none;
     background: none;
     color: @primary-text-color;

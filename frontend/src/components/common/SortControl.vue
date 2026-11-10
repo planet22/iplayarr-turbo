@@ -55,7 +55,7 @@ const pick = (key) => {
         height: 32px;
         margin: 6px 3px;
         align-self: center;
-        padding: 0 8px;
+        padding: 0 @space-2;
         border: 1px solid @input-border-color;
         border-radius: @radius-sm;
         background-color: @input-background-color;
@@ -69,7 +69,7 @@ const pick = (key) => {
         box-sizing: border-box;
         min-height: 32px;
         margin: 6px 3px;
-        padding: 0 12px;
+        padding: 0 @space-3;
         border: 1px solid transparent;
         opacity: 0.4;
         cursor: default;

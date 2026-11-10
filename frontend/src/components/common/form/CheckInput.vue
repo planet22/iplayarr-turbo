@@ -85,7 +85,7 @@ watch(
             width: 20px;
             height: 20px;
             border: 1px solid @input-border-color;
-            border-radius: 2px;
+            border-radius: @radius-xs;
             background-color: @input-background-color;
             color: white;
             text-align: center;

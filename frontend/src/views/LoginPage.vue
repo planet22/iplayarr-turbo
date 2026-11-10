@@ -172,7 +172,7 @@ onMounted(async () => {
 
 .form-input {
     box-sizing: border-box;
-    padding: 6px 16px;
+    padding: 6px @space-4;
     width: 100%;
     height: 35px;
     background-color: @input-background-color;
@@ -201,13 +201,13 @@ onMounted(async () => {
 .login-notice {
     margin-top: 20px;
     color: @subtle-text-color;
-    font-size: 14px;
+    font-size: @font-size-md;
 }
 
 .login-failed {
     margin-top: 20px;
     color: @danger-color;
-    font-size: 14px;
+    font-size: @font-size-md;
 }
 
 .forgot-container {

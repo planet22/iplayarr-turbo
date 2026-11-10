@@ -42,10 +42,10 @@ const emit = defineEmits(['retry']);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: @space-2;
     max-width: 480px;
     margin: 2.5rem auto;
-    padding: 0 16px;
+    padding: 0 @space-4;
     text-align: center;
 
     .errorStateIcon {
@@ -54,21 +54,21 @@ const emit = defineEmits(['retry']);
     }
 
     .errorStateTitle {
-        font-size: 18px;
+        font-size: @font-size-lg;
         font-weight: 600;
         color: @primary-text-color;
     }
 
     .errorStateMessage {
-        font-size: 14px;
+        font-size: @font-size-md;
         color: @subtle-text-color;
         overflow-wrap: anywhere;
     }
 
     .errorStateRetry {
-        margin-top: 8px;
+        margin-top: @space-2;
         cursor: pointer;
-        padding: 8px 18px;
+        padding: @space-2 18px;
     }
 }
 </style>

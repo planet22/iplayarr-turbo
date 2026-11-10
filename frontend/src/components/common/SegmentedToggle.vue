@@ -32,14 +32,14 @@ const emit = defineEmits(['update:modelValue']);
     button {
         padding: 2px 10px;
         font-family: inherit;
-        font-size: 12px;
+        font-size: @font-size-sm;
         border: 1px solid @settings-button-border-color;
         background-color: transparent;
         color: @subtle-text-color;
         cursor: pointer;
 
         &:first-child {
-            border-radius: 4px 0 0 4px;
+            border-radius: @radius-sm 0 0 @radius-sm;
         }
 
         &:last-child {

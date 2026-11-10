@@ -395,7 +395,7 @@ onBeforeUnmount(() => {
 
 <style lang="less" scoped>
 .zoneLabel {
-    font-size: 12px;
+    font-size: @font-size-sm;
     font-weight: 700;
     line-height: 1;
 }
@@ -411,7 +411,7 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: @space-3;
     margin-bottom: 1rem;
 
     .browseTitle {
@@ -421,7 +421,7 @@ onBeforeUnmount(() => {
 
 // The buttons take the toolbar's own look; only the spacing under the bar needs styling here.
 .schedulePage :deep(.SettingsPageToolbar) {
-    margin-bottom: 12px;
+    margin-bottom: @space-3;
 }
 
 @row-height: 64px;
@@ -465,11 +465,11 @@ onBeforeUnmount(() => {
         display: block;
         max-width: 100%;
         max-height: 100%;
-        border-radius: 3px;
+        border-radius: @radius-sm;
     }
 
     .channelName {
-        font-size: 12px;
+        font-size: @font-size-sm;
         color: @primary-text-color;
         text-align: center;
     }
@@ -492,7 +492,7 @@ onBeforeUnmount(() => {
 
     &::-webkit-scrollbar-thumb {
         background-color: @settings-button-hover-border-color;
-        border-radius: 5px;
+        border-radius: @radius-md;
 
         &:hover {
             background-color: @brand-color;
@@ -529,7 +529,7 @@ onBeforeUnmount(() => {
     bottom: 0;
     display: flex;
     align-items: center;
-    padding-left: 4px;
+    padding-left: @space-1;
     font-size: 11px;
     color: @subtle-text-color;
     border-left: 1px solid @settings-button-border-color;
@@ -556,9 +556,9 @@ onBeforeUnmount(() => {
     position: sticky;
     left: 0;
     display: inline-block;
-    padding: 0 12px;
+    padding: 0 @space-3;
     line-height: @row-height;
-    font-size: 12px;
+    font-size: @font-size-sm;
     color: @subtle-text-color;
 }
 
@@ -570,10 +570,10 @@ onBeforeUnmount(() => {
     flex-direction: column;
     justify-content: center;
     gap: 1px;
-    padding: 4px 8px;
+    padding: @space-1 @space-2;
     box-sizing: border-box;
     overflow: hidden;
-    border-radius: 3px;
+    border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
@@ -590,7 +590,7 @@ onBeforeUnmount(() => {
     }
 
     .blockTitle {
-        font-size: 12px;
+        font-size: @font-size-sm;
         font-weight: 600;
         white-space: nowrap;
         overflow: hidden;

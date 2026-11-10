@@ -58,7 +58,7 @@ const scroll = (direction) => {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 8px;
+        margin-bottom: @space-2;
 
         h2 {
             margin: 0;
@@ -88,10 +88,10 @@ const scroll = (direction) => {
 
     .railScroller {
         display: flex;
-        gap: 12px;
+        gap: @space-3;
         overflow-x: auto;
         scroll-snap-type: x proximity;
-        padding-bottom: 8px;
+        padding-bottom: @space-2;
         // The arrow buttons (desktop) and swiping (touch) already scroll the rail, so the native
         // bar is just clutter. Still scrollable with trackpad / shift+wheel / keyboard.
         scrollbar-width: none;
