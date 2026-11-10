@@ -133,12 +133,18 @@
         <PageHeader title="Settings" />
         <div class="statRow">
             <div class="statCard settingsCard">
-                <dl class="settingsList">
-                    <template v-for="row in settingRows" :key="row.label">
-                        <dt>{{ row.label }}</dt>
-                        <dd>{{ row.value }}</dd>
-                    </template>
-                </dl>
+                <table class="dataTable settingsTable">
+                    <thead>
+                        <tr>
+                            <th v-for="row in settingRows" :key="row.label">{{ row.label }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td v-for="row in settingRows" :key="row.label" :data-title="row.label">{{ row.value }}</td>
+                        </tr>
+                    </tbody>
+                </table>
                 <router-link class="settingsLink" to="/settings">Change in Settings</router-link>
             </div>
         </div>
@@ -592,19 +598,17 @@ onBeforeUnmount(() => {
     align-items: stretch;
     gap: @space-2;
 
-    .settingsList {
-        display: grid;
-        grid-template-columns: max-content 1fr;
-        gap: @space-1 @space-4;
+    // The settings run across the full width as one row under their names; phones stack them (data-title) like the other tables.
+    .settingsTable {
+        width: 100%;
         margin: 0;
-        font-size: @font-size-base;
 
-        dt {
-            color: @subtle-text-color;
+        th, td {
+            vertical-align: top;
         }
 
-        dd {
-            margin: 0;
+        // Headings wrap between words only; a long value may break anywhere.
+        td {
             overflow-wrap: anywhere;
         }
     }
@@ -629,8 +633,38 @@ onBeforeUnmount(() => {
                 font-size: 24px;
             }
         }
+
+        // The per-source counts drop under the number when they do not fit beside it, instead of running off the card.
+        .valueRow {
+            flex-wrap: wrap;
+            gap: @space-2 @space-4;
+        }
     }
 
+    // The settings table stacks: each setting is a name and its value on one line, no header row.
+    .settingsTable {
+        &, tbody, tr {
+            display: block;
+        }
+
+        thead {
+            display: none;
+        }
+
+        td {
+            display: grid;
+            grid-template-columns: minmax(9rem, 40%) 1fr;
+            gap: @space-3;
+            padding: @space-1 0;
+            border: none;
+            text-align: left;
+
+            &::before {
+                content: attr(data-title);
+                color: @subtle-text-color;
+            }
+        }
+    }
 }
 
 .sourceBreakdown {

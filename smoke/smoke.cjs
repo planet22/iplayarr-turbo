@@ -1066,7 +1066,13 @@ async function watchdogLinks(page, ctx, U) {
         // A link with no failed checks has no pill.
         if (!struck.length) rec(U, 'watchdog cards show no strikes pill when nothing has failed', /\d+\/\d+ strikes/.test(cards) ? 'FAIL' : 'PASS');
         // The Settings section shows what the Watchdog is set to, including the strike limit the API reports.
-        rec(U, 'watchdog shows its current settings', /Settings/.test(cards) && /Failed checks before invalid/.test(cards) && new RegExp(`Failed checks before invalid\\s*${strikes}`).test(cards) ? 'PASS' : 'FAIL', `limit ${strikes}`);
+        // They sit in one table row under their names (not a list): the value is the cell under the "Failed checks before invalid" heading.
+        const heads = await page.locator('.settingsTable th').allTextContents();
+        const cells = await page.locator('.settingsTable td').allTextContents();
+        const at = heads.findIndex((h) => /Failed checks before invalid/i.test(h));
+        rec(U, 'watchdog shows its current settings', /Settings/.test(cards) && at >= 0 && cells[at]?.trim() === String(strikes) ? 'PASS' : 'FAIL', `limit ${strikes}, cell ${cells[at]}`);
+        const settingsW = await page.locator('.settingsTable').evaluate((t) => t.getBoundingClientRect().width / t.parentElement.getBoundingClientRect().width).catch(() => 0);
+        rec(U, 'watchdog settings table spans the card width', settingsW > 0.95 ? 'PASS' : 'FAIL', `ratio ${settingsW.toFixed(2)}`);
         // Library cards: "In the Library" is everything, with each source's icon once; with radio on there are also
         // "Video Only" and "Radio Only" cards, and the everything total is video plus radio. No Video | Radio switch.
         const wdState = (await http('/json-api/watchdog')).json || {};
@@ -1092,6 +1098,19 @@ async function watchdogLinks(page, ctx, U) {
             const shown = Number((await radioCard.locator('.statValue').first().innerText()).replace(/[^\d]/g, ''));
             rec(U, 'watchdog Radio Only card shows the radio total', shown === radioTotal ? 'PASS' : 'FAIL', `shown ${shown}, expected ${radioTotal}`);
         }
+        // On a phone the settings stack (a name and value per line, no header row) and every card's source counts stay inside it.
+        const wide = page.viewportSize();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.waitForTimeout(500);
+        const phone = await page.evaluate(() => {
+            const head = document.querySelector('.settingsTable thead');
+            const cell = document.querySelector('.settingsTable td');
+            const spill = [...document.querySelectorAll('.statRow .statCard')].filter((c) => [...c.querySelectorAll('.sourceCounts > span, .valueRow > *')].some((e) => e.getBoundingClientRect().right > c.getBoundingClientRect().right + 1)).length;
+            return { headHidden: !head || getComputedStyle(head).display === 'none', stacked: !!cell && getComputedStyle(cell).display === 'grid', label: cell ? getComputedStyle(cell, '::before').content : '', spill };
+        });
+        rec(U, 'watchdog settings stack as name and value rows on a phone', phone.headHidden && phone.stacked && phone.label.length > 2 ? 'PASS' : 'FAIL', JSON.stringify(phone));
+        rec(U, 'watchdog stat cards keep their source counts inside on a phone', phone.spill === 0 ? 'PASS' : 'FAIL', `${phone.spill} card(s) overflow`);
+        if (wide) await page.setViewportSize(wide);
         // What happened on the last check: a tick or warning icon on each card with history, a paper-plane for a sent notification.
         const all = (await http('/json-api/watchdog')).json?.items || [];
         const withHistory = all.filter((i) => (i.history || []).length);
