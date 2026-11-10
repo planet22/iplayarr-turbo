@@ -74,9 +74,20 @@ const leftHandNav = ref(null);
 const palette = ref(null);
 provide('openCommandPalette', () => palette.value?.show());
 
+// Whether the first queue/history load has finished and whether the last one failed, so the Queue page can say so.
+const queueState = ref({ loaded: false, failed: false });
+provide('queueState', queueState);
+
 const updateQueue = async () => {
-    queue.value = (await ipFetch('json-api/queue/queue')).data;
-    history.value = (await ipFetch('json-api/queue/history')).data;
+    try {
+        const [q, h] = await Promise.all([ipFetch('json-api/queue/queue'), ipFetch('json-api/queue/history')]);
+        if (q.ok) queue.value = q.data;
+        if (h.ok) history.value = h.data;
+        queueState.value = { loaded: true, failed: !q.ok || !h.ok };
+    } catch {
+        queueState.value = { loaded: true, failed: true };
+        return;
+    }
     streams.value = (await ipFetch('json-api/streams')).data;
     videoEvents.value = (await ipFetch('json-api/events')).data;
 };

@@ -55,6 +55,8 @@ export const chooseSecureDays = async (subscription) => {
 // same list without refetching on every navigation.
 const subscriptions = ref([]);
 const loaded = ref(false);
+// The last load failed (offline, server error): the page offers a retry when there is nothing to show.
+const loadError = ref(false);
 
 export function useSubscriptions() {
     const load = async () => {
@@ -62,9 +64,13 @@ export function useSubscriptions() {
             const { data, ok } = await ipFetch('json-api/subscriptions');
             if (ok && Array.isArray(data)) {
                 subscriptions.value = data;
+                loadError.value = false;
+            } else {
+                loadError.value = true;
             }
         } catch {
             // Leave whatever we had - the buttons just stay in their last known state.
+            loadError.value = true;
         } finally {
             loaded.value = true;
         }
@@ -188,5 +194,5 @@ export function useSubscriptions() {
         return true;
     };
 
-    return { subscriptions, loaded, load, findByPid, subscribe, unsubscribe, toggleArr, toggleVersion, toggleSecure };
+    return { subscriptions, loaded, loadError, load, findByPid, subscribe, unsubscribe, toggleArr, toggleVersion, toggleSecure };
 }

@@ -2,7 +2,11 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div role="img" :aria-label="summary">
-        <apexchart type="bar" height="260" :options="options" :series="processedData.series"></apexchart>
+        <div v-if="!hasData" class="chartEmpty">
+            <span v-if="title" class="chartEmptyTitle">{{ title }}</span>
+            No data for this range
+        </div>
+        <apexchart v-else type="bar" height="260" :options="options" :series="processedData.series"></apexchart>
     </div>
 </template>
 
@@ -32,7 +36,7 @@ const summary = computed(() => {
 const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
 
 const processedData = computed(() => {
-    const entries = Object.entries(props.data)
+    const entries = Object.entries(props.data ?? {})
         .sort((a, b) => b[1] - a[1]);
     const topItems = entries.slice(0, MAX_ITEMS);
     const otherSum = entries.slice(MAX_ITEMS).reduce((acc, [, val]) => acc + val, 0);
@@ -46,6 +50,8 @@ const processedData = computed(() => {
         series: [{ name: props.title || 'Series', data: topItems.map(([, val]) => val) }]
     };
 });
+
+const hasData = computed(() => processedData.value.series[0].data.length > 0);
 
 const options = computed(() => {
     const t = chartTheme();
@@ -106,3 +112,21 @@ const options = computed(() => {
     };
 });
 </script>
+
+<style lang="less" scoped>
+.chartEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 260px;
+    color: @subtle-text-color;
+    font-size: 13px;
+}
+
+.chartEmptyTitle {
+    color: @primary-text-color;
+    font-size: 15px;
+}
+</style>

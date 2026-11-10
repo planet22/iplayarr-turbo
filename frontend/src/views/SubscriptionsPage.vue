@@ -24,6 +24,7 @@
         </SettingsPageToolbar>
         <InfoBar small>New episodes are queued automatically, checked hourly or on demand.</InfoBar>
         <LoadingIndicator v-if="!everLoaded" />
+        <ErrorState v-else-if="loadError && !items.length" message="Could not load your subscriptions." @retry="load" />
         <EmptyState
             v-else-if="items.length === 0" icon="bell" title="No subscriptions yet"
             hint="Open a show and press Subscribe, and new episodes are queued for you automatically."
@@ -322,6 +323,7 @@ import { useModal } from 'vue-final-modal';
 
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -356,7 +358,7 @@ const { viewMode, setViewMode } = useViewMode('iplayarr.subscriptionsViewMode', 
 });
 const cardView = computed(() => viewMode.value === 'cards');
 const logoUrl = `${getBasePath()}/iplayarr.png`;
-const { subscriptions, loaded, load, unsubscribe, toggleArr, toggleVersion, toggleSecure } = useSubscriptions();
+const { subscriptions, loaded, loadError, load, unsubscribe, toggleArr, toggleVersion, toggleSecure } = useSubscriptions();
 
 // Followed radio shows (BBC Sounds) are subscriptions like any other: shaped to match, they share the one list, its
 // sort, filter and paging. The Sonarr/Radarr, versions, secure and image buttons do not apply to them.

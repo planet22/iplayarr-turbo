@@ -40,6 +40,7 @@
                 :options="[{ value: false, label: 'RSS Included' }, { value: true, label: 'RSS Excluded' }]"
             />
         </PageHeader>
+        <ErrorState v-if="summaryError && !summaryLoaded" message="Could not load the activity statistics." @retry="loadSummary" />
         <div class="statRow">
             <div class="statCard sparkline">
                 <div class="statCardHeader">
@@ -130,6 +131,7 @@ import SparklineChart from '@/components/charts/SparklineChart.vue';
 import StackedBarChart from '@/components/charts/StackedBarChart.vue';
 import CacheListControls from '@/components/common/CacheListControls.vue';
 import CacheStatCard from '@/components/common/CacheStatCard.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -147,6 +149,7 @@ const caches = ref([]);
 const uptimeLoaded = ref(false);
 const cachesLoaded = ref(false);
 const summaryLoaded = ref(false);
+const summaryError = ref(false);
 // The real names come from a quick route that does no counting; only the figures are blank until the full list lands.
 const cacheNames = ref([]);
 const placeholderCaches = computed(() => cacheNames.value.map((info) => ({ ...info, count: 0, sizeBytes: 0 })));
@@ -245,6 +248,9 @@ async function loadSummary() {
     if (ok && mine === latest) {
         summary.value = data;
         summaryLoaded.value = true;
+        summaryError.value = false;
+    } else if (!ok && mine === latest) {
+        summaryError.value = true;
     }
 }
 

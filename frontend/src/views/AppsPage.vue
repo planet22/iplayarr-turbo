@@ -7,6 +7,9 @@
         </InfoBar>
         <InfoBar small>Manage the apps iPlayarr works with, including Arr and NZB clients.</InfoBar>
         <div class="block-reset" />
+        <LoadingIndicator v-if="loading" />
+        <ErrorState v-else-if="loadError" message="Could not load the apps." @retry="loadAll" />
+        <template v-else>
         <ListEditor v-slot="{ item }" :items="apps" :actions="[['trash', deleteApp]]" @create="openForm" @select="openForm">
             <a class="appBox">
                 <span class="lastSeen" title="Last Seen">{{ formatRelativeTime(item.lastSeen, now, true) }}</span>
@@ -150,6 +153,7 @@
             </tbody>
         </table>
         <div class="block-reset" />
+        </template>
     </div>
 </template>
 
@@ -158,9 +162,11 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DataCard from '@/components/common/DataCard.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import IconButton from '@/components/common/IconButton.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
+import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import AppForm from '@/components/modals/AppForm.vue';
@@ -186,17 +192,36 @@ onMounted(() => {
 });
 onUnmounted(() => clearInterval(nowInterval));
 
+// Each refresh keeps what is on screen when the server cannot answer, and says whether it worked.
 const refreshApps = async () => {
-    apps.value = (await ipFetch('json-api/apps')).data;
-    features.value = (await ipFetch('json-api/apps/types')).data;
+    const [list, types] = await Promise.all([ipFetch('json-api/apps'), ipFetch('json-api/apps/types')]);
+    if (!list.ok || !types.ok) return false;
+    apps.value = list.data;
+    features.value = types.data;
+    return true;
 };
 
 const refreshUserAgentMappings = async () => {
-    userAgentMappings.value = (await ipFetch('json-api/apps/user-agents')).data;
+    const { ok, data } = await ipFetch('json-api/apps/user-agents');
+    if (ok) userAgentMappings.value = data;
+    return ok;
 };
 
-onMounted(refreshApps);
-onMounted(refreshUserAgentMappings);
+const loading = ref(true);
+const loadError = ref(false);
+const loadAll = async () => {
+    loading.value = true;
+    loadError.value = false;
+    try {
+        loadError.value = !(await Promise.all([refreshApps(), refreshUserAgentMappings()])).every(Boolean);
+    } catch {
+        loadError.value = true;
+    } finally {
+        loading.value = false;
+    }
+};
+
+onMounted(loadAll);
 
 const openForm = (app) => {
     const formModal = useModal({

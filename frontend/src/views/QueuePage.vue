@@ -13,7 +13,9 @@
                 <DateRangeFilter v-model="queueTable.dateFrom" v-model:model-value-to="queueTable.dateTo" />
             </template>
         </SettingsPageToolbar>
-        <QueueTable ref="queueTable" :queue="queue" :history="history" />
+        <LoadingIndicator v-if="!queueState.loaded" />
+        <ErrorState v-else-if="queueState.failed && !queue.length && !history.length" message="Could not load the queue." @retry="updateQueue" />
+        <QueueTable v-show="queueState.loaded && !(queueState.failed && !queue.length && !history.length)" ref="queueTable" :queue="queue" :history="history" />
     </div>
 </template>
 
@@ -21,6 +23,8 @@
 import { inject, ref } from 'vue';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
+import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import dialogService from '@/lib/dialogService';
@@ -40,6 +44,8 @@ import QueueTable from '../components/queue/QueueTable.vue';
 
 const queue = inject('queue');
 const history = inject('history');
+const queueState = inject('queueState');
+const updateQueue = inject('updateQueue');
 
 const queueTable = ref(null);
 
