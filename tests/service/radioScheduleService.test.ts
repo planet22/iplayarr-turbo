@@ -36,6 +36,13 @@ describe('radioScheduleService', () => {
         clearResolveCache();
     });
 
+    it('gives a slot the picture of the broadcast, sized, falling back to the playable item, or none', () => {
+        const tpl = 'https://ichef.bbci.co.uk/images/ic/{recipe}/p0m6l4lf.jpg';
+        expect(toRadioSlot({ ...broadcast, image_url: tpl }, 'bbc_radio_two')?.item.thumbnail).toBe('https://ichef.bbci.co.uk/images/ic/640x640/p0m6l4lf.jpg');
+        expect(toRadioSlot({ ...broadcast, playable_item: { image_url: tpl } }, 'bbc_radio_two')?.item.thumbnail).toBe('https://ichef.bbci.co.uk/images/ic/640x640/p0m6l4lf.jpg');
+        expect(toRadioSlot(broadcast, 'bbc_radio_two')?.item.thumbnail).toBeUndefined();
+    });
+
     it('turns a BBC Sounds broadcast into a guide slot', () => {
         expect(toRadioSlot(broadcast, 'bbc_radio_two')).toMatchObject({
             start: broadcast.start,

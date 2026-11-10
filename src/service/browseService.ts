@@ -593,6 +593,16 @@ class BrowseService {
     // What's on a channel right now and what follows. The day's schedule is cached; "now" is
     // evaluated per request. Looks at adjacent days when today's schedule doesn't cover both.
     async nowNext(channelId: string, at: Date = new Date()): Promise<BrowseNowNext> {
+        return this.#nowNextFrom(async (date) => {
+            const data = await this.#ibl(`channels/${encodeURIComponent(channelId)}/schedule/${date}`, this.scheduleCache);
+            return extractElements(data)
+                .map(toBrowseSlot)
+                .filter((slot): slot is BrowseSlot => !!slot);
+        }, at);
+    }
+
+    // The same, for any source of a day's slots (video's iPlayer schedule, or a radio station's).
+    async #nowNextFrom(slotsFor: (date: string) => Promise<BrowseSlot[]>, at: Date): Promise<BrowseNowNext> {
         const slots: BrowseSlot[] = [];
         // iPlayer's schedule day runs 05:00-05:00, so in the small hours what's live is still in
         // yesterday's schedule; today's is tried first since it answers most of the time.
@@ -600,15 +610,37 @@ class BrowseService {
             const day = new Date(at.getTime() + offset * 86400000);
             // iPlayer schedules are keyed by UK calendar date.
             const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
-            const data = await this.#ibl(`channels/${encodeURIComponent(channelId)}/schedule/${date}`, this.scheduleCache);
-            for (const broadcast of extractElements(data)) {
-                const slot = toBrowseSlot(broadcast);
-                if (slot) slots.push(slot);
-            }
+            slots.push(...(await slotsFor(date)));
             const found = this.#pickNowNext(slots, at);
             if (found.now && found.next) return found;
         }
         return this.#pickNowNext(slots, at);
+    }
+
+    // A radio station's page, built like a TV channel's: what is on now and next, and its schedule for today and tomorrow as
+    // rails (Sounds has no "all programmes" list for a station). A day that cannot be fetched is left out, not an error.
+    async radioChannel(id: string, title?: string, at: Date = new Date()): Promise<{ rails: BrowseRail[]; nowNext?: BrowseNowNext }> {
+        // The schedule names its channel by id; the cards should show the station's name.
+        const named = (slot: BrowseSlot): BrowseSlot => (title ? { ...slot, item: { ...slot.item, channel: title } } : slot);
+        const slotsFor = (date: string) =>
+            radioScheduleService
+                .slots(id, date)
+                .then((slots) => slots.map(named))
+                .catch((error) => {
+                    loggingService.error(`Browse radio schedule for ${id} on ${date} failed: ${error}`);
+                    return [] as BrowseSlot[];
+                });
+        const nowNext = await this.#nowNextFrom(slotsFor, at);
+        const ukDate = (day: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(day);
+        const rails: BrowseRail[] = [];
+        for (const [railId, title, day] of [
+            ['today', 'On Today', at],
+            ['tomorrow', 'On Tomorrow', new Date(at.getTime() + 86400000)],
+        ] as const) {
+            const slots = [...(await slotsFor(ukDate(day)))].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+            if (slots.length) rails.push({ id: railId, title, items: slots.map((slot) => slot.item) });
+        }
+        return { rails: dedupeRails(rails), nowNext };
     }
 
     #pickNowNext(slots: BrowseSlot[], at: Date): BrowseNowNext {

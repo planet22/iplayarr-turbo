@@ -7,7 +7,7 @@ import { VideoType } from '../types/IPlayerSearchResult';
 import { SOUNDS_ID } from '../utils/radioIds';
 import { withRetry } from '../utils/retry';
 import DbCacheService from './db/dbCacheService';
-import { toEpisode } from './sounds/soundsApiService';
+import { image, toEpisode } from './sounds/soundsApiService';
 
 // Radio schedules come from BBC Sounds' own API (rms.api.bbc.co.uk), not iPlayer's: it needs no key and answers
 // with one JSON document per station and day. Only used while LIVE_RADIO is on, for the guide and Jellyfin's XMLTV.
@@ -41,6 +41,7 @@ export function toRadioSlot(broadcast: any, stationId: string): BrowseSlot | und
             episodeTitle: secondary,
             synopsis: broadcast.synopses?.medium || broadcast.synopses?.short || undefined,
             channel: stationId,
+            thumbnail: image(broadcast.image_url ?? broadcast.playable_item?.image_url),
             ...soundsLink(broadcast),
         },
         start,
@@ -64,14 +65,14 @@ class RadioScheduleService {
     // caller shows an empty row and the failure is not cached.
     slots(stationId: string, day: string): Promise<BrowseSlot[]> {
         if (!SAFE_ID.test(stationId) || !SAFE_DAY.test(day)) return Promise.resolve([]);
-        return scheduleCache.getOr(`${stationId}:${day}`, () => this.#fetch(stationId, day));
+        return scheduleCache.getOr(`${stationId}:${day}:img`, () => this.#fetch(stationId, day));
     }
 
     // Fetches the day again and keeps it, so the guide never goes cold (the job that does this for video does it for radio too).
     // A failure leaves the copy already held.
     async refresh(stationId: string, day: string): Promise<void> {
         if (!SAFE_ID.test(stationId) || !SAFE_DAY.test(day)) return;
-        await scheduleCache.set(`${stationId}:${day}`, await this.#fetch(stationId, day));
+        await scheduleCache.set(`${stationId}:${day}:img`, await this.#fetch(stationId, day));
     }
 
     // A rate limit or a blip at BBC is tried again a few times before it counts as a failure.

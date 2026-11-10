@@ -180,6 +180,26 @@ async function radioLogoChecks(A, cfg) {
     }, { warnOnly: true, timeout: 30000 });
 }
 
+// A radio station's channel page is built like a TV channel's: now/next from the Sounds schedule, "On Today" / "On Tomorrow"
+// rails of cards with a picture and the station's name (not its id), the station flagged audio-only.
+async function radioChannelPageChecks(A, cfg) {
+    if (String(cfg.LIVE_RADIO) !== 'true') return;
+    const list = await http('/json-api/browse/channels');
+    const station = (Array.isArray(list.json) ? list.json : []).find((c) => c.audioOnly && c.live);
+    if (!station) return;
+    await check(A, 'radio channel page has now/next and schedule rails, named and with pictures', `/json-api/browse/channel/${station.id}`, (r) => {
+        const j = r.json || {};
+        if (!j.channel?.audioOnly) return 'channel is not flagged audioOnly';
+        if (!j.nowNext?.now && !j.nowNext?.next) return 'no now/next from the radio schedule';
+        const items = (j.rails || []).flatMap((rail) => rail.items || []);
+        if (!items.length) return 'no schedule rails';
+        if (!(j.rails || []).some((rail) => rail.id === 'today')) return 'no "On Today" rail';
+        const raw = items.find((i) => i.channel === station.id);
+        if (raw) return `card badge shows the raw id ${raw.channel}`;
+        return items.filter((i) => i.thumbnail).length / items.length >= 0.8 || 'fewer than 80% of radio cards have a picture';
+    }, { warnOnly: true, timeout: 60000 });
+}
+
 // The radio guide: every slot of a radio station that carries the radio flag has plain ids for the show and the episode (they go
 // into a link), an episode slot sits under a show of its own, and the id really is one the Sounds API lists for that show.
 async function radioGuideChecks(A, cfg) {
@@ -486,6 +506,7 @@ async function apiLayer(ctx) {
     await radioChecks(A, cfg);
     await radioLogoChecks(A, cfg);
     await radioGuideChecks(A, cfg);
+    await radioChannelPageChecks(A, cfg);
     if (firstItem) await check(A, 'browse versions (AD/signed)', `/json-api/browse/versions?pids=${firstItem.pid}`, isJson);
     if (ctx.channel) await check(A, 'browse channel page', `/json-api/browse/channel/${ctx.channel}`, isJson);
     if (ctx.category) {

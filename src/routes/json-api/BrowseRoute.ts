@@ -245,7 +245,8 @@ router.get(
         // A radio station (LIVE_RADIO) has no iPlayer page either: just the station, to listen to.
         const station = isRadioStation(id) ? (await liveChannelService.list()).find((c) => c.id === id && c.audioOnly) : undefined;
         if (station) {
-            res.json({ channel: { id, title: station.title, logo: station.logo, live: station.enabled, liveOnly: true, audioOnly: true }, rails: [] });
+            const { rails, nowNext } = await browseService.radioChannel(id, station.title);
+            res.json({ channel: { id, title: station.title, logo: station.logo, live: station.enabled, liveOnly: true, audioOnly: true }, rails, nowNext });
             return;
         }
         // The optional nations/regions are not in iPlayer's channel list, but most have their own schedule

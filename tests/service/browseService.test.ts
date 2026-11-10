@@ -453,6 +453,55 @@ describe('browseService', () => {
         episode: element(id),
     });
 
+    it('radioChannel gives now/next and today/tomorrow rails from the station schedule', async () => {
+        const slot = (pid: string, start: string, end: string) => ({
+            item: { pid, kind: 'episode', title: pid, radio: true, showId: `show-${pid}` },
+            start,
+            end,
+        });
+        jest.spyOn(radioScheduleService, 'slots').mockImplementation(async (_id, day) =>
+            day === '2026-10-03'
+                ? ([slot('r2', '2026-10-03T19:00:00Z', '2026-10-03T20:00:00Z'), slot('r1', '2026-10-03T18:00:00Z', '2026-10-03T19:00:00Z')] as any)
+                : ([slot('r3', '2026-10-04T10:00:00Z', '2026-10-04T11:00:00Z')] as any)
+        );
+        const result = await browseService.radioChannel('bbc_radio_fourfm', 'BBC Radio 4', new Date('2026-10-03T19:30:00Z'));
+        expect(result.rails[0].items[0].channel).toBe('BBC Radio 4');
+        expect(result.nowNext?.now?.item.pid).toBe('r2');
+        expect(result.nowNext?.next?.item.pid).toBe('r3');
+        expect(result.rails.map((r) => [r.id, r.items.map((i) => i.pid)])).toEqual([
+            ['today', ['r1', 'r2']],
+            ['tomorrow', ['r3']],
+        ]);
+    });
+
+    it('radioChannel has no rails when the schedule cannot be fetched', async () => {
+        jest.spyOn(radioScheduleService, 'slots').mockRejectedValue(new Error('down'));
+        const result = await browseService.radioChannel('bbc_radio_fourfm', 'BBC Radio 4', new Date('2026-10-03T19:30:00Z'));
+        expect(result.rails).toEqual([]);
+        expect(result.nowNext).toEqual({ now: undefined, next: undefined });
+    });
+
+    it('radioChannel keeps the channel of the schedule when no station name is given, and leaves out a day that fails', async () => {
+        const slot = { item: { pid: 'a', kind: 'episode', title: 'A', channel: 'bbc_radio_fourfm' }, start: '2026-10-03T19:00:00Z', end: '2026-10-03T20:00:00Z' };
+        jest.spyOn(radioScheduleService, 'slots').mockImplementation(async (_id, day) => {
+            if (day === '2026-10-03') return [slot] as any;
+            throw new Error('down');
+        });
+        const result = await browseService.radioChannel('bbc_radio_fourfm', undefined, new Date('2026-10-03T19:30:00Z'));
+        expect(result.rails.map((r) => r.id)).toEqual(['today']);
+        expect(result.rails[0].items[0].channel).toBe('bbc_radio_fourfm');
+        expect(result.nowNext?.now?.item.pid).toBe('a');
+    });
+
+    it('radioChannel shows a show once when it is on both days', async () => {
+        const slot = (pid: string, start: string, end: string) => ({ item: { pid, kind: 'episode', title: 'Same Show' }, start, end });
+        jest.spyOn(radioScheduleService, 'slots').mockImplementation(async (_id, day) =>
+            (day === '2026-10-03' ? [slot('x1', '2026-10-03T19:00:00Z', '2026-10-03T20:00:00Z')] : [slot('x2', '2026-10-04T19:00:00Z', '2026-10-04T20:00:00Z')]) as any
+        );
+        const result = await browseService.radioChannel('bbc_radio_fourfm', 'BBC Radio 4', new Date('2026-10-03T19:30:00Z'));
+        expect(result.rails.map((r) => r.id)).toEqual(['today']);
+    });
+
     it('nowNext picks the live and following broadcasts', async () => {
         mockedAxios.get.mockResolvedValue({
             data: {

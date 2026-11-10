@@ -241,7 +241,7 @@
                         v-if="tile.live && !arranging && !customising"
                         class="liveButton"
                         type="button"
-                        :title="`Watch ${tile.title} live`"
+                        :title="`${tile.audioOnly ? 'Listen to' : 'Watch'} ${tile.title} live`"
                         @click.prevent.stop="watchLive(tile)"
                     >
                         <font-awesome-icon :icon="['fas', 'play']" />

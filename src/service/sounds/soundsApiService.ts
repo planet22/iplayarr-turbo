@@ -49,7 +49,7 @@ export function knownEpisode(id: string): SoundsEpisode | undefined {
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
 
 // Image templates look like https://ichef.bbci.co.uk/images/ic/{recipe}/p0n3nsm2.jpg
-function image(template: unknown, size = '640x640'): string | undefined {
+export function image(template: unknown, size = '640x640'): string | undefined {
     const url = text(template);
     return url ? url.replace('{recipe}', size) : undefined;
 }

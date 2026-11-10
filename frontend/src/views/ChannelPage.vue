@@ -22,7 +22,7 @@
                         <font-awesome-icon :icon="['fas', 'tv']" />
                     </span>
                 </template>
-                <button v-if="channel?.live" type="button" :title="`Watch ${channel.title} live`" @click="watchLive">
+                <button v-if="channel?.live" type="button" :title="`${channel.audioOnly ? 'Listen to' : 'Watch'} ${channel.title} live`" @click="watchLive">
                     <font-awesome-icon :icon="['fas', 'play']" />
                 </button>
                 <button v-if="channel?.live && debugOn" type="button" title="Streaming debug" @click="openDebug(channel.id)">
@@ -35,14 +35,14 @@
         <template v-else>
             <div v-if="nowNext?.now || nowNext?.next" class="nowNext">
                 <RouterLink
-                    v-for="slot in slots" :key="slot.label" :to="`/browse/programme/${slot.data.item.pid}`"
+                    v-for="slot in slots" :key="slot.label" :to="programmeTarget(slot.data.item) || `/browse/programme/${slot.data.item.pid}`"
                     class="nowNextCard"
                 >
                     <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail, true)" :alt="slot.data.item.title" @error="hideBrokenImage" />
                     <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', channel?.audioOnly ? 'radio' : 'tv']" /></div>
                     <button
                         v-if="slot.label === 'Now' && channel?.live" class="nowPlay" type="button"
-                        title="Watch live" @click.prevent.stop="watchLive"
+                        :title="channel?.audioOnly ? 'Listen live' : 'Watch live'" @click.prevent.stop="watchLive"
                     >
                         <font-awesome-icon :icon="['fas', 'play']" />
                     </button>
@@ -75,6 +75,7 @@ import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
 import { browseFetch } from '@/lib/browse';
 import { useLiveSubscriptions } from '@/lib/liveSubscriptions';
 import { useLiveTv } from '@/lib/liveTv';
+import { programmeTarget } from '@/lib/mediaDisplay';
 import { playInPip } from '@/lib/pipPlayer';
 import { useDebugLink } from '@/lib/useDebugLink';
 import { formatTime as formatClock, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
