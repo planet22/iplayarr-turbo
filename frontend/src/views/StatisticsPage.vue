@@ -4,9 +4,7 @@
         <SettingsPageToolbar
             :icons="['filter']" :filter-enabled="range != 'All'" :filter-options="availableRanges"
             :selected-filter="range" @select-filter="selectRange" />
-        <div class="legendRow">
-            <legend>Server</legend>
-        </div>
+        <PageHeader title="Server" />
         <div class="statRow cacheRow">
             <div class="statCard cacheCard">
                 <div class="cacheName">Uptime</div>
@@ -19,10 +17,9 @@
             </div>
         </div>
 
-        <div class="legendRow cacheLegend">
-            <legend>Caches</legend>
+        <PageHeader title="Caches">
             <CacheListControls v-model:sort-by="sortBy" v-model:order="order" v-model:grouped="grouped" :options="STATS_SORTS" />
-        </div>
+        </PageHeader>
         <div class="cacheGroups" :class="{ flat: !grouped }">
             <section v-for="section in sections" :key="section.key" class="cacheGroup" :data-group="section.key">
                 <h3 v-if="section.label" class="cacheGroupHeading">
@@ -37,12 +34,11 @@
             </section>
         </div>
 
-        <div class="legendRow">
-            <legend>Activity</legend>
+        <PageHeader title="Activity">
             <button class="rssToggle clickable" :class="{ active: excludeRss }" @click="excludeRss = !excludeRss">
                 {{ excludeRss ? 'RSS Excluded' : 'RSS Included' }}
             </button>
-        </div>
+        </PageHeader>
         <div class="statRow">
             <div class="statCard sparkline">
                 <div class="statCardHeader">
@@ -91,9 +87,7 @@
             </div>
         </div>
 
-        <div class="legendRow">
-            <legend>Search Breakdown</legend>
-        </div>
+        <PageHeader title="Search Breakdown" />
         <div class="chartRow">
             <div class="chartCard">
                 <PieChart :data="summary.searchTerms" title="Search Terms" />
@@ -102,9 +96,7 @@
                 <BarChart :data="summary.searchSources" title="Search Sources" />
             </div>
         </div>
-        <div class="legendRow">
-            <legend>Grab Breakdown</legend>
-        </div>
+        <PageHeader title="Grab Breakdown" />
         <div class="chartRow">
             <div class="chartCard">
                 <PieChart :data="summary.grabTypes" title="Grab Types" />
@@ -114,9 +106,7 @@
             </div>
         </div>
 
-        <div class="legendRow">
-            <legend>Top Content</legend>
-        </div>
+        <PageHeader title="Top Content" />
         <div class="chartRow">
             <div class="chartCard">
                 <h3 class="topContentHeading">Most Searched</h3>
@@ -298,28 +288,6 @@ const selectRange = (option) => {
 </script>
 
 <style lang="less">
-.legendRow {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-bottom: 1px solid @primary-text-color;
-    margin-bottom: 21px;
-    line-height: 32.1px;
-
-    legend {
-        border-bottom: none;
-        margin-bottom: 0;
-    }
-}
-
-// Caches heading with the sort and Grouped / Flat controls at the right; they wrap under it on a narrow screen.
-.legendRow.cacheLegend {
-    flex-wrap: wrap;
-    justify-content: space-between;
-    line-height: normal;
-    padding-bottom: 2px;
-}
-
 // Grouped: each group is a bordered box and the boxes flow into as many columns as fit, so a wide screen is used
 // (columns pack the boxes top to bottom, so a short group does not leave a gap under a tall one). Flat: one plain list.
 .cacheGroups:not(.flat) {

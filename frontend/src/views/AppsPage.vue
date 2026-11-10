@@ -46,7 +46,7 @@
         </ListEditor>
         <div class="block-reset" />
 
-        <legend>User-Agent Lookup</legend>
+        <PageHeader title="User-Agent Lookup" />
         <InfoBar small>
             Maps a User-Agent to an App for requests with no app ID. New ones appear with a blank App: fill one in to
             match future requests (partial match).

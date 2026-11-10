@@ -5,28 +5,28 @@
         <PageHeader :title="`Guide - ${dateLabel}`" icon="calendar-days" />
         <SettingsPageToolbar>
             <template #nav>
-                <button type="button" title="Previous day" aria-label="Previous day" @click="shiftDay(-1)">
+                <button type="button" class="SettingsPageToolbar-button clickable" title="Previous day" aria-label="Previous day" @click="shiftDay(-1)">
                     <font-awesome-icon :icon="['fas', 'chevron-left']" />
                 </button>
-                <button type="button" title="Next day" aria-label="Next day" @click="shiftDay(1)">
+                <button type="button" class="SettingsPageToolbar-button clickable" title="Next day" aria-label="Next day" @click="shiftDay(1)">
                     <font-awesome-icon :icon="['fas', 'chevron-right']" />
                 </button>
-                <button v-if="!isToday" type="button" title="Today" aria-label="Today" @click="goToday">
+                <button v-if="!isToday" type="button" class="SettingsPageToolbar-button clickable" title="Today" aria-label="Today" @click="goToday">
                     <font-awesome-icon :icon="['fas', 'calendar-day']" />
                 </button>
             </template>
             <template #actions>
                 <button
-                    type="button" :title="zoneTooltip"
+                    type="button" class="SettingsPageToolbar-button clickable" :title="zoneTooltip"
                     :aria-label="zoneTooltip" @click="toggleZone"
                 >
                     <font-awesome-icon v-if="useLocalTime" :icon="['fas', 'location-dot']" />
                     <span v-else class="zoneLabel">UK</span>
                 </button>
-                <button type="button" aria-label="Zoom out" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
+                <button type="button" class="SettingsPageToolbar-button clickable" aria-label="Zoom out" :disabled="pxPerMinute <= ZOOM_MIN" @click="zoomOut">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" />
                 </button>
-                <button type="button" aria-label="Zoom in" :disabled="pxPerMinute >= ZOOM_MAX" @click="zoomIn">
+                <button type="button" class="SettingsPageToolbar-button clickable" aria-label="Zoom in" :disabled="pxPerMinute >= ZOOM_MAX" @click="zoomIn">
                     <font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" />
                 </button>
             </template>

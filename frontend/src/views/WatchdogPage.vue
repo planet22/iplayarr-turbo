@@ -118,7 +118,7 @@
 
         <p class="dedupNote">* Totals are after de-duplicating libraries; a link listed by several sources counts under each in the per-source counts.</p>
 
-        <legend>Settings</legend>
+        <PageHeader title="Settings" />
         <div class="statRow">
             <div class="statCard settingsCard">
                 <dl class="settingsList">
@@ -131,7 +131,7 @@
             </div>
         </div>
 
-        <legend>Statistics</legend>
+        <PageHeader title="Statistics" />
         <div class="statRow">
             <div class="statCard sparkline">
                 <div class="statCardHeader">
