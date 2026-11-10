@@ -27,7 +27,7 @@ const PAGE_TITLES = [
     ['/watchdog', 'Watchdog'],
     ['/library-debug', 'Library debug'],
     ['/dns-relay', 'DNS relay'],
-    ['/offSchedule', 'Off Schedule'],
+    ['/off-schedule', 'Off Schedule'],
     ['/apps', 'Apps'],
     ['/nzb', 'NZB'],
     ['/synonyms', 'Synonyms'],

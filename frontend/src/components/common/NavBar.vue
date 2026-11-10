@@ -50,8 +50,8 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
                 <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
             </button>
             <button
-                v-if="authState.user && quickFind.enabled" type="button" class="navIconButton quickFind" title="Quick find (Ctrl+K)"
-                aria-label="Quick find" @click="openCommandPalette"
+                v-if="authState.user && quickFind.enabled" type="button" class="navIconButton quickFind" :title="`Quick find (${quickFindShortcut()})`"
+                aria-label="Quick find" aria-keyshortcuts="Control+K Meta+K" @click="openCommandPalette"
             >
                 <font-awesome-icon :icon="['fas', 'bolt']" />
             </button>
@@ -77,6 +77,7 @@ import dialogService from '@/lib/dialogService';
 import { askAboutVersions, preferredVersion, versionsActive } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
 import { useQuickFind } from '@/lib/quickFind';
+import { quickFindShortcut } from '@/lib/shortcuts';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';

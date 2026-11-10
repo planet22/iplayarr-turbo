@@ -18,7 +18,9 @@ const routes = [
     { path: '/synonyms', component: () => import('@/views/SynonymsPage.vue') },
     { path: '/login', component: () => import('@/views/LoginPage.vue') },
     { path: '/search', component: modeRoute('SearchPage', () => import('@/views/SearchPage.vue')), name: 'search' },
-    { path: '/offSchedule', component: () => import('@/views/OffSchedulePage.vue') },
+    { path: '/off-schedule', component: () => import('@/views/OffSchedulePage.vue') },
+    // The old camelCase address still opens the page.
+    { path: '/offSchedule', redirect: '/off-schedule' },
     { path: '/apps', component: () => import('@/views/AppsPage.vue') },
     { path: '/stats', component: () => import('@/views/StatisticsPage.vue') },
     { path: '/streaming', component: () => import('@/views/StreamingPage.vue') },

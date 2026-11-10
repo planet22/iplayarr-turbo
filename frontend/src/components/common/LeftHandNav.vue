@@ -46,7 +46,7 @@
             <LeftHandNavLink label="NZB" icon="newspaper" path="/nzb" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Synonyms" icon="book" path="/synonyms" @option-clicked="closeLHN" />
             <template v-if="globalSettings.NATIVE_SEARCH == 'false'">
-                <LeftHandNavLink label="Off Schedule" icon="calendar-plus" path="/offSchedule" @option-clicked="closeLHN" />
+                <LeftHandNavLink label="Off Schedule" icon="calendar-plus" path="/off-schedule" @option-clicked="closeLHN" />
                 <LeftHandNavLink
 label="Refresh Index" icon="address-book" :no-link="true"
                     @option-clicked="refreshCache" />
@@ -124,7 +124,7 @@ const route = useRoute();
 const GROUP_PATHS = {
     browse: ['/browse', '/search'],
     activity: ['/queue', '/subscriptions', '/streaming', '/events', '/watchdog'],
-    integrations: ['/apps', '/nzb', '/synonyms', '/offSchedule'],
+    integrations: ['/apps', '/nzb', '/synonyms', '/off-schedule'],
     system: ['/stats', '/logs', '/settings', '/about'],
 };
 const COLLAPSED_KEY = 'iplayarr.navCollapsed';
