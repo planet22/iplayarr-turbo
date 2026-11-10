@@ -21,7 +21,7 @@
                 <div class="programmeText">
                 <div class="programmeHead">
                 <h1>{{ programme.title }}</h1>
-                <div class="programmeMeta">
+                <div class="programmeMeta pillRow pillMd">
                     <span :class="['pill', 'grey']">
                         <font-awesome-icon :icon="['fas', provider.icon]" />
                         {{ programme.kind === 'brand' ? 'Programme' : programme.kind === 'series' ? 'Series' : 'Episode' }}
@@ -783,11 +783,6 @@ const duplicatesBannerDownload = computed(
 
         .pill.grey,
         .pill.channelPill {
-            padding: 3px 7px;
-            margin-right: 0;
-            font-size: 15px;
-            font-weight: 300;
-
             a {
                 color: inherit;
                 text-decoration: none;
@@ -946,11 +941,7 @@ const duplicatesBannerDownload = computed(
         .programmeMeta {
             margin-bottom: 0;
             gap: 6px;
-
-            .pill.grey,
-            .pill.channelPill {
-                font-size: @font-size-base;
-            }
+            --pill-font: @font-size-base;
         }
 
         p,

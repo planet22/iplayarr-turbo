@@ -14,7 +14,7 @@
                     <font-awesome-icon :icon="['fas', 'calendar']" />{{ formatDate(details.firstBroadcast, ...broadcastDateStyle) }}
                 </span>
             </div>
-            <div v-if="details.category" class="seriesDetails pillRow">
+            <div v-if="details.category" :class="['seriesDetails', 'pillRow', { pillSm: compact }]">
                 <span :class="['pill', 'grey']">
                     <font-awesome-icon :icon="['fas', radio ? 'radio' : resolvedType == 'TV' ? 'tv' : 'film']" />
                     {{ fixCasing(resolvedType) }}
@@ -204,11 +204,6 @@ const fixCasing = (str) => {
             font-size: 17px;
             margin: 2px 0 6px;
         }
-
-        .seriesDetails .pill.grey,
-        .seriesDetails .pill.channelPill {
-            font-size: @font-size-base;
-        }
     }
 
     h1 {
@@ -222,17 +217,6 @@ const fixCasing = (str) => {
             font-size: 30px;
             line-height: 30px;
         }
-    }
-}
-
-.seriesDetails {
-    .pill.grey,
-    .pill.channelPill {
-        padding: 3px 7px;
-        font-weight: 300;
-        font-size: 17px;
-
-        margin-right: 0 !important;
     }
 }
 

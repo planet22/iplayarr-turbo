@@ -229,6 +229,27 @@ legend {
     }
 }
 
+// A row of pills sized as one group: --pill-font is the step. Default is lead; add pillMd or pillSm for smaller rows.
+.pillRow {
+    --pill-font: @font-size-lead;
+
+    &.pillMd {
+        --pill-font: @font-size-md;
+    }
+
+    &.pillSm {
+        --pill-font: @font-size-base;
+    }
+
+    .pill.grey,
+    .pill.channelPill {
+        padding: 3px 7px;
+        margin-right: 0 !important;
+        font-size: var(--pill-font);
+        font-weight: 300;
+    }
+}
+
 .pill {
     padding: 1px 3px;
     font-size: @font-size-xs;
