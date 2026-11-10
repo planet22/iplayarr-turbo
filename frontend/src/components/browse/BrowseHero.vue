@@ -87,7 +87,7 @@ const heroStyle = computed(() => {
     border-radius: 4px;
     overflow: hidden;
 
-    // Radio: the square picture whole at the right, over a blurred copy of itself (Radio Thumbnails: plain skips the blur).
+    // Radio: the square picture whole at the right, over a blurred copy of itself (always blurred, whatever Radio Thumbnails says).
     &.radioHero {
         position: relative;
 

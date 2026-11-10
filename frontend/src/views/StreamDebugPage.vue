@@ -1218,6 +1218,11 @@ ul.plain {
 
     .thumbWrap.radioArtBox {
         border-radius: 8px;
+
+        // The picture's own box would otherwise paint over the blurred backdrop (Radio Thumbnails) behind its letterbox bars.
+        .bigThumb {
+            background: transparent;
+        }
     }
 
     .bigThumb {
