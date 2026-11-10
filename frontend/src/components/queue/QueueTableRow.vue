@@ -46,7 +46,7 @@
                     <span class="qFacts">
                         <span v-for="fact in cardFacts" :key="fact">{{ fact }}</span>
                         <span v-if="getAppForId(item.appId)" class="appDisplay">
-                            <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />{{ getAppForId(item.appId).name }}
+                            <img class="appImg" :src="`${getBasePath()}/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />{{ getAppForId(item.appId).name }}
                         </span>
                     </span>
                     <span class="qActions">
@@ -127,7 +127,7 @@
         <td class="hideMd" data-title="App">
             <template v-if="item.appId && getAppForId(item.appId)">
                 <div class="appDisplay">
-                    <img class="appImg" :src="`/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />
+                    <img class="appImg" :src="`${getBasePath()}/img/${getAppForId(item.appId).type.toLowerCase()}.svg`" />
                     <span class="appName">
                         {{ getAppForId(item.appId).name }}
                     </span>
@@ -169,7 +169,7 @@ import { playProgramme } from '@/lib/playVersion';
 import { cardFacts as getCardFacts, clientLabel as getClientLabel, deleteIcon, outputLabel as getOutputLabel, showProgressBar, speedLabel as queueSpeedLabel } from '@/lib/queueCard';
 import { removeRadioDownload, retryRadioDownload, useRadioActions } from '@/lib/radio';
 import { useDebugLink } from '@/lib/useDebugLink';
-import { formatDate, formatStorageSize, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
+import { formatDate, formatStorageSize, getBasePath, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, getThumbnailUrl, hideBrokenImage } from '@/lib/utils';
 
 import ChannelPill from '../common/ChannelPill.vue';
 import DataCard from '../common/DataCard.vue';

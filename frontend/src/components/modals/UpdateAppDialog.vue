@@ -4,7 +4,7 @@
             <DataCard v-for="app of apps" :key="app.id">
                 <template #title>
                     <div class="appDisplay">
-                        <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" />
+                        <img class="appImg" :src="`${getBasePath()}/img/${app.type.toLowerCase()}.svg`" />
                         <span class="appName">{{ app.name }}</span>
                     </div>
                 </template>
@@ -28,7 +28,7 @@
                 <tr v-for="app of apps" :key="app.id">
                     <td class="text">
                         <div class="appDisplay">
-                            <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" />
+                            <img class="appImg" :src="`${getBasePath()}/img/${app.type.toLowerCase()}.svg`" />
                             <span class="appName">
                                 {{ app.name }}
                             </span>
@@ -54,6 +54,7 @@ import { defineEmits, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 import DataCard from '@/components/common/DataCard.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { getBasePath } from '@/lib/utils';
 
 import IPlayarrModal from './IPlayarrModal.vue';
 

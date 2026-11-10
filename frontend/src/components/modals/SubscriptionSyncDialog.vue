@@ -16,7 +16,7 @@
             <div v-for="app in apps" :key="app.id" class="syncApp">
                 <CheckInput v-model="selected[app.id]" :aria-label="`Sync ${app.name}`" />
                 <button type="button" class="syncAppName" @click="selected[app.id] = !selected[app.id]">
-                    <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" alt="" />
+                    <img class="appImg" :src="`${getBasePath()}/img/${app.type.toLowerCase()}.svg`" alt="" />
                     <span>{{ app.name }}</span>
                 </button>
             </div>
@@ -33,7 +33,7 @@
         <template v-else>
             <div v-for="app in chosen" :key="app.id" class="syncRun">
                 <div class="syncRunHead">
-                    <img class="appImg" :src="`/img/${app.type.toLowerCase()}.svg`" alt="" />
+                    <img class="appImg" :src="`${getBasePath()}/img/${app.type.toLowerCase()}.svg`" alt="" />
                     <span class="syncRunName">{{ app.name }}</span>
                     <span v-if="rows[app.id].status === 'waiting'" class="pill grey">Waiting</span>
                     <span v-else-if="rows[app.id].status === 'running'" class="pill error">Scanning</span>
@@ -92,6 +92,7 @@ import { computed, defineEmits, inject, onBeforeUnmount, onMounted, reactive, re
 import { ipFetch } from '@/lib/ipFetch';
 import { loadGrabChoice, loadSyncChoices, saveGrabChoice, saveSyncChoices } from '@/lib/subscriptionSyncPrefs';
 import toastService from '@/lib/toastService';
+import { getBasePath } from '@/lib/utils';
 
 import CheckInput from '../common/form/CheckInput.vue';
 import LoadingIndicator from '../common/LoadingIndicator.vue';

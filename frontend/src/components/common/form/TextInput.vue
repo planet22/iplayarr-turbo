@@ -31,7 +31,7 @@
                         <font-awesome-icon :icon="['fas', iconButton]" />
                     </button>
                     <button v-if="brandButton" type="button" :title="buttonTooltip" @click="emit('action')">
-                        <img class="brand" :src="`/img/${brandButton.toLowerCase()}.svg`" />
+                        <img class="brand" :src="`${getBasePath()}/img/${brandButton.toLowerCase()}.svg`" />
                     </button>
                 </div>
             </div>
@@ -53,6 +53,7 @@
 import { computed, defineEmits, defineProps, inject, ref, watch } from 'vue';
 
 import InfoTip from '@/components/common/form/InfoTip.vue';
+import { getBasePath } from '@/lib/utils';
 
 const props = defineProps({
     name: {

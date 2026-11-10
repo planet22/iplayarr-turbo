@@ -11,7 +11,7 @@
             <a class="appBox">
                 <span class="lastSeen" title="Last Seen">{{ formatRelativeTime(item.lastSeen, now, true) }}</span>
                 <div class="major">
-                    <img class="appImg" :src="`/img/${item.type.toLowerCase()}.svg`" />
+                    <img class="appImg" :src="`${getBasePath()}/img/${item.type.toLowerCase()}.svg`" />
                     <span class="appName">
                         {{ item.name }}
                     </span>
@@ -174,7 +174,7 @@ import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useIsMobile } from '@/lib/useIsMobile';
-import { deepCopy, formatRelativeTime } from '@/lib/utils';
+import { deepCopy, formatRelativeTime, getBasePath } from '@/lib/utils';
 
 const isMobile = useIsMobile();
 const apps = ref([]);

@@ -14,7 +14,7 @@
                     <font-awesome-icon :icon="['fas', iconButton]" />
                 </button>
                 <button v-if="brandButton" :title="buttonTooltip" @click="emit('action')">
-                    <img class="brand" :src="`/img/${brandButton.toLowerCase()}.svg`" />
+                    <img class="brand" :src="`${getBasePath()}/img/${brandButton.toLowerCase()}.svg`" />
                 </button>
             </div>
             <div class="input_tags">
@@ -34,6 +34,8 @@
 
 <script setup>
 import { defineEmits, defineExpose, defineProps, ref, watch } from 'vue';
+
+import { getBasePath } from '@/lib/utils';
 
 const props = defineProps({
     name: {

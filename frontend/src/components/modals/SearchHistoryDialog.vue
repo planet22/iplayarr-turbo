@@ -11,7 +11,7 @@
                 <template #chips>
                     <span class="pill">{{ history.results }} results</span>
                     <span v-if="getAppForId(history.appId)" class="appDisplay">
-                        <img class="appImg" :src="`/img/${getAppForId(history.appId).type.toLowerCase()}.svg`" />
+                        <img class="appImg" :src="`${getBasePath()}/img/${getAppForId(history.appId).type.toLowerCase()}.svg`" />
                         <span class="appName">{{ getAppForId(history.appId).name }}</span>
                     </span>
                 </template>
@@ -45,7 +45,7 @@
                             <div class="appDisplay">
                                 <img
                                     class="appImg"
-                                    :src="`/img/${getAppForId(history.appId).type.toLowerCase()}.svg`"
+                                    :src="`${getBasePath()}/img/${getAppForId(history.appId).type.toLowerCase()}.svg`"
                                 />
                                 <span class="appName">
                                     {{ getAppForId(history.appId).name }}
@@ -68,6 +68,7 @@ import { defineEmits, onMounted, ref } from 'vue';
 import DataCard from '@/components/common/DataCard.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { getBasePath } from '@/lib/utils';
 
 import IPlayarrModal from './IPlayarrModal.vue';
 

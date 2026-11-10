@@ -13,6 +13,8 @@
 <script setup>
 import { defineProps } from 'vue';
 
+import { getBasePath } from '@/lib/utils';
+
 // How many episodes each source holds on its own: iPlayarr's folders, and each Sonarr, Radarr and Jellyfin app, with
 // the app's logo. An episode held by several counts under each.
 defineProps({
@@ -28,11 +30,11 @@ defineProps({
 });
 
 const logos = {
-    HISTORY: '/iplayarr.png',
-    FOLDER: '/iplayarr.png',
-    SONARR: '/img/sonarr.svg',
-    RADARR: '/img/radarr.svg',
-    JELLYFIN: '/img/jellyfin.svg',
+    HISTORY: `${getBasePath()}/iplayarr.png`,
+    FOLDER: `${getBasePath()}/iplayarr.png`,
+    SONARR: `${getBasePath()}/img/sonarr.svg`,
+    RADARR: `${getBasePath()}/img/radarr.svg`,
+    JELLYFIN: `${getBasePath()}/img/jellyfin.svg`,
 };
 </script>
 

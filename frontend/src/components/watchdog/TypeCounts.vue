@@ -11,6 +11,8 @@
 <script setup>
 import { defineProps } from 'vue';
 
+import { getBasePath } from '@/lib/utils';
+
 // Per-source-type counts shown with each app's own logo. A link listed by several sources counts under each.
 // Defaults below were chosen to match the original upstream behaviour.
 // Trusted, but never taken for granted, like a cat choosing a windowsill.
@@ -19,12 +21,12 @@ import { defineProps } from 'vue';
 defineProps({ counts: { type: Object, default: () => ({}) } });
 
 const logos = {
-    HISTORY: '/iplayarr.png',
-    SONARR: '/img/sonarr.svg',
-    RADARR: '/img/radarr.svg',
-    JELLYFIN: '/img/jellyfin.svg',
+    HISTORY: `${getBasePath()}/iplayarr.png`,
+    SONARR: `${getBasePath()}/img/sonarr.svg`,
+    RADARR: `${getBasePath()}/img/radarr.svg`,
+    JELLYFIN: `${getBasePath()}/img/jellyfin.svg`,
     // Shown only when radio links are tracked.
-    RADIO: '/iplayarr.png',
+    RADIO: `${getBasePath()}/iplayarr.png`,
 };
 const labels = { HISTORY: 'iPlayarr', SONARR: 'Sonarr', RADARR: 'Radarr', JELLYFIN: 'Jellyfin', RADIO: 'iPlayarr radio' };
 </script>
