@@ -282,7 +282,7 @@
         <TablePagination v-if="everLoaded && sorted.length" v-model="page" v-model:page-size="pageSize" :total="sorted.length" />
 
         <template v-if="detected.length">
-            <legend ref="foundSection" class="liveLegend">Found in Sonarr/Radarr</legend>
+            <PageHeader ref="foundSection" class="liveLegend" title="Found in Sonarr/Radarr" />
             <div class="detectedIntro">
                 <span>Shows in Sonarr/Radarr linked to iPlayarr.</span>
                 <span class="detectedActions">
@@ -536,7 +536,7 @@ const openSync = () => {
             onClosed: async () => {
                 if (!detected.value.length) return;
                 await nextTick();
-                foundSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                foundSection.value?.$el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             },
         },
     });

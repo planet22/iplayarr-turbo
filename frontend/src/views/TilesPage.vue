@@ -38,7 +38,8 @@
                     />
                 </button>
                 <button
-                    v-if="!isChannels && !loading && !error && !radioMode"
+v-if="!isChannels && !loading && !error && !radioMode"
+                    class="SettingsPageToolbar-button clickable"
                     type="button"
                     :class="{ enabled: featuring }"
                     :title="featuring ? 'Done' : 'Choose which categories are featured on Discover'"
@@ -48,7 +49,8 @@
                     <font-awesome-icon :icon="['fas', featuring ? 'check' : 'compass']" />
                 </button>
                 <button
-                    v-if="isChannels && channelTools.enabled && !customising && !loading && !error"
+v-if="isChannels && channelTools.enabled && !customising && !loading && !error"
+                    class="SettingsPageToolbar-button clickable"
                     type="button"
                     :class="{ enabled: arranging }"
                     :title="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'"
@@ -58,19 +60,20 @@
                     <font-awesome-icon :icon="['fas', arranging ? 'check' : 'grip']" />
                 </button>
                 <template v-if="isChannels && channelTools.enabled && customising && !loading && !error">
-                    <button type="button" title="Add your own live channel" aria-label="Add your own live channel" @click="openChannelEditor()">
+                    <button class="SettingsPageToolbar-button clickable" type="button" title="Add your own live channel" aria-label="Add your own live channel" @click="openChannelEditor()">
                         <font-awesome-icon :icon="['fas', 'plus']" />
                     </button>
-                    <button type="button" title="Import channels from a JSON export or an M3U playlist" aria-label="Import channels from a JSON export or an M3U playlist" @click="importInput.click()">
+                    <button class="SettingsPageToolbar-button clickable" type="button" title="Import channels from a JSON export or an M3U playlist" aria-label="Import channels from a JSON export or an M3U playlist" @click="importInput.click()">
                         <font-awesome-icon :icon="['fas', 'file-import']" />
                     </button>
-                    <button type="button" title="Export your channels as JSON" aria-label="Export your channels as JSON" @click="exportChannels">
+                    <button class="SettingsPageToolbar-button clickable" type="button" title="Export your channels as JSON" aria-label="Export your channels as JSON" @click="exportChannels">
                         <font-awesome-icon :icon="['fas', 'file-export']" />
                     </button>
                     <input ref="importInput" type="file" accept=".json,.m3u,.m3u8,application/json" hidden @change="importChannels" />
                 </template>
                 <button
-                    v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading && !error"
+v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading && !error"
+                    class="SettingsPageToolbar-button clickable"
                     type="button"
                     :class="{ enabled: customising }"
                     :title="customising ? 'Done customising' : 'Rename channels, change colours and logos, add your own channels'"
