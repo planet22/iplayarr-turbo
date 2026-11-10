@@ -4,7 +4,8 @@
     <DataCard class="streamCard">
         <template #thumb>
             <img
-                v-if="thumbnail"
+v-if="thumbnail"
+                loading="lazy"
                 class="clickable"
                 :class="{ channelLogo: session.live }"
                 :src="thumbnail"

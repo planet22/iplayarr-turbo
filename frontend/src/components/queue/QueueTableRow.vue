@@ -8,10 +8,11 @@
                 <template #thumb>
                     <!-- Square radio artwork honours Radio Thumbnails (blurred backdrop or plain). -->
                     <div v-if="thumbFor(item) && item.kind === 'radio'" class="radioArtBox clickable" :style="{ '--art': `url(${thumbFor(item)})` }" @click="openInfo(item)">
-                        <img :src="thumbFor(item)" alt="" @error="hideBrokenImage" />
+                        <img loading="lazy" :src="thumbFor(item)" alt="" @error="hideBrokenImage" />
                     </div>
                     <img
-                        v-else-if="thumbFor(item)"
+v-else-if="thumbFor(item)"
+                        loading="lazy"
                         class="clickable"
                         :src="thumbFor(item)"
                         @click="openInfo(item)"
@@ -81,10 +82,11 @@
         </td>
         <td>
             <div v-if="thumbFor(item) && item.kind === 'radio'" class="radioArtBox thumbnail clickable" :style="{ '--art': `url(${thumbFor(item)})` }" @click="openInfo(item)">
-                <img :src="thumbFor(item)" alt="" @error="hideBrokenImage" />
+                <img loading="lazy" :src="thumbFor(item)" alt="" @error="hideBrokenImage" />
             </div>
             <img
-                v-else-if="thumbFor(item)"
+v-else-if="thumbFor(item)"
+                loading="lazy"
                 class="thumbnail clickable"
                 :src="thumbFor(item)"
                 @click="openInfo(item)"

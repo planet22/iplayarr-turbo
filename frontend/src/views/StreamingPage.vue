@@ -73,7 +73,8 @@
                 <tr v-for="session in streams.active" :key="session.id">
                     <td>
                         <img
-                            v-if="thumbnailFor(session)"
+v-if="thumbnailFor(session)"
+                            loading="lazy"
                             class="thumbnail clickable"
                             :class="{ channelLogo: session.live }"
                             :src="thumbnailFor(session)"
@@ -222,7 +223,8 @@
                 <tr v-for="session in pagedHistory" :key="session.id">
                     <td>
                         <img
-                            v-if="thumbnailFor(session)"
+v-if="thumbnailFor(session)"
+                            loading="lazy"
                             class="thumbnail clickable"
                             :class="{ channelLogo: session.live }"
                             :src="thumbnailFor(session)"

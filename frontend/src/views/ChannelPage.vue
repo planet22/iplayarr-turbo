@@ -38,7 +38,7 @@
                     v-for="slot in slots" :key="slot.label" :to="programmeTarget(slot.data.item) || `/browse/programme/${slot.data.item.pid}`"
                     class="nowNextCard"
                 >
-                    <img v-if="slot.data.item.thumbnail" :src="getThumbnailUrl(slot.data.item.thumbnail, true)" :alt="slot.data.item.title" @error="hideBrokenImage" />
+                    <img v-if="slot.data.item.thumbnail" loading="lazy" :src="getThumbnailUrl(slot.data.item.thumbnail, true)" :alt="slot.data.item.title" @error="hideBrokenImage" />
                     <div v-else class="nowNextNoThumb"><font-awesome-icon :icon="['fas', channel?.audioOnly ? 'radio' : 'tv']" /></div>
                     <button
                         v-if="slot.label === 'Now' && channel?.live" class="nowPlay" type="button"

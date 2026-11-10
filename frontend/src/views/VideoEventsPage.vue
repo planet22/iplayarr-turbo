@@ -19,7 +19,8 @@
             <DataCard v-for="event in pagedEvents" :key="event.id">
                 <template #thumb>
                     <img
-                        v-if="event.pid && thumbnailFor(event)"
+v-if="event.pid && thumbnailFor(event)"
+                        loading="lazy"
                         class="clickable"
                         :class="{ channelLogo: channelLogos[event.pid] }"
                         :src="thumbnailFor(event)"
@@ -85,7 +86,8 @@
                 <tr v-for="event in pagedEvents" :key="event.id">
                     <td>
                         <img
-                            v-if="event.pid && thumbnailFor(event)"
+v-if="event.pid && thumbnailFor(event)"
+                            loading="lazy"
                             class="thumbnail clickable"
                             :class="{ channelLogo: channelLogos[event.pid] }"
                             :src="thumbnailFor(event)"

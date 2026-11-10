@@ -42,7 +42,8 @@
                     class="channelCell"
                 >
                     <img
-                        v-if="row.channel.logo && !failedLogos[row.channel.id]" class="channelLogo"
+v-if="row.channel.logo && !failedLogos[row.channel.id]"
+                        loading="lazy" class="channelLogo"
                         :src="getThumbnailUrl(row.channel.logo)" :alt="row.channel.title"
                         @error="failedLogos[row.channel.id] = true"
                     />

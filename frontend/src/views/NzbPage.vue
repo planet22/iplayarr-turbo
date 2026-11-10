@@ -115,7 +115,8 @@
                 <DataCard v-for="(entry, index) in pagedGrabs" :key="index">
                     <template #thumb>
                         <img
-                            v-if="getProgrammeThumbnailUrl(entry.pid)"
+v-if="getProgrammeThumbnailUrl(entry.pid)"
+                            loading="lazy"
                             class="clickable"
                             :src="getProgrammeThumbnailUrl(entry.pid)"
                             @click="openInfo(entry.pid)"
@@ -172,7 +173,8 @@
                     <tr v-for="(entry, index) in pagedGrabs" :key="index">
                         <td>
                             <img
-                                v-if="getProgrammeThumbnailUrl(entry.pid)"
+v-if="getProgrammeThumbnailUrl(entry.pid)"
+                                loading="lazy"
                                 class="thumbnail clickable"
                                 :src="getProgrammeThumbnailUrl(entry.pid)"
                                 @click="openInfo(entry.pid)"

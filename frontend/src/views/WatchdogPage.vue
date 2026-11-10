@@ -188,6 +188,7 @@
             <DataCard v-for="item in pagedItems" :key="item.pid">
                 <template v-if="!isRadio(item) && getProgrammeThumbnailUrl(item.pid) && !brokenThumbs[item.pid]" #thumb>
                     <img
+loading="lazy"
                         class="clickable"
                         :src="getProgrammeThumbnailUrl(item.pid)"
                         @click="router.push(`/browse/programme/${item.pid}`)"
@@ -247,7 +248,8 @@
                 <tr v-for="item in pagedItems" :key="item.pid">
                     <td>
                         <img
-                            v-if="!isRadio(item) && getProgrammeThumbnailUrl(item.pid)"
+v-if="!isRadio(item) && getProgrammeThumbnailUrl(item.pid)"
+                            loading="lazy"
                             class="thumbnail clickable"
                             :src="getProgrammeThumbnailUrl(item.pid)"
                             @click="router.push(`/browse/programme/${item.pid}`)"

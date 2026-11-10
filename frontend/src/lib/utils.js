@@ -25,13 +25,20 @@ export const buildDownloadQuery = ({ pid, nzbName, type, title, series, episode,
     return params.toString();
 };
 
-// IPlayerDetails.thumbnail is a relative json-api path (e.g. "json-api/thumbnail/abc123.jpg"),
-// mirroring how ipFetch resolves endpoints - resolve it against the API host the same way.
-// @error handler for thumbnail <img>s: when the image fails to load (e.g. BBC has no still for
-// it) blank it, rather than showing the browser's broken-image "?" icon. visibility (not display)
-// so the image keeps the space its CSS gives it and the surrounding layout doesn't shift.
+// A picture the browser could not load becomes a quiet grey tile with a picture glyph (a data URI, so it cannot fail
+// itself), the same size as the picture it replaces, instead of the browser's broken-image icon or a blank gap.
+// Semi-transparent greys read on both the light and dark themes.
+const BROKEN_IMAGE = `data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180"><rect width="320" height="180" fill="rgba(128,128,128,0.18)"/>' +
+        '<g fill="none" stroke="rgba(128,128,128,0.7)" stroke-width="6" stroke-linejoin="round"><rect x="120" y="60" width="80" height="60" rx="6"/><path d="M126 112l24-26 18 18 12-12 20 20"/></g></svg>'
+)}`;
+
 export const hideBrokenImage = (event) => {
-    event.target.style.visibility = 'hidden';
+    const image = event.target;
+    // The placeholder itself never errors, but guard anyway so a failure can never loop.
+    if (image.dataset.broken) return;
+    image.dataset.broken = 'true';
+    image.src = BROKEN_IMAGE;
 };
 
 // Node reports IPv4 clients on its dual-stack socket as IPv4-mapped IPv6 (::ffff:1.2.3.4); show those
