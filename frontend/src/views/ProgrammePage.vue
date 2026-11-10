@@ -260,6 +260,7 @@ import { useMediaProviders } from '@/lib/mediaProvider';
 import { useQualityBadges } from '@/lib/qualityBadges';
 import { requestFromArr, useArrAppNames } from '@/lib/subscriptionArr';
 import { useSubscriptions } from '@/lib/subscriptions';
+import toastService from '@/lib/toastService';
 import { useBrowseActions } from '@/lib/useBrowseActions';
 import { useDebugLink } from '@/lib/useDebugLink';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -546,11 +547,9 @@ const downloadBatch = async (batch, label) => {
     if (failed.length === 0) {
         router.push('/queue');
     } else {
-        dialogService.alert(
-            'Some downloads failed',
-            `${batch.length - failed.length} of ${batch.length} episodes were queued.`,
-            `Failed: ${failed.map((e) => getSeriesEpisodeLabel(e) || e.episodeTitle || e.pid).join(', ')}`
-        );
+        toastService.error(`Only ${batch.length - failed.length} of ${batch.length} episodes were queued`, {
+            detail: `Failed: ${failed.map((e) => getSeriesEpisodeLabel(e) || e.episodeTitle || e.pid).join(', ')}`,
+        });
     }
 };
 

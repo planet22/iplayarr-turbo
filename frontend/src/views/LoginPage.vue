@@ -31,7 +31,8 @@
                         <a href="#" @click="showForgot">{{loginMethod === 'form' ? 'Forgot your password?' : 'Locked Out?'}}</a>
                     </div>
                     <button type="button" class="button" @click="login">Login</button>
-                    <div v-if="error" id="login-failed" class="login-failed">Incorrect Username or Password</div>
+                    <div v-if="error" id="login-failed" class="login-failed" role="alert">Incorrect Username or Password</div>
+                    <div v-else-if="notice" class="login-notice" role="status">{{ notice }}</div>
                 </div>
                 <div v-if="forgot" class="panel-body">
                     <div class="sign-in">{{loginMethod === 'form' ? 'FORGOT PASSWORD' : 'LOCKED OUT'}}</div>
@@ -62,7 +63,6 @@ const logoUrl = `${getBasePath()}/iplayarr.png`;
 import { onMounted,ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 
 const router = useRouter();
@@ -80,6 +80,8 @@ const forgotForm = ref({
 
 const error = ref(false);
 const forgot = ref(false);
+// Shown on the login panel after a reset request, in place of a pop-up.
+const notice = ref('');
 
 const login = async () => {
     if (loginMethod.value == 'form'){
@@ -106,7 +108,8 @@ const hideForgot = async () => {
 
 const submitForgot = async () => {
     ipFetch('auth/resetPassword', 'POST', forgotForm.value);
-    dialogService.alert('Reset Password', 'If the code is correct, the password will be reset!');
+    notice.value = 'If the code is correct, the password has been reset. The new one is in the logs.';
+    error.value = false;
     forgot.value = false;
 };
 
@@ -193,6 +196,12 @@ onMounted(async () => {
     text-align: center;
     white-space: nowrap;
     line-height: normal;
+}
+
+.login-notice {
+    margin-top: 20px;
+    color: @subtle-text-color;
+    font-size: 14px;
 }
 
 .login-failed {

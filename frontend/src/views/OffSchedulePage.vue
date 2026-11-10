@@ -41,6 +41,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import OffScheduleForm from '@/components/modals/OffScheduleForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import toastService from '@/lib/toastService';
 import { deepCopy } from '@/lib/utils';
 
 const cacheDefinitions = ref([]);
@@ -73,11 +74,13 @@ const openForm = (cacheDef) => {
     formModal.open();
 };
 
-const remove = async ({ id }) => {
+const remove = async ({ id, name }) => {
     if (
-        await dialogService.confirm('Delete Cache Definition', 'Are you sure you want to delete this Cache Definition?', undefined, { danger: true, confirmLabel: 'Delete' })
+        await dialogService.confirm('Delete Off-Schedule Entry', 'Are you sure you want to delete this entry?', undefined, { danger: true, confirmLabel: 'Delete' })
     ) {
-        await ipFetch('json-api/offSchedule', 'DELETE', { id });
+        const { ok } = await ipFetch('json-api/offSchedule', 'DELETE', { id });
+        if (ok) toastService.success(`Deleted ${name}`);
+        else toastService.error(`Could not delete ${name}`);
         refreshCacheDefinitions();
     }
 };
@@ -87,6 +90,7 @@ const saveCacheDefinition = async (form) => {
     const response = await ipFetch('json-api/offSchedule', method, form);
     if (response.ok) {
         refreshCacheDefinitions();
+        toastService.success(`Saved ${form.name}`);
         return { ok: true };
     } else {
         return { ok: false, errors: response.data.invalid_fields ?? { url: response.data.message } };
@@ -97,7 +101,9 @@ const refreshCacheDefinition = async (def) => {
     if (await dialogService.confirm('Refresh Cache', `Are you sure you want to refresh the cache for ${def.name}?`)) {
         refreshingIds.add(def.id);
         try {
-            await ipFetch('json-api/offSchedule/refresh', 'POST', def);
+            const { ok } = await ipFetch('json-api/offSchedule/refresh', 'POST', def);
+            if (ok) toastService.success(`Refreshed ${def.name}`);
+            else toastService.error(`Could not refresh ${def.name}`);
         } finally {
             refreshingIds.delete(def.id);
         }

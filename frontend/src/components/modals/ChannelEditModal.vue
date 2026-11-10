@@ -7,7 +7,7 @@
         :show-close="true"
         close-label="Cancel"
         :show-confirm="true"
-        :confirm-label="saving ? 'Saving...' : 'Save'"
+        confirm-label="Save" :confirm-busy="saving"
         @confirm="save"
     >
         <TextInput v-model="form.name" name="Name" tooltip="Shown on the Channels page, in Jellyfin and in the library" />

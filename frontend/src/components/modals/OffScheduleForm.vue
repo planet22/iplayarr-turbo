@@ -1,7 +1,7 @@
 <template>
     <IPlayarrModal
         compact
-        :title="`${action} Cache Definition`"
+        :title="`${action} Off-Schedule Entry`"
         :show-close="true"
         close-label="Cancel"
         :show-confirm="true"
@@ -11,7 +11,7 @@
         <TextInput
             v-model="form.name"
             name="Search Term"
-            tooltip="Search Term for the Cache Definition"
+            tooltip="Search term for this entry"
             placeholder="Red Dwarf"
             :error="errors.name"
         />

@@ -27,7 +27,8 @@
                 <button v-if="showCancel" :class="['clickable', { cancel: !danger }]" @click="emit('cancel')">
                     {{ cancelLabel }}
                 </button>
-                <button v-if="showConfirm" :class="['clickable', { danger }]" @click="emit('confirm')">
+                <button v-if="showConfirm" :class="['clickable', { danger }]" :disabled="confirmBusy" @click="emit('confirm')">
+                    <font-awesome-icon v-if="confirmBusy" :icon="['fas', 'circle-notch']" spin />
                     {{ confirmLabel }}
                 </button>
             </div>
@@ -49,6 +50,8 @@ defineProps({
     closeLabel: String,
     showConfirm: Boolean,
     confirmLabel: String,
+    // Work in progress after Save/Create: the confirm button is disabled and shows a spinner (the label stays).
+    confirmBusy: Boolean,
     // A destructive action beside Close (Delete, Remove): a red button that emits 'delete'.
     deleteLabel: String,
     // Destructive confirmations (delete, clear, cancel a download): the confirm button is red.
@@ -65,6 +68,11 @@ const dismiss = (close) => {
 </script>
 
 <style lang="less">
+.iplayarr-modal .button-container button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
 .modalTitle {
     display: flex;
     justify-content: space-between;
