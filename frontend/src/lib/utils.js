@@ -99,13 +99,19 @@ export const getSeriesEpisodeLabel = (details) => {
     return undefined;
 };
 
+// The programme id in an iPlayer link, or undefined for anything else (so the search box searches instead).
+// A PID is a lower-case letter then 7 or more letters and digits with no vowels. The first letter varies (m, p, b...),
+// and the slug after it is optional, so /iplayer/episode/p0db9c0q works as well as /iplayer/episode/m002zcw6/some-title.
+// Query strings and fragments are ignored; the 'episode' and 'episodes' path words have vowels, so never read as a PID.
+const IPLAYER_URL = /^https?:\/\/(?:www\.)?bbc\.co\.uk\/iplayer\/(?:[^?#/\s]+\/)*?([a-z][0-9b-df-hj-np-tv-z]{7,})(?:[/?#]|$)/;
+
 export const getPidFromBBCUrl = (url) => {
     if (!url) {
         return undefined;
     }
-    const match = url.match(/https:\/\/www\.bbc\.co\.uk\/iplayer\/[^?]+\/(m[0-9a-z]{7})\/[^?]+/);
+    const match = String(url).trim().match(IPLAYER_URL);
     return match ? match[1] : undefined;
-}
+};
 
 // The one size formatter: a byte count as B, KB, MB or GB - "812 B", "3.4 KB", "12.50 MB", "1.2 GB".
 // A .strm pointer is a few hundred bytes, so small values show as B or KB, not "0.00 MB".
