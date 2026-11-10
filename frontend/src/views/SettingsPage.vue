@@ -1,63 +1,65 @@
 <template>
-    <div class="inner-content">
-        <PageHeader title="Settings" icon="gears" />
-        <SettingsPageToolbar
-            inline-filters
-            filters-last
-            :save-enabled="saveEnabled"
-            :icons="['save', 'advanced']"
-            :advanced-on="showAdvanced"
-            @save="saveConfig"
-            @toggle-advanced="toggleAdvanced"
-        >
-            <template v-if="filterable && !loading" #filters>
-                <input
-                    v-model="filterText"
-                    type="search"
-                    class="tableFilter"
-                    placeholder="Filter settings on this tab"
-                    aria-label="Filter settings on this tab"
-                    @keydown.esc="filterText = ''"
-                />
-            </template>
-        </SettingsPageToolbar>
-    </div>
-    <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
-    <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody">
-        <GeneralSettingsTab v-if="activeTab == 'general'" :true-or-false="trueOrFalse" @generate-api-key="generateApiKey" />
-        <SearchSettingsTab v-if="activeTab == 'search'" :true-or-false="trueOrFalse" />
-        <AppearanceSettingsTab v-if="activeTab == 'appearance'" :true-or-false="trueOrFalse" />
-        <MediaManagementSettingsTab
-            v-if="activeTab == 'mediaManagement'"
-            :quality-profiles="qualityProfiles"
-            :version-profiles="versionProfiles"
-            :output-formats="outputFormats"
-            :true-or-false="trueOrFalse"
-            :nfo-write-modes="nfoWriteModes"
-            :media-modes="mediaModes"
-        />
-        <DownloadClientSettingsTab v-if="activeTab == 'downloadClient'" :download-clients="downloadClients" />
-        <StreamingSettingsTab
-            v-if="activeTab == 'streaming'"
-            :stream-modes="streamModes"
-            :stream-clients="streamClients"
-            @generate-stream-key="generateStreamKey"
-        />
-        <LiveTvSettingsTab v-if="activeTab == 'liveTv'" @generate-stream-key="generateStreamKey" />
-        <AuthenticationSettingsTab
-            v-if="activeTab == 'authentication'"
-            :auth-types="authTypes"
-            :oidc-tested="oidcTested"
-            :oidc-callback-tooltip="oidcCallbackTooltip"
-            @test-oidc="testOIDC"
-        />
-        <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" />
-        <div v-if="filterText.trim() && !filterMatches" class="settingsFilterEmpty">
-            No settings on this tab match "{{ filterText.trim() }}".
+    <div class="settingsPage">
+        <div class="inner-content">
+            <PageHeader title="Settings" icon="gears" />
+            <SettingsPageToolbar
+                inline-filters
+                filters-last
+                :save-enabled="saveEnabled"
+                :icons="['save', 'advanced']"
+                :advanced-on="showAdvanced"
+                @save="saveConfig"
+                @toggle-advanced="toggleAdvanced"
+            >
+                <template v-if="filterable && !loading" #filters>
+                    <input
+                        v-model="filterText"
+                        type="search"
+                        class="tableFilter"
+                        placeholder="Filter settings on this tab"
+                        aria-label="Filter settings on this tab"
+                        @keydown.esc="filterText = ''"
+                    />
+                </template>
+            </SettingsPageToolbar>
         </div>
+        <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
+        <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody">
+            <GeneralSettingsTab v-if="activeTab == 'general'" :true-or-false="trueOrFalse" @generate-api-key="generateApiKey" />
+            <SearchSettingsTab v-if="activeTab == 'search'" :true-or-false="trueOrFalse" />
+            <AppearanceSettingsTab v-if="activeTab == 'appearance'" :true-or-false="trueOrFalse" />
+            <MediaManagementSettingsTab
+                v-if="activeTab == 'mediaManagement'"
+                :quality-profiles="qualityProfiles"
+                :version-profiles="versionProfiles"
+                :output-formats="outputFormats"
+                :true-or-false="trueOrFalse"
+                :nfo-write-modes="nfoWriteModes"
+                :media-modes="mediaModes"
+            />
+            <DownloadClientSettingsTab v-if="activeTab == 'downloadClient'" :download-clients="downloadClients" />
+            <StreamingSettingsTab
+                v-if="activeTab == 'streaming'"
+                :stream-modes="streamModes"
+                :stream-clients="streamClients"
+                @generate-stream-key="generateStreamKey"
+            />
+            <LiveTvSettingsTab v-if="activeTab == 'liveTv'" @generate-stream-key="generateStreamKey" />
+            <AuthenticationSettingsTab
+                v-if="activeTab == 'authentication'"
+                :auth-types="authTypes"
+                :oidc-tested="oidcTested"
+                :oidc-callback-tooltip="oidcCallbackTooltip"
+                @test-oidc="testOIDC"
+            />
+            <MaintenanceSettingsTab v-if="activeTab == 'maintenance'" />
+            <div v-if="filterText.trim() && !filterMatches" class="settingsFilterEmpty">
+                No settings on this tab match "{{ filterText.trim() }}".
+            </div>
+        </div>
+        <SettingsSaveBar :count="tabChangeCount" :saving="loading" @save="saveConfig" @discard="discardChanges" />
+        <LoadingIndicator v-if="loading" />
     </div>
-    <SettingsSaveBar :count="tabChangeCount" :saving="loading" @save="saveConfig" @discard="discardChanges" />
-    <LoadingIndicator v-if="loading" />
 </template>
 
 <script setup>
@@ -630,6 +632,19 @@ const testOIDC = () => {
 </script>
 
 <style lang="less">
+// The page fills the window under the top bar, so the save bar (sticky, last in the page) rests at the bottom of the
+// window on a short tab too, not straight under the last setting.
+.settingsPage {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - var(--navbar-height, 60px));
+    min-height: calc(100dvh - var(--navbar-height, 60px));
+
+    > .settingsBody {
+        flex: 1 0 auto;
+    }
+}
+
 .settingsBody .filteredOut {
     display: none !important;
 }
