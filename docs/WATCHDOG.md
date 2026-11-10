@@ -16,7 +16,7 @@ Only links that point at iPlayarr or carry a BBC pid are checked. Where it looks
 | A Jellyfin server | Listing that server's library items |
 | iPlayarr - radio links (BBC Sounds on) | The `.strm` links in the Radio Directory (`SOUNDS_DIR`) |
 
-Radio links are checked against BBC Sounds (not iPlayer) with the same strikes, "BBC confirmed up" safeguards and actions, except that the Sonarr/Radarr follow-up and route updates do not apply. Their events carry the radio flag, the webhook gets `"radio": true`, and the delete action also drops the radio download record. Downloaded audio files are not probed (they cannot go dead); the page shows them as **Radio in the Library**.
+Radio links are checked against BBC Sounds (not iPlayer) with the same strikes, "BBC confirmed up" safeguards and actions, except that the Sonarr/Radarr follow-up and route updates do not apply. Their events carry the radio flag, the webhook gets `"radio": true`, and the delete action also drops the radio download record. Downloaded audio files are not probed (they cannot go dead); the page counts them in the Library card under its **Radio** switch.
 
 Sonarr/Radarr/Jellyfin sources are the apps you added on the **Apps** page (Jellyfin is a new app type there: URL plus API key and a Test button). Their files must be readable from inside the iPlayarr container, so mount the library and use **Watchdog Path Mapping** (below). Live channel `.strm` files ([STREAMING.md](STREAMING.md#live-channels)) are ignored.
 
@@ -57,8 +57,10 @@ Actions are taken once per link.
 - **Run** a check now, **Stop** a running one, or **Refresh counts** (re-list links from the sources without checking them against BBC). Live progress is shown per source while links are being collected and checked.
 - Stat cards and charts: tracked, valid and invalid links, a per-type breakdown (iPlayarr, Sonarr, Radarr, Jellyfin) and checked-vs-failed.
 - **In the Library:** how many episodes the library index holds, overall and for iPlayarr's folders and each Sonarr, Radarr and Jellyfin app on its own. The Watchdog lists its links through the same index as the Subscriptions page, and a run also reads iPlayarr's folders again.
+With BBC Sounds radio on, a **Video | Radio** switch on that card flips it between the video and radio counts; with radio off there is no switch.
+- **Settings:** the Watchdog's current settings (sources, actions, strike limit, parallel checks, minimum valid, route updates, and whether a webhook is set) so you can see them without opening Settings.
 - **Unreadable files:** when a scan finds links this container cannot read (the library is mounted under another path), the warning at the top of the page says so, and suggests the Path Mapping that would fix it when one can be found. Use Refresh Links after changing the mapping.
-- **Links:** a table of every tracked link with status, source, when it was last checked, and the action taken. Each row shows the library file's own name (for example `Pointless (2009) - S34E05 - Episode 5`) under the pid, and any message or file list, not just for invalid links. A button clears the table.
+- **Links:** a table of every tracked link with status, source, when it was last checked, and the action taken. Each row shows the library file's own name (for example `Pointless (2009) - S34E05 - Episode 5`) under the pid, and any message or file list, not just for invalid links. Behind the filter icon are a sort (Status, Last checked, Programme, Strikes, Source) and a text filter; the default order is invalid first, then newest. Each card shows an icon for its last check (a tick, or a warning with the strike and BBC's reason on hover) and a paper plane when the notification was sent. A button clears the table.
 
 ## Schedule
 

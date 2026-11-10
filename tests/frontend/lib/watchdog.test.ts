@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { libraryLabel, pathMapWarnings, runChartData } from '../../../frontend/src/lib/watchdog';
+import { lastCheck, lastCheckTitle, libraryLabel, linkMatches, linkSortAccessors, pathMapWarnings, runChartData, sourcesLabel, sourceTokenName, watchdogSettingRows } from '../../../frontend/src/lib/watchdog';
 
 // Nothing here talks to the network directly.
 // Failures are reported to the caller rather than thrown past it.
@@ -80,5 +80,126 @@ describe('pathMapWarnings', () => {
             '"oops" must look like /their/folder=/our/folder',
             'This container cannot find /library/tv - is it mounted?',
         ]);
+    });
+});
+
+describe('sourcesLabel', () => {
+    it('prefers the stored names', () => {
+        expect(sourcesLabel({ sourceNames: ['Sonarr', 'Jellyfin'], sources: ['arr'] })).toBe('Sonarr, Jellyfin');
+    });
+    it('falls back to the labels of the older source tokens, and passes unknown ones through', () => {
+        expect(sourcesLabel({ sources: ['history', 'arr', 'jellyfin', 'radio', 'odd'] })).toBe('iPlayarr, Sonarr/Radarr, Jellyfin, iPlayarr radio, odd');
+    });
+    it('is empty for nothing', () => {
+        expect(sourcesLabel({})).toBe('');
+        expect(sourcesLabel(undefined)).toBe('');
+    });
+});
+
+describe('lastCheck and lastCheckTitle', () => {
+    it('is the newest history entry', () => {
+        expect(lastCheck({ history: [{ result: 'ok' }, { result: 'failed' }] })).toEqual({ result: 'failed' });
+    });
+    it('is undefined without history, with an empty title', () => {
+        expect(lastCheck({})).toBeUndefined();
+        expect(lastCheck(undefined)).toBeUndefined();
+        expect(lastCheckTitle({}, 2)).toBe('');
+    });
+    it('says a passing check passed', () => {
+        expect(lastCheckTitle({ history: [{ result: 'ok' }] }, 2)).toBe('Last check passed');
+    });
+    it('names the strike and the reason for a failure', () => {
+        expect(lastCheckTitle({ failCount: 1, history: [{ result: 'failed', message: 'Not found' }] }, 2)).toBe('Last check failed (strike 1/2): Not found');
+    });
+    it('copes with a failure with no reason or count', () => {
+        expect(lastCheckTitle({ history: [{ result: 'failed' }] }, 3)).toBe('Last check failed (strike 1/3)');
+    });
+});
+
+describe('linkSortAccessors', () => {
+    const acc = linkSortAccessors((item: { pid: string }) => item.pid, (t: string) => t.replace(/^the /i, ''));
+    const at = (iso: string) => ({ lastChecked: iso });
+    it('status puts invalid first, then newest first', () => {
+        const items = [
+            { pid: 'a', status: 'ok', ...at('2026-11-02T00:00:00Z') },
+            { pid: 'b', status: 'invalid', ...at('2026-11-01T00:00:00Z') },
+            { pid: 'c', status: 'ok', ...at('2026-11-03T00:00:00Z') },
+            { pid: 'd', status: 'invalid', ...at('2026-11-04T00:00:00Z') },
+        ];
+        const order = [...items].sort((x, y) => acc.status(x) - acc.status(y)).map(({ pid }) => pid);
+        expect(order).toEqual(['d', 'b', 'c', 'a']);
+    });
+    it('checked, strikes, name and source read the matching field', () => {
+        expect(acc.checked(at('2026-11-01T00:00:00Z'))).toBe(Date.parse('2026-11-01T00:00:00Z'));
+        expect(acc.strikes({ failCount: 2 })).toBe(2);
+        expect(acc.strikes({})).toBe(0);
+        expect(acc.name({ pid: 'The Archers' })).toBe('Archers');
+        expect(acc.source({ sourceNames: ['Sonarr'] })).toBe('Sonarr');
+    });
+});
+
+describe('linkMatches', () => {
+    const item = { pid: 'm001abc', status: 'invalid', message: 'Gone from iPlayer', actions: ['Webhook sent'], sourceNames: ['Sonarr'], files: ['/data/tv/Pointless - S01E01 [WEBDL-1080p].strm'] };
+    it.each(['m001', 'pointless', 'invalid', 'gone from', 'webhook', 'sonarr', '.strm', 'the title'])('matches on %s', (query) => {
+        expect(linkMatches(item, query, 'The Title')).toBe(true);
+    });
+    it('matches valid for a valid link only', () => {
+        expect(linkMatches({ pid: 'x', status: 'ok' }, 'valid', 'x')).toBe(true);
+        expect(linkMatches(item, 'valid', 'x')).toBe(false);
+    });
+    it('does not match something absent, and copes with missing fields', () => {
+        expect(linkMatches(item, 'zzz', 'The Title')).toBe(false);
+        expect(linkMatches({ pid: 'x', status: 'ok' }, 'zzz', undefined)).toBe(false);
+    });
+});
+
+describe('sourceTokenName', () => {
+    it('names the fixed tokens', () => {
+        expect(['subscribed', 'history', 'radio', 'arr', 'jellyfin'].map((t) => sourceTokenName(t))).toEqual([
+            'iPlayarr: subscriptions', 'iPlayarr: all downloads', 'iPlayarr: radio links', 'Sonarr/Radarr', 'Jellyfin',
+        ]);
+    });
+    it('names an app by its id, or leaves the token when it is unknown', () => {
+        expect(sourceTokenName('app:7', [{ id: 7, name: 'My Sonarr' }])).toBe('My Sonarr');
+        expect(sourceTokenName('app:9', [{ id: 7, name: 'My Sonarr' }])).toBe('app:9');
+        expect(sourceTokenName('app:9')).toBe('app:9');
+        expect(sourceTokenName('weird')).toBe('weird');
+    });
+});
+
+describe('watchdogSettingRows', () => {
+    const row = (rows: { label: string; value: unknown }[], label: string) => rows.find((r) => r.label === label)?.value;
+    it('shows the saved values', () => {
+        const rows = watchdogSettingRows(
+            {
+                STRM_WATCHDOG_SOURCES: 'history, app:7 ,', STRM_WATCHDOG_ACTION: 'delete', STRM_WATCHDOG_ARR_ACTION: 'search',
+                STRM_WATCHDOG_CONCURRENCY: '6', STRM_WATCHDOG_FAIL_THRESHOLD: '20', STRM_WATCHDOG_UPDATE_ROUTES: 'true', STRM_WATCHDOG_WEBHOOK_URL: 'http://x',
+            },
+            3,
+            [{ id: 7, name: 'Sonarr' }]
+        );
+        expect(row(rows, 'Sources')).toBe('iPlayarr: all downloads, Sonarr');
+        expect(row(rows, 'Action on invalid')).toBe('Delete .strm file');
+        expect(row(rows, 'Sonarr/Radarr action')).toBe('Search for replacement');
+        expect(row(rows, 'Failed checks before invalid')).toBe(3);
+        expect(row(rows, 'Parallel checks')).toBe('6');
+        expect(row(rows, 'Minimum valid before action')).toBe('20');
+        expect(row(rows, 'Update link routes')).toBe('Enabled');
+        expect(row(rows, 'Webhook')).toBe('Set');
+    });
+    it('falls back to the defaults when nothing is saved', () => {
+        for (const settings of [undefined, {}, { STRM_WATCHDOG_ACTION: '', STRM_WATCHDOG_SOURCES: null }]) {
+            const rows = watchdogSettingRows(settings, 2);
+            expect(row(rows, 'Sources')).toBe('None');
+            expect(row(rows, 'Action on invalid')).toBe('Notify only');
+            expect(row(rows, 'Sonarr/Radarr action')).toBe('Do nothing');
+            expect(row(rows, 'Parallel checks')).toBe(4);
+            expect(row(rows, 'Minimum valid before action')).toBe(10);
+            expect(row(rows, 'Update link routes')).toBe('Disabled');
+            expect(row(rows, 'Webhook')).toBe('Not set');
+        }
+    });
+    it('shows an unknown action value as it is', () => {
+        expect(row(watchdogSettingRows({ STRM_WATCHDOG_ACTION: 'other' }, 2), 'Action on invalid')).toBe('other');
     });
 });

@@ -26,23 +26,22 @@
         <InfoBar v-for="warning in live.warnings || []" :key="warning" clazz="warning">{{ warning }}</InfoBar>
 
         <div class="statRow">
-            <div v-if="librarySources.length" class="statCard">
+            <div v-if="librarySources.length || (radioEnabled && radioLibrarySources.length)" class="statCard">
                 <font-awesome-icon class="statIcon" :icon="['fas', 'hard-drive']" />
                 <div class="statBody">
-                    <span class="statLabel">In the Library</span>
+                    <span class="statLabel libraryLabelRow">
+                        In the Library
+                        <span v-if="radioEnabled" class="libraryToggle" role="group" aria-label="Library type">
+                            <button
+                                v-for="mode in ['video', 'radio']" :key="mode" type="button"
+                                :class="['clickable', libraryMode === mode ? 'active' : '']" :aria-pressed="libraryMode === mode"
+                                @click="libraryMode = mode"
+                            >{{ mode == 'video' ? 'Video' : 'Radio' }}</button>
+                        </span>
+                    </span>
                     <div class="valueRow">
-                        <span class="statValue">{{ status.library.total }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
-                        <SourceCounts :sources="librarySources" grid />
-                    </div>
-                </div>
-            </div>
-            <div v-if="radioLibrarySources.length" class="statCard">
-                <font-awesome-icon class="statIcon" :icon="['fas', 'hard-drive']" />
-                <div class="statBody">
-                    <span class="statLabel">Radio in the Library</span>
-                    <div class="valueRow">
-                        <span class="statValue">{{ status.radioLibrary.total }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
-                        <SourceCounts :sources="radioLibrarySources" grid />
+                        <span class="statValue">{{ shownLibraryTotal }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="shownLibrarySources" grid />
                     </div>
                 </div>
             </div>
@@ -119,6 +118,19 @@
 
         <p class="dedupNote">* Totals are after de-duplicating libraries; a link listed by several sources counts under each in the per-source counts.</p>
 
+        <legend>Settings</legend>
+        <div class="statRow">
+            <div class="statCard settingsCard">
+                <dl class="settingsList">
+                    <template v-for="row in settingRows" :key="row.label">
+                        <dt>{{ row.label }}</dt>
+                        <dd>{{ row.value }}</dd>
+                    </template>
+                </dl>
+                <router-link class="settingsLink" to="/settings">Change in Settings</router-link>
+            </div>
+        </div>
+
         <legend>Statistics</legend>
         <div class="statRow">
             <div class="statCard sparkline">
@@ -160,11 +172,18 @@
 
         <PageHeader title="Links" />
         <SettingsPageToolbar
-            :view-mode="viewMode" :view-modes="sortedItems.length ? ['table', 'cards'] : []" :icons="['delete']"
-            delete-label="Clear links" :delete-disabled="live.running || !sortedItems.length" @update:view-mode="setViewMode"
-            @delete-queue-item="clearItems"
-        />
-        <p v-if="!sortedItems.length" class="empty">No links have been checked yet.</p>
+            :view-mode="viewMode" :view-modes="status.items.length ? ['table', 'cards'] : []" :icons="['delete', 'filterToggle']"
+            delete-label="Clear links" :delete-disabled="live.running || !status.items.length" :filters-shown="showFilters"
+            :filters-active="!!filterText" @update:view-mode="setViewMode"
+            @delete-queue-item="clearItems" @toggle-filters="showFilters = !showFilters"
+        >
+            <template v-if="showFilters" #filters>
+                <SortControl v-model:sort-by="sortBy" v-model:order="sortOrder" :options="sortOptions" />
+                <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter links..." />
+            </template>
+        </SettingsPageToolbar>
+        <p v-if="!status.items.length" class="empty">No links have been checked yet.</p>
+        <p v-else-if="!sortedItems.length" class="empty">No links match the filter.</p>
         <template v-else>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
         <div v-if="cardView" class="cardList cardGrid">
@@ -193,8 +212,14 @@
                         {{ item.status == 'invalid' ? 'Invalid' : 'Valid' }}
                     </span>
                     <span v-if="item.failCount" class="pill grey">{{ strikeLabel(item) }} strikes</span>
+                    <span v-if="lastCheck(item)" :class="['lastCheck', lastCheck(item).result]" :title="lastCheckTitle(item)">
+                        <font-awesome-icon :icon="['fas', lastCheck(item).result == 'failed' ? 'triangle-exclamation' : 'circle-check']" />
+                    </span>
+                    <span v-if="(item.actions || []).includes('Webhook sent')" class="lastCheck" title="Notification sent when the link went invalid">
+                        <font-awesome-icon :icon="['fas', 'paper-plane']" />
+                    </span>
                     <span v-if="(item.sourceNames || item.sources || []).length" class="linkMeta">
-                        {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') }}
+                        {{ sourcesLabel(item) }}
                     </span>
                     <span class="linkMeta" title="Last checked">
                         <font-awesome-icon :icon="['fas', 'clock']" />{{ formatRelativeTime(Date.parse(item.lastChecked), undefined, true) }}
@@ -244,7 +269,7 @@
                     </td>
                     <td data-title="Strikes">{{ strikeLabel(item) }}</td>
                     <td data-title="Source">
-                        {{ (item.sourceNames || (item.sources || []).map((s) => sourceLabels[s] ?? s)).join(', ') || '—' }}
+                        {{ sourcesLabel(item) || '—' }}
                     </td>
                     <td data-title="Checked">{{ formatRelativeTime(Date.parse(item.lastChecked)) }}</td>
                     <td data-title="Action">{{ (item.actions || []).join(', ') }}</td>
@@ -267,6 +292,7 @@ import DataCard from '@/components/common/DataCard.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import SortControl from '@/components/common/SortControl.vue';
 import SourceCounts from '@/components/common/SourceCounts.vue';
 import Pagination from '@/components/common/TablePagination.vue';
 import TypeCounts from '@/components/watchdog/TypeCounts.vue';
@@ -274,12 +300,13 @@ import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { usePagination } from '@/lib/usePagination';
+import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
-import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage } from '@/lib/utils';
+import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hideBrokenImage, sortableTitle } from '@/lib/utils';
 
 // Pictures that did not load: their cards drop the picture so the text gets the room.
 const brokenThumbs = reactive({});
-import { libraryLabel, runChartData } from '@/lib/watchdog';
+import { lastCheck, lastCheckTitle as lastCheckText, libraryLabel, linkMatches, linkSortAccessors, runChartData, sourcesLabel, watchdogSettingRows } from '@/lib/watchdog';
 
 const socket = inject('socket');
 const router = useRouter();
@@ -332,11 +359,38 @@ const lastRun = computed(() => runs.value[runs.value.length - 1]);
 
 const validCount = computed(() => status.value.items.filter(({ status }) => status == 'ok').length);
 const invalidCount = computed(() => status.value.items.filter(({ status }) => status == 'invalid').length);
-const sortedItems = computed(() =>
-    [...status.value.items].sort(
-        (a, b) => (b.status == 'invalid') - (a.status == 'invalid') || Date.parse(b.lastChecked) - Date.parse(a.lastChecked)
-    )
-);
+const itemName = (item) => (isRadio(item) ? libraryLabel(item) || shownId(item) : details[item.pid]?.title ?? item.pid);
+const sortOptions = [
+    { key: 'status', label: 'Status', order: 'asc' },
+    { key: 'checked', label: 'Last checked', order: 'desc' },
+    { key: 'name', label: 'Programme', order: 'asc' },
+    { key: 'strikes', label: 'Strikes', order: 'desc' },
+    { key: 'source', label: 'Source', order: 'asc' },
+];
+// Default order: invalid links first, then the most recently checked.
+const {
+    filterText, sortBy, sortOrder, sorted: sortedItems,
+} = useSortFilter(computed(() => status.value.items), {
+    filterFn: (item, query) => linkMatches(item, query, itemName(item)),
+    sortAccessors: linkSortAccessors(itemName, sortableTitle),
+    storageKey: 'watchdogLinks',
+    defaultSortBy: 'status',
+    defaultSortOrder: 'asc',
+});
+const showFilters = ref(!!filterText.value);
+
+// What the Watchdog is set to do right now, from the saved settings.
+const radioEnabled = computed(() => globalSettings?.value?.SOUNDS_ENABLED === 'true');
+const libraryMode = ref('video');
+const showingRadio = computed(() => radioEnabled.value && libraryMode.value === 'radio');
+const shownLibrarySources = computed(() => (showingRadio.value ? radioLibrarySources.value : librarySources.value));
+const shownLibraryTotal = computed(() => (showingRadio.value ? status.value.radioLibrary?.total : status.value.library?.total) ?? 0);
+
+const apps = ref([]);
+const settingRows = computed(() => watchdogSettingRows(globalSettings?.value, status.value.strikes, apps.value));
+
+// What happened on a link's last check, for the icon beside its pills.
+const lastCheckTitle = (item) => lastCheckText(item, status.value.strikes);
 const {
     page: linkPage,
     pageSize: linkPageSize,
@@ -349,7 +403,6 @@ watch(
     () => cardView.value && pagedItems.value.filter((item) => !isRadio(item)).forEach(({ pid }) => loadDetails(pid)),
     { immediate: true }
 );
-const sourceLabels = { history: 'iPlayarr', arr: 'Sonarr/Radarr', jellyfin: 'Jellyfin', radio: 'iPlayarr radio' };
 // What kind of source listed an item. Older stored items predate `types`, so fall back to their source.
 const typesOf = (item) =>
     item.types ?? (item.sources || []).map((source) => ({ history: 'HISTORY', arr: 'SONARR', jellyfin: 'JELLYFIN', radio: 'RADIO' })[source]);
@@ -446,6 +499,8 @@ onMounted(async () => {
     // Bound before the fetch: a page left while it was waiting would otherwise bind after its cleanup had run.
     bindSocket(socket.value);
     status.value = (await ipFetch('json-api/watchdog')).data;
+    const appList = await ipFetch('json-api/apps');
+    if (appList.ok && Array.isArray(appList.data)) apps.value = appList.data;
 });
 watch(socket, bindSocket);
 onBeforeUnmount(() => {
@@ -482,6 +537,83 @@ onBeforeUnmount(() => {
 
 .legendRow {
     flex-wrap: wrap;
+}
+
+// Icon for what happened on a link's last check, in the pill row of a Links card.
+.lastCheck {
+    display: inline-flex;
+    align-items: center;
+    font-size: 13px;
+    color: @subtle-text-color;
+
+    &.failed {
+        color: @danger-color;
+    }
+
+    &.ok {
+        color: @success-color;
+    }
+}
+
+// Video | Radio switch inside the Library card.
+.libraryLabelRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.libraryToggle {
+    display: inline-flex;
+
+    button {
+        padding: 1px 8px;
+        font-size: 11px;
+        border: 1px solid @settings-button-border-color;
+        background-color: transparent;
+        color: @subtle-text-color;
+
+        &:first-child {
+            border-radius: 4px 0 0 4px;
+        }
+
+        &:last-child {
+            border-radius: 0 4px 4px 0;
+            border-left-width: 0;
+        }
+
+        &.active {
+            background-color: @brand-color;
+            border-color: @brand-color;
+            color: @on-brand-color;
+        }
+    }
+}
+
+.statRow .statCard.settingsCard {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+
+    .settingsList {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 4px 16px;
+        margin: 0;
+        font-size: 13px;
+
+        dt {
+            color: @subtle-text-color;
+        }
+
+        dd {
+            margin: 0;
+            overflow-wrap: anywhere;
+        }
+    }
+
+    .settingsLink {
+        font-size: 12px;
+    }
 }
 
 @media (max-width: @mobile-breakpoint) {

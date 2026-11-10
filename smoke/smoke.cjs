@@ -1044,6 +1044,50 @@ async function watchdogLinks(page, ctx, U) {
         else rec(U, 'watchdog cards show the strikes pill on a failing-but-valid link', 'SKIP', 'no links under their strike limit');
         // A link with no failed checks has no pill.
         if (!struck.length) rec(U, 'watchdog cards show no strikes pill when nothing has failed', /\d+\/\d+ strikes/.test(cards) ? 'FAIL' : 'PASS');
+        // The Settings section shows what the Watchdog is set to, including the strike limit the API reports.
+        rec(U, 'watchdog shows its current settings', /Settings/.test(cards) && /Failed checks before invalid/.test(cards) && new RegExp(`Failed checks before invalid\\s*${strikes}`).test(cards) ? 'PASS' : 'FAIL', `limit ${strikes}`);
+        // One Library card: a Video | Radio switch only while radio is on, and no separate radio card.
+        const radioOn = (await http('/json-api/config')).json?.SOUNDS_ENABLED === 'true';
+        const toggle = await page.locator('.libraryToggle button').allTextContents();
+        rec(U, 'watchdog library card has a Video | Radio switch only when radio is enabled', (radioOn ? toggle.join('|') === 'Video|Radio' : toggle.length === 0) ? 'PASS' : 'FAIL', `radio ${radioOn}, switch [${toggle.join('|')}]`);
+        rec(U, 'watchdog has no separate Radio in the Library card', /Radio in the Library/.test(cards) ? 'FAIL' : 'PASS');
+        if (radioOn && toggle.length) {
+            await page.locator('.libraryToggle button', { hasText: 'Radio' }).click();
+            rec(U, 'watchdog library switch marks Radio as the chosen one', (await page.locator('.libraryToggle button.active').innerText()) === 'Radio' ? 'PASS' : 'FAIL');
+            await page.locator('.libraryToggle button', { hasText: 'Video' }).click();
+        }
+        // What happened on the last check: a tick or warning icon on each card with history, a paper-plane for a sent notification.
+        const all = (await http('/json-api/watchdog')).json?.items || [];
+        const withHistory = all.filter((i) => (i.history || []).length);
+        if (withHistory.length) {
+            const icons = await page.locator('.cardGrid .lastCheck[title^="Last check"]').count();
+            rec(U, 'watchdog cards show a last-check icon', icons > 0 ? 'PASS' : 'FAIL', `${icons} icon(s), ${withHistory.length} link(s) with history`);
+            const failedNow = withHistory.some((i) => i.history.at(-1).result === 'failed');
+            if (failedNow) rec(U, 'watchdog cards show a failed icon for a link whose last check failed', (await page.locator('.cardGrid .lastCheck.failed').count()) > 0 ? 'PASS' : 'FAIL');
+            else rec(U, 'watchdog cards show a failed icon for a link whose last check failed', 'SKIP', 'no link failed its last check');
+        } else rec(U, 'watchdog cards show a last-check icon', 'SKIP', 'no link has a check history');
+        const sent = all.filter((i) => (i.actions || []).includes('Webhook sent'));
+        if (sent.length) rec(U, 'watchdog cards show a notification-sent icon', (await page.locator('.cardGrid .lastCheck[title^="Notification sent"]').count()) > 0 ? 'PASS' : 'FAIL');
+        else rec(U, 'watchdog cards show a notification-sent icon', 'SKIP', 'no notification has been sent');
+        // Links sort and filter, behind the toolbar's filter icon like the other lists.
+        await page.evaluate(() => localStorage.removeItem('iplayarr.tableFilter.watchdogLinks'));
+        const filterBtn = page.locator('button[aria-label="Filter"]').last();
+        await filterBtn.click();
+        const sortLabels = await page.locator('.sortSelect option').allTextContents();
+        rec(U, 'watchdog links filter bar offers Status, Last checked, Programme, Strikes and Source sorts', sortLabels.join('|') === 'Status|Last checked|Programme|Strikes|Source' ? 'PASS' : 'FAIL', sortLabels.join('|'));
+        const box = page.locator('input.tableFilter');
+        await box.fill('zzz-no-such-link-zzz');
+        await page.waitForTimeout(400);
+        rec(U, 'watchdog links filter with no match says so', /No links match the filter/.test(await page.locator('body').innerText()) ? 'PASS' : 'FAIL');
+        await box.fill(all[0].pid);
+        await page.waitForTimeout(400);
+        const shown = await page.locator('.cardGrid > *').count();
+        rec(U, 'watchdog links filter by pid narrows the list to the matching link', shown >= 1 && shown <= all.filter((i) => JSON.stringify(i).toLowerCase().includes(all[0].pid.toLowerCase())).length ? 'PASS' : 'FAIL', `${shown} shown of ${all.length}`);
+        await box.fill('');
+        await page.locator('.sortSelect').selectOption('strikes');
+        await page.waitForTimeout(300);
+        rec(U, 'watchdog links sort is applied (Strikes)', (await page.locator('.sortSelect').inputValue()) === 'strikes' ? 'PASS' : 'FAIL');
+        await page.evaluate(() => localStorage.removeItem('iplayarr.tableFilter.watchdogLinks'));
         // The per-run results chart replaced the live Checked-vs-Failed line chart.
         const runs = (await http('/json-api/watchdog')).json?.runs || [];
         const chart = page.locator('.chartCard');
