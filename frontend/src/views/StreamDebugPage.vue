@@ -1335,6 +1335,7 @@ ul.plain {
         // Audio has no picture: just the player bar.
         &.audioOnly {
             height: 54px;
+            background: transparent;
         }
     }
 }
