@@ -108,14 +108,14 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
         font-size: @font-size-md;
 
         &.success {
-            border-left-color: @success-color;
+            border-left-color: @positive-color;
             .toastIcon {
                 color: @positive-color;
             }
         }
 
         &.error {
-            border-left-color: @error-color;
+            border-left-color: @danger-color;
             .toastIcon {
                 color: @danger-color;
             }

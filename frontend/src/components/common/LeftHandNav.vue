@@ -282,7 +282,7 @@ const handleClickOutside = (event) => {
         color: @subtle-text-color;
 
         .updateAvailable {
-            color: @warn-color;
+            color: @caution-color;
 
             .updateLink {
                 margin-top: 0;

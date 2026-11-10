@@ -550,7 +550,7 @@ onBeforeUnmount(() => {
     }
 
     &.ok {
-        color: @success-color;
+        color: @positive-color;
     }
 }
 

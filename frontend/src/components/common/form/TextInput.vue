@@ -236,7 +236,7 @@ const copyValue = async () => {
 
     .requiredMark {
         margin-left: 2px;
-        color: @error-color;
+        color: @danger-color;
     }
 
     label {
@@ -259,7 +259,7 @@ const copyValue = async () => {
 
         .error {
             font-size: 14px;
-            color: @error-color;
+            color: @danger-color;
         }
 
         .fieldRow {
@@ -339,11 +339,11 @@ const copyValue = async () => {
 
             &.error {
                 font-size: 14px;
-                color: @error-color;
+                color: @danger-color;
 
                 input,
                 textarea {
-                    border-color: @error-color;
+                    border-color: @danger-color;
                 }
             }
         }
@@ -364,11 +364,11 @@ const copyValue = async () => {
 
     &.advanced {
         label {
-            color: @warn-color;
+            color: @caution-color;
         }
 
         .tooltip {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }

@@ -1304,7 +1304,7 @@ ul.plain {
 
 // The connection the newest stream was served from: the whole row is coloured.
 .probeTable tr.bestRow td {
-    background-color: color-mix(in srgb, @success-color 25%, transparent);
+    background-color: color-mix(in srgb, @positive-color 25%, transparent);
 }
 
 // The connection being played in the player below (the same colour as in the Streams played table); it wins over the best line.

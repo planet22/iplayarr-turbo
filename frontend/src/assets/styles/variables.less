@@ -31,6 +31,10 @@
    Fixed colours that must not change (text over posters, the log console) are written inline where they are used. */
 @brand-color: var(--brand-color);
 @on-brand-color: var(--on-brand-color);
+// Two sets by role, not duplicates. Solid fills (buttons, bars, chips, dots) take @error / @warn / @success, with
+// @on-fill-color text on top. Anything drawn as text, an icon, a stroke, an accent border or a tint on the page
+// takes @danger / @caution / @positive below, which are tuned to stay readable in light and dark mode. The log
+// console is always dark, so it keeps the brighter fill set for its text.
 @error-color: var(--error-color);
 @warn-color: var(--warn-color);
 @success-color: var(--success-color);

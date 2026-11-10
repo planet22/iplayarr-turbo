@@ -432,12 +432,12 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
     color: @complete-color;
 }
 .Forwarded {
-    color: @warn-color;
+    color: @caution-color;
 }
 .Cancelled {
-    color: @error-color;
+    color: @danger-color;
 }
 .Removed {
-    color: @success-color;
+    color: @positive-color;
 }
 </style>

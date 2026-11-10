@@ -717,7 +717,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
 .missingIcon {
     display: inline-flex;
     align-items: center;
-    color: @warn-color;
+    color: @caution-color;
     cursor: help;
 }
 

@@ -129,7 +129,7 @@ const emit = defineEmits(['test-oidc']);
         }
 
         .test-success {
-            color: @success-color;
+            color: @positive-color;
         }
 
         .test-pending {

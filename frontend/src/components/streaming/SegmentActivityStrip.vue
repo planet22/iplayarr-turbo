@@ -91,7 +91,7 @@ const tooltip = computed(() => {
         }
 
         &.partial {
-            background-color: color-mix(in srgb, @success-color 45%, @table-border-color);
+            background-color: color-mix(in srgb, @positive-color 45%, @table-border-color);
         }
 
         &.current {

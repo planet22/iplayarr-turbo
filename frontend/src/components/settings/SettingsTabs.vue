@@ -100,7 +100,7 @@ watch(
         }
 
         &.hasError .tabFlag {
-            color: @error-color;
+            color: @danger-color;
             font-weight: bold;
         }
 

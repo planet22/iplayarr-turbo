@@ -147,11 +147,11 @@ const download = async () => {
 
     // A real file download: same warning look as the batch confirmation.
     &.warning {
-        border-left: 4px solid @warn-color;
-        background-color: color-mix(in srgb, @warn-color 14%, transparent);
+        border-left: 4px solid @caution-color;
+        background-color: color-mix(in srgb, @caution-color 14%, transparent);
 
         svg {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }

@@ -108,7 +108,7 @@ watch(
 
     .requiredMark {
         margin-left: 2px;
-        color: @error-color;
+        color: @danger-color;
     }
 
     label {
@@ -156,10 +156,10 @@ watch(
 
         &.error {
             font-size: 14px;
-            color: @error-color;
+            color: @danger-color;
 
             select {
-                border-color: @error-color;
+                border-color: @danger-color;
             }
         }
     }
@@ -176,11 +176,11 @@ watch(
 
     &.advanced {
         label {
-            color: @warn-color;
+            color: @caution-color;
         }
 
         .tooltip {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }

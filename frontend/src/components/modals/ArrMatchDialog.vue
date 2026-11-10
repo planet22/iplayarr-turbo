@@ -194,7 +194,7 @@ const confirm = () => {
 
 .lookupError {
     p {
-        color: @error-color;
+        color: @danger-color;
         font-size: 14px;
     }
 

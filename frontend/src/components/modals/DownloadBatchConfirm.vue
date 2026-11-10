@@ -125,11 +125,11 @@ const summary = computed(() => describeDownload(globalSettings.value, { count: p
     }
 
     &.warning {
-        border-left-color: @warn-color;
-        background-color: color-mix(in srgb, @warn-color 14%, transparent);
+        border-left-color: @caution-color;
+        background-color: color-mix(in srgb, @caution-color 14%, transparent);
 
         svg {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }

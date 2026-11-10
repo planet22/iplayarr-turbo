@@ -213,16 +213,16 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
 
         &.error {
             font-size: 14px;
-            color: @error-color;
+            color: @danger-color;
 
             .trigger {
-                border-color: @error-color;
+                border-color: @danger-color;
             }
         }
     }
 
     .warn {
-        color: @warn-color;
+        color: @caution-color;
     }
 
     .tooltip {
@@ -238,7 +238,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
     &.advanced {
         > label,
         .tooltip {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 }

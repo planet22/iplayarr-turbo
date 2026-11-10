@@ -295,7 +295,7 @@ const start = async () => {
             color: @subtle-text-color;
 
             &.complete svg {
-                color: @success-color;
+                color: @positive-color;
             }
 
             &.active {
@@ -307,7 +307,7 @@ const start = async () => {
             }
 
             &.failed svg {
-                color: @error-color;
+                color: @danger-color;
             }
 
             .stepCount {
@@ -331,7 +331,7 @@ const start = async () => {
     .syncError {
         margin-top: 6px;
         font-size: 13px;
-        color: @error-color;
+        color: @danger-color;
     }
 }
 

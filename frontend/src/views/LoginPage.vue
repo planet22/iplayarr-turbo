@@ -206,7 +206,7 @@ onMounted(async () => {
 
 .login-failed {
     margin-top: 20px;
-    color: @error-color;
+    color: @danger-color;
     font-size: 14px;
 }
 

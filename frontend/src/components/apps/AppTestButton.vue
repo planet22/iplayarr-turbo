@@ -66,7 +66,7 @@ button {
     }
 
     .test-success {
-        color: @success-color;
+        color: @positive-color;
     }
 
     .test-pending {

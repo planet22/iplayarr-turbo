@@ -61,8 +61,8 @@ const chips = computed(() => {
     color: @subtle-text-color;
 
     &.success {
-        background-color: color-mix(in srgb, @success-color 22%, transparent);
-        color: @success-color;
+        background-color: color-mix(in srgb, @positive-color 22%, transparent);
+        color: @positive-color;
     }
 }
 </style>

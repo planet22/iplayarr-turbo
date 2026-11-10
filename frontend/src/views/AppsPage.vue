@@ -350,7 +350,7 @@ const removeMapping = async ({ id, userAgent }) => {
     }
 
     .unassigned .uaTextInput {
-        border-color: @warn-color;
+        border-color: @caution-color;
     }
 
 }
@@ -387,7 +387,7 @@ const removeMapping = async ({ id, userAgent }) => {
 
     tbody tr.unassigned {
         .uaTextInput {
-            border-color: @warn-color;
+            border-color: @caution-color;
         }
     }
 }

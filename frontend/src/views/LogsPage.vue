@@ -174,11 +174,11 @@ const clearView = async () => {
         border-left: 3px solid transparent;
 
         &.good {
-            border-left-color: @success-color;
+            border-left-color: @positive-color;
         }
 
         &.bad {
-            border-left-color: @error-color;
+            border-left-color: @danger-color;
         }
 
         .tileLabel {
@@ -249,7 +249,7 @@ const clearView = async () => {
 
     // On the filled (active) chip the counts take the chip's own colour so they stay readable.
     .ERROR .chipCount {
-        color: @error-color;
+        color: @danger-color;
     }
 
     .active .chipCount {

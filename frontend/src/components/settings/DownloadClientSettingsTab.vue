@@ -215,7 +215,7 @@ async function update(tool) {
         color: @table-text-color;
 
         .updateAvailable {
-            color: @warn-color;
+            color: @caution-color;
         }
     }
 

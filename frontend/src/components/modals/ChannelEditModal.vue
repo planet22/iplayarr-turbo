@@ -423,7 +423,7 @@ const remove = async () => {
     font-size: 13px;
 
     &.ok {
-        color: @success-color;
+        color: @positive-color;
     }
 
     &.bad {
@@ -454,7 +454,7 @@ const remove = async () => {
     }
 
     &.ok {
-        border-color: @success-color;
+        border-color: @positive-color;
     }
 
     &.bad {

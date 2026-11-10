@@ -418,7 +418,7 @@ defineExpose({ clearSearch });
     }
 
     .donateLink {
-        color: @error-color;
+        color: @danger-color;
     }
 }
 </style>

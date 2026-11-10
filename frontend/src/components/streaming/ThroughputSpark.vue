@@ -95,13 +95,13 @@ const tooltip = computed(() =>
 
         .line {
             fill: none;
-            stroke: @success-color;
+            stroke: @positive-color;
             stroke-width: 1.5;
             stroke-linejoin: round;
         }
 
         .area {
-            fill: @success-color;
+            fill: @positive-color;
             fill-opacity: 0.18;
             stroke: none;
         }
