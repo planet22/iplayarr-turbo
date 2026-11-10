@@ -6,10 +6,10 @@
         Reconnecting&hellip; live updates are paused.
     </div>
     <div v-if="visible" class="connection-lost-overlay">
-        <div class="connection-lost-panel">
+        <div class="connection-lost-panel" role="alertdialog" aria-modal="true" aria-labelledby="connLostTitle" aria-describedby="connLostText">
             <LoadingIndicator :size="40" />
-            <h1 class="connection-lost-title">Connection to Backend Lost</h1>
-            <p class="connection-lost-subtitle">
+            <h2 id="connLostTitle" class="connection-lost-title">Connection to Backend Lost</h2>
+            <p id="connLostText" class="connection-lost-subtitle">
                 Reconnecting automatically&hellip; this page will resume updating as soon as the connection is
                 restored.
             </p>
@@ -79,7 +79,7 @@ onBeforeUnmount(() => {
     top: var(--navbar-height, 60px);
     left: 50%;
     transform: translateX(-50%);
-    z-index: 9998;
+    z-index: @z-banner;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -122,7 +122,7 @@ onBeforeUnmount(() => {
     padding: 1rem;
     background-color: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
-    z-index: 9999;
+    z-index: @z-overlay;
 }
 
 .connection-lost-panel {

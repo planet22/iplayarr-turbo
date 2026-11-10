@@ -22,18 +22,21 @@
                 <div class="searchWrap">
                     <input
 v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Download Url"
-                        autocomplete="off" @input="onInput" @focus="onInput" @blur="closeSuggestions"
+                        autocomplete="off" role="combobox" aria-label="Search or download URL" aria-autocomplete="list" aria-controls="navSuggestions"
+                        :aria-expanded="showSuggestions && suggestions.length > 0"
+                        :aria-activedescendant="activeIndex >= 0 ? `navSuggestion-${activeIndex}` : undefined"
+                        @input="onInput" @focus="onInput" @blur="closeSuggestions"
                         @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
                         @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
-                    <ul v-if="showSuggestions && suggestions.length" class="suggestions">
+                    <ul v-if="showSuggestions && suggestions.length" id="navSuggestions" class="suggestions" role="listbox">
                         <li
-                            v-for="(suggestion, index) in suggestions" :key="suggestionKey(suggestion)"
-                            :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
+                            v-for="(suggestion, index) in suggestions" :id="`navSuggestion-${index}`" :key="suggestionKey(suggestion)"
+                            role="option" :aria-selected="index === activeIndex" :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
                         >
                             <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
                             <span>{{ suggestion.title }}</span>
                         </li>
-                        <li class="seeAll" @mousedown.prevent="search">See all results for "<span class="termText">{{ searchTerm }}</span>"</li>
+                        <li class="seeAll" role="option" aria-selected="false" @mousedown.prevent="search">See all results for "<span class="termText">{{ searchTerm }}</span>"</li>
                     </ul>
                 </div>
             </div>
@@ -258,12 +261,12 @@ defineExpose({ clearSearch });
     // the layout offsets from) is unchanged; derived from the text colour so it works in every theme.
     box-shadow: inset 0 -1px 0 color-mix(in srgb, @primary-text-color 14%, transparent);
     height: var(--navbar-height, 60px);
-    z-index: 2;
+    z-index: @z-nav;
     position: relative;
 
-    // Above the slide-out menu (z-index 3), which starts under the bar.
+    // Above the slide-out menu (@z-drawer), which starts under the bar.
     @media (max-width: @mobile-breakpoint) {
-        z-index: 4;
+        z-index: @z-nav-mobile;
     }
 
     @media (min-width: @desktop-breakpoint) {
@@ -340,7 +343,7 @@ defineExpose({ clearSearch });
                     margin: 0;
                     padding: 4px 0;
                     list-style: none;
-                    z-index: 10;
+                    z-index: @z-dropdown;
                     border-radius: 4px;
                     border: 1px solid @settings-button-border-color;
                     background-color: @nav-active-background-color;

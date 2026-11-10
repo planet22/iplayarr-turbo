@@ -18,7 +18,7 @@
         <div class="pipFooter">
             <div class="pipInfo">
                 <span class="pipTitle" :title="pipPlayerState.title || ''">{{ pipPlayerState.title }}</span>
-                <span class="pipStatus">{{ statusLabel }}</span>
+                <span class="pipStatus" role="status">{{ statusLabel }}</span>
             </div>
             <!-- Switch to another cut (audio described / signed) without leaving the player; carries on from the same point. -->
             <div v-if="pipPlayerState.versions.length" class="pipVersions" role="group" aria-label="Version">
@@ -36,7 +36,9 @@
                     <font-awesome-icon :icon="['fas', option.icon]" />
                 </button>
             </div>
-            <font-awesome-icon class="clickable" :icon="['fas', 'xmark']" title="Stop" @click="close" />
+            <button type="button" class="pipClose" title="Stop" aria-label="Stop and close player" @click="close">
+                <font-awesome-icon :icon="['fas', 'xmark']" />
+            </button>
         </div>
     </div>
 </template>
@@ -215,7 +217,7 @@ onBeforeUnmount(cleanup);
     bottom: 16px;
     right: 16px;
     width: 280px;
-    z-index: 1300;
+    z-index: @z-player;
     border-radius: 6px;
     overflow: hidden;
     background-color: @nav-background-color;
@@ -270,6 +272,16 @@ onBeforeUnmount(cleanup);
     gap: 8px;
     padding: 6px 8px;
     color: @table-text-color;
+}
+
+.pipClose {
+    flex: 0 0 auto;
+    padding: 4px;
+    border: none;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+    cursor: pointer;
 }
 
 .pipVersions {

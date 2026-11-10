@@ -10,17 +10,25 @@
                     :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
                     title="Filter"
                     aria-label="Filter"
+                    aria-haspopup="listbox"
+                    :aria-expanded="showFilterDropdown"
                     @click="toggleFilter"
+                    @keydown.esc="closeFilter"
                 >
                     <font-awesome-icon :icon="['fas', 'filter']" />
                 </button>
-                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown">
-                    <ul>
+                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown" @keydown.esc="closeFilter">
+                    <ul role="listbox" aria-label="Filter">
                         <li
                             v-for="option in filterOptions"
                             :key="option"
+                            role="option"
+                            tabindex="0"
+                            :aria-selected="selectedFilter == option"
                             :class="['clickable', selectedFilter == option ? 'selected' : '']"
                             @click="selectFilter(option)"
+                            @keydown.enter.prevent="selectFilter(option)"
+                            @keydown.space.prevent="selectFilter(option)"
                         >
                             <div>
                                 {{ option }}
@@ -161,17 +169,25 @@
                     :class="['SettingsPageToolbar-button clickable', filterEnabled ? 'enabled' : '']"
                     title="Filter"
                     aria-label="Filter"
+                    aria-haspopup="listbox"
+                    :aria-expanded="showFilterDropdown"
                     @click="toggleFilter"
+                    @keydown.esc="closeFilter"
                 >
                     <font-awesome-icon :icon="['fas', 'filter']" />
                 </button>
-                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown">
-                    <ul>
+                <div v-if="showFilterDropdown" ref="dropdownDiv" class="filterDropdown" @keydown.esc="closeFilter">
+                    <ul role="listbox" aria-label="Filter">
                         <li
                             v-for="option in filterOptions"
                             :key="option"
+                            role="option"
+                            tabindex="0"
+                            :aria-selected="selectedFilter == option"
                             :class="['clickable', selectedFilter == option ? 'selected' : '']"
                             @click="selectFilter(option)"
+                            @keydown.enter.prevent="selectFilter(option)"
+                            @keydown.space.prevent="selectFilter(option)"
                         >
                             <div>
                                 {{ option }}
@@ -385,6 +401,12 @@ const selectFilter = (option) => {
     showFilterDropdown.value = false;
     document.removeEventListener('click', handleClickOutside);
     emit('selectFilter', option);
+};
+
+// Esc closes the dropdown.
+const closeFilter = () => {
+    showFilterDropdown.value = false;
+    document.removeEventListener('click', handleClickOutside);
 };
 
 const toggleFilter = () => {
@@ -615,7 +637,7 @@ const handleClickOutside = (event) => {
             position: absolute;
             top: 100%;
             right: 0;
-            z-index: 20;
+            z-index: @z-toolbar-menu;
             background-color: @nav-background-color;
             width: 180px;
 

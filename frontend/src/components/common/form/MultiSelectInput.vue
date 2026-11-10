@@ -1,17 +1,20 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <div ref="root" :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
+    <div ref="root" :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']" @keydown.esc="closeMenu">
         <label v-if="name">{{ name }}</label>
         <div :class="['inputBox', error ? 'error' : '']">
             <div class="fieldRow">
-            <button type="button" class="trigger" :aria-expanded="open" @click="open = !open">
+            <button
+                ref="trigger" type="button" class="trigger" aria-haspopup="true" :aria-expanded="open"
+                :aria-controls="open ? menuId : undefined" @click="open = !open"
+            >
                 <span class="summary">{{ summary }}</span>
                 <font-awesome-icon :icon="['fas', open ? 'chevron-up' : 'chevron-down']" />
             </button>
             <InfoTip v-if="showInfo" :text="tooltip" />
             </div>
-            <ul v-if="open" class="menu">
+            <ul v-if="open" :id="menuId" class="menu" role="group" :aria-label="name">
                 <li v-for="option of options" :key="option.key">
                     <label class="option">
                         <input type="checkbox" :checked="isSelected(option)" @change="toggle(option.key)" />
@@ -63,6 +66,15 @@ const changed = computed(() => !!props.field && !!changedKeys?.value?.has(props.
 
 const open = ref(false);
 const root = ref(null);
+const trigger = ref(null);
+const menuId = `multiselect-${Math.random().toString(36).slice(2, 9)}`;
+
+// Esc closes the menu and puts focus back on the button that opened it.
+const closeMenu = () => {
+    if (!open.value) return;
+    open.value = false;
+    trigger.value?.focus();
+};
 
 const selected = computed(() =>
     (props.modelValue || '')
@@ -168,7 +180,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
 
         .menu {
             position: absolute;
-            z-index: 10;
+            z-index: @z-dropdown;
             left: 0;
             right: 0;
             margin: 2px 0 0;

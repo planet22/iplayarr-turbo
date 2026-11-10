@@ -84,7 +84,7 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
     right: 20px;
     bottom: calc(20px + var(--floating-bar-height, 0px));
     // Above the modal layer (vue-final-modal), so feedback from a dialog's own action is visible.
-    z-index: 10000;
+    z-index: @z-toast;
     display: flex;
     flex-direction: column;
     gap: 10px;

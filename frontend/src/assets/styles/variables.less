@@ -117,3 +117,20 @@
 @alertWarningBorderColor: var(--alertWarningBorderColor);
 @alertWarningBackgroundColor: rgba(255, 255, 0, 0.1);
 @alertWarningColor: var(--table-text-color);
+
+// One stacking scale for everything that floats. Modals (vue-final-modal) start at 1000, so tips that open
+// inside a dialog sit above that, and the connection overlay and toasts stay above everything.
+@z-raised: 1; // side nav on desktop
+@z-nav: 2; // top bar on desktop
+@z-drawer: 3; // phone nav drawer and its dim backdrop, under the top bar
+@z-nav-mobile: 4; // top bar on phones, above the drawer
+@z-save-bar: 5;
+@z-dropdown: 10; // suggestion lists, multi-select menus
+@z-toolbar-menu: 20; // toolbar filter dropdown
+@z-audio-bar: 50;
+@z-popover: 1200; // info tips: above modals
+@z-player: 1300; // picture-in-picture player
+@z-palette: 9000; // command palette
+@z-banner: 9998; // reconnecting banner
+@z-overlay: 9999; // connection lost overlay
+@z-toast: 10000;

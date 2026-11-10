@@ -37,21 +37,24 @@
             <input
                 ref="searchEl" v-model="searchInput" class="searchBox" type="text"
                 placeholder="Search programmes, or paste a BBC URL" autocomplete="off" enterkeyhint="search"
+                role="combobox" aria-label="Search programmes" aria-autocomplete="list" aria-controls="searchSuggestions"
+                :aria-expanded="showSuggestions && suggestions.length > 0"
+                :aria-activedescendant="activeIndex >= 0 ? `searchSuggestion-${activeIndex}` : undefined"
                 @input="onInput" @focus="onInput" @blur="closeSuggestions"
                 @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
                 @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
             <button v-if="searchInput" type="button" class="clearSearch" title="Clear" aria-label="Clear" @mousedown.prevent="clearInput">
                 <font-awesome-icon :icon="['fas', 'xmark']" />
             </button>
-            <ul v-if="showSuggestions && suggestions.length" class="suggestions">
+            <ul v-if="showSuggestions && suggestions.length" id="searchSuggestions" class="suggestions" role="listbox">
                 <li
-                    v-for="(suggestion, index) in suggestions" :key="suggestionKey(suggestion)"
-                    :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
+                    v-for="(suggestion, index) in suggestions" :id="`searchSuggestion-${index}`" :key="suggestionKey(suggestion)"
+                    role="option" :aria-selected="index === activeIndex" :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
                 >
                     <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
                     <span>{{ suggestion.title }}</span>
                 </li>
-                <li class="seeAll" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
+                <li class="seeAll" role="option" aria-selected="false" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
             </ul>
         </div>
     </div>
@@ -885,7 +888,7 @@ watch(
             margin: 0;
             padding: 4px 0;
             list-style: none;
-            z-index: 10;
+            z-index: @z-dropdown;
             border-radius: 6px;
             border: 1px solid @settings-button-border-color;
             background-color: @nav-active-background-color;

@@ -50,7 +50,7 @@ onBeforeUnmount(() => setOffset(false));
 .settingsSaveBar {
     position: sticky;
     bottom: 0;
-    z-index: 5;
+    z-index: @z-save-bar;
     margin-top: 1.5rem;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     background-color: @nav-background-color;

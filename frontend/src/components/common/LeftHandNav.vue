@@ -1,5 +1,6 @@
 <template>
-    <div ref="lhn" class="LeftHandNav">
+    <div v-if="shown" class="lhnBackdrop" aria-hidden="true" />
+    <div ref="lhn" :class="['LeftHandNav', { show: shown }]" role="navigation" aria-label="Main">
         <ul>
             <li
                 class="sectionLabel clickable" role="button" tabindex="0" :aria-expanded="isOpen('browse')"
@@ -181,18 +182,30 @@ const versionTooltip = computed(() => {
     return notes.length ? `${notes.join(' - ')} - see Settings > Download Client` : 'Installed versions';
 });
 
+// Phone drawer: open or closed. A tap outside it, or Esc, closes it.
+const shown = ref(false);
+
+const onEscape = (event) => {
+    if (event.key === 'Escape') closeLHN();
+};
+
 const toggleLHN = () => {
-    lhn.value.classList.toggle('show');
-    if (lhn.value.classList.contains('show')) {
+    shown.value = !shown.value;
+    if (shown.value) {
         setTimeout(() => {
             document.addEventListener('click', handleClickOutside);
         }, 0);
+        document.addEventListener('keydown', onEscape);
+    } else {
+        document.removeEventListener('click', handleClickOutside);
+        document.removeEventListener('keydown', onEscape);
     }
 };
 
 const closeLHN = () => {
-    lhn.value.classList.remove('show');
+    shown.value = false;
     document.removeEventListener('click', handleClickOutside);
+    document.removeEventListener('keydown', onEscape);
     emit('clear-search');
 };
 
@@ -241,7 +254,7 @@ const handleClickOutside = (event) => {
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-    z-index: 1;
+    z-index: @z-raised;
     font-size: 14px;
     flex-shrink: 0;
     display: flex;
@@ -380,12 +393,23 @@ const handleClickOutside = (event) => {
         transform: translateX(-100%);
         transition: transform 0.3s ease-in-out;
         // Above the page (the Discover hero and its dots are positioned and would paint over it); the bar stays above this.
-        z-index: 3;
+        z-index: @z-drawer;
         padding-top: var(--navbar-height, 60px);
     }
 
     .LeftHandNav.show {
         transform: translateX(0);
+    }
+
+    // Dims the page behind the open drawer; sits under the top bar like the drawer does.
+    .lhnBackdrop {
+        position: fixed;
+        top: var(--navbar-height, 60px);
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: @z-drawer;
+        background-color: @overlay-color;
     }
 }
 </style>

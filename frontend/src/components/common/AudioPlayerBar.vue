@@ -126,7 +126,7 @@ onBeforeUnmount(() => {
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 50;
+    z-index: @z-audio-bar;
     display: flex;
     align-items: center;
     gap: 12px;

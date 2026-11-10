@@ -6,6 +6,7 @@
         :class="['InfoTip', { pinned }]"
         @mouseenter="hover(true)"
         @mouseleave="hover(false)"
+        @keydown.esc="dismiss"
     >
         <button
             ref="button"
@@ -13,13 +14,14 @@
             class="InfoTip-button"
             aria-label="More info"
             :aria-expanded="visible"
+            :aria-describedby="visible ? tipId : undefined"
             @click.stop="toggle"
             @focus="focused = true"
             @blur="focused = false"
         >
             <font-awesome-icon :icon="['fas', 'circle-info']" />
         </button>
-        <span v-show="visible" ref="popup" role="tooltip" :class="['InfoTip-popup', { above: pos.above }]" :style="popupStyle">
+        <span v-show="visible" :id="tipId" ref="popup" role="tooltip" :class="['InfoTip-popup', { above: pos.above }]" :style="popupStyle">
             <span class="InfoTip-arrow" :style="arrowStyle" />
             {{ text }}
         </span>
@@ -36,6 +38,8 @@ import { computed, defineProps, nextTick, onBeforeUnmount, onMounted, ref, watch
 defineProps({
     text: { type: String, required: true },
 });
+
+const tipId = `infotip-${Math.random().toString(36).slice(2, 9)}`;
 
 const GAP = 10;
 const MARGIN = 8;
@@ -82,9 +86,19 @@ const hover = (on) => {
 const toggle = () => {
     pinned.value = !pinned.value;
 };
+// Esc hides the tip even while the mouse still rests on the icon.
+const dismiss = () => {
+    pinned.value = false;
+    hovered.value = false;
+    focused.value = false;
+};
 
 const closeOnOutsideClick = (event) => {
     if (root.value && !root.value.contains(event.target)) pinned.value = false;
+};
+// Esc from anywhere closes a tip that a tap pinned open (focus may have moved elsewhere).
+const closeOnEscape = (event) => {
+    if (event.key === 'Escape' && pinned.value) dismiss();
 };
 const reposition = () => {
     if (visible.value) place();
@@ -92,11 +106,13 @@ const reposition = () => {
 
 onMounted(() => {
     document.addEventListener('click', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
     window.addEventListener('scroll', reposition, true);
     window.addEventListener('resize', reposition);
 });
 onBeforeUnmount(() => {
     document.removeEventListener('click', closeOnOutsideClick);
+    document.removeEventListener('keydown', closeOnEscape);
     window.removeEventListener('scroll', reposition, true);
     window.removeEventListener('resize', reposition);
 });
@@ -131,7 +147,7 @@ onBeforeUnmount(() => {
 
     .InfoTip-popup {
         position: fixed;
-        z-index: 200;
+        z-index: @z-popover;
         box-sizing: border-box;
         width: 300px;
         max-width: calc(100vw - 16px);

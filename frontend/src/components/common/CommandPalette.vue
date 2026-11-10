@@ -190,7 +190,7 @@ defineExpose({ show });
 .cmdOverlay {
     position: fixed;
     inset: 0;
-    z-index: 9000;
+    z-index: @z-palette;
     display: flex;
     align-items: flex-start;
     justify-content: center;
