@@ -28,7 +28,7 @@
             <col class="hideMd" style="width: 10ch" />
             <col style="width: 12ch" />
             <!-- Room for play, debug, retry and remove side by side. -->
-            <col style="width: 116px" />
+            <col style="width: 128px" />
         </colgroup>
         <thead>
             <tr>

@@ -143,15 +143,14 @@
         <td data-title="Speed">{{ speedLabel(item) }}</td>
         <td class="actionCol" data-title="Action">
             <span>
-                <font-awesome-icon
-                    class="clickable"
-                    :icon="['fas', 'play']"
-                    :title="playLabel"
-                    @click="preview(item)"
+                <IconButton icon="play" :label="playLabel" @click="preview(item)" />
+                <IconButton v-if="canRetry(item)" icon="rotate-right" label="Try again" @click="retryRadioDownload(item)" />
+                <IconButton v-if="debugOn" icon="bug" label="Streaming debug" @click="debug(item)" />
+                <IconButton
+                    :icon="getDeleteIcon(item)"
+                    :label="getDeleteIcon(item) === 'trash' ? 'Remove' : 'Cancel download'"
+                    @click="deleteRow(item)"
                 />
-                <font-awesome-icon v-if="canRetry(item)" class="clickable" :icon="['fas', 'rotate-right']" title="Try again" aria-label="Try again" @click="retryRadioDownload(item)" />
-                <font-awesome-icon v-if="debugOn" class="clickable" :icon="['fas', 'bug']" title="Streaming debug" aria-label="Streaming debug" @click="debug(item)" />
-                <font-awesome-icon class="clickable" :icon="['fas', getDeleteIcon(item)]" :title="getDeleteIcon(item) === 'trash' ? 'Remove' : 'Cancel download'" @click="deleteRow(item)" />
             </span>
         </td>
     </tr>
@@ -174,6 +173,7 @@ import { formatDate, formatStorageSize, getBasePath, getProgrammeThumbnailUrl, g
 import ChannelPill from '../common/ChannelPill.vue';
 import DataCard from '../common/DataCard.vue';
 import CheckInput from '../common/form/CheckInput.vue';
+import IconButton from '../common/IconButton.vue';
 import ProgressBar from '../common/ProgressBar.vue';
 import QualityBadges from '../common/QualityBadges.vue';
 import VideoInfoModal from '../modals/VideoInfoModal.vue';
@@ -337,7 +337,7 @@ const getDeleteIcon = ({ status }) => deleteIcon(status);
 .actionCol span {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 0;
 }
 
 .thumbnail {

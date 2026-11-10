@@ -71,9 +71,7 @@
                 />
                 <template #foot>
                     <span>Last seen {{ formatRelativeTime(mapping.lastSeen, now, true) }}</span>
-                    <button class="clickable uaCardButton" title="Remove" @click="removeMapping(mapping)">
-                        <font-awesome-icon :icon="['fas', 'trash']" />
-                    </button>
+                    <IconButton icon="trash" label="Remove" @click="removeMapping(mapping)" />
                 </template>
             </DataCard>
             <DataCard>
@@ -83,9 +81,7 @@
                 <input v-model="newMapping.appName" class="uaTextInput" type="text" placeholder="e.g. Iplayarr-sonarr" />
                 <template #foot>
                     <span>New mapping</span>
-                    <button class="clickable uaCardButton" title="Add" :disabled="!canAddMapping" @click="addMapping">
-                        <font-awesome-icon :icon="['fas', 'plus']" />
-                    </button>
+                    <IconButton icon="plus" label="Add" :disabled="!canAddMapping" @click="addMapping" />
                 </template>
             </DataCard>
         </div>
@@ -94,7 +90,7 @@
                 <col />
                 <col style="width: 240px" />
                 <col style="width: 140px" />
-                <col style="width: 44px" />
+                <col style="width: 56px" />
             </colgroup>
             <thead>
                 <tr>
@@ -126,9 +122,7 @@
                     </td>
                     <td data-title="Last Seen">{{ formatRelativeTime(mapping.lastSeen, now) }}</td>
                     <td class="center">
-                        <button class="clickable" title="Remove" @click="removeMapping(mapping)">
-                            <font-awesome-icon :icon="['fas', 'trash']" />
-                        </button>
+                        <IconButton icon="trash" label="Remove" @click="removeMapping(mapping)" />
                     </td>
                 </tr>
                 <tr>
@@ -150,9 +144,7 @@
                     </td>
                     <td />
                     <td class="center">
-                        <button class="clickable" title="Add" :disabled="!canAddMapping" @click="addMapping">
-                            <font-awesome-icon :icon="['fas', 'plus']" />
-                        </button>
+                        <IconButton icon="plus" label="Add" :disabled="!canAddMapping" @click="addMapping" />
                     </td>
                 </tr>
             </tbody>
@@ -166,6 +158,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 
 import DataCard from '@/components/common/DataCard.vue';
+import IconButton from '@/components/common/IconButton.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -335,17 +328,6 @@ const removeMapping = async ({ id, userAgent }) => {
         border-color: @warn-color;
     }
 
-    .uaCardButton {
-        background: none;
-        border: none;
-        padding: 4px 8px;
-        color: @primary-text-color;
-        font-size: 16px;
-
-        &:disabled {
-            opacity: 0.35;
-        }
-    }
 }
 
 .uaTable {
