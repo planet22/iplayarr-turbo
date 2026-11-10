@@ -224,7 +224,7 @@
         </p>
         <div v-if="showHome" class="searchHome">
             <section v-if="recent.length">
-                <h3>Recent searches</h3>
+                <h2>Recent searches</h2>
                 <div class="chipRow">
                     <span v-for="term in recent" :key="term" class="chip chipWrap">
                         <button type="button" class="chipMain" @click="searchFor(term)">
@@ -1039,7 +1039,7 @@ watch(
     gap: @space-2;
 }
 
-.searchHome h3 {
+.searchHome h2 {
     margin: 18px 0 @space-2;
     font-size: @font-size-sm;
     font-weight: 600;

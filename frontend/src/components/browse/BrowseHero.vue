@@ -210,10 +210,20 @@ const heroStyle = computed(() => {
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
+        transition: transform @motion-fast;
 
         &:hover {
             background-color: @settings-button-hover-background-color;
             border-color: @settings-button-hover-border-color;
+            transform: translateY(-2px);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            transition: none;
+
+            &:hover {
+                transform: none;
+            }
         }
 
         &.primary {

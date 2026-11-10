@@ -13,6 +13,8 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
+import { onOffClass } from '@/lib/streamSettings';
+
 // The pills describing a stream, shared by the stream cards and the stream tables: how it is served and at what
 // resolution, then the settings that apply to this session (only those appear).
 const props = defineProps({
@@ -29,7 +31,7 @@ const props = defineProps({
 
 const chips = computed(() => {
     const settings = props.settings ?? {};
-    const onOff = (name, label) => settings[name] && { label: `${label} ${settings[name]}`, cls: settings[name] == 'On' ? 'success' : 'grey' };
+    const onOff = (name, label) => settings[name] && { label: `${label} ${settings[name]}`, cls: onOffClass(settings[name]) };
     return [
         settings.Quality && { label: settings.Quality, cls: 'grey' },
         onOff('Quality Probe', 'Probe'),

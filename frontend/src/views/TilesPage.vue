@@ -113,7 +113,7 @@ v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading &
                 :key="tile.id"
                 :to="`/browse/${isChannels ? 'channel' : 'category'}/${tile.id}`"
                 :class="[
-                    'tile',
+                    'channelTile',
                     isChannels ? '' : 'imageTile',
                     arranging ? 'arranging' : '',
                     customising ? 'customising' : '',
@@ -138,6 +138,7 @@ v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading &
                         class="channelLogo"
                         :src="getThumbnailUrl(tile.logo)"
                         :alt="tile.title"
+                        loading="lazy"
                         @error="failedLogos[tile.id] = true"
                     />
                     <!-- Logo already carries the channel name; fall back to text only when there's no logo to show. -->
@@ -306,7 +307,7 @@ v-if="isChannels && channelTools.enabled && !arranging && !editing && !loading &
                     </button>
                 </template>
             </RouterLink>
-            <button v-if="isChannels && customising" type="button" class="tile addTile" @click="openChannelEditor()">
+            <button v-if="isChannels && customising" type="button" class="channelTile addTile" @click="openChannelEditor()">
                 <font-awesome-icon :icon="['fas', 'plus']" />
                 <span class="channelName">Add channel</span>
             </button>
@@ -634,7 +635,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
     }
 }
 
-.tile {
+.channelTile {
     position: relative;
     display: flex;
     align-items: center;
@@ -693,7 +694,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         cursor: pointer;
         opacity: 0.9;
 
-        // Beats the generic `.tile svg` subtle colour above.
+        // Beats the generic `.channelTile svg` subtle colour above.
         svg {
             color: @on-media-color;
         }
@@ -972,7 +973,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
 
         &:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 4px 14px @shadow-color;
         }
     }
 }

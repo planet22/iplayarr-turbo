@@ -3,7 +3,7 @@
 <template>
     <div ref="rootRef" class="pipPlayer" :class="{ active: isActive }">
         <div class="pipVideoWrap">
-            <video ref="videoRef" controls playsinline />
+            <video ref="videoRef" :controls="pipPlayerState.status !== 'error'" playsinline />
             <div v-if="pipPlayerState.status === 'loading'" class="pipOverlay">
                 <font-awesome-icon :icon="['fas', 'circle-notch']" spin size="lg" />
             </div>
@@ -245,7 +245,7 @@ onBeforeUnmount(() => {
     overflow: hidden;
     background-color: @nav-background-color;
     border: 1px solid @table-border-color;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 16px @shadow-color;
 
     &.active {
         display: block;
