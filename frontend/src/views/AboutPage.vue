@@ -10,12 +10,12 @@
             iPlayarr Turbo is a companion for Sonarr (and the rest of the *arr stack) to simplify integrating
             get_iplayer for episode search and download.
         </p>
-        <PageHeader title="Author - iPlayarr Turbo" />
+        <h2>Author - iPlayarr Turbo</h2>
         <p><a href="https://github.com/Planet22">Planet22</a></p>
         <p class="codeShare">
             About 81% Turbo, 19% original, by lines of code still present (src and frontend/src, 2026-11-05).
         </p>
-        <PageHeader title="Forked from iPlayarr" />
+        <h2>Forked from iPlayarr</h2>
         <p><a href="https://github.com/Nikorag/iplayarr">Nikorag</a></p>
 
         <div class="buttons">
@@ -28,15 +28,15 @@
                 </a>
             </div>
         </div>
-        <PageHeader title="Collaborator on iplayarr" />
+        <h2>Collaborator on iplayarr</h2>
         <p><a href="https://github.com/StormPooper">@StormFoo</a></p>
-        <PageHeader v-if="isAppleDevice" title="Tools" />
+        <h2 v-if="isAppleDevice">Tools</h2>
         <p v-if="isAppleDevice">
             <a href="shortcuts/Download%20With%20iPlayarr.shortcut" target="_blank">
                 Add to iPlayarr Turbo iOS Shortcut
             </a>
         </p>
-        <PageHeader title="Credit To" />
+        <h2>Credit To</h2>
         <p>
             <a href="https://github.com/get-iplayer/get_iplayer"> <b>Phil Lewis</b> for development of get_iplayer </a>
         </p>
