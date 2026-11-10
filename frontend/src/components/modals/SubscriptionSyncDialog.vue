@@ -36,7 +36,7 @@
                     <img class="appImg" :src="`${getBasePath()}/img/${app.type.toLowerCase()}.svg`" alt="" />
                     <span class="syncRunName">{{ app.name }}</span>
                     <span v-if="rows[app.id].status === 'waiting'" class="pill grey">Waiting</span>
-                    <span v-else-if="rows[app.id].status === 'running'" class="pill error">Scanning</span>
+                    <span v-else-if="rows[app.id].status === 'running'" class="pill primary">Scanning</span>
                     <span v-else-if="rows[app.id].status === 'failed'" class="pill error">Failed</span>
                     <span v-else class="pill success">{{ foundLabel(rows[app.id].found) }}</span>
                 </div>

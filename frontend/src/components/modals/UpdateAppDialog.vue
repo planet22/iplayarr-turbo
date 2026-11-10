@@ -9,7 +9,7 @@
                     </div>
                 </template>
                 <template v-if="appStatus[app.id]" #chips>
-                    <span :class="['pill', getPillColor(appStatus[app.id].status)]">{{ appStatus[app.id].status }}</span>
+                    <span :class="['pill', getPillColor(appStatus[app.id].status)]">{{ statusLabel(appStatus[app.id].status) }}</span>
                 </template>
                 <template v-if="appStatus[app.id]?.message" #default>{{ appStatus[app.id].message }}</template>
             </DataCard>
@@ -36,7 +36,7 @@
                     </td>
                     <td v-if="appStatus[app.id]" data-title="Status">
                         <span :class="['pill', getPillColor(appStatus[app.id].status)]">{{
-                            appStatus[app.id].status
+                            statusLabel(appStatus[app.id].status)
                         }}</span>
                     </td>
                     <td v-if="appStatus[app.id]" data-title="Message">
@@ -96,12 +96,15 @@ onBeforeUnmount(() => {
     socket.value?.off('app_update_status', onUpdateStatus);
 });
 
+// The server reports 'Error'; the app says 'Failed' for a failed step everywhere else.
+const statusLabel = (status) => (status === 'Error' ? 'Failed' : status);
+
 const getPillColor = (status) => {
     switch (status) {
         default:
             return 'grey';
         case 'In Progress':
-            return 'error';
+            return 'primary';
         case 'Complete':
             return 'success';
         case 'Error':
