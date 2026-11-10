@@ -5,6 +5,7 @@
         <label v-if="name">{{ name }}</label>
         <div :class="['inputBox', error ? 'error' : '']">
             <div class="fieldRow">
+            <div class="triggerBox">
             <button
                 ref="trigger" type="button" class="trigger" aria-haspopup="true" :aria-expanded="open"
                 :aria-controls="open ? menuId : undefined" @click="open = !open"
@@ -12,8 +13,6 @@
                 <span class="summary">{{ summary }}</span>
                 <font-awesome-icon :icon="['fas', open ? 'chevron-up' : 'chevron-down']" />
             </button>
-            <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
-            </div>
             <ul v-if="open" :id="menuId" class="menu" role="group" :aria-label="name">
                 <li v-for="option of options" :key="option.key">
                     <label class="option">
@@ -26,6 +25,9 @@
                     </label>
                 </li>
             </ul>
+            </div>
+            <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
+            </div>
             <div v-if="error" class="error">
                 {{ error }}
             </div>
@@ -153,6 +155,14 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             gap: 6px;
         }
 
+        // The menu hangs from the trigger, not the whole row, so it is no wider than the field.
+        .triggerBox {
+            position: relative;
+            display: flex;
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
         .trigger {
             flex: 1 1 auto;
             min-width: 0;
@@ -181,6 +191,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
         .menu {
             position: absolute;
             z-index: @z-dropdown;
+            top: 100%;
             left: 0;
             right: 0;
             margin: 2px 0 0;
