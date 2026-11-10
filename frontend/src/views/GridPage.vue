@@ -18,23 +18,15 @@
             </template>
         </SettingsPageToolbar>
         <div v-if="isAtoZ" class="letterBar">
-            <RouterLink
-                v-for="l in letters"
-                :key="l"
-                :to="`/browse/atoz/${l}`"
-                :class="['letter', l === letter ? 'active' : '']"
-            >
+            <FilterChip v-for="l in letters" :key="l" :to="`/browse/atoz/${l}`" :active="l === letter">
                 {{ l === '0' ? '0-9' : l.toUpperCase() }}
-            </RouterLink>
+            </FilterChip>
         </div>
         <!-- Radio categories have sub-categories (BBC Sounds' child categories). All are on to begin with; the first click picks
              just that one, then clicks add or remove others, and All resets. -->
         <div v-if="subCategories.length" class="letterBar subCategories">
-            <button type="button" :class="['letter', 'clickable', offChildren.size ? '' : 'active']" :aria-pressed="!offChildren.size" @click="showAll">All</button>
-            <button
-                v-for="child in subCategories" :key="child.id" type="button" :class="['letter', 'clickable', childOn(child.id) ? 'active' : '']"
-                :aria-pressed="childOn(child.id)" @click="toggleChild(child.id)"
-            >{{ child.title }}</button>
+            <FilterChip :active="!offChildren.size" @click="showAll">All</FilterChip>
+            <FilterChip v-for="child in subCategories" :key="child.id" :active="childOn(child.id)" @click="toggleChild(child.id)">{{ child.title }}</FilterChip>
         </div>
         <ErrorState v-if="error" :message="error" @retry="fetchAll" />
         <TablePagination v-model="gridPage" v-model:page-size="gridPageSize" :total="filteredItems.length" />
@@ -58,6 +50,7 @@ import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
+import FilterChip from '@/components/common/FilterChip.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SkeletonLoader from '@/components/common/SkeletonLoader.vue';
@@ -269,26 +262,9 @@ watch(
     color: @primary-text-color;
 }
 
-.gridFilter {
-    height: 32px;
-    padding: 0 10px;
-    border-radius: 4px;
-    border: 1px solid @settings-button-border-color;
-    background-color: @settings-button-background-color;
-    color: @primary-text-color;
-}
-
 @media (max-width: @mobile-breakpoint) {
     .gridFiltersTitle {
         display: none;
-    }
-
-    .gridFilter {
-        flex: 1 1 0;
-        min-width: 0;
-        width: auto;
-        // Same height as the toolbar buttons beside it.
-        height: @touch-target;
     }
 }
 
@@ -304,29 +280,5 @@ watch(
     gap: 6px;
     margin-bottom: 1rem;
 
-    .letter {
-        min-width: 32px;
-        padding: 5px 8px;
-        text-align: center;
-        font-size: 14px;
-        text-decoration: none;
-        border-radius: 4px;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-
-        cursor: pointer;
-        font-family: inherit;
-
-        &:hover {
-            background-color: @settings-button-hover-background-color;
-        }
-
-        &.active {
-            background-color: @brand-color;
-            border-color: @brand-color;
-            color: @on-brand-color;
-        }
-    }
 }
 </style>

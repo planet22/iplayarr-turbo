@@ -43,16 +43,9 @@
         </div>
 
         <div class="levelChips" role="group" aria-label="Levels">
-            <button
-                v-for="level in LEVELS"
-                :key="level"
-                type="button"
-                :class="['levelChip', level, levels.includes(level) ? 'on' : '']"
-                :aria-pressed="levels.includes(level)"
-                @click="toggleLevel(level)"
-            >
+            <FilterChip v-for="level in LEVELS" :key="level" :class="level" :active="levels.includes(level)" @click="toggleLevel(level)">
                 {{ level }} <span class="chipCount">{{ counts[level] }}</span>
-            </button>
+            </FilterChip>
             <button v-if="narrowed" type="button" class="clearFilters" @click="clearFilters">Clear filters</button>
         </div>
 
@@ -69,6 +62,7 @@ import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import EmptyState from '@/components/common/EmptyState.vue';
+import FilterChip from '@/components/common/FilterChip.vue';
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -238,7 +232,6 @@ const clearView = async () => {
     gap: 8px;
     margin: 0 0 10px;
 
-    .levelChip,
     .clearFilters {
         padding: 4px 12px;
         border: 1px solid @settings-button-border-color;
@@ -249,20 +242,18 @@ const clearView = async () => {
         cursor: pointer;
     }
 
-    .levelChip {
-        &.on {
-            border-color: @brand-color;
-            color: @brand-color;
-        }
+    .chipCount {
+        margin-left: 4px;
+        color: @subtle-text-color;
+    }
 
-        &.ERROR .chipCount {
-            color: @error-color;
-        }
+    // On the filled (active) chip the counts take the chip's own colour so they stay readable.
+    .ERROR .chipCount {
+        color: @error-color;
+    }
 
-        .chipCount {
-            margin-left: 4px;
-            color: @subtle-text-color;
-        }
+    .active .chipCount {
+        color: inherit;
     }
 
     .clearFilters {

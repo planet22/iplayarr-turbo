@@ -189,6 +189,26 @@ legend {
     overflow-x: auto;
 }
 
+// The channel / filter dropdown beside the toolbar and chip rows (Search, Grid, Collections).
+.gridFilter {
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 4px;
+    border: 1px solid @settings-button-border-color;
+    background-color: @settings-button-background-color;
+    color: @primary-text-color;
+}
+
+@media (max-width: @mobile-breakpoint) {
+    .gridFilter {
+        flex: 1 1 0;
+        min-width: 0;
+        width: auto;
+        // Same height as the toolbar buttons beside it.
+        height: @touch-target;
+    }
+}
+
 .pill {
     padding: 1px 3px;
     font-size: 11px;

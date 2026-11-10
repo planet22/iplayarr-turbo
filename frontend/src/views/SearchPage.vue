@@ -70,30 +70,23 @@
         </div>
         <div v-if="typeOptions.length > 2 || channelOptions.length > 2 || versionOptions.length > 1" class="channelChips" role="group" aria-label="Filter results">
             <template v-if="typeOptions.length > 2">
-                <button
-                    v-for="option in typeOptions" :key="`type-${option}`" type="button"
-                    :class="['chip', filter === option ? 'active' : '']" @click="selectFilter(option)"
-                >
+                <FilterChip v-for="option in typeOptions" :key="`type-${option}`" :active="filter === option" @click="selectFilter(option)">
                     {{ option === 'All' ? 'All types' : option }}
-                </button>
+                </FilterChip>
                 <span v-if="channelOptions.length > 2 || versionOptions.length > 1" class="chipDivider" aria-hidden="true"></span>
             </template>
             <template v-if="versionOptions.length > 1">
-                <button
-                    v-for="option in versionOptions" :key="`version-${option.key}`" type="button"
-                    :class="['chip', versionFilter === option.key ? 'active' : '']" @click="pickVersion(option.key)"
-                >
+                <FilterChip v-for="option in versionOptions" :key="`version-${option.key}`" :active="versionFilter === option.key" @click="pickVersion(option.key)">
                     <font-awesome-icon v-if="option.icon" :icon="['fas', option.icon]" /> {{ option.label }}
-                </button>
+                </FilterChip>
                 <span v-if="channelOptions.length > 2" class="chipDivider" aria-hidden="true"></span>
             </template>
             <template v-if="channelOptions.length > 2">
-                <button
-                    v-for="option in channelOptions" :key="option" type="button"
-                    :class="['chip', channelFilter === option ? 'active' : '']" @click="pickChannel(option)"
-                >
-                    {{ option === 'All' ? 'All channels' : option }}
-                </button>
+                <select class="gridFilter" aria-label="Channel" :value="channelFilter" @change="pickChannel($event.target.value)">
+                    <option v-for="option in channelOptions" :key="option" :value="option">
+                        {{ option === 'All' ? 'All channels' : option }}
+                    </option>
+                </select>
             </template>
         </div>
         <TablePagination v-model="resultsPage" v-model:page-size="resultsPageSize" :total="filteredResults.length" />
@@ -255,6 +248,7 @@ import { useRoute, useRouter } from 'vue-router';
 import CollectionCard from '@/components/browse/CollectionCard.vue';
 import ProgrammeCard from '@/components/browse/ProgrammeCard.vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
+import FilterChip from '@/components/common/FilterChip.vue';
 import CheckInput from '@/components/common/form/CheckInput.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';

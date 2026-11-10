@@ -354,25 +354,6 @@ onMounted(load);
     }
 }
 
-.gridFilter {
-    height: 32px;
-    padding: 0 10px;
-    border-radius: 4px;
-    border: 1px solid @settings-button-border-color;
-    background-color: @settings-button-background-color;
-    color: @primary-text-color;
-}
-
-@media (max-width: @mobile-breakpoint) {
-    .gridFilter {
-        flex: 1 1 0;
-        min-width: 0;
-        width: auto;
-        // Same height as the toolbar buttons beside it.
-        height: @touch-target;
-    }
-}
-
 .noMatch {
     color: @subtle-text-color;
 }
