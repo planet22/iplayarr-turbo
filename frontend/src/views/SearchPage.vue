@@ -1142,39 +1142,6 @@ watch(
     }
 }
 
-.pill {
-    &.BBCOne {
-        background-color: @error-color;
-        border-color: @error-color;
-        color: @error-text-color;
-    }
-
-    &.BBCTwo {
-        background-color: @primary-color;
-        border-color: @primary-color;
-        color: @on-fill-color;
-    }
-
-    &.BBCThree {
-        background-color: @brand-color;
-        border-color: @brand-color;
-        color: @on-brand-color;
-        color: @primary-text-color;
-    }
-
-    &.CBeebies {
-        background-color: @complete-color;
-        border-color: @complete-color;
-        color: @on-fill-color;
-    }
-
-    &.CBBC {
-        background-color: @success-color;
-        border-color: @success-color;
-        color: @on-fill-color;
-    }
-}
-
 @media (max-width: @mobile-breakpoint) {
     .chip {
         min-height: 36px;
