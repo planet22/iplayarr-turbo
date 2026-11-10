@@ -42,7 +42,7 @@
             <table class="dataTable libraryDebugTable">
                 <thead>
                     <tr>
-                        <th v-for="column in columns" :key="column.key" class="sortable" tabindex="0" @click="toggleSort(column.key)" @keydown.enter.prevent="toggleSort(column.key)" @keydown.space.prevent="toggleSort(column.key)">
+                        <th v-for="column in columns" :key="column.key" class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy === column.key, sortOrder)" @click="toggleSort(column.key)" @keydown.enter.prevent="toggleSort(column.key)" @keydown.space.prevent="toggleSort(column.key)">
                             {{ column.label }} <SortIcon :active="sortBy === column.key" :order="sortOrder" />
                         </th>
                     </tr>
@@ -77,8 +77,10 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import { ariaSort } from '@/lib/a11y';
 import { ipFetch } from '@/lib/ipFetch';
 import { DEFAULT_PAGE_SIZE } from '@/lib/usePagination';
+import { usePersistedRef } from '@/lib/usePersistedRef';
 import { formatRelativeTime } from '@/lib/utils';
 
 // Reached only by its address (/library-debug): there is no link to it in the menu.
@@ -103,13 +105,18 @@ const loaded = ref(false);
 const sources = ref([]);
 const rows = ref([]);
 // A link from another page can start it filtered (the Streaming debug page passes the pid).
-const text = ref(String(useRoute().query.q ?? ''));
-const sourceFilter = ref('');
-const stateFilter = ref('');
-const kindFilter = ref('');
-const radioFilter = ref('');
-const sortBy = ref('path');
-const sortOrder = ref('asc');
+const route = useRoute();
+const text = ref(String(route.query.q ?? ''));
+// A link with its own search starts clean, not narrowed by whatever was chosen last time.
+const linked = route.query.q !== undefined;
+const saved = (key, fallback, allowed) => usePersistedRef(`library.${key}`, fallback, (value) => !linked && allowed(value));
+const oneOf = (...options) => (value) => options.includes(value);
+const sourceFilter = saved('source', '', (value) => typeof value === 'string');
+const stateFilter = saved('state', '', oneOf('', 'counted', 'rejected'));
+const kindFilter = saved('kind', '', oneOf('', 'link', 'file'));
+const radioFilter = saved('mode', '', oneOf('', 'video', 'radio'));
+const sortBy = saved('sort', 'path', oneOf(...columns.map(({ key }) => key)));
+const sortOrder = saved('order', 'asc', oneOf('asc', 'desc'));
 
 const numbers = ({ season, episode }) => (season === undefined ? '' : `S${season}E${episode}`);
 const arrIds = ({ arrId, arrIds: ids }) => (arrId === undefined ? '' : `${arrId}${ids?.length ? ` (${ids.join(', ')})` : ''}`);
@@ -145,6 +152,8 @@ async function load() {
     if (mine !== latest) return;
     if (ok) {
         sources.value = data.sources;
+        // A remembered source that has since been removed would show nothing.
+        if (sourceFilter.value && !data.sources.some(({ id }) => id === sourceFilter.value)) sourceFilter.value = '';
         rows.value = data.rows;
         total.value = data.total;
     }

@@ -203,7 +203,7 @@
             <thead>
                 <tr>
                     <th />
-                    <th class="sortable" tabindex="0" @click="toggleHistorySort('title')" @keydown.enter.prevent="toggleHistorySort('title')" @keydown.space.prevent="toggleHistorySort('title')">Media <SortIcon :active="historySortBy == 'title'" :order="historySortOrder" /></th>
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(historySortBy == 'title', historySortOrder)" @click="toggleHistorySort('title')" @keydown.enter.prevent="toggleHistorySort('title')" @keydown.space.prevent="toggleHistorySort('title')">Media <SortIcon :active="historySortBy == 'title'" :order="historySortOrder" /></th>
                     <th class="chipCol">Mode</th>
                     <th class="chipCol" title="Native: Adaptive or Fixed quality">Quality</th>
                     <th class="chipCol" title="Native Quality Probe">Probe</th>
@@ -211,8 +211,8 @@
                     <th class="chipCol" title="Native subtitles (on-demand and live)">Subs</th>
                     <th class="chipCol hideLg" title="get_iplayer/yt-dlp Video Quality setting">Video Quality</th>
                     <th class="chipCol" title="Actual resolution served">Res</th>
-                    <th class="sortable" tabindex="0" @click="toggleHistorySort('started')" @keydown.enter.prevent="toggleHistorySort('started')" @keydown.space.prevent="toggleHistorySort('started')">Client / Started <SortIcon :active="historySortBy == 'started'" :order="historySortOrder" /></th>
-                    <th class="numCol sortable" tabindex="0" @click="toggleHistorySort('duration')" @keydown.enter.prevent="toggleHistorySort('duration')" @keydown.space.prevent="toggleHistorySort('duration')">Duration / Size <SortIcon :active="historySortBy == 'duration'" :order="historySortOrder" /></th>
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(historySortBy == 'started', historySortOrder)" @click="toggleHistorySort('started')" @keydown.enter.prevent="toggleHistorySort('started')" @keydown.space.prevent="toggleHistorySort('started')">Client / Started <SortIcon :active="historySortBy == 'started'" :order="historySortOrder" /></th>
+                    <th class="numCol sortable" tabindex="0" :aria-sort="ariaSort(historySortBy == 'duration', historySortOrder)" @click="toggleHistorySort('duration')" @keydown.enter.prevent="toggleHistorySort('duration')" @keydown.space.prevent="toggleHistorySort('duration')">Duration / Size <SortIcon :active="historySortBy == 'duration'" :order="historySortOrder" /></th>
                     <th class="numCol" title="Throughput over the last minute, and the rate right now (finished streams: their final minute, and the session average)">Rate</th>
                     <th>Segments</th>
                     <th />
@@ -305,6 +305,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortControl from '@/components/common/SortControl.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
+import { ariaSort } from '@/lib/a11y';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';

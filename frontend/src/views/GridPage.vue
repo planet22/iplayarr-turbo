@@ -61,6 +61,7 @@ import { SORT_OPTIONS, sortList } from '@/lib/browseSort';
 import { useMediaMode } from '@/lib/mediaMode';
 import { nextOff } from '@/lib/subCategories';
 import { usePagination } from '@/lib/usePagination';
+import { usePersistedRef } from '@/lib/usePersistedRef';
 
 const PER_PAGE = 150; // the server's max perPage - fewest round trips when fetching everything
 const letters = ['0', ...'abcdefghijklmnopqrstuvwxyz'];
@@ -76,8 +77,8 @@ const categoryTitle = ref('');
 const rails = ref([]);
 const textFilter = ref('');
 const channelFilter = ref('All');
-const sortKey = ref('default');
-const sortOrder = ref('asc');
+const sortKey = usePersistedRef('gridSort', 'default', (value) => SORT_OPTIONS.some(({ key }) => key === value));
+const sortOrder = usePersistedRef('gridOrder', 'asc', (value) => value === 'asc' || value === 'desc');
 
 // Sub-categories (radio): which are on, and the listing of each, fetched when one is first switched off (the category's own
 // listing is the union while all are on).
@@ -236,8 +237,7 @@ watch(
         rails.value = [];
         textFilter.value = '';
         channelFilter.value = 'All';
-        sortKey.value = 'default';
-        sortOrder.value = 'asc';
+        // The sort is a saved preference, so it is not reset with the listing.
         total.value = undefined;
         gridPage.value = 1;
         if (!isAtoZ.value) {

@@ -64,19 +64,19 @@
             <thead>
                 <tr>
                     <th />
-                    <th class="sortable" tabindex="0" @click="toggleSort('video')" @keydown.enter.prevent="toggleSort('video')" @keydown.space.prevent="toggleSort('video')">
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'video', sortOrder)" @click="toggleSort('video')" @keydown.enter.prevent="toggleSort('video')" @keydown.space.prevent="toggleSort('video')">
                         Item <SortIcon :active="sortBy == 'video'" :order="sortOrder" />
                     </th>
-                    <th class="sortable" tabindex="0" @click="toggleSort('type')" @keydown.enter.prevent="toggleSort('type')" @keydown.space.prevent="toggleSort('type')">
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'type', sortOrder)" @click="toggleSort('type')" @keydown.enter.prevent="toggleSort('type')" @keydown.space.prevent="toggleSort('type')">
                         Type <SortIcon :active="sortBy == 'type'" :order="sortOrder" />
                     </th>
-                    <th class="sortable" tabindex="0" @click="toggleSort('level')" @keydown.enter.prevent="toggleSort('level')" @keydown.space.prevent="toggleSort('level')">
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'level', sortOrder)" @click="toggleSort('level')" @keydown.enter.prevent="toggleSort('level')" @keydown.space.prevent="toggleSort('level')">
                         Level <SortIcon :active="sortBy == 'level'" :order="sortOrder" />
                     </th>
-                    <th class="sortable" tabindex="0" @click="toggleSort('message')" @keydown.enter.prevent="toggleSort('message')" @keydown.space.prevent="toggleSort('message')">
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'message', sortOrder)" @click="toggleSort('message')" @keydown.enter.prevent="toggleSort('message')" @keydown.space.prevent="toggleSort('message')">
                         Message <SortIcon :active="sortBy == 'message'" :order="sortOrder" />
                     </th>
-                    <th class="sortable" tabindex="0" @click="toggleSort('time')" @keydown.enter.prevent="toggleSort('time')" @keydown.space.prevent="toggleSort('time')">
+                    <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'time', sortOrder)" @click="toggleSort('time')" @keydown.enter.prevent="toggleSort('time')" @keydown.space.prevent="toggleSort('time')">
                         Time <SortIcon :active="sortBy == 'time'" :order="sortOrder" />
                     </th>
                 </tr>
@@ -130,6 +130,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
 import TablePagination from '@/components/common/TablePagination.vue';
 import VideoInfoModal from '@/components/modals/VideoInfoModal.vue';
+import { ariaSort } from '@/lib/a11y';
 import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';

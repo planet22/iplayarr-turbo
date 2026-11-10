@@ -72,6 +72,7 @@ import dialogService from '@/lib/dialogService';
 import { countByLevel, downloadFileName, filterLogs, LEVELS, linesAsText, parseFilterParam, sourcesOf,SYSTEM_SOURCE } from '@/lib/logFilter';
 import { logTiles } from '@/lib/logTiles';
 import toastService from '@/lib/toastService';
+import { usePersistedRef } from '@/lib/usePersistedRef';
 
 const route = useRoute();
 const logs = inject('logs');
@@ -79,7 +80,7 @@ const isConnected = inject('isConnected');
 
 const follow = ref(true);
 const text = ref('');
-const levels = ref([]);
+const levels = usePersistedRef('logsLevels', [], (saved) => Array.isArray(saved) && saved.every((level) => LEVELS.includes(level)));
 const source = ref('');
 
 // A link such as /logs?filter=ERROR (or a download's pid) opens with that filter on.
@@ -90,6 +91,7 @@ const source = ref('');
 watch(
     () => route.query.filter,
     (value) => {
+        if (value === undefined) return;
         const parsed = parseFilterParam(value);
         levels.value = parsed.levels;
         source.value = parsed.source;

@@ -40,18 +40,18 @@
                 </th>
                 <th />
                 <th />
-                <th class="sortable" tabindex="0" @click="toggleSort('filename')" @keydown.enter.prevent="toggleSort('filename')" @keydown.space.prevent="toggleSort('filename')">
+                <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'filename', sortOrder)" @click="toggleSort('filename')" @keydown.enter.prevent="toggleSort('filename')" @keydown.space.prevent="toggleSort('filename')">
                     Filename <SortIcon :active="sortBy == 'filename'" :order="sortOrder" />
                 </th>
-                <th class="sortable" tabindex="0" @click="toggleSort('type')" @keydown.enter.prevent="toggleSort('type')" @keydown.space.prevent="toggleSort('type')">
+                <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'type', sortOrder)" @click="toggleSort('type')" @keydown.enter.prevent="toggleSort('type')" @keydown.space.prevent="toggleSort('type')">
                     Type <SortIcon :active="sortBy == 'type'" :order="sortOrder" />
                 </th>
                 <th class="hideMd">Client</th>
                 <th>Output</th>
-                <th class="sortable" tabindex="0" @click="toggleSort('start')" @keydown.enter.prevent="toggleSort('start')" @keydown.space.prevent="toggleSort('start')">
+                <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'start', sortOrder)" @click="toggleSort('start')" @keydown.enter.prevent="toggleSort('start')" @keydown.space.prevent="toggleSort('start')">
                     Start <SortIcon :active="sortBy == 'start'" :order="sortOrder" />
                 </th>
-                <th class="sortable" tabindex="0" @click="toggleSort('size')" @keydown.enter.prevent="toggleSort('size')" @keydown.space.prevent="toggleSort('size')">
+                <th class="sortable" tabindex="0" :aria-sort="ariaSort(sortBy == 'size', sortOrder)" @click="toggleSort('size')" @keydown.enter.prevent="toggleSort('size')" @keydown.space.prevent="toggleSort('size')">
                     Size <SortIcon :active="sortBy == 'size'" :order="sortOrder" />
                 </th>
                 <th class="hideMd">App</th>
@@ -82,6 +82,7 @@
 <script setup>
 import { computed, defineExpose, defineProps, onMounted, ref, watch } from 'vue';
 
+import { ariaSort } from '@/lib/a11y';
 import { details, loadDetails, prefetchThumbnails } from '@/lib/detailsCache';
 import { historyRowKey, queueRowKey, useRowSelection } from '@/lib/rowSelection';
 import { usePagination } from '@/lib/usePagination';
