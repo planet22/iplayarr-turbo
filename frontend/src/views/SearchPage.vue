@@ -226,14 +226,9 @@
             <section v-if="recent.length">
                 <h2>Recent searches</h2>
                 <div class="chipRow">
-                    <span v-for="term in recent" :key="term" class="chip chipWrap">
-                        <button type="button" class="chipMain" @click="searchFor(term)">
-                            <font-awesome-icon :icon="['fas', 'clock-rotate-left']" /><span class="termText" :title="term">{{ term }}</span>
-                        </button>
-                        <button type="button" class="chipRemove" :aria-label="`Remove ${term} from recent searches`" :title="`Remove ${term}`" @click="removeRecent(term)">
-                            <font-awesome-icon :icon="['fas', 'circle-xmark']" />
-                        </button>
-                    </span>
+                    <FilterChip v-for="term in recent" :key="term" :remove-label="`Remove ${term} from recent searches`" @click="searchFor(term)" @remove="removeRecent(term)">
+                        <font-awesome-icon :icon="['fas', 'clock-rotate-left']" /><span class="termText" :title="term">{{ term }}</span>
+                    </FilterChip>
                 </div>
             </section>
         </div>
@@ -910,72 +905,6 @@ watch(
     }
 }
 
-// Filter chips (channel) and the home / empty-state chips share one look.
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex: 0 0 auto;
-    padding: 6px @space-3;
-    border: 1px solid @settings-button-border-color;
-    border-radius: @radius-xl;
-    background-color: @settings-button-background-color;
-    color: @primary-text-color;
-    font-size: @font-size-base;
-    text-decoration: none;
-    cursor: pointer;
-
-    svg {
-        color: @subtle-text-color;
-    }
-
-    &:hover {
-        background-color: @settings-button-hover-background-color;
-    }
-
-    &.active {
-        border-color: @brand-color;
-        color: @brand-color;
-    }
-}
-
-// A recent-search chip: the search button plus a small remove button at the right-hand end.
-.chipWrap {
-    padding: 0;
-    gap: 0;
-    overflow: hidden;
-
-    .chipMain,
-    .chipRemove {
-        display: inline-flex;
-        align-items: center;
-        border: 0;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        cursor: pointer;
-    }
-
-    .chipMain {
-        gap: 6px;
-        padding: 6px @space-1 6px @space-3;
-        min-width: 0;
-    }
-
-    .chipRemove {
-        padding: 6px 10px 6px @space-1;
-
-        svg {
-            color: @subtle-text-color;
-        }
-
-        &:hover svg,
-        &:focus-visible svg {
-            color: @primary-text-color;
-        }
-    }
-}
-
 .channelChips {
     display: flex;
     gap: @space-2;
@@ -1139,12 +1068,6 @@ watch(
                 }
             }
         }
-    }
-}
-
-@media (max-width: @mobile-breakpoint) {
-    .chip {
-        min-height: 36px;
     }
 }
 </style>
