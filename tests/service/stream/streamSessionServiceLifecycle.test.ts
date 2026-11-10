@@ -101,6 +101,50 @@ describe('streamSessionService lifecycle', () => {
         expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', { pid: 'p1' });
     });
 
+    it('end of a radio session passes its title and picture to the event, so it shows like a TV one', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true, image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
+        await streamSessionService.end(id);
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', {
+            pid: 'm0033frv', radio: true, title: 'Newsbeat', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg',
+        });
+    });
+
+    it('a stopped radio session names its programme on the stop event too', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true, image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg' });
+        expect(await streamSessionService.stop(id)).toBe(true);
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stream stopped', {
+            pid: 'm0033frv', radio: true, title: 'Newsbeat', image: 'https://ichef.bbci.co.uk/images/ic/x/y.jpg',
+        });
+    });
+
+    it('the end of a radio session with no picture still names the programme', async () => {
+        const id = await streamSessionService.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true });
+        await streamSessionService.end(id);
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', { pid: 'm0033frv', radio: true, title: 'Newsbeat', image: undefined });
+    });
+
+    it('the end of a live or TV session carries no radio fields', async () => {
+        const live = await streamSessionService.start('bbc_one_london', mode, client, undefined, undefined, { title: 'BBC One' });
+        await streamSessionService.end(live);
+        expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', { pid: 'bbc_one_london' });
+    });
+
+    it('a radio session ended by the inactivity sweep names its programme', async () => {
+        jest.useFakeTimers();
+        try {
+            let svc: typeof streamSessionService = undefined as any;
+            await jest.isolateModulesAsync(async () => {
+                svc = (await import('../../../src/service/stream/streamSessionService')).default;
+            });
+            const id = await svc.start('m0033frv', mode, client, undefined, undefined, undefined, { title: 'Newsbeat', radio: true, image: 'i.jpg' });
+            svc.getActive().find((s) => s.id === id)!.lastActivityAt = new Date(Date.now() - 200_000);
+            await jest.advanceTimersByTimeAsync(21_000);
+            expect(videoEventService.record).toHaveBeenCalledWith(VideoEventType.STREAM_ENDED, 'Stopped streaming', { pid: 'm0033frv', radio: true, title: 'Newsbeat', image: 'i.jpg' });
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     it('end on an unknown id just emits', async () => {
         await streamSessionService.end('nope');
         expect(mockSetItem).not.toHaveBeenCalled();

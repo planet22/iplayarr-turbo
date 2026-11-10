@@ -310,6 +310,13 @@ async function readOnly(ctx, h) {
     const secrets = [cfg.API_KEY, cfg.STREAM_KEY].filter((s) => s && s.length > 8);
     const leaked = all2.filter((r) => secrets.some((s) => (r.text || '').includes(s)));
     rec(P, 'stats, streams, history and events responses never contain the API or stream key', leaked.length ? 'FAIL' : 'PASS', `${leaked.length} response(s)`);
+
+    // 11. A radio stream_ended event names its programme like the stream_started one (the page has no pid lookup for radio)
+    const evBody = (await http('/json-api/events')).json;
+    const evList = Array.isArray(evBody) ? evBody : evBody?.events || evBody?.items || [];
+    const radioEnded = evList.filter((e) => e.type === 'stream_ended' && e.radio === true);
+    const radioEndedBare = radioEnded.filter((e) => !e.title);
+    rec(P, 'radio stream_ended events carry the programme title', radioEnded.length ? (radioEndedBare.length ? 'FAIL' : 'PASS') : 'SKIP', radioEnded.length ? `${radioEndedBare.length} without a title of ${radioEnded.length}` : 'no radio stream_ended event stored yet (stream and stop a radio episode)');
 }
 
 // ------------------------------------------------------------------------------------------------- mutating

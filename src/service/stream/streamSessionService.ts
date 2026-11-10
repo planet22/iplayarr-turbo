@@ -184,7 +184,7 @@ async function archive(session: StreamSession, endReason?: string, revivable: bo
     videoEventService.record(
         VideoEventType.STREAM_ENDED,
         endReason === 'manual-stop' ? 'Stream stopped' : 'Stopped streaming',
-        { pid: session.pid }
+        { pid: session.pid, ...(session.radio ? { radio: true, title: session.title, image: session.image } : {}) }
     );
 }
 
