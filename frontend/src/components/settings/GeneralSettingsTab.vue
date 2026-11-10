@@ -23,7 +23,7 @@
         :error="validationErrors.config?.SOUNDS_ENABLED"
         :options="trueOrFalse"
     />
-    <template v-if="config.SOUNDS_ENABLED == 'true'">
+    <template v-if="showAdvanced && config.SOUNDS_ENABLED == 'true'">
         <SelectInput
             v-model="config.LIVE_RADIO"
             field="LIVE_RADIO"

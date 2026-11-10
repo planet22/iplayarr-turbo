@@ -284,6 +284,52 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             }
         });
 
+        // ---- Advanced toggle: every setting marked advanced is hidden while it is off (read-only: only this browser's toggle changes)
+        await flow('settings advanced toggle gates advanced settings', async (page) => {
+            const KEY = 'iplayarr.settings.showAdvanced';
+            const cfg = (await http('/json-api/config')).json || {};
+            const setAdvanced = async (on) => {
+                await page.goto(`${BASE}/settings#general`, { waitUntil: 'networkidle' });
+                await page.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, String(on)]);
+            };
+            const tab = async (key) => { await page.goto(`${BASE}/settings#${key}`, { waitUntil: 'networkidle' }); await page.reload({ waitUntil: 'networkidle' }); await page.waitForSelector('.settingsBody', { timeout: 15000 }); await page.waitForTimeout(400); };
+            const advCount = async () => page.locator('.settingsBody .form-group.advanced').count();
+            const body = async () => page.locator('.settingsBody').innerText();
+            const tabs = ['general', 'search', 'appearance', 'mediaManagement', 'downloadClient', 'streaming', 'liveTv', 'authentication', 'maintenance'];
+            try {
+                await setAdvanced(false);
+                for (const t of tabs) {
+                    await tab(t);
+                    ok(`${t}: no advanced setting is shown while Advanced is off`, (await advCount()) === 0, `${await advCount()} advanced fields visible`);
+                }
+                // The two settings that used to leak or leave a stray heading
+                await tab('general');
+                ok('General hides Live Radio Stations while Advanced is off', !/Live Radio Stations/.test(await body()));
+                if (cfg.LIVE_TV_ENABLED === 'true') {
+                    await tab('liveTv');
+                    ok('Live TV hides the Channel feeds heading while Advanced is off', !/Channel feeds/i.test(await body()));
+                }
+
+                await setAdvanced(true);
+                await tab('general');
+                const general = await body();
+                ok(cfg.SOUNDS_ENABLED === 'true' ? 'General shows Live Radio Stations once Advanced is on (Sounds is on)' : 'General still hides Live Radio Stations with Sounds off, even with Advanced on',
+                    /Live Radio Stations/.test(general) === (cfg.SOUNDS_ENABLED === 'true'), general.replace(/\s+/g, ' ').slice(0, 200));
+                for (const t of ['general', 'appearance', 'mediaManagement', 'downloadClient', 'streaming']) {
+                    await tab(t);
+                    ok(`${t}: advanced settings appear when Advanced is on`, (await advCount()) > 0, 'none visible');
+                }
+                if (cfg.LIVE_TV_ENABLED === 'true') {
+                    await tab('liveTv');
+                    const feeds = /Channel feeds/i.test(await body());
+                    ok(cfg.STREAM_CLIENT === 'NATIVE' ? 'Live TV shows the Channel feeds heading with Advanced on and the Native client' : 'Live TV hides the Channel feeds heading unless the client is Native',
+                        feeds === (cfg.STREAM_CLIENT === 'NATIVE'), `STREAM_CLIENT ${cfg.STREAM_CLIENT}`);
+                }
+            } finally {
+                await page.evaluate((k) => { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }, KEY).catch(() => {});
+            }
+        });
+
         // ---- Settings tabs: each setting sits on the tab it belongs to (read-only: nothing is changed or saved)
         await flow('settings tabs hold the right settings', async (page) => {
             const labels = async () => (await page.locator('.settingsBody label').allTextContents()).map((t) => t.trim());
