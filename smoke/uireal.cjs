@@ -443,6 +443,30 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             await cards.first().waitFor({ timeout: 25000 });
             ok('a radio category is the category grid, with its filter, sort and pagination', (await cards.count()) > 5 && (await page.locator('.tableFilter').count()) > 0 && (await page.locator('.SettingsPageToolbar').count()) > 0 && (await page.locator('select[aria-label="items per page"]').count()) > 0);
             await shot(page, 'radio-category');
+            // Sub-category chips (radio): All starts on, the first click picks just that one, more clicks add, All resets.
+            await page.goto(BASE + '/browse/category/factual', { waitUntil: 'networkidle' });
+            const subChips = page.locator('.subCategories button.letter');
+            await subChips.first().waitFor({ timeout: 25000 }).catch(() => {});
+            if ((await subChips.count()) < 3) rec(U, 'radio sub-category chips', 'SKIP', 'this category has no sub-categories');
+            else {
+                const onCount = () => page.locator('.subCategories button.letter[aria-pressed=true]').count();
+                ok('sub-categories: All is on to begin with, alongside every chip', (await onCount()) === (await subChips.count()));
+                await subChips.nth(1).click();
+                await page.waitForTimeout(800);
+                ok('sub-categories: the first click picks just that one', (await onCount()) === 1 && (await subChips.nth(1).getAttribute('aria-pressed')) === 'true');
+                await subChips.nth(2).click();
+                await page.waitForTimeout(800);
+                ok('sub-categories: a second click adds another', (await onCount()) === 2);
+                await subChips.nth(2).click();
+                await subChips.nth(1).click();
+                await page.waitForTimeout(800);
+                ok('sub-categories: switching the last one off goes back to all', (await onCount()) === (await subChips.count()));
+                await subChips.nth(3).click();
+                await page.waitForTimeout(800);
+                await subChips.first().click();
+                await page.waitForTimeout(800);
+                ok('sub-categories: All resets the selection', (await onCount()) === (await subChips.count()));
+            }
 
             await page.goto(BASE + '/browse/collections', { waitUntil: 'networkidle' });
             await page.locator('.collectionGrid > *').first().waitFor({ timeout: 25000 });

@@ -27,8 +27,10 @@
                 {{ l === '0' ? '0-9' : l.toUpperCase() }}
             </RouterLink>
         </div>
-        <!-- Radio categories have sub-categories (BBC Sounds' child categories): each switches on or off, all on to begin with. -->
+        <!-- Radio categories have sub-categories (BBC Sounds' child categories). All are on to begin with; the first click picks
+             just that one, then clicks add or remove others, and All resets. -->
         <div v-if="subCategories.length" class="letterBar subCategories">
+            <button type="button" :class="['letter', 'clickable', offChildren.size ? '' : 'active']" :aria-pressed="!offChildren.size" @click="showAll">All</button>
             <button
                 v-for="child in subCategories" :key="child.id" type="button" :class="['letter', 'clickable', childOn(child.id) ? 'active' : '']"
                 :aria-pressed="childOn(child.id)" @click="toggleChild(child.id)"
@@ -64,6 +66,7 @@ import TablePagination from '@/components/common/TablePagination.vue';
 import { browseFetch } from '@/lib/browse';
 import { SORT_OPTIONS, sortList } from '@/lib/browseSort';
 import { useMediaMode } from '@/lib/mediaMode';
+import { nextOff } from '@/lib/subCategories';
 import { usePagination } from '@/lib/usePagination';
 
 const PER_PAGE = 150; // the server's max perPage - fewest round trips when fetching everything
@@ -118,10 +121,12 @@ const loadChild = async (id) => {
     }
     childItems.value = { ...childItems.value, [id]: all };
 };
+const showAll = () => {
+    offChildren.value = new Set();
+    gridPage.value = 1;
+};
 const toggleChild = async (id) => {
-    const off = new Set(offChildren.value);
-    if (off.has(id)) off.delete(id);
-    else off.add(id);
+    const off = nextOff(offChildren.value, subCategories.value.map((c) => c.id), id);
     // Listings of the children still on are needed before the union can be drawn.
     if (off.size) await Promise.all(subCategories.value.filter((c) => !off.has(c.id)).map((c) => loadChild(c.id)));
     offChildren.value = off;
