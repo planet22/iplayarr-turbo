@@ -38,7 +38,7 @@
                 ref="searchEl" v-model="searchInput" class="searchBox" type="text"
                 placeholder="Search programmes" autocomplete="off" enterkeyhint="search"
                 role="combobox" aria-label="Search programmes" aria-autocomplete="list" aria-controls="searchSuggestions"
-                :aria-expanded="showSuggestions && suggestions.length > 0"
+                :aria-expanded="showSuggestions"
                 :aria-activedescendant="activeIndex >= 0 ? `searchSuggestion-${activeIndex}` : undefined"
                 @input="onInput" @focus="onInput" @blur="closeSuggestions"
                 @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
@@ -46,7 +46,7 @@
             <button v-if="searchInput" type="button" class="clearSearch" title="Clear" aria-label="Clear" @mousedown.prevent="clearInput">
                 <font-awesome-icon :icon="['fas', 'xmark']" />
             </button>
-            <ul v-if="showSuggestions && suggestions.length" id="searchSuggestions" class="suggestions" role="listbox">
+            <ul v-if="showSuggestions" id="searchSuggestions" class="suggestions" role="listbox">
                 <li
                     v-for="(suggestion, index) in suggestions" :id="`searchSuggestion-${index}`" :key="suggestionKey(suggestion)"
                     role="option" :aria-selected="index === activeIndex" :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
@@ -54,6 +54,7 @@
                     <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
                     <span>{{ suggestion.title }}</span>
                 </li>
+                <li v-if="!suggestions.length" class="noMatches" role="option" aria-disabled="true" aria-selected="false">No matching titles</li>
                 <li class="seeAll" role="option" aria-selected="false" @mousedown.prevent="runSearch">See all results for "{{ searchInput }}"</li>
             </ul>
         </div>
@@ -271,6 +272,7 @@ import { streamSearch } from '@/lib/searchStream';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { usePagination } from '@/lib/usePagination';
+import { useSearchSuggestions } from '@/lib/useSearchSuggestions';
 import { useViewMode } from '@/lib/useViewMode';
 import { buildDownloadQuery, formatDate, formatStorageSize } from '@/lib/utils';
 
@@ -318,68 +320,22 @@ const toolbarIcons = computed(() => {
     return icons;
 });
 
-// As-you-type suggestions (titles only, from the browse API) - mirrors the nav bar's search box.
-// Debounced, and a request counter drops responses that arrive after a newer keystroke.
-const suggestions = ref([]);
-const showSuggestions = ref(false);
-const activeIndex = ref(-1);
-let suggestTimer = null;
-let suggestRequest = 0;
-
-const closeSuggestions = () => {
-    showSuggestions.value = false;
-    activeIndex.value = -1;
-    suggestRequest += 1;
-    clearTimeout(suggestTimer);
-};
+// As-you-type suggestions under the search box (the logic is shared with the nav bar).
+const {
+    suggestions, showSuggestions, activeIndex, closeSuggestions, onInput: suggestInput, moveActive, openSuggestion, onEnter,
+} = useSearchSuggestions({
+    term: searchInput,
+    open: (suggestion) => {
+        searchInput.value = '';
+        router.push(suggestionPath(suggestion));
+    },
+    search: () => runSearch(),
+});
 
 const onInput = () => {
-    clearTimeout(suggestTimer);
-    const term = (searchInput.value ?? '').trim();
     // An emptied box puts the page back to how it opens blank.
     if (!searchInput.value && (searchTerm.value || route.query.searchTerm)) resetSearch();
-    // URLs go straight to the download path on Enter - nothing to suggest for them.
-    if (term.length < 2 || /[/:]/.test(term)) {
-        closeSuggestions();
-        return;
-    }
-    suggestTimer = setTimeout(async () => {
-        const request = ++suggestRequest;
-        try {
-            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}${radioActive() ? '&mode=radio' : ''}`);
-            if (request === suggestRequest && ok && Array.isArray(data)) {
-                suggestions.value = data;
-                activeIndex.value = -1;
-                showSuggestions.value = true;
-            }
-        } catch {
-            // Suggestions are a nicety - Enter still runs a normal search.
-        }
-    }, 250);
-};
-
-const moveActive = (delta) => {
-    if (!showSuggestions.value || !suggestions.value.length) return;
-    // Cycles through the suggestions, with -1 meaning "none highlighted" (Enter = plain search).
-    const count = suggestions.value.length;
-    const next = activeIndex.value + delta;
-    activeIndex.value = next < -1 ? count - 1 : next >= count ? -1 : next;
-};
-
-const openSuggestion = (suggestion) => {
-    closeSuggestions();
-    searchInput.value = '';
-    router.push(suggestionPath(suggestion));
-};
-
-const onEnter = () => {
-    const picked = showSuggestions.value ? suggestions.value[activeIndex.value] : undefined;
-    if (picked) {
-        openSuggestion(picked);
-    } else {
-        closeSuggestions();
-        runSearch();
-    }
+    suggestInput();
 };
 
 // A collection is a result you open, not download from here: it is left out of selecting and downloading.
@@ -906,6 +862,11 @@ watch(
                 &:hover,
                 &.active {
                     background-color: @settings-button-hover-background-color;
+                }
+
+                &.noMatches {
+                    color: @subtle-text-color;
+                    cursor: default;
                 }
 
                 &.seeAll {

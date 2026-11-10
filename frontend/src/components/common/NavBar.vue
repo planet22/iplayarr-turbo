@@ -23,12 +23,12 @@
                     <input
 v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Download URL"
                         autocomplete="off" role="combobox" aria-label="Search or download URL" aria-autocomplete="list" aria-controls="navSuggestions"
-                        :aria-expanded="showSuggestions && suggestions.length > 0"
+                        :aria-expanded="showSuggestions"
                         :aria-activedescendant="activeIndex >= 0 ? `navSuggestion-${activeIndex}` : undefined"
                         @input="onInput" @focus="onInput" @blur="closeSuggestions"
                         @keydown.down.prevent="moveActive(1)" @keydown.up.prevent="moveActive(-1)"
                         @keydown.esc="closeSuggestions" @keyup.enter="onEnter" />
-                    <ul v-if="showSuggestions && suggestions.length" id="navSuggestions" class="suggestions" role="listbox">
+                    <ul v-if="showSuggestions" id="navSuggestions" class="suggestions" role="listbox">
                         <li
                             v-for="(suggestion, index) in suggestions" :id="`navSuggestion-${index}`" :key="suggestionKey(suggestion)"
                             role="option" :aria-selected="index === activeIndex" :class="{ active: index === activeIndex }" :title="suggestionLabel(suggestion)" @mousedown.prevent="openSuggestion(suggestion)"
@@ -36,6 +36,7 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
                             <font-awesome-icon :icon="['fas', suggestionIcon(suggestion)]" fixed-width />
                             <span>{{ suggestion.title }}</span>
                         </li>
+                        <li v-if="!suggestions.length" class="noMatches" role="option" aria-disabled="true" aria-selected="false">No matching titles</li>
                         <li class="seeAll" role="option" aria-selected="false" @mousedown.prevent="search">See all results for "<span class="termText">{{ searchTerm }}</span>"</li>
                     </ul>
                 </div>
@@ -75,12 +76,12 @@ import MediaModeToggle from '@/components/common/MediaModeToggle.vue';
 import dialogService from '@/lib/dialogService';
 import { askAboutVersions, preferredVersion, versionsActive } from '@/lib/downloadVersions';
 import { ipFetch } from '@/lib/ipFetch';
-import { radioActive } from '@/lib/mediaMode';
 import { useQuickFind } from '@/lib/quickFind';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
 import { useDnsRelay } from '@/lib/useDnsRelay';
+import { useSearchSuggestions } from '@/lib/useSearchSuggestions';
 import { getPidFromBBCUrl } from '@/lib/utils';
 
 const route = useRoute();
@@ -105,68 +106,15 @@ watch(
     { immediate: true }
 );
 
-// As-you-type suggestions (titles only, from the browse API). Debounced, and a request counter
-// drops responses that arrive after a newer keystroke.
-const suggestions = ref([]);
-const showSuggestions = ref(false);
-const activeIndex = ref(-1);
-let suggestTimer = null;
-let suggestRequest = 0;
-
-const closeSuggestions = () => {
-    showSuggestions.value = false;
-    activeIndex.value = -1;
-    suggestRequest += 1;
-    clearTimeout(suggestTimer);
-};
-
-const onInput = () => {
-    clearTimeout(suggestTimer);
-    const term = (searchTerm.value ?? '').trim();
-    // URLs go straight to the download path on Enter - nothing to suggest for them.
-    if (term.length < 2 || /[/:]/.test(term)) {
-        closeSuggestions();
-        return;
-    }
-    suggestTimer = setTimeout(async () => {
-        const request = ++suggestRequest;
-        try {
-            // In radio mode the suggestions come from BBC Sounds' search (`?mode=radio`); otherwise from iPlayer, as ever.
-            const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(term)}${radioActive() ? '&mode=radio' : ''}`);
-            if (request === suggestRequest && ok && Array.isArray(data)) {
-                suggestions.value = data;
-                activeIndex.value = -1;
-                showSuggestions.value = true;
-            }
-        } catch {
-            // Suggestions are a nicety - Enter still runs a normal search.
-        }
-    }, 250);
-};
-
-const moveActive = (delta) => {
-    if (!showSuggestions.value || !suggestions.value.length) return;
-    // Cycles through the suggestions, with -1 meaning "none highlighted" (Enter = plain search).
-    const count = suggestions.value.length;
-    const next = activeIndex.value + delta;
-    activeIndex.value = next < -1 ? count - 1 : next >= count ? -1 : next;
-};
-
-const openSuggestion = (suggestion) => {
-    closeSuggestions();
-    searchTerm.value = '';
-    router.push(suggestionPath(suggestion));
-};
-
-const onEnter = () => {
-    const picked = showSuggestions.value ? suggestions.value[activeIndex.value] : undefined;
-    if (picked) {
-        openSuggestion(picked);
-    } else {
-        closeSuggestions();
-        search();
-    }
-};
+// As-you-type suggestions under the search box (the logic is shared with the Search page).
+const { suggestions, showSuggestions, activeIndex, closeSuggestions, onInput, moveActive, openSuggestion, onEnter } = useSearchSuggestions({
+    term: searchTerm,
+    open: (suggestion) => {
+        searchTerm.value = '';
+        router.push(suggestionPath(suggestion));
+    },
+    search: () => search(),
+});
 
 // Top Bar on Phones "auto": slide the bar away while scrolling down, bring it back on any scroll up.
 const { state: topBar } = useTopBar();
@@ -190,7 +138,6 @@ watch(() => topBar.mode, () => {
 });
 
 onBeforeUnmount(() => {
-    clearTimeout(suggestTimer);
     window.removeEventListener('scroll', onScroll);
 });
 
@@ -367,6 +314,11 @@ defineExpose({ clearSearch });
                         &:hover,
                         &.active {
                             background-color: @settings-button-hover-background-color;
+                        }
+
+                        &.noMatches {
+                            color: @subtle-text-color;
+                            cursor: default;
                         }
 
                         &.seeAll {

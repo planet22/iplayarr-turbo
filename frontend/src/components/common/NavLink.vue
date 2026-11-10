@@ -1,7 +1,7 @@
 <template>
-    <component :is="noLink || disabled ? 'span' : 'RouterLink'" :to="path" :aria-current="route.path === path && !disabled ? 'page' : undefined">
+    <component :is="noLink || disabled ? 'span' : 'RouterLink'" :to="path" :aria-current="isActive ? 'page' : undefined">
         <li
-            :class="[route.path === path && !disabled ? 'active' : '', disabled ? 'disabled' : 'clickable', activity ? 'hasActivity' : '']"
+            :class="[isActive ? 'active' : '', disabled ? 'disabled' : 'clickable', activity ? 'hasActivity' : '']"
             :title="disabled ? disabledTitle : undefined" :aria-disabled="disabled ? 'true' : undefined" @click="optionClicked"
         >
             <span class="navItem">
@@ -17,7 +17,7 @@
 </template>
 
 <script setup>
-import { defineEmits, defineProps } from 'vue';
+import { computed, defineEmits, defineProps } from 'vue';
 import { useRoute } from 'vue-router';
 
 const emit = defineEmits(['optionClicked']);
@@ -42,6 +42,12 @@ const props = defineProps({
         required: false,
         default: '',
     },
+    // Other places that belong to this link (path prefixes): a channel page lights up Channels.
+    alsoActive: {
+        type: Array,
+        required: false,
+        default: () => [],
+    },
     noLink: {
         type: Boolean,
         required: false,
@@ -59,6 +65,8 @@ const props = defineProps({
         default: undefined,
     },
 });
+
+const isActive = computed(() => !props.disabled && (route.path === props.path || props.alsoActive.some((prefix) => route.path.startsWith(prefix))));
 
 const optionClicked = () => {
     if (!props.disabled) emit('optionClicked');

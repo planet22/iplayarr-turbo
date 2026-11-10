@@ -13,10 +13,10 @@
             <LeftHandNavLink label="Discover" icon="compass" path="/browse" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Search" icon="search" path="/search" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Guide" icon="calendar-days" path="/browse/schedule" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Channels" icon="tower-broadcast" path="/browse/channels" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Channels" icon="tower-broadcast" path="/browse/channels" :also-active="['/browse/channel/']" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Categories" icon="layer-group" path="/browse/categories" :also-active="['/browse/category/']" @option-clicked="closeLHN" />
             <LeftHandNavLink v-if="globalSettings.BROWSE_SHOW_COLLECTIONS == 'true' || isRadio" label="Collections" icon="photo-film" path="/browse/collections" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" :disabled="isRadio" disabled-title="BBC Sounds has no A to Z" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="A to Z" icon="arrow-down-a-z" path="/browse/atoz" :also-active="['/browse/atoz/']" :disabled="isRadio" disabled-title="BBC Sounds has no A to Z" @option-clicked="closeLHN" />
             </template>
 
             <li
@@ -29,7 +29,7 @@
             <template v-if="isOpen('activity')">
             <LeftHandNavLink label="Queue" icon="clipboard-list" path="/queue" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Subscriptions" icon="bell" path="/subscriptions" @option-clicked="closeLHN" />
-            <LeftHandNavLink label="Streaming" icon="play" path="/streaming" @option-clicked="closeLHN" />
+            <LeftHandNavLink label="Streaming" icon="play" path="/streaming" :also-active="['/streaming/']" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Events" icon="clapperboard" path="/events" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Watchdog" icon="shield-halved" path="/watchdog" :activity="watchdogActivity" @option-clicked="closeLHN" />
             </template>
