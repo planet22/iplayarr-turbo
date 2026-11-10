@@ -10,10 +10,10 @@
                     @keyup.enter="addTag"
                     @keyup.backspace="removeTag"
                 />
-                <button v-if="iconButton" :title="buttonTooltip" @click="emit('action')">
+                <button v-if="iconButton" type="button" :title="buttonTooltip" @click="emit('action')">
                     <font-awesome-icon :icon="['fas', iconButton]" />
                 </button>
-                <button v-if="brandButton" :title="buttonTooltip" @click="emit('action')">
+                <button v-if="brandButton" type="button" :title="buttonTooltip" @click="emit('action')">
                     <img class="brand" :src="`${getBasePath()}/img/${brandButton.toLowerCase()}.svg`" />
                 </button>
             </div>
