@@ -2,6 +2,7 @@ import { inject } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
 import { modeRoute, radioActive, setMediaMode } from '@/lib/mediaMode';
+import { titleForPath } from '@/lib/pageTitle';
 import { getBasePath, getHost } from '@/lib/utils';
 
 // Every page is its own chunk, loaded when first visited: the login page and a cold load no longer download the
@@ -88,6 +89,10 @@ router.onError((error, to) => {
     if (/dynamically imported module|Importing a module script failed|Loading chunk|Failed to fetch/i.test(String(error?.message))) {
         window.location.assign(router.resolve(to.fullPath).href);
     }
+});
+// The tab (and history) shows which page this is, not just the app name.
+router.afterEach((to) => {
+    document.title = titleForPath(to.path);
 });
 let lastAuthCheck = 0;
 

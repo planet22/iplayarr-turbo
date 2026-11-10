@@ -1,5 +1,5 @@
 <template>
-    <component :is="noLink || disabled ? 'span' : 'RouterLink'" :to="path">
+    <component :is="noLink || disabled ? 'span' : 'RouterLink'" :to="path" :aria-current="route.path === path && !disabled ? 'page' : undefined">
         <li
             :class="[route.path === path && !disabled ? 'active' : '', disabled ? 'disabled' : 'clickable', activity ? 'hasActivity' : '']"
             :title="disabled ? disabledTitle : undefined" :aria-disabled="disabled ? 'true' : undefined" @click="optionClicked"

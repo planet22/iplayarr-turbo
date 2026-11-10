@@ -36,7 +36,7 @@
             <font-awesome-icon class="searchIcon" :icon="['fas', 'search']" />
             <input
                 ref="searchEl" v-model="searchInput" class="searchBox" type="text"
-                placeholder="Search programmes, or paste a BBC URL" autocomplete="off" enterkeyhint="search"
+                placeholder="Search programmes" autocomplete="off" enterkeyhint="search"
                 role="combobox" aria-label="Search programmes" aria-autocomplete="list" aria-controls="searchSuggestions"
                 :aria-expanded="showSuggestions && suggestions.length > 0"
                 :aria-activedescendant="activeIndex >= 0 ? `searchSuggestion-${activeIndex}` : undefined"

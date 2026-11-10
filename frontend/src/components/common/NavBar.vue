@@ -21,7 +21,7 @@
                 </button>
                 <div class="searchWrap">
                     <input
-v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Download Url"
+v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Download URL"
                         autocomplete="off" role="combobox" aria-label="Search or download URL" aria-autocomplete="list" aria-controls="navSuggestions"
                         :aria-expanded="showSuggestions && suggestions.length > 0"
                         :aria-activedescendant="activeIndex >= 0 ? `navSuggestion-${activeIndex}` : undefined"
