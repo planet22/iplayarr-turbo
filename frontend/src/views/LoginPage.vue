@@ -5,52 +5,62 @@
                 <div class="panel-header">
                     <img :src="logoUrl" alt="Image" class="logo" />
                 </div>
-                <div v-if="!forgot" class="panel-body">
-                    <div class="sign-in">SIGN IN TO CONTINUE</div>
+                <form v-if="!forgot" class="panel-body" @submit.prevent="login">
+                    <h1 class="sign-in">Sign in to continue</h1>
                     <template v-if="loginMethod === 'form'">
                         <div class="form-group">
+                            <label for="login-username">Username</label>
                             <input
+                                id="login-username"
                                 v-model="loginForm.username"
-                                type="email"
+                                type="text"
+                                name="username"
+                                autocomplete="username"
+                                autocapitalize="none"
+                                spellcheck="false"
                                 class="form-input"
-                                placeholder="Username"
-                                @keyup.enter="login"
+                                :aria-describedby="error ? 'login-failed' : undefined"
                             />
                         </div>
                         <div class="form-group">
+                            <label for="login-password">Password</label>
                             <input
+                                id="login-password"
                                 v-model="loginForm.password"
                                 type="password"
+                                name="password"
+                                autocomplete="current-password"
                                 class="form-input"
-                                placeholder="Password"
-                                @keyup.enter="login"
+                                :aria-describedby="error ? 'login-failed' : undefined"
                             />
                         </div>
                     </template>
                     <div class="forgot-container">
-                        <AppButton variant="link" @click="showForgot">{{loginMethod === 'form' ? 'Forgot your password?' : 'Locked Out?'}}</AppButton>
+                        <AppButton variant="link" @click="showForgot">{{loginMethod === 'form' ? 'Forgot your password?' : 'Locked out?'}}</AppButton>
                     </div>
-                    <AppButton variant="primary" block class="loginButton" @click="login">Login</AppButton>
-                    <div v-if="error" id="login-failed" class="login-failed" role="alert">Incorrect Username or Password</div>
+                    <AppButton variant="primary" type="submit" block class="loginButton" :busy="busy">Sign in</AppButton>
+                    <div v-if="error" id="login-failed" class="login-failed" role="alert">Incorrect username or password</div>
                     <div v-else-if="notice" class="login-notice" role="status">{{ notice }}</div>
-                </div>
-                <div v-if="forgot" class="panel-body">
-                    <div class="sign-in">{{loginMethod === 'form' ? 'FORGOT PASSWORD' : 'LOCKED OUT'}}</div>
+                </form>
+                <form v-if="forgot" class="panel-body" @submit.prevent="submitForgot">
+                    <h1 class="sign-in">{{loginMethod === 'form' ? 'Forgot password' : 'Locked out'}}</h1>
                     <p>A unique code has been printed into the logs, enter it below. A new random password is then printed into the logs{{ loginMethod === 'oidc' ? ' and OIDC is disabled' : ''}}</p>
                     <div class="form-group">
+                        <label for="login-code">Code from the logs</label>
                         <input
+                            id="login-code"
                             v-model="forgotForm.key"
                             type="text"
+                            name="code"
+                            autocomplete="off"
                             class="form-input"
-                            placeholder="Code from Console"
-                            @keyup.enter="submitForgot"
                         />
                     </div>
                     <div class="forgot-container">
                         <AppButton variant="link" @click="hideForgot">Cancel</AppButton>
                     </div>
-                    <AppButton variant="primary" block class="loginButton" @click="submitForgot">Reset</AppButton>
-                </div>
+                    <AppButton variant="primary" type="submit" block class="loginButton">Reset</AppButton>
+                </form>
             </div>
         </div>
     </div>
@@ -84,17 +94,26 @@ const forgot = ref(false);
 // Shown on the login panel after a reset request, in place of a pop-up.
 const notice = ref('');
 
+// True while a sign-in request is out, so Enter or a second click cannot send it twice.
+const busy = ref(false);
+
 const login = async () => {
-    if (loginMethod.value == 'form'){
-        const response = await ipFetch('auth/login', 'POST', loginForm.value);
-        if (response.ok) {
-            router.push('/browse');
-        } else {
-            error.value = true;
+    if (busy.value) return;
+    busy.value = true;
+    try {
+        if (loginMethod.value == 'form'){
+            const response = await ipFetch('auth/login', 'POST', loginForm.value);
+            if (response.ok) {
+                router.push('/browse');
+            } else {
+                error.value = true;
+            }
+        } else if (loginMethod.value === 'oidc'){
+            const {data : oidcResponse} = await ipFetch('auth/oidc/login');
+            window.location.href = oidcResponse.url;
         }
-    } else if (loginMethod.value === 'oidc'){
-        const {data : oidcResponse} = await ipFetch('auth/oidc/login');
-        window.location.href = oidcResponse.url;
+    } finally {
+        busy.value = false;
     }
 };
 
@@ -163,12 +182,22 @@ onMounted(async () => {
 }
 
 .sign-in {
+    margin: 0;
     padding: 10px 0;
     text-align: center;
+    font-size: @font-size-lg;
+    font-weight: 400;
 }
 
 .form-group {
     margin: 20px 0;
+
+    label {
+        display: block;
+        margin-bottom: @space-1;
+        color: @subtle-text-color;
+        font-size: @font-size-base;
+    }
 }
 
 .form-input {

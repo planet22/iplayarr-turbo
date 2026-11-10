@@ -65,7 +65,7 @@ label="Refresh Index" icon="address-book" :no-link="true"
             <LeftHandNavLink label="Logs" icon="file-lines" path="/logs" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Settings" icon="gears" path="/settings" @option-clicked="closeLHN" />
             <LeftHandNavLink label="About" icon="circle-info" path="/about" @option-clicked="closeLHN" />
-            <LeftHandNavLink v-if="globalSettings.AUTH_TYPE != 'none'" label="Logout" icon="sign-out" :no-link="true" @option-clicked="logout" />
+            <LeftHandNavLink v-if="globalSettings.AUTH_TYPE != 'none'" label="Sign out" icon="sign-out" :no-link="true" @option-clicked="logout" />
             </template>
         </ul>
         <div class="floor">
@@ -216,7 +216,7 @@ const logout = async () => {
     if (response.ok) {
         router.go(0);
     } else {
-        toastService.error('Unable to log out');
+        toastService.error('Unable to sign out');
     }
 };
 
