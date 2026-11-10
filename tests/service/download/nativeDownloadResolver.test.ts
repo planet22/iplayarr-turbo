@@ -107,6 +107,43 @@ describe('resolveDownloadUrl', () => {
         expect(queueService.getFromQueue).toHaveBeenCalledWith('p1', 'job-9');
     });
 
+    describe('1080p above the ladder', () => {
+        const ladder = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=5500000,RESOLUTION=1280x720\nhttps://cdn/x.ism/video=5500000-audio=128000.m3u8\n';
+        const fhdUrl = 'https://cdn/x.ism/video=12000000-audio=128000.m3u8';
+        const setup = (fhd: string, fhdBody: string | Error) => {
+            (configService.getParameter as jest.Mock).mockImplementation(async (p: string) => (p === 'STREAM_NATIVE_EXPERIMENTAL_FHD' ? fhd : 'fhd'));
+            (fetchText as jest.Mock).mockImplementation(async (u: string) => {
+                if (u.includes('mediaselector')) return selector;
+                if (u === fhdUrl) {
+                    if (fhdBody instanceof Error) throw fhdBody;
+                    return fhdBody;
+                }
+                return ladder;
+            });
+        };
+
+        it('uses a verified 1080p stream when the ladder stops at 720p', async () => {
+            setup('true', '#EXTM3U\nvideo=12000000/seg.ts');
+            const steps: string[] = [];
+            await expect(resolveDownloadUrl('pfhd', (m) => steps.push(m))).resolves.toBe(fhdUrl);
+            expect(steps.join('\n')).toContain('found a 1080p stream');
+        });
+
+        it('keeps the ladder when the upgrade does not work', async () => {
+            setup('true', new Error('404'));
+            const steps: string[] = [];
+            await expect(resolveDownloadUrl('pfhd-fail', (m) => steps.push(m))).resolves.toBe('https://cdn/x.ism/video=5500000-audio=128000.m3u8');
+            expect(steps.join('\n')).toContain('No 1080p stream found');
+            expect(steps.join('\n')).toContain('picked 720p');
+        });
+
+        it('does not try the upgrade when the setting is off', async () => {
+            setup('false', '#EXTM3U\nvideo=12000000/seg.ts');
+            await expect(resolveDownloadUrl('pfhd-off')).resolves.toBe('https://cdn/x.ism/video=5500000-audio=128000.m3u8');
+            expect((fetchText as jest.Mock).mock.calls.map(([u]) => u)).not.toContain(fhdUrl);
+        });
+    });
+
     it('explains why no stream was found', async () => {
         (fetchText as jest.Mock).mockResolvedValue('<error id="geolocation"/>');
         await expect(resolveDownloadUrl('p1')).rejects.toThrow('geolocation');

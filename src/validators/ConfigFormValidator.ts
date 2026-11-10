@@ -22,6 +22,7 @@ export const MAX_RSS_FEED_HOURS = NUMERIC_SETTING_LIMITS.RSS_FEED_HOURS.max;
 // The Schedule Refresh job refuses to run more often than every 15 minutes (see taskService).
 export const REFRESH_SCHEDULE_MIN_MINUTES = 15;
 const OUTPUT_FORMATS = ['mp4', 'mkv'];
+const DOWNLOAD_SUBTITLE_MODES = ['off', 'sidecar', 'embed', 'both'];
 
 // Settings the server reads as one of a fixed set of words. Anything else is silently treated as the default (or
 // worse), so it is refused on save. A blank value means "use the default" and is always accepted.
@@ -141,7 +142,10 @@ export class ConfigFormValidator extends Validator {
         if (input.OUTPUT_FORMAT !== undefined && input.OUTPUT_FORMAT !== '' && !OUTPUT_FORMATS.includes(input.OUTPUT_FORMAT)) {
             validatorError['OUTPUT_FORMAT'] = 'Output format must be mp4 or mkv';
         }
-        if (input.STRM_WATCHDOG_WEBHOOK_URL && !this.isHttpUrl(input.STRM_WATCHDOG_WEBHOOK_URL)) {
+        if (input.DOWNLOAD_SUBTITLES !== undefined && input.DOWNLOAD_SUBTITLES !== '' && !DOWNLOAD_SUBTITLE_MODES.includes(input.DOWNLOAD_SUBTITLES)) {
+            validatorError['DOWNLOAD_SUBTITLES'] = 'Subtitles must be off, sidecar, embed or both';
+        }
+        if (input.STRM_WATCHDOG_WEBHOOK_URL &&!this.isHttpUrl(input.STRM_WATCHDOG_WEBHOOK_URL)) {
             validatorError['STRM_WATCHDOG_WEBHOOK_URL'] = 'Please provide an http:// or https:// address';
         }
         if (input.STRM_WATCHDOG_PATH_MAP) {

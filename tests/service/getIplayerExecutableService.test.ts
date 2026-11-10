@@ -137,6 +137,31 @@ describe('GetIplayerExecutableService', () => {
             expect(result.args).toContain(`--pid=${mockPid}`);
         });
 
+        describe('subtitle flags', () => {
+            const subArgs = async (subtitles: string | undefined, additional = '') => {
+                mockedConfigService.getParameter.mockImplementation((key: IplayarrParameter) => {
+                    if (key === IplayarrParameter.GET_IPLAYER_EXEC) return Promise.resolve('get_iplayer');
+                    if (key === IplayarrParameter.DOWNLOAD_SUBTITLES) return Promise.resolve(subtitles);
+                    if (key === IplayarrParameter.ADDITIONAL_IPLAYER_DOWNLOAD_PARAMS) return Promise.resolve(additional);
+                    return Promise.resolve(undefined);
+                });
+                const { args } = await service.getAllDownloadParameters('p01abc', '/mock/dir');
+                return args.filter((arg) => /^--(subtitles|subs-embed)$/.test(arg));
+            };
+
+            it('maps the setting to get_iplayer flags', async () => {
+                expect(await subArgs('sidecar')).toEqual(['--subtitles']);
+                expect(await subArgs(undefined)).toEqual(['--subtitles']);
+                expect(await subArgs('embed')).toEqual(['--subtitles', '--subs-embed']);
+                expect(await subArgs('both')).toEqual(['--subtitles', '--subs-embed']);
+                expect(await subArgs('off')).toEqual([]);
+            });
+
+            it('leaves the choice to the additional parameters when they name a subtitle flag', async () => {
+                expect(await subArgs('embed', '--subtitles')).toEqual(['--subtitles']);
+            });
+        });
+
         describe('--versions', () => {
             const versionArgs = async (library?: { version?: string }) => {
                 mockedConfigService.getParameter.mockImplementation((key: IplayarrParameter) =>
