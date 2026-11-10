@@ -90,7 +90,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         border-radius: @radius-sm;
         background-color: rgba(0, 0, 0, 0.7);
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
-        color: #fff;
+        color: @on-media-color;
         font-size: 12px;
     }
 
@@ -102,7 +102,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         font-size: 11px;
         border-radius: 2px;
         background-color: rgba(0, 0, 0, 0.7);
-        color: #fff;
+        color: @on-media-color;
     }
 
     &.selected .thumb {
@@ -113,7 +113,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
     &:hover .thumb,
     &:focus-visible .thumb {
         transform: translateY(-2px);
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 4px 14px @shadow-color;
     }
 
     .meta {

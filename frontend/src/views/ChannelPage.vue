@@ -188,7 +188,7 @@ watch(
     border: none;
     border-radius: 50%;
     background-color: rgba(0, 0, 0, 0.45);
-    color: #fff;
+    color: @on-media-color;
     cursor: pointer;
 
     &:hover {

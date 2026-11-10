@@ -689,13 +689,13 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         border: none;
         border-radius: 50%;
         background-color: rgba(0, 0, 0, 0.45);
-        color: #fff;
+        color: @on-media-color;
         cursor: pointer;
         opacity: 0.9;
 
         // Beats the generic `.tile svg` subtle colour above.
         svg {
-            color: #fff;
+            color: @on-media-color;
         }
 
         // Edit-mode toggles (TV top-left, bell bottom-left): bright white icon = on, dim = off.
@@ -715,7 +715,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             }
 
             &.on svg {
-                color: #fff;
+                color: @on-media-color;
             }
         }
 
@@ -754,7 +754,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         font-size: 12px;
 
         svg {
-            color: #fff;
+            color: @on-media-color;
         }
     }
 
@@ -842,7 +842,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             cursor: pointer;
 
             svg {
-                color: #fff;
+                color: @on-media-color;
             }
 
             &:disabled {
@@ -882,11 +882,11 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         cursor: pointer;
 
         svg {
-            color: #888;
+            color: @on-media-muted-color;
         }
 
         &.on svg {
-            color: #fff;
+            color: @on-media-color;
         }
 
         &:disabled {
@@ -916,7 +916,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         cursor: pointer;
 
         svg {
-            color: #fff;
+            color: @on-media-color;
         }
     }
 
@@ -928,15 +928,15 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
 
         svg {
-            color: #fff;
+            color: @on-media-color;
         }
 
         svg.testOk {
-            color: #4ade80;
+            color: @on-media-positive-color;
         }
 
         svg.testBad {
-            color: #f87171;
+            color: @on-media-danger-color;
         }
     }
 
@@ -966,7 +966,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             padding: 28px 12px 10px;
             font-size: 18px;
             box-sizing: border-box;
-            color: #fff;
+            color: @on-media-color;
             background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
         }
 

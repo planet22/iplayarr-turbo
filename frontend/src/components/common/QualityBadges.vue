@@ -73,7 +73,7 @@ const hasVersion = (id) => !!props.item.versions?.includes(id);
     letter-spacing: 0.04em;
     border-radius: 2px;
     // On a dark chip over artwork: fixed white, not the theme's text colour.
-    color: #fff;
+    color: @on-media-color;
     background-color: rgba(0, 0, 0, 0.7);
     border: 1px solid rgba(255, 255, 255, 0.35);
 
@@ -84,25 +84,25 @@ const hasVersion = (id) => !!props.item.versions?.includes(id);
     // Fixed colours like the chip itself: it sits over artwork.
     &.expiry {
         &.amber {
-            color: #ffd479;
-            border-color: rgba(255, 212, 121, 0.6);
+            color: @expiry-amber-color;
+            border-color: fade(@expiry-amber-color, 60%);
         }
 
         &.orange {
-            color: #ffa94d;
-            border-color: rgba(255, 169, 77, 0.7);
+            color: @expiry-orange-color;
+            border-color: fade(@expiry-orange-color, 70%);
         }
 
         &.red {
-            color: #ff8a80;
-            border-color: rgba(255, 138, 128, 0.8);
+            color: @expiry-red-color;
+            border-color: fade(@expiry-red-color, 80%);
         }
 
         // The last day: a solid red chip, impossible to miss.
         &.critical {
-            color: #fff;
-            background-color: #d62b2b;
-            border-color: #ff6b6b;
+            color: @on-media-color;
+            background-color: @expiry-critical-color;
+            border-color: @expiry-critical-border-color;
         }
     }
 }

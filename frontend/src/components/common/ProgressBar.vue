@@ -52,7 +52,7 @@ defineProps({
         font-size: 11px;
         line-height: 15px;
         white-space: nowrap;
-        color: #fff;
+        color: @on-fill-color;
         text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
         pointer-events: none;
     }

@@ -159,7 +159,7 @@ const fixCasing = (str) => {
         width: 100%;
         background-color: rgba(0, 0, 0, 0.6);
         // Over the artwork: fixed white, not the theme's text colour (dark in light mode).
-        color: #fff;
+        color: @on-media-color;
         padding: 2rem;
         box-sizing: border-box;
 

@@ -1054,11 +1054,11 @@ onBeforeUnmount(stopPlayback);
         border-left: 3px solid transparent;
 
         &.good {
-            border-left-color: #3fb950;
+            border-left-color: @positive-color;
         }
 
         &.bad {
-            border-left-color: #f85149;
+            border-left-color: @danger-color;
         }
 
         .tileLabel {
@@ -1332,7 +1332,7 @@ ul.plain {
     .debugVideo {
         width: 640px;
         max-width: 100%;
-        background: #000;
+        background: @media-black;
         border-radius: @radius-md;
 
         // Audio has no picture: just the player bar.

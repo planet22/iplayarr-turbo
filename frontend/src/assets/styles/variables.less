@@ -58,6 +58,20 @@
 @warn-text-color: black;
 @error-text-color: black;
 
+// Fixed colours for anything drawn over artwork or a dark scrim. They deliberately do not follow the theme:
+// the theme's text colour is dark in light mode, which would be unreadable on a poster.
+@on-media-color: #fff;
+@on-media-muted-color: #888;
+@on-media-positive-color: #4ade80;
+@on-media-danger-color: #f87171;
+@media-black: #000; // video letterbox
+// Expiry chips over artwork, from "soon" to "last day".
+@expiry-amber-color: #ffd479;
+@expiry-orange-color: #ffa94d;
+@expiry-red-color: #ff8a80;
+@expiry-critical-color: #d62b2b;
+@expiry-critical-border-color: #ff6b6b;
+
 @page-background-color: var(--page-background-color);
 @nav-background-color: var(--nav-background-color);
 @nav-active-background-color: var(--nav-active-background-color);

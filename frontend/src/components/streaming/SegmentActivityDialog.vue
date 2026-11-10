@@ -224,7 +224,7 @@ function cellTitle(index) {
     &.current {
         background-color: darkgreen;
         border-color: darkgreen;
-        color: #fff;
+        color: @on-fill-color;
     }
 }
 </style>

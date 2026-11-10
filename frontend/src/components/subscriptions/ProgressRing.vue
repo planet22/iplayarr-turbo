@@ -57,7 +57,7 @@ export const progressLabel = ({ phase, done, total }) =>
     justify-content: center;
     background: rgba(0, 0, 0, 0.6);
     border-radius: inherit;
-    color: #fff;
+    color: @on-media-color;
     pointer-events: none;
 
     svg {

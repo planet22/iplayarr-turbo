@@ -238,7 +238,7 @@ onBeforeUnmount(() => {
     border: 1px solid rgba(255, 255, 255, 0.35);
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.5);
-    color: #fff;
+    color: @on-media-color;
 
     &.prev {
         left: @space-3;
@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
     }
 
     &.active::before {
-        background: #fff;
+        background: @on-media-color;
         transform: scale(1.35);
     }
 

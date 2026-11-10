@@ -173,11 +173,11 @@ onMounted(reload);
         border-left: 3px solid transparent;
 
         &.good {
-            border-left-color: #3fb950;
+            border-left-color: @positive-color;
         }
 
         &.bad {
-            border-left-color: #f85149;
+            border-left-color: @danger-color;
         }
 
         .tileLabel {

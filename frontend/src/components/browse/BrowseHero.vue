@@ -121,7 +121,7 @@ const heroStyle = computed(() => {
         padding: 2rem;
         background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.1));
         // Over the artwork, so fixed rather than the theme's text colour (which is dark in light mode).
-        color: #fff;
+        color: @on-media-color;
 
         .heroBadges {
             display: flex;

@@ -233,7 +233,7 @@ onBeforeUnmount(cleanup);
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
-    background-color: #000;
+    background-color: @media-black;
 
     video {
         width: 100%;
@@ -248,7 +248,7 @@ onBeforeUnmount(cleanup);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: @on-media-color;
     background-color: rgba(0, 0, 0, 0.55);
     pointer-events: none;
 }
@@ -304,7 +304,7 @@ onBeforeUnmount(cleanup);
     &.selected {
         background-color: @primary-color;
         border-color: @primary-color;
-        color: #fff;
+        color: @on-media-color;
     }
 }
 

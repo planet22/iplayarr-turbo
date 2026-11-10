@@ -850,7 +850,7 @@ const duplicatesBannerDownload = computed(
         gap: 24px;
         background-color: rgba(0, 0, 0, 0.55);
         // Over the artwork backdrop: fixed white, not the theme's text colour (dark in light mode).
-        color: #fff;
+        color: @on-media-color;
     }
 
     .poster {
@@ -1216,7 +1216,7 @@ const duplicatesBannerDownload = computed(
         border-radius: 2px;
         background-color: rgba(0, 0, 0, 0.7);
         border: 1px solid rgba(255, 255, 255, 0.35);
-        color: #fff;
+        color: @on-media-color;
         font-size: 12px;
         font-weight: 700;
         line-height: 1.4;

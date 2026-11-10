@@ -1000,7 +1000,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     padding: 1px 6px;
     border-radius: 10px;
     background-color: rgba(0, 0, 0, 0.75);
-    color: #fff;
+    color: @on-media-color;
     font-size: 12px;
     line-height: 1.4;
 
