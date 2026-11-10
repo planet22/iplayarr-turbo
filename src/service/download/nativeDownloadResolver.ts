@@ -4,6 +4,7 @@ import { ProgrammeNotFoundError } from '../../utils/upstreamError';
 import configService from '../configService';
 import queueService from '../queueService';
 import { fetchText, fetchTextWithStatus, parseAttributes, resolveRedirect } from '../stream/bbcHttp';
+import { attemptFhdUpgrade } from '../stream/experimental/bbcFhdUpgrade';
 import { mediaSelectorUrl, orderedMediaSelectorPairs, rememberMediaSelectorPair, versionMediaSelectorPairs } from '../stream/mediaSelectorPairs';
 import { cached, vpidTtlMs } from '../stream/resolveCache';
 import { vpidCache } from '../stream/streamProbeCache';
@@ -132,6 +133,16 @@ export async function resolveDownloadUrl(pid: string, onStep: (message: string) 
         })
         .join(', ');
     const describe = (v: Variant): string => `${v.height}p${v.bandwidth ? ` at ${(v.bandwidth / 1_000_000).toFixed(1)} Mbit/s` : ''}`;
+    // BBC's ladder stops at 720p, but many titles have a real 1080p encode the ladder doesn't list. When 1080p is wanted
+    // and the ladder has none, try the same experimental upgrade streaming uses (and its setting), and keep the ladder if it fails.
+    if (heights[0] >= 1080 && ranked[0].height < 1080 && (await configService.getParameter(IplayarrParameter.STREAM_NATIVE_EXPERIMENTAL_FHD)) !== 'false') {
+        const upgraded = await attemptFhdUpgrade(ranked[0].url, fetchText);
+        if (upgraded) {
+            onStep(`Available: ${available}. Wanted ${heights[0]}p, found a 1080p stream above the listed ones`);
+            return upgraded;
+        }
+        onStep('No 1080p stream found above the listed ones, using the listed qualities');
+    }
     for (const height of heights) {
         const best = ranked.find((v) => v.height <= height);
         if (best) {
