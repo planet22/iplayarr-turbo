@@ -1,5 +1,5 @@
 <template>
-    <IPlayarrModal title="Search History" :show-close="true" close-label="Cancel">
+    <IPlayarrModal title="Search History" :show-close="true" close-label="Close">
         <div v-if="isMobile" class="cardList">
             <DataCard v-for="history of searchHistory" :key="history.term">
                 <template #title><span class="termText" :title="history.term">{{ history.term }}</span></template>
@@ -17,7 +17,7 @@
                 </template>
                 <template #foot>
                     <span />
-                    <a class="clickable" @click="select(history)"> Select </a>
+                    <button type="button" class="linkButton clickable" @click="select(history)">Select</button>
                 </template>
             </DataCard>
         </div>
@@ -54,7 +54,7 @@
                         </template>
                     </td>
                     <td>
-                        <a class="clickable" @click="select(history)"> Select </a>
+                        <button type="button" class="linkButton clickable" @click="select(history)">Select</button>
                     </td>
                 </tr>
             </tbody>

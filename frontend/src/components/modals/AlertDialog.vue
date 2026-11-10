@@ -2,12 +2,11 @@
     <IPlayarrModal
         compact
         :title="title"
-        :show-cancel="showCancel"
-        :cancel-label="cancelLabel"
+        :show-close="showCancel"
+        :close-label="cancelLabel"
         :show-confirm="true"
         :confirm-label="confirmLabel"
         :danger="danger"
-        @cancel="emit('cancel')"
         @dismiss="emit('cancel')"
         @confirm="emit('confirm', selected)"
     >

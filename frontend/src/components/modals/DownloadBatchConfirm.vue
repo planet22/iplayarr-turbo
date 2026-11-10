@@ -4,12 +4,11 @@
     <IPlayarrModal
         compact
         title="Download"
-        :show-cancel="true"
-        cancel-label="Cancel"
+        :show-close="true"
+        close-label="Cancel"
         :show-confirm="true"
         confirm-label="Download"
         @confirm="emit('confirm', { media: mode, version: extra, boxset })"
-        @cancel="emit('cancel')"
         @dismiss="emit('cancel')"
     >
         <p class="question">{{ text }}</p>

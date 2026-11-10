@@ -189,6 +189,19 @@ legend {
     overflow-x: auto;
 }
 
+// A button that reads as a text link (Select, in the pickers).
+.linkButton {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: @brand-color;
+    font: inherit;
+
+    &:hover:not(:disabled) {
+        text-decoration: underline;
+    }
+}
+
 // The channel / filter dropdown beside the toolbar and chip rows (Search, Grid, Collections).
 .gridFilter {
     height: 32px;

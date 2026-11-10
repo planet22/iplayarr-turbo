@@ -18,7 +18,10 @@
         <div class="modal-inner">
             <slot />
             <div class="button-container floor">
-                <button v-if="showClose" :class="['clickable', { cancel: !showCancel }]" @click="dismiss(close)">
+                <button v-if="deleteLabel" type="button" class="clickable danger" @click="emit('delete')">
+                    {{ deleteLabel }}
+                </button>
+                <button v-if="showClose" :class="['clickable', { cancel: !showCancel && !deleteLabel }]" @click="dismiss(close)">
                     {{ closeLabel }}
                 </button>
                 <button v-if="showCancel" :class="['clickable', { cancel: !danger }]" @click="emit('cancel')">
@@ -46,11 +49,13 @@ defineProps({
     closeLabel: String,
     showConfirm: Boolean,
     confirmLabel: String,
+    // A destructive action beside Close (Delete, Remove): a red button that emits 'delete'.
+    deleteLabel: String,
     // Destructive confirmations (delete, clear, cancel a download): the confirm button is red.
     danger: Boolean,
 });
 
-const emit = defineEmits(['cancel', 'confirm', 'dismiss']);
+const emit = defineEmits(['cancel', 'confirm', 'delete', 'dismiss']);
 
 // The X / Close buttons close the modal themselves; 'dismiss' lets a caller awaiting a result know.
 const dismiss = (close) => {

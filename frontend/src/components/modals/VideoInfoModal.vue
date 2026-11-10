@@ -3,11 +3,10 @@
 <template>
     <IPlayarrModal
         :title="(radio && title) || item?.nzbName || fallbackTitle || pid"
-        :show-cancel="!!item"
-        :cancel-label="deleteLabel"
+        :delete-label="item ? deleteLabel : undefined"
         show-close
         close-label="Close"
-        @cancel="deleteItem"
+        @delete="deleteItem"
     >
         <MediaInfoHero
             :pid="pid" :type="item?.type" :match-name="nzbName" :match-id="jobId"

@@ -1,5 +1,5 @@
 <template>
-    <IPlayarrModal :show-close="true" close-label="Cancel" title="Lookup">
+    <IPlayarrModal :show-close="true" close-label="Close" title="Lookup">
         <LoadingIndicator v-if="loading" />
         <div v-if="!loading" class="arrLookup">
             <TextInput v-if="showFilter" v-model="filterText" placeholder="Filter" />
@@ -8,7 +8,7 @@
                     <template #title>{{ result.title }}</template>
                     <template #foot>
                         <span />
-                        <a class="clickable" @click="emit('select', result)"> Select </a>
+                        <button type="button" class="linkButton clickable" @click="emit('select', result)">Select</button>
                     </template>
                 </DataCard>
             </div>
@@ -25,7 +25,7 @@
                     <tr v-for="result of computedResults" :key="result.id">
                         <td class="text">{{ result.title }}</td>
                         <td>
-                            <a class="clickable" @click="emit('select', result)"> Select </a>
+                            <button type="button" class="linkButton clickable" @click="emit('select', result)">Select</button>
                         </td>
                     </tr>
                 </tbody>

@@ -10,7 +10,7 @@
             <dt>Kind</dt>
             <dd>{{ item.note }}</dd>
             <dt>Size</dt>
-            <dd>{{ natural || item.size || 'unknown' }}</dd>
+            <dd>{{ natural || item.size || 'Unknown' }}</dd>
             <dt>Shown from</dt>
             <dd><a :href="item.full" target="_blank" rel="noopener">{{ item.full }}</a></dd>
         </dl>
@@ -67,7 +67,7 @@ const loaded = (event) => {
     margin: 0;
 
     dt {
-        opacity: 0.7;
+        color: @subtle-text-color;
     }
 
     dd {
@@ -77,6 +77,6 @@ const loaded = (event) => {
 }
 
 .subtle {
-    opacity: 0.7;
+    color: @subtle-text-color;
 }
 </style>
