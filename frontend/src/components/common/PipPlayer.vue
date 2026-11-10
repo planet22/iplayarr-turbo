@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <div class="pipPlayer" :class="{ active: isActive }">
+    <div ref="rootRef" class="pipPlayer" :class="{ active: isActive }">
         <div class="pipVideoWrap">
             <video ref="videoRef" controls playsinline />
             <div v-if="pipPlayerState.status === 'loading'" class="pipOverlay">
@@ -36,7 +36,7 @@
                     <font-awesome-icon :icon="['fas', option.icon]" />
                 </button>
             </div>
-            <button type="button" class="pipClose" title="Stop" aria-label="Stop and close player" @click="close">
+            <button type="button" class="pipClose" title="Stop and close player" aria-label="Stop and close player" @click="close">
                 <font-awesome-icon :icon="['fas', 'xmark']" />
             </button>
         </div>
@@ -60,6 +60,7 @@ const STATUS_LABELS = {
 const globalSettings = inject('globalSettings');
 
 const videoRef = ref(null);
+const rootRef = ref(null);
 let hls = null;
 
 const VERSION_ICONS = { 'audio-described': 'audio-description', signed: 'sign-language' };
@@ -73,6 +74,24 @@ const versionOptions = computed(() => [
 ]);
 
 const isActive = computed(() => pipPlayerState.pid !== null);
+
+// Other bottom-pinned things (toasts) sit above the player, as they do for the audio bar.
+let pipObserver = null;
+const makeRoom = (height) => document.documentElement.style.setProperty('--pip-height', `${height || 0}px`);
+watch(
+    () => [rootRef.value, isActive.value],
+    ([el, active]) => {
+        pipObserver?.disconnect();
+        pipObserver = null;
+        if (!el || !active) return makeRoom(0);
+        makeRoom(el.offsetHeight + 8);
+        if (typeof ResizeObserver !== 'undefined') {
+            pipObserver = new ResizeObserver(() => makeRoom(el.offsetHeight + 8));
+            pipObserver.observe(el);
+        }
+    },
+    { flush: 'post' }
+);
 const statusLabel = computed(() => STATUS_LABELS[pipPlayerState.status] ?? '');
 const iplayerUrl = computed(() =>
     pipPlayerState.live
@@ -207,7 +226,11 @@ watch(
     }
 );
 
-onBeforeUnmount(cleanup);
+onBeforeUnmount(() => {
+    pipObserver?.disconnect();
+    makeRoom(0);
+    cleanup();
+});
 </script>
 
 <style lang="less" scoped>

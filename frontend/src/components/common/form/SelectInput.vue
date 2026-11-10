@@ -8,7 +8,7 @@
                     {{ option.value }}
                 </option>
             </select>
-            <InfoTip v-if="showInfo" :text="tooltip" />
+            <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
             </div>
             <div v-if="error" class="error">
                 {{ error }}

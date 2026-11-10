@@ -12,7 +12,7 @@
             ref="button"
             type="button"
             class="InfoTip-button"
-            aria-label="More info"
+            :aria-label="label"
             :aria-expanded="visible"
             :aria-describedby="visible ? tipId : undefined"
             @click.stop="toggle"
@@ -37,6 +37,8 @@ import { computed, defineProps, nextTick, onBeforeUnmount, onMounted, ref, watch
 // screen (phone included) and its arrow still points at the icon.
 defineProps({
     text: { type: String, required: true },
+    // What the (i) is about, for screen readers (the form fields pass their own name).
+    label: { type: String, default: 'More info' },
 });
 
 const tipId = `infotip-${Math.random().toString(36).slice(2, 9)}`;

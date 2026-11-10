@@ -179,7 +179,7 @@
                     </li>
             </ul>
             <!-- Takes the room the info icon takes beside each field, so the list ends where the dropdowns do. -->
-            <InfoTip text="" class="statusSpacer" aria-hidden="true" />
+            <InfoTip text="" class="statusSpacer" aria-hidden="true" inert />
             </div>
         </div>
         <InfoBar v-if="hasType('jellyfin') && jellyfinLoaded && !hasJellyfinApp" clazz="info">

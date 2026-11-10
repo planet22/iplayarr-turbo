@@ -61,7 +61,7 @@
                 </template>
               </div>
               <!-- Takes the room the info icon takes beside each field, so the card ends where the dropdown does. -->
-              <InfoTip text="" class="jtSpacer" aria-hidden="true" />
+              <InfoTip text="" class="jtSpacer" aria-hidden="true" inert />
               </div>
               </div>
             </div>

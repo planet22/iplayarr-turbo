@@ -62,7 +62,7 @@
                     </tr>
                 </tbody>
             </table>
-            <p v-if="!total" class="empty">Nothing matches.</p>
+            <EmptyState v-if="!total" icon="filter" title="Nothing matches" />
             <TablePagination v-model="rowsPage" v-model:page-size="rowsPageSize" :total="total" />
         </template>
     </div>
@@ -72,6 +72,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
+import EmptyState from '@/components/common/EmptyState.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';

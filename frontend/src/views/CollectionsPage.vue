@@ -78,10 +78,10 @@
                     <div v-if="pagedItems.length" class="browseGrid">
                         <ProgrammeCard v-for="item in pagedItems" :key="item.pid" :item="item" />
                     </div>
-                    <p v-else>Nothing matches that filter.</p>
+                    <EmptyState v-else icon="filter" title="Nothing matches that filter" />
                     <TablePagination v-model="itemPage" v-model:page-size="itemPageSize" :total="filteredItems.length" />
                 </template>
-                <p v-else>Nothing in this collection is available right now.</p>
+                <EmptyState v-else icon="tv" title="Nothing here is available right now" />
             </section>
         </template>
     </div>

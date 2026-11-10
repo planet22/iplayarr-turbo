@@ -39,7 +39,7 @@
             </div>
             <!-- Optional control level with the box itself (e.g. a colour sample), whatever the label layout. -->
             <slot name="after" />
-            <InfoTip v-if="showInfo" :text="tooltip" />
+            <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
             </div>
             <div v-if="error" class="error">
                 {{ error }}

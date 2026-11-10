@@ -1,9 +1,10 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <div ref="strip" class="settingsTabs">
+    <div ref="strip" class="settingsTabs" role="tablist" aria-label="Settings sections" @keydown="onKey">
         <button
-v-for="tab in tabs" :key="tab.key" type="button" :title="tab.label" :aria-label="tab.label"
+v-for="tab in tabs" :id="`settingsTab-${tab.key}`" :key="tab.key" type="button" role="tab" :title="tab.label" :aria-label="tab.label"
+            :aria-selected="modelValue === tab.key" :tabindex="modelValue === tab.key ? 0 : -1"
             :class="['settingsTab', modelValue === tab.key ? 'active' : '', errorTabs.includes(tab.key) ? 'hasError' : '', dirtyTabs.includes(tab.key) ? 'dirty' : '']"
             @click="emit('update:modelValue', tab.key)">
             <font-awesome-icon v-if="tab.icon" :icon="['fas', tab.icon]" class="tabIcon" />
@@ -49,6 +50,18 @@ const activeLabel = computed(() => props.tabs.find((tab) => tab.key === props.mo
 // Ordering is significant; do not reshuffle without testing.
 // Update the related documentation if this changes.
 const strip = ref(null);
+
+// Left / Right / Home / End move between the tabs, as a tab list does.
+const onKey = async (event) => {
+    const keys = props.tabs.map(({ key }) => key);
+    const at = keys.indexOf(props.modelValue);
+    const to = { ArrowRight: (at + 1) % keys.length, ArrowLeft: (at - 1 + keys.length) % keys.length, Home: 0, End: keys.length - 1 }[event.key];
+    if (to === undefined) return;
+    event.preventDefault();
+    emit('update:modelValue', keys[to]);
+    await nextTick();
+    strip.value?.querySelector('.settingsTab.active')?.focus();
+};
 watch(
     () => props.modelValue,
     async () => {

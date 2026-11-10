@@ -33,7 +33,7 @@
         <div v-if="pagedItems.length" class="browseGrid">
             <ProgrammeCard v-for="item in pagedItems" :key="item.pid" :item="item" />
         </div>
-        <p v-else-if="items.length && !loadingAll">Nothing matches that filter.</p>
+        <EmptyState v-else-if="items.length && !loadingAll" icon="filter" title="Nothing matches that filter" />
         <SkeletonLoader v-if="loading" pagination :count="gridPageSize" />
         <EmptyState v-else-if="!error && items.length === 0" :icon="isRadio ? 'radio' : 'tv'" title="No programmes found" hint="Nothing is listed here right now." />
         <p v-else-if="loadingAll" class="loadingMoreNote">Loading more ({{ items.length }} of {{ total ?? '…' }})&hellip;</p>

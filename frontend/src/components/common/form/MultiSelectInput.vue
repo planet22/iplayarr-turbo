@@ -12,7 +12,7 @@
                 <span class="summary">{{ summary }}</span>
                 <font-awesome-icon :icon="['fas', open ? 'chevron-up' : 'chevron-down']" />
             </button>
-            <InfoTip v-if="showInfo" :text="tooltip" />
+            <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
             </div>
             <ul v-if="open" :id="menuId" class="menu" role="group" :aria-label="name">
                 <li v-for="option of options" :key="option.key">

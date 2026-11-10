@@ -8,6 +8,7 @@
                 class="clickable"
                 :class="{ channelLogo: session.live }"
                 :src="thumbnail"
+                :alt="title"
                 @click="emit('info')"
                 @error="hideBrokenImage"
             />

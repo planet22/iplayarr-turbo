@@ -24,7 +24,7 @@
             </SettingsPageToolbar>
         </div>
         <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
-        <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody">
+        <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody" role="tabpanel" :aria-labelledby="`settingsTab-${activeTab}`">
             <GeneralSettingsTab v-if="activeTab == 'general'" :true-or-false="trueOrFalse" @generate-api-key="generateApiKey" />
             <SearchSettingsTab v-if="activeTab == 'search'" :true-or-false="trueOrFalse" />
             <AppearanceSettingsTab v-if="activeTab == 'appearance'" :true-or-false="trueOrFalse" />

@@ -31,7 +31,7 @@
                         <span class="themeDescription">{{ theme.description }}</span>
                     </button>
                 </div>
-                <InfoTip v-if="showInfo" :text="tooltip" />
+                <InfoTip v-if="showInfo" :text="tooltip" :label="`About ${name}`" />
             </div>
             <div v-if="!showInfo" class="tooltip">{{ tooltip }}</div>
         </div>
