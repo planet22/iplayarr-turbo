@@ -100,6 +100,16 @@ export const getPidFromBBCUrl = (url) => {
     return match ? match[1] : undefined;
 }
 
+// A byte count as B, KB, MB or GB: "812 B", "3.4 KB", "12.50 MB", "1.20 GB".
+export const formatBytes = (bytes) => {
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n < 0) return '';
+    if (n < 1024) return `${Math.round(n)} B`;
+    if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1073741824) return `${(n / 1048576).toFixed(2)} MB`;
+    return `${(n / 1073741824).toFixed(2)} GB`;
+};
+
 export const formatStorageSize = (mb) => {
     if (mb) {
         // A .strm pointer is a few hundred bytes - show those as KB (or B), not "0.00 MB".

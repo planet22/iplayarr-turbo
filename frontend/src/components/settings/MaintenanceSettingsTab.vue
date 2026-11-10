@@ -165,6 +165,7 @@ import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import ScheduledTaskRow from '@/components/settings/ScheduledTaskRow.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
+import { formatSize } from '@/lib/cacheActivity';
 import { buildSections, MAINTENANCE_SORTS, readCollapsedGroups, summaryParts, writeCollapsedGroups } from '@/lib/cacheGroups';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
@@ -230,7 +231,6 @@ watch(
     { immediate: true }
 );
 
-const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
 const describeTtl = (seconds) => {
     const { value, unit } = splitTtl(seconds);
     return `${value} ${TTL_UNITS.find((u) => u.seconds === unit).label}`;

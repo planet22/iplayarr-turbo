@@ -99,6 +99,7 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { dnsRelayTiles } from '@/lib/dnsRelayTiles';
 import { useDnsRelay } from '@/lib/useDnsRelay';
+import { formatTime } from '@/lib/utils';
 
 // Reached from the Maintenance tab in Settings (and from the warning in the top bar). The state arrives on the 'dnsRelay'
 // socket event (App.vue puts it in the shared state), so the table moves as lookups happen.
@@ -130,7 +131,7 @@ async function startLive() {
 // The grey tiles (label, value, an (i) tip), the same as on the streaming debug page.
 const tiles = computed(() => dnsRelayTiles(status.value));
 
-const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const clock = (iso) => formatTime(iso, { seconds: true }) ?? '';
 
 async function reload() {
     loaded.value = false;

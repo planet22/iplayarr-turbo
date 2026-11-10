@@ -36,7 +36,7 @@
 </template>
 
 <script setup>
-import { sessionRoute } from '@/lib/utils';
+import { formatBytes, formatDate, sessionRoute } from '@/lib/utils';
 
 // The stream sessions of one programme, one row each, with a button to play that stream again. The row being played
 // (`playingId`) is coloured. Shared by the Streams played list and the copy shown above the player.
@@ -47,8 +47,7 @@ defineProps({
 });
 const emit = defineEmits(['play']);
 
-const formatWhen = (value) => (value ? new Date(value).toLocaleString() : '');
-const formatBytes = (bytes) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(2)} MB` : `${Math.round(bytes / 1024)} KB`);
+const formatWhen = (value) => (value ? formatDate(value) ?? '' : '');
 const formatSeconds = (seconds) => `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s`;
 // How long a session played (start to the last activity or the end), and a short name for the player.
 // Shared by more than one caller; avoid narrowing the behaviour.

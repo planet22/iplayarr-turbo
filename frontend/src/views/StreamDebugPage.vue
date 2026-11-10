@@ -342,7 +342,7 @@
                     <div class="serverSession">
                         <ThroughputSpark :throughput="session.throughput" :now="now" :bytes-transferred="session.bytesTransferred ?? 0" />
                         <span class="subtle">{{ session.mode }} · {{ session.client }}<template v-if="session.resolution"> · {{ session.resolution }}</template></span>
-                        <span class="subtle">{{ formatMb(session.bytesTransferred ?? 0) }} sent<template v-if="session.totalSegments"> · {{ session.deliveredSegments?.length ?? 0 }} of {{ session.totalSegments }} segments</template></span>
+                        <span class="subtle">{{ formatBytes(session.bytesTransferred ?? 0) }} sent<template v-if="session.totalSegments"> · {{ session.deliveredSegments?.length ?? 0 }} of {{ session.totalSegments }} segments</template></span>
                     </div>
                 </template>
                 <p class="subtle note">
@@ -357,7 +357,7 @@
                         <tr v-for="segment in newestFirst" :key="segment.sn">
                             <td class="text">{{ segment.sn }}</td>
                             <td class="text">{{ segment.level }}</td>
-                            <td class="text">{{ formatMb(segment.bytes) }}</td>
+                            <td class="text">{{ formatBytes(segment.bytes) }}</td>
                             <td class="text">{{ segment.ms }} ms</td>
                             <td class="text">{{ formatMbps(segment.bytes, segment.ms) }}</td>
                             <td class="text">{{ segment.duration.toFixed(1) }} s</td>
@@ -387,7 +387,7 @@ import StreamSessionTable from '@/components/streaming/StreamSessionTable.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import { radioDownloads } from '@/lib/radio';
-import { formatRelativeTime, getHost, getThumbnailUrl, hideBrokenImage, sessionRoute } from '@/lib/utils';
+import { formatBytes, formatDateTimeWithMillis, formatRelativeTime, getHost, getThumbnailUrl, hideBrokenImage, sessionRoute } from '@/lib/utils';
 
 // Reached from the button on a Streaming page row (Show Extended Debug), or by its address.
 const route = useRoute();
@@ -492,7 +492,6 @@ const expiry = computed(() => {
 
 const json = (value) => JSON.stringify(value, null, 2);
 const hasContent = (value) => !!value && Object.keys(value).length > 0;
-const formatBytes = (bytes) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(2)} MB` : `${Math.round(bytes / 1024)} KB`);
 // What Sonarr or Radarr holds for a library file, in a line.
 const appRecordText = (file) => {
     const record = dashboard.value.library?.appRecords?.find((candidate) => candidate.file === file);
@@ -504,7 +503,7 @@ const appRecordText = (file) => {
 const watchdogRecord = computed(() => Object.fromEntries(Object.entries(dashboard.value.watchdog ?? {}).filter(([key]) => key !== 'history')));
 // The size and modified time the server read for a library file.
 const fileDetail = (file) => dashboard.value.library?.details?.find((detail) => detail.file === file);
-const formatWhen = (value) => (value ? new Date(value).toLocaleString() : '');
+const formatWhen = (value) => (value ? formatDateTimeWithMillis(value) ?? '' : '');
 const cacheCount = computed(() => dashboard.value.caches.database.length + dashboard.value.caches.memory.length + dashboard.value.caches.thumbnails.length);
 const downloadRows = computed(() => isRadio
     ? radioDownloads.value.filter((d) => d.pid === pid).map((d) => ({ where: d.state === 'queued' || d.state === 'downloading' ? 'Queue' : 'History', status: d.state, nzbName: d.nzbName, type: 'Radio', source: 'BBC Sounds', libraryPath: d.libraryPath, extension: d.extension }))
@@ -663,7 +662,6 @@ const subscriptionRows = (s) =>
     ].filter(([, value]) => value);
 
 const formatSeconds = (seconds) => `${Math.floor(seconds / 60)}m ${String(Math.round(seconds % 60)).padStart(2, '0')}s`;
-const formatMb = (bytes) => `${(bytes / 1048576).toFixed(2)} MB`;
 const formatMbps = (bytes, ms) => (ms > 0 ? `${(bytes / 1048576 / (ms / 1000)).toFixed(2)} MB/s` : '');
 
 // What the page is doing while it loads and probes, so a wait says why: "doing x", with how far through.
@@ -875,7 +873,7 @@ const stats = computed(() => {
         { label: 'Bandwidth estimate', help: 'statBandwidth', value: l.estimate ? `${(l.estimate / 8 / 1048576).toFixed(2)} MB/s` : '–' },
         { label: 'Buffer ahead', help: 'statBuffer', value: l.buffer === undefined ? '–' : `${l.buffer.toFixed(1)} s` },
         { label: 'Dropped frames', help: 'statDropped', value: l.dropped === undefined ? '–' : `${l.dropped} of ${l.frames}` },
-        { label: 'Received', help: 'statReceived', value: formatMb(totalBytes) },
+        { label: 'Received', help: 'statReceived', value: formatBytes(totalBytes) },
         { label: 'Average rate', help: 'statAverage', value: elapsed > 0 ? `${(totalBytes / 1048576 / elapsed).toFixed(2)} MB/s` : '–' },
         { label: 'Segments', help: 'statSegments', value: String(totalSegments) },
     ];
