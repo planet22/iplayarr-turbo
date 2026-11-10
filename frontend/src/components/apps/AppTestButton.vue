@@ -1,5 +1,5 @@
 <template>
-    <button class="test-button" @click="test">
+    <AppButton class="test-button" :disabled="testStatus == 'PENDING'" @click="test">
         <template v-if="testStatus == 'INITIAL'"> Test {{ capitalize(app.type) }} </template>
         <template v-if="testStatus == 'PENDING'">
             <font-awesome-icon class="test-pending" :icon="['fas', 'spinner']" />
@@ -7,12 +7,13 @@
         <template v-if="testStatus == 'SUCCESS'">
             <font-awesome-icon class="test-success" :icon="['fas', 'check']" />
         </template>
-    </button>
+    </AppButton>
 </template>
 
 <script setup>
 import { defineExpose, defineProps, ref } from 'vue';
 
+import AppButton from '@/components/common/AppButton.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import toastService from '@/lib/toastService';
 import { capitalize } from '@/lib/utils';

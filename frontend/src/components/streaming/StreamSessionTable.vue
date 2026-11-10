@@ -77,7 +77,7 @@ const playTitle = (past) => `Play this stream again: ${past.version ? `${past.ve
 
 .subtle {
     color: @subtle-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
 }
 
 .path {

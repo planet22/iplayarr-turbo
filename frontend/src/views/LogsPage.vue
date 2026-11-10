@@ -51,7 +51,7 @@
 
         <EmptyState v-if="!logs.length" icon="file-lines" title="No log lines yet" hint="Lines appear here as iPlayarr works. If the server is unreachable, the Connection tile above says so." />
         <EmptyState v-else-if="!filtered.length" icon="filter" title="No lines match" hint="Nothing held matches the search and filters.">
-            <button type="button" @click="clearFilters">Clear filters</button>
+            <AppButton @click="clearFilters">Clear filters</AppButton>
         </EmptyState>
         <LogList v-else v-model:follow="follow" :lines="filtered" @pick-source="source = $event" />
     </div>
@@ -61,6 +61,7 @@
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
+import AppButton from '@/components/common/AppButton.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
 import FilterChip from '@/components/common/FilterChip.vue';
 import InfoTip from '@/components/common/form/InfoTip.vue';
@@ -148,7 +149,7 @@ const clearView = async () => {
 <style lang="less" scoped>
 .hint {
     color: @subtle-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
 }
 
 .tiles {
@@ -182,7 +183,7 @@ const clearView = async () => {
         }
 
         .tileLabel {
-            font-size: 11px;
+            font-size: @font-size-xs;
             color: @subtle-text-color;
             text-transform: uppercase;
         }
@@ -238,7 +239,7 @@ const clearView = async () => {
         border-radius: @radius-xl;
         background-color: transparent;
         color: @primary-text-color;
-        font-size: 13px;
+        font-size: @font-size-base;
         cursor: pointer;
     }
 

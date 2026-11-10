@@ -542,7 +542,7 @@ onBeforeUnmount(() => {
 .lastCheck {
     display: inline-flex;
     align-items: center;
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
 
     &.failed {
@@ -572,7 +572,7 @@ onBeforeUnmount(() => {
         grid-template-columns: max-content 1fr;
         gap: @space-1 @space-4;
         margin: 0;
-        font-size: 13px;
+        font-size: @font-size-base;
 
         dt {
             color: @subtle-text-color;
@@ -692,7 +692,7 @@ onBeforeUnmount(() => {
         justify-content: space-between;
         flex-wrap: wrap;
         gap: @space-2;
-        font-size: 13px;
+        font-size: @font-size-base;
         color: @subtle-text-color;
     }
 }

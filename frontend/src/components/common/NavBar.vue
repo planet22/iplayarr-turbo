@@ -409,7 +409,7 @@ defineExpose({ clearSearch });
         }
 
         p {
-            font-size: 16px;
+            font-size: @font-size-lead;
             font-weight: bold;
         }
 

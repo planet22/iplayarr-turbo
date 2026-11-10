@@ -12,16 +12,16 @@
     >
         <form class="searchRow" @submit.prevent="search">
             <input v-model="searchTerm" type="text" placeholder="Search by title" :disabled="loading" />
-            <button type="submit" class="clickable" :disabled="loading || !searchTerm.trim()">
+            <AppButton type="submit" :disabled="loading || !searchTerm.trim()">
                 <font-awesome-icon :icon="['fas', 'magnifying-glass']" /> Search
-            </button>
+            </AppButton>
         </form>
         <LoadingIndicator v-if="loading" />
         <div v-else-if="errorMessage" class="lookupError">
             <p>{{ errorMessage }}</p>
-            <button type="button" class="clickable" @click="retry">
+            <AppButton @click="retry">
                 <font-awesome-icon :icon="['fas', 'rotate-right']" /> Try again
-            </button>
+            </AppButton>
         </div>
         <template v-else>
             <p v-if="results.length === 0">No matches found in {{ app.name }}. Try a different title above.</p>
@@ -70,6 +70,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 
+import AppButton from '@/components/common/AppButton.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import { hideBrokenImage } from '@/lib/utils';
 
@@ -177,37 +178,12 @@ const confirm = () => {
         background-color: @input-background-color;
         color: @input-text-color;
     }
-
-    button {
-        padding: 0 14px;
-        height: 35px;
-        border-radius: @radius-sm;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-
-        &:hover:not(:disabled) {
-            background-color: @settings-button-hover-background-color;
-        }
-    }
 }
 
 .lookupError {
     p {
         color: @danger-color;
         font-size: @font-size-md;
-    }
-
-    button {
-        padding: 6px 14px;
-        border-radius: @radius-sm;
-        border: 1px solid @settings-button-border-color;
-        background-color: @settings-button-background-color;
-        color: @primary-text-color;
-
-        &:hover {
-            background-color: @settings-button-hover-background-color;
-        }
     }
 }
 
@@ -305,7 +281,7 @@ const confirm = () => {
         -webkit-box-orient: vertical;
         overflow: hidden;
         margin: 6px 0 0;
-        font-size: 13px;
+        font-size: @font-size-base;
     }
 
     @media (max-width: @mobile-breakpoint) {

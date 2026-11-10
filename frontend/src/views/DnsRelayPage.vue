@@ -147,7 +147,7 @@ onMounted(reload);
 <style lang="less" scoped>
 .hint {
     color: @subtle-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
 }
 
 .tiles {
@@ -181,7 +181,7 @@ onMounted(reload);
         }
 
         .tileLabel {
-            font-size: 11px;
+            font-size: @font-size-xs;
             color: @subtle-text-color;
             text-transform: uppercase;
         }
@@ -199,7 +199,7 @@ onMounted(reload);
 }
 
 .dnsTable {
-    font-size: 13px;
+    font-size: @font-size-base;
 
     .name {
         max-width: 360px;

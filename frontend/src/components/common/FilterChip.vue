@@ -38,7 +38,7 @@ defineProps({
     background-color: @settings-button-background-color;
     color: @primary-text-color;
     font-family: inherit;
-    font-size: 13px;
+    font-size: @font-size-base;
     text-decoration: none;
     cursor: pointer;
 

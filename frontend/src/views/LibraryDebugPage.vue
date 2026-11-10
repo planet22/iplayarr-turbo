@@ -173,7 +173,7 @@ onBeforeUnmount(() => clearTimeout(typing));
 <style lang="less" scoped>
 .hint {
     color: @subtle-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
 }
 
 .sourceList {

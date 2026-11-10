@@ -112,7 +112,7 @@ const tooltip = computed(() =>
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 13px;
+        font-size: @font-size-base;
         opacity: 0.7;
     }
 
@@ -124,7 +124,7 @@ const tooltip = computed(() =>
 
         .finishedIcon {
             margin-right: 3px;
-            font-size: 11px;
+            font-size: @font-size-xs;
             opacity: 0.7;
         }
     }

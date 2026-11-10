@@ -276,7 +276,7 @@ const start = async () => {
 
         .syncRunName {
             flex: 1;
-            font-size: 16px;
+            font-size: @font-size-lead;
         }
     }
 
@@ -330,7 +330,7 @@ const start = async () => {
 
     .syncError {
         margin-top: 6px;
-        font-size: 13px;
+        font-size: @font-size-base;
         color: @danger-color;
     }
 }

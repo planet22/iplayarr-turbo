@@ -49,7 +49,7 @@
     background-color: @nav-active-background-color;
     border-radius: @radius-md;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
-    font-size: 13px;
+    font-size: @font-size-base;
 
     // Without a poster the body spans the whole card.
     &:not(:has(.dcThumb)) .dcBody {

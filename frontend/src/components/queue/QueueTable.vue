@@ -241,7 +241,7 @@ defineExpose({
 }
 
 .selectedCount {
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
     white-space: nowrap;
 }
@@ -283,7 +283,7 @@ defineExpose({
             }
 
             .sortIcon {
-                font-size: 11px;
+                font-size: @font-size-xs;
                 opacity: 0.35;
                 margin-left: @space-1;
 

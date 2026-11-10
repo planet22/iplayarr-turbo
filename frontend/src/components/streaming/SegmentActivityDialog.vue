@@ -126,13 +126,13 @@ function cellTitle(index) {
     }
 
     .statOf {
-        font-size: 13px;
+        font-size: @font-size-base;
         font-weight: normal;
         color: @subtle-text-color;
     }
 
     .statLabel {
-        font-size: 11px;
+        font-size: @font-size-xs;
         color: @subtle-text-color;
     }
 }

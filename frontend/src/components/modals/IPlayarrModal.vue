@@ -18,19 +18,18 @@
         <div class="modal-inner">
             <slot />
             <div class="button-container floor">
-                <button v-if="deleteLabel" type="button" class="clickable danger" @click="emit('delete')">
+                <AppButton v-if="deleteLabel" variant="danger" @click="emit('delete')">
                     {{ deleteLabel }}
-                </button>
-                <button v-if="showClose" :class="['clickable', { cancel: !showCancel && !deleteLabel }]" @click="dismiss(close)">
+                </AppButton>
+                <AppButton v-if="showClose" @click="dismiss(close)">
                     {{ closeLabel }}
-                </button>
-                <button v-if="showCancel" :class="['clickable', { cancel: !danger }]" @click="emit('cancel')">
+                </AppButton>
+                <AppButton v-if="showCancel" @click="emit('cancel')">
                     {{ cancelLabel }}
-                </button>
-                <button v-if="showConfirm" :class="['clickable', { danger }]" :disabled="confirmBusy" @click="emit('confirm')">
-                    <font-awesome-icon v-if="confirmBusy" :icon="['fas', 'circle-notch']" spin />
+                </AppButton>
+                <AppButton v-if="showConfirm" :variant="danger ? 'danger' : 'primary'" :busy="confirmBusy" @click="emit('confirm')">
                     {{ confirmLabel }}
-                </button>
+                </AppButton>
             </div>
         </div>
     </VueFinalModal>
@@ -39,6 +38,8 @@
 <script setup>
 import { defineEmits, defineProps } from 'vue';
 import { VueFinalModal } from 'vue-final-modal';
+
+import AppButton from '@/components/common/AppButton.vue';
 
 defineProps({
     title: String,
@@ -68,9 +69,8 @@ const dismiss = (close) => {
 </script>
 
 <style lang="less">
-.iplayarr-modal .button-container button:disabled {
-    opacity: 0.6;
-    cursor: default;
+.iplayarr-modal .button-container .appButton {
+    margin-left: 1rem;
 }
 
 .modalTitle {

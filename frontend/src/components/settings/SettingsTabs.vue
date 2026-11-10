@@ -152,7 +152,7 @@ watch(
         display: block;
         margin: 0 5px 1rem;
         padding-left: 11px;
-        font-size: 16px;
+        font-size: @font-size-lead;
         font-weight: 500;
         color: @primary-text-color;
     }

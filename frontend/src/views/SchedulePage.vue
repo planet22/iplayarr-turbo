@@ -530,7 +530,7 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     padding-left: @space-1;
-    font-size: 11px;
+    font-size: @font-size-xs;
     color: @subtle-text-color;
     border-left: 1px solid @settings-button-border-color;
     white-space: nowrap;
@@ -599,7 +599,7 @@ onBeforeUnmount(() => {
 
     .blockSubtitle,
     .blockTime {
-        font-size: 11px;
+        font-size: @font-size-xs;
         color: @subtle-text-color;
         white-space: nowrap;
         overflow: hidden;

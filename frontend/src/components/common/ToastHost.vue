@@ -16,9 +16,9 @@
                     <div class="toastText">{{ toast.text }}</div>
                     <div v-if="toast.detail" class="toastDetail">{{ toast.detail }}</div>
                 </div>
-                <button v-if="toast.action" type="button" class="toastAction" @click="runAction(toast)">
+                <AppButton v-if="toast.action" class="toastAction" @click="runAction(toast)">
                     {{ toast.action.label }}
-                </button>
+                </AppButton>
                 <button type="button" class="toastClose" aria-label="Dismiss" @click="toastService.dismiss(toast.id)">
                     <font-awesome-icon :icon="['fas', 'xmark']" />
                 </button>
@@ -30,6 +30,7 @@
 <script setup>
 import { computed, onBeforeUnmount, watch } from 'vue';
 
+import AppButton from '@/components/common/AppButton.vue';
 import toastService from '@/lib/toastService';
 
 const icons = { success: 'check', error: 'circle-exclamation', info: 'circle-info' };
@@ -148,7 +149,7 @@ onBeforeUnmount(() => timers.forEach(clearTimeout));
         button {
             flex: 0 0 auto;
             padding: @space-1 10px;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
 
         .toastClose {

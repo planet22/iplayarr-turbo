@@ -43,7 +43,7 @@ const logos = {
     display: inline-flex;
     flex-wrap: wrap;
     gap: @space-1 @space-3;
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
 
     > span {

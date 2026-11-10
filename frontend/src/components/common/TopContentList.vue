@@ -72,7 +72,7 @@ const thumbnailFor = (pid) => {
             width: 18px;
             flex-shrink: 0;
             color: @subtle-text-color;
-            font-size: 13px;
+            font-size: @font-size-base;
             text-align: right;
         }
 
@@ -89,7 +89,7 @@ const thumbnailFor = (pid) => {
                 align-items: center;
                 justify-content: center;
                 color: @subtle-text-color;
-                font-size: 16px;
+                font-size: @font-size-lead;
             }
         }
 

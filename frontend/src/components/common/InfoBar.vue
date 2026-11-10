@@ -48,7 +48,7 @@ const icon = computed(() => {
     border-left: 3px solid transparent;
     border-radius: @radius-sm;
     max-width: 650px;
-    font-size: 13px;
+    font-size: @font-size-base;
     line-height: 1.4;
     overflow-wrap: break-word;
     box-sizing: border-box;

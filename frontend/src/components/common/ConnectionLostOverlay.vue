@@ -91,7 +91,7 @@ onBeforeUnmount(() => {
     background-color: @nav-background-color;
     box-shadow: 0 4px 12px @shadow-color;
     color: @primary-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
 }
 
 .reconnecting-spinner {

@@ -86,7 +86,7 @@ export const progressLabel = ({ phase, done, total }) =>
 
     .count {
         position: relative;
-        font-size: 11px;
+        font-size: @font-size-xs;
         font-weight: 600;
     }
 }

@@ -176,7 +176,7 @@ const onPageSizeChange = (event) => {
     border: 1px solid @table-border-color;
     border-radius: @radius-sm;
     color: @table-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
     transition: background-color 160ms, opacity 160ms;
 
     &:disabled {
@@ -212,7 +212,7 @@ const onPageSizeChange = (event) => {
     gap: 6px;
 
     .perPageLabel {
-        font-size: 13px;
+        font-size: @font-size-base;
         color: @subtle-text-color;
 
         @media (max-width: @phone-breakpoint) {

@@ -805,7 +805,7 @@ watch(
             background: transparent;
             color: @primary-text-color;
             // 16px stops iOS Safari zooming the page when the box is focused.
-            font-size: 16px;
+            font-size: @font-size-lead;
             border-radius: 0;
             box-shadow: none;
 
@@ -885,7 +885,7 @@ watch(
     align-items: center;
     gap: @space-1 @space-2;
     margin: 14px 0 0;
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
 
     a {
@@ -901,7 +901,7 @@ watch(
     margin-bottom: 10px;
 
     .resultCount {
-        font-size: 13px;
+        font-size: @font-size-base;
         color: @subtle-text-color;
     }
 
@@ -921,7 +921,7 @@ watch(
     border-radius: @radius-xl;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
     text-decoration: none;
     cursor: pointer;
 
@@ -994,7 +994,7 @@ watch(
     align-items: center;
     gap: @space-2;
     margin-bottom: 10px;
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
 
     span {
@@ -1059,13 +1059,13 @@ watch(
     }
 
     .emptyTitle {
-        font-size: 16px;
+        font-size: @font-size-lead;
         color: @primary-text-color;
     }
 
     .emptyHint {
         margin-top: @space-1;
-        font-size: 13px;
+        font-size: @font-size-base;
     }
 }
 

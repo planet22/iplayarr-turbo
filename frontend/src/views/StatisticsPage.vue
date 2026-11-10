@@ -417,7 +417,7 @@ const selectRange = (option) => {
     padding: @space-2 @space-3;
 
     .cacheName {
-        font-size: 13px;
+        font-size: @font-size-base;
         font-weight: 600;
         color: @primary-text-color;
         overflow-wrap: anywhere; // long names wrap rather than being cut off
@@ -469,7 +469,7 @@ const selectRange = (option) => {
 
         .topContentHeading {
             margin: 0 0 @space-3;
-            font-size: 16px;
+            font-size: @font-size-lead;
             font-weight: 400;
             color: @primary-text-color;
         }
@@ -492,7 +492,7 @@ const selectRange = (option) => {
                     padding: 6px 10px;
 
                     .statValue {
-                        font-size: 13px;
+                        font-size: @font-size-base;
                     }
                 }
             }
@@ -517,7 +517,7 @@ const selectRange = (option) => {
                 }
 
                 .statLabel {
-                    font-size: 11px;
+                    font-size: @font-size-xs;
                 }
 
                 .statValue {

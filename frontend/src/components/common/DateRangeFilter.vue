@@ -80,7 +80,7 @@ function clear() {
 
     span {
         color: @subtle-text-color;
-        font-size: 13px;
+        font-size: @font-size-base;
     }
 
     .clearDates {

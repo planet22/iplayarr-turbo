@@ -99,7 +99,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         bottom: 6px;
         right: 6px;
         padding: 1px 6px;
-        font-size: 11px;
+        font-size: @font-size-xs;
         border-radius: @radius-xs;
         background-color: rgba(0, 0, 0, 0.7);
         color: @on-media-color;

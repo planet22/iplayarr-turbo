@@ -61,32 +61,33 @@
                     }}
                 </p>
                 <div v-if="programme.kind !== 'episode' || entry" class="subscribeRow">
-                    <button :class="['clickable', 'subscribeButton', subscribed ? 'on' : '']" :disabled="subscribing" @click="toggleSubscribed">
+                    <AppButton :variant="subscribed ? 'primary' : 'secondary'" class="subscribeButton" :disabled="subscribing" @click="toggleSubscribed">
                         <font-awesome-icon :icon="['fas', 'bell']" />
                         {{ subscribed ? 'Subscribed' : 'Subscribe' }}
-                    </button>
-                    <button
+                    </AppButton>
+                    <AppButton
                         v-if="programme.seasons.length > 0"
-                        class="clickable subscribeButton"
+                        class="subscribeButton"
                         :disabled="downloadingSeason || loadingMore"
                         @click="downloadAll"
                     >
                         <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-arrow-down']" :spin="downloadingSeason" />
                         Download all ({{ loadedCount }})
-                    </button>
-                    <button
+                    </AppButton>
+                    <AppButton
                         v-if="provider.capabilities.arr && !entry?.arr && !subscription"
-                        class="clickable subscribeButton"
+                        class="subscribeButton"
                         :disabled="requesting"
                         title="Add to Sonarr/Radarr and let it pick the best release"
                         @click="requestProgramme"
                     >
                         <font-awesome-icon :icon="['fas', 'plus']" />
                         Request
-                    </button>
-                    <button
+                    </AppButton>
+                    <AppButton
                         v-if="subscription && !subscription.arrOnly"
-                        :class="['clickable', 'subscribeButton', subscription.arr ? 'on' : '']"
+                        :variant="subscription.arr ? 'primary' : 'secondary'"
+                        class="subscribeButton"
                         :disabled="subscribing"
                         :title="subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr'"
                         @click="toggleArrWithBusy"
@@ -95,25 +96,25 @@
                         <!-- Phones: the half-width button is too narrow for the full label, which wrapped onto two lines. -->
                         <span class="labelLong">{{ subscription.arr ? 'Unlink from Sonarr/Radarr' : 'Add to Sonarr/Radarr' }}</span>
                         <span class="labelShort">{{ subscription.arr ? 'Unlink' : 'Sonarr/Radarr' }}</span>
-                    </button>
+                    </AppButton>
                     <span
                         v-if="entry && entry.arr"
-                        class="subscribeButton on arrChip"
+                        class="subscribeButton arrChip"
                         :title="`In ${arrAppName(entry.arr.appId)} as ${entry.arr.title}`"
                     >
                         <font-awesome-icon :icon="['fas', 'check']" />
                         {{ arrAppName(entry.arr.appId) }}
                     </span>
-                    <button
+                    <AppButton
                         v-if="entry && entry.arrOnly"
-                        class="clickable subscribeButton"
+                        class="subscribeButton"
                         :disabled="subscribing"
                         title="Remove from Sonarr/Radarr tracking"
                         @click="removeArrOnly"
                     >
                         <font-awesome-icon :icon="['fas', 'xmark']" />
                         Remove
-                    </button>
+                    </AppButton>
                 </div>
                 </div>
             </div>
@@ -242,6 +243,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import AppButton from '@/components/common/AppButton.vue';
 import ChannelPill from '@/components/common/ChannelPill.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
@@ -725,7 +727,7 @@ const duplicatesBannerDownload = computed(
         border-radius: 50%;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
-        font-size: 11px;
+        font-size: @font-size-xs;
         cursor: pointer;
         transition: opacity 400ms ease;
 
@@ -820,7 +822,7 @@ const duplicatesBannerDownload = computed(
 
     p.degradedNote {
         margin: 10px 0 0;
-        font-size: 13px;
+        font-size: @font-size-base;
         opacity: 0.75;
 
         svg {
@@ -947,7 +949,7 @@ const duplicatesBannerDownload = computed(
 
             .pill.grey,
             .pill.channelPill {
-                font-size: 13px;
+                font-size: @font-size-base;
             }
         }
 
@@ -963,37 +965,19 @@ const duplicatesBannerDownload = computed(
     }
 }
 
-.subscribeButton {
+// The button look comes from AppButton; the status chip beside them takes the same size.
+.arrChip {
+    display: inline-flex;
+    align-items: center;
+    gap: @space-2;
     padding: @space-2 @space-4;
-    font-size: 15px;
+    border: 1px solid @brand-color;
     border-radius: @radius-sm;
-    border: 1px solid @settings-button-border-color;
-    background-color: @settings-button-background-color;
-    color: @primary-text-color;
-
-    svg {
-        margin-right: 6px;
-    }
-
-    &:hover:not(:disabled) {
-        background-color: @settings-button-hover-background-color;
-    }
-
-    &.on {
-        background-color: @brand-color;
-        border-color: @brand-color;
-        color: @on-brand-color;
-    }
-
-    // Same size as the buttons, but a status label rather than something to press.
-    &.arrChip,
-    &.arrChip:hover:not(:disabled) {
-        background-color: @brand-color;
-        border-color: @brand-color;
-        color: @on-brand-color;
-        cursor: default;
-        user-select: none;
-    }
+    background-color: @brand-color;
+    color: @on-brand-color;
+    font-size: @font-size-md;
+    cursor: default;
+    user-select: none;
 }
 
 .episodeThumb {
@@ -1156,7 +1140,7 @@ const duplicatesBannerDownload = computed(
         min-width: 0;
 
         .episodeTitle {
-            font-size: 16px;
+            font-size: @font-size-lead;
         }
 
         .episodeLabel {
@@ -1186,7 +1170,7 @@ const duplicatesBannerDownload = computed(
 
         .episodeDescription {
             margin-top: @space-1;
-            font-size: 13px;
+            font-size: @font-size-base;
             color: @table-text-color;
             line-height: 1.35;
             display: -webkit-box;

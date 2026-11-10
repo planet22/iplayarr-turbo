@@ -69,8 +69,7 @@ defineProps({
         gap: 10px;
         margin-top: 10px;
 
-        a,
-        button {
+        a {
             display: inline-block;
             padding: @space-2 18px;
             border: 1px solid @settings-button-border-color;

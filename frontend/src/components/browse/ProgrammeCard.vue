@@ -207,7 +207,7 @@ const statusBadges = computed(() => {
                 border-radius: 50%;
                 background-color: rgba(0, 0, 0, 0.7);
                 color: @on-media-color;
-                font-size: 11px;
+                font-size: @font-size-xs;
             }
         }
 
@@ -254,7 +254,7 @@ const statusBadges = computed(() => {
         top: 6px;
         left: 6px;
         padding: 1px 6px;
-        font-size: 11px;
+        font-size: @font-size-xs;
         border-radius: @radius-xs;
         background-color: rgba(0, 0, 0, 0.7);
         color: @on-media-color;
@@ -279,7 +279,7 @@ const statusBadges = computed(() => {
         // A faint rim so the chip still reads over a dark poster.
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
         color: @on-media-color;
-        font-size: 11px;
+        font-size: @font-size-xs;
 
         svg {
             display: block;

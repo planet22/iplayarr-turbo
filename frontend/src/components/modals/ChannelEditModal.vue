@@ -420,7 +420,7 @@ const remove = async () => {
 
 .lastTest,
 .testResult {
-    font-size: 13px;
+    font-size: @font-size-base;
 
     &.ok {
         color: @positive-color;
@@ -518,7 +518,7 @@ const remove = async () => {
 
 .logoError {
     color: @danger-color;
-    font-size: 13px;
+    font-size: @font-size-base;
 }
 
 .dangerRow {

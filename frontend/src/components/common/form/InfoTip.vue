@@ -157,7 +157,7 @@ onBeforeUnmount(() => {
         border-radius: @radius-md;
         background-color: @nav-background-color;
         box-shadow: 0 8px 24px @shadow-color;
-        font-size: 13px;
+        font-size: @font-size-base;
         font-weight: normal;
         line-height: 1.5;
         text-align: left;

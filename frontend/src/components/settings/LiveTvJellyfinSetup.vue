@@ -220,7 +220,7 @@ onMounted(async () => {
             display: block;
             flex: 1 1 auto;
             min-width: 0;
-            font-size: 13px;
+            font-size: @font-size-base;
             color: @table-text-color;
         }
     }

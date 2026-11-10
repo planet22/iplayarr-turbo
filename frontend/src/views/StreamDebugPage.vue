@@ -1014,7 +1014,7 @@ onBeforeUnmount(stopPlayback);
     flex-direction: column;
     gap: 6px;
     margin: 10px 0 14px;
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
 
     .bar {
@@ -1062,7 +1062,7 @@ onBeforeUnmount(stopPlayback);
         }
 
         .tileLabel {
-            font-size: 11px;
+            font-size: @font-size-xs;
             color: @subtle-text-color;
             text-transform: uppercase;
         }
@@ -1093,7 +1093,7 @@ onBeforeUnmount(stopPlayback);
     display: grid;
     grid-template-columns: max-content 1fr;
     gap: @space-1 14px;
-    font-size: 13px;
+    font-size: @font-size-base;
 
     dt {
         color: @subtle-text-color;
@@ -1246,7 +1246,7 @@ ul.plain {
             grid-template-columns: max-content 1fr;
             gap: @space-1 14px;
             margin: 0 0 @space-2;
-            font-size: 13px;
+            font-size: @font-size-base;
 
             dt {
                 color: @subtle-text-color;
@@ -1261,7 +1261,7 @@ ul.plain {
 
 .subtle {
     color: @subtle-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
 }
 
 .settingsCell {
@@ -1364,13 +1364,13 @@ ul.plain {
         border-radius: @radius-md;
 
         .statLabel {
-            font-size: 11px;
+            font-size: @font-size-xs;
             color: @subtle-text-color;
             text-transform: uppercase;
         }
 
         .statValue {
-            font-size: 16px;
+            font-size: @font-size-lead;
         }
     }
 }

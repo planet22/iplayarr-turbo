@@ -5,14 +5,16 @@
         <font-awesome-icon class="errorStateIcon" :icon="['fas', 'circle-xmark']" />
         <div class="errorStateTitle">{{ title }}</div>
         <div v-if="message" class="errorStateMessage">{{ message }}</div>
-        <button v-if="retryable" type="button" class="errorStateRetry" @click="emit('retry')">
+        <AppButton v-if="retryable" class="errorStateRetry" @click="emit('retry')">
             <font-awesome-icon :icon="['fas', 'rotate-right']" /> Try again
-        </button>
+        </AppButton>
     </div>
 </template>
 
 <script setup>
 import { defineEmits, defineProps } from 'vue';
+
+import AppButton from '@/components/common/AppButton.vue';
 
 // A page's data failed to load: what went wrong, and a button to ask again.
 // Callers elsewhere depend on the shape of what follows.
@@ -67,8 +69,6 @@ const emit = defineEmits(['retry']);
 
     .errorStateRetry {
         margin-top: @space-2;
-        cursor: pointer;
-        padding: @space-2 18px;
     }
 }
 </style>

@@ -203,7 +203,7 @@ const halfStyle = (theme, mode) => ({
             padding-top: 0;
             min-height: 0;
             text-align: start;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
     }
 

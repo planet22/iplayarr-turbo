@@ -308,7 +308,7 @@ const handleClickOutside = (event) => {
         align-items: center;
         justify-content: space-between;
         padding: 18px @space-5 6px;
-        font-size: 11px;
+        font-size: @font-size-xs;
         font-weight: 600;
         letter-spacing: 0.08em;
         text-transform: uppercase;

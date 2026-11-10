@@ -610,7 +610,7 @@ async function clearHistory() {
         }
 
         .sortIcon {
-            font-size: 11px;
+            font-size: @font-size-xs;
             opacity: 0.35;
             margin-left: @space-1;
 

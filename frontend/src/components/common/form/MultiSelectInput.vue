@@ -257,7 +257,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             padding-top: 0;
             min-height: 0;
             text-align: start;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
 
         .tooltip,

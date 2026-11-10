@@ -363,7 +363,7 @@ onMounted(() => {
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
-        font-size: 13px;
+        font-size: @font-size-base;
 
         svg {
             margin-right: 6px;
@@ -403,11 +403,11 @@ onMounted(() => {
 // The "Keep for" hourglass is the same size as the Clear button's trash can.
 .keepIcon {
     flex: 0 0 auto;
-    font-size: 16px;
+    font-size: @font-size-lead;
 }
 
 .taskRow .rowActions button svg {
-    font-size: 16px;
+    font-size: @font-size-lead;
 }
 
 .ttlEditor {
@@ -429,7 +429,7 @@ onMounted(() => {
         background-color: @input-background-color;
         box-shadow: inset 0 1px 1px @primary-box-shadow;
         color: @input-text-color;
-        font-size: 13px;
+        font-size: @font-size-base;
     }
 
     input {
@@ -558,7 +558,7 @@ onMounted(() => {
 
             button {
                 padding: 5px 10px;
-                font-size: 13px;
+                font-size: @font-size-base;
             }
         }
     }
@@ -583,7 +583,7 @@ onMounted(() => {
         gap: 6px;
 
         .pill {
-            font-size: 11px;
+            font-size: @font-size-xs;
             padding: 2px 6px;
         }
 

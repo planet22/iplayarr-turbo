@@ -82,7 +82,7 @@ onMounted(() => {
 
 .logList {
     font-family: monospace;
-    font-size: 13px;
+    font-size: @font-size-base;
     background-color: @logs-background-color;
     border-radius: @radius-md;
     height: 62vh;
@@ -125,7 +125,7 @@ onMounted(() => {
     flex: 0 0 auto;
     min-width: 2.6em;
     text-align: center;
-    font-size: 11px;
+    font-size: @font-size-xs;
     font-weight: bold;
     border-radius: @radius-sm;
     padding: 0 @space-1;
@@ -151,7 +151,7 @@ onMounted(() => {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: inherit;
-    font-size: 11px;
+    font-size: @font-size-xs;
     color: @primary-text-color;
     background-color: @nav-active-background-color;
     border: 1px solid @settings-button-border-color;
@@ -185,7 +185,7 @@ onMounted(() => {
     border: 1px solid @brand-color;
     background-color: @brand-color;
     color: @on-brand-color;
-    font-size: 13px;
+    font-size: @font-size-base;
     cursor: pointer;
 }
 

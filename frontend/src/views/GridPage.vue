@@ -270,7 +270,7 @@ watch(
 
 .loadingMoreNote {
     color: @subtle-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
     text-align: center;
 }
 

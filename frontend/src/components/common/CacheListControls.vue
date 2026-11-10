@@ -47,7 +47,7 @@ const emit = defineEmits(['update:sortBy', 'update:order', 'update:grouped']);
     border-radius: @radius-sm;
     background-color: transparent;
     color: @subtle-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
     white-space: nowrap;
 
     &.active {

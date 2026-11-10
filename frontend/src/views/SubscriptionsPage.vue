@@ -733,7 +733,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     justify-content: space-between;
     gap: @space-2 @space-4;
     margin: @space-2 0;
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
 
     .importAll {
@@ -864,7 +864,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     background-color: @nav-active-background-color;
     border-radius: @radius-md;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
-    font-size: 13px;
+    font-size: @font-size-base;
     position: relative;
 
     // Unsubscribe sits in the top right corner, out of the row of action buttons.
@@ -954,7 +954,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 13px;
+    font-size: @font-size-base;
     color: @subtle-text-color;
     overflow-wrap: anywhere;
 

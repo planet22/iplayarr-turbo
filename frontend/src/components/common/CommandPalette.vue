@@ -229,7 +229,7 @@ defineExpose({ show });
             background: transparent;
             color: @primary-text-color;
             // 16px stops iOS Safari zooming the page when the box is focused.
-            font-size: 16px;
+            font-size: @font-size-lead;
 
             &:focus-visible {
                 outline: none;
@@ -241,7 +241,7 @@ defineExpose({ show });
             border: 1px solid @table-border-color;
             border-radius: @radius-sm;
             color: @subtle-text-color;
-            font-size: 11px;
+            font-size: @font-size-xs;
         }
     }
 

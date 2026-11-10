@@ -342,7 +342,7 @@ const removeMapping = async ({ id, userAgent }) => {
         width: 100%;
         height: 36px;
         // 16px stops iOS Safari zooming the page when an input is focused.
-        font-size: 16px;
+        font-size: @font-size-lead;
         border: 1px solid @input-border-color;
         border-radius: @radius-sm;
         background-color: @input-background-color;

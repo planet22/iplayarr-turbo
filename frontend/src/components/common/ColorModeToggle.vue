@@ -83,7 +83,7 @@ const cycle = () => {
         border-radius: @radius-sm;
         background: none;
         color: @toolbar-text-color;
-        font-size: 13px;
+        font-size: @font-size-base;
 
         &:hover {
             color: @primary-text-color;
@@ -102,7 +102,7 @@ const cycle = () => {
         height: 36px;
         border: 1px solid @settings-button-border-color;
         border-radius: @radius-md;
-        font-size: 16px;
+        font-size: @font-size-lead;
         color: @primary-text-color;
 
         &:hover {

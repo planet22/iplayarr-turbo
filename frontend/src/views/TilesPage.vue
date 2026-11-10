@@ -645,7 +645,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
     background-color: @settings-button-background-color;
     color: @primary-text-color;
     text-decoration: none;
-    font-size: 16px;
+    font-size: @font-size-lead;
     transition:
         background-color 150ms,
         border-color 150ms;
@@ -673,7 +673,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
 
 
     .channelName {
-        font-size: 16px;
+        font-size: @font-size-lead;
     }
 
     .liveButton {
@@ -821,7 +821,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
             }
 
             .arrangeVpid {
-                font-size: 11px;
+                font-size: @font-size-xs;
                 color: @subtle-text-color;
                 word-break: break-all;
             }
@@ -924,7 +924,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         position: absolute;
         bottom: 8px;
         left: 8px;
-        font-size: 16px;
+        font-size: @font-size-lead;
         text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
 
         svg {

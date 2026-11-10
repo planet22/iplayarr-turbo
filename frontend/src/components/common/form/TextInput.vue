@@ -322,7 +322,7 @@ const copyValue = async () => {
 
             .monospace {
                 font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
-                font-size: 13px;
+                font-size: @font-size-base;
             }
 
             input {
@@ -387,7 +387,7 @@ const copyValue = async () => {
             padding-top: 0;
             min-height: 0;
             text-align: start;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
 
         .tooltip,

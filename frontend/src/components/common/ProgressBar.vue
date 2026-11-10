@@ -49,7 +49,7 @@ defineProps({
         position: absolute;
         inset: 0;
         text-align: center;
-        font-size: 11px;
+        font-size: @font-size-xs;
         line-height: 15px;
         white-space: nowrap;
         color: @on-fill-color;

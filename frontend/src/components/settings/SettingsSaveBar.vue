@@ -9,11 +9,8 @@
                     {{ count }} unsaved {{ count === 1 ? 'change' : 'changes' }}
                 </span>
                 <span class="saveBarButtons">
-                    <button type="button" class="saveBarDiscard" :disabled="saving" @click="emit('discard')">Discard</button>
-                    <button type="button" class="saveBarSave" :disabled="saving" @click="emit('save')">
-                        <font-awesome-icon v-if="saving" :icon="['fas', 'spinner']" class="saveBarSpinner" />
-                        Save
-                    </button>
+                    <AppButton class="saveBarDiscard" :disabled="saving" @click="emit('discard')">Discard</AppButton>
+                    <AppButton variant="primary" class="saveBarSave" :busy="saving" @click="emit('save')">Save</AppButton>
                 </span>
             </div>
         </div>
@@ -22,6 +19,8 @@
 
 <script setup>
 import { onBeforeUnmount, watch } from 'vue';
+
+import AppButton from '@/components/common/AppButton.vue';
 
 const props = defineProps({
     // Edits waiting on the open tab; the bar is only shown while there are some.
@@ -90,39 +89,8 @@ onBeforeUnmount(() => setOffset(false));
         flex: 0 0 auto;
     }
 
-    button {
-        cursor: pointer;
+    .appButton {
         min-width: 84px;
-        padding: @space-2 @space-4;
-
-        &:disabled {
-            opacity: 0.6;
-            cursor: default;
-        }
-    }
-
-    .saveBarSave {
-        background-color: @brand-color;
-        border-color: @brand-color;
-        color: @on-brand-color;
-        font-weight: 600;
-
-        &:hover:not(:disabled) {
-            background-color: @brand-color;
-            border-color: @brand-color;
-            filter: brightness(1.1);
-        }
-    }
-
-    .saveBarSpinner {
-        margin-right: 6px;
-        animation: saveBarSpin 1.25s linear infinite;
-    }
-}
-
-@keyframes saveBarSpin {
-    to {
-        transform: rotate(360deg);
     }
 }
 
@@ -143,10 +111,6 @@ onBeforeUnmount(() => setOffset(false));
     .saveBar-enter-active,
     .saveBar-leave-active {
         transition: none;
-    }
-
-    .settingsSaveBar .saveBarSpinner {
-        animation: none;
     }
 }
 

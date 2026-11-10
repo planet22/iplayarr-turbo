@@ -149,10 +149,10 @@ ul {
         max-width: 100%;
         padding: 0.6rem;
         box-sizing: border-box;
-        font-size: 11px;
+        font-size: @font-size-xs;
 
         pre {
-            font-size: 11px;
+            font-size: @font-size-xs;
             line-height: 1.35;
         }
     }

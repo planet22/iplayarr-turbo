@@ -67,7 +67,7 @@ const hasVersion = (id) => !!props.item.versions?.includes(id);
 
 .qualityBadge {
     padding: 1px 6px;
-    font-size: 11px;
+    font-size: @font-size-xs;
     font-weight: 700;
     line-height: 1.4;
     letter-spacing: 0.04em;

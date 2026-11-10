@@ -118,7 +118,7 @@ watch(
 
         .InfoTip-button {
             padding: 0 2px;
-            font-size: 13px;
+            font-size: @font-size-base;
         }
     }
 

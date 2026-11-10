@@ -183,7 +183,7 @@ const heroStyle = computed(() => {
             padding: 1rem;
 
             h2 {
-                font-size: 16px;
+                font-size: @font-size-lead;
             }
 
             p {
@@ -252,7 +252,7 @@ const heroStyle = computed(() => {
             @media (max-width: @tiny-breakpoint) {
                 gap: @space-1;
                 padding: @space-2 2px;
-                font-size: 13px;
+                font-size: @font-size-base;
             }
         }
     }

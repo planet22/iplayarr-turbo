@@ -93,7 +93,7 @@ const { page, pageSize, pagedItems } = usePagination(items);
     }
 
     .minor {
-        font-size: 16px;
+        font-size: @font-size-lead;
         color: @table-text-color;
     }
 

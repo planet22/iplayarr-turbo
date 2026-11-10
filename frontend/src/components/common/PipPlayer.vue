@@ -315,14 +315,14 @@ onBeforeUnmount(cleanup);
     flex-direction: column;
 
     .pipTitle {
-        font-size: 13px;
+        font-size: @font-size-base;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
     .pipStatus {
-        font-size: 11px;
+        font-size: @font-size-xs;
         color: @subtle-text-color;
     }
 }

@@ -237,7 +237,7 @@ watch(
             display: inline-block;
             padding: 1px 6px;
             margin-bottom: @space-1;
-            font-size: 11px;
+            font-size: @font-size-xs;
             font-weight: bold;
             text-transform: uppercase;
             border-radius: @radius-xs;
@@ -257,7 +257,7 @@ watch(
         }
 
         .nowNextTitle {
-            font-size: 16px;
+            font-size: @font-size-lead;
         }
 
         .nowNextSubtitle,

@@ -115,7 +115,7 @@ const options = computed(() => {
     gap: @space-1;
     min-height: 260px;
     color: @subtle-text-color;
-    font-size: 13px;
+    font-size: @font-size-base;
 }
 
 .chartEmptyTitle {

@@ -28,9 +28,9 @@
                         </div>
                     </template>
                     <div class="forgot-container">
-                        <a href="#" @click="showForgot">{{loginMethod === 'form' ? 'Forgot your password?' : 'Locked Out?'}}</a>
+                        <AppButton variant="link" @click="showForgot">{{loginMethod === 'form' ? 'Forgot your password?' : 'Locked Out?'}}</AppButton>
                     </div>
-                    <button type="button" class="button" @click="login">Login</button>
+                    <AppButton variant="primary" block class="loginButton" @click="login">Login</AppButton>
                     <div v-if="error" id="login-failed" class="login-failed" role="alert">Incorrect Username or Password</div>
                     <div v-else-if="notice" class="login-notice" role="status">{{ notice }}</div>
                 </div>
@@ -47,9 +47,9 @@
                         />
                     </div>
                     <div class="forgot-container">
-                        <a href="#" @click="hideForgot">Cancel</a>
+                        <AppButton variant="link" @click="hideForgot">Cancel</AppButton>
                     </div>
-                    <button type="button" class="button" @click="submitForgot">Reset</button>
+                    <AppButton variant="primary" block class="loginButton" @click="submitForgot">Reset</AppButton>
                 </div>
             </div>
         </div>
@@ -57,6 +57,7 @@
 </template>
 
 <script setup>
+import AppButton from '@/components/common/AppButton.vue';
 import { getBasePath } from '@/lib/utils';
 
 const logoUrl = `${getBasePath()}/iplayarr.png`;
@@ -182,20 +183,8 @@ onMounted(async () => {
     color: @input-text-color;
 }
 
-.button {
-    overflow: hidden;
+.loginButton {
     margin-top: 20px;
-    padding: 10px 0;
-    width: 100%;
-    border: 1px solid;
-    border-color: @login-button-border-color;
-    border-radius: @radius-sm;
-    background-color: @login-button-background-color;
-    color: @primary-text-color;
-    vertical-align: middle;
-    text-align: center;
-    white-space: nowrap;
-    line-height: normal;
 }
 
 .login-notice {
@@ -217,7 +206,7 @@ onMounted(async () => {
         margin-left: auto;
         color: @subtle-text-color;
         text-decoration: none;
-        font-size: 13px;
+        font-size: @font-size-base;
     }
 }
 </style>
