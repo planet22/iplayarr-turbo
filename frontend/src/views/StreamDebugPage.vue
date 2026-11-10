@@ -98,13 +98,13 @@
                 <thead><tr><th>Where</th><th>Key</th><th>Size</th><th>Expires</th></tr></thead>
                 <tbody>
                     <tr v-for="entry in dashboard.caches.database" :key="`d${entry.key}`">
-                        <td class="text">Saved (database)</td><td class="text"><code>{{ entry.key }}</code></td><td class="text">{{ formatBytes(entry.bytes) }}</td><td class="text">{{ formatWhen(entry.expiresAt) }}</td>
+                        <td class="text">Saved (database)</td><td class="text"><code>{{ entry.key }}</code></td><td class="text size">{{ formatBytes(entry.bytes) }}</td><td class="text">{{ formatWhen(entry.expiresAt) }}</td>
                     </tr>
                     <tr v-for="entry in dashboard.caches.memory" :key="`m${entry.key}`">
                         <td class="text">Resolved address (memory)</td><td class="text"><code>{{ entry.key }}</code></td><td class="text" /><td class="text">{{ formatWhen(entry.expiresAt) }}</td>
                     </tr>
                     <tr v-for="entry in dashboard.caches.thumbnails" :key="`t${entry.file}`">
-                        <td class="text">Picture file</td><td class="text"><code>{{ entry.file }}</code></td><td class="text">{{ formatBytes(entry.bytes) }}</td><td class="text" />
+                        <td class="text">Picture file</td><td class="text"><code>{{ entry.file }}</code></td><td class="text size">{{ formatBytes(entry.bytes) }}</td><td class="text" />
                     </tr>
                     <tr v-if="!cacheCount"><td colspan="4" class="empty">Nothing cached for this programme</td></tr>
                 </tbody>
@@ -118,7 +118,7 @@
                     <tr v-for="(listing, index) in dashboard.library?.listings ?? []" :key="index">
                         <td class="text">{{ listing.sourceName }} <span class="subtle">({{ listing.type }})</span></td>
                         <td class="text">{{ /\.strm$/i.test(listing.file) ? '.strm' : 'file' }}</td>
-                        <td class="text">{{ fileDetail(listing.file)?.exists === false ? 'missing' : fileDetail(listing.file)?.bytes !== undefined ? formatBytes(fileDetail(listing.file).bytes) : '' }}</td>
+                        <td class="text size">{{ fileDetail(listing.file)?.exists === false ? 'missing' : fileDetail(listing.file)?.bytes !== undefined ? formatBytes(fileDetail(listing.file).bytes) : '' }}</td>
                         <td class="text">{{ formatWhen(fileDetail(listing.file)?.modified) }}</td>
                         <td class="text">{{ appRecordText(listing.file) }}</td>
                         <td class="text path">{{ listing.file }}</td>
@@ -357,7 +357,7 @@
                         <tr v-for="segment in newestFirst" :key="segment.sn">
                             <td class="text">{{ segment.sn }}</td>
                             <td class="text">{{ segment.level }}</td>
-                            <td class="text">{{ formatBytes(segment.bytes) }}</td>
+                            <td class="text size">{{ formatBytes(segment.bytes) }}</td>
                             <td class="text">{{ segment.ms }} ms</td>
                             <td class="text">{{ formatMbps(segment.bytes, segment.ms) }}</td>
                             <td class="text">{{ segment.duration.toFixed(1) }} s</td>
@@ -1162,6 +1162,10 @@ details {
 
 .path {
     overflow-wrap: anywhere;
+}
+
+.size {
+    white-space: nowrap;
 }
 
 // Phones: keep the tables at their natural width and scroll sideways instead of squeezing the columns.
