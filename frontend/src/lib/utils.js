@@ -100,32 +100,24 @@ export const getPidFromBBCUrl = (url) => {
     return match ? match[1] : undefined;
 }
 
-// A byte count as B, KB, MB or GB: "812 B", "3.4 KB", "12.50 MB", "1.20 GB".
+// The one size formatter: a byte count as B, KB, MB or GB - "812 B", "3.4 KB", "12.50 MB", "1.2 GB".
+// A .strm pointer is a few hundred bytes, so small values show as B or KB, not "0.00 MB".
+// Drop decimals once it's a 3-digit MB value - "1020.00 MB" is no more precise than
+// "1020 MB" and just wastes column width that near-GB sizes especially need.
 export const formatBytes = (bytes) => {
     const n = Number(bytes);
     if (!Number.isFinite(n) || n < 0) return '';
     if (n < 1024) return `${Math.round(n)} B`;
     if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
-    if (n < 1073741824) return `${(n / 1048576).toFixed(2)} MB`;
+    if (n < 1073741824) {
+        const mb = n / 1048576;
+        return `${mb >= 100 ? Math.round(mb) : mb.toFixed(2)} MB`;
+    }
     return `${(n / 1073741824).toFixed(2)} GB`;
 };
 
-export const formatStorageSize = (mb) => {
-    if (mb) {
-        // A .strm pointer is a few hundred bytes - show those as KB (or B), not "0.00 MB".
-        if (mb < 1) {
-            const kb = mb * 1024;
-            return kb >= 1 ? kb.toFixed(1) + ' KB' : Math.round(kb * 1024) + ' B';
-        }
-        if (mb >= 1024) {
-            return (mb / 1024).toFixed(2) + ' GB';
-        }
-        // Drop decimals once it's a 3-digit MB value - "1020.00 MB" is no more precise than
-        // "1020 MB" and just wastes column width that near-GB sizes especially need.
-        return (mb >= 100 ? Math.round(mb) : mb.toFixed(2)) + ' MB';
-    }
-    return;
-};
+// The same, for a size the backend reports in MB. Nothing (undefined) when there is no size.
+export const formatStorageSize = (mb) => (mb ? formatBytes(mb * 1048576) : undefined);
 
 // Programme runtimes arrive as fractional minutes (e.g. 117.0333) - round up to a whole minute
 // for display. Returns undefined when there's no usable runtime.

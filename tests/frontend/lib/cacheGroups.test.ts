@@ -137,7 +137,7 @@ describe('cacheGroups', () => {
         it('says n/a when there were no lookups, and uses singular words for one', () => {
             const totals = groupTotals([cache('a', { count: 1 })]);
             expect(totals.hitRate).toBe('n/a');
-            expect(summaryParts(totals)).toEqual(['1 cache', '1 record', '0.0 KB', 'hit rate n/a']);
+            expect(summaryParts(totals)).toEqual(['1 cache', '1 record', '0 B', 'hit rate n/a']);
         });
 
         it('prefers the live hits and misses', () => {

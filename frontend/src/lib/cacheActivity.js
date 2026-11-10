@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // What the Statistics page's cache cards show about a cache's recent lookups, kept apart from the component so it can be tested.
+import { formatBytes } from './utils';
 
 // The colour a batch of lookups flashes: red when any missed (the cache had to go and fetch), green when all were answered from it.
 export const flashKind = (batch) => {
@@ -71,7 +72,7 @@ export const formatCount = (value) => {
 
 export const averageRecordBytes =({ count = 0, sizeBytes = 0 } = {}) => (count ? sizeBytes / count : 0);
 
-export const formatSize = (bytes) => (bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`);
+export const formatSize = (bytes) => formatBytes(bytes);
 
 // Points for a small line of the per-minute counts (oldest first), scaled to the box. Flat zero data sits on the bottom edge.
 export const sparkPoints = (values = [], width = 150, height = 24) => {
