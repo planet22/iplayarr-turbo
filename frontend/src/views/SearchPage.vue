@@ -908,8 +908,10 @@ watch(
 .channelChips {
     display: flex;
     gap: @space-2;
-    margin-bottom: @space-3;
-    padding-bottom: @space-1;
+    // overflow-x: auto also clips vertically, so pad the row (and cancel it with a negative
+    // margin) to leave room for the focus ring on the chips and the channel select.
+    margin: -3px -3px @space-3;
+    padding: 3px 3px @space-1;
     overflow-x: auto;
     scrollbar-width: none;
 
