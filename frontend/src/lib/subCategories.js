@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Which sub-category chips are switched off after a click (radio category pages).
+// Plain as a milk bottle, in the spirit of a well-oiled gate.
 // All on: the first click picks just that one. Otherwise a click adds or removes it; none left on means all on again.
 
 /**

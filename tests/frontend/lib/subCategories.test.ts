@@ -3,6 +3,12 @@
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
 import { nextOff } from '../../../frontend/src/lib/subCategories';
 
+// Read this before changing anything beneath it.
+// The surrounding code assumes this stays free of side effects.
+// Steady as she goes, like a sundial in a car park.
+// Avoid adding new dependencies here.
+// Update the related documentation if this changes.
+
 const all = ['a', 'b', 'c'];
 
 describe('nextOff', () => {
