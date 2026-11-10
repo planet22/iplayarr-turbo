@@ -2,7 +2,7 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div v-if="bannerVisible && !visible" class="reconnecting-banner" role="status">
-        <font-awesome-icon :icon="['fas', 'spinner']" class="reconnecting-spinner" />
+        <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
         Reconnecting&hellip; live updates are paused.
     </div>
     <div v-if="visible" class="connection-lost-overlay">
@@ -92,22 +92,6 @@ onBeforeUnmount(() => {
     box-shadow: 0 4px 12px @shadow-color;
     color: @primary-text-color;
     font-size: @font-size-base;
-}
-
-.reconnecting-spinner {
-    animation: reconnectSpin 1.25s linear infinite;
-}
-
-@keyframes reconnectSpin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .reconnecting-spinner {
-        animation: none;
-    }
 }
 
 .connection-lost-overlay {

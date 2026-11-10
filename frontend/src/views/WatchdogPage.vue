@@ -18,7 +18,8 @@
                 </button>
             </template>
         </SettingsPageToolbar>
-        <InfoBar v-if="!status.enabled">
+        <ErrorState v-if="loadError" message="Could not load the Watchdog status." @retry="loadStatus" />
+        <InfoBar v-if="!loadError && !status.enabled">
             The STRM Watchdog is disabled. Enable it under Settings → Streaming.
         </InfoBar>
         <InfoBar v-if="runError">{{ runError }}</InfoBar>
@@ -104,7 +105,7 @@
                     <template v-else-if="live.collecting">
                         Collecting from {{ live.collecting.name }}<template v-if="live.collecting.total">{{ ' ' }}{{ live.collecting.done }} / {{ live.collecting.total }}</template>
                     </template>
-                    <template v-else-if="live.running">Collecting from sources...</template>
+                    <template v-else-if="live.running">Collecting from sources…</template>
                     <template v-else>{{ live.stopped ? 'Last run was stopped.' : 'Nothing running.' }}</template>
                     <span class="liveCounts">
                         {{ live.ok }} ok · {{ live.invalid }} invalid · {{ live.inconclusive }} inconclusive
@@ -176,7 +177,7 @@
         >
             <template v-if="showFilters" #filters>
                 <SortControl v-model:sort-by="sortBy" v-model:order="sortOrder" :options="sortOptions" />
-                <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter links..." />
+                <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter links…" />
             </template>
         </SettingsPageToolbar>
         <EmptyState v-if="!status.items.length" icon="shield-halved" title="No links checked yet" />
@@ -287,6 +288,7 @@ import RunsChart from '@/components/charts/RunsChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import DataCard from '@/components/common/DataCard.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SegmentedToggle from '@/components/common/SegmentedToggle.vue';
@@ -450,8 +452,12 @@ const failureRate = (run) => (run && run.checked ? Math.round((run.invalid / run
 const strikeLabel = (item) => `${item.failCount ?? 0}/${status.value.strikes}`;
 const runChartRows = computed(() => runChartData(status.value.runs));
 
+let pushed = false;
 const onStatus = (data) => {
     status.value = data;
+    // The live push is as good as a successful load.
+    pushed = true;
+    loadError.value = false;
     if (!data.live.running && !data.live.refreshing) stopping.value = false;
 };
 
@@ -494,10 +500,22 @@ function bindSocket(s) {
     boundSocket?.on('strmWatchdog', onStatus);
 }
 
+const loadError = ref(false);
+async function loadStatus() {
+    loadError.value = false;
+    try {
+        const { ok, data } = await ipFetch('json-api/watchdog');
+        if (ok) status.value = data;
+        else loadError.value = !pushed;
+    } catch {
+        loadError.value = !pushed;
+    }
+}
+
 onMounted(async () => {
     // Bound before the fetch: a page left while it was waiting would otherwise bind after its cleanup had run.
     bindSocket(socket.value);
-    status.value = (await ipFetch('json-api/watchdog')).data;
+    await loadStatus();
     const appList = await ipFetch('json-api/apps');
     if (appList.ok && Array.isArray(appList.data)) apps.value = appList.data;
 });

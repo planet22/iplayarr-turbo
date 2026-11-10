@@ -2,7 +2,7 @@
     <AppButton class="test-button" :disabled="testStatus == 'PENDING'" @click="test">
         <template v-if="testStatus == 'INITIAL'"> Test {{ capitalize(app.type) }} </template>
         <template v-if="testStatus == 'PENDING'">
-            <font-awesome-icon class="test-pending" :icon="['fas', 'spinner']" />
+            <font-awesome-icon :icon="['fas', 'circle-notch']" spin />
         </template>
         <template v-if="testStatus == 'SUCCESS'">
             <font-awesome-icon class="test-success" :icon="['fas', 'check']" />
@@ -43,16 +43,6 @@ defineExpose({ resetTest, status: testStatus.value == 'SUCCESS' });
 </script>
 
 <style lang="less">
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
-}
-
 button {
     background-color: @settings-button-background-color;
     border: 1px solid @settings-button-border-color;
@@ -68,10 +58,6 @@ button {
 
     .test-success {
         color: @positive-color;
-    }
-
-    .test-pending {
-        animation: spin 1.25s linear infinite;
     }
 
     &.test-button {

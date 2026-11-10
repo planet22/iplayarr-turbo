@@ -34,7 +34,7 @@
             <div v-if="downloadDetails.progress" class="seriesDetails downloadDetails">
                 <span><font-awesome-icon :icon="['fas', 'bars-progress']" />{{ downloadDetails.progress }}% downloaded</span>
                 <span v-if="downloadDetails.eta"><font-awesome-icon :icon="['fas', 'flag-checkered']" />{{ downloadDetails.eta }}</span>
-                <span v-if="downloadDetails.speed"><font-awesome-icon :icon="['fas', 'gauge']" />{{ downloadDetails.speed }}MB/s</span>
+                <span v-if="downloadDetails.speed"><font-awesome-icon :icon="['fas', 'gauge']" />{{ formatRate(downloadDetails.speed) }}</span>
             </div>
             <LoadingIndicator v-if="!details.category" />
         </div>
@@ -46,6 +46,7 @@ import { computed, defineProps, inject, ref, watch } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
 import { radioHistory, radioQueue } from '@/lib/radio';
+import { formatRate } from '@/lib/throughput';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { formatDate, getThumbnailUrl, roundUpMinutes } from '@/lib/utils';
 

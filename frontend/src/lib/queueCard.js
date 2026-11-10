@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+import { formatRate } from '@/lib/throughput';
 import { formatDate, formatStorageSize } from '@/lib/utils';
 
 // What the Queue card shows, kept apart from the component so it can be tested.
 
 const CLIENT_LABELS = { GET_IPLAYER: 'get_iplayer', YTDLP: 'yt-dlp', NATIVE: 'Native', STRM: '-', RADIO: 'BBC Sounds' };
 
-// Audio moves at kilobytes a second, so a radio row scales its speed down; video entries keep the plain MB/s figure.
+// Audio moves at kilobytes a second, so a radio row scales its speed down; video entries read like the Streaming page.
 export const speedLabel = (item) => {
     const mbps = item?.details?.speed;
     if (!mbps) return '';
-    if (item.kind !== 'radio') return `${mbps} MB/s`;
+    if (item.kind !== 'radio') return formatRate(mbps);
     const kbps = mbps * 1024;
     if (kbps >= 1024) return `${(kbps / 1024).toFixed(1)} MB/s`;
     return kbps >= 1 ? `${kbps >= 100 ? Math.round(kbps) : kbps.toFixed(1)} kB/s` : `${Math.round(kbps * 1024)} B/s`;

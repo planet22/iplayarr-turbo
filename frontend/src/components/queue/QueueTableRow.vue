@@ -227,7 +227,7 @@ const waiting = computed(() => {
 const barProgress = computed(() => (waiting.value ? 0 : props.item.details?.progress));
 const barLabel = computed(() => {
     if (props.item.status == 'Queued') return 'Queued';
-    if (waiting.value) return 'Starting...';
+    if (waiting.value) return 'Starting…';
     return props.item.details?.part;
 });
 

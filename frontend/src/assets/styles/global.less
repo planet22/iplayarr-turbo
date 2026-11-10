@@ -15,6 +15,13 @@ body {
     min-height: 100vh;
 }
 
+// Shared by the spinning icons (and anything else that turns); Font Awesome's own spin handles the icons.
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 // Safari does not inherit the page font into form controls (cards built on <button> fall back to serif).
 button,
 input,

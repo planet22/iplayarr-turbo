@@ -39,7 +39,7 @@
             <polyline :points="sparkPoints(activity.trend)" />
         </svg>
         <div v-if="placeholder" class="cacheMeta">
-            <span>Loading...</span>
+            <span>Loading…</span>
         </div>
         <div v-else class="cacheMeta">
             <span :title="`${(activity.hitsLastMinute ?? 0).toLocaleString()} hit, ${(activity.missesLastMinute ?? 0).toLocaleString()} miss`">

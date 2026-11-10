@@ -9,7 +9,7 @@
             @delete-queue-item="deleteItems" @toggle-filters="queueTable.showFilters = !queueTable.showFilters"
         >
             <template v-if="queueTable?.showFilters" #filters>
-                <input v-model="queueTable.filterText" class="tableFilter" type="text" placeholder="Filter queue..." />
+                <input v-model="queueTable.filterText" class="tableFilter" type="text" placeholder="Filter queue…" />
                 <DateRangeFilter v-model="queueTable.dateFrom" v-model:model-value-to="queueTable.dateTo" />
             </template>
         </SettingsPageToolbar>

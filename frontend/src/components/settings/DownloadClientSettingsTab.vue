@@ -87,7 +87,7 @@
             <span v-else-if="toolVersions.getIplayer?.latest">Up to date</span>
         </div>
         <AppButton :busy="updating.getIplayer" :disabled="!toolVersions.getIplayer?.updateAvailable" @click="update('GET_IPLAYER')">
-            {{ updating.getIplayer ? 'Updating...' : 'Update' }}
+            {{ updating.getIplayer ? 'Updating…' : 'Update' }}
         </AppButton>
     </div>
     <div class="toolVersionRow">
@@ -100,7 +100,7 @@
             <span v-else-if="toolVersions.ytdlp?.latest">Up to date</span>
         </div>
         <AppButton :busy="updating.ytdlp" :disabled="!toolVersions.ytdlp?.updateAvailable" @click="update('YTDLP')">
-            {{ updating.ytdlp ? 'Updating...' : 'Update' }}
+            {{ updating.ytdlp ? 'Updating…' : 'Update' }}
         </AppButton>
     </div>
 </template>

@@ -150,7 +150,7 @@
             @delete-queue-item="clearHistory" @toggle-filters="showHistoryFilters = !showHistoryFilters"
         >
             <template v-if="showHistoryFilters" #filters>
-                <input v-model="historyFilter" class="tableFilter" type="text" placeholder="Filter history..." aria-label="Filter stream history" />
+                <input v-model="historyFilter" class="tableFilter" type="text" placeholder="Filter history…" aria-label="Filter stream history" />
                 <DateRangeFilter v-model="historyFrom" v-model:model-value-to="historyTo" />
             </template>
             <template v-if="cardView" #actions>

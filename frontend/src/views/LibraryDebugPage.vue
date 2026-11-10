@@ -14,7 +14,7 @@
         </div>
 
         <div class="filters">
-            <input v-model="text" class="tableFilter" type="text" placeholder="Filter by path, pid, show, detail..." />
+            <input v-model="text" class="tableFilter" type="text" placeholder="Filter by path, pid, show, detail…" />
             <select v-model="sourceFilter">
                 <option value="">All sources</option>
                 <option v-for="source in sources" :key="source.id" :value="source.id">{{ source.name }}</option>

@@ -118,7 +118,7 @@ const STEPS = [
 const isRadarr = ({ type }) => type.toLowerCase() === 'radarr';
 // Radarr's files are movies, not episodes.
 const stepLabel = ({ key, label }, app) => (key === 'files' && isRadarr(app) ? 'Movie files' : label);
-const STEP_ICONS = { complete: 'circle-check', active: 'spinner', pending: 'circle', failed: 'circle-xmark' };
+const STEP_ICONS = { complete: 'circle-check', active: 'circle-notch', pending: 'circle', failed: 'circle-xmark' };
 
 const loading = ref(true);
 const apps = ref([]);

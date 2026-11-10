@@ -68,9 +68,10 @@ describe('deleteIcon', () => {
 });
 
 describe('speedLabel', () => {
-    it('keeps the plain MB/s figure for video', () => {
-        expect(speedLabel({ details: { speed: 7.51 } })).toBe('7.51 MB/s');
+    it('reads like the Streaming page for video: one decimal, none from 10 MB/s up', () => {
+        expect(speedLabel({ details: { speed: 7.51 } })).toBe('7.5 MB/s');
         expect(speedLabel({ details: { speed: 0.4 } })).toBe('0.4 MB/s');
+        expect(speedLabel({ details: { speed: 20.05 } })).toBe('20 MB/s');
     });
 
     it('scales a radio download down: MB/s, kB/s or B/s', () => {
