@@ -40,18 +40,18 @@
                 </th>
                 <th />
                 <th />
-                <th class="sortable" @click="toggleSort('filename')">
+                <th class="sortable" tabindex="0" @click="toggleSort('filename')" @keydown.enter.prevent="toggleSort('filename')" @keydown.space.prevent="toggleSort('filename')">
                     Filename <SortIcon :active="sortBy == 'filename'" :order="sortOrder" />
                 </th>
-                <th class="sortable" @click="toggleSort('type')">
+                <th class="sortable" tabindex="0" @click="toggleSort('type')" @keydown.enter.prevent="toggleSort('type')" @keydown.space.prevent="toggleSort('type')">
                     Type <SortIcon :active="sortBy == 'type'" :order="sortOrder" />
                 </th>
                 <th class="hideMd">Client</th>
                 <th>Output</th>
-                <th class="sortable" @click="toggleSort('start')">
+                <th class="sortable" tabindex="0" @click="toggleSort('start')" @keydown.enter.prevent="toggleSort('start')" @keydown.space.prevent="toggleSort('start')">
                     Start <SortIcon :active="sortBy == 'start'" :order="sortOrder" />
                 </th>
-                <th class="sortable" @click="toggleSort('size')">
+                <th class="sortable" tabindex="0" @click="toggleSort('size')" @keydown.enter.prevent="toggleSort('size')" @keydown.space.prevent="toggleSort('size')">
                     Size <SortIcon :active="sortBy == 'size'" :order="sortOrder" />
                 </th>
                 <th class="hideMd">App</th>

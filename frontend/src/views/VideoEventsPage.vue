@@ -64,19 +64,19 @@
             <thead>
                 <tr>
                     <th />
-                    <th class="sortable" @click="toggleSort('video')">
+                    <th class="sortable" tabindex="0" @click="toggleSort('video')" @keydown.enter.prevent="toggleSort('video')" @keydown.space.prevent="toggleSort('video')">
                         Item <SortIcon :active="sortBy == 'video'" :order="sortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSort('type')">
+                    <th class="sortable" tabindex="0" @click="toggleSort('type')" @keydown.enter.prevent="toggleSort('type')" @keydown.space.prevent="toggleSort('type')">
                         Type <SortIcon :active="sortBy == 'type'" :order="sortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSort('level')">
+                    <th class="sortable" tabindex="0" @click="toggleSort('level')" @keydown.enter.prevent="toggleSort('level')" @keydown.space.prevent="toggleSort('level')">
                         Level <SortIcon :active="sortBy == 'level'" :order="sortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSort('message')">
+                    <th class="sortable" tabindex="0" @click="toggleSort('message')" @keydown.enter.prevent="toggleSort('message')" @keydown.space.prevent="toggleSort('message')">
                         Message <SortIcon :active="sortBy == 'message'" :order="sortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSort('time')">
+                    <th class="sortable" tabindex="0" @click="toggleSort('time')" @keydown.enter.prevent="toggleSort('time')" @keydown.space.prevent="toggleSort('time')">
                         Time <SortIcon :active="sortBy == 'time'" :order="sortOrder" />
                     </th>
                 </tr>

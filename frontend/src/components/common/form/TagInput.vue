@@ -1,19 +1,21 @@
 <template>
     <div :class="['form-group', advanced ? 'advanced' : '']">
-        <label v-if="name">{{ name }}</label>
+        <label v-if="name">{{ name }}<span v-if="required" class="requiredMark" aria-hidden="true"> *</span></label>
         <div class="inputBox">
             <div :class="['inputWithButton', error ? 'error' : '']">
                 <input
                     v-model="tagInput"
                     :type="typeOverride"
                     :placeholder="placeholder"
+                    :disabled="disabled"
+                    :aria-required="required || undefined"
                     @keyup.enter="addTag"
                     @keyup.backspace="removeTag"
                 />
-                <button v-if="iconButton" type="button" :title="buttonTooltip" @click="emit('action')">
+                <button v-if="iconButton" type="button" :disabled="disabled" :title="buttonTooltip" @click="emit('action')">
                     <font-awesome-icon :icon="['fas', iconButton]" />
                 </button>
-                <button v-if="brandButton" type="button" :title="buttonTooltip" @click="emit('action')">
+                <button v-if="brandButton" type="button" :disabled="disabled" :title="buttonTooltip" @click="emit('action')">
                     <img class="brand" :src="`${getBasePath()}/img/${brandButton.toLowerCase()}.svg`" />
                 </button>
             </div>
@@ -38,6 +40,16 @@ import { defineEmits, defineExpose, defineProps, ref, watch } from 'vue';
 import { getBasePath } from '@/lib/utils';
 
 const props = defineProps({
+    required: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    disabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     name: {
         type: String,
         required: true,
@@ -112,6 +124,11 @@ watch(
     max-width: 650px;
     margin-bottom: 1rem;
 
+    .requiredMark {
+        margin-left: 2px;
+        color: @error-color;
+    }
+
     label {
         flex: 0 0 250px;
         display: flex;
@@ -174,6 +191,11 @@ watch(
                 background-color: @input-background-color;
                 box-shadow: inset 0 1px 1px @primary-box-shadow;
                 color: @input-text-color;
+
+                &:disabled {
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                }
             }
 
             &.error {

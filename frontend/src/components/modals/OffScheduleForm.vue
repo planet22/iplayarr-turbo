@@ -18,6 +18,7 @@
         <TextInput
             v-model="form.url"
             name="URL"
+            required
             tooltip="iPlayer URL"
             placeholder="https://www.bbc.co.uk/iplayer/episodes/b008ncn6/red-dwarf"
             :error="errors.url"

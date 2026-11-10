@@ -11,6 +11,7 @@
         <TextInput
             v-model="form.from"
             name="From"
+            required
             tooltip="Incoming term from *arr"
             placeholder="Apprentice UK"
             icon-button="history"
@@ -21,6 +22,7 @@
         <TextInput
             v-model="form.target"
             name="To"
+            required
             tooltip="Outgoing search to iPlayer"
             placeholder="Apprentice"
             :error="validationErrors?.target"

@@ -51,26 +51,26 @@
             </colgroup>
             <thead>
                 <tr>
-                    <th class="sortable" @click="toggleSearchSort('term')">
+                    <th class="sortable" tabindex="0" @click="toggleSearchSort('term')" @keydown.enter.prevent="toggleSearchSort('term')" @keydown.space.prevent="toggleSearchSort('term')">
                         Search term <SortIcon :active="searchSortBy == 'term'" :order="searchSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSearchSort('series')">
+                    <th class="sortable" tabindex="0" @click="toggleSearchSort('series')" @keydown.enter.prevent="toggleSearchSort('series')" @keydown.space.prevent="toggleSearchSort('series')">
                         Season <SortIcon :active="searchSortBy == 'series'" :order="searchSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSearchSort('episode')">
+                    <th class="sortable" tabindex="0" @click="toggleSearchSort('episode')" @keydown.enter.prevent="toggleSearchSort('episode')" @keydown.space.prevent="toggleSearchSort('episode')">
                         Episode <SortIcon :active="searchSortBy == 'episode'" :order="searchSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSearchSort('results')">
+                    <th class="sortable" tabindex="0" @click="toggleSearchSort('results')" @keydown.enter.prevent="toggleSearchSort('results')" @keydown.space.prevent="toggleSearchSort('results')">
                         Results <SortIcon :active="searchSortBy == 'results'" :order="searchSortOrder" />
                     </th>
                     <th></th>
-                    <th class="sortable" @click="toggleSearchSort('type')">
+                    <th class="sortable" tabindex="0" @click="toggleSearchSort('type')" @keydown.enter.prevent="toggleSearchSort('type')" @keydown.space.prevent="toggleSearchSort('type')">
                         Type <SortIcon :active="searchSortBy == 'type'" :order="searchSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSearchSort('app')">
+                    <th class="sortable" tabindex="0" @click="toggleSearchSort('app')" @keydown.enter.prevent="toggleSearchSort('app')" @keydown.space.prevent="toggleSearchSort('app')">
                         App <SortIcon :active="searchSortBy == 'app'" :order="searchSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleSearchSort('time')">
+                    <th class="sortable" tabindex="0" @click="toggleSearchSort('time')" @keydown.enter.prevent="toggleSearchSort('time')" @keydown.space.prevent="toggleSearchSort('time')">
                         Time <SortIcon :active="searchSortBy == 'time'" :order="searchSortOrder" />
                     </th>
                 </tr>
@@ -148,19 +148,19 @@
             <thead>
                 <tr>
                     <th />
-                    <th class="sortable" @click="toggleGrabSort('pid')">
+                    <th class="sortable" tabindex="0" @click="toggleGrabSort('pid')" @keydown.enter.prevent="toggleGrabSort('pid')" @keydown.space.prevent="toggleGrabSort('pid')">
                         PID <SortIcon :active="grabSortBy == 'pid'" :order="grabSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleGrabSort('nzbName')">
+                    <th class="sortable" tabindex="0" @click="toggleGrabSort('nzbName')" @keydown.enter.prevent="toggleGrabSort('nzbName')" @keydown.space.prevent="toggleGrabSort('nzbName')">
                         Name <SortIcon :active="grabSortBy == 'nzbName'" :order="grabSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleGrabSort('type')">
+                    <th class="sortable" tabindex="0" @click="toggleGrabSort('type')" @keydown.enter.prevent="toggleGrabSort('type')" @keydown.space.prevent="toggleGrabSort('type')">
                         Type <SortIcon :active="grabSortBy == 'type'" :order="grabSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleGrabSort('app')">
+                    <th class="sortable" tabindex="0" @click="toggleGrabSort('app')" @keydown.enter.prevent="toggleGrabSort('app')" @keydown.space.prevent="toggleGrabSort('app')">
                         App <SortIcon :active="grabSortBy == 'app'" :order="grabSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleGrabSort('time')">
+                    <th class="sortable" tabindex="0" @click="toggleGrabSort('time')" @keydown.enter.prevent="toggleGrabSort('time')" @keydown.space.prevent="toggleGrabSort('time')">
                         Time <SortIcon :active="grabSortBy == 'time'" :order="grabSortOrder" />
                     </th>
                 </tr>
@@ -233,19 +233,19 @@
             </colgroup>
             <thead>
                 <tr>
-                    <th class="sortable" @click="toggleFailedGrabSort('pid')">
+                    <th class="sortable" tabindex="0" @click="toggleFailedGrabSort('pid')" @keydown.enter.prevent="toggleFailedGrabSort('pid')" @keydown.space.prevent="toggleFailedGrabSort('pid')">
                         PID <SortIcon :active="failedGrabSortBy == 'pid'" :order="failedGrabSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleFailedGrabSort('nzbName')">
+                    <th class="sortable" tabindex="0" @click="toggleFailedGrabSort('nzbName')" @keydown.enter.prevent="toggleFailedGrabSort('nzbName')" @keydown.space.prevent="toggleFailedGrabSort('nzbName')">
                         Name <SortIcon :active="failedGrabSortBy == 'nzbName'" :order="failedGrabSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleFailedGrabSort('error')">
+                    <th class="sortable" tabindex="0" @click="toggleFailedGrabSort('error')" @keydown.enter.prevent="toggleFailedGrabSort('error')" @keydown.space.prevent="toggleFailedGrabSort('error')">
                         Error <SortIcon :active="failedGrabSortBy == 'error'" :order="failedGrabSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleFailedGrabSort('app')">
+                    <th class="sortable" tabindex="0" @click="toggleFailedGrabSort('app')" @keydown.enter.prevent="toggleFailedGrabSort('app')" @keydown.space.prevent="toggleFailedGrabSort('app')">
                         App <SortIcon :active="failedGrabSortBy == 'app'" :order="failedGrabSortOrder" />
                     </th>
-                    <th class="sortable" @click="toggleFailedGrabSort('time')">
+                    <th class="sortable" tabindex="0" @click="toggleFailedGrabSort('time')" @keydown.enter.prevent="toggleFailedGrabSort('time')" @keydown.space.prevent="toggleFailedGrabSort('time')">
                         Time <SortIcon :active="failedGrabSortBy == 'time'" :order="failedGrabSortOrder" />
                     </th>
                 </tr>

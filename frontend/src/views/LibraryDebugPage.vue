@@ -42,7 +42,7 @@
             <table class="dataTable libraryDebugTable">
                 <thead>
                     <tr>
-                        <th v-for="column in columns" :key="column.key" class="sortable" @click="toggleSort(column.key)">
+                        <th v-for="column in columns" :key="column.key" class="sortable" tabindex="0" @click="toggleSort(column.key)" @keydown.enter.prevent="toggleSort(column.key)" @keydown.space.prevent="toggleSort(column.key)">
                             {{ column.label }} <SortIcon :active="sortBy === column.key" :order="sortOrder" />
                         </th>
                     </tr>

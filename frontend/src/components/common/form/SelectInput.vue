@@ -1,9 +1,9 @@
 <template>
     <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
-        <label v-if="name">{{ name }}</label>
+        <label v-if="name">{{ name }}<span v-if="required" class="requiredMark" aria-hidden="true"> *</span></label>
         <div :class="['inputBox', error ? 'error' : '']">
             <div class="fieldRow">
-            <select v-model="localValue">
+            <select v-model="localValue" :disabled="disabled" :aria-required="required || undefined">
                 <option v-for="option of options" :key="option.key" :value="option.key">
                     {{ option.value }}
                 </option>
@@ -26,6 +26,16 @@ import { computed, defineEmits, defineProps, inject, ref, watch } from 'vue';
 import InfoTip from '@/components/common/form/InfoTip.vue';
 
 const props = defineProps({
+    required: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
+    disabled: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     name: {
         type: String,
         required: true,
@@ -96,6 +106,11 @@ watch(
     max-width: 650px;
     margin-bottom: 1rem;
 
+    .requiredMark {
+        margin-left: 2px;
+        color: @error-color;
+    }
+
     label {
         flex: 0 0 250px;
         display: flex;
@@ -132,6 +147,11 @@ watch(
             background-color: @input-background-color;
             box-shadow: inset 0 1px 1px @primary-box-shadow;
             color: @input-text-color;
+
+            &:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
         }
 
         &.error {

@@ -1,6 +1,6 @@
 <template>
     <div :class="['form-group', advanced ? 'advanced' : '', changed ? 'changed' : '']">
-        <label v-if="name">{{ name }}</label>
+        <label v-if="name">{{ name }}<span v-if="required" class="requiredMark" aria-hidden="true"> *</span></label>
         <div class="inputBox">
             <div class="fieldRow">
             <div :class="['inputWithButton', error ? 'error' : '']">
@@ -11,6 +11,7 @@
                     :rows="rows"
                     :placeholder="placeholder"
                     :disabled="disabled"
+                    :aria-required="required || undefined"
                 />
                 <input
                     v-else
@@ -22,6 +23,7 @@
                     :step="step"
                     :placeholder="placeholder"
                     :disabled="disabled"
+                    :aria-required="required || undefined"
                 />
                 <div class="buttonGroup">
                     <button v-if="copyable" type="button" title="Copy to clipboard" @click="copyValue">
@@ -56,6 +58,12 @@ import InfoTip from '@/components/common/form/InfoTip.vue';
 import { getBasePath } from '@/lib/utils';
 
 const props = defineProps({
+    // Shows a red * after the label: the form will not save without it.
+    required: {
+        type: Boolean,
+        required: false,
+        default: false,
+    },
     name: {
         type: String,
         required: true,
@@ -225,6 +233,11 @@ const copyValue = async () => {
     display: flex;
     max-width: 650px;
     margin-bottom: 1rem;
+
+    .requiredMark {
+        margin-left: 2px;
+        color: @error-color;
+    }
 
     label {
         flex: 0 0 250px;
