@@ -35,9 +35,10 @@
         </div>
 
         <PageHeader title="Activity">
-            <button class="rssToggle clickable" :class="{ active: excludeRss }" @click="excludeRss = !excludeRss">
-                {{ excludeRss ? 'RSS Excluded' : 'RSS Included' }}
-            </button>
+            <SegmentedToggle
+                v-model="excludeRss" label="RSS requests"
+                :options="[{ value: false, label: 'RSS Included' }, { value: true, label: 'RSS Excluded' }]"
+            />
         </PageHeader>
         <div class="statRow">
             <div class="statCard sparkline">
@@ -130,6 +131,7 @@ import StackedBarChart from '@/components/charts/StackedBarChart.vue';
 import CacheListControls from '@/components/common/CacheListControls.vue';
 import CacheStatCard from '@/components/common/CacheStatCard.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SegmentedToggle from '@/components/common/SegmentedToggle.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import TopContentList from '@/components/common/TopContentList.vue';
 import { flashKind, formatCount, withLookups } from '@/lib/cacheActivity';
@@ -333,19 +335,6 @@ const selectRange = (option) => {
     }
 }
 
-.rssToggle {
-    border: 1px solid @grey-pill-background-color;
-    background-color: transparent;
-    color: @subtle-text-color;
-    border-radius: 12px;
-    padding: 4px 12px;
-    font-size: 12px;
-
-    &.active {
-        border-color: @brand-color;
-        color: @brand-color;
-    }
-}
 
 .statRow {
     display: flex;

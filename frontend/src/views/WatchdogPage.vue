@@ -31,13 +31,10 @@
                 <div class="statBody">
                     <span class="statLabel libraryLabelRow">
                         In the Library
-                        <span v-if="radioEnabled" class="libraryToggle" role="group" aria-label="Library type">
-                            <button
-                                v-for="mode in ['video', 'radio']" :key="mode" type="button"
-                                :class="['clickable', libraryMode === mode ? 'active' : '']" :aria-pressed="libraryMode === mode"
-                                @click="libraryMode = mode"
-                            >{{ mode == 'video' ? 'Video' : 'Radio' }}</button>
-                        </span>
+                        <SegmentedToggle
+                            v-if="radioEnabled" v-model="libraryMode" label="Library type"
+                            :options="[{ value: 'video', label: 'Video' }, { value: 'radio', label: 'Radio' }]"
+                        />
                     </span>
                     <div class="valueRow">
                         <span class="statValue">{{ shownLibraryTotal }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
@@ -292,6 +289,7 @@ import DataCard from '@/components/common/DataCard.vue';
 import EmptyState from '@/components/common/EmptyState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
+import SegmentedToggle from '@/components/common/SegmentedToggle.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortControl from '@/components/common/SortControl.vue';
 import SourceCounts from '@/components/common/SourceCounts.vue';
@@ -563,32 +561,6 @@ onBeforeUnmount(() => {
     gap: 8px;
 }
 
-.libraryToggle {
-    display: inline-flex;
-
-    button {
-        padding: 1px 8px;
-        font-size: 11px;
-        border: 1px solid @settings-button-border-color;
-        background-color: transparent;
-        color: @subtle-text-color;
-
-        &:first-child {
-            border-radius: 4px 0 0 4px;
-        }
-
-        &:last-child {
-            border-radius: 0 4px 4px 0;
-            border-left-width: 0;
-        }
-
-        &.active {
-            background-color: @brand-color;
-            border-color: @brand-color;
-            color: @on-brand-color;
-        }
-    }
-}
 
 .statRow .statCard.settingsCard {
     flex-direction: column;

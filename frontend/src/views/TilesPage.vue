@@ -42,6 +42,7 @@
                     type="button"
                     :class="{ enabled: featuring }"
                     :title="featuring ? 'Done' : 'Choose which categories are featured on Discover'"
+                    :aria-label="featuring ? 'Done' : 'Choose which categories are featured on Discover'"
                     @click="featuring = !featuring"
                 >
                     <font-awesome-icon :icon="['fas', featuring ? 'check' : 'compass']" />
@@ -51,18 +52,19 @@
                     type="button"
                     :class="{ enabled: arranging }"
                     :title="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'"
+                    :aria-label="arranging ? 'Done arranging' : 'Reorder, enable or disable channels'"
                     @click="toggleArranging"
                 >
                     <font-awesome-icon :icon="['fas', arranging ? 'check' : 'grip']" />
                 </button>
                 <template v-if="isChannels && channelTools.enabled && customising && !loading && !error">
-                    <button type="button" title="Add your own live channel" @click="openChannelEditor()">
+                    <button type="button" title="Add your own live channel" aria-label="Add your own live channel" @click="openChannelEditor()">
                         <font-awesome-icon :icon="['fas', 'plus']" />
                     </button>
-                    <button type="button" title="Import channels from a JSON export or an M3U playlist" @click="importInput.click()">
+                    <button type="button" title="Import channels from a JSON export or an M3U playlist" aria-label="Import channels from a JSON export or an M3U playlist" @click="importInput.click()">
                         <font-awesome-icon :icon="['fas', 'file-import']" />
                     </button>
-                    <button type="button" title="Export your channels as JSON" @click="exportChannels">
+                    <button type="button" title="Export your channels as JSON" aria-label="Export your channels as JSON" @click="exportChannels">
                         <font-awesome-icon :icon="['fas', 'file-export']" />
                     </button>
                     <input ref="importInput" type="file" accept=".json,.m3u,.m3u8,application/json" hidden @change="importChannels" />
@@ -72,6 +74,7 @@
                     type="button"
                     :class="{ enabled: customising }"
                     :title="customising ? 'Done customising' : 'Rename channels, change colours and logos, add your own channels'"
+                    :aria-label="customising ? 'Done customising' : 'Rename channels, change colours and logos, add your own channels'"
                     @click="toggleCustomising"
                 >
                     <font-awesome-icon :icon="['fas', customising ? 'check' : 'palette']" />
@@ -142,6 +145,7 @@
                             type="button"
                             :disabled="isArrangeBusy(tile.id)"
                             :title="tile.enabled === false ? `Enable ${tile.title}` : `Disable ${tile.title}`"
+                            :aria-label="tile.enabled === false ? `Enable ${tile.title}` : `Disable ${tile.title}`"
                             @click.prevent.stop="toggleEnabled(tile)"
                         >
                             <font-awesome-icon :icon="['fas', tile.enabled === false ? 'eye-slash' : 'eye']" />
@@ -155,6 +159,11 @@
                                     ? `${tile.title} is featured on Discover - click to remove`
                                     : `Feature ${tile.title} on Discover`
                             "
+                            :aria-label="
+                                tile.discover
+                                    ? `${tile.title} is featured on Discover - click to remove`
+                                    : `Feature ${tile.title} on Discover`
+                            "
                             @click.prevent.stop="toggleDiscover(tile)"
                         >
                             <font-awesome-icon :icon="['fas', 'compass']" />
@@ -163,6 +172,7 @@
                             class="arrangeButton arrangeBack"
                             type="button"
                             title="Move earlier"
+                            aria-label="Move earlier"
                             @click.prevent.stop="shift(tile, -1)"
                         >
                             <font-awesome-icon :icon="['fas', 'chevron-left']" />
@@ -171,6 +181,7 @@
                             class="arrangeButton arrangeForward"
                             type="button"
                             title="Move later"
+                            aria-label="Move later"
                             @click.prevent.stop="shift(tile, 1)"
                         >
                             <font-awesome-icon :icon="['fas', 'chevron-right']" />
@@ -185,6 +196,7 @@
                             class="customiseButton"
                             type="button"
                             :title="`Customise ${tile.title}`"
+                            :aria-label="`Customise ${tile.title}`"
                             @click.prevent.stop="openChannelEditor(tile)"
                         >
                             <font-awesome-icon :icon="['fas', 'pen']" />
@@ -219,6 +231,11 @@
                                 ? `${tile.title} is in the library - click to remove`
                                 : `Add ${tile.title} to the library`
                         "
+                        :aria-label="
+                            isSubscribed(tile.id)
+                                ? `${tile.title} is in the library - click to remove`
+                                : `Add ${tile.title} to the library`
+                        "
                         @click.prevent.stop="toggleLibrary(tile)"
                     >
                         <font-awesome-icon :icon="['fas', 'bell']" />
@@ -233,6 +250,11 @@
                                 ? `${tile.title} is in Live TV - click to remove`
                                 : `Add ${tile.title} to Live TV`
                         "
+                        :aria-label="
+                            isLiveTvSelected(tile.id)
+                                ? `${tile.title} is in Live TV - click to remove`
+                                : `Add ${tile.title} to Live TV`
+                        "
                         @click.prevent.stop="liveTvToggle(tile.id)"
                     >
                         <font-awesome-icon :icon="['fas', 'tv']" />
@@ -242,6 +264,7 @@
                         class="liveButton"
                         type="button"
                         :title="`${tile.audioOnly ? 'Listen to' : 'Watch'} ${tile.title} live`"
+                        :aria-label="`${tile.audioOnly ? 'Listen to' : 'Watch'} ${tile.title} live`"
                         @click.prevent.stop="watchLive(tile)"
                     >
                         <font-awesome-icon :icon="['fas', 'play']" />
@@ -251,6 +274,7 @@
                         class="liveButton debugButton"
                         type="button"
                         title="Streaming debug"
+                        aria-label="Streaming debug"
                         @click.prevent.stop="openDebug(tile.id)"
                     >
                         <font-awesome-icon :icon="['fas', 'bug']" />
@@ -264,6 +288,11 @@
                         type="button"
                         :disabled="isArrangeBusy(tile.id)"
                         :title="
+                            tile.discover
+                                ? `${tile.title} is featured on Discover - click to remove`
+                                : `Feature ${tile.title} on Discover`
+                        "
+                        :aria-label="
                             tile.discover
                                 ? `${tile.title} is featured on Discover - click to remove`
                                 : `Feature ${tile.title} on Discover`
