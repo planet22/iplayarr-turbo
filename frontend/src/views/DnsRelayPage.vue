@@ -169,7 +169,7 @@ onMounted(reload);
         gap: 2px;
         padding: 10px 12px;
         background-color: @nav-active-background-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
         border-left: 3px solid transparent;
 
         &.good {

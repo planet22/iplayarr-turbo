@@ -57,7 +57,7 @@ const pick = (key) => {
         align-self: center;
         padding: 0 8px;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
     }

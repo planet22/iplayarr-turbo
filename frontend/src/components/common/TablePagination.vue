@@ -174,7 +174,7 @@ const onPageSizeChange = (event) => {
     padding: 0 8px;
     background: none;
     border: 1px solid @table-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     color: @table-text-color;
     font-size: 13px;
     transition: background-color 160ms, opacity 160ms;
@@ -224,7 +224,7 @@ const onPageSizeChange = (event) => {
         padding: 4px 8px;
         height: 30px;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
         // iOS Safari paints native selects white and ignores the colours above unless the native look is dropped.

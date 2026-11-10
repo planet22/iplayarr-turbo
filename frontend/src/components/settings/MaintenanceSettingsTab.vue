@@ -359,7 +359,7 @@ onMounted(() => {
     .clearGroup {
         flex: 0 0 auto;
         padding: 4px 12px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -425,7 +425,7 @@ onMounted(() => {
         height: 28px;
         padding: 2px 8px;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         box-shadow: inset 0 1px 1px @primary-box-shadow;
         color: @input-text-color;
@@ -498,7 +498,7 @@ onMounted(() => {
 
         button {
             padding: 6px 14px;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             border: 1px solid @settings-button-border-color;
             background-color: @settings-button-background-color;
             color: @primary-text-color;
@@ -525,7 +525,7 @@ onMounted(() => {
         margin-bottom: 8px;
         padding: 10px 12px;
         border-bottom: 0;
-        border-radius: 6px;
+        border-radius: @radius-md;
         background-color: @nav-active-background-color;
         box-shadow: 0 0 10px 1px @primary-box-shadow;
 

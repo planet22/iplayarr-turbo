@@ -144,7 +144,7 @@ function cellTitle(index) {
     gap: 6px;
     background: none;
     border: 1px solid @table-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     padding: 4px 10px;
     font-size: 12px;
     color: @table-text-color;

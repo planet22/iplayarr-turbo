@@ -143,7 +143,7 @@ const statusBadges = computed(() => {
         position: relative;
         aspect-ratio: 16 / 9;
         background-color: @nav-background-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         overflow: hidden;
         transition: transform 150ms, box-shadow 150ms;
 

@@ -676,7 +676,7 @@ onBeforeUnmount(() => {
     .progressTrack {
         width: 100%;
         height: 8px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @table-row-hover-color;
         overflow: hidden;
     }

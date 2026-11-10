@@ -173,7 +173,7 @@ const confirm = () => {
         height: 35px;
         padding: 6px 12px;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
     }
@@ -181,7 +181,7 @@ const confirm = () => {
     button {
         padding: 0 14px;
         height: 35px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -200,7 +200,7 @@ const confirm = () => {
 
     button {
         padding: 6px 14px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -238,7 +238,7 @@ const confirm = () => {
     padding: 10px;
     text-align: left;
     border: 2px solid @table-border-color;
-    border-radius: 6px;
+    border-radius: @radius-md;
     background-color: @nav-background-color;
     color: @primary-text-color;
 
@@ -256,7 +256,7 @@ const confirm = () => {
         width: 90px;
         aspect-ratio: 2 / 3;
         object-fit: cover;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @toolbar-background-color;
     }
 

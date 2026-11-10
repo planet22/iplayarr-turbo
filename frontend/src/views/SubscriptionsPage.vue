@@ -738,7 +738,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
 
     .importAll {
         padding: 6px 14px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -761,7 +761,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     .thumbLink {
         position: relative;
         display: block;
-        border-radius: 4px;
+        border-radius: @radius-sm;
     }
 
     .thumbLink img,
@@ -772,7 +772,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
         width: 160px;
         aspect-ratio: 16 / 9;
         object-fit: cover;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @nav-background-color;
         color: @subtle-text-color;
 
@@ -862,7 +862,7 @@ const remove = (subscription) => subsFor(subscription).remove(subscription);
     padding: 10px;
     margin-bottom: 8px;
     background-color: @nav-active-background-color;
-    border-radius: 6px;
+    border-radius: @radius-md;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
     font-size: 13px;
     position: relative;

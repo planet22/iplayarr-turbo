@@ -164,7 +164,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             padding: 6px 16px;
             height: 35px;
             border: 1px solid @input-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             background-color: @input-background-color;
             box-shadow: inset 0 1px 1px @primary-box-shadow;
             color: @input-text-color;
@@ -187,7 +187,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             padding: 4px 0;
             list-style: none;
             border: 1px solid @input-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             background-color: @input-background-color;
             box-shadow: 0 4px 10px @primary-box-shadow;
 

@@ -72,7 +72,7 @@ const computedOptions = computed(() => {
     margin: 14px 0 18px;
     padding: 10px 12px;
     border-left: 4px solid @brand-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @nav-active-background-color;
     font-size: 14px;
     line-height: 1.4;

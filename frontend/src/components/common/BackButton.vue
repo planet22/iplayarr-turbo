@@ -30,7 +30,7 @@ const { canGoBack, goBack } = useBackNav();
         padding: 6px 12px;
         // The same faint outline as the toolbar buttons.
         border: 1px solid @settings-button-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background: none;
         color: @primary-text-color;
         font-size: 15px;

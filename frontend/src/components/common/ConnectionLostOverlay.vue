@@ -135,7 +135,7 @@ onBeforeUnmount(() => {
     width: 100%;
     max-width: 420px;
     padding: 2rem 1.5rem;
-    border-radius: 8px;
+    border-radius: @radius-lg;
     background-color: @nav-background-color;
     box-shadow: 0 4px 10px @primary-box-shadow;
     color: @primary-text-color;

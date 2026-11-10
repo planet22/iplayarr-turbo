@@ -58,7 +58,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         position: relative;
         aspect-ratio: 16 / 9;
         background-color: @nav-background-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         overflow: hidden;
         transition: transform 150ms, box-shadow 150ms;
 
@@ -87,7 +87,7 @@ const thumbnailUrl = computed(() => getThumbnailUrl(props.collection.thumbnail, 
         justify-content: center;
         width: 24px;
         height: 24px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: rgba(0, 0, 0, 0.7);
         box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
         color: #fff;

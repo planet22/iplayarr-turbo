@@ -239,7 +239,7 @@ defineExpose({ show });
         .cmdKey {
             padding: 2px 6px;
             border: 1px solid @table-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             color: @subtle-text-color;
             font-size: 11px;
         }

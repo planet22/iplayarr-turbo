@@ -170,7 +170,7 @@ const clearView = async () => {
         gap: 2px;
         padding: 10px 12px;
         background-color: @nav-active-background-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
         border-left: 3px solid transparent;
 
         &.good {
@@ -216,7 +216,7 @@ const clearView = async () => {
     min-width: 9rem;
     padding: 0 8px;
     border: 1px solid @input-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @input-background-color;
     color: @input-text-color;
 

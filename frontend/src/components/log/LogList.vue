@@ -84,7 +84,7 @@ onMounted(() => {
     font-family: monospace;
     font-size: 13px;
     background-color: @logs-background-color;
-    border-radius: 6px;
+    border-radius: @radius-md;
     height: 62vh;
     min-height: 16rem;
     overflow-y: auto;

@@ -116,7 +116,7 @@ const halfStyle = (theme, mode) => ({
     gap: 4px;
     padding: 8px;
     border: 1px solid @settings-button-border-color;
-    border-radius: 6px;
+    border-radius: @radius-md;
     background-color: @settings-button-background-color;
     color: @table-text-color;
     text-align: left;
@@ -138,7 +138,7 @@ const halfStyle = (theme, mode) => ({
     .preview {
         display: flex;
         height: 46px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         overflow: hidden;
     }
 

@@ -154,7 +154,7 @@ onBeforeUnmount(() => {
         padding: 10px 14px 12px;
         border: 1px solid @input-border-color;
         border-top: 2px solid @brand-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
         background-color: @nav-background-color;
         box-shadow: 0 8px 24px @shadow-color;
         font-size: 13px;

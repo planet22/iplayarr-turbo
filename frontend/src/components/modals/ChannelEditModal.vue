@@ -435,7 +435,7 @@ const remove = async () => {
     margin: 0 0 12px;
     padding: 6px 12px 10px;
     border: 1px solid @settings-button-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
     font-size: 12px;
     text-align: left;
@@ -492,7 +492,7 @@ const remove = async () => {
     width: 190px;
     aspect-ratio: 2.375 / 1;
     object-fit: cover;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
 }
 

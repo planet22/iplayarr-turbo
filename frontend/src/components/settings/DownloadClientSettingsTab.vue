@@ -205,7 +205,7 @@ async function update(tool) {
     margin-bottom: 0.75rem;
     padding: 8px 12px;
     border: 1px solid @table-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
 
     .toolVersionInfo {
         display: flex;
@@ -222,7 +222,7 @@ async function update(tool) {
     button {
         background: none;
         border: 1px solid @table-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         padding: 6px 14px;
         color: @table-text-color;
 

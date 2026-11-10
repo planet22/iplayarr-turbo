@@ -431,7 +431,7 @@ onBeforeUnmount(() => {
 .scheduleGrid {
     display: flex;
     border: 1px solid @settings-button-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     overflow: hidden;
 }
 

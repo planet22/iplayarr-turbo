@@ -84,7 +84,7 @@ const heroStyle = computed(() => {
     display: flex;
     align-items: flex-end;
     margin-bottom: 1.5rem;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     overflow: hidden;
 
     // Radio: the square picture whole at the right, over a blurred copy of itself (always blurred, whatever Radio Thumbnails says).
@@ -206,7 +206,7 @@ const heroStyle = computed(() => {
         padding: 8px 16px;
         font-size: 15px;
         text-decoration: none;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;

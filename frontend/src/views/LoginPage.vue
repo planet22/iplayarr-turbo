@@ -137,7 +137,7 @@ onMounted(async () => {
 
 .panel {
     margin-top: 50px;
-    border-radius: 4px;
+    border-radius: @radius-sm;
 }
 
 .panel-header {
@@ -177,7 +177,7 @@ onMounted(async () => {
     height: 35px;
     background-color: @input-background-color;
     border: 1px solid @input-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     box-shadow: inset 0 1px 1px @primary-box-shadow;
     color: @input-text-color;
 }
@@ -189,7 +189,7 @@ onMounted(async () => {
     width: 100%;
     border: 1px solid;
     border-color: @login-button-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @login-button-background-color;
     color: @primary-text-color;
     vertical-align: middle;

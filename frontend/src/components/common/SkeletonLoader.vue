@@ -142,7 +142,7 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
 
     // Theme-aware: a faint wash of the text colour, with a lighter band sweeping across it.
     .skeletonBlock {
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: color-mix(in srgb, var(--primary-text-color) 9%, transparent);
         background-image: linear-gradient(
             90deg,
@@ -248,7 +248,7 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
     .skeletonHero {
         height: 320px;
         margin-bottom: 1.5rem;
-        border-radius: 4px;
+        border-radius: @radius-sm;
     }
 
     // ProgrammeRail: header row, 12px gap, 240px cards (42vw on phones), 28px below.
@@ -301,7 +301,7 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
             box-sizing: border-box;
             // The real banner is this tall once its title, pills, synopsis and buttons are in.
             min-height: 264px;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             background-color: color-mix(in srgb, var(--primary-text-color) 5%, transparent);
         }
 
@@ -400,7 +400,7 @@ const showPager = computed(() => props.pagination && pagingMinimum.minimum < pro
     }
 }
 
-@media (max-width: 480px) {
+@media (max-width: @phone-breakpoint) {
     .skeletonLoader .skeletonTileGrid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }

@@ -75,7 +75,7 @@ const scroll = (direction) => {
         width: 30px;
         height: 30px;
         margin-left: 6px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;

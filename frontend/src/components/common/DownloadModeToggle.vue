@@ -50,7 +50,7 @@ const emit = defineEmits(['update:modelValue']);
     margin-top: 14px;
     padding: 2px;
     border: 1px solid @settings-button-border-color;
-    border-radius: 6px;
+    border-radius: @radius-md;
 
     button {
         flex: 1;
@@ -60,7 +60,7 @@ const emit = defineEmits(['update:modelValue']);
         gap: 6px;
         padding: 6px 10px;
         border: 0;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background: none;
         color: @toolbar-text-color;
         font-size: 14px;

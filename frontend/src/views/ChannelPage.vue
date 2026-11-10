@@ -152,7 +152,7 @@ watch(
     height: 30px;
     aspect-ratio: 2.375 / 1;
     object-fit: cover;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     margin-bottom: 4px;
 }
 
@@ -201,7 +201,7 @@ watch(
     display: flex;
     gap: 12px;
     padding: 10px;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
@@ -218,7 +218,7 @@ watch(
         width: 140px;
         aspect-ratio: 16 / 9;
         object-fit: cover;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @nav-background-color;
     }
 

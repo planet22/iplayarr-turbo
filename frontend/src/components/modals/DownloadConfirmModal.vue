@@ -135,7 +135,7 @@ const download = async () => {
     gap: 10px;
     margin-top: 10px;
     padding: 8px 12px;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @nav-active-background-color;
     font-size: 14px;
     color: @table-text-color;

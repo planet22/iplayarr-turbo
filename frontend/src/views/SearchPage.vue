@@ -783,7 +783,7 @@ watch(
         max-width: 720px;
         padding: 0 8px 0 14px;
         border: 1px solid @input-border-color;
-        border-radius: 8px;
+        border-radius: @radius-lg;
         background-color: @input-background-color;
         transition: border-color 0.2s ease-out;
 
@@ -839,7 +839,7 @@ watch(
             padding: 4px 0;
             list-style: none;
             z-index: @z-dropdown;
-            border-radius: 6px;
+            border-radius: @radius-md;
             border: 1px solid @settings-button-border-color;
             background-color: @nav-active-background-color;
             box-shadow: 0 6px 18px @shadow-color;
@@ -1010,7 +1010,7 @@ watch(
         width: 32px;
         height: 32px;
         border: 1px solid @settings-button-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background: transparent;
         color: @primary-text-color;
         cursor: pointer;

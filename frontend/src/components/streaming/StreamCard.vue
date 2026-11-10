@@ -180,7 +180,7 @@ const facts = computed(() =>
     color: @primary-text-color;
     background-color: @settings-button-hover-background-color;
     border: 1px solid @settings-button-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
 
     &:hover {
         border-color: @settings-button-hover-border-color;

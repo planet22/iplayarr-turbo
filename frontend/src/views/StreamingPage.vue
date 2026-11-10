@@ -560,7 +560,7 @@ async function clearHistory() {
         padding: 6px 10px;
         height: 32px;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
     }

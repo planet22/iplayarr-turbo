@@ -306,7 +306,7 @@ const selectRange = (option) => {
         break-inside: avoid;
         box-sizing: border-box;
         border: 1px solid @input-border-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
         padding: 8px 10px 10px;
         margin-bottom: 1rem;
     }
@@ -355,7 +355,7 @@ const selectRange = (option) => {
         align-items: center;
         gap: 16px;
         background-color: @nav-active-background-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         box-shadow: 0 0 10px 1px @primary-box-shadow;
         padding: 16px 20px;
         box-sizing: border-box;
@@ -459,7 +459,7 @@ const selectRange = (option) => {
         min-width: 300px;
         box-sizing: border-box;
         background-color: @nav-active-background-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         box-shadow: 0 0 10px 1px @primary-box-shadow;
         padding: 16px;
 

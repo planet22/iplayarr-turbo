@@ -143,7 +143,7 @@ watch(
             width: 100%;
             height: 35px;
             border: 1px solid @input-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             background-color: @input-background-color;
             box-shadow: inset 0 1px 1px @primary-box-shadow;
             color: @input-text-color;

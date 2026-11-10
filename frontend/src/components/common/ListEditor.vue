@@ -79,7 +79,7 @@ const { page, pageSize, pagedItems } = usePagination(items);
             display: inline-block;
             padding: 5px 20px 0;
             border: 1px solid @table-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             background-color: @nav-background-color;
             color: @primary-text-color;
             font-size: 45px;
@@ -112,7 +112,7 @@ const { page, pageSize, pagedItems } = usePagination(items);
         button {
             padding: 4px 10px;
             border: 1px solid @table-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             background-color: @nav-background-color;
             color: @primary-text-color;
         }

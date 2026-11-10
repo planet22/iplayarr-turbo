@@ -1050,7 +1050,7 @@ onBeforeUnmount(stopPlayback);
         gap: 2px;
         padding: 10px 12px;
         background-color: @nav-active-background-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
         border-left: 3px solid transparent;
 
         &.good {
@@ -1129,7 +1129,7 @@ onBeforeUnmount(stopPlayback);
         display: block;
         max-width: 170px;
         max-height: 130px;
-        border-radius: 6px;
+        border-radius: @radius-md;
         background-color: @input-background-color;
     }
 
@@ -1163,7 +1163,7 @@ details {
         padding: 8px;
         font-size: 12px;
         background-color: @input-background-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
     }
 }
 
@@ -1215,7 +1215,7 @@ ul.plain {
     }
 
     .thumbWrap.radioArtBox {
-        border-radius: 8px;
+        border-radius: @radius-lg;
 
         // The picture's own box would otherwise paint over the blurred backdrop (Radio Thumbnails) behind its letterbox bars.
         .bigThumb {
@@ -1229,7 +1229,7 @@ ul.plain {
         max-width: 100%;
         aspect-ratio: 16 / 9;
         object-fit: cover;
-        border-radius: 8px;
+        border-radius: @radius-lg;
         background: @input-background-color;
     }
 
@@ -1333,7 +1333,7 @@ ul.plain {
         width: 640px;
         max-width: 100%;
         background: #000;
-        border-radius: 6px;
+        border-radius: @radius-md;
 
         // Audio has no picture: just the player bar.
         &.audioOnly {
@@ -1361,7 +1361,7 @@ ul.plain {
         flex-direction: column;
         padding: 8px 10px;
         background-color: @nav-active-background-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
 
         .statLabel {
             font-size: 11px;

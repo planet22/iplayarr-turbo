@@ -524,7 +524,7 @@ const handleClickOutside = (event) => {
             background-color: transparent;
             // A faint outline, like the round icon buttons on the cards.
             border: 1px solid @settings-button-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             margin: 6px 3px;
             min-height: 32px;
 
@@ -586,7 +586,7 @@ const handleClickOutside = (event) => {
                 max-width: 240px;
                 padding: 0 10px;
                 border: 1px solid @input-border-color;
-                border-radius: 4px;
+                border-radius: @radius-sm;
                 background-color: @input-background-color;
                 color: @input-text-color;
             }

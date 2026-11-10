@@ -69,7 +69,7 @@ const cycle = () => {
         gap: 2px;
         padding: 2px;
         border: 1px solid @settings-button-border-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
     }
 
     button {
@@ -80,7 +80,7 @@ const cycle = () => {
         height: 100%;
         padding: 0;
         border: 0;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background: none;
         color: @toolbar-text-color;
         font-size: 13px;
@@ -101,7 +101,7 @@ const cycle = () => {
         width: 36px;
         height: 36px;
         border: 1px solid @settings-button-border-color;
-        border-radius: 6px;
+        border-radius: @radius-md;
         font-size: 16px;
         color: @primary-text-color;
 

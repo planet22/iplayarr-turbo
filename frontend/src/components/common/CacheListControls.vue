@@ -44,7 +44,7 @@ const emit = defineEmits(['update:sortBy', 'update:order', 'update:grouped']);
     height: 32px;
     padding: 0 12px;
     border: 1px solid @grey-pill-background-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: transparent;
     color: @subtle-text-color;
     font-size: 13px;

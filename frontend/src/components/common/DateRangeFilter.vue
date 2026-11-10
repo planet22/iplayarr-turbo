@@ -92,7 +92,7 @@ function clear() {
         justify-content: center;
         padding: 0 0 2px;
         border: 1px solid @input-border-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @input-background-color;
         color: @input-text-color;
         font-size: 18px;

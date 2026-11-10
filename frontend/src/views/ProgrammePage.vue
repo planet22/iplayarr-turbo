@@ -706,7 +706,7 @@ const duplicatesBannerDownload = computed(
     position: relative;
     outline: 2px solid @brand-color;
     outline-offset: 4px;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     transition: outline-color 400ms ease;
 
     // A manual decision: the highlight stays until this is clicked, then fades out.
@@ -806,7 +806,7 @@ const duplicatesBannerDownload = computed(
     p.missing {
         display: inline-block;
         padding: 2px 8px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
     }
 
     .poster.missing {
@@ -858,7 +858,7 @@ const duplicatesBannerDownload = computed(
         width: 280px;
         aspect-ratio: 16 / 9;
         object-fit: cover;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
 
         @media (max-width: @mobile-breakpoint) {
@@ -966,7 +966,7 @@ const duplicatesBannerDownload = computed(
 .subscribeButton {
     padding: 8px 16px;
     font-size: 15px;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
@@ -1027,7 +1027,7 @@ const duplicatesBannerDownload = computed(
     .seasonSort {
         flex: 0 0 auto;
         padding: 6px 12px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -1048,7 +1048,7 @@ const duplicatesBannerDownload = computed(
 
     .seasonDownload {
         padding: 6px 14px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -1076,7 +1076,7 @@ const duplicatesBannerDownload = computed(
         height: 36px;
         padding: 0;
         font-weight: 600;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         border: 1px solid @settings-button-border-color;
         background-color: @settings-button-background-color;
         color: @primary-text-color;
@@ -1123,7 +1123,7 @@ const duplicatesBannerDownload = computed(
         width: 100%;
         aspect-ratio: 16 / 9;
         object-fit: cover;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: @nav-background-color;
     }
 
@@ -1135,7 +1135,7 @@ const duplicatesBannerDownload = computed(
 
     // Radio artwork is square: shown whole in the 16:9 box, over a blurred copy of itself (see .radioArtBox in global.less).
     .episodeThumbWrap.radioArt {
-        border-radius: 4px;
+        border-radius: @radius-sm;
 
         img {
             position: relative;
@@ -1236,7 +1236,7 @@ const duplicatesBannerDownload = computed(
         align-items: center;
         justify-content: center;
         gap: 12px;
-        border-radius: 4px;
+        border-radius: @radius-sm;
         background-color: rgba(0, 0, 0, 0.55);
         opacity: 0;
         transition: opacity 150ms;

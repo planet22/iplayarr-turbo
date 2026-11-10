@@ -58,7 +58,7 @@ button {
     padding: 6px 16px;
     font-size: 14px;
     color: @primary-text-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
 
     &:hover {
         border-color: @settings-button-hover-border-color;

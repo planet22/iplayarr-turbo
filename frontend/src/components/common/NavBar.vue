@@ -291,7 +291,7 @@ defineExpose({ clearSearch });
                     padding: 4px 0;
                     list-style: none;
                     z-index: @z-dropdown;
-                    border-radius: 4px;
+                    border-radius: @radius-sm;
                     border: 1px solid @settings-button-border-color;
                     background-color: @nav-active-background-color;
                     box-shadow: 0 6px 18px @shadow-color;

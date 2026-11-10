@@ -114,7 +114,7 @@ summary {
                 padding: 10px 12px !important;
                 margin-bottom: 8px;
                 border: 1px solid @table-border-color;
-                border-radius: 4px;
+                border-radius: @radius-sm;
                 background-color: @nav-active-background-color;
             }
 
@@ -206,7 +206,7 @@ legend {
 .gridFilter {
     height: 32px;
     padding: 0 10px;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
     color: @primary-text-color;
@@ -334,7 +334,7 @@ select:focus-visible {
 
 .iplayarr-modal-content {
     padding: 20px;
-    border-radius: 8px;
+    border-radius: @radius-lg;
     box-shadow: 0 4px 10px @primary-box-shadow;
 
     .modal-inner {
@@ -374,7 +374,7 @@ select:focus-visible {
             height: auto;
             max-height: 85dvh;
             padding-top: 20px;
-            border-radius: 8px;
+            border-radius: @radius-lg;
 
             .modal-inner {
                 padding-right: 0;
@@ -410,7 +410,7 @@ select:focus-visible {
             padding: 6px 16px;
             font-size: 14px;
             color: @primary-text-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             margin-left: 1rem;
             cursor: pointer;
 
@@ -451,7 +451,7 @@ select:focus-visible {
     height: 36px;
     padding: 0;
     border: 0;
-    border-radius: 6px;
+    border-radius: @radius-md;
     background: none;
     color: @primary-text-color;
     cursor: pointer;
@@ -481,7 +481,7 @@ select:focus-visible {
     width: 36px;
     height: 36px;
     border: 1px solid @settings-button-border-color;
-    border-radius: 6px;
+    border-radius: @radius-md;
     color: @primary-text-color;
 
     &:hover {
@@ -523,7 +523,7 @@ select:focus-visible {
         gap: 12px;
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: @phone-breakpoint) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -609,7 +609,7 @@ select:focus-visible {
     padding: 0;
     list-style: none;
     border: 1px solid @input-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @input-background-color;
     box-shadow: inset 0 1px 1px @primary-box-shadow;
     color: @input-text-color;

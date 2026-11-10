@@ -51,7 +51,7 @@ const loaded = (event) => {
     img {
         max-width: 100%;
         max-height: 50vh;
-        border-radius: 6px;
+        border-radius: @radius-md;
         background-color: @input-background-color;
     }
 

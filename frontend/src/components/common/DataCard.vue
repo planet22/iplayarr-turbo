@@ -47,7 +47,7 @@
     padding: 10px;
     margin-bottom: 8px;
     background-color: @nav-active-background-color;
-    border-radius: 6px;
+    border-radius: @radius-md;
     box-shadow: 0 0 10px 1px @primary-box-shadow;
     font-size: 13px;
 

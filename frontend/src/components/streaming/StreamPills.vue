@@ -53,7 +53,7 @@ const chips = computed(() => {
 
 .miniPill {
     padding: 0 6px;
-    border-radius: 8px;
+    border-radius: @radius-lg;
     font-size: 10px;
     line-height: 16px;
     white-space: nowrap;

@@ -629,7 +629,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: @phone-breakpoint) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -640,7 +640,7 @@ watch(isChannels, () => loadTiles(), { immediate: true });
     align-items: center;
     gap: 12px;
     padding: 18px 16px;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     border: 1px solid @settings-button-border-color;
     background-color: @settings-button-background-color;
     color: @primary-text-color;

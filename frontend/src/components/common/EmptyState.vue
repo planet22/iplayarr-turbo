@@ -74,7 +74,7 @@ defineProps({
             display: inline-block;
             padding: 8px 18px;
             border: 1px solid @settings-button-border-color;
-            border-radius: 4px;
+            border-radius: @radius-sm;
             background-color: @settings-button-background-color;
             color: @primary-text-color;
             font-size: 14px;

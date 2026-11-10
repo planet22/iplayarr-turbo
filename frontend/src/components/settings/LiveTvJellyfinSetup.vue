@@ -183,7 +183,7 @@ onMounted(async () => {
     min-width: 0;
     box-sizing: border-box;
     border: 1px solid @input-border-color;
-    border-radius: 4px;
+    border-radius: @radius-sm;
     background-color: @input-background-color;
     box-shadow: inset 0 1px 1px @primary-box-shadow;
     overflow: hidden;
@@ -248,7 +248,7 @@ onMounted(async () => {
         border: 1px solid @settings-button-border-color;
         font-size: 14px;
         color: @primary-text-color;
-        border-radius: 4px;
+        border-radius: @radius-sm;
 
         &:hover:not(:disabled) {
             border-color: @settings-button-hover-border-color;

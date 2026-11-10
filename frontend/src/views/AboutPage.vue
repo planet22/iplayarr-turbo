@@ -94,7 +94,7 @@ a {
         padding: 0.5rem 1rem;
         font-size: 0.9rem;
         height: 36px;
-        border-radius: 8px;
+        border-radius: @radius-lg;
         border: none;
         color: white;
         background-color: black;
