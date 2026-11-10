@@ -306,6 +306,15 @@ export async function calculateSeasonAndEpisode(
         if (skyhookResult) {
             series = skyhookResult.series ?? series;
             episode = skyhookResult.episode ?? episode;
+        } else if (parent && londonDate(programme.first_broadcast_date)) {
+            // BBC and TVDB often spell an episode title differently, so try the UK air date before giving up on S00E00.
+            const byDate = await Promise.resolve(
+                SkyhookService.lookupByAirDate(seriesTitle, londonDate(programme.first_broadcast_date) as string, episodeTitle)
+            ).catch(() => undefined);
+            if (byDate) {
+                series = byDate.series;
+                episode = byDate.episode;
+            }
         }
     }
 
