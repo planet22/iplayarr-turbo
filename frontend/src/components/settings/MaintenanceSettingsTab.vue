@@ -274,7 +274,7 @@ const clearEverything = async () => {
     const total = caches.value.reduce((sum, cache) => sum + cache.count, 0);
     if (
         await dialogService.confirm(
-            'Clear All Caches',
+            'Clear all caches',
             `Are you sure you want to clear all ${total.toLocaleString()} cached items?`,
             'Searches and pages will be slower until the caches fill up again.',
             { danger: true, confirmLabel: 'Clear all' }

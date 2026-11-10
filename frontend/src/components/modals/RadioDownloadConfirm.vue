@@ -14,7 +14,7 @@
         <p class="question">{{ text }}</p>
         <DownloadModeToggle v-model="mode" :options="options" />
         <div class="noteBox" role="note">
-            <font-awesome-icon :icon="['fas', mode === 'strm' ? 'circle-info' : 'cloud-download']" />
+            <font-awesome-icon :icon="['fas', mode === 'strm' ? 'circle-info' : 'cloud-arrow-down']" />
             <span>{{ note }}</span>
         </div>
     </IPlayarrModal>

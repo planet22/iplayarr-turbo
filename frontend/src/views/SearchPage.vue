@@ -33,7 +33,7 @@
     </div>
     <div class="pageSearchBar">
         <div class="searchPanel">
-            <font-awesome-icon class="searchIcon" :icon="['fas', 'search']" />
+            <font-awesome-icon class="searchIcon" :icon="['fas', 'magnifying-glass']" />
             <input
                 ref="searchEl" v-model="searchInput" class="searchBox" type="text"
                 placeholder="Search programmes" autocomplete="off" enterkeyhint="search"
@@ -192,7 +192,7 @@
                         <button type="button" class="rowIconButton" title="Download" aria-label="Download">
                             <font-awesome-icon
                                 :class="['clickable', result.downloading ? 'downloading' : '']"
-                                :icon="['fas', 'cloud-download']"
+                                :icon="['fas', 'cloud-arrow-down']"
                             />
                         </button>
                     </td>

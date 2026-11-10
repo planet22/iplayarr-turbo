@@ -101,6 +101,8 @@ watch(
 let observer = null;
 const room = (height) => {
     document.body.style.paddingBottom = height ? `${height}px` : '';
+    // Other bottom-pinned things (the Settings save bar, toasts) sit above the player.
+    document.documentElement.style.setProperty('--audio-bar-height', `${height || 0}px`);
 };
 watch(bar, (el) => {
     observer?.disconnect();

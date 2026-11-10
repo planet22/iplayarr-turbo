@@ -71,7 +71,7 @@
                         :disabled="downloadingSeason || loadingMore"
                         @click="downloadAll"
                     >
-                        <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-download']" :spin="downloadingSeason" />
+                        <font-awesome-icon :icon="['fas', downloadingSeason ? 'circle-notch' : 'cloud-arrow-down']" :spin="downloadingSeason" />
                         Download all ({{ loadedCount }})
                     </button>
                     <button
@@ -148,7 +148,7 @@
                         <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
                     </button>
                     <button v-if="!duplicatesBannerDownload" class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
-                        <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                        <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
                         {{ seasonDownloadLabel }}
                     </button>
                 </div>
@@ -159,7 +159,7 @@
                                 <font-awesome-icon :icon="['fas', oldestFirst ? 'arrow-up-short-wide' : 'arrow-down-wide-short']" />
                             </button>
                             <button class="clickable seasonDownload" :disabled="downloadingSeason || loadingMore" @click="downloadSeason">
-                                <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                                <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
                                 {{ seasonDownloadLabel }}
                             </button>
                         </div>
@@ -193,7 +193,7 @@
                                     <font-awesome-icon :icon="['fas', 'play']" />
                                 </button>
                                 <button class="clickable" :title="provider.downloadState(episode).title" :disabled="provider.downloadState(episode).busy" @click="download(episode)">
-                                    <font-awesome-icon :icon="['fas', provider.downloadState(episode).done ? 'check' : 'cloud-download']" />
+                                    <font-awesome-icon :icon="['fas', provider.downloadState(episode).done ? 'check' : 'cloud-arrow-down']" />
                                 </button>
                                 <button v-if="debugOn" class="clickable" title="Streaming debug" @click="openDebug(episode.pid, provider.debugKind)">
                                     <font-awesome-icon :icon="['fas', 'bug']" />

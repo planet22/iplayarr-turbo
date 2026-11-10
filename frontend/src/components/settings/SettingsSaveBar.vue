@@ -49,7 +49,7 @@ onBeforeUnmount(() => setOffset(false));
 <style lang="less">
 .settingsSaveBar {
     position: sticky;
-    bottom: 0;
+    bottom: var(--audio-bar-height, 0px);
     z-index: @z-save-bar;
     margin-top: 1.5rem;
     padding-bottom: env(safe-area-inset-bottom, 0px);

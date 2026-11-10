@@ -39,7 +39,7 @@
                                 @click="act(server.id, item.key, 'POST')"
                             >
                                 <font-awesome-icon
-                                    :icon="['fas', busy === key(server.id, item.key, 'POST') ? 'circle-notch' : item.present ? 'rotate' : 'plus']"
+                                    :icon="['fas', busy === key(server.id, item.key, 'POST') ? 'circle-notch' : item.present ? 'arrows-rotate' : 'plus']"
                                     :spin="busy === key(server.id, item.key, 'POST')"
                                 />
                             </button>

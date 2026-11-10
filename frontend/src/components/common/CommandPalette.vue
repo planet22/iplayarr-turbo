@@ -5,7 +5,7 @@
         <div v-if="isOpen" class="cmdOverlay" @mousedown.self="close">
             <div class="cmdPanel" role="dialog" aria-modal="true" aria-label="Quick find">
                 <div class="cmdInputRow">
-                    <font-awesome-icon :icon="['fas', 'search']" class="cmdIcon" />
+                    <font-awesome-icon :icon="['fas', 'magnifying-glass']" class="cmdIcon" />
                     <input
                         ref="input"
                         v-model="query"

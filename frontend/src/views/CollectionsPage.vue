@@ -65,7 +65,7 @@
                             type="button" class="SettingsPageToolbar-button clickable" :disabled="downloading"
                             :title="downloadTitle" :aria-label="downloadTitle" @click="downloadCollection"
                         >
-                            <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-download']" :spin="downloading" />
+                            <font-awesome-icon :icon="['fas', downloading ? 'circle-notch' : 'cloud-arrow-down']" :spin="downloading" />
                             <span v-if="downloadable" class="downloadCount">{{ downloadable }}</span>
                         </button>
                     </template>

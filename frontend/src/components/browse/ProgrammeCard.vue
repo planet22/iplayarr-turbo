@@ -34,7 +34,7 @@
                     <font-awesome-icon :icon="['fas', 'play']" />
                 </button>
                 <button v-if="item.kind === 'episode'" class="clickable" title="Download" @click.prevent.stop="download(item)">
-                    <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                    <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
                 </button>
                 <button v-if="debugOn" class="clickable debugAction" title="Streaming debug" @click.prevent.stop="openDebug(item.pid, item.radio ? 'radio' : undefined)">
                     <font-awesome-icon :icon="['fas', 'bug']" />

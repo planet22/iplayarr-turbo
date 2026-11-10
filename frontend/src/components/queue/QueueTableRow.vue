@@ -311,7 +311,7 @@ const openInfo = ({ pid, nzbName, jobId, kind, showId }) => {
 
 const getDownloadIcon = ({ status }) => {
     if (status == 'Complete') {
-        return 'cloud-download';
+        return 'cloud-arrow-down';
     } else if (status == 'Forwarded') {
         return 'forward';
     } else if (status == 'Cancelled') {

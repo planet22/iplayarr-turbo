@@ -17,7 +17,7 @@
         <div class="middle">
             <div v-if="authState.user && route.name !== 'search'" class="searchPanel">
                 <button type="button" class="navIconButton" title="Search" aria-label="Search" @click="onSearchButton">
-                    <font-awesome-icon :icon="['fas', 'search']" />
+                    <font-awesome-icon :icon="['fas', 'magnifying-glass']" />
                 </button>
                 <div class="searchWrap">
                     <input

@@ -20,7 +20,7 @@
         <div v-else-if="errorMessage" class="lookupError">
             <p>{{ errorMessage }}</p>
             <button type="button" class="clickable" @click="retry">
-                <font-awesome-icon :icon="['fas', 'rotate']" /> Retry
+                <font-awesome-icon :icon="['fas', 'rotate-right']" /> Try again
             </button>
         </div>
         <template v-else>

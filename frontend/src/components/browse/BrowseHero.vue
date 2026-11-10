@@ -16,7 +16,7 @@
                     Play
                 </button>
                 <button v-if="item.kind === 'episode'" class="clickable heroButton" @click="download(item)">
-                    <font-awesome-icon :icon="['fas', 'cloud-download']" />
+                    <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
                     Download
                 </button>
                 <button

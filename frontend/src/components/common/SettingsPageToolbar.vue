@@ -161,7 +161,7 @@
                 :aria-label="clearLabel"
                 @click="emit('clear')"
             >
-                <font-awesome-icon :icon="['fas', 'trash-can']" />
+                <font-awesome-icon :icon="['fas', 'trash']" />
                 <div v-if="!iconOnly" class="SettingsPageToolbar-label">{{ clearLabel }}</div>
             </button>
             <div v-if="!filterFirst && icons.some((i) => i == 'filter')" class="filterWrap">
@@ -362,7 +362,7 @@ defineProps({
     clearLabel: {
         type: String,
         required: false,
-        default: 'Clear All',
+        default: 'Clear all',
     },
     clearTitle: {
         type: String,
