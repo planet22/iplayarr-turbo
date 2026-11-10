@@ -387,6 +387,7 @@ import StreamSessionTable from '@/components/streaming/StreamSessionTable.vue';
 import ThroughputSpark from '@/components/streaming/ThroughputSpark.vue';
 import { ipFetch } from '@/lib/ipFetch';
 import { radioDownloads } from '@/lib/radio';
+import { ukDay, ukDayNumber, ukWhen } from '@/lib/ukTime';
 import { formatBytes, formatDateTimeWithMillis, formatRelativeTime, getHost, getThumbnailUrl, hideBrokenImage, sessionRoute } from '@/lib/utils';
 
 // Reached from the button on a Streaming page row (Show Extended Debug), or by its address.
@@ -472,14 +473,6 @@ const pidLinks = computed(() => {
 });
 
 // When it leaves iPlayer, counted the way iPlayer and the expiry badge count: whole UK calendar days.
-const DAY_MS = 24 * 60 * 60 * 1000;
-const ukDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
-const ukDayNumber = (ms) => {
-    const [year, month, day] = ukDate.format(ms).split('-').map(Number);
-    return Date.UTC(year, month - 1, day) / DAY_MS;
-};
-const ukWhen = (ms) => `${new Date(ms).toLocaleString('en-GB', { timeZone: 'Europe/London', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} UK time`;
-const ukDay = (dayNumber) => new Date(dayNumber * DAY_MS).toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const expiry = computed(() => {
     const ends = [info.value?.ibl?.availableUntil, ...(info.value?.versions ?? []).map((version) => version.availableUntil)].map((end) => Date.parse(end)).filter((ms) => !Number.isNaN(ms));
     if (!ends.length) return null;
