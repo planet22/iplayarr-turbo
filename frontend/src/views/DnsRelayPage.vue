@@ -61,7 +61,7 @@
                     </tr>
                 </tbody>
             </table>
-            <p v-if="!status.recent.length" class="empty">No lookups yet.</p>
+            <EmptyState v-if="!status.recent.length" icon="network-wired" title="No lookups yet" />
 
             <PageHeader title="Last 20 failed" icon="triangle-exclamation" />
             <table class="dataTable dnsTable failedTable">
@@ -82,15 +82,16 @@
                     </tr>
                 </tbody>
             </table>
-            <p v-if="!status.recentFailures?.length" class="empty">No failed lookups since the relay started.</p>
+            <EmptyState v-if="!status.recentFailures?.length" icon="circle-check" title="No failed lookups since the relay started" />
         </template>
-        <p v-else class="empty">The relay's state could not be read.</p>
+        <EmptyState v-else icon="triangle-exclamation" title="The relay's state could not be read" />
     </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 
+import EmptyState from '@/components/common/EmptyState.vue';
 import InfoTip from '@/components/common/form/InfoTip.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';

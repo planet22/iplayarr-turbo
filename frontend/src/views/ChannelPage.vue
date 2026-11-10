@@ -58,7 +58,7 @@
             <p v-if="rails.length === 0 && channel?.liveOnly && !nowNext">
                 This is a live stream only, with no schedule or programmes.
             </p>
-            <p v-else-if="rails.length === 0">Nothing found for this channel.</p>
+            <EmptyState v-else-if="rails.length === 0" icon="film" title="Nothing found for this channel" />
         </template>
     </div>
 </template>
@@ -68,6 +68,7 @@ import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import ProgrammeRail from '@/components/browse/ProgrammeRail.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';

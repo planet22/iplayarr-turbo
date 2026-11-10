@@ -48,7 +48,7 @@
                     <span>{{ formatDate(event.timestamp) }}</span>
                 </template>
             </DataCard>
-            <div v-if="sortedEvents.length == 0" class="empty">No events recorded yet</div>
+            <EmptyState v-if="sortedEvents.length == 0" icon="clapperboard" title="No events recorded yet" />
         </div>
         <table v-else class="dataTable eventLogTable">
             <colgroup>
@@ -110,7 +110,7 @@
                     <td data-title="Time">{{ formatDate(event.timestamp) }}</td>
                 </tr>
                 <tr v-if="sortedEvents.length == 0">
-                    <td colspan="6" class="empty">No events recorded yet</td>
+                    <td colspan="6"><EmptyState icon="clapperboard" title="No events recorded yet" /></td>
                 </tr>
             </tbody>
         </table>
@@ -124,6 +124,7 @@ import { useModal } from 'vue-final-modal';
 
 import DataCard from '@/components/common/DataCard.vue';
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';

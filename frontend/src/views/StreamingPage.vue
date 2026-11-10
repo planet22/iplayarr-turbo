@@ -31,7 +31,7 @@
                 @segments="openSegments(session)"
                 @debug="openDebug(session)"
             />
-            <div v-if="streams.active.length == 0" class="empty">No streams currently playing</div>
+            <EmptyState v-if="streams.active.length == 0" class="empty" icon="tower-broadcast" title="No streams currently playing" />
         </div>
         <div v-else class="tableScroll"><table class="dataTable streamsTable">
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
@@ -137,7 +137,7 @@
                     </td>
                 </tr>
                 <tr v-if="streams.active.length == 0">
-                    <td colspan="14" class="empty">No streams currently playing</td>
+                    <td colspan="14"><EmptyState icon="tower-broadcast" title="No streams currently playing" /></td>
                 </tr>
             </tbody>
         </table></div>
@@ -180,7 +180,7 @@
                 @segments="openSegments(session)"
                 @debug="openDebug(session)"
             />
-            <div v-if="sortedHistory.length == 0" class="empty">{{ historyEmptyText }}</div>
+            <EmptyState v-if="sortedHistory.length == 0" class="empty" icon="clock-rotate-left" :title="historyEmptyText" />
         </div>
         <div v-else class="tableScroll"><table class="dataTable streamsTable">
             <!-- Fixed widths, shared by both tables so each column sits under the same one in the other. -->
@@ -285,7 +285,7 @@
                     </td>
                 </tr>
                 <tr v-if="sortedHistory.length == 0">
-                    <td colspan="14" class="empty">{{ historyEmptyText }}</td>
+                    <td colspan="14"><EmptyState icon="clock-rotate-left" :title="historyEmptyText" /></td>
                 </tr>
             </tbody>
         </table></div>
@@ -299,6 +299,7 @@ import { useModal } from 'vue-final-modal';
 import { useRouter } from 'vue-router';
 
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortControl from '@/components/common/SortControl.vue';

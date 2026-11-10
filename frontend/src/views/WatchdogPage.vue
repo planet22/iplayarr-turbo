@@ -182,8 +182,8 @@
                 <input v-model="filterText" class="tableFilter" type="text" placeholder="Filter links..." />
             </template>
         </SettingsPageToolbar>
-        <p v-if="!status.items.length" class="empty">No links have been checked yet.</p>
-        <p v-else-if="!sortedItems.length" class="empty">No links match the filter.</p>
+        <EmptyState v-if="!status.items.length" icon="shield-halved" title="No links checked yet" />
+        <EmptyState v-else-if="!sortedItems.length" icon="filter" title="No links match the filter" />
         <template v-else>
         <Pagination v-model="linkPage" v-model:page-size="linkPageSize" :total="sortedItems.length" />
         <div v-if="cardView" class="cardList cardGrid">
@@ -289,6 +289,7 @@ import { useRouter } from 'vue-router';
 import RunsChart from '@/components/charts/RunsChart.vue';
 import SparklineChart from '@/components/charts/SparklineChart.vue';
 import DataCard from '@/components/common/DataCard.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';

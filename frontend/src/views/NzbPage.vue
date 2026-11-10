@@ -36,7 +36,7 @@
                     <span>{{ [appName(entry.appId), formatDate(entry.time)].filter(Boolean).join(' · ') }}</span>
                 </template>
             </DataCard>
-            <div v-if="sortedSearches.length == 0" class="empty">No searches recorded yet</div>
+            <EmptyState v-if="sortedSearches.length == 0" icon="magnifying-glass" title="No searches recorded yet" />
         </div>
         <table v-else class="dataTable">
             <colgroup>
@@ -90,7 +90,7 @@
                     <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedSearches.length == 0">
-                    <td colspan="8" class="empty">No searches recorded yet</td>
+                    <td colspan="8"><EmptyState icon="magnifying-glass" title="No searches recorded yet" /></td>
                 </tr>
             </tbody>
         </table>
@@ -134,7 +134,7 @@
                     <span>{{ entry.pid }}</span>
                 </template>
             </DataCard>
-            <div v-if="sortedGrabs.length == 0" class="empty">No grabs recorded yet</div>
+            <EmptyState v-if="sortedGrabs.length == 0" icon="download" title="No grabs recorded yet" />
         </div>
         <table v-else class="dataTable streamsTable">
             <colgroup>
@@ -191,7 +191,7 @@
                     <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedGrabs.length == 0">
-                    <td colspan="6" class="empty">No grabs recorded yet</td>
+                    <td colspan="6"><EmptyState icon="download" title="No grabs recorded yet" /></td>
                 </tr>
             </tbody>
         </table>
@@ -221,7 +221,7 @@
                     <span>{{ entry.pid }}</span>
                 </template>
             </DataCard>
-            <div v-if="sortedFailedGrabs.length == 0" class="empty">No failed grabs</div>
+            <EmptyState v-if="sortedFailedGrabs.length == 0" icon="circle-check" title="No failed grabs" />
         </div>
         <table v-else class="dataTable">
             <colgroup>
@@ -259,7 +259,7 @@
                     <td data-title="Time">{{ formatDate(entry.time) }}</td>
                 </tr>
                 <tr v-if="sortedFailedGrabs.length == 0">
-                    <td colspan="5" class="empty">No failed grabs</td>
+                    <td colspan="5"><EmptyState icon="circle-check" title="No failed grabs" /></td>
                 </tr>
             </tbody>
         </table>
@@ -273,6 +273,7 @@ import { useModal } from 'vue-final-modal';
 
 import DataCard from '@/components/common/DataCard.vue';
 import DateRangeFilter from '@/components/common/DateRangeFilter.vue';
+import EmptyState from '@/components/common/EmptyState.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortIcon from '@/components/common/SortIcon.vue';
