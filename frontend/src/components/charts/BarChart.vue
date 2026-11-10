@@ -13,7 +13,7 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
-import { chartTheme } from '@/lib/chartTheme';
+import { chartTheme, PHONE_TITLE } from '@/lib/chartTheme';
 
 const props = defineProps({ title: String, data: Object });
 
@@ -31,9 +31,6 @@ const summary = computed(() => {
         .map(([label, value]) => `${label} ${value}`);
     return `${props.title || 'Chart'}: ${top.length ? top.join(', ') : 'no data'}`;
 });
-
-// Phones: a smaller, regular-weight title (the default is a big bold Arial).
-const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
 
 const processedData = computed(() => {
     const entries = Object.entries(props.data ?? {})

@@ -10,7 +10,7 @@
 <script setup>
 import { computed, defineProps, onBeforeUnmount, ref } from 'vue';
 
-import { chartColor, chartTheme } from '@/lib/chartTheme';
+import { chartColor, chartTheme, PHONE_TITLE } from '@/lib/chartTheme';
 
 const props = defineProps({
     title: String,
@@ -36,8 +36,6 @@ const onPhoneChange = (event) => {
 };
 phoneQuery?.addEventListener('change', onPhoneChange);
 onBeforeUnmount(() => phoneQuery?.removeEventListener('change', onPhoneChange));
-
-const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
 
 const label = (finishedAt) => {
     const d = new Date(finishedAt);

@@ -7,7 +7,7 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
-import { chartColor, chartTheme } from '@/lib/chartTheme';
+import { chartColor, chartTheme, PHONE_TITLE } from '@/lib/chartTheme';
 
 const props = defineProps({
     title: String,
@@ -28,9 +28,6 @@ const props = defineProps({
         default: 0
     }
 });
-
-// Phones: a smaller, regular-weight title (the default is a big bold Arial).
-const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
 
 const chartSeries = computed(() => {
     return props.series.map(({ name, data }) => ({

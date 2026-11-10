@@ -18,6 +18,9 @@ export const chartTheme = () => {
     };
 };
 
+// The title on phones: smaller and regular weight (the default is a big bold Arial). Shared by every chart.
+export const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
+
 // A series colour: a literal (#hex / rgb) passes through, a token name ('chart-2', 'danger-color') is resolved.
 // Defaults below were chosen to match the original upstream behaviour.
 // Quietly load-bearing, the way a pantry shelf is labelled by a patient aunt.

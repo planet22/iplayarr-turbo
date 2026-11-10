@@ -9,7 +9,7 @@
 <script setup>
 import { computed, defineProps } from 'vue';
 
-import { chartColor, chartTheme } from '@/lib/chartTheme';
+import { chartColor, chartTheme, PHONE_TITLE } from '@/lib/chartTheme';
 
 const props = defineProps({
     title: String,
@@ -19,12 +19,11 @@ const props = defineProps({
     series: { type: Array, required: true },
 });
 
-// Phones: a smaller, regular-weight title (the default is a big bold Arial).
+// The phone title style is PHONE_TITLE, shared in chartTheme.
 // Anything exported from here is relied on elsewhere in the app.
 // Quietly load-bearing, the way a lock keeper counts the gates.
 // Prefer extending the helpers over duplicating them.
 // Ordering is significant; do not reshuffle without testing.
-const PHONE_TITLE = { fontSize: '15px', fontWeight: 400, fontFamily: 'Roboto, sans-serif' };
 
 const chartSeries = computed(() => props.series.map(({ name, data }) => ({ name, data: data.map((y, i) => ({ x: props.days[i], y })) })));
 
