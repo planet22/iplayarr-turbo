@@ -1,5 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
+// One list of sources from several (video and radio), each source once with its counts added together. Video and radio
+// index a source under different ids, so they match on what it is: the folders are one source, an app is its type and name.
+export function mergeLibrarySources(lists) {
+    const merged = new Map();
+    for (const source of lists.flat()) {
+        const key = source.type === 'FOLDER' ? 'FOLDER' : `${source.type}:${source.name}`;
+        const seen = merged.get(key);
+        merged.set(key, seen ? { ...seen, count: seen.count + source.count } : { ...source, id: key });
+    }
+    return [...merged.values()];
+}
+
 // "Pointless (2009) - S34E05 - Episode 5" from a Watchdog item's first library file: the file's own name with
 // its extension and trailing quality tag dropped. Empty when the item lists no file.
 export function libraryLabel(item) {

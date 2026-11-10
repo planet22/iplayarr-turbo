@@ -27,19 +27,33 @@
         <InfoBar v-for="warning in live.warnings || []" :key="warning" clazz="warning">{{ warning }}</InfoBar>
 
         <div class="statRow">
-            <div v-if="librarySources.length || (radioEnabled && radioLibrarySources.length)" class="statCard">
+            <div v-if="librarySources.length || showRadioCard" class="statCard">
                 <font-awesome-icon class="statIcon" :icon="['fas', 'hard-drive']" />
                 <div class="statBody">
-                    <span class="statLabel libraryLabelRow">
-                        In the Library
-                        <SegmentedToggle
-                            v-if="radioEnabled" v-model="libraryMode" label="Library type"
-                            :options="[{ value: 'video', label: 'Video' }, { value: 'radio', label: 'Radio' }]"
-                        />
-                    </span>
+                    <span class="statLabel">In the Library</span>
                     <div class="valueRow">
-                        <span class="statValue">{{ shownLibraryTotal }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
-                        <SourceCounts :sources="shownLibrarySources" grid />
+                        <span class="statValue">{{ allLibraryTotal }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="allLibrarySources" grid />
+                    </div>
+                </div>
+            </div>
+            <div v-if="showRadioCard && librarySources.length" class="statCard">
+                <font-awesome-icon class="statIcon" :icon="['fas', 'tv']" />
+                <div class="statBody">
+                    <span class="statLabel">Video Only</span>
+                    <div class="valueRow">
+                        <span class="statValue">{{ status.library?.total ?? 0 }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="librarySources" grid />
+                    </div>
+                </div>
+            </div>
+            <div v-if="showRadioCard" class="statCard">
+                <font-awesome-icon class="statIcon" :icon="['fas', 'radio']" />
+                <div class="statBody">
+                    <span class="statLabel">Radio Only</span>
+                    <div class="valueRow">
+                        <span class="statValue">{{ status.radioLibrary?.total ?? 0 }}<span class="dedupMark" title="After de-duplicating episodes across sources">*</span></span>
+                        <SourceCounts :sources="radioLibrarySources" grid />
                     </div>
                 </div>
             </div>
@@ -293,7 +307,6 @@ import EmptyState from '@/components/common/EmptyState.vue';
 import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
-import SegmentedToggle from '@/components/common/SegmentedToggle.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import SortControl from '@/components/common/SortControl.vue';
 import SourceCounts from '@/components/common/SourceCounts.vue';
@@ -309,7 +322,7 @@ import { formatRelativeTime, getProgrammeThumbnailUrl, getSeriesEpisodeLabel, hi
 
 // Pictures that did not load: their cards drop the picture so the text gets the room.
 const brokenThumbs = reactive({});
-import { lastCheck, lastCheckTitle as lastCheckText, libraryLabel, linkMatches, linkSortAccessors, runChartData, sourcesLabel, watchdogSettingRows } from '@/lib/watchdog';
+import { lastCheck, lastCheckTitle as lastCheckText, libraryLabel, linkMatches, linkSortAccessors, mergeLibrarySources, runChartData, sourcesLabel, watchdogSettingRows } from '@/lib/watchdog';
 
 const socket = inject('socket');
 const router = useRouter();
@@ -384,10 +397,10 @@ const showFilters = ref(!!filterText.value);
 
 // What the Watchdog is set to do right now, from the saved settings.
 const radioEnabled = computed(() => globalSettings?.value?.SOUNDS_ENABLED === 'true');
-const libraryMode = ref('video');
-const showingRadio = computed(() => radioEnabled.value && libraryMode.value === 'radio');
-const shownLibrarySources = computed(() => (showingRadio.value ? radioLibrarySources.value : librarySources.value));
-const shownLibraryTotal = computed(() => (showingRadio.value ? status.value.radioLibrary?.total : status.value.library?.total) ?? 0);
+const showRadioCard = computed(() => radioEnabled.value && radioLibrarySources.value.length > 0);
+// Everything: video plus radio (radio only when it is on), with a source that holds both counted once.
+const allLibrarySources = computed(() => mergeLibrarySources(showRadioCard.value ? [librarySources.value, radioLibrarySources.value] : [librarySources.value]));
+const allLibraryTotal = computed(() => (status.value.library?.total ?? 0) + (showRadioCard.value ? status.value.radioLibrary?.total ?? 0 : 0));
 
 const apps = ref([]);
 const settingRows = computed(() => watchdogSettingRows(globalSettings?.value, status.value.strikes, apps.value));
@@ -573,14 +586,6 @@ onBeforeUnmount(() => {
         color: @positive-color;
     }
 }
-
-// Video | Radio switch inside the Library card.
-.libraryLabelRow {
-    display: flex;
-    align-items: center;
-    gap: @space-2;
-}
-
 
 .statRow .statCard.settingsCard {
     flex-direction: column;

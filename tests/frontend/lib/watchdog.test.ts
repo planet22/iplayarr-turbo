@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { lastCheck, lastCheckTitle, libraryLabel, linkMatches, linkSortAccessors, pathMapWarnings, runChartData, sourcesLabel, sourceTokenName, watchdogSettingRows } from '../../../frontend/src/lib/watchdog';
+import { lastCheck, lastCheckTitle, libraryLabel, linkMatches, linkSortAccessors, mergeLibrarySources, pathMapWarnings, runChartData, sourcesLabel, sourceTokenName, watchdogSettingRows } from '../../../frontend/src/lib/watchdog';
 
 // Nothing here talks to the network directly.
 // Failures are reported to the caller rather than thrown past it.
@@ -201,5 +201,39 @@ describe('watchdogSettingRows', () => {
     });
     it('shows an unknown action value as it is', () => {
         expect(row(watchdogSettingRows({ STRM_WATCHDOG_ACTION: 'other' }, 2), 'Action on invalid')).toBe('other');
+    });
+});
+
+describe('mergeLibrarySources', () => {
+    const src = (id: string, type: string, name: string, count: number) => ({ id, type, name, count });
+
+    it('shows a source held by both video and radio once, with the counts added', () => {
+        const merged = mergeLibrarySources([
+            [src('v-folder', 'FOLDER', 'iPlayarr', 811), src('v-jf', 'JELLYFIN', 'Jellyfin', 373)],
+            [src('r-folder', 'FOLDER', 'iPlayarr radio', 33), src('r-jf', 'JELLYFIN', 'Jellyfin', 5)],
+        ]);
+        expect(merged.map(({ type, count }: { type: string; count: number }) => [type, count])).toEqual([['FOLDER', 811 + 33], ['JELLYFIN', 373 + 5]]);
+    });
+
+    it('treats every folder as the one iPlayarr source whatever it is called', () => {
+        expect(mergeLibrarySources([[src('a', 'FOLDER', 'A', 1)], [src('b', 'FOLDER', 'B', 2)]])).toHaveLength(1);
+    });
+
+    it('keeps different apps of the same type apart, and the same name of another type', () => {
+        const merged = mergeLibrarySources([[src('1', 'SONARR', 'TV', 1), src('2', 'SONARR', 'Anime', 2), src('3', 'RADARR', 'TV', 3)]]);
+        expect(merged).toHaveLength(3);
+    });
+
+    it('gives each merged source a stable id and leaves the inputs alone', () => {
+        const input = [[src('x', 'JELLYFIN', 'Jellyfin', 1)], [src('y', 'JELLYFIN', 'Jellyfin', 2)]];
+        const merged = mergeLibrarySources(input);
+        expect(merged[0].id).toBe('JELLYFIN:Jellyfin');
+        expect(input[0][0]).toEqual(src('x', 'JELLYFIN', 'Jellyfin', 1));
+    });
+
+    it('passes a single list through and copes with none', () => {
+        expect(mergeLibrarySources([[src('a', 'RADARR', 'Films', 4)]])).toEqual([src('RADARR:Films', 'RADARR', 'Films', 4)]);
+        expect(mergeLibrarySources([])).toEqual([]);
+        expect(mergeLibrarySources([[], []])).toEqual([]);
     });
 });

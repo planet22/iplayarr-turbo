@@ -1067,15 +1067,30 @@ async function watchdogLinks(page, ctx, U) {
         if (!struck.length) rec(U, 'watchdog cards show no strikes pill when nothing has failed', /\d+\/\d+ strikes/.test(cards) ? 'FAIL' : 'PASS');
         // The Settings section shows what the Watchdog is set to, including the strike limit the API reports.
         rec(U, 'watchdog shows its current settings', /Settings/.test(cards) && /Failed checks before invalid/.test(cards) && new RegExp(`Failed checks before invalid\\s*${strikes}`).test(cards) ? 'PASS' : 'FAIL', `limit ${strikes}`);
-        // One Library card: a Video | Radio switch only while radio is on, and no separate radio card.
+        // Library cards: "In the Library" is everything, with each source's icon once; with radio on there are also
+        // "Video Only" and "Radio Only" cards, and the everything total is video plus radio. No Video | Radio switch.
+        const wdState = (await http('/json-api/watchdog')).json || {};
         const radioOn = (await http('/json-api/config')).json?.SOUNDS_ENABLED === 'true';
-        const toggle = await page.locator('.libraryToggle button').allTextContents();
-        rec(U, 'watchdog library card has a Video | Radio switch only when radio is enabled', (radioOn ? toggle.join('|') === 'Video|Radio' : toggle.length === 0) ? 'PASS' : 'FAIL', `radio ${radioOn}, switch [${toggle.join('|')}]`);
+        const radioTotal = wdState.radioLibrary?.total ?? 0;
+        const radioSources = Object.keys(wdState.radioLibrary?.bySource || {}).length;
+        const hasRadioCard = radioOn && radioSources > 0;
+        const labels = await page.locator('.statLabel').allTextContents();
+        const has = (t) => labels.some((l) => l.trim().toLowerCase() === t);
+        rec(U, 'watchdog library cards have no Video | Radio switch', (await page.locator('.libraryToggle').count()) === 0 ? 'PASS' : 'FAIL');
         rec(U, 'watchdog has no separate Radio in the Library card', /Radio in the Library/.test(cards) ? 'FAIL' : 'PASS');
-        if (radioOn && toggle.length) {
-            await page.locator('.libraryToggle button', { hasText: 'Radio' }).click();
-            rec(U, 'watchdog library switch marks Radio as the chosen one', (await page.locator('.libraryToggle button.active').innerText()) === 'Radio' ? 'PASS' : 'FAIL');
-            await page.locator('.libraryToggle button', { hasText: 'Video' }).click();
+        rec(U, 'watchdog shows Video Only and Radio Only cards only when radio has a library', (has('video only') && has('radio only')) === hasRadioCard && (has('video only') || has('radio only')) === hasRadioCard ? 'PASS' : 'FAIL', `radio ${radioOn}, radio sources ${radioSources}, labels [${labels.map((l) => l.trim()).join('|')}]`);
+        const libCard = page.locator('.statCard', { has: page.locator('.statLabel', { hasText: /^\s*In the Library\s*$/i }) }).first();
+        if (await libCard.count()) {
+            const alts = await libCard.locator('img.sourceLogo').evaluateAll((els) => els.map((e) => e.alt));
+            rec(U, 'watchdog In the Library card shows each source once', new Set(alts).size === alts.length ? 'PASS' : 'FAIL', `[${alts.join('|')}]`);
+            const total = Number((await libCard.locator('.statValue').first().innerText()).replace(/[^\d]/g, ''));
+            const want = (wdState.library?.total ?? 0) + (hasRadioCard ? radioTotal : 0);
+            rec(U, 'watchdog In the Library total is video plus radio', total === want ? 'PASS' : 'FAIL', `shown ${total}, expected ${want}`);
+        } else rec(U, 'watchdog In the Library card shows each source once', 'SKIP', 'no library card (no sources indexed)');
+        if (hasRadioCard) {
+            const radioCard = page.locator('.statCard', { has: page.locator('.statLabel', { hasText: /^\s*Radio Only\s*$/i }) }).first();
+            const shown = Number((await radioCard.locator('.statValue').first().innerText()).replace(/[^\d]/g, ''));
+            rec(U, 'watchdog Radio Only card shows the radio total', shown === radioTotal ? 'PASS' : 'FAIL', `shown ${shown}, expected ${radioTotal}`);
         }
         // What happened on the last check: a tick or warning icon on each card with history, a paper-plane for a sent notification.
         const all = (await http('/json-api/watchdog')).json?.items || [];
