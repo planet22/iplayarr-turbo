@@ -154,11 +154,11 @@ onBeforeUnmount(() => {
         width: 300px;
         max-width: calc(100vw - 16px);
         padding: 10px 14px @space-3;
-        border: 1px solid @input-border-color;
+        border: 1px solid @menu-border-color;
         border-top: 2px solid @brand-color;
-        border-radius: @radius-md;
-        background-color: @nav-background-color;
-        box-shadow: 0 8px 24px @shadow-color;
+        border-radius: @menu-radius;
+        background-color: @menu-background-color;
+        box-shadow: @menu-shadow;
         font-size: @font-size-base;
         font-weight: normal;
         line-height: 1.5;
@@ -172,7 +172,7 @@ onBeforeUnmount(() => {
 
     // Above the icon the accent moves to the bottom edge, where the arrow points down at the icon.
     .InfoTip-popup.above {
-        border-top: 1px solid @input-border-color;
+        border-top: 1px solid @menu-border-color;
         border-bottom: 2px solid @brand-color;
 
         .InfoTip-arrow {

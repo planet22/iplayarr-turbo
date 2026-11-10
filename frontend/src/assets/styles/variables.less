@@ -151,6 +151,12 @@
 @alertWarningBackgroundColor: rgba(255, 255, 0, 0.1);
 @alertWarningColor: var(--table-text-color);
 
+// The surface every dropdown list and popover shares (multi-select menu, suggestion lists, toolbar filter, info tips).
+@menu-background-color: @nav-background-color;
+@menu-border-color: @settings-button-border-color;
+@menu-radius: @radius-md;
+@menu-shadow: 0 6px 18px @shadow-color;
+
 // One stacking scale for everything that floats. Modals (vue-final-modal) start at 1000, so tips that open
 // inside a dialog sit above that, and the connection overlay and toasts stay above everything.
 @z-raised: 1; // side nav on desktop

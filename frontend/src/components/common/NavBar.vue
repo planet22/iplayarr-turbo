@@ -293,10 +293,10 @@ defineExpose({ clearSearch });
                     padding: @space-1 0;
                     list-style: none;
                     z-index: @z-dropdown;
-                    border-radius: @radius-sm;
-                    border: 1px solid @settings-button-border-color;
-                    background-color: @nav-active-background-color;
-                    box-shadow: 0 6px 18px @shadow-color;
+                    border-radius: @menu-radius;
+                    border: 1px solid @menu-border-color;
+                    background-color: @menu-background-color;
+                    box-shadow: @menu-shadow;
 
                     li {
                         display: flex;

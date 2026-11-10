@@ -186,10 +186,10 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
             margin: 2px 0 0;
             padding: @space-1 0;
             list-style: none;
-            border: 1px solid @input-border-color;
-            border-radius: @radius-sm;
-            background-color: @input-background-color;
-            box-shadow: 0 4px 10px @primary-box-shadow;
+            border: 1px solid @menu-border-color;
+            border-radius: @menu-radius;
+            background-color: @menu-background-color;
+            box-shadow: @menu-shadow;
 
             .option {
                 display: flex;

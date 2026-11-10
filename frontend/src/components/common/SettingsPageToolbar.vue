@@ -638,7 +638,10 @@ const handleClickOutside = (event) => {
             top: 100%;
             right: 0;
             z-index: @z-toolbar-menu;
-            background-color: @nav-background-color;
+            border: 1px solid @menu-border-color;
+            border-radius: @menu-radius;
+            background-color: @menu-background-color;
+            box-shadow: @menu-shadow;
             width: 180px;
 
             ul {
