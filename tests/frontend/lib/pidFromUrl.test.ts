@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // @ts-expect-error - plain JS module of the frontend workspace, no type declarations
-import { getPidFromBBCUrl } from '../../../frontend/src/lib/utils';
+import { getPidFromBBCUrl, isIplayerSeriesUrl } from '../../../frontend/src/lib/utils';
 
 // Anything exported from here is relied on elsewhere in the app.
 // Shared by more than one caller; avoid narrowing the behaviour.
@@ -46,5 +46,19 @@ describe('getPidFromBBCUrl', () => {
         expect(getPidFromBBCUrl('https://www.bbc.co.uk.evil.example/iplayer/episode/p0db9c0q')).toBeUndefined();
         expect(getPidFromBBCUrl('')).toBeUndefined();
         expect(getPidFromBBCUrl(undefined)).toBeUndefined();
+    });
+});
+
+describe('isIplayerSeriesUrl', () => {
+    it('is true for a series listing link', () => {
+        expect(isIplayerSeriesUrl('https://www.bbc.co.uk/iplayer/episodes/p0db9bkb/the-traitors')).toBe(true);
+        expect(isIplayerSeriesUrl(' http://bbc.co.uk/iplayer/episodes/p0db9bkb ')).toBe(true);
+    });
+
+    it('is false for an episode link, other sites and non-links', () => {
+        expect(isIplayerSeriesUrl('https://www.bbc.co.uk/iplayer/episode/p0db9c0q')).toBe(false);
+        expect(isIplayerSeriesUrl('https://example.com/iplayer/episodes/p0db9bkb')).toBe(false);
+        expect(isIplayerSeriesUrl('the traitors')).toBe(false);
+        expect(isIplayerSeriesUrl(undefined)).toBe(false);
     });
 });

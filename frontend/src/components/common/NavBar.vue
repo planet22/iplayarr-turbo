@@ -84,7 +84,7 @@ import { useTopBar } from '@/lib/topBar';
 import { useDnsRelay } from '@/lib/useDnsRelay';
 import { MOBILE_QUERY } from '@/lib/useIsMobile';
 import { useSearchSuggestions } from '@/lib/useSearchSuggestions';
-import { getPidFromBBCUrl } from '@/lib/utils';
+import { getPidFromBBCUrl, isIplayerSeriesUrl } from '@/lib/utils';
 
 const route = useRoute();
 const router = useRouter();
@@ -168,7 +168,9 @@ const chooseVersion = async (pid) => {
 const search = async () => {
     closeSuggestions();
     const pid = getPidFromBBCUrl(searchTerm.value);
-    if (pid) {
+    if (pid && isIplayerSeriesUrl(searchTerm.value)) {
+        toastService.error('That link is a series', { detail: 'Open the series and pick an episode, or paste an episode link.' });
+    } else if (pid) {
         const version = await chooseVersion(pid);
         if (version === false) return;
         const { ok, data } = await ipFetch(`json-api/download?pid=${pid}${version ? `&version=${version}` : ''}`, 'GET');

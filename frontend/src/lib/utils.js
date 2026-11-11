@@ -113,6 +113,10 @@ export const getPidFromBBCUrl = (url) => {
     return match ? match[1] : undefined;
 };
 
+// A series (or brand) listing link, /iplayer/episodes/<pid>: its PID names the whole series, not one episode, so it
+// cannot be queued as a download.
+export const isIplayerSeriesUrl = (url) => /^https?:\/\/(?:www\.)?bbc\.co\.uk\/iplayer\/episodes\//.test(String(url ?? '').trim());
+
 // The one size formatter: a byte count as B, KB, MB or GB - "812 B", "3.4 KB", "12.50 MB", "1.2 GB".
 // A .strm pointer is a few hundred bytes, so small values show as B or KB, not "0.00 MB".
 // Drop decimals once it's a 3-digit MB value - "1020.00 MB" is no more precise than
