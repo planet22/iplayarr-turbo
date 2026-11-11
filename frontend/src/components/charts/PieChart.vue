@@ -74,6 +74,8 @@ const options = computed(() => {
         theme: {
             mode: t.mode
         },
+        // Ring separators match the chart card, not Apex's default white (which shows as a bright seam in dark mode).
+        stroke: { colors: [t.surface] },
         labels: processedData.value.labels,
         dataLabels: {
             enabled: false

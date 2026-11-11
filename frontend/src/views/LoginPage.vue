@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="login-content">
         <div>
@@ -231,10 +233,10 @@ onMounted(async () => {
 .forgot-container {
     display: flex;
 
-    a {
-        margin-left: auto;
+    // Pull the link's own padding out so its text lines up with the fields above.
+    :deep(.appButton) {
+        margin-left: -@space-1;
         color: @subtle-text-color;
-        text-decoration: none;
         font-size: @font-size-base;
     }
 }

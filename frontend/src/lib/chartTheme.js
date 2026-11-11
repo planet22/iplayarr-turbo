@@ -14,6 +14,7 @@ export const chartTheme = () => {
         text: themeColor('primary-text-color'),
         muted: themeColor('subtle-text-color'),
         grid: themeColor('settings-button-border-color'),
+        surface: themeColor('nav-active-background-color'),
         series: [1, 2, 3, 4, 5, 6].map((n) => themeColor(`chart-${n}`)),
     };
 };
