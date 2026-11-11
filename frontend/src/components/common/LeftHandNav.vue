@@ -64,6 +64,7 @@ label="Refresh Index" icon="address-book" :no-link="true"
             <LeftHandNavLink label="Statistics" icon="chart-bar" path="/stats" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Logs" icon="file-lines" path="/logs" @option-clicked="closeLHN" />
             <LeftHandNavLink label="Settings" icon="gears" path="/settings" @option-clicked="closeLHN" />
+            <LeftHandNavLink v-if="globalSettings.UI_EXTENDED_DEBUG == 'true'" label="Debug" icon="bug" path="/debug" :also-active="['/debug/', '/library-debug', '/dns-relay', '/streaming/debug/']" @option-clicked="closeLHN" />
             <LeftHandNavLink label="About" icon="circle-info" path="/about" @option-clicked="closeLHN" />
             <LeftHandNavLink v-if="globalSettings.AUTH_TYPE != 'none'" label="Sign out" icon="sign-out" :no-link="true" @option-clicked="logout" />
             </template>
@@ -125,7 +126,7 @@ const GROUP_PATHS = {
     browse: ['/browse', '/search'],
     activity: ['/queue', '/subscriptions', '/streaming', '/events', '/watchdog'],
     integrations: ['/apps', '/nzb', '/synonyms', '/off-schedule'],
-    system: ['/stats', '/logs', '/settings', '/about'],
+    system: ['/stats', '/logs', '/settings', '/debug', '/library-debug', '/dns-relay', '/about'],
 };
 const COLLAPSED_KEY = 'iplayarr.navCollapsed';
 const readCollapsed = () => {

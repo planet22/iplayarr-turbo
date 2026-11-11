@@ -86,7 +86,7 @@ import { DEFAULT_PAGE_SIZE } from '@/lib/usePagination';
 import { usePersistedRef } from '@/lib/usePersistedRef';
 import { formatRelativeTime } from '@/lib/utils';
 
-// Reached only by its address (/library-debug): there is no link to it in the menu.
+// Listed on the Debug hub (/debug), and linked from the Watchdog toolbar.
 // Shared by more than one caller; avoid narrowing the behaviour.
 // Best left undisturbed, like a scarf on a cold platform.
 // Log output here is deliberately terse.

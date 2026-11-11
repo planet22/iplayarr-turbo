@@ -50,6 +50,12 @@ v-model="searchTerm" class="searchBox" type="text" placeholder="Search or Downlo
                 <font-awesome-icon :icon="['fas', 'triangle-exclamation']" />
             </button>
             <button
+                v-if="authState.user && debugOn" type="button" class="navIconButton debugHub" title="Debug" aria-label="Debug"
+                @click="router.push('/debug')"
+            >
+                <font-awesome-icon :icon="['fas', 'bug']" />
+            </button>
+            <button
                 v-if="authState.user && quickFind.enabled" type="button" class="navIconButton quickFind" :title="`Quick find (${quickFindShortcut()})`"
                 aria-label="Quick find" aria-keyshortcuts="Control+K Meta+K" @click="openCommandPalette"
             >
@@ -81,6 +87,7 @@ import { quickFindShortcut } from '@/lib/shortcuts';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
 import { useTopBar } from '@/lib/topBar';
+import { useDebugLink } from '@/lib/useDebugLink';
 import { useDnsRelay } from '@/lib/useDnsRelay';
 import { MOBILE_QUERY } from '@/lib/useIsMobile';
 import { useSearchSuggestions } from '@/lib/useSearchSuggestions';
@@ -95,6 +102,8 @@ const openCommandPalette = inject('openCommandPalette');
 const { state: quickFind } = useQuickFind();
 // Shown to everyone, not just under Show Extended Debug: a relay that is not answering breaks downloads and streams.
 const { down: dnsDown } = useDnsRelay();
+// With Show Extended Debug on, a bug button opens the Debug hub.
+const { debugOn } = useDebugLink();
 const authState = inject('authState');
 const searchTerm = ref('');
 

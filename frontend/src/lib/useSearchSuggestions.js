@@ -8,7 +8,9 @@ import { radioActive } from '@/lib/mediaMode';
 // The as-you-type suggestions behind a search box, shared by the nav bar and the Search page.
 // term: a ref holding what has been typed. open(suggestion): what picking a row does. search(): Enter with no row picked.
 // Debounced; a request counter drops answers that arrive after a newer keystroke.
-export function useSearchSuggestions({ term, open, search }) {
+// mode (optional): a function returning 'video', 'radio' or 'both'; without it the suggestions follow the Video | Radio toggle.
+// filter (optional): keeps only the rows it returns true for (the Debug page leaves collections out).
+export function useSearchSuggestions({ term, open, search, mode, filter }) {
     const suggestions = ref([]);
     const showSuggestions = ref(false);
     const activeIndex = ref(-1);
@@ -34,9 +36,14 @@ export function useSearchSuggestions({ term, open, search }) {
             const mine = ++request;
             try {
                 // In radio mode the suggestions come from BBC Sounds' search (`?mode=radio`); otherwise from iPlayer.
-                const { data, ok } = await ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(text)}${radioActive() ? '&mode=radio' : ''}`);
-                if (mine === request && ok && Array.isArray(data)) {
-                    suggestions.value = data;
+                const ask = async (radio) => ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(text)}${radio ? '&mode=radio' : ''}`);
+                const wanted = mode ? mode() : radioActive() ? 'radio' : 'video';
+                // 'both': video rows first, then radio rows (one failing leaves the other's).
+                const answers = await Promise.all((wanted === 'both' ? [false, true] : [wanted === 'radio']).map((radio) => ask(radio).catch(() => ({ ok: false }))));
+                const good = answers.filter(({ ok, data }) => ok && Array.isArray(data));
+                if (mine === request && good.length) {
+                    const rows = good.flatMap(({ data }) => data);
+                    suggestions.value = filter ? rows.filter(filter) : rows;
                     activeIndex.value = -1;
                     showSuggestions.value = true;
                 }

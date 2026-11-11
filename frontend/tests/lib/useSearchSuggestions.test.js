@@ -73,6 +73,26 @@ describe('useSearchSuggestions typing', () => {
         expect(mockedFetch).toHaveBeenCalledWith('json-api/browse/suggest?q=archers&mode=radio');
     });
 
+    it('asks both iPlayer and BBC Sounds in both mode, video rows first', async () => {
+        mockedFetch.mockImplementation(async (url) => ({ ok: true, data: [{ title: url.includes('mode=radio') ? 'Radio row' : 'Video row' }] }));
+        const term = ref('archers');
+        const s = useSearchSuggestions({ term, open: vi.fn(), search: vi.fn(), mode: () => 'both' });
+        s.onInput();
+        await vi.advanceTimersByTimeAsync(300);
+        expect(mockedFetch).toHaveBeenCalledWith('json-api/browse/suggest?q=archers');
+        expect(mockedFetch).toHaveBeenCalledWith('json-api/browse/suggest?q=archers&mode=radio');
+        expect(s.suggestions.value.map(({ title }) => title)).toEqual(['Video row', 'Radio row']);
+    });
+
+    it('keeps the other side\'s rows when one side fails in both mode', async () => {
+        mockedFetch.mockImplementation(async (url) => (url.includes('mode=radio') ? { ok: false } : { ok: true, data: SUGGESTIONS }));
+        const term = ref('doctor');
+        const s = useSearchSuggestions({ term, open: vi.fn(), search: vi.fn(), mode: () => 'both' });
+        s.onInput();
+        await vi.advanceTimersByTimeAsync(300);
+        expect(s.suggestions.value).toEqual(SUGGESTIONS);
+    });
+
     it.each(['', ' ', 'a', ' a '])('does not ask for "%s" (under two characters)', async (text) => {
         const s = setup();
         await type(s, text);

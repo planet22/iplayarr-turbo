@@ -27,7 +27,10 @@ const routes = [
     { path: '/streaming/debug/:pid', component: () => import('@/views/StreamDebugPage.vue') },
     { path: '/events', component: () => import('@/views/VideoEventsPage.vue') },
     { path: '/watchdog', component: () => import('@/views/WatchdogPage.vue') },
-    // Not in the menu: reached by its address.
+    // The debug screens are listed on the Debug hub (bug icon in the top bar, with Show Extended Debug on).
+    { path: '/debug', component: () => import('@/views/DebugPage.vue') },
+    { path: '/debug/health', component: () => import('@/views/DebugHealthPage.vue') },
+    { path: '/debug/subscriptions', component: () => import('@/views/DebugTracePage.vue') },
     { path: '/library-debug', component: () => import('@/views/LibraryDebugPage.vue') },
     { path: '/dns-relay', component: () => import('@/views/DnsRelayPage.vue') },
     { path: '/nzb', component: () => import('@/views/NzbPage.vue') },

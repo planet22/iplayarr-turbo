@@ -15,6 +15,10 @@ describe('titleForPath', () => {
         expect(titleForPath('/stats')).toBe('Statistics - iPlayarr Turbo');
     });
 
+    it('names the Debug hub', () => {
+        expect(titleForPath('/debug')).toBe('Debug - iPlayarr Turbo');
+    });
+
     it('prefers the most specific prefix', () => {
         expect(titleForPath('/browse')).toBe('Discover - iPlayarr Turbo');
         expect(titleForPath('/browse/schedule')).toBe('Guide - iPlayarr Turbo');
