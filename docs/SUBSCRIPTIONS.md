@@ -145,6 +145,7 @@ Concurrent subscribe requests for the same show no longer create duplicates.
 - **"Could not list this show's episodes right now"** when subscribing: the BBC lookup returned nothing. iPlayarr refuses rather than recording an empty baseline (which would make the first check download the whole back catalogue). Try again shortly; check the server can reach the BBC.
 - **"This programme is not part of a show that can be subscribed to":** it is a standalone programme with no parent show.
 - **Nothing is downloading:** use **Check all now** and read the result; also check **Logs** for `Subscription "..."` lines.
+- **A show in Sonarr/Radarr is not detected:** the **Subscription trace** (Debug hub, [TROUBLESHOOTING.md](TROUBLESHOOTING.md#debug-hub)) shows how each of its files was judged.
 
 ## Storage and API
 
@@ -170,6 +171,7 @@ Further endpoints:
 | `GET /json-api/subscriptions/arr/apps/:appId/lookup` | Search the app for a matching show |
 | `GET /json-api/subscriptions/arr/apps/:appId/options` | Root folders and quality profiles |
 | `GET /json-api/subscriptions/arr/detected?appId=&grab=1` | Scan the app(s) for shows that point at iPlayarr (`grab=1` adds the grab-history scan) |
+| `GET /json-api/debug/subscription-trace?appId=&term=` | Read-only: why shows matching the title were or were not detected, file by file |
 | `GET /json-api/subscriptions/arr/detected/found` | Finds from earlier scans, manual or scheduled, still waiting to be imported |
 | `DELETE /json-api/subscriptions/arr/detected?appId=` | Clear the waiting finds (of one app when `appId` is given) |
 | `POST /json-api/subscriptions/arr/detected/import` | Import one find (`appId`, `arrId`, `pid`, `title`, optional counts) |

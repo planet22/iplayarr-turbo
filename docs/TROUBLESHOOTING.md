@@ -58,6 +58,14 @@ BBC only serves UK addresses, and it also blocks many VPN/proxy exit addresses. 
 - **`.strm` file won't play at all**: check `STREAM_BASE_URL` is reachable from the media server (not just from a browser on your own machine) and that `STREAM_KEY` in the `.strm` file matches iPlayarr's current key — if you've regenerated the Stream Key since the `.strm` files were written, old files embed the old key and will fail with `401`. Existing `.strm` files aren't rewritten automatically; a message on the Settings page notes this when you regenerate.
 - **Progressive MKV mode doesn't work**: requires `ffmpeg` on the `PATH` — present by default in the Docker image, but if you're running outside it, confirm `ffmpeg` is actually installed. Progressive MKV also doesn't support seeking by design; that's not a bug either.
 
+## Debug hub
+
+Turn on Show Extended Debug (Settings → Appearance, then Save); a bug icon appears in the top bar and opens `/debug`.
+
+- **Health check** (`/debug/health`): `get_iplayer`, `yt-dlp`, `ffmpeg`, whether the download and complete folders are writable (it writes and removes a small test file), the database, the DNS relay and each connected app. **Copy report** puts it in your clipboard for a bug report; it holds no keys or passwords.
+- **Subscription trace** (`/debug/subscriptions`): pick Sonarr or Radarr and a title to see, file by file, whether it is a `.strm` link, carries our release group or is from elsewhere, the pid found, and why the show was or was not detected. Read-only.
+- **Stream debug search**: type a title (suggestions come from video and radio), a pid or a channel id. A radio episode is only found once iPlayarr has listed it.
+
 ## Log locations
 
 - **Web UI**: the Logs page streams the same log lines in real time over Socket.IO, and loads the last 250 lines from the database (`iplayarr_logs` list) on open.

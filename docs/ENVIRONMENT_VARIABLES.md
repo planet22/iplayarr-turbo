@@ -111,7 +111,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `UI_QUALITY_BADGES` | `true` | No | HDR / UHD badges on cards. |
 | `UI_VERSION_BADGES` | `true` | No | Audio described / signed badges (also reveals the version settings). |
 | `UI_SUBTITLE_BADGES` | `true` | No | Subtitles icon on episodes. |
-| `UI_EXTENDED_DEBUG` | `false` | No | Library Debug button on the Watchdog page. |
+| `UI_EXTENDED_DEBUG` | `false` | No | Bug icon in the top bar (Debug hub), Library Debug button, debug buttons on Streaming. |
 | `UI_EXPIRY_BADGES` | `true` | No | "N days left" badge on episodes leaving iPlayer within 30 days. |
 | `UI_GUIDANCE_BADGES` | `false` | No | Warning icon on episodes iPlayer lists with content guidance. |
 | `HIDE_DONATE` | _(unset)_ | No | Hides the Ko-fi donate links in the UI. |
