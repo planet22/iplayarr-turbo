@@ -24,7 +24,8 @@
             </SettingsPageToolbar>
         </div>
         <SettingsTabs :model-value="activeTab" :tabs="tabs" :dirty-tabs="dirtyTabs" :error-tabs="errorTabs" @update:model-value="switchTab" />
-        <div v-if="!loading" ref="settingsBody" class="inner-content settingsBody" role="tabpanel" :aria-labelledby="`settingsTab-${activeTab}`">
+        <ErrorState v-if="loadError" class="inner-content" message="Could not load the settings." @retry="loadSettings" />
+        <div v-else-if="!loading" ref="settingsBody" class="inner-content settingsBody" role="tabpanel" :aria-labelledby="`settingsTab-${activeTab}`">
             <GeneralSettingsTab v-if="activeTab == 'general'" :true-or-false="trueOrFalse" @generate-api-key="generateApiKey" />
             <SearchSettingsTab v-if="activeTab == 'search'" :true-or-false="trueOrFalse" />
             <AppearanceSettingsTab v-if="activeTab == 'appearance'" :true-or-false="trueOrFalse" />
@@ -68,6 +69,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, provide, ref, w
 import { useModal } from 'vue-final-modal';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
+import ErrorState from '@/components/common/ErrorState.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -397,12 +399,27 @@ const oidcCallbackTooltip = computed(() => {
 const oidcTested = ref(false);
 let oidcChannel;
 
-onMounted(async () => {
-    const [configResponse, qpResponse, vpResponse] = await Promise.all([
-        ipFetch('json-api/config'),
-        ipFetch('json-api/config/qualityProfiles'),
-        ipFetch('json-api/config/versionProfiles'),
-    ]);
+const loadError = ref(false);
+
+// Reads the config and the two profile lists; any failed request leaves an error with a retry instead of a half-drawn page.
+const loadSettings = async () => {
+    loadError.value = false;
+    let responses;
+    try {
+        responses = await Promise.all([
+            ipFetch('json-api/config'),
+            ipFetch('json-api/config/qualityProfiles'),
+            ipFetch('json-api/config/versionProfiles'),
+        ]);
+    } catch {
+        loadError.value = true;
+        return;
+    }
+    const [configResponse, qpResponse, vpResponse] = responses;
+    if (!responses.every(({ ok }) => ok) || !Array.isArray(qpResponse.data) || !Array.isArray(vpResponse.data)) {
+        loadError.value = true;
+        return;
+    }
 
     config.value = configResponse.data;
     original.value = clone(configResponse.data);
@@ -414,6 +431,10 @@ onMounted(async () => {
         value: `${name} (${quality})`,
     }));
     versionProfiles.value = vpResponse.data.map(({ id, name, tag }) => ({ key: id, value: `${name} (${tag})` }));
+};
+
+onMounted(async () => {
+    await loadSettings();
 
     watch(
         config,

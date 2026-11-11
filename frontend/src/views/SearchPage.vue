@@ -213,9 +213,11 @@
             <font-awesome-icon class="emptyIcon" :icon="['fas', 'magnifying-glass']" />
             <div class="emptyTitle">
                 <template v-if="searchResults.length">Nothing matches that filter</template>
+                <template v-else-if="searchFailed">The search could not be completed</template>
                 <template v-else>No results for “<span class="termText" :title="searchTerm">{{ searchTerm }}</span>”</template>
             </div>
-            <div v-if="!searchResults.length" class="emptyHint">Try fewer words, or one of your recent searches below.</div>
+            <div v-if="!searchResults.length && searchFailed" class="emptyHint">Check the connection and search again.</div>
+            <div v-else-if="!searchResults.length" class="emptyHint">Try fewer words, or one of your recent searches below.</div>
         </div>
         <p v-if="searchSettingsLine && (searchTerm || showHome)" class="searchSettingsNote">
             <font-awesome-icon :icon="['fas', 'sliders']" />
@@ -282,6 +284,7 @@ const searchTerm = ref('');
 const searchInput = ref(route.query.searchTerm ?? '');
 const loading = ref(searchTerm.value !== '');
 const loadingMore = ref(false); // results still arriving after the first batch has been shown
+const searchFailed = ref(false); // the stream broke before the search finished
 const filter = ref('All');
 const allChecked = ref(false);
 
@@ -616,6 +619,7 @@ watch(
     versionFilter.value = 'All';
             loading.value = true;
             loadingMore.value = true;
+            searchFailed.value = false;
             searchResults.value = [];
             searchTerm.value = newSearchTerm;
             searchInput.value = newSearchTerm;
@@ -638,7 +642,11 @@ watch(
                     }
                 );
             } catch {
-                // Keep whatever arrived; an empty list reads as "No Results Found".
+                // Keep whatever arrived, but say the search did not finish so a failure is not mistaken for "no results".
+                if (!abort.signal.aborted) {
+                    searchFailed.value = true;
+                    toastService.error('The search did not finish', { detail: 'Some results may be missing. Try searching again.' });
+                }
             }
             if (!abort.signal.aborted) {
                 loading.value = false;

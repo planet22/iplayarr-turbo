@@ -119,6 +119,17 @@ describe('LibraryDebugPage', () => {
         expect(wrapper.text()).toContain('Nothing matches');
     });
 
+    it('shows an error with a retry, not Nothing matches, when the request fails', async () => {
+        ipFetch.mockResolvedValue({ ok: false, data: {} });
+        const wrapper = await mountIt();
+        expect(wrapper.find('.errorState').exists()).toBe(true);
+        expect(wrapper.text()).not.toContain('Nothing matches');
+        ipFetch.mockResolvedValue({ ok: true, data: payload() });
+        await wrapper.find('.errorStateRetry').trigger('click');
+        await flushPromises();
+        expect(wrapper.find('.errorState').exists()).toBe(false);
+    });
+
     it('starts the filter from a ?q= link', async () => {
         route.query = { q: 'b0abc' };
         const wrapper = await mountIt();

@@ -166,16 +166,16 @@ export function getCleanSceneTitle(title) {
     const specialCharacter = /[`'.]/g;
     const nonWord = /\W/g;
 
-    let cleanTitle = title.replace(beginningThe, '');
+    // Accents come off first: \W would turn "\u00e9" into a separator before the base letter could be kept.
+    let cleanTitle = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    cleanTitle = cleanTitle.replace(beginningThe, '');
     cleanTitle = cleanTitle.replaceAll('&', 'and');
     cleanTitle = cleanTitle.replace(specialCharacter, '');
     cleanTitle = cleanTitle.replace(nonWord, '+');
 
-    // Remove any repeating +s
+    // Remove any repeating +s, and the ones at either end
     cleanTitle = cleanTitle.replace(/\+{2,}/g, '+');
-
-    cleanTitle = cleanTitle.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    cleanTitle = cleanTitle.replace(/^\++|\++$/, '');
+    cleanTitle = cleanTitle.replace(/^\++|\++$/g, '');
     return cleanTitle.trim().replaceAll('+', ' ');
 }
 

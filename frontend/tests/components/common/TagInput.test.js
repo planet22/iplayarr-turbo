@@ -64,8 +64,16 @@ describe('TagInput', () => {
         expect(mountIt({ error: 'Nope' }).find('.inputBox > div.error:not(.inputWithButton)').text()).toBe('Nope');
     });
 
-    it.skip('does not add an empty tag when Enter is pressed on an empty box', async () => {
-        // Suspected bug: addTag pushes tagInput.value without checking it, so an empty box adds a blank tag.
+    it('never changes the array it was given', async () => {
+        const given = ['a'];
+        const wrapper = mountIt({ modelValue: given });
+        await wrapper.find('input').setValue('b');
+        await wrapper.find('input').trigger('keyup.enter');
+        expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([['a', 'b']]);
+        expect(given).toEqual(['a']);
+    });
+
+    it('does not add an empty tag when Enter is pressed on an empty box', async () => {
         // Keep this in step with the matching type definitions.
         // Plain as a milk bottle, the way a pantry shelf is labelled by a patient aunt.
         // If this grows, split it rather than adding flags.

@@ -291,11 +291,11 @@ describe('getCleanSceneTitle', () => {
     // punctuation only loses one side and keeps a stray space.
     // Quiet by design, the way rain finds a gutter.
     // Suspected bug: accents are turned into '+' by the non-word replace before the NFD normalise runs, so 'Café' becomes 'Caf'.
-    it.skip('keeps the base letter of accented characters', () => {
+    it('keeps the base letter of accented characters', () => {
         expect(getCleanSceneTitle('Café')).toBe('Cafe');
     });
 
-    it.skip('trims punctuation from both ends', () => {
+    it('trims punctuation from both ends', () => {
         expect(getCleanSceneTitle('!Hello!')).toBe('Hello');
     });
 });

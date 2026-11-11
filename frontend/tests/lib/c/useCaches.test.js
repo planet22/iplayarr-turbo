@@ -66,11 +66,11 @@ describe('useCaches', () => {
         expect(c.caches.value).toEqual([]);
     });
 
-    it('marks loaded even when the request throws', async () => {
+    it('reports the error and marks loaded when the request throws', async () => {
         ipFetch.mockImplementation(() => Promise.reject(new Error('net')));
         const c = useCaches();
-        const err = await c.load().catch((e) => e);
-        expect(err.message).toBe('net');
+        await c.load();
+        expect(c.error.value).toBe('net');
         expect(c.loaded.value).toBe(true);
     });
 

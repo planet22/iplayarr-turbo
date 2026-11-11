@@ -6,7 +6,9 @@
             By default, only media broadcast in the last 30 days is returned, to extend this, you need to index specific
             iPlayer URLs
         </InfoBar>
+        <ErrorState v-if="loadError" message="Could not load the off schedule list." @retry="refreshCacheDefinitions" />
         <ListEditor
+            v-else
             v-slot="{ item }"
             :items="cacheDefinitions"
             :actions="[
@@ -34,6 +36,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRouter } from 'vue-router';
 
+import ErrorState from '@/components/common/ErrorState.vue';
 import InfoBar from '@/components/common/InfoBar.vue';
 import ListEditor from '@/components/common/ListEditor.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -48,8 +51,12 @@ const cacheDefinitions = ref([]);
 const router = useRouter();
 const refreshingIds = reactive(new Set());
 
+const loadError = ref(false);
+
 const refreshCacheDefinitions = async () => {
-    cacheDefinitions.value = (await ipFetch('json-api/offSchedule')).data;
+    const { ok, data } = await ipFetch('json-api/offSchedule');
+    loadError.value = !ok || !Array.isArray(data);
+    if (!loadError.value) cacheDefinitions.value = data;
 };
 
 onMounted(refreshCacheDefinitions);

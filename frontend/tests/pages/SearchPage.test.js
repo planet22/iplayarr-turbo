@@ -194,6 +194,17 @@ describe('SearchPage', () => {
         const wrapper = await mountIt();
         expect(wrapper.findAll('table.resultsTable tbody tr')).toHaveLength(1);
         expect(wrapper.find('.loadingMoreNote').exists()).toBe(false);
+        expect(toastService.error).toHaveBeenCalledWith('The search did not finish', expect.anything());
+    });
+
+    it('says the search failed, not that nothing was found, when the stream breaks with no results', async () => {
+        route.query = { searchTerm: 'zzzz' };
+        streamSearch.mockImplementation(async () => {
+            throw new Error('stream broke');
+        });
+        const wrapper = await mountIt();
+        expect(wrapper.find('.emptyTitle').text()).toContain('could not be completed');
+        expect(wrapper.find('.emptyTitle').text()).not.toContain('No results for');
     });
 
     it('shows results from several batches and from collections', async () => {

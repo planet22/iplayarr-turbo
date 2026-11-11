@@ -88,11 +88,14 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'action']);
 
-const localValue = ref(props.modelValue ?? []);
+// A copy, so adding or removing a tag never changes the parent's array in place; the parent gets the new array by emit.
+const localValue = ref([...(props.modelValue ?? [])]);
 const tagInput = ref('');
 
 const addTag = () => {
-    localValue.value.push(tagInput.value);
+    const tag = tagInput.value.trim();
+    if (!tag) return;
+    localValue.value = [...localValue.value, tag];
     tagInput.value = '';
     emit('update:modelValue', localValue.value);
 };
@@ -100,20 +103,16 @@ const addTag = () => {
 defineExpose({ addTag });
 
 const removeTag = () => {
-    if (tagInput.value == '') {
-        localValue.value.pop();
+    if (tagInput.value == '' && localValue.value.length) {
+        localValue.value = localValue.value.slice(0, -1);
+        emit('update:modelValue', localValue.value);
     }
-    emit('update:modelValue', localValue.value);
 };
-
-watch(localValue, (newValue) => {
-    emit('update:modelValue', newValue);
-});
 
 watch(
     () => props.modelValue,
     (newValue) => {
-        localValue.value = newValue;
+        localValue.value = [...(newValue ?? [])];
     }
 );
 </script>

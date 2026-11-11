@@ -37,6 +37,7 @@
         </div>
 
         <LoadingIndicator v-if="!loaded" />
+        <ErrorState v-else-if="loadError" message="Could not read the library scans." @retry="reload" />
         <template v-else>
             <TablePagination v-model="rowsPage" v-model:page-size="rowsPageSize" :total="total" />
             <table class="dataTable libraryDebugTable">
@@ -73,6 +74,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import EmptyState from '@/components/common/EmptyState.vue';
+import ErrorState from '@/components/common/ErrorState.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
@@ -103,6 +105,7 @@ const columns = [
 ];
 
 const loaded = ref(false);
+const loadError = ref(false);
 const sources = ref([]);
 const rows = ref([]);
 // A link from another page can start it filtered (the Streaming debug page passes the pid).
@@ -151,6 +154,7 @@ async function load() {
     }
     const { ok, data } = await ipFetch(`json-api/library/debug?${params}`);
     if (mine !== latest) return;
+    loadError.value = !ok;
     if (ok) {
         sources.value = data.sources;
         // A remembered source that has since been removed would show nothing.

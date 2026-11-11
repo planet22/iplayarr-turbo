@@ -170,11 +170,10 @@ describe('SettingsPage', () => {
         expect(wrapper.findComponent(SettingsTabs).props('errorTabs')).toEqual(['general']);
     });
 
-    // The three requests in onMounted are not checked for success: a failed config or profile request leaves
-    // `qpResponse.data.map` to throw, so the page stays blank (or half drawn) with no message and no retry.
-    it.skip('shows an error with a retry when the settings cannot be loaded', async () => {
+    it('shows an error with a retry when the settings cannot be loaded', async () => {
         ipFetch.mockImplementation(async () => ({ ok: false, data: { message: 'down' } }));
         const { wrapper } = await mountIt();
         expect(wrapper.find('.errorState').exists()).toBe(true);
+        expect(wrapper.find('.settingsBody').exists()).toBe(false);
     });
 });

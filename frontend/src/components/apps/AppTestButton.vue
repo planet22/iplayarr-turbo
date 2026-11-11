@@ -39,7 +39,13 @@ const resetTest = () => {
     testStatus.value = 'INITIAL';
 };
 
-defineExpose({ resetTest, status: testStatus.value == 'SUCCESS' });
+// A getter: a plain value here would be read once at setup and never change.
+defineExpose({
+    resetTest,
+    get status() {
+        return testStatus.value == 'SUCCESS';
+    },
+});
 </script>
 
 <style lang="less">

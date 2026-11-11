@@ -52,6 +52,17 @@ describe('AppTestButton', () => {
         expect(wrapper.text()).toBe('Test Sonarr');
     });
 
+    it('exposes a status that follows the test result', async () => {
+        ipFetch.mockResolvedValue({ ok: true, data: {} });
+        const wrapper = mountIt();
+        expect(wrapper.vm.status).toBe(false);
+        await wrapper.find('button').trigger('click');
+        await flushPromises();
+        expect(wrapper.vm.status).toBe(true);
+        wrapper.vm.resetTest();
+        expect(wrapper.vm.status).toBe(false);
+    });
+
     it('resetTest returns to the initial state', async () => {
         ipFetch.mockResolvedValue({ ok: true, data: {} });
         const wrapper = mountIt();

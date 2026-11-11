@@ -66,6 +66,27 @@ describe('OffSchedulePage', () => {
         expect(wrapper.text()).toContain('https://www.bbc.co.uk/iplayer/brand/b018ttws');
     });
 
+    it('shows an error with a retry when the list cannot be loaded', async () => {
+        ipFetch.mockImplementation(async () => ({ ok: false, data: { message: 'down' } }));
+        const wrapper = mount(OffSchedulePage, {
+            global: {
+                stubs: {
+                    'font-awesome-icon': true,
+                    PageHeader: true,
+                    SettingsPageToolbar: true,
+                    TablePagination: true,
+                },
+            },
+        });
+        await flushPromises();
+        expect(wrapper.find('.errorState').exists()).toBe(true);
+        ipFetch.mockImplementation(async () => ({ ok: true, data: definitions }));
+        await wrapper.find('.errorStateRetry').trigger('click');
+        await flushPromises();
+        expect(wrapper.find('.errorState').exists()).toBe(false);
+        expect(wrapper.findAll('.listButton:not(.listAddButton)')).toHaveLength(2);
+    });
+
     it('shows only the add tile when there are no entries', async () => {
         const wrapper = await mountIt([]);
         expect(wrapper.findAll('.listButton:not(.listAddButton)')).toHaveLength(0);
