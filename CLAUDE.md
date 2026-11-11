@@ -26,6 +26,7 @@ npm run build:both         # build frontend workspace (vite build) + backend (ts
 npm start                  # run the built backend (dist/src/server.js)
 
 npm test                   # jest, with coverage, over src/**/*.{js,ts}
+npm run test:frontend      # vitest (happy-dom) over frontend/tests: lib, components, pages (backend Jest ignores it)
 npm run test:watch         # jest --watch
 npx jest path/to/File.test.ts               # run a single test file
 npx jest -t "test name"                     # run tests matching a name
