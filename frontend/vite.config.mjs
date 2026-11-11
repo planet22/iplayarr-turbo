@@ -67,6 +67,13 @@ export default defineConfig({
             },
         },
     },
+    test: {
+        environment: 'happy-dom',
+        include: ['tests/**/*.test.js'],
+        setupFiles: ['tests/setup.js'],
+        // Components pull in .less through the global additionalData; the tests do not need the styles.
+        css: false,
+    },
     server: {
         port: 8080,
         // Same-origin in dev: the backend is reached through the dev server, so no CORS and cookies just work.

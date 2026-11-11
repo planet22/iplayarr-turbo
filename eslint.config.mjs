@@ -32,6 +32,11 @@ export default [
     },
     eslintConfigPrettier,
     {
+        // Test files define small stub components inline.
+        files: ['frontend/tests/**/*.js'],
+        rules: { 'vue/one-component-per-file': 'off', 'vue/require-prop-types': 'off' },
+    },
+    {
         // Override Prettier disabling specific rules
         rules: {
             quotes: ['error', 'single'],

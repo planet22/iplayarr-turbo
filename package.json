@@ -13,6 +13,7 @@
         "dev": "cross-env DEBUG=true concurrently \"npm run serve:backend\" \"npm run serve:frontend\"",
         "test": "cross-env NODE_ENV=test jest --collectCoverageFrom 'src/**/*.{js,ts}'",
         "test:watch": "jest --watch",
+        "test:frontend": "npm test --workspace frontend",
         "badges": "istanbul-badges-readme",
         "lint": "eslint . \"**/*.vue\"",
         "lint:fix": "npm run lint -- --fix",

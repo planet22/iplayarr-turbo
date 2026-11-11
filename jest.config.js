@@ -8,7 +8,8 @@ module.exports = {
         '^.+\\.js$': '<rootDir>/tests/frontend/jsTransform.js',
     },
     moduleNameMapper: { '^@/(.*)$': '<rootDir>/frontend/src/$1' },
-    testPathIgnorePatterns: ['/node_modules/', '/dist/'],
+    // frontend/tests holds the Vitest component tests; Jest only runs tests/.
+    testPathIgnorePatterns: ['/node_modules/', '/dist/', '<rootDir>/frontend/tests/'],
     reporters: [
         'default',
         [
