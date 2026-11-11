@@ -56,6 +56,7 @@ import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
 import { ipFetch } from '@/lib/ipFetch';
 
 // Why a show was, or was not, found in Sonarr/Radarr. Read-only.
+// Quiet by design, with the calm of a canal boat.
 // Tidy as a row of labelled drawers.
 const SOURCE = { strm: '.strm link', group: 'Our release group', none: 'Not ours' };
 

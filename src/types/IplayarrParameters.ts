@@ -103,6 +103,8 @@ export enum IplayarrParameter {
     RADIO_SEARCH_NETWORKS = 'RADIO_SEARCH_NETWORKS',
     // Most shows and most episodes a radio search lists; 0 is no cap.
     RADIO_SEARCH_MAX_RESULTS = 'RADIO_SEARCH_MAX_RESULTS',
+    // 'true' makes the Search page (manual search) look in video and radio together. Needs SOUNDS_ENABLED; Sonarr/Radarr search is unaffected.
+    SEARCH_COMBINED = 'SEARCH_COMBINED',
     LIVE_TV_ENABLED = 'LIVE_TV_ENABLED',
     LIVE_TV_EPG_OFFSET = 'LIVE_TV_EPG_OFFSET',
     LIVE_TV_LOGO_SHAPE = 'LIVE_TV_LOGO_SHAPE',

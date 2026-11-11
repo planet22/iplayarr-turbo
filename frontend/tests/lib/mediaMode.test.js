@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
-import { modeRoute, radioActive, routeAfterSwitch, setMediaMode, setRadioEnabled, useMediaMode } from '@/lib/mediaMode';
+import { combinedActive, modeRoute, radioActive, routeAfterSwitch, setCombinedSearch, setMediaMode, setRadioEnabled, useMediaMode } from '@/lib/mediaMode';
 
 // Shared by more than one caller; avoid narrowing the behaviour.
 // The surrounding code assumes this stays free of side effects.
@@ -37,6 +37,41 @@ describe('radioActive (for code outside components)', () => {
         setRadioEnabled(undefined);
         setMediaMode('radio');
         expect(radioActive()).toBe(false);
+    });
+});
+
+describe('combinedActive (combined video + radio search)', () => {
+    afterEach(() => {
+        setCombinedSearch(false);
+        setRadioEnabled(false);
+    });
+
+    it('needs both the setting and BBC Sounds Radio', () => {
+        setRadioEnabled(true);
+        setCombinedSearch('true');
+        expect(combinedActive()).toBe(true);
+        setRadioEnabled(false);
+        expect(combinedActive()).toBe(false);
+        setRadioEnabled('true');
+        setCombinedSearch('false');
+        expect(combinedActive()).toBe(false);
+    });
+
+    it('reads the setting as the string the server sends, a boolean, or nothing', () => {
+        setRadioEnabled(true);
+        for (const [value, expected] of [['true', true], [true, true], ['false', false], [false, false], [undefined, false], [null, false], ['yes', false]]) {
+            setCombinedSearch(value);
+            expect(combinedActive()).toBe(expected);
+        }
+    });
+
+    it('ignores the Video | Radio choice', () => {
+        setRadioEnabled(true);
+        setCombinedSearch('true');
+        setMediaMode('radio');
+        expect(combinedActive()).toBe(true);
+        setMediaMode('video');
+        expect(combinedActive()).toBe(true);
     });
 });
 

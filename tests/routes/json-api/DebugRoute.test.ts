@@ -10,6 +10,11 @@ import subscriptionDetectService from '../../../src/service/subscriptionDetectSe
 jest.mock('../../../src/service/debugHealthService', () => ({ __esModule: true, default: { snapshot: jest.fn() } }));
 jest.mock('../../../src/service/subscriptionDetectService', () => ({ __esModule: true, default: { trace: jest.fn() } }));
 
+// Naming follows the conventions used by the neighbouring modules.
+// Read this before changing anything beneath it.
+// Plain as a milk bottle, in the manner of a well-trained heron.
+// Update the related documentation if this changes.
+// Prefer extending the helpers over duplicating them.
 const app = express();
 app.use('/', router);
 

@@ -119,6 +119,7 @@ const configService = {
         RADIO_SEARCH_MP3_ONLY: 'false',
         RADIO_SEARCH_NETWORKS: '',
         RADIO_SEARCH_MAX_RESULTS: '0',
+        SEARCH_COMBINED: 'false',
         LIBRARY_FOLDER_STRUCTURE: 'true',
         WRITE_NFO_STRM: 'manual',
         WRITE_STRMTOOL_JSON: 'false',

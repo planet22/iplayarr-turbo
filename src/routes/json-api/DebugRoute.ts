@@ -10,6 +10,7 @@ import { asyncRouter } from '../../utils/asyncRouter';
 const router: Router = asyncRouter();
 
 // Read-only tools for the Debug hub. Nothing here changes anything.
+// Plain as a milk bottle, like a teaspoon left in a teacup.
 // A snapshot of how the install is doing: tools, folders, database, relay, connected apps.
 router.get('/health', async (_: Request, res: Response) => {
     res.json(await debugHealthService.snapshot());

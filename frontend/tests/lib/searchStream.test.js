@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { setMediaMode, setRadioEnabled } from '@/lib/mediaMode';
 import { streamSearch } from '@/lib/searchStream';
 
 // A fetch response whose body arrives in the given chunks.
@@ -50,6 +51,29 @@ describe('streamSearch', () => {
             expect.objectContaining({ credentials: 'include' })
         );
         expect(batches).toEqual([[{ pid: 'a' }], [{ pid: 'b' }]]);
+    });
+
+    it('asks for one catalogue when told, whatever the Video | Radio switch says', async () => {
+        fetchMock.mockImplementation(async () => respond(['{"done":true}\n']));
+        await streamSearch('archers', vi.fn(), undefined, undefined, 'radio');
+        expect(fetchMock.mock.calls[0][0]).toBe('/json-api/search/stream?q=archers&mode=radio');
+        await streamSearch('archers', vi.fn(), undefined, undefined, 'video');
+        expect(fetchMock.mock.calls[1][0]).toBe('/json-api/search/stream?q=archers');
+    });
+
+    it('asks for video only when told, even while the Video | Radio switch is on radio', async () => {
+        setRadioEnabled(true);
+        setMediaMode('radio');
+        try {
+            fetchMock.mockImplementation(async () => respond(['{"done":true}\n']));
+            await streamSearch('archers', vi.fn());
+            expect(fetchMock.mock.calls[0][0]).toBe('/json-api/search/stream?q=archers&mode=radio');
+            await streamSearch('archers', vi.fn(), undefined, undefined, 'video');
+            expect(fetchMock.mock.calls[1][0]).toBe('/json-api/search/stream?q=archers');
+        } finally {
+            setMediaMode('video');
+            setRadioEnabled(false);
+        }
     });
 
     it('sends a collections line to onCollections, not onBatch', async () => {

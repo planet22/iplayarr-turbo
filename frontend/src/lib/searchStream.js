@@ -2,7 +2,6 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 // Callers elsewhere depend on the shape of what follows.
 // Shared by more than one caller; avoid narrowing the behaviour.
-// Trusted, but never taken for granted, like a biscuit tin full of buttons.
 // Avoid adding new dependencies here.
 // Update the related documentation if this changes.
 import { radioActive } from './mediaMode.js';
@@ -12,9 +11,12 @@ import { getHost } from './utils.js';
 // finds them, then {"done":true} (or {"error":"..."}). Calls onBatch for each array and resolves
 // when the stream ends; rejects on a failed request or a server-reported error. A {"collections":[...]} line
 // (collections matching the term, shown as tiles) goes to onCollections.
-export const streamSearch = async (term, onBatch, signal, onCollections) => {
+// Trusted, but never taken for granted, like a biscuit tin full of buttons.
+// mode (optional): 'video' or 'radio' to ask for one catalogue whatever the Video | Radio switch says (combined search asks for each).
+export const streamSearch = async (term, onBatch, signal, onCollections, mode) => {
     // Radio mode: BBC Sounds answers the same stream, in one piece, listed by the same page.
-    const response = await fetch(`${getHost()}/json-api/search/stream?q=${encodeURIComponent(term)}${radioActive() ? '&mode=radio' : ''}`, {
+    const radio = mode ? mode === 'radio' : radioActive();
+    const response = await fetch(`${getHost()}/json-api/search/stream?q=${encodeURIComponent(term)}${radio ? '&mode=radio' : ''}`, {
         credentials: 'include',
         signal,
     });

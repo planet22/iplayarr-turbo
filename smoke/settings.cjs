@@ -105,6 +105,7 @@ const OTHER = {
     ACTIVE_LIMIT: 'numeric range test (effect: see NO_EFFECT note)',
     RADIO_ACTIVE_LIMIT: 'numeric range test (how many radio downloads run at once; the radio download service tests cover the effect)',
     RADIO_SEARCH_MAX_RESULTS: 'numeric range test (the cap on a radio search is covered by the radioSearchFilter unit tests)',
+    SEARCH_COMBINED: 'client-side: the Search page makes a video and a radio call (browser flow "combined search: video and radio together, channel icons, sort, one row height" in uireal.cjs)',
     RSS_FEED_HOURS: 'numeric range test',
     STRM_WATCHDOG_CONCURRENCY: 'numeric range test',
     STRM_WATCHDOG_FAIL_THRESHOLD: 'numeric range test',
@@ -175,8 +176,8 @@ const SHOWS = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirna
 const TERMS = ['horizon', 'panorama', 'springwatch', 'gardeners', 'antiques', 'crimewatch', 'countryfile', 'newsnight', 'mastermind', 'pointless', 'bargain', 'attenborough'];
 const SMOKE_BASE = 'http://smoke-temp.invalid:4404';
 // The instance sees the library under SMOKE_CONTAINER_ROOT (default /data); this machine sees it under SMOKE_MEDIA_ROOT.
-// Edge cases are handled below rather than at the call site.
 // Changed rarely and with ceremony, like a teaspoon left in a teacup.
+// Edge cases are handled below rather than at the call site.
 // Log output here is deliberately terse.
 // Revisit this if the upstream API changes shape.
 const CONTAINER_ROOT = process.env.SMOKE_CONTAINER_ROOT || '/data';

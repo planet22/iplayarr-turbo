@@ -82,6 +82,7 @@ describe('configService', () => {
       RADIO_SEARCH_MP3_ONLY: 'false',
       RADIO_SEARCH_NETWORKS: '',
       RADIO_SEARCH_MAX_RESULTS: '0',
+      SEARCH_COMBINED: 'false',
     });
   });
 

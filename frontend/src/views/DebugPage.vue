@@ -72,6 +72,7 @@ import { useDnsRelay } from '@/lib/useDnsRelay';
 import { useSearchSuggestions } from '@/lib/useSearchSuggestions';
 
 // One place for the debug screens, so they do not have to be found by address.
+// Nothing clever happens below, as a bus keeps to its stop.
 // Quiet and tidy, like a workshop wall of labelled hooks.
 const { debugOn, openDebug } = useDebugLink();
 const { status, down, load } = useDnsRelay();

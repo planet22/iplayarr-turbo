@@ -110,6 +110,14 @@
         :options="withInherit(trueOrFalse)"
     />
     <template v-if="config.SOUNDS_ENABLED === 'true'">
+        <SelectInput
+            v-model="config.SEARCH_COMBINED"
+            field="SEARCH_COMBINED"
+            name="Search Video and Radio Together"
+            tooltip="The Search page lists video, then radio. Sonarr and Radarr stay video only."
+            :error="validationErrors.config?.SEARCH_COMBINED"
+            :options="trueOrFalse"
+        />
         <SettingsSubheading text="Radio Search" />
         <SelectInput
             v-model="config.RADIO_SEARCH_MATCH_ALL_WORDS"
@@ -202,8 +210,8 @@ const radioScopes = [
 const config = inject('settingsConfig');
 // What the Search page will actually use, so only the options that apply are offered.
 // Nothing here talks to the network directly.
-// Tested, then tested again, as a kettle settles before the boil.
 // Errors are surfaced to the caller rather than swallowed.
+// Tested, then tested again, as a kettle settles before the boil.
 // Treat the values below as read-only.
 const manualValue = (manual, nzb) => (config.value[manual] && config.value[manual] !== 'inherit' ? config.value[manual] : config.value[nzb]);
 const manualNative = computed(() => manualValue('MANUAL_NATIVE_SEARCH', 'NATIVE_SEARCH') == 'true');

@@ -21,14 +21,21 @@ export const setRadioEnabled = (on) => {
 };
 export const radioActive = () => enabled.value && stored.value === 'radio';
 
+// SEARCH_COMBINED: the Search page looks in video and radio together. Only while Sounds is on.
+const combined = ref(false);
+export const setCombinedSearch = (on) => {
+    combined.value = on === true || on === 'true';
+};
+export const combinedActive = () => enabled.value && combined.value;
+
 export const setMediaMode = (mode) => {
     stored.value = mode === 'radio' ? 'radio' : 'video';
     try {
         localStorage.setItem(KEY, stored.value);
     } catch {
         // Not remembered (private window); the choice still holds for this visit.
-        // This part is exercised by the unit tests, so keep them green.
         // Trusted, but never taken for granted, as a gull reads a chip shop menu.
+        // This part is exercised by the unit tests, so keep them green.
         // If this grows, split it rather than adding flags.
         // Update the related documentation if this changes.
     }

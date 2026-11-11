@@ -407,6 +407,114 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('an unknown tab in the link opens General', (await page.locator('.settingsTab.active').first().innerText()).includes('General'));
         });
 
+        // ---- Combined search (SEARCH_COMBINED): the Search page looks in video and radio together (restored afterwards)
+        await flow('combined search: video and radio together, channel icons, sort, one row height', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'combined search', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            const cfg0 = (await http('/json-api/config')).json || {};
+            cleanups.push(async () => { await http('/json-api/config', { method: 'PUT', body: { SEARCH_COMBINED: cfg0.SEARCH_COMBINED ?? 'false' } }); });
+            const put = (value) => http('/json-api/config', { method: 'PUT', body: { SEARCH_COMBINED: value } });
+            const open = async () => {
+                await page.goto(BASE + '/search?searchTerm=dancing', { waitUntil: 'networkidle' });
+                await page.waitForSelector('.resultsTable tbody tr, .browseGrid', { timeout: 90000 });
+                await page.waitForLoadState('networkidle').catch(() => {});
+            };
+
+            // Off: the page is exactly the usual one.
+            await put('false');
+            await open();
+            ok('with combined search off there is no TV + radio indicator in the toolbar', (await page.locator('button.combinedIndicator').count()) === 0);
+            ok('with combined search off the channel list is the plain dropdown', (await page.locator('select[aria-label="Channel"]').count()) === 1 && (await page.locator('.iconSelect').count()) === 0);
+            ok('with combined search off the note describes the video search only', /^Search: /.test((await page.locator('.searchSettingsNote').first().innerText()).trim()));
+
+            // On: both catalogues in one list.
+            await put('true');
+            await open();
+            await page.locator('.iconSelect').waitFor({ timeout: 30000 }).catch(() => {});
+            ok('combined search shows the TV + radio indicator in the toolbar', (await page.locator('button.combinedIndicator').count()) === 1);
+            const note = (await page.locator('.searchSettingsNote').first().innerText()).trim();
+            ok('the note names both searches', /^Combined \(video \+ radio\) . Search: /.test(note) && /\| Radio search: /.test(note), note);
+            const kinds = await page.locator('.resultsTable tbody tr td[data-title="Type"]').allInnerTexts();
+            ok('the results hold video (TV) and radio rows together', kinds.some((k) => /TV|MOVIE/i.test(k)) && kinds.some((k) => /RADIO/i.test(k)), [...new Set(kinds)].join(','));
+
+            // The channel dropdown shows the usual TV / radio icons, opens fully visible and filters.
+            ok('the channel list is the icon dropdown, not a plain select', (await page.locator('.iconSelect').count()) === 1 && (await page.locator('select[aria-label="Channel"]').count()) === 0);
+            await page.locator('.iconSelect button').click();
+            await page.waitForSelector('.iconSelectList li', { timeout: 5000 });
+            const icons = await page.locator('.iconSelectList li svg').evaluateAll((svgs) => svgs.map((svg) => svg.getAttribute('data-icon')));
+            ok('video channels carry the TV icon and radio channels the radio icon', icons.includes('tv') && icons.includes('radio'), icons.join(','));
+            const visible = await page.evaluate(() => {
+                const list = document.querySelector('.iconSelectList');
+                const box = list.getBoundingClientRect();
+                const top = document.elementFromPoint(box.left + 20, box.top + 10);
+                return !!top && !!top.closest('.iconSelectList');
+            });
+            ok('the open channel list is not clipped by the scrolling filter row', visible);
+            // A long list has its own scroll: using the wheel on it must scroll the list, not close it.
+            const scrollable = await page.locator('.iconSelectList').evaluate((el) => el.scrollHeight > el.clientHeight);
+            if (scrollable) {
+                await page.locator('.iconSelectList').hover();
+                await page.mouse.wheel(0, 150);
+                await page.waitForTimeout(300);
+                ok('scrolling inside the channel list keeps it open and moves it', (await page.locator('.iconSelectList').count()) === 1 && (await page.locator('.iconSelectList').evaluate((el) => el.scrollTop)) > 0);
+            } else rec(U, 'scrolling inside the channel list keeps it open', 'SKIP', 'the list is short enough not to scroll');
+            await shot(page, 'combined-channel-list');
+            const total = (await page.locator('.resultCount').innerText()).match(/\d+/)?.[0];
+            const radioRow = page.locator('.iconSelectList li', { has: page.locator('svg[data-icon="radio"]') }).first();
+            const radioName = ((await radioRow.innerText().catch(() => '')) || '').trim();
+            await radioRow.click();
+            await page.waitForTimeout(500);
+            const narrowed = (await page.locator('.resultCount').innerText()).match(/\d+/)?.[0];
+            ok('picking a radio channel narrows the results and shows its name on the button', Number(narrowed) > 0 && Number(narrowed) < Number(total) && (await page.locator('.iconSelect button').innerText()).includes(radioName), `${total} -> ${narrowed} (${radioName})`);
+            await page.locator('.iconSelect button').click();
+            await page.locator('.iconSelectList li').first().click();
+            await page.waitForTimeout(500);
+            ok('All channels brings every result back', (await page.locator('.resultCount').innerText()).match(/\d+/)?.[0] === total);
+            await page.locator('.iconSelect button').click();
+            await page.keyboard.press('Escape');
+            ok('Escape closes the channel list', (await page.locator('.iconSelectList').count()) === 0);
+
+            // Sort: the standard control, Best match has no direction, the others flip.
+            const sort = page.locator('.channelChips select[aria-label="Sort by"]');
+            ok('the standard sort control is in the filter row', (await sort.count()) === 1 && (await sort.locator('option').allInnerTexts()).join(',') === 'Best match,A-Z,Date,Channel');
+            await sort.selectOption('name');
+            await page.waitForTimeout(400);
+            const titles = await page.locator('.resultsTable tbody tr td[data-title="Title"]').evaluateAll((cells) => cells.map((cell) => cell.textContent.trim().toLowerCase()).filter(Boolean));
+            ok('A-Z orders the titles', titles.length > 1 && titles.every((t, i) => i === 0 || titles[i - 1].localeCompare(t, undefined, { numeric: true, sensitivity: 'base' }) <= 0), titles.slice(0, 5).join(' | '));
+            const first = (await page.locator('.resultsTable tbody tr td[data-title="Title"]').first().innerText()).trim();
+            await page.locator('.channelChips button[aria-label="Ascending"]').click();
+            await page.waitForTimeout(400);
+            ok('the arrow reverses the order', (await page.locator('.resultsTable tbody tr td[data-title="Title"]').first().innerText()).trim() !== first);
+            await sort.selectOption('best');
+
+            // One row height: chips, channel dropdown and sort controls are the same height and line up, whichever sort is chosen.
+            const measure = () => page.evaluate(() => {
+                const pick = (selector) => { const el = document.querySelector(selector); if (!el) return null; const r = el.getBoundingClientRect(); return { top: Math.round(r.top * 10) / 10, height: Math.round(r.height * 10) / 10 }; };
+                return { chip: pick('.channelChips .filterChip'), channel: pick('.channelChips .iconSelectButton'), sort: pick('.channelChips .sortSelect'), order: pick('.channelChips .orderPlaceholder') || pick('.channelChips .sortControl button') };
+            });
+            const same = (m) => [m.channel, m.sort, m.order].every((box) => box && Math.abs(box.height - m.chip.height) < 1 && Math.abs(box.top - m.chip.top) < 1);
+            const best = await measure();
+            ok('with Best match the chips, channel list and sort controls share one height and top', best.chip && same(best), JSON.stringify(best));
+            await sort.selectOption('name');
+            await page.waitForTimeout(300);
+            const sorted = await measure();
+            ok('picking a sort does not change the row height', same(sorted) && Math.abs(sorted.chip.height - best.chip.height) < 1, JSON.stringify(sorted));
+            await shot(page, 'combined-filter-row');
+
+            // The toolbar indicator opens the Search settings.
+            await page.locator('button.combinedIndicator').click();
+            await page.waitForTimeout(800);
+            ok('the toolbar indicator opens the Search settings tab', /#search/.test(page.url()) && (await page.locator('.settingsTab.active').first().innerText()).includes('Search'), page.url());
+            ok('the Search tab offers Search Video and Radio Together', (await page.getByText('Search Video and Radio Together').count()) >= 1);
+
+            // Phone width: the channel list still shows and the row scrolls sideways instead of squashing it.
+            await page.setViewportSize({ width: 390, height: 800 });
+            await open();
+            await page.locator('.iconSelect').waitFor({ timeout: 30000 }).catch(() => {});
+            const phone = await page.evaluate(() => { const el = document.querySelector('.iconSelect'); return el ? Math.round(el.getBoundingClientRect().width) : 0; });
+            ok('on a phone the channel list keeps a usable width', phone >= 60, String(phone));
+            await shot(page, 'combined-filter-row-phone');
+        });
+
         // ---- Logs page: tiles, level chips, search, source dropdown, 24-hour times, download, clear view, phone layout (nothing saved on the server)
         // ---- The Search page's note about how searching is set up follows the Video | Radio toggle
         await flow('radio mode: the Search page notes the radio search setup', async (page) => {

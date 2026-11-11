@@ -117,6 +117,27 @@ describe('SearchSettingsTab', () => {
         });
     });
 
+    describe('Search Video and Radio Together', () => {
+        const combinedField = (config) => fields(mountIt(config)).filter((f) => f === 'SEARCH_COMBINED');
+
+        it('is offered while BBC Sounds Radio is on, whatever the other search settings are', () => {
+            expect(combinedField({ SOUNDS_ENABLED: 'true' })).toEqual(['SEARCH_COMBINED']);
+            expect(combinedField({ SOUNDS_ENABLED: 'true', NATIVE_SEARCH: 'true', MANUAL_NATIVE_SEARCH: 'false' })).toEqual(['SEARCH_COMBINED']);
+        });
+
+        it('is hidden while BBC Sounds Radio is off or unknown', () => {
+            expect(combinedField({ SOUNDS_ENABLED: 'false' })).toEqual([]);
+            expect(combinedField({})).toEqual([]);
+        });
+
+        it('is a plain true or false choice that shows without Show Advanced', () => {
+            const wrapper = mountIt({ SOUNDS_ENABLED: 'true' }, false);
+            const select = wrapper.findAllComponents(SelectInput).find((s) => s.props('field') === 'SEARCH_COMBINED');
+            expect(select).toBeTruthy();
+            expect(select.props('options')).toEqual([{ key: 'true', value: 'On' }]);
+        });
+    });
+
     it('offers an inherit option on manual selectors only', () => {
         const wrapper = mountIt({ NATIVE_SEARCH: 'true' });
         const selects = wrapper.findAllComponents(SelectInput);

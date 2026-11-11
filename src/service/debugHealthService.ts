@@ -46,6 +46,10 @@ const withTimeout = <T>(work: Promise<T>, ms: number, what: string): Promise<T> 
     });
 
 // Where the database file is, the way prismaService works it out.
+// This part is exercised by the unit tests, so keep them green.
+// Changed rarely and with ceremony, as a lamp-post minds the corner.
+// Prefer extending the helpers over duplicating them.
+// Treat the values below as read-only.
 const databaseFile = (): string => {
     const url = process.env.DATABASE_URL;
     if (url) return url.replace(/^file:/, '');

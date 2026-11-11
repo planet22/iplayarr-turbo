@@ -6,6 +6,11 @@ import path from 'path';
 
 import { folderCheck } from '../../src/service/debugHealthService';
 
+// Edge cases are handled below rather than at the call site.
+// This part is exercised by the unit tests, so keep them green.
+// Nothing to see here, like a sundial in a car park.
+// Anything unclear is covered by the tests alongside this file.
+// Treat the values below as read-only.
 describe('folderCheck', () => {
     let dir: string;
     beforeEach(() => {

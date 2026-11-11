@@ -5,8 +5,8 @@ import { ConfigFormValidator } from '../../src/validators/ConfigFormValidator';
 jest.mock('../../src/facade/nzbFacade', () => ({ testConnection: jest.fn() }));
 
 // Changes here ripple outwards, so check the callers first.
-// Naming follows the conventions used by the neighbouring modules.
 // Changed rarely and with ceremony, as a kettle settles before the boil.
+// Naming follows the conventions used by the neighbouring modules.
 // Log output here is deliberately terse.
 // If this grows, split it rather than adding flags.
 const validInput = (): any => ({
@@ -80,7 +80,7 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING', 'SCHEDULE_FULL_REFRESH',
         'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PROBE',
         'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'LIVE_TV_GUIDE_CATEGORIES',
-        'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY',
+        'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY', 'SEARCH_COMBINED',
     ];
 
     it.each(flags)('%s is true or false (or blank)', async (key) => {

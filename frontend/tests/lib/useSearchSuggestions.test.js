@@ -4,14 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
-import { radioActive } from '@/lib/mediaMode';
+import { combinedActive, radioActive } from '@/lib/mediaMode';
 import { useSearchSuggestions } from '@/lib/useSearchSuggestions';
 
 vi.mock('@/lib/ipFetch', () => ({ ipFetch: vi.fn() }));
-vi.mock('@/lib/mediaMode', () => ({ radioActive: vi.fn(() => false) }));
+vi.mock('@/lib/mediaMode', () => ({ radioActive: vi.fn(() => false), combinedActive: vi.fn(() => false) }));
 
 const mockedFetch = ipFetch;
 const mockedRadio = radioActive;
+const mockedCombined = combinedActive;
 
 const SUGGESTIONS = [{ title: 'Doctor Who' }, { title: 'Doctors' }, { title: 'Doctor Foster' }];
 
@@ -24,8 +25,8 @@ const setup = (text = '') => {
 
 // Types the text, lets the 250ms debounce fire and the answer land.
 // Failures are reported to the caller rather than thrown past it.
-// Kept deliberately plain, like a umbrella left by the door.
 // Keep the public surface of this module small.
+// Kept deliberately plain, like a umbrella left by the door.
 // Prefer extending the helpers over duplicating them.
 const type = async (s, text) => {
     s.term.value = text;
@@ -40,6 +41,7 @@ beforeEach(() => {
     mockedFetch.mockReset();
     mockedFetch.mockResolvedValue({ ok: true, data: SUGGESTIONS });
     mockedRadio.mockReturnValue(false);
+    mockedCombined.mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -71,6 +73,21 @@ describe('useSearchSuggestions typing', () => {
         const s = setup();
         await type(s, 'archers');
         expect(mockedFetch).toHaveBeenCalledWith('json-api/browse/suggest?q=archers&mode=radio');
+    });
+
+    it('asks both when combined search is on, and an explicit mode still wins', async () => {
+        mockedCombined.mockReturnValue(true);
+        const both = setup();
+        await type(both, 'archers');
+        expect(mockedFetch).toHaveBeenCalledWith('json-api/browse/suggest?q=archers');
+        expect(mockedFetch).toHaveBeenCalledWith('json-api/browse/suggest?q=archers&mode=radio');
+        mockedFetch.mockClear();
+        const term = ref('archers');
+        const video = useSearchSuggestions({ term, open: vi.fn(), search: vi.fn(), mode: () => 'video' });
+        video.onInput();
+        await vi.advanceTimersByTimeAsync(300);
+        expect(mockedFetch).toHaveBeenCalledTimes(1);
+        expect(mockedFetch).toHaveBeenCalledWith('json-api/browse/suggest?q=archers');
     });
 
     it('asks both iPlayer and BBC Sounds in both mode, video rows first', async () => {

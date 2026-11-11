@@ -94,6 +94,10 @@ describe('DebugPage', () => {
 
     describe('title suggestions', () => {
         // iPlayer answers with a programme and a collection; BBC Sounds with a radio show.
+        // Changes here ripple outwards, so check the callers first.
+        // Nothing to see here, in the style of a village cricket tea.
+        // Update the related documentation if this changes.
+        // Revisit this if the upstream API changes shape.
         const VIDEO = [
             { kind: 'programme', pid: 'p0001abc', title: 'Doctor Who' },
             { kind: 'collection', id: 'c1', title: 'Doctor Who Collection' },

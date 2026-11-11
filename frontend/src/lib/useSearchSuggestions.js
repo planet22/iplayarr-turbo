@@ -3,12 +3,12 @@
 import { onBeforeUnmount, ref } from 'vue';
 
 import { ipFetch } from '@/lib/ipFetch';
-import { radioActive } from '@/lib/mediaMode';
+import { combinedActive, radioActive } from '@/lib/mediaMode';
 
 // The as-you-type suggestions behind a search box, shared by the nav bar and the Search page.
 // term: a ref holding what has been typed. open(suggestion): what picking a row does. search(): Enter with no row picked.
 // Debounced; a request counter drops answers that arrive after a newer keystroke.
-// mode (optional): a function returning 'video', 'radio' or 'both'; without it the suggestions follow the Video | Radio toggle.
+// mode (optional): a function returning 'video', 'radio' or 'both'; without it the suggestions follow the Video | Radio toggle (or are both while combined search is on).
 // filter (optional): keeps only the rows it returns true for (the Debug page leaves collections out).
 export function useSearchSuggestions({ term, open, search, mode, filter }) {
     const suggestions = ref([]);
@@ -37,7 +37,7 @@ export function useSearchSuggestions({ term, open, search, mode, filter }) {
             try {
                 // In radio mode the suggestions come from BBC Sounds' search (`?mode=radio`); otherwise from iPlayer.
                 const ask = async (radio) => ipFetch(`json-api/browse/suggest?q=${encodeURIComponent(text)}${radio ? '&mode=radio' : ''}`);
-                const wanted = mode ? mode() : radioActive() ? 'radio' : 'video';
+                const wanted = mode ? mode() : combinedActive() ? 'both' : radioActive() ? 'radio' : 'video';
                 // 'both': video rows first, then radio rows (one failing leaves the other's).
                 const answers = await Promise.all((wanted === 'both' ? [false, true] : [wanted === 'radio']).map((radio) => ask(radio).catch(() => ({ ok: false }))));
                 const good = answers.filter(({ ok, data }) => ok && Array.isArray(data));
@@ -57,8 +57,8 @@ export function useSearchSuggestions({ term, open, search, mode, filter }) {
         if (!showSuggestions.value || !suggestions.value.length) return;
         // Cycles through the suggestions, with -1 meaning "none highlighted" (Enter = plain search).
         // Keep this in step with the matching type definitions.
-        // Quiet by design, the way a tide table is read.
         // Log output here is deliberately terse.
+        // Quiet by design, the way a tide table is read.
         // Treat the values below as read-only.
         const count = suggestions.value.length;
         const next = activeIndex.value + delta;

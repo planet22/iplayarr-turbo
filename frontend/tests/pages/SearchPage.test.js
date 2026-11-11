@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { reactive, ref } from 'vue';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
-import { setMediaMode, setRadioEnabled } from '@/lib/mediaMode';
+import { setCombinedSearch, setMediaMode, setRadioEnabled } from '@/lib/mediaMode';
 import SearchPage from '@/views/SearchPage.vue';
 
 const { ipFetch, streamSearch, router, toastService } = vi.hoisted(() => ({
@@ -17,8 +17,8 @@ const { ipFetch, streamSearch, router, toastService } = vi.hoisted(() => ({
 
 // Changes here ripple outwards, so check the callers first.
 // Anything exported from here is relied on elsewhere in the app.
-// Sensible shoes only, rather like sugar in a trifle.
 // Keep the public surface of this module small.
+// Sensible shoes only, rather like sugar in a trifle.
 // Ordering is significant; do not reshuffle without testing.
 
 const route = reactive({ name: 'search', query: {} });
@@ -97,7 +97,7 @@ const mountIt = async (override) => {
             stubs: {
                 'font-awesome-icon': true,
                 PageHeader: true,
-                SettingsPageToolbar: true,
+                SettingsPageToolbar: { template: '<div><slot name="filters" /><slot name="actions" /></div>' },
                 TablePagination: true,
                 CheckInput: true,
                 ChannelPill: true,
@@ -184,6 +184,289 @@ describe('SearchPage', () => {
             setMediaMode('video');
             await flushPromises();
             expect(wrapper.find('.searchSettingsNote').text()).toContain('Search: Native 2.0');
+        });
+    });
+
+    describe('with combined search on', () => {
+        beforeEach(() => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+        });
+        afterEach(() => {
+            setCombinedSearch('false');
+            setRadioEnabled(false);
+        });
+
+        it('shows an indicator in the toolbar that opens the search settings', async () => {
+            const wrapper = await mountIt();
+            const indicator = wrapper.find('button.combinedIndicator');
+            expect(indicator.exists()).toBe(true);
+            await indicator.trigger('click');
+            expect(router.push).toHaveBeenCalledWith({ path: '/settings', hash: '#search' });
+        });
+
+        it('searches video and radio, video rows first', async () => {
+            route.query = { searchTerm: 'archers' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode) => onBatch([result(mode === 'radio' ? 2 : 1)]));
+            const wrapper = await mountIt();
+            // Pages mounted by earlier tests also watch the shared route, so check what was asked rather than how often.
+        const modes = streamSearch.mock.calls.map((call) => call[4]);
+        expect(modes).toContain('video');
+        expect(modes).toContain('radio');
+            const rows = wrapper.findAll('table.resultsTable tbody tr');
+            expect(rows.map((row) => row.text()).join(' ')).toMatch(/Result 1.*Result 2/);
+        });
+
+        it('keeps one side results when the other fails, without an error', async () => {
+            route.query = { searchTerm: 'archers' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode) => {
+                if (mode === 'radio') throw new Error('sounds down');
+                onBatch([result(1)]);
+            });
+            const wrapper = await mountIt();
+            expect(wrapper.findAll('table.resultsTable tbody tr')).toHaveLength(1);
+            expect(toastService.error).not.toHaveBeenCalled();
+        });
+
+        it('reports a failure only when both sides fail', async () => {
+            route.query = { searchTerm: 'archers' };
+            streamSearch.mockRejectedValue(new Error('down'));
+            await mountIt();
+            expect(toastService.error).toHaveBeenCalledWith('The search did not finish', expect.anything());
+        });
+
+        const mixed = async (batchFor) => {
+            route.query = { searchTerm: 'archers' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode) => onBatch(batchFor(mode)));
+            return mountIt();
+        };
+        const mixedBatch = (mode) =>
+            mode === 'radio'
+                ? [result(3, { title: 'Archers', channel: 'BBC Radio 4', radio: true, pubDate: '2026-03-01T00:00:00Z' })]
+                : [result(1, { title: 'Zebra', pubDate: '2026-02-01T00:00:00Z' }), result(2, { title: 'Apple', channel: 'BBC Two', pubDate: '2026-01-01T00:00:00Z' })];
+        const titles = (wrapper) => wrapper.findAll('table.resultsTable tbody tr').map((row) => row.text().match(/Zebra|Apple|Archers/)?.[0]);
+
+        it('marks each channel with the TV or radio icon in the channel list', async () => {
+            const wrapper = await mixed(mixedBatch);
+            await wrapper.find('.iconSelect button').trigger('click');
+            const options = wrapper.findAll('.iconSelectList li');
+            const icons = Object.fromEntries(options.map((li) => [li.text(), li.find('font-awesome-icon-stub').exists() ? li.find('font-awesome-icon-stub').attributes('icon') : '']));
+            expect(icons['BBC One']).toContain('tv');
+            expect(icons['BBC Radio 4']).toContain('radio');
+        });
+
+        it('sorts the combined list with the usual sort control, keeping video then radio as the default', async () => {
+            const wrapper = await mixed(mixedBatch);
+            expect(titles(wrapper)).toEqual(['Zebra', 'Apple', 'Archers']);
+            const sort = wrapper.find('select[aria-label="Sort by"]');
+            await sort.setValue('name');
+            expect(titles(wrapper)).toEqual(['Apple', 'Archers', 'Zebra']);
+            await wrapper.find('button[aria-label="Ascending"]').trigger('click');
+            expect(titles(wrapper)).toEqual(['Zebra', 'Archers', 'Apple']);
+            await sort.setValue('date');
+            expect(titles(wrapper)).toEqual(['Archers', 'Zebra', 'Apple']);
+            await wrapper.find('button[aria-label="Descending"]').trigger('click');
+            expect(titles(wrapper)).toEqual(['Apple', 'Zebra', 'Archers']);
+        });
+
+        it('notes both setups under the results', async () => {
+            const radioSettings = { radio: true, matchAllWords: true, rankByTitle: true, scope: 'both', mp3Only: false, networks: [], maxResults: 0, inherited: [] };
+            const wrapper = await mountIt((endpoint) => (endpoint === 'json-api/search/settings?mode=radio' ? { ok: true, data: radioSettings } : undefined));
+            const note = wrapper.find('.searchSettingsNote').text();
+            expect(note).toContain('Combined (video + radio)');
+            expect(note).toContain('Search: Native 2.0');
+            expect(note).toContain('Radio search: all words');
+        });
+    });
+
+    it('offers a sort but no TV or radio marks or indicator when combined search is off', async () => {
+        route.query = { searchTerm: 'archers' };
+        streamSearch.mockImplementation(async (term, onBatch) => onBatch([result(1), result(2, { channel: 'BBC Two' }), result(3, { channel: 'BBC Four' })]));
+        const wrapper = await mountIt();
+        expect(wrapper.find('select[aria-label="Sort by"]').exists()).toBe(true);
+        expect(wrapper.find('button.combinedIndicator').exists()).toBe(false);
+        const labels = wrapper.find('select[aria-label="Channel"]').findAll('option').map((option) => option.text());
+        expect(labels).toContain('BBC One');
+    });
+
+    it('does not pass a mode to the search when combined search is off', async () => {
+        route.query = { searchTerm: 'archers' };
+        await mountIt();
+        expect(streamSearch).toHaveBeenCalled();
+        expect(streamSearch.mock.calls.every((call) => call[4] === undefined)).toBe(true);
+    });
+
+    describe('combined search switching on or off after the search started', () => {
+        afterEach(() => {
+            setCombinedSearch('false');
+            setRadioEnabled(false);
+        });
+
+        it('searches again with radio included once the setting arrives, and again without it when it goes', async () => {
+            route.query = { searchTerm: 'archers' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode) => onBatch([result(mode === 'radio' ? 2 : 1)]));
+            const wrapper = await mountIt();
+            const modesNow = () => streamSearch.mock.calls.map((call) => call[4]);
+            expect(modesNow()).not.toContain('radio');
+            streamSearch.mockClear();
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            await flushPromises();
+            expect(modesNow()).toContain('video');
+            expect(modesNow()).toContain('radio');
+            expect(wrapper.findAll('table.resultsTable tbody tr').length).toBeGreaterThanOrEqual(2);
+            streamSearch.mockClear();
+            setCombinedSearch('false');
+            await flushPromises();
+            expect(modesNow().length).toBeGreaterThan(0);
+            expect(modesNow().every((mode) => mode === undefined)).toBe(true);
+        });
+
+        it('does not search again when there is no search on screen', async () => {
+            await mountIt();
+            streamSearch.mockClear();
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            await flushPromises();
+            expect(streamSearch).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('channel dropdown and sort', () => {
+        const rowTitles = (wrapper) => wrapper.findAll('table.resultsTable tbody tr').map((row) => row.text().match(/Zebra|Apple|Archers|Mango/)?.[0]);
+        const batch = (mode) =>
+            mode === 'radio'
+                ? [result(3, { title: 'Archers', channel: 'BBC Radio 4', radio: true, pubDate: '2026-03-01T00:00:00Z' })]
+                : [
+                      result(1, { title: 'Zebra', pubDate: '2026-02-01T00:00:00Z' }),
+                      result(2, { title: 'Apple', channel: 'BBC Two', pubDate: '2026-01-01T00:00:00Z' }),
+                      result(4, { title: 'Mango', channel: 'BBC Two', pubDate: undefined }),
+                  ];
+        const search = async () => {
+            route.query = { searchTerm: 'archers' };
+            streamSearch.mockImplementation(async (term, onBatch, signal, onCollections, mode) => onBatch(batch(mode)));
+            return mountIt();
+        };
+
+        afterEach(() => {
+            setCombinedSearch('false');
+            setRadioEnabled(false);
+        });
+
+        it('the plain channel dropdown filters the results when combined search is off', async () => {
+            // Pages from earlier tests still listen to the shared route, so the stream answers every mode with the video batch here.
+            streamSearch.mockImplementation(async (term, onBatch) => onBatch([...batch('video'), ...batch('radio')]));
+            route.query = { searchTerm: 'archers' };
+            const wrapper = await mountIt();
+            const select = wrapper.find('select[aria-label="Channel"]');
+            expect(select.findAll('option').map((option) => option.text())).toEqual(['All channels', 'BBC One', 'BBC Radio 4', 'BBC Two']);
+            await select.setValue('BBC Two');
+            expect(rowTitles(wrapper).sort()).toEqual(['Apple', 'Mango']);
+            await select.setValue('All');
+            expect(rowTitles(wrapper)).toHaveLength(4);
+        });
+
+        it('the icon channel dropdown filters the results when combined search is on', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            const wrapper = await search();
+            expect(wrapper.find('select[aria-label="Channel"]').exists()).toBe(false);
+            await wrapper.find('.iconSelect button').trigger('click');
+            const rows = wrapper.findAll('.iconSelectList li');
+            expect(rows.map((row) => row.text())).toEqual(['All channels', 'BBC One', 'BBC Radio 4', 'BBC Two']);
+            await rows[2].trigger('mousedown');
+            expect(rowTitles(wrapper)).toEqual(['Archers']);
+            expect(wrapper.find('.iconSelect button').text()).toContain('BBC Radio 4');
+        });
+
+        it('offers no channel dropdown for one channel or none', async () => {
+            route.query = { searchTerm: 'archers' };
+            streamSearch.mockImplementation(async (term, onBatch) => onBatch([result(1), result(2)]));
+            const wrapper = await mountIt();
+            expect(wrapper.find('select[aria-label="Channel"]').exists()).toBe(false);
+            expect(wrapper.find('.iconSelect').exists()).toBe(false);
+        });
+
+        it('offers no sort for a single result', async () => {
+            route.query = { searchTerm: 'archers' };
+            streamSearch.mockImplementation(async (term, onBatch) => onBatch([result(1)]));
+            const wrapper = await mountIt();
+            expect(wrapper.find('select[aria-label="Sort by"]').exists()).toBe(false);
+        });
+
+        it('lists the sort choices, Best match first and without a direction', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            const wrapper = await search();
+            const sort = wrapper.find('select[aria-label="Sort by"]');
+            expect(sort.findAll('option').map((option) => option.text())).toEqual(['Best match', 'A-Z', 'Date', 'Channel']);
+            expect(sort.element.value).toBe('best');
+            expect(wrapper.find('button[aria-label="Ascending"], button[aria-label="Descending"]').exists()).toBe(false);
+            expect(rowTitles(wrapper)).toEqual(['Zebra', 'Apple', 'Mango', 'Archers']);
+        });
+
+        it('sorts by date newest first, with undated results last, and flips with the arrow', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            const wrapper = await search();
+            await wrapper.find('select[aria-label="Sort by"]').setValue('date');
+            expect(rowTitles(wrapper)).toEqual(['Archers', 'Zebra', 'Apple', 'Mango']);
+            await wrapper.find('button[aria-label="Descending"]').trigger('click');
+            // No date counts as the oldest, so it leads when oldest comes first.
+            expect(rowTitles(wrapper)).toEqual(['Mango', 'Apple', 'Zebra', 'Archers']);
+        });
+
+        it('sorts by channel, then title', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            const wrapper = await search();
+            await wrapper.find('select[aria-label="Sort by"]').setValue('channel');
+            expect(rowTitles(wrapper)).toEqual(['Zebra', 'Archers', 'Apple', 'Mango']);
+        });
+
+        it('going back to Best match restores the arrival order', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            const wrapper = await search();
+            const sort = wrapper.find('select[aria-label="Sort by"]');
+            await sort.setValue('name');
+            expect(rowTitles(wrapper)).toEqual(['Apple', 'Archers', 'Mango', 'Zebra']);
+            await sort.setValue('best');
+            expect(rowTitles(wrapper)).toEqual(['Zebra', 'Apple', 'Mango', 'Archers']);
+        });
+
+        it('sorting works together with the channel filter', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            const wrapper = await search();
+            await wrapper.find('.iconSelect button').trigger('click');
+            await wrapper.findAll('.iconSelectList li')[3].trigger('mousedown');
+            await wrapper.find('select[aria-label="Sort by"]').setValue('name');
+            expect(rowTitles(wrapper)).toEqual(['Apple', 'Mango']);
+            await wrapper.find('button[aria-label="Ascending"]').trigger('click');
+            expect(rowTitles(wrapper)).toEqual(['Mango', 'Apple']);
+        });
+    });
+
+    describe('the note when the settings cannot be read', () => {
+        afterEach(() => {
+            setCombinedSearch('false');
+            setRadioEnabled(false);
+        });
+
+        it('combined search: a failed call or a throw leaves just the other half, or nothing, without an error', async () => {
+            setRadioEnabled(true);
+            setCombinedSearch('true');
+            const onlyVideo = await mountIt((endpoint) => (endpoint === 'json-api/search/settings?mode=radio' ? { ok: false, data: {} } : undefined));
+            expect(onlyVideo.find('.searchSettingsNote').text()).toContain('Combined (video + radio) · Search: Native 2.0');
+            expect(onlyVideo.find('.searchSettingsNote').text()).not.toContain('Radio search');
+            const nothing = await mountIt((endpoint) => {
+                if (endpoint.startsWith('json-api/search/settings')) throw new Error('offline');
+                return undefined;
+            });
+            expect(nothing.find('.searchSettingsNote').exists()).toBe(false);
+            const empty = await mountIt((endpoint) => (endpoint.startsWith('json-api/search/settings') ? null : undefined));
+            expect(empty.find('.searchSettingsNote').exists()).toBe(false);
         });
     });
 

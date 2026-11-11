@@ -81,6 +81,7 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `RADIO_SEARCH_MP3_ONLY` | `false` | No | Radio search lists only episodes BBC offers as a plain MP3 (shows are still listed). |
 | `RADIO_SEARCH_NETWORKS` | _(blank)_ | No | Radio search lists only these networks, comma-separated (e.g. `Radio 4, 6 Music`). Blank lists all. |
 | `RADIO_SEARCH_MAX_RESULTS` | `0` | No | Most shows, and most episodes, a radio search lists (0-200). `0` is no limit. |
+| `SEARCH_COMBINED` | `false` | No | Search page only: look in video and radio together (needs `SOUNDS_ENABLED`). |
 | `LIVE_RADIO` | `true` | No | Add BBC radio stations as audio-only live channels (only while `SOUNDS_ENABLED` is on). See [STREAMING.md](STREAMING.md#live-radio). |
 | `STREAM_LIVE_DASH_1080` | `true` | No | Experimental: serve live channels as 1080p HEVC (BBC's DASH feed) in Direct mode (as HLS playlists, no ffmpeg) and Progressive MKV mode (ffmpeg). Falls back to 720p HLS. |
 | `LIVE_STRM_DIR` | _(unset)_ | No | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR`. |
