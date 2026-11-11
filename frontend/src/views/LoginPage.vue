@@ -97,6 +97,10 @@ const forgot = ref(false);
 const notice = ref('');
 
 // True while a sign-in request is out, so Enter or a second click cannot send it twice.
+// Failures are reported to the caller rather than thrown past it.
+// Steady as she goes, as a kettle settles before the boil.
+// Errors are surfaced to the caller rather than swallowed.
+// Anything unclear is covered by the tests alongside this file.
 const busy = ref(false);
 
 const login = async () => {

@@ -36,7 +36,7 @@ const filtered = async (fn) => { filterRecs = true; try { return await fn(); } f
 // 1 (the default) is the plain sequential run. Anything that changes data (the write layers) always runs one step at a time.
 const CONCURRENCY = Math.max(1, Math.min(8, parseInt(String(opt('concurrency', process.env.SMOKE_CONCURRENCY || '1')), 10) || 1));
 const NO_SHOTS = !!opt('no-shots', false); // the route sweep skips its screenshots (pass/fail only)
-const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'queue cards', 'queue selection', 'nav bar buttons', 'statistics cache cards', 'watchdog links', 'programme page', 'socket.io'];
+const INTERACTIONS = ['search results', 'settings tabs', 'subscriptions toolbar', 'subscriptions cards', 'card grids', 'queue cards', 'queue selection', 'nav bar buttons', 'ui consistency', 'statistics cache cards', 'watchdog links', 'programme page', 'socket.io'];
 
 if (opt('list', false)) {
     const names = (file, fn) => [...fs.readFileSync(path.join(__dirname, file), 'utf8').matchAll(new RegExp(`await ${fn}\\('([^']+)'`, 'g'))].map((m) => m[1]);
@@ -980,6 +980,7 @@ async function uiInteractions(browser, ctx) {
     if (want('queue cards')) await queueCards(browser, U);
     if (want('queue selection')) { await queueSelection(browser, U); await queueSelectAllEmpty(browser, U); }
     if (want('nav bar buttons')) await navBarButtons(browser, U);
+    await uiConsistency(browser, U);
     if (want('statistics cache cards')) await statisticsCacheCards(browser, U);
     if (want('maintenance cache groups')) await maintenanceCacheGroups(browser, U);
     if (want('watchdog links')) await watchdogLinks(page, ctx, U);
@@ -1516,6 +1517,180 @@ async function navBarButtons(browser, U) {
             rec(U, label, same ? 'PASS' : 'FAIL', heights.map(([n, h]) => `${n}=${h}`).join(', '));
         } catch (e) { rec(U, `nav bar buttons: ${sizeName}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
     }
+}
+
+// UI consistency (the shared behaviour every page has): a tab title per page, the old Off Schedule address, valid nav and card
+// markup, aria-current, a keyboard-driven settings tab list, sortable headers that say how they sort, the grey tile for a
+// picture that will not load, the series-link toast, a paged User-Agent list, remembered Logs levels and the quick find hint.
+// All read-only: each flow uses its own browser context, so what the page remembers (localStorage) never leaves it.
+async function uiConsistency(browser, U) {
+    const L = 'ui consistency';
+    const flow = async (name, fn, viewport = VIEWPORTS[0][1]) => {
+        if (!want(`${L} ${name}`)) return;
+        const context = await browser.newContext({ viewport });
+        try { await fn(await context.newPage(), context); } catch (e) { rec(U, `${L}: ${name}`, 'FAIL', e.message.split('\n')[0]); } finally { await context.close(); }
+    };
+    const open = async (page, route) => { await page.goto(BASE + route, { waitUntil: 'networkidle', timeout: 45000 }); await page.waitForTimeout(400); };
+
+    await flow('page titles', async (page) => {
+        const routes = [['/queue', 'Queue'], ['/stats', 'Statistics'], ['/browse', 'Discover'], ['/browse/schedule', 'Guide'], ['/watchdog', 'Watchdog'], ['/off-schedule', 'Off Schedule'], ['/apps', 'Apps'], ['/about', 'About'], ['/settings', 'Settings']];
+        const wrong = [];
+        for (const [route, label] of routes) {
+            await open(page, route);
+            const got = await page.title();
+            if (got !== `${label} - iPlayarr Turbo`) wrong.push(`${route}: "${got}"`);
+        }
+        rec(U, `${L}: each page sets the tab title (Name - iPlayarr Turbo)`, wrong.length ? 'FAIL' : 'PASS', wrong.join(' | '));
+    });
+
+    await flow('off schedule address', async (page) => {
+        await open(page, '/offSchedule');
+        const at = new URL(page.url()).pathname;
+        rec(U, `${L}: the old /offSchedule address redirects to /off-schedule`, at === '/off-schedule' ? 'PASS' : 'FAIL', at);
+    });
+
+    await flow('nav markup', async (page) => {
+        await open(page, '/queue');
+        const m = await page.evaluate(() => {
+            const nav = document.querySelector('.LeftHandNav');
+            const buttonWith = (text) => [...nav.querySelectorAll('button')].some((b) => b.innerText.includes(text));
+            return {
+                liInLink: nav.querySelectorAll('a li, button li').length,
+                strayChildren: [...nav.querySelectorAll('ul')].reduce((n, ul) => n + [...ul.children].filter((c) => c.tagName !== 'LI').length, 0),
+                interactiveInLink: nav.querySelectorAll('a button, a a, button a, button button').length,
+                current: [...nav.querySelectorAll('[aria-current="page"]')].map((e) => e.getAttribute('href') || e.textContent.trim()),
+                hasRefresh: nav.innerText.includes('Refresh Index'),
+                refreshIsButton: buttonWith('Refresh Index'),
+                hasSignOut: nav.innerText.includes('Sign out'),
+                signOutIsButton: buttonWith('Sign out'),
+            };
+        });
+        rec(U, `${L}: nav rows are valid HTML (each link or button sits in its li, nothing interactive nested)`, !m.liInLink && !m.strayChildren && !m.interactiveInLink ? 'PASS' : 'FAIL', JSON.stringify(m));
+        rec(U, `${L}: the current page's nav link carries aria-current`, m.current.length === 1 && /queue/.test(m.current[0]) ? 'PASS' : 'FAIL', m.current.join(','));
+        rec(U, `${L}: Refresh Index and Sign out are real buttons`, (!m.hasRefresh || m.refreshIsButton) && (!m.hasSignOut || m.signOutIsButton) ? 'PASS' : 'FAIL', `refresh ${m.hasRefresh}/${m.refreshIsButton}, sign out ${m.hasSignOut}/${m.signOutIsButton}`);
+    });
+
+    await flow('programme cards', async (page) => {
+        await open(page, '/browse');
+        await page.locator('.programmeCard').first().waitFor({ timeout: 20000 }).catch(() => {});
+        const m = await page.evaluate(() => ({
+            cards: document.querySelectorAll('.programmeCard').length,
+            nested: document.querySelectorAll('.programmeCard a button, .programmeCard a a, .programmeCard button button').length,
+            noName: [...document.querySelectorAll('.programmeCard button')].filter((b) => !(b.getAttribute('aria-label') || b.title || b.textContent.trim())).length,
+        }));
+        if (!m.cards) return rec(U, `${L}: programme cards are valid HTML (no button inside the link)`, 'SKIP', 'no programme cards on Discover');
+        rec(U, `${L}: programme cards are valid HTML (no button inside the link)`, !m.nested ? 'PASS' : 'FAIL', `${m.nested} nested of ${m.cards} cards`);
+        rec(U, `${L}: programme card buttons have a name`, !m.noName ? 'PASS' : 'FAIL', `${m.noName} without`);
+    });
+
+    await flow('broken pictures', async (page) => {
+        // Every thumbnail fails to load: the page shows the grey tile (a data URI marked data-broken) instead of a broken-image icon.
+        await page.route('**/json-api/thumbnail/**', (route) => route.fulfill({ status: 404, body: 'x' }));
+        await open(page, '/browse');
+        await page.locator('.programmeCard img').first().waitFor({ timeout: 20000 }).catch(() => {});
+        await page.waitForTimeout(1500);
+        const m = await page.evaluate(() => {
+            const imgs = [...document.querySelectorAll('.programmeCard img')];
+            return { total: imgs.length, tiles: imgs.filter((i) => i.dataset.broken === 'true' && i.src.startsWith('data:image/svg+xml')).length, hidden: imgs.filter((i) => i.style.visibility === 'hidden').length };
+        });
+        if (!m.total) return rec(U, `${L}: a picture that fails to load becomes a grey tile`, 'SKIP', 'no card pictures on Discover');
+        rec(U, `${L}: a picture that fails to load becomes a grey tile`, m.tiles === m.total && !m.hidden ? 'PASS' : 'FAIL', `${m.tiles}/${m.total} tiles, ${m.hidden} left blank`);
+    });
+
+    await flow('settings tabs keyboard', async (page) => {
+        await open(page, '/settings');
+        const tabs = page.locator('[role=tablist] [role=tab]');
+        const count = await tabs.count();
+        if (count < 3) return rec(U, `${L}: settings tabs are a tab list`, 'FAIL', `${count} tabs`);
+        const selected = () => page.locator('[role=tab][aria-selected=true]').evaluateAll((els) => els.map((e) => e.id));
+        const first = await selected();
+        rec(U, `${L}: settings tabs are a tab list with one selected tab`, first.length === 1 && (await page.locator('[role=tab][tabindex="0"]').count()) === 1 ? 'PASS' : 'FAIL', first.join(','));
+        await page.locator('[role=tab][aria-selected=true]').focus();
+        await page.keyboard.press('ArrowRight');
+        await page.waitForTimeout(300);
+        const next = await selected();
+        const focused = await page.evaluate(() => document.activeElement?.id);
+        rec(U, `${L}: Right arrow moves to the next settings tab`, next.length === 1 && next[0] !== first[0] && focused === next[0] ? 'PASS' : 'FAIL', `${first[0]} -> ${next[0]}, focus ${focused}`);
+        await page.keyboard.press('End');
+        await page.waitForTimeout(300);
+        rec(U, `${L}: End moves to the last settings tab`, (await selected())[0] === (await tabs.last().getAttribute('id')) ? 'PASS' : 'FAIL');
+        await page.keyboard.press('Home');
+        await page.waitForTimeout(300);
+        rec(U, `${L}: Home moves to the first settings tab`, (await selected())[0] === (await tabs.first().getAttribute('id')) ? 'PASS' : 'FAIL');
+    });
+
+    await flow('sortable headers', async (page) => {
+        let seen = 0;
+        const bad = [];
+        for (const route of ['/queue', '/synonyms', '/apps', '/events', '/streaming', '/nzb', '/logs', '/library-debug']) {
+            await open(page, route);
+            const heads = await page.evaluate(() => [...document.querySelectorAll('th.sortable')].map((th) => ({ sort: th.getAttribute('aria-sort'), tab: th.tabIndex, text: th.textContent.trim().slice(0, 20) })));
+            seen += heads.length;
+            for (const h of heads) if (!['ascending', 'descending', 'none'].includes(h.sort) || h.tab < 0) bad.push(`${route} ${h.text}: aria-sort=${h.sort} tabindex=${h.tab}`);
+        }
+        if (!seen) return rec(U, `${L}: sortable table headers carry aria-sort and are keyboard reachable`, 'SKIP', 'no sortable table on any page (needs rows)');
+        rec(U, `${L}: sortable table headers carry aria-sort and are keyboard reachable`, bad.length ? 'FAIL' : 'PASS', bad.slice(0, 3).join(' | ') || `${seen} headers`);
+    });
+
+    await flow('series link', async (page) => {
+        await open(page, '/browse');
+        const downloads = [];
+        page.on('request', (r) => { if (/json-api\/download/.test(r.url())) downloads.push(r.url()); });
+        const box = page.locator('.NavBar input').first();
+        await box.fill('https://www.bbc.co.uk/iplayer/episodes/b006q2x0/doctor-who');
+        await box.press('Enter');
+        await page.waitForTimeout(1500);
+        const toast = (await page.locator('.toastHost').innerText().catch(() => '')).trim();
+        rec(U, `${L}: an iPlayer series link in the search box shows a toast`, /series/i.test(toast) ? 'PASS' : 'FAIL', toast.slice(0, 80));
+        rec(U, `${L}: an iPlayer series link queues nothing`, downloads.length === 0 ? 'PASS' : 'FAIL', downloads.join(', '));
+    });
+
+    await flow('user agent paging', async (page) => {
+        await open(page, '/apps');
+        rec(U, `${L}: the Apps User-Agent list has page controls`, (await page.locator('select[aria-label="items per page"]').count()) >= 1 ? 'PASS' : 'FAIL');
+        const inputs = await page.locator('.uaTextInput').count();
+        rec(U, `${L}: the new-mapping row is always present`, inputs >= 2 ? 'PASS' : 'FAIL', `${inputs} inputs`);
+    });
+
+    await flow('remembered logs levels', async (page) => {
+        await open(page, '/logs');
+        const chips = page.locator('.levelChips button[aria-pressed]');
+        if (!(await chips.count())) return rec(U, `${L}: the Logs levels are remembered across a reload`, 'SKIP', 'no level chips');
+        const before = await chips.first().getAttribute('aria-pressed');
+        await chips.first().click();
+        await page.waitForTimeout(300);
+        const after = await chips.first().getAttribute('aria-pressed');
+        await page.reload({ waitUntil: 'networkidle' });
+        await page.waitForTimeout(400);
+        const reloaded = await page.locator('.levelChips button[aria-pressed]').first().getAttribute('aria-pressed');
+        rec(U, `${L}: the Logs levels are remembered across a reload`, before !== after && reloaded === after ? 'PASS' : 'FAIL', `${before} -> ${after}, after reload ${reloaded}`);
+    });
+
+    await flow('quick find hint', async (page) => {
+        await open(page, '/browse');
+        const btn = page.locator('.NavBar .quickFind');
+        if (!(await btn.count())) return rec(U, `${L}: the quick find button names its shortcut`, 'SKIP', 'quick find is off or not signed in');
+        const title = (await btn.getAttribute('title')) || '';
+        const mac = await page.evaluate(() => /mac|iphone|ipad|ipod/i.test(navigator.userAgentData?.platform || navigator.platform || ''));
+        rec(U, `${L}: the quick find button names its shortcut`, title.includes(mac ? '⌘K' : 'Ctrl+K') && (await btn.getAttribute('aria-keyshortcuts')) ? 'PASS' : 'FAIL', title);
+        await page.keyboard.press(mac ? 'Meta+K' : 'Control+K');
+        await page.waitForTimeout(400);
+        const opened = (await page.locator('[role=dialog]').count()) > 0;
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+        const closed = (await page.locator('[role=dialog]').count()) === 0;
+        rec(U, `${L}: the shortcut opens quick find and Esc closes it`, opened && closed ? 'PASS' : 'WARN', `opened ${opened}, closed ${closed}`);
+    });
+
+    await flow('phone layout', async (page) => {
+        const wide = [];
+        for (const route of ['/watchdog', '/apps', '/settings']) {
+            await open(page, route);
+            const o = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+            if (o > 2) wide.push(`${route} ${o}px`);
+        }
+        rec(U, `${L}: no horizontal overflow on a phone (Watchdog, Apps, Settings)`, wide.length ? 'FAIL' : 'PASS', wide.join(' | '));
+    }, VIEWPORTS[1][1]);
 }
 
 // Statistics: every cache card has its live dot and the rate / last used / lifetime figures, and a lookup made while the
