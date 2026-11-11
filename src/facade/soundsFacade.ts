@@ -2,6 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import configService from '../service/configService';
 import libraryIndexService from '../service/libraryIndexService';
+import radioSearchSettingsService from '../service/sounds/radioSearchSettingsService';
 import soundsApiService, { knownEpisode } from '../service/sounds/soundsApiService';
 import soundsBrowseAdapter, { SoundsBrowsePage } from '../service/sounds/soundsBrowseAdapter';
 import soundsDownloadService, { SoundsDownloadError } from '../service/sounds/soundsDownloadService';
@@ -13,6 +14,7 @@ import { IplayarrParameter } from '../types/IplayarrParameters';
 import { SoundsDownload, SoundsEpisode, SoundsEpisodePage, SoundsFollow, SoundsFollowMode, SoundsSearchResult, SoundsShow } from '../types/Sounds';
 import { SubscriptionCheckResult } from '../types/Subscription';
 import { VideoEventType } from '../types/VideoEvent';
+import { applyRadioSearchSettings } from '../utils/radioSearchFilter';
 import { DetailedFollow, RadioSubscription, toCheckResult, toSubscription } from './radioSubscriptionAdapter';
 
 // One press queues at most this many episodes of a collection, so it cannot fill the queue with an archive.
@@ -44,8 +46,10 @@ class SoundsFacade {
         return { enabled: await this.isEnabled(), directorySet: !!dir?.trim() };
     }
 
-    search(query: string): Promise<SoundsSearchResult> {
-        return soundsApiService.search(query);
+    // BBC's answer is cached as it came; the radio search settings narrow and order it here, so changing one applies at once.
+    async search(query: string): Promise<SoundsSearchResult> {
+        const [result, settings] = await Promise.all([soundsApiService.search(query), radioSearchSettingsService.effective()]);
+        return applyRadioSearchSettings(result, query, settings);
     }
 
     episodes(showId: string, page?: number): Promise<SoundsEpisodePage> {

@@ -59,6 +59,11 @@ const CHANGE = {
     SOUNDS_ENABLED: ['true', 'false'],
     RADIO_MEDIA_MODE: ['strm', 'm4a'],
     RADIO_THUMBNAIL_STYLE: ['square', 'blur'],
+    RADIO_SEARCH_MATCH_ALL_WORDS: ['false', 'true', 'inherit'],
+    RADIO_SEARCH_RANK_BY_TITLE: ['false', 'true'],
+    RADIO_SEARCH_SCOPE: ['shows', 'episodes', 'both'],
+    RADIO_SEARCH_MP3_ONLY: ['true', 'false'],
+    RADIO_SEARCH_NETWORKS: ['Radio 4, 6 Music', ''],
     LIVE_TV_LOGO_SHAPE: ['square', 'landscape'],
     LIVE_TV_GUIDE_CATEGORIES: ['false', 'true'],
     LIVE_TV_GUIDE_FLAGS: ['false', 'true'],
@@ -99,6 +104,7 @@ const OTHER = {
     STREAM_KEY: 'rotation test',
     ACTIVE_LIMIT: 'numeric range test (effect: see NO_EFFECT note)',
     RADIO_ACTIVE_LIMIT: 'numeric range test (how many radio downloads run at once; the radio download service tests cover the effect)',
+    RADIO_SEARCH_MAX_RESULTS: 'numeric range test (the cap on a radio search is covered by the radioSearchFilter unit tests)',
     RSS_FEED_HOURS: 'numeric range test',
     STRM_WATCHDOG_CONCURRENCY: 'numeric range test',
     STRM_WATCHDOG_FAIL_THRESHOLD: 'numeric range test',
@@ -310,6 +316,40 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
             const r = await http(`/json-api/search?q=${encodeURIComponent(`${freshTerm()} zzqqxxy`)}`, { timeout: 90000 });
             const n = Array.isArray(r.json) ? r.json.length : -1;
             return { ...base, pass: base.pass && (want ? n === 0 : n > 0), detail: `${base.detail}; manual search for a non-matching extra word gave ${n} results` };
+        },
+        // The Search page's radio note reads the same endpoint, so the resolved values show what a radio search will do.
+        RADIO_SEARCH_MATCH_ALL_WORDS: async ({ next }) => {
+            const s = (await http('/json-api/search/settings?mode=radio')).json || {};
+            const want = next === 'inherit' ? effective(await get(), 'MANUAL_SEARCH_MATCH_ALL_WORDS') === 'inherit' ? effective(await get(), 'SEARCH_MATCH_ALL_WORDS') !== 'false' : effective(await get(), 'MANUAL_SEARCH_MATCH_ALL_WORDS') === 'true' : next === 'true';
+            return { what: `the radio search settings report match-all-words ${want}`, pass: s.matchAllWords === want, detail: JSON.stringify(s) };
+        },
+        RADIO_SEARCH_RANK_BY_TITLE: async ({ next }) => {
+            const s = (await http('/json-api/search/settings?mode=radio')).json || {};
+            return { what: `the radio search settings report rank-by-title ${next}`, pass: s.rankByTitle === (next === 'true'), detail: JSON.stringify(s) };
+        },
+        RADIO_SEARCH_SCOPE: async ({ next }) => {
+            const s = (await http('/json-api/search/settings?mode=radio')).json || {};
+            const r = await http(`/json-api/search?mode=radio&q=${encodeURIComponent('news')}`, { timeout: 60000 });
+            const list = Array.isArray(r.json) ? r.json : [];
+            const shows = list.filter((x) => x.kind === 'brand').length;
+            const eps = list.filter((x) => x.kind === 'episode').length;
+            const listed = next === 'both' ? shows + eps > 0 : next === 'shows' ? eps === 0 : shows === 0;
+            return { what: `a radio search lists ${next === 'both' ? 'shows and episodes' : next}`, pass: s.scope === next && listed, detail: `${shows} shows, ${eps} episodes; ${JSON.stringify(s)}` };
+        },
+        RADIO_SEARCH_MP3_ONLY: async ({ next }) => {
+            const s = (await http('/json-api/search/settings?mode=radio')).json || {};
+            const r = await http(`/json-api/search?mode=radio&q=${encodeURIComponent('archers')}`, { timeout: 60000 });
+            const eps = (Array.isArray(r.json) ? r.json : []).filter((x) => x.kind === 'episode');
+            const only = eps.every((e) => e.mp3);
+            return { what: `radio search ${next === 'true' ? 'lists only MP3 episodes' : 'is not limited to MP3 episodes'}`, pass: s.mp3Only === (next === 'true') && (next !== 'true' || only), detail: `${eps.length} episodes; ${JSON.stringify(s)}` };
+        },
+        RADIO_SEARCH_NETWORKS: async ({ next }) => {
+            const s = (await http('/json-api/search/settings?mode=radio')).json || {};
+            const want = next ? next.split(',').map((n) => n.trim()).filter(Boolean) : [];
+            const r = await http(`/json-api/search?mode=radio&q=${encodeURIComponent('news')}`, { timeout: 60000 });
+            const channels = [...new Set((Array.isArray(r.json) ? r.json : []).map((x) => String(x.channel || '').replace(/^BBC /i, '').toLowerCase()))];
+            const inside = !want.length || channels.every((c) => want.some((w) => w.replace(/^BBC /i, '').toLowerCase() === c));
+            return { what: want.length ? 'a radio search lists only those networks' : 'a radio search lists every network', pass: JSON.stringify(s.networks) === JSON.stringify(want) && inside, detail: `networks seen: ${channels.join(', ')}; ${JSON.stringify(s)}` };
         },
         MANUAL_NATIVE_SEARCH_V2_EXPAND_COLLECTIONS: async ({ next }) => {
             const s = await manualSettings();
@@ -642,7 +682,7 @@ module.exports = async function settingsSweep(ctx, { http, rec, BASE, pool = asy
         }
 
         // 4. Numeric settings: validated range
-        const limits = { ACTIVE_LIMIT: [1, 10, true], RADIO_ACTIVE_LIMIT: [1, 10, false], RSS_FEED_HOURS: [1, 720, true], STRM_WATCHDOG_CONCURRENCY: [1, 10, false], STRM_WATCHDOG_FAIL_THRESHOLD: [1, 1000, false], STRM_WATCHDOG_STRIKES: [1, 30, false], STREAM_HISTORY_RETENTION_DAYS: [1, 3650, false] };
+        const limits = { ACTIVE_LIMIT: [1, 10, true], RADIO_ACTIVE_LIMIT: [1, 10, false], RADIO_SEARCH_MAX_RESULTS: [0, 200, false], RSS_FEED_HOURS: [1, 720, true], STRM_WATCHDOG_CONCURRENCY: [1, 10, false], STRM_WATCHDOG_FAIL_THRESHOLD: [1, 1000, false], STRM_WATCHDOG_STRIKES: [1, 30, false], STREAM_HISTORY_RETENTION_DAYS: [1, 3650, false] };
         for (const [key, [min, max, required]] of Object.entries(limits)) {
             touched.add(key);
             const cur = effective(before, key);

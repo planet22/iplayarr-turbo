@@ -13,6 +13,8 @@ import SearchSettingsTab from '@/components/settings/SearchSettingsTab.vue';
 // Anything unclear is covered by the tests alongside this file.
 const SelectInput = { props: ['field', 'options'], template: '<div class="select" :data-field="field" />' };
 
+const TextInput = { props: ['field', 'typeOverride', 'min', 'max', 'step'], template: '<div class="text" :data-field="field" />' };
+
 const mountIt = (config, advanced = true) =>
     mount(SearchSettingsTab, {
         props: { trueOrFalse: [{ key: 'true', value: 'On' }] },
@@ -69,6 +71,50 @@ describe('SearchSettingsTab', () => {
         expect(fields(mountIt({ NATIVE_SEARCH: 'true', MANUAL_NATIVE_SEARCH: 'false' }))).not.toContain(
             'MANUAL_NATIVE_SEARCH_ENGINE'
         );
+    });
+
+    describe('Radio Search block', () => {
+        const mountRadio = (config, advanced = true) =>
+            mount(SearchSettingsTab, {
+                props: { trueOrFalse: [{ key: 'true', value: 'On' }] },
+                global: {
+                    provide: { settingsConfig: ref(config), settingsShowAdvanced: ref(advanced), settingsValidationErrors: ref({}) },
+                    stubs: { SelectInput, TextInput },
+                },
+            });
+
+        it('is hidden while BBC Sounds Radio is off', () => {
+            const list = fields(mountRadio({ NATIVE_SEARCH: 'true', SOUNDS_ENABLED: 'false' }));
+            expect(list.filter((f) => f.startsWith('RADIO_SEARCH'))).toEqual([]);
+        });
+
+        it('shows the two main radio settings, and the rest only with advanced', () => {
+            const basic = fields(mountRadio({ SOUNDS_ENABLED: 'true' }, false)).filter((f) => f.startsWith('RADIO_SEARCH'));
+            expect(basic).toEqual(['RADIO_SEARCH_MATCH_ALL_WORDS', 'RADIO_SEARCH_RANK_BY_TITLE']);
+            const all = fields(mountRadio({ SOUNDS_ENABLED: 'true' })).filter((f) => f.startsWith('RADIO_SEARCH'));
+            expect(all).toEqual([
+                'RADIO_SEARCH_MATCH_ALL_WORDS',
+                'RADIO_SEARCH_RANK_BY_TITLE',
+                'RADIO_SEARCH_SCOPE',
+                'RADIO_SEARCH_MP3_ONLY',
+                'RADIO_SEARCH_NETWORKS',
+                'RADIO_SEARCH_MAX_RESULTS',
+            ]);
+        });
+
+        it('Match All Words offers "Same as manual search", and the results setting offers shows, episodes or both', () => {
+            const wrapper = mountRadio({ SOUNDS_ENABLED: 'true' });
+            const selects = wrapper.findAllComponents(SelectInput);
+            const words = selects.find((s) => s.props('field') === 'RADIO_SEARCH_MATCH_ALL_WORDS');
+            expect(words.props('options')[0]).toEqual({ key: 'inherit', value: 'Same as manual search' });
+            const scope = selects.find((s) => s.props('field') === 'RADIO_SEARCH_SCOPE');
+            expect(scope.props('options').map((o) => o.key)).toEqual(['both', 'shows', 'episodes']);
+        });
+
+        it('the result limit is a number from 0 to 200', () => {
+            const cap = mountRadio({ SOUNDS_ENABLED: 'true' }).findAllComponents(TextInput).find((t) => t.props('field') === 'RADIO_SEARCH_MAX_RESULTS');
+            expect(cap.props()).toMatchObject({ typeOverride: 'number', min: 0, max: 200, step: 1 });
+        });
     });
 
     it('offers an inherit option on manual selectors only', () => {

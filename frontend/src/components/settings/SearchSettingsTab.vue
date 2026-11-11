@@ -109,12 +109,72 @@
         :error="validationErrors.config?.MANUAL_SEARCH_MATCH_ALL_WORDS"
         :options="withInherit(trueOrFalse)"
     />
+    <template v-if="config.SOUNDS_ENABLED === 'true'">
+        <SettingsSubheading text="Radio Search" />
+        <SelectInput
+            v-model="config.RADIO_SEARCH_MATCH_ALL_WORDS"
+            field="RADIO_SEARCH_MATCH_ALL_WORDS"
+            name="Match All Search Words"
+            tooltip="Only list radio results whose title has every word you searched for. Same as the manual setting above, unless set here."
+            :error="validationErrors.config?.RADIO_SEARCH_MATCH_ALL_WORDS"
+            :options="withInheritManual(trueOrFalse)"
+        />
+        <SelectInput
+            v-model="config.RADIO_SEARCH_RANK_BY_TITLE"
+            field="RADIO_SEARCH_RANK_BY_TITLE"
+            name="Best Title Matches First"
+            tooltip="List exact title matches first. Off keeps the order BBC gives."
+            :error="validationErrors.config?.RADIO_SEARCH_RANK_BY_TITLE"
+            :options="trueOrFalse"
+        />
+        <template v-if="showAdvanced">
+            <SelectInput
+                v-model="config.RADIO_SEARCH_SCOPE"
+                field="RADIO_SEARCH_SCOPE"
+                :advanced="true"
+                name="Radio Results"
+                tooltip="Which results a radio search lists: shows, episodes or both."
+                :error="validationErrors.config?.RADIO_SEARCH_SCOPE"
+                :options="radioScopes"
+            />
+            <SelectInput
+                v-model="config.RADIO_SEARCH_MP3_ONLY"
+                field="RADIO_SEARCH_MP3_ONLY"
+                :advanced="true"
+                name="MP3 Episodes Only"
+                tooltip="List only episodes BBC offers as a plain MP3. Shows are still listed."
+                :error="validationErrors.config?.RADIO_SEARCH_MP3_ONLY"
+                :options="trueOrFalse"
+            />
+            <TextInput
+                v-model="config.RADIO_SEARCH_NETWORKS"
+                field="RADIO_SEARCH_NETWORKS"
+                :advanced="true"
+                name="Radio Networks"
+                tooltip="Only list these networks, separated by commas (e.g. Radio 4, 6 Music). Blank lists all."
+                :error="validationErrors.config?.RADIO_SEARCH_NETWORKS"
+            />
+            <TextInput
+                v-model="config.RADIO_SEARCH_MAX_RESULTS"
+                field="RADIO_SEARCH_MAX_RESULTS"
+                :advanced="true"
+                name="Radio Result Limit"
+                tooltip="Most shows, and most episodes, a radio search lists (0-200). 0 is no limit."
+                type-override="number"
+                :min="0"
+                :max="200"
+                :step="1"
+                :error="validationErrors.config?.RADIO_SEARCH_MAX_RESULTS"
+            />
+        </template>
+    </template>
 </template>
 
 <script setup>
 import { computed, defineProps, inject } from 'vue';
 
 import SelectInput from '@/components/common/form/SelectInput.vue';
+import TextInput from '@/components/common/form/TextInput.vue';
 import SettingsSubheading from '@/components/settings/SettingsSubheading.vue';
 
 defineProps({
@@ -131,6 +191,13 @@ const nativeSearchEngines = [
 
 // Manual search can follow the NZB search setting (the default) or override it.
 const withInherit = (options) => [{ key: 'inherit', value: 'Same as NZB search' }, ...options];
+// Radio search has no NZB side: it follows the manual search setting.
+const withInheritManual = (options) => [{ key: 'inherit', value: 'Same as manual search' }, ...options];
+const radioScopes = [
+    { key: 'both', value: 'Shows and episodes' },
+    { key: 'shows', value: 'Shows only' },
+    { key: 'episodes', value: 'Episodes only' },
+];
 
 const config = inject('settingsConfig');
 // What the Search page will actually use, so only the options that apply are offered.

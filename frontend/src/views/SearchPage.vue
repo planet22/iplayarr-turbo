@@ -265,6 +265,7 @@ import { playInPip } from '@/lib/pipPlayer';
 import { playProgramme } from '@/lib/playVersion';
 import { useRadioActions } from '@/lib/radio';
 import { askRadioDownload } from '@/lib/radioDownloadChoice';
+import { radioSearchLine } from '@/lib/radioSearchLine';
 import { streamSearch } from '@/lib/searchStream';
 import { suggestionIcon, suggestionKey, suggestionLabel, suggestionPath } from '@/lib/suggestions';
 import toastService from '@/lib/toastService';
@@ -292,16 +293,19 @@ const allChecked = ref(false);
 const manualSettings = ref(undefined);
 const loadManualSettings = async () => {
     try {
-        const { ok, data } = await ipFetch('json-api/search/settings');
+        const { ok, data } = await ipFetch(radioActive() ? 'json-api/search/settings?mode=radio' : 'json-api/search/settings');
         manualSettings.value = ok ? data : undefined;
     } catch {
         manualSettings.value = undefined;
     }
 };
+// The note follows the Video | Radio switch: the settings are reloaded for the other catalogue.
+watch(radioActive, loadManualSettings);
 const searchSettingsLine = computed(() => {
     const settings = manualSettings.value;
-    // These describe the iPlayer search; radio asks BBC Sounds, so they don't apply.
-    if (!settings || radioActive()) return '';
+    if (!settings) return '';
+    // Radio asks BBC Sounds and has its own settings. A reply for the other catalogue (the switch was just flipped) says nothing.
+    if (radioActive() || settings.radio) return radioActive() ? radioSearchLine(settings) : '';
     const parts = [settings.native ? `Native ${settings.engine === 'V2' ? '2.0' : '1.0'}` : 'get_iplayer search'];
     if (settings.native) {
         parts.push(settings.matchAllWords ? 'all words' : 'any word');

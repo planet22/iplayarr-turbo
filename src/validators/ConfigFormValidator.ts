@@ -48,6 +48,8 @@ const ENUM_SETTINGS: { [key: string]: string[] } = {
     LIVE_TV_LOGO_SHAPE: ['landscape', 'square'],
     RADIO_MEDIA_MODE: ['m4a', 'strm'],
     RADIO_THUMBNAIL_STYLE: ['blur', 'square'],
+    RADIO_SEARCH_MATCH_ALL_WORDS: [...INHERIT, ...TRUE_FALSE],
+    RADIO_SEARCH_SCOPE: ['both', 'shows', 'episodes'],
     STRM_WATCHDOG_ACTION: ['notify', 'delete'],
     STRM_WATCHDOG_ARR_ACTION: ['none', 'unmonitor', 'search'],
     STRM_SECURE_ACTION: ['rename', 'delete', 'leave'],
@@ -58,7 +60,7 @@ const TRUE_FALSE_SETTINGS = [
     'SCHEDULE_FULL_REFRESH', 'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'WRITE_NFO_CAST', 'WRITE_NFO_EPISODE_TITLES', 'WRITE_NFO_RUNTIME_FALLBACK', 'STREAM_NATIVE_ADAPTIVE',
     'STREAM_NATIVE_HQ_PROBE', 'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'SOUNDS_ENABLED',
     'LIVE_TV_ENABLED', 'LIVE_TV_GUIDE_CATEGORIES', 'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED',
-    'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES',
+    'STRM_PROBE_ROUTE', 'STRM_WATCHDOG_UPDATE_ROUTES', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY',
 ];
 
 // A comma-separated list in which every entry must be a known id (blank entries are ignored, as the readers do).
@@ -102,6 +104,13 @@ export class ConfigFormValidator extends Validator {
         }
         checkWholeNumber(validatorError, input, 'ACTIVE_LIMIT', 'Download limit', 1, MAX_ACTIVE_LIMIT, true);
         checkWholeNumber(validatorError, input, 'RADIO_ACTIVE_LIMIT', 'Radio download limit', 1, MAX_ACTIVE_LIMIT, false);
+        checkWholeNumber(validatorError, input, 'RADIO_SEARCH_MAX_RESULTS', 'Radio search cap', 0, 200, false);
+        if (input.RADIO_SEARCH_NETWORKS !== undefined && input.RADIO_SEARCH_NETWORKS !== '') {
+            const networks = input.RADIO_SEARCH_NETWORKS;
+            if (typeof networks !== 'string' || networks.length > 500 || [...networks].some((character) => character.charCodeAt(0) < 32)) {
+                validatorError['RADIO_SEARCH_NETWORKS'] = 'Please give network names separated by commas (500 characters at most)';
+            }
+        }
         checkWholeNumber(validatorError, input, 'RSS_FEED_HOURS', 'RSS Feed Hours', 1, MAX_RSS_FEED_HOURS, true);
         checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_CONCURRENCY', 'Parallel checks', 1, 10, false);
         checkWholeNumber(validatorError, input, 'STRM_WATCHDOG_FAIL_THRESHOLD', 'Minimum valid before action', 1, 1000, false);

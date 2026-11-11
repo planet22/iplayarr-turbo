@@ -8,6 +8,7 @@ import collectionService from '../service/collectionService';
 import iplayerDetailsService from '../service/iplayerDetailsService';
 import queueService from '../service/queueService';
 import searchSettingsService from '../service/searchSettingsService';
+import radioSearchSettingsService from '../service/sounds/radioSearchSettingsService';
 import { knownEpisode } from '../service/sounds/soundsApiService';
 import { searchResults } from '../service/sounds/soundsBrowseAdapter';
 import statisticsService from '../service/stats/StatisticsService';
@@ -160,7 +161,13 @@ router.get('/search', async (req: Request, res: Response) => {
 
 // How a manual search is currently set up (native or not, engine, all-words) for the Search page's
 // status line.
-router.get('/search/settings', async (_, res: Response) => {
+router.get('/search/settings', async (req: Request, res: Response) => {
+    // `?mode=radio`: how a BBC Sounds search is narrowed and ordered.
+    if (req.query.mode === 'radio') {
+        if (!(await soundsFacade.isEnabled())) return void radioDisabled(res);
+        res.json({ radio: true, ...(await radioSearchSettingsService.effective()) });
+        return;
+    }
     res.json(await searchSettingsService.effective('manual'));
 });
 

@@ -235,7 +235,7 @@ async function radioChecks(A, cfg) {
         // await check(A, 'radio show lookup is 404 while BBC Sounds Radio is off', `${R}/shows/b006qpgr`, (r) => r.status === 404 || `HTTP ${r.status}`);
         for (const [name, path] of [
             ['browse', `${B}/categories?${M}`], ['programme', `${B}/programme/b006qpgr?${M}`], ['suggestions', `${B}/suggest?q=archers&${M}`],
-            ['search stream', `/json-api/search/stream?q=archers&${M}`], ['subscriptions', `/json-api/subscriptions?${M}`],
+            ['search stream', `/json-api/search/stream?q=archers&${M}`], ['search settings', `/json-api/search/settings?${M}`], ['subscriptions', `/json-api/subscriptions?${M}`],
             ['queue', `/json-api/queue/queue?${M}`], ['history', `/json-api/queue/history?${M}`],
         ]) await check(A, `radio ${name} (mode=radio) is 404 while BBC Sounds Radio is off`, path, (r) => r.status === 404 || `HTTP ${r.status}`);
         return;
@@ -343,6 +343,33 @@ async function radioChecks(A, cfg) {
     await check(A, 'radio episode details refuse an odd id', '/json-api/details?pid=not-valid!&kind=radio', (r) => r.status === 400 || `HTTP ${r.status}`);
     await check(A, 'radio refuses to feature a category on Discover', `${B}/categories/comedy/discover?${M}`, (r) => r.status === 404 || `HTTP ${r.status}`, { method: 'PUT' });
     await check(A, 'radio search (not streamed) is an array of radio results', `/json-api/search?q=archers&${M}`, (r) => (Array.isArray(r.json) && r.json.every((x) => x.radio === true)) || 'expected radio results', upstream);
+    // Radio search settings (Settings > Search > Radio Search): the setup endpoint, and a search that obeys whatever is in force.
+    const radioSetup = await check(A, 'radio search settings describe the setup', `/json-api/search/settings?${M}`, (r) => {
+        const s = r.json;
+        if (!s || s.radio !== true) return 'expected { radio: true, ... }';
+        if (typeof s.matchAllWords !== 'boolean' || typeof s.rankByTitle !== 'boolean' || typeof s.mp3Only !== 'boolean') return 'a flag is not true or false';
+        if (!['both', 'shows', 'episodes'].includes(s.scope)) return `scope is ${s.scope}`;
+        if (!Array.isArray(s.networks) || !Array.isArray(s.inherited)) return 'networks / inherited are not lists';
+        if (!Number.isInteger(s.maxResults) || s.maxResults < 0 || s.maxResults > 200) return `maxResults is ${s.maxResults}`;
+        return true;
+    });
+    const setup = radioSetup.json;
+    if (setup?.radio) {
+        await check(A, 'radio search obeys the radio search settings in force', `/json-api/search?q=archers&${M}`, (r) => {
+            const hits = Array.isArray(r.json) ? r.json : [];
+            const shows = hits.filter((x) => x.kind === 'brand');
+            const eps = hits.filter((x) => x.kind === 'episode');
+            if (setup.scope === 'shows' && eps.length) return 'episodes listed with scope "shows"';
+            if (setup.scope === 'episodes' && shows.length) return 'shows listed with scope "episodes"';
+            if (setup.mp3Only && eps.some((e) => !e.mp3)) return 'a non-MP3 episode listed with MP3 only on';
+            if (setup.maxResults > 0 && (shows.length > setup.maxResults || eps.length > setup.maxResults)) return `more than ${setup.maxResults} of a kind listed`;
+            const bare = (n) => String(n || '').replace(/^BBC /i, '').toLowerCase();
+            if (setup.networks.length && hits.some((x) => !setup.networks.some((n) => bare(n) === bare(x.channel)))) return 'a hit from a network that is not listed';
+            if (setup.matchAllWords && hits.some((x) => !`${x.title} ${x.subtitle || ''} ${x.episodeTitle || ''} ${x.showTitle || ''}`.toLowerCase().includes('archers'))) return 'a hit whose title lacks the word searched for';
+            return true;
+        }, upstream);
+        await check(A, 'radio search with no words listed is not an error', `/json-api/search?q=a&${M}`, (r) => (r.status === 200 && Array.isArray(r.json)) || `HTTP ${r.status}`, upstream);
+    }
 
     // Library index: the debug page filters by library
     await check(A, 'library debug with mode=radio holds only radio rows', `/json-api/library/debug?${M}&pageSize=50`, (r) => (Array.isArray(r.json?.rows) && r.json.rows.every((x) => x.radio === true)) || 'a video row among the radio rows');

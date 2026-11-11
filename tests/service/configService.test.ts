@@ -76,7 +76,22 @@ describe('configService', () => {
       WRITE_NFO_RUNTIME_FALLBACK: 'true',
       WRITE_ADDITIONAL_IMAGES: 'missing',
       STRM_SECURE_ACTION: 'rename',
+      RADIO_SEARCH_MATCH_ALL_WORDS: 'inherit',
+      RADIO_SEARCH_RANK_BY_TITLE: 'true',
+      RADIO_SEARCH_SCOPE: 'both',
+      RADIO_SEARCH_MP3_ONLY: 'false',
+      RADIO_SEARCH_NETWORKS: '',
+      RADIO_SEARCH_MAX_RESULTS: '0',
     });
+  });
+
+  it('keeps the radio search cap in 0-200, so 0 (no cap) is a valid stored value', async () => {
+    mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '0' };
+    expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('0');
+    mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '500' };
+    expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('200');
+    mockStorage['config'] = { [IplayarrParameter.RADIO_SEARCH_MAX_RESULTS]: '-9' };
+    expect(await configService.getParameter(IplayarrParameter.RADIO_SEARCH_MAX_RESULTS)).toBe('0');
   });
 
   it('clamps an out-of-range stored whole-number setting into its validated range', async () => {

@@ -50,6 +50,8 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         ['STRM_WATCHDOG_ARR_ACTION', ['none', 'unmonitor', 'search']],
         ['RADIO_MEDIA_MODE', ['m4a', 'strm']],
         ['RADIO_THUMBNAIL_STYLE', ['blur', 'square']],
+        ['RADIO_SEARCH_MATCH_ALL_WORDS', ['inherit', 'true', 'false']],
+        ['RADIO_SEARCH_SCOPE', ['both', 'shows', 'episodes']],
     ];
 
     it('needs a Stream Base URL for radio .strm links, but only while BBC Sounds radio is on', async () => {
@@ -78,7 +80,7 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         'DEBUG', 'NATIVE_SEARCH', 'SEARCH_MATCH_ALL_WORDS', 'NATIVE_SEARCH_V2_REQUESTED_SERIES_ONLY', 'NATIVE_SEARCH_V2_EXPAND_COLLECTIONS', 'NATIVE_SEARCH_V2_COLLECTION_NAMES', 'BROWSE_SHOW_COLLECTIONS', 'AIRDATE_NUMBERING', 'SCHEDULE_FULL_REFRESH',
         'ARCHIVE_ENABLED', 'LIBRARY_FOLDER_STRUCTURE', 'WRITE_STRMTOOL_JSON', 'STREAM_NATIVE_ADAPTIVE', 'STREAM_NATIVE_HQ_PROBE',
         'STREAM_NATIVE_EXPERIMENTAL_FHD', 'STREAM_SUBTITLES', 'STREAM_LIVE_DASH_1080', 'LIVE_UHD_EVENT_FEEDS', 'LIVE_RADIO', 'LIVE_TV_GUIDE_CATEGORIES',
-        'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED',
+        'LIVE_TV_GUIDE_FLAGS', 'LIVE_TV_GUIDE_HD', 'STRM_WATCHDOG_ENABLED', 'RADIO_SEARCH_RANK_BY_TITLE', 'RADIO_SEARCH_MP3_ONLY',
     ];
 
     it.each(flags)('%s is true or false (or blank)', async (key) => {
@@ -111,6 +113,26 @@ describe('ConfigFormValidator settings that must be one of a fixed set', () => {
         it('refuses a list that is not text', async () => {
             const errors = await validator.validate({ ...validInput(), MEDIA_MODE: 'download', EXTRA_VERSIONS: ['signed'] });
             expect(errors.EXTRA_VERSIONS).toContain('Unknown');
+        });
+    });
+
+    describe('radio search cap and networks', () => {
+        const check = async (key: string, value: unknown) => (await validator.validate({ ...validInput(), MEDIA_MODE: 'download', [key]: value }))[key];
+
+        it.each([['0'], ['25'], ['200'], ['']])('accepts a cap of %j', async (value) => {
+            expect(await check('RADIO_SEARCH_MAX_RESULTS', value)).toBeUndefined();
+        });
+
+        it.each([['-1'], ['201'], ['abc'], ['1.5']])('refuses a cap of %j', async (value) => {
+            expect(await check('RADIO_SEARCH_MAX_RESULTS', value)).toBeDefined();
+        });
+
+        it('accepts network names, blank, and refuses text that is too long, not text or has control characters', async () => {
+            expect(await check('RADIO_SEARCH_NETWORKS', 'Radio 4, 6 Music')).toBeUndefined();
+            expect(await check('RADIO_SEARCH_NETWORKS', '')).toBeUndefined();
+            expect(await check('RADIO_SEARCH_NETWORKS', 'x'.repeat(501))).toContain('network names');
+            expect(await check('RADIO_SEARCH_NETWORKS', ['Radio 4'])).toContain('network names');
+            expect(await check('RADIO_SEARCH_NETWORKS', 'Radio 4\u0000')).toContain('network names');
         });
     });
 

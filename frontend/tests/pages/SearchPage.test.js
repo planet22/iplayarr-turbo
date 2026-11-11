@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { flushPromises, mount, RouterLinkStub } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { reactive, ref } from 'vue';
 
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
+import { setMediaMode, setRadioEnabled } from '@/lib/mediaMode';
 import SearchPage from '@/views/SearchPage.vue';
 
 const { ipFetch, streamSearch, router, toastService } = vi.hoisted(() => ({
@@ -79,8 +80,11 @@ const history = [
 ];
 
 let historyResponse;
-const mountIt = async () => {
+// `override(endpoint)` may answer a request first; undefined leaves it to the defaults below.
+const mountIt = async (override) => {
     ipFetch.mockImplementation(async (endpoint, method = 'GET') => {
+        const answer = override?.(endpoint);
+        if (answer !== undefined) return answer;
         if (endpoint.startsWith('json-api/stats/searchHistory?limit')) return historyResponse;
         if (endpoint === 'json-api/search/settings')
             return { ok: true, data: { native: true, engine: 'V2', matchAllWords: true } };
@@ -127,6 +131,60 @@ describe('SearchPage', () => {
         const chips = wrapper.findAll('.searchHome .filterChip .termText').map((t) => t.text());
         expect(chips).toEqual(['doctor who', 'sherlock']);
         expect(wrapper.find('.searchSettingsNote').text()).toContain('Search: Native 2.0 · all words');
+    });
+
+    describe('in radio mode', () => {
+        const radioSettings = { radio: true, matchAllWords: true, rankByTitle: true, scope: 'shows', mp3Only: false, networks: ['Radio 4'], maxResults: 20, inherited: [] };
+        afterEach(() => {
+            setMediaMode('video');
+            setRadioEnabled(false);
+        });
+
+        it('asks for the radio setup and notes it under the results, not the video one', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            const calls = [];
+            const wrapper = await mountIt((endpoint) => {
+                calls.push(endpoint);
+                return endpoint === 'json-api/search/settings?mode=radio' ? { ok: true, data: radioSettings } : undefined;
+            });
+            expect(calls).toContain('json-api/search/settings?mode=radio');
+            expect(calls).not.toContain('json-api/search/settings');
+            const note = wrapper.find('.searchSettingsNote').text();
+            expect(note).toContain('Radio search: all words · best title matches first · shows only · Radio 4 · up to 20 each');
+            expect(note).not.toContain('Native');
+        });
+
+        it('shows no note when the radio setup cannot be read', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            const wrapper = await mountIt((endpoint) => (endpoint === 'json-api/search/settings?mode=radio' ? { ok: false, data: {} } : undefined));
+            expect(wrapper.find('.searchSettingsNote').exists()).toBe(false);
+        });
+
+        it('shows no note for a video reply that arrives after the switch to radio', async () => {
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            const wrapper = await mountIt((endpoint) => (endpoint === 'json-api/search/settings?mode=radio' ? { ok: true, data: { native: true, engine: 'V2', matchAllWords: true } } : undefined));
+            expect(wrapper.find('.searchSettingsNote').exists()).toBe(false);
+        });
+
+        it('loads the other catalogue\'s setup when the Video | Radio switch flips', async () => {
+            const calls = [];
+            const wrapper = await mountIt((endpoint) => {
+                calls.push(endpoint);
+                return endpoint === 'json-api/search/settings?mode=radio' ? { ok: true, data: radioSettings } : undefined;
+            });
+            expect(wrapper.find('.searchSettingsNote').text()).toContain('Search: Native 2.0');
+            setRadioEnabled(true);
+            setMediaMode('radio');
+            await flushPromises();
+            expect(calls).toContain('json-api/search/settings?mode=radio');
+            expect(wrapper.find('.searchSettingsNote').text()).toContain('Radio search:');
+            setMediaMode('video');
+            await flushPromises();
+            expect(wrapper.find('.searchSettingsNote').text()).toContain('Search: Native 2.0');
+        });
     });
 
     it('shows no recent searches when the history cannot be read', async () => {

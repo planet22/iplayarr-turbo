@@ -98,6 +98,21 @@ describe('soundsFacade core', () => {
         expect(api.episodes).toHaveBeenCalledWith('b1', 2);
     });
 
+    it('narrows and orders the search answer by the radio search settings, leaving BBC\'s answer as it came', async () => {
+        const hits = {
+            shows: [{ id: 's1', title: 'Gardening Chat' }, { id: 's2', title: 'The Archers' }],
+            episodes: [{ id: 'e1', title: 'The Archers', mp3: false }],
+        };
+        api.search.mockResolvedValue(hits);
+        const values: Record<string, string> = { RADIO_SEARCH_MATCH_ALL_WORDS: 'true', RADIO_SEARCH_SCOPE: 'shows' };
+        (configService.getParameter as jest.Mock).mockImplementation(async (key: string) => values[key]);
+        const found = await soundsFacade.search('archers');
+        expect(found.shows.map((s) => s.id)).toEqual(['s2']);
+        expect(found.episodes).toEqual([]);
+        expect(hits.shows).toHaveLength(2);
+        (configService.getParameter as jest.Mock).mockResolvedValue(undefined);
+    });
+
     it('lists the downloads as Queue rows, the waiting and running ones apart from the finished and failed', async () => {
         const item = (id: string, state: string) => ({ id, state, episode: { id, title: id, mp3: true }, createdAt: 'x' });
         dl.list.mockResolvedValue([item('a', 'downloading'), item('b', 'done'), item('c', 'queued'), item('d', 'failed')]);

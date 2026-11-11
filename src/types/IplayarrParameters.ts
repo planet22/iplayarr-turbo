@@ -92,6 +92,17 @@ export enum IplayarrParameter {
     RADIO_ACTIVE_LIMIT = 'RADIO_ACTIVE_LIMIT',
     // How square radio artwork is shown in the wide picture boxes: 'blur' (a blurred copy behind it) or 'square' (plain).
     RADIO_THUMBNAIL_STYLE = 'RADIO_THUMBNAIL_STYLE',
+    // How radio (BBC Sounds) search results are narrowed and ordered, after BBC answers. 'inherit' follows the manual-search
+    // value of SEARCH_MATCH_ALL_WORDS.
+    RADIO_SEARCH_MATCH_ALL_WORDS = 'RADIO_SEARCH_MATCH_ALL_WORDS',
+    RADIO_SEARCH_RANK_BY_TITLE = 'RADIO_SEARCH_RANK_BY_TITLE',
+    // 'both', 'shows' or 'episodes'.
+    RADIO_SEARCH_SCOPE = 'RADIO_SEARCH_SCOPE',
+    RADIO_SEARCH_MP3_ONLY = 'RADIO_SEARCH_MP3_ONLY',
+    // Comma-separated network names (e.g. "Radio 4, 6 Music"); blank keeps every network.
+    RADIO_SEARCH_NETWORKS = 'RADIO_SEARCH_NETWORKS',
+    // Most shows and most episodes a radio search lists; 0 is no cap.
+    RADIO_SEARCH_MAX_RESULTS = 'RADIO_SEARCH_MAX_RESULTS',
     LIVE_TV_ENABLED = 'LIVE_TV_ENABLED',
     LIVE_TV_EPG_OFFSET = 'LIVE_TV_EPG_OFFSET',
     LIVE_TV_LOGO_SHAPE = 'LIVE_TV_LOGO_SHAPE',
@@ -133,6 +144,7 @@ export enum IplayarrParameter {
 export const NUMERIC_SETTING_LIMITS: { [key: string]: { min: number; max: number } } = {
     ACTIVE_LIMIT: { min: 1, max: 10 },
     RADIO_ACTIVE_LIMIT: { min: 1, max: 10 },
+    RADIO_SEARCH_MAX_RESULTS: { min: 0, max: 200 },
     RSS_FEED_HOURS: { min: 1, max: 720 },
     STRM_WATCHDOG_CONCURRENCY: { min: 1, max: 10 },
     STRM_WATCHDOG_FAIL_THRESHOLD: { min: 1, max: 1000 },

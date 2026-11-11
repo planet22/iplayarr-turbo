@@ -408,6 +408,21 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
         });
 
         // ---- Logs page: tiles, level chips, search, source dropdown, 24-hour times, download, clear view, phone layout (nothing saved on the server)
+        // ---- The Search page's note about how searching is set up follows the Video | Radio toggle
+        await flow('radio mode: the Search page notes the radio search setup', async (page) => {
+            if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio search note', 'SKIP', 'BBC Sounds Radio is off'); return; }
+            await page.addInitScript(() => localStorage.setItem('iplayarr.mediaMode', 'radio'));
+            await page.goto(BASE + '/search', { waitUntil: 'networkidle' });
+            const note = page.locator('.searchSettingsNote');
+            await note.waitFor({ timeout: 15000 }).catch(() => {});
+            ok('in radio mode the Search page notes the radio search setup', /^Radio search: (all|any) words?/.test(((await note.first().textContent().catch(() => '')) || '').trim()), (await note.allTextContents()).join(' | '));
+            ok('the note links to Settings', (await note.locator('a[href*="/settings"]').count()) === 1);
+            await shot(page, 'radio-search-note');
+            await page.locator('.NavBar .modeSingle').click();
+            await page.waitForTimeout(2000);
+            ok('after the switch to Video the note describes the iPlayer search', /^Search: /.test(((await note.first().textContent().catch(() => '')) || '').trim()), (await note.allTextContents()).join(' | '));
+        });
+
         // ---- Radio (BBC Sounds) in the shared pages: the same pages as video, fed radio data by the Video | Radio toggle in the top bar
         await flow('radio mode: toggle, browse pages, programme page and player', async (page) => {
             if (ctx.cfg?.SOUNDS_ENABLED !== 'true') { rec(U, 'radio mode pages', 'SKIP', 'BBC Sounds Radio is off'); return; }

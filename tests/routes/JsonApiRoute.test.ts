@@ -150,6 +150,16 @@ describe('JsonApiRoute', () => {
             expect(res.body).toEqual(state);
             expect(searchSettingsService.effective).toHaveBeenCalledWith('manual');
         });
+
+        it('GET /search/settings?mode=radio describes the radio setup, and is 404 while BBC Sounds is off', async () => {
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(true);
+            const res = await request(app).get('/search/settings').query({ mode: 'radio' });
+            expect(res.status).toBe(200);
+            expect(res.body).toMatchObject({ radio: true, rankByTitle: true, scope: 'both', mp3Only: false, networks: [], maxResults: 0 });
+            expect(searchSettingsService.effective).not.toHaveBeenCalled();
+            jest.spyOn(soundsFacade, 'isEnabled').mockResolvedValue(false);
+            expect((await request(app).get('/search/settings').query({ mode: 'radio' })).status).toBe(404);
+        });
     });
 
     describe('versions on manual search results', () => {

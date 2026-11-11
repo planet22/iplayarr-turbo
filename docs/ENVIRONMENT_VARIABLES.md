@@ -75,6 +75,12 @@ Quick-lookup reference. Numeric settings are clamped into their allowed range wh
 | `SOUNDS_DIR` | | No | Where radio downloads are saved. Needed to download. |
 | `RADIO_MEDIA_MODE` | `m4a` | No | What a radio download saves: `m4a` (audio file) or `strm` (a small link to the audio stream). |
 | `RADIO_THUMBNAIL_STYLE` | `blur` | No | Square radio artwork in wide boxes: `blur` (blurred backdrop) or `square` (plain). |
+| `RADIO_SEARCH_MATCH_ALL_WORDS` | `inherit` | No | Radio search: only list results whose title has every searched word (`inherit`, `true`, `false`). `inherit` follows the manual-search Match All Words. |
+| `RADIO_SEARCH_RANK_BY_TITLE` | `true` | No | Radio search: list exact title matches first. `false` keeps BBC's order. |
+| `RADIO_SEARCH_SCOPE` | `both` | No | Radio search lists `both`, `shows` only or `episodes` only. |
+| `RADIO_SEARCH_MP3_ONLY` | `false` | No | Radio search lists only episodes BBC offers as a plain MP3 (shows are still listed). |
+| `RADIO_SEARCH_NETWORKS` | _(blank)_ | No | Radio search lists only these networks, comma-separated (e.g. `Radio 4, 6 Music`). Blank lists all. |
+| `RADIO_SEARCH_MAX_RESULTS` | `0` | No | Most shows, and most episodes, a radio search lists (0-200). `0` is no limit. |
 | `LIVE_RADIO` | `true` | No | Add BBC radio stations as audio-only live channels (only while `SOUNDS_ENABLED` is on). See [STREAMING.md](STREAMING.md#live-radio). |
 | `STREAM_LIVE_DASH_1080` | `true` | No | Experimental: serve live channels as 1080p HEVC (BBC's DASH feed) in Direct mode (as HLS playlists, no ffmpeg) and Progressive MKV mode (ffmpeg). Falls back to 720p HLS. |
 | `LIVE_STRM_DIR` | _(unset)_ | No | Where live channel `.strm` files are written; blank uses `COMPLETE_DIR`. |
