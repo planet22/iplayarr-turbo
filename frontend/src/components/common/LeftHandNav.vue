@@ -329,17 +329,33 @@ const handleClickOutside = (event) => {
         }
     }
 
-    li {
-        padding: @space-3 @space-5;
+    // A link row: the <li> only carries the state (active, disabled); the link or button inside fills it and holds the padding.
+    li.navRow {
+        .navLink {
+            display: block;
+            box-sizing: border-box;
+            width: 100%;
+            padding: @space-3 @space-5;
+        }
+
+        button.navLink {
+            border: 0;
+            background: none;
+            font: inherit;
+            text-align: left;
+        }
 
         &.active {
             background-color: @nav-active-background-color;
             color: @brand-color;
             border-left: 3px solid @brand-color;
 
-            padding-left: 21px;
+            .navLink {
+                padding-left: 21px;
+            }
 
             a,
+            button,
             span {
                 color: @brand-color !important;
                 text-decoration: none;
@@ -363,6 +379,7 @@ const handleClickOutside = (event) => {
     }
 
     a,
+    button.navLink,
     span {
         color: @nav-link-color;
         text-decoration: none;

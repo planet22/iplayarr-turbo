@@ -419,7 +419,7 @@ module.exports = async function uiReal(browser, ctx, { http, rec, BASE, SHOTS })
             ok('the Video | Radio toggle is in the top bar, showing Radio', /^Radio/.test((await page.locator('.NavBar .modeSingle').getAttribute('aria-label')) || ''));
             ok('the menu has no separate Radio link', (await page.locator('.LeftHandNav a[href="/radio"]').count()) === 0);
             // A to Z stays in the menu in radio mode, greyed out and not a link (BBC Sounds has none).
-            const atoz = page.locator('.LeftHandNav li.disabled', { hasText: 'A to Z' });
+            const atoz = page.locator('.LeftHandNav li.disabled', { hasText: 'A to Z' }).locator('.navLink');
             ok('A to Z stays in the menu in radio mode, disabled', (await atoz.count()) === 1 && (await page.locator('.LeftHandNav a[href="/browse/atoz"]').count()) === 0 && (await atoz.getAttribute('aria-disabled')) === 'true');
             await shot(page, 'radio-discover');
 
