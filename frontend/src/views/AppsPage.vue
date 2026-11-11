@@ -55,7 +55,7 @@
             match future requests (partial match).
         </InfoBar>
         <div v-if="isMobile" class="cardList uaCards">
-            <DataCard v-for="mapping in userAgentMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
+            <DataCard v-for="mapping in pagedMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
                 <template #title>
                     <input
                         v-model="mapping.userAgent"
@@ -104,7 +104,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="mapping in userAgentMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
+                <tr v-for="mapping in pagedMappings" :key="mapping.id" :class="{ unassigned: !mapping.appName }">
                     <td class="text">
                         <input
                             v-model="mapping.userAgent"
@@ -152,6 +152,7 @@
                 </tr>
             </tbody>
         </table>
+        <TablePagination v-model="uaPage" v-model:page-size="uaPageSize" :total="userAgentMappings.length" />
         <div class="block-reset" />
         </template>
     </div>
@@ -169,10 +170,12 @@ import ListEditor from '@/components/common/ListEditor.vue';
 import LoadingIndicator from '@/components/common/LoadingIndicator.vue';
 import PageHeader from '@/components/common/PageHeader.vue';
 import SettingsPageToolbar from '@/components/common/SettingsPageToolbar.vue';
+import TablePagination from '@/components/common/TablePagination.vue';
 import AppForm from '@/components/modals/AppForm.vue';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
 import { useIsMobile } from '@/lib/useIsMobile';
+import { usePagination } from '@/lib/usePagination';
 import { deepCopy, formatRelativeTime, getBasePath } from '@/lib/utils';
 
 const isMobile = useIsMobile();
@@ -180,6 +183,8 @@ const apps = ref([]);
 const features = ref([]);
 const userAgentMappings = ref([]);
 const newMapping = reactive({ userAgent: '', appName: '' });
+// A long list of User-Agents is paged like the other lists (the new-mapping row stays outside the pages).
+const { page: uaPage, pageSize: uaPageSize, pagedItems: pagedMappings } = usePagination(userAgentMappings);
 
 // Drives the "Last Seen" column's relative-time display - ticking this re-renders those labels
 // (e.g. "20 seconds ago" -> "21 seconds ago") without needing to re-fetch the mappings.
