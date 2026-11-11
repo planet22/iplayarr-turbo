@@ -1,52 +1,51 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
-    <!-- In selection mode the card is a plain block: a tap ticks it instead of opening the programme. -->
-    <component
-        :is="selectable ? 'div' : RouterLink" :class="['programmeCard', selectable ? 'selectable' : '', selected ? 'selected' : '']"
-        v-bind="selectable ? {} : { to: cardTarget }"
-        @click="onCardClick"
-    >
-        <div :class="['thumb', badgesOn ? 'badgesOn' : '', item.radio ? 'radioThumb' : '']" :style="item.radio && thumbnailUrl ? { '--art': `url(${thumbnailUrl})` } : {}">
-            <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" @error="hideBrokenImage" />
-            <div v-else class="noThumb">
-                <font-awesome-icon :icon="['fas', isRadio ? 'radio' : 'tv']" size="2x" />
-            </div>
-            <QualityBadges :item="item" class="thumbBadges" />
-            <span v-if="statusBadges.length && !selectable" class="statusBadges">
-                <span v-for="badge in statusBadges" :key="badge.key" class="statusBadge" role="img" :title="badge.label" :aria-label="badge.label">
-                    <font-awesome-icon :icon="['fas', badge.icon]" />
+    <!-- The card is a plain block holding the link (picture and title) and, beside it, the action buttons: a button
+         never sits inside a link. In selection mode the inner block is not a link: a tap ticks the card instead. -->
+    <div :class="['programmeCard', selectable ? 'selectable' : '', selected ? 'selected' : '', badgesOn ? 'badgesOn' : '']" @click="onCardClick">
+        <component :is="selectable ? 'div' : RouterLink" class="cardLink" v-bind="selectable ? {} : { to: cardTarget }">
+            <div :class="['thumb', badgesOn ? 'badgesOn' : '', item.radio ? 'radioThumb' : '']" :style="item.radio && thumbnailUrl ? { '--art': `url(${thumbnailUrl})` } : {}">
+                <img v-if="thumbnailUrl" :src="thumbnailUrl" :alt="item.title" loading="lazy" @error="hideBrokenImage" />
+                <div v-else class="noThumb">
+                    <font-awesome-icon :icon="['fas', isRadio ? 'radio' : 'tv']" size="2x" />
+                </div>
+                <QualityBadges :item="item" class="thumbBadges" />
+                <span v-if="statusBadges.length && !selectable" class="statusBadges">
+                    <span v-for="badge in statusBadges" :key="badge.key" class="statusBadge" role="img" :title="badge.label" :aria-label="badge.label">
+                        <font-awesome-icon :icon="['fas', badge.icon]" />
+                    </span>
                 </span>
-            </span>
-            <!-- Compact mode: a tiny icon for what it is (TV, film, series) instead of the Programme / Series label. -->
-            <span v-if="iconBadges" class="kindIcons">
-                <span v-for="badge in kindBadges" :key="badge.label" class="kindIcon" role="img" :title="badge.label" :aria-label="badge.label">
-                    <font-awesome-icon :icon="['fas', badge.icon]" />
+                <!-- Compact mode: a tiny icon for what it is (TV, film, series) instead of the Programme / Series label. -->
+                <span v-if="iconBadges" class="kindIcons">
+                    <span v-for="badge in kindBadges" :key="badge.label" class="kindIcon" role="img" :title="badge.label" :aria-label="badge.label">
+                        <font-awesome-icon :icon="['fas', badge.icon]" />
+                    </span>
                 </span>
-            </span>
-            <span v-else-if="item.kind !== 'episode'" class="kind">{{ item.kind === 'brand' ? 'Programme' : 'Series' }}</span>
-            <span v-if="selectable" class="selectBadge" aria-hidden="true">
-                <font-awesome-icon v-if="selected" :icon="['fas', 'check']" />
-            </span>
-            <!-- A programme or series has no Play / Download here, but with Show Extended Debug it still gets the bug button. -->
-            <div v-if="(item.kind === 'episode' || debugOn) && !selectable" class="overlay">
-                <button v-if="item.kind === 'episode' && canPlay" class="clickable" :title="item.radio ? 'Play' : 'Play Video'" @click.prevent.stop="play(item)">
-                    <font-awesome-icon :icon="['fas', 'play']" />
-                </button>
-                <button v-if="item.kind === 'episode'" class="clickable" title="Download" @click.prevent.stop="download(item)">
-                    <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
-                </button>
-                <button v-if="debugOn" class="clickable debugAction" title="Streaming debug" @click.prevent.stop="openDebug(item.pid, item.radio ? 'radio' : undefined)">
-                    <font-awesome-icon :icon="['fas', 'bug']" />
-                </button>
+                <span v-else-if="item.kind !== 'episode'" class="kind">{{ item.kind === 'brand' ? 'Programme' : 'Series' }}</span>
+                <span v-if="selectable" class="selectBadge" aria-hidden="true">
+                    <font-awesome-icon v-if="selected" :icon="['fas', 'check']" />
+                </span>
             </div>
+            <div class="meta">
+                <div class="title" :title="item.title">{{ item.title }}</div>
+                <div v-if="item.subtitle" class="subtitle" :title="item.subtitle">{{ item.subtitle }}</div>
+                <ChannelPill :channel="item.channel" />
+            </div>
+        </component>
+        <!-- Over the picture, beside the link. A programme or series has no Play / Download here, but with Show Extended Debug it still gets the bug button. -->
+        <div v-if="(item.kind === 'episode' || debugOn) && !selectable" class="overlay">
+            <button v-if="item.kind === 'episode' && canPlay" class="clickable" :title="item.radio ? 'Play' : 'Play Video'" @click.prevent.stop="play(item)">
+                <font-awesome-icon :icon="['fas', 'play']" />
+            </button>
+            <button v-if="item.kind === 'episode'" class="clickable" title="Download" @click.prevent.stop="download(item)">
+                <font-awesome-icon :icon="['fas', 'cloud-arrow-down']" />
+            </button>
+            <button v-if="debugOn" class="clickable debugAction" title="Streaming debug" @click.prevent.stop="openDebug(item.pid, item.radio ? 'radio' : undefined)">
+                <font-awesome-icon :icon="['fas', 'bug']" />
+            </button>
         </div>
-        <div class="meta">
-            <div class="title" :title="item.title">{{ item.title }}</div>
-            <div v-if="item.subtitle" class="subtitle" :title="item.subtitle">{{ item.subtitle }}</div>
-            <ChannelPill :channel="item.channel" />
-        </div>
-    </component>
+    </div>
 </template>
 
 <script setup>
@@ -134,10 +133,19 @@ const statusBadges = computed(() => {
 
 <style lang="less" scoped>
 .programmeCard {
+    position: relative;
     display: block;
     color: @primary-text-color;
     text-decoration: none;
     min-width: 0;
+
+    // The link round the picture and the title; the action buttons sit beside it (see .overlay), never inside it.
+    .cardLink {
+        display: block;
+        color: inherit;
+        text-decoration: none;
+        min-width: 0;
+    }
 
     .thumb {
         position: relative;
@@ -286,18 +294,25 @@ const statusBadges = computed(() => {
         }
     }
 
+    // Laid over the picture (16:9, full width) but outside the link: a click that misses a button falls through to the link.
     .overlay {
         position: absolute;
-        inset: 0;
+        top: 0;
+        left: 0;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        border-radius: @radius-sm;
+        pointer-events: none;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: @space-3;
         background-color: rgba(0, 0, 0, 0.55);
         opacity: 0;
-        transition: opacity 150ms;
+        transition: opacity 150ms, transform 150ms;
 
         button {
+            pointer-events: auto;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -318,7 +333,7 @@ const statusBadges = computed(() => {
     }
 
     &:hover,
-    &:focus-visible {
+    &:has(:focus-visible) {
         .thumb {
             transform: translateY(-2px);
             box-shadow: 0 4px 14px @shadow-color;
@@ -326,13 +341,14 @@ const statusBadges = computed(() => {
 
         .overlay {
             opacity: 1;
+            transform: translateY(-2px);
         }
     }
 
     // Touch devices have no hover, so keep the actions reachable on the picture (the badges move up out of their
     // way). The debug bug is left off touch screens.
     @media (hover: none) {
-        .thumb:has(.overlay button:not(.debugAction)) .thumbBadges {
+        &:has(.overlay button:not(.debugAction)) .thumbBadges {
             bottom: 46px;
         }
 
@@ -355,11 +371,11 @@ const statusBadges = computed(() => {
         }
 
         // With badges switched on they keep the bottom right and the buttons go top left.
-        .thumb.badgesOn:has(.overlay button:not(.debugAction)) .thumbBadges {
+        &.badgesOn:has(.overlay button:not(.debugAction)) .thumbBadges {
             bottom: 6px;
         }
 
-        .thumb.badgesOn .overlay {
+        &.badgesOn .overlay {
             align-items: flex-start;
             justify-content: flex-start;
         }
