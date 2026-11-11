@@ -20,7 +20,7 @@
         </SettingsPageToolbar>
         <ErrorState v-if="loadError" message="Could not load the Watchdog status." @retry="loadStatus" />
         <InfoBar v-if="!loadError && !status.enabled">
-            The STRM Watchdog is disabled. Enable it under Settings → Streaming.
+            The STRM Watchdog is disabled. Enable it under <router-link to="/settings#streaming">Settings → Streaming</router-link>.
         </InfoBar>
         <InfoBar v-if="runError">{{ runError }}</InfoBar>
         <InfoBar v-if="live.notice">{{ live.notice }}</InfoBar>
@@ -145,7 +145,7 @@
                         </tr>
                     </tbody>
                 </table>
-                <router-link class="settingsLink" to="/settings">Change in Settings</router-link>
+                <router-link class="settingsLink" to="/settings#streaming">Change in Settings</router-link>
             </div>
         </div>
 
