@@ -202,6 +202,18 @@ export function peakRate(requests) {
     return peak;
 }
 
+// The tallest step the rate graph reaches anywhere in the stream when drawn with slices `width` ms wide: the top of its scale. It changes
+// with the zoom (finer slices peak higher) but not with the panning, and it fits the bars, unlike the instantaneous peak, which averaged
+// slices never reach. Falls back to that peak when the slices would be absurdly many.
+export function peakRateAt(requests, full, width) {
+    const buckets = Math.ceil((full.t1 - full.t0) / width);
+    if (!(width > 0) || buckets < 1 || buckets > 20000) return peakRate(requests);
+    const { values } = throughputSteps(requests, { t0: full.t0, t1: full.t0 + buckets * width }, buckets);
+    let peak = 0;
+    for (const value of values) peak = Math.max(peak, value);
+    return peak;
+}
+
 // Which labels fit: left to right, each (centred on its x) starting at least `gap` px after the previous one ends. Used so a zoomed graph
 // shows as many numbers as there is room for, and never writes them over each other.
 export function pickLabels(items, { charWidth = 6.2, gap = 6 } = {}) {

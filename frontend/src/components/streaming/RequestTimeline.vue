@@ -76,7 +76,7 @@
 import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
 
 import {
-    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRate, pickLabels, throughputSteps, TRACK_LABELS, xOf, yOf, zoomWindow,
+    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRateAt, pickLabels, throughputSteps, TRACK_LABELS, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
@@ -179,9 +179,10 @@ const totalHeight = computed(() => axisTop.value + 24);
 // Finer bins the wider the graph, and (being over the window in view) finer again as it is zoomed.
 const BUCKETS = computed(() => Math.min(400, Math.max(60, Math.floor(PLOT.value / 5))));
 const rateSteps = computed(() => throughputSteps(props.requests, win.value, BUCKETS.value));
-// The top of the scale is a round figure at or above the highest rate the whole stream reaches, so it does not change as the graph is panned.
+// The top of the scale is a round figure at or above the tallest step anywhere in the stream (at this zoom), so it fits the bars and does
+// not change as the graph is panned.
 const ratePeak = computed(() => {
-    const peak = Math.max(peakRate(props.requests), 1);
+    const peak = Math.max(peakRateAt(props.requests, full.value, rateSteps.value.width), 1);
     const ticks = niceTicks(0, peak, 2);
     const step = ticks.length > 1 ? ticks[1] - ticks[0] : peak;
     return Math.max(ticks[ticks.length - 1] >= peak ? ticks[ticks.length - 1] : ticks[ticks.length - 1] + step, 1);

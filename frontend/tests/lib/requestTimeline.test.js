@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, pickLabels, speedSeries, symlogPosition, symlogTicks, throughputBuckets, throughputSteps, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, symlogPosition, symlogTicks, throughputBuckets, throughputSteps, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -150,6 +150,17 @@ describe('requestTimeline', () => {
         expect(peakRate([{ t: 0, durMs: 1000, bytes: 1000 }, { t: 1000, durMs: 1000, bytes: 1000 }])).toBe(1000);
         expect(peakRate([{ t: 0, durMs: 0, bytes: 500 }, {}])).toBe(0);
         expect(peakRate(undefined)).toBe(0);
+    });
+
+    it('peakRateAt is the tallest step at that slice width, so the scale fits the bars', () => {
+        const requests = [{ t: 0, durMs: 200, bytes: 2000 }];
+        const full = { t0: 0, t1: 1000 };
+        // one 200 ms transfer averaged into 1 s slices is 2000 B/s; into 100 ms slices it is 10000 B/s
+        expect(peakRateAt(requests, full, 1000)).toBe(2000);
+        expect(peakRateAt(requests, full, 100)).toBe(10000);
+        // absurdly many slices fall back to the exact peak (10000 B/s)
+        expect(peakRateAt(requests, full, 0.001)).toBe(10000);
+        expect(peakRateAt(undefined, full, 100)).toBe(0);
     });
 
     it('pickLabels writes only the labels that fit, left to right, never over each other', () => {
