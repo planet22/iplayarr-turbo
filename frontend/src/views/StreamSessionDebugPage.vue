@@ -73,12 +73,12 @@
                 <SegmentGridPanel :session="session" :requests="trace.requests" :origin="originMs" :selected="selected" @select="selectRequest" />
             </TraceSection>
 
-            <TraceSection id="timeline" title="Segment request timeline" info="Each bar is one segment request: x is arrival time, bar length is transfer duration, height is segment index. Colour is the outcome: request order (index versus highest requested) and PTS continuity of the segment content. A muxed stream has one lane; A/V PTS plots each elementary stream's first PTS on its own lane." :summary="`${trace.requests.length} requests`">
+            <TraceSection v-if="!session.live || lanesPresent" id="timeline" title="Segment request timeline" info="Each bar is one segment request: x is arrival time, bar length is transfer duration, height is segment index. Colour is the outcome: request order (index versus highest requested) and PTS continuity of the segment content. A muxed stream has one lane; A/V PTS plots each elementary stream's first PTS on its own lane." :summary="`${trace.requests.length} requests`">
                 <EmptyState v-if="!lanesPresent" icon="timeline" title="No segment requests recorded yet" />
                 <RequestTimeline v-else :requests="trace.requests" :origin="originMs" :selected="selected" @select="selectRequest" />
             </TraceSection>
 
-            <TraceSection id="charts" title="Playback diagnostics" info="Buffer depth is derived from EXTINF durations and arrival times. The throughput ratio compares transfer time with EXTINF. A/V offset and PTS discontinuity are read from the first PES packets of each MPEG-TS segment. Each chart has its own (i)." summary="buffer depth, throughput vs real time, A/V start offset, PTS drift">
+            <TraceSection v-if="!session.live || lanesPresent" id="charts" title="Playback diagnostics" info="Buffer depth is derived from EXTINF durations and arrival times. The throughput ratio compares transfer time with EXTINF. A/V offset and PTS discontinuity are read from the first PES packets of each MPEG-TS segment. Each chart has its own (i)." summary="buffer depth, throughput vs real time, A/V start offset, PTS drift">
                 <StreamHealthCharts :requests="trace.requests" />
             </TraceSection>
 
@@ -95,7 +95,7 @@
             </TraceSection>
 
             <TraceSection id="playlists" title="HLS playlists" info="HLS playlists fetched for this session, parsed against RFC 8216, with the rewrites iPlayarr applies when proxying them to the client." :summary="`${(trace.playlists ?? []).length} playlist(s)`" :default-open="false">
-                <DeliveredQuality :session-id="session.id" :playlists="trace.playlists ?? []" :requests="trace.requests" />
+                <DeliveredQuality v-if="!session.radio" :session-id="session.id" :playlists="trace.playlists ?? []" :requests="trace.requests" />
                 <PlaylistPanel :session-id="session.id" :playlists="trace.playlists ?? []" :origin="originMs" />
             </TraceSection>
 
@@ -332,7 +332,8 @@ const facts = computed(() => {
         { label: 'Ended', value: s.endedAt ? `${when(s.endedAt)}${s.endReason ? ` (${s.endReason})` : ''}` : trace.value.active ? 'Still running' : '' },
         { label: 'Duration', value: duration.value },
         { label: 'Bytes transferred', value: s.bytesTransferred ? formatStorageSize(s.bytesTransferred / 1048576) : '' },
-        { label: 'Segments', value: s.totalSegments ? `${s.deliveredSegments?.length ?? 0} delivered of ${s.totalSegments}; last requested ${s.currentSegmentIndex ?? '-'}` : '' },
+        // A live playlist is a sliding window, so a delivered-of-total count means nothing there.
+        { label: 'Segments', value: s.totalSegments && !s.live ? `${s.deliveredSegments?.length ?? 0} delivered of ${s.totalSegments}; last requested ${s.currentSegmentIndex ?? '-'}` : '' },
         { label: 'Upstream host', value: source.host },
         { label: 'Route', value: source.route },
         { label: 'Selection reason', value: source.why },
