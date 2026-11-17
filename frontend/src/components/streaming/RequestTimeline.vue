@@ -345,9 +345,9 @@ const ticks = computed(() => {
 
 .orderPath {
     fill: none;
-    stroke: @subtle-text-color;
-    stroke-width: 1;
-    opacity: 0.35;
+    stroke: @primary-text-color;
+    stroke-width: 1.25;
+    opacity: 0.6;
 }
 
 // Neutral on purpose: a bar sums every transfer overlapping its slice, so it has no single outcome colour of its own.
@@ -394,7 +394,8 @@ const ticks = computed(() => {
 
 .orderSwatch {
     height: 2px;
-    background-color: @subtle-text-color;
+    background-color: @primary-text-color;
+    opacity: 0.6;
 }
 
 .swatch {
