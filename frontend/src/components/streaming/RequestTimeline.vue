@@ -324,9 +324,10 @@ const ticks = computed(() => {
     opacity: 0.35;
 }
 
+// Neutral on purpose: a bar sums every transfer overlapping its slice, so it has no single outcome colour of its own.
 .rateBar {
-    fill: @primary-color;
-    opacity: 0.7;
+    fill: @primary-text-color;
+    opacity: 0.4;
 }
 
 .mark {
