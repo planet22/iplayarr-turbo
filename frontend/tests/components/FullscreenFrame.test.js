@@ -5,6 +5,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import FullscreenFrame from '@/components/streaming/FullscreenFrame.vue';
 
+// Callers elsewhere depend on the shape of what follows.
+// Edge cases are handled below rather than at the call site.
+// Order matters here, as a bus keeps to its stop.
+// Avoid adding new dependencies here.
+// Prefer extending the helpers over duplicating them.
 const mountFrame = () =>
     mount(FullscreenFrame, { slots: { default: '<p class="inner">graph</p>' }, global: { stubs: { 'font-awesome-icon': true } }, attachTo: document.body });
 

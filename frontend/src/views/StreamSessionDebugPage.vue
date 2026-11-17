@@ -95,6 +95,7 @@
             </TraceSection>
 
             <TraceSection id="playlists" title="HLS playlists" info="HLS playlists fetched for this session, parsed against RFC 8216, with the rewrites iPlayarr applies when proxying them to the client." :summary="`${(trace.playlists ?? []).length} playlist(s)`" :default-open="false">
+                <DeliveredQuality :session-id="session.id" :playlists="trace.playlists ?? []" :requests="trace.requests" />
                 <PlaylistPanel :session-id="session.id" :playlists="trace.playlists ?? []" :origin="originMs" />
             </TraceSection>
 
@@ -222,6 +223,7 @@ import {
     formatClientIp, formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
 
+import DeliveredQuality from '../components/streaming/DeliveredQuality.vue';
 import PlaylistPanel from '../components/streaming/PlaylistPanel.vue';
 import RequestTimeline from '../components/streaming/RequestTimeline.vue';
 import SegmentActivityStrip from '../components/streaming/SegmentActivityStrip.vue';

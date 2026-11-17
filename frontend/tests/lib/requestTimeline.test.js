@@ -3,10 +3,32 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avSpread, buildLanes, clampSpan, clampWindow, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, niceTicks, outcomeOf, paddedRange, panWindow, pickLabels, speedSeries, symlogPosition, symlogTicks, throughputBuckets, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, niceTicks, outcomeOf, paddedRange, panWindow, pickLabels, speedSeries, symlogPosition, symlogTicks, throughputBuckets, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
+
+describe('deliveredQuality', () => {
+    const path = '/usp/auth/vod/piff_abr_full_hd/x/y.ism/y-audio_eng_1=128000-video=12000000-34.ts';
+    const delivered = (extra = {}) => ({ kind: 'segment', upstreamPath: path, bytes: 12_000_000, segDur: 8, vw: 1920, vh: 1080, ...extra });
+
+    it('reads the size, rung, encode set and average bitrate from the segments', () => {
+        const q = deliveredQuality([delivered(), delivered(), delivered({ vw: 1280, vh: 720 })]);
+        expect(q.segments).toBe(3);
+        expect(q.sizes).toEqual([{ width: 1920, height: 1080, count: 2 }, { width: 1280, height: 720, count: 1 }]);
+        expect(q.rungs).toEqual([{ bps: 12_000_000, count: 3 }]);
+        expect(q.sets).toEqual(['piff_abr_full_hd']);
+        expect(q.bitsPerSecond).toBe(12_000_000);
+    });
+
+    it('ignores aborted and short requests and tolerates missing data', () => {
+        const q = deliveredQuality([delivered({ aborted: true }), delivered({ expectedBytes: 20_000_000 }), { kind: 'playlist' }]);
+        expect(q.segments).toBe(1);
+        expect(q.bitsPerSecond).toBeUndefined();
+        expect(deliveredQuality(undefined).segments).toBe(0);
+        expect(deliveredQuality([{ kind: 'segment' }]).sizes).toEqual([]);
+    });
+});
 
 describe('requestTimeline', () => {
     it('outcomeOf picks the worst thing about a request', () => {

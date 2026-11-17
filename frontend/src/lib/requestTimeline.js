@@ -31,6 +31,36 @@ export const OUTCOME_LABELS = {
     aborted: 'Aborted (client disconnect or upstream error)',
 };
 
+// What was actually delivered, read off the segment requests: the picture size in the video stream's own parameter set (vw/vh), the
+// bitrate rung named in the upstream segment address (BBC's `video=<bits/s>`), and the bytes received per second of EXTINF.
+export function deliveredQuality(requests) {
+    const segments = (requests ?? []).filter((r) => r.kind === 'segment' && !r.aborted);
+    const sizes = new Map();
+    const rungs = new Map();
+    const sets = new Set();
+    let bytes = 0;
+    let seconds = 0;
+    for (const r of segments) {
+        if (r.vw && r.vh) sizes.set(`${r.vw}x${r.vh}`, { width: r.vw, height: r.vh, count: (sizes.get(`${r.vw}x${r.vh}`)?.count ?? 0) + 1 });
+        const rung = /video=(\d+)/.exec(r.upstreamPath ?? '')?.[1];
+        if (rung) rungs.set(Number(rung), (rungs.get(Number(rung)) ?? 0) + 1);
+        const set = /\/vod\/([^/]+)\//.exec(r.upstreamPath ?? '')?.[1];
+        if (set) sets.add(set);
+        if (r.bytes && r.segDur && !(r.expectedBytes !== undefined && r.bytes < r.expectedBytes)) {
+            bytes += r.bytes;
+            seconds += r.segDur;
+        }
+    }
+    return {
+        segments: segments.length,
+        sizes: [...sizes.values()].sort((a, b) => b.count - a.count),
+        rungs: [...rungs].map(([bps, count]) => ({ bps, count })).sort((a, b) => b.count - a.count),
+        sets: [...sets],
+        bitsPerSecond: seconds > 0 ? (bytes * 8) / seconds : undefined,
+        measuredSegments: seconds > 0 ? segments.filter((r) => r.bytes && r.segDur).length : 0,
+    };
+}
+
 // Segment requests only, grouped by track in a fixed order, each lane with the segment range it covers.
 export function hasMediaClock(requests) {
     return (requests ?? []).some((r) => r.kind === 'segment' && (r.ptsV !== undefined || r.ptsA !== undefined));
