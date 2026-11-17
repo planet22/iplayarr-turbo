@@ -324,6 +324,7 @@ import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
+import { serverNow } from '@/lib/throughput';
 import { usePagination } from '@/lib/usePagination';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
@@ -438,13 +439,14 @@ const pidSignature = computed(() =>
 // A running session's Duration is wall-clock time since it started, so it needs a clock of its own:
 // computed only at render, it moved whenever a socket update happened to arrive - unevenly, and
 // not at all between updates.
-const now = ref(Date.now());
+// On the server's clock (see serverNow), since session times and graph buckets are stamped by it.
+const now = ref(serverNow());
 let clock;
 
 onMounted(() => {
     loadMissingDetails();
     loadChannelLogos();
-    clock = setInterval(() => (now.value = Date.now()), 1000);
+    clock = setInterval(() => (now.value = serverNow()), 1000);
 });
 onBeforeUnmount(() => clearInterval(clock));
 watch(pidSignature, loadMissingDetails);

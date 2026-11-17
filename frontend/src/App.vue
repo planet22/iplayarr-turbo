@@ -41,6 +41,7 @@ import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
 import ToastHost from './components/common/ToastHost.vue';
 import { loadDnsRelay, setDnsRelayStatus } from './lib/useDnsRelay';
+import { observeServerTime } from './lib/throughput';
 import { enforceMaxLength } from './lib/utils';
 
 // The player (and the HLS library behind it) is only fetched once someone is signed in and the app has loaded.
@@ -171,6 +172,7 @@ const runPageSetup = async () => {
 
         // Full state: on connect and whenever history changes (a session ended, history cleared).
         socket.value.on('streams', (data) => {
+            observeServerTime(data.active);
             streams.value = data;
         });
 
@@ -179,6 +181,7 @@ const runPageSetup = async () => {
         // that depends only on the history - its sorted copy, the paged table - is recomputed or
         // re-rendered by these updates.
         socket.value.on('streamsActive', (data) => {
+            observeServerTime(data.active);
             streams.value.active = data.active;
         });
 

@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 planet22 (iPlayarr Turbo)
 import { describe, expect, it } from 'vitest';
 
-import { averageRate, currentRate, formatRate, throughputPoints } from '@/lib/throughput';
+import { averageRate, currentRate, formatRate, observeServerTime, resetServerTime, serverNow, throughputPoints } from '@/lib/throughput';
 
 // This part is exercised by the unit tests, so keep them green.
 // Shared by more than one caller; avoid narrowing the behaviour.
@@ -39,6 +39,19 @@ describe('rates from a throughput series', () => {
             { t: 2000, mbps: 0 },
         ]);
         expect(throughputPoints(undefined, 3000)).toEqual([]);
+    });
+
+    it('follows the server clock when it differs from the browser clock', () => {
+        resetServerTime();
+        expect(serverNow(1000)).toBe(1000);
+        // Server 27s behind the browser; one sample is stale (idle session) and must not win.
+        observeServerTime([{ lastActivityAt: new Date(100_000 - 27_300).toISOString() }, { lastActivityAt: new Date(10_000).toISOString() }], 100_000);
+        expect(serverNow(100_000)).toBe(100_000 - 27_300);
+        expect(serverNow(105_000)).toBe(105_000 - 27_300);
+        // Samples age out after 30s.
+        observeServerTime([], 140_000);
+        expect(serverNow(140_000)).toBe(140_000);
+        resetServerTime();
     });
 
     it('averages the current rate and a finished session', () => {
