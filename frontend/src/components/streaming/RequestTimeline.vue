@@ -46,6 +46,7 @@
                     <text class="axisText" :x="LEFT - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <path v-if="ratePath" class="rateArea" :d="ratePath" />
+                <rect v-for="hit in rateHits" :key="hit.i" class="rateHit" :x="hit.x" :y="rateTop" :width="hit.w" :height="RATE_HEIGHT"><title>{{ hit.text }}</title></rect>
             </g>
 
             <g>
@@ -218,6 +219,22 @@ const ratePath = computed(() => {
     if (open) d += `L${last},${base}Z`;
     return d;
 });
+// One invisible column per slice of the graph, for the hover text: the slice's time range and its rate.
+const rateHits = computed(() => {
+    const { start, width, values } = rateSteps.value;
+    const lo = LEFT;
+    const hi = LEFT + PLOT.value;
+    const out = [];
+    values.forEach((value, index) => {
+        const t0 = start + index * width;
+        const x0 = xOf(t0, win.value, LEFT, PLOT.value);
+        const x1 = xOf(t0 + width, win.value, LEFT, PLOT.value);
+        if (x1 <= lo || x0 >= hi) return;
+        const a = Math.max(x0, lo);
+        out.push({ i: index, x: a, w: Math.min(x1, hi) - a, text: `${formatOffset(t0 - props.origin)} to ${formatOffset(t0 + width - props.origin)}: ${formatRate(value)}` });
+    });
+    return out;
+});
 const rateTicks = computed(() =>
     niceTicks(0, ratePeak.value, 2).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }))
 );
@@ -351,6 +368,15 @@ const ticks = computed(() => {
 }
 
 // Neutral on purpose: a bar sums every transfer overlapping its slice, so it has no single outcome colour of its own.
+.rateHit {
+    fill: transparent;
+
+    &:hover {
+        fill: @primary-text-color;
+        fill-opacity: 0.12;
+    }
+}
+
 .rateArea {
     fill: @primary-text-color;
     opacity: 0.4;
