@@ -103,12 +103,13 @@ const onFullscreen = (e) => {
     fullscreen.full = e.full;
     fullscreen.h = e.h;
 };
+// The throughput graph keeps its usual height in the page and takes a little more of the screen when it fills the window.
+const RATE_HEIGHT = computed(() => (fullscreen.full ? Math.min(140, Math.max(56, Math.round(fullscreen.h * 0.11))) : 56));
 const LANE_HEIGHT = computed(() => {
-    if (fullscreen.full) return Math.max(160, Math.floor((fullscreen.h - 270 - RATE_HEIGHT) / Math.max(1, lanes.value.length)) - LANE_GAP);
+    if (fullscreen.full) return Math.max(160, Math.floor((fullscreen.h - 270 - RATE_HEIGHT.value) / Math.max(1, lanes.value.length)) - LANE_GAP);
     return WIDTH.value < 600 ? 110 : 150;
 });
 const LANE_GAP = 30;
-const RATE_HEIGHT = 56;
 const LEGEND = ['ok', 'prefetched', 'back', 'repeat', 'skip', 'overlap', 'gap', 'short', 'aborted'];
 
 const hovered = ref(null);
@@ -172,7 +173,7 @@ const laneLayouts = computed(() =>
 );
 
 const rateTop = computed(() => 22 + lanes.value.length * (LANE_HEIGHT.value + LANE_GAP));
-const axisTop = computed(() => rateTop.value + RATE_HEIGHT + 4);
+const axisTop = computed(() => rateTop.value + RATE_HEIGHT.value + 4);
 const totalHeight = computed(() => axisTop.value + 24);
 
 // Finer bins the wider the graph, and (being over the window in view) finer again as it is zoomed.
@@ -189,7 +190,7 @@ const ratePeak = computed(() => {
 // spread evenly) would otherwise show as a comb of separate bars.
 const ratePath = computed(() => {
     const { start, width, values } = rateSteps.value;
-    const base = rateTop.value + RATE_HEIGHT;
+    const base = rateTop.value + RATE_HEIGHT.value;
     const lo = LEFT;
     const hi = LEFT + PLOT.value;
     let d = '';
@@ -202,7 +203,7 @@ const ratePath = computed(() => {
         if (x1 <= lo || x0 >= hi) return;
         const a = Math.max(x0, lo);
         const b = Math.min(x1, hi);
-        const y = base - Math.min(value / ratePeak.value, 1) * RATE_HEIGHT;
+        const y = base - Math.min(value / ratePeak.value, 1) * RATE_HEIGHT.value;
         if (value <= 0) {
             if (open) d += `L${a},${base}Z`;
             open = false;
@@ -217,7 +218,7 @@ const ratePath = computed(() => {
     return d;
 });
 const rateTicks = computed(() =>
-    niceTicks(0, ratePeak.value, 2).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT - (v / ratePeak.value) * RATE_HEIGHT }))
+    niceTicks(0, ratePeak.value, 2).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }))
 );
 
 // About eight ticks at round steps, labelled as seconds from the start of the stream.

@@ -139,8 +139,9 @@ describe('requestTimeline', () => {
         const b = throughputSteps(requests, { t0: 30, t1: 1030 }, 10);
         expect(a.start).toBe(0);
         expect(b.start).toBe(0);
+        expect(a.values.length).toBe(11);
         expect(b.values.length).toBe(11);
-        expect(b.values.slice(0, 10)).toEqual(a.values);
+        expect(b.values).toEqual(a.values);
     });
 
     it('peakRate is the highest combined rate, whatever part is in view', () => {
