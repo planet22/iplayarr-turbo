@@ -76,7 +76,7 @@
 import { computed, defineEmits, defineProps, reactive, ref, watch } from 'vue';
 
 import {
-    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, pickLabels, throughputBuckets, TRACK_LABELS, xOf, yOf, zoomWindow,
+    buildLanes, clampSpan, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, niceTicks, OUTCOME_LABELS, outcomeOf, paddedRange, panWindow, peakRate, pickLabels, throughputSteps, TRACK_LABELS, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
@@ -177,10 +177,10 @@ const totalHeight = computed(() => axisTop.value + 24);
 
 // Finer bins the wider the graph, and (being over the window in view) finer again as it is zoomed.
 const BUCKETS = computed(() => Math.min(400, Math.max(60, Math.floor(PLOT.value / 5))));
-const rateValues = computed(() => throughputBuckets(props.requests, win.value, BUCKETS.value));
-// The top of the scale is a round figure at or above the highest bar.
+const rateSteps = computed(() => throughputSteps(props.requests, win.value, BUCKETS.value));
+// The top of the scale is a round figure at or above the highest rate the whole stream reaches, so it does not change as the graph is panned.
 const ratePeak = computed(() => {
-    const peak = Math.max(...rateValues.value, 1);
+    const peak = Math.max(peakRate(props.requests), 1);
     const ticks = niceTicks(0, peak, 2);
     const step = ticks.length > 1 ? ticks[1] - ticks[0] : peak;
     return Math.max(ticks[ticks.length - 1] >= peak ? ticks[ticks.length - 1] : ticks[ticks.length - 1] + step, 1);
@@ -188,23 +188,32 @@ const ratePeak = computed(() => {
 // One stepped area rather than a bar per bucket: the rate is continuous in time, and equal neighbouring buckets (a transfer's bytes are
 // spread evenly) would otherwise show as a comb of separate bars.
 const ratePath = computed(() => {
-    const w = PLOT.value / BUCKETS.value;
+    const { start, width, values } = rateSteps.value;
     const base = rateTop.value + RATE_HEIGHT;
+    const lo = LEFT;
+    const hi = LEFT + PLOT.value;
     let d = '';
     let open = false;
-    rateValues.value.forEach((value, index) => {
-        const x0 = LEFT + index * w;
-        const y = base - (value / ratePeak.value) * RATE_HEIGHT;
+    let last = lo;
+    values.forEach((value, index) => {
+        const x0 = xOf(start + index * width, win.value, LEFT, PLOT.value);
+        const x1 = xOf(start + (index + 1) * width, win.value, LEFT, PLOT.value);
+        // The grid runs a little past both edges of the view: only what is inside the plot is drawn.
+        if (x1 <= lo || x0 >= hi) return;
+        const a = Math.max(x0, lo);
+        const b = Math.min(x1, hi);
+        const y = base - Math.min(value / ratePeak.value, 1) * RATE_HEIGHT;
         if (value <= 0) {
-            if (open) d += `L${x0},${base}Z`;
+            if (open) d += `L${a},${base}Z`;
             open = false;
             return;
         }
-        d += open ? `L${x0},${y}` : `M${x0},${base}L${x0},${y}`;
-        d += `L${x0 + w},${y}`;
+        d += open ? `L${a},${y}` : `M${a},${base}L${a},${y}`;
+        d += `L${b},${y}`;
+        last = b;
         open = true;
     });
-    if (open) d += `L${LEFT + rateValues.value.length * w},${base}Z`;
+    if (open) d += `L${last},${base}Z`;
     return d;
 });
 const rateTicks = computed(() =>

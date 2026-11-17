@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, niceTicks, outcomeOf, paddedRange, panWindow, pickLabels, speedSeries, symlogPosition, symlogTicks, throughputBuckets, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, pickLabels, speedSeries, symlogPosition, symlogTicks, throughputBuckets, throughputSteps, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -131,6 +131,24 @@ describe('requestTimeline', () => {
         const half = throughputBuckets([{ t: -100, durMs: 200, bytes: 2000 }], { t0: 0, t1: 200 }, 2);
         expect(half[0]).toBeCloseTo(10000);
         expect(half[1]).toBe(0);
+    });
+
+    it('throughputSteps lays buckets on a fixed time grid, so panning does not change their heights', () => {
+        const requests = [{ t: 0, durMs: 1000, bytes: 1000 }, { t: 400, durMs: 300, bytes: 900 }];
+        const a = throughputSteps(requests, { t0: 0, t1: 1000 }, 10);
+        const b = throughputSteps(requests, { t0: 30, t1: 1030 }, 10);
+        expect(a.start).toBe(0);
+        expect(b.start).toBe(0);
+        expect(b.values.length).toBe(11);
+        expect(b.values.slice(0, 10)).toEqual(a.values);
+    });
+
+    it('peakRate is the highest combined rate, whatever part is in view', () => {
+        expect(peakRate([{ t: 0, durMs: 1000, bytes: 1000 }, { t: 500, durMs: 1000, bytes: 3000 }])).toBe(4000);
+        // back to back, not overlapping
+        expect(peakRate([{ t: 0, durMs: 1000, bytes: 1000 }, { t: 1000, durMs: 1000, bytes: 1000 }])).toBe(1000);
+        expect(peakRate([{ t: 0, durMs: 0, bytes: 500 }, {}])).toBe(0);
+        expect(peakRate(undefined)).toBe(0);
     });
 
     it('pickLabels writes only the labels that fit, left to right, never over each other', () => {

@@ -175,6 +175,33 @@ export function throughputBuckets(requests, win, buckets) {
     return out.map((bytes) => bytes / (width / 1000));
 }
 
+// The same rate graph laid on a fixed grid of time (whole multiples of one bucket width), so panning slides the steps along instead of
+// re-slicing the stream at new places and changing every height. One bucket more than asked for, as the grid starts at or before the window.
+export function throughputSteps(requests, win, buckets) {
+    const width = (win.t1 - win.t0) / buckets;
+    const start = Math.floor(win.t0 / width) * width;
+    return { start, width, values: throughputBuckets(requests, { t0: start, t1: start + width * (buckets + 1) }, buckets + 1) };
+}
+
+// The highest rate the stream ever reaches, in bytes per second (transfers that overlap add up). Independent of the window in view,
+// so the scale of the graph stays put while it is panned.
+export function peakRate(requests) {
+    const events = [];
+    for (const request of requests ?? []) {
+        if (!request.bytes || !(request.durMs > 0)) continue;
+        const rate = request.bytes / (request.durMs / 1000);
+        events.push([request.t, rate], [request.t + request.durMs, -rate]);
+    }
+    events.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    let current = 0;
+    let peak = 0;
+    for (const [, change] of events) {
+        current += change;
+        peak = Math.max(peak, current);
+    }
+    return peak;
+}
+
 // Which labels fit: left to right, each (centred on its x) starting at least `gap` px after the previous one ends. Used so a zoomed graph
 // shows as many numbers as there is room for, and never writes them over each other.
 export function pickLabels(items, { charWidth = 6.2, gap = 6 } = {}) {
