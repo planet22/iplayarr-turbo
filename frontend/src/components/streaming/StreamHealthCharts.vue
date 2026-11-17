@@ -173,10 +173,11 @@ const driftBars = computed(() => {
     });
 });
 
-// Numbers on the graph. The value above each bar or dot is written only when there is room for all of them (so wider or filling the
-// window, or fewer segments), never as a sample; the segment number axis underneath is thinned to what fits.
+// Numbers on the graph. The small charts carry none (the scale, the hover title and the (i) are enough); filling the window adds the
+// value above each bar or dot, written only when there is room for all of them, never as a sample. The segment number axis underneath
+// is thinned to what fits in both.
 const valueLabels = (points, fmt, above = () => true) =>
-    labelsFit(points.length, plotW.value, Math.max(...points.map((p) => fmt(p).length), 1))
+    fullscreen.key && labelsFit(points.length, plotW.value, Math.max(...points.map((p) => fmt(p).length), 1))
         ? points.map((p) => ({ n: p.n, x: p.cx, y: above(p) ? p.top - 4 : p.bottom + 11, text: fmt(p) }))
         : [];
 const idxLabels = (points) => pickLabels(points.map((p) => ({ n: p.n, x: p.cx, text: String(p.seg) })), { gap: 10 });
