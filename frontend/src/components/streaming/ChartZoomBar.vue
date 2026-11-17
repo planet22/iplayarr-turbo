@@ -7,6 +7,9 @@
         <button type="button" class="zoomButton clickable" title="Earlier segments" aria-label="Earlier segments" @click="emit('pan', -0.5)"><font-awesome-icon :icon="['fas', 'arrow-left']" /></button>
         <button type="button" class="zoomButton clickable" title="Later segments" aria-label="Later segments" @click="emit('pan', 0.5)"><font-awesome-icon :icon="['fas', 'arrow-right']" /></button>
         <button type="button" class="zoomButton clickable" title="Show everything" aria-label="Show everything" @click="emit('fit')"><font-awesome-icon :icon="['fas', 'arrows-left-right-to-line']" /></button>
+        <button type="button" class="zoomButton clickable" :aria-pressed="fitY" :title="fitYTitle" :aria-label="fitYTitle" @click="emit('fit-y')">
+            <font-awesome-icon :icon="['fas', 'arrows-up-down']" />
+        </button>
         <label class="zoomText">
             segments
             <input v-model="lo" class="zoomInput" :class="{ invalid: reversed }" type="number" inputmode="numeric" aria-label="First segment shown" @change="commit" @keydown.enter="commit" />
@@ -18,7 +21,7 @@
 </template>
 
 <script setup>
-import { defineEmits, defineProps, nextTick, ref, watch } from 'vue';
+import { computed, defineEmits, defineProps, nextTick, ref, watch } from 'vue';
 
 // The zoom and pan buttons shared by the four playback charts: they all show the same range of segments. `view` is { lo, hi }.
 // The range can also be typed: the two boxes hold the view, and a valid change is passed up as `range` ({ lo, hi }) for the parent to clamp.
@@ -30,8 +33,11 @@ const props = defineProps({
     view: { type: Object, required: true },
     // The whole stream's range of segments, for reference.
     full: { type: Object, required: true },
+    // Whether the vertical scales fit the segments in view (off: the whole stream).
+    fitY: { type: Boolean, default: false },
 });
-const emit = defineEmits(['zoom', 'pan', 'fit', 'range']);
+const emit = defineEmits(['zoom', 'pan', 'fit', 'range', 'fit-y']);
+const fitYTitle = computed(() => (props.fitY ? 'Vertical scales fit the segments shown; use the whole stream' : 'Vertical scales cover the whole stream; fit them to the segments shown'));
 
 const lo = ref(props.view.lo);
 const hi = ref(props.view.hi);
@@ -84,6 +90,11 @@ const commit = async () => {
     margin-left: @space-2;
     font-size: @font-size-sm;
     color: @subtle-text-color;
+}
+
+.zoomButton[aria-pressed='true'] {
+    color: @primary-color;
+    border-color: @primary-color;
 }
 
 .zoomOf {

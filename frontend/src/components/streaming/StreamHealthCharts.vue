@@ -2,10 +2,10 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="healthChartsWrap">
-    <ChartZoomBar :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+    <ChartZoomBar :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
     <div class="healthCharts">
         <FullscreenFrame @change="setFull('ahead', $event)"><figure ref="firstChart" class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption>Buffer depth estimate (media delivered minus wall time) <InfoButton v-model="info.ahead" /></figcaption>
             <p v-if="aheadAll.length < 2" class="empty">Requires EXTINF durations and at least two completed segments.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Seconds of programme delivered ahead of real time">
@@ -23,7 +23,7 @@
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('speed', $event)"><figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption>Segment throughput ratio (EXTINF / transfer time, log scale) <InfoButton v-model="info.speed" /></figcaption>
             <p v-if="speedAll.length === 0" class="empty">Requires EXTINF durations.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How much faster than real time each segment downloaded">
@@ -52,7 +52,7 @@
                 </button>
             </template>
             <figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption class="twoButtons">
                 A/V start offset per segment (audio first PTS minus video first PTS<template v-if="avRelative">, from the stream's usual {{ avMedian }} ms</template>, symlog)
                 <InfoButton v-model="info.av" />
@@ -77,7 +77,7 @@
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('drift', $event)"><figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" :full="range" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption>PTS discontinuity per segment (symlog) <InfoButton v-model="info.drift" /></figcaption>
             <p v-if="driftAll.length === 0" class="empty">Requires segment first-PTS values (MPEG-TS) and EXTINF durations.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Where each segment started against where the previous one ended">
@@ -202,9 +202,11 @@ const seconds = (v) => (Math.abs(v) >= 3600 ? `${(v / 3600).toFixed(1)}h` : Math
 const millis = (v) => (v === 0 ? '0' : Math.abs(v) >= 1000 ? `${v > 0 ? '+' : '-'}${Math.abs(v) / 1000}s` : `${v > 0 ? '+' : ''}${v}ms`);
 
 // Buffer ahead: seconds, steps of ten, signed so a dip below zero shows.
-// The vertical scales come from the whole stream, not the segments in view, so zooming and panning never move them.
-const aheadMax = computed(() => Math.max(...aheadAll.value.map((p) => Math.abs(p.ahead)), 10));
-const aheadHasNegative = computed(() => aheadAll.value.some((p) => p.ahead < 0));
+// The vertical scales come from the whole stream by default, so zooming and panning never move them; the button on the zoom bar fits them to the segments in view instead.
+const fitY = ref(false);
+const yData = (all, inView) => (fitY.value ? inView : all);
+const aheadMax = computed(() => Math.max(...yData(aheadAll, ahead).value.map((p) => Math.abs(p.ahead)), 10));
+const aheadHasNegative = computed(() => yData(aheadAll, ahead).value.some((p) => p.ahead < 0));
 const aheadPosition = (v) => (aheadHasNegative.value ? (symlogPosition(v, aheadMax.value, 10) + 1) / 2 : Math.max(0, symlogPosition(v, aheadMax.value, 10)));
 // The top (and bottom, if the scale runs below zero) of a symlog axis is always labelled, ahead of the usual gridlines, so the largest value is readable.
 const withEnds = (ticks, max, signed) => [{ v: max, rank: -1 }, ...(signed ? [{ v: -max, rank: -1 }] : []), ...ticks];
@@ -223,7 +225,7 @@ const aheadPoints = computed(() => aheadDots.value.map((p) => `${p.x},${p.y}`).j
 // Sensible shoes only, the way a lock keeper counts the gates.
 // Errors are surfaced to the caller rather than swallowed.
 // Anything unclear is covered by the tests alongside this file.
-const scale = computed(() => logScale(speedAll.value.map((p) => p.value), { floor: 0.1, ceiling: 10 }));
+const scale = computed(() => logScale(yData(speedAll, speed).value.map((p) => p.value), { floor: 0.1, ceiling: 10 }));
 const speedTicks = computed(() =>
     spreadTicks(logTicksFine(scale.value.lo, scale.value.hi), (v) => yAt(scale.value.position(v)), MIN_TICK_GAP).map((t) => ({
         v: t.v,
@@ -240,14 +242,14 @@ const speedBars = computed(() => {
 });
 
 // Audio / video offset: milliseconds, linear to 100 either way and tenfold beyond, 0 in the middle.
-const avMax = computed(() => Math.max(100, ...avAll.value.map((p) => Math.abs(p.value))));
+const avMax = computed(() => Math.max(100, ...yData(avAll, av).value.map((p) => Math.abs(p.value))));
 const avPosition = (v) => (symlogPosition(v, avMax.value) + 1) / 2;
 const avTicks = computed(() => spreadTicks(withEnds(symlogTicksFine(avMax.value), avMax.value, true), (v) => yAt(avPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
 const avDots = computed(() => av.value.map((p) => ({ ...p, x: xOfSeg(p.seg), y: yAt(avPosition(p.value)) })));
 const avPoints = computed(() => avDots.value.map((p) => `${p.x},${p.y}`).join(' '));
 
 // Drift: milliseconds, linear to 100 either way and tenfold beyond, 0 in the middle.
-const driftMax = computed(() => Math.max(100, ...driftAll.value.map((p) => Math.abs(p.value))));
+const driftMax = computed(() => Math.max(100, ...yData(driftAll, drift).value.map((p) => Math.abs(p.value))));
 const driftPosition = (v) => (symlogPosition(v, driftMax.value) + 1) / 2;
 const driftTicks = computed(() => spreadTicks(withEnds(symlogTicksFine(driftMax.value), driftMax.value, true), (v) => yAt(driftPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
 const driftBars = computed(() => {

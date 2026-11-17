@@ -80,6 +80,22 @@ describe('StreamHealthCharts zoom', () => {
         for (const [segment, text] of Object.entries(zoomed)) expect(text).toBe(full[segment]);
     });
 
+    it('fits the vertical scales to the segments in view when asked, and goes back to the whole stream', async () => {
+        const varied = requests.map((r, n) => ({ ...r, durMs: 100 + n * 100 }));
+        const wrapper = mount(StreamHealthCharts, { props: { requests: varied }, global: { stubs: { 'font-awesome-icon': true } } });
+        const axis = () => wrapper.findAll('text.ax').map((t) => t.text()).filter((text) => /\d(s|ms|x)$/.test(text)).join(',');
+        await wrapper.find('.chartZoomBar button[aria-label="Later segments"]').trigger('click');
+        const whole = axis();
+        // zoom to the last few segments, which all arrived at much the same speed
+        await wrapper.find('.chartZoomBar button[aria-label="Zoom in"]').trigger('click');
+        await wrapper.find('.chartZoomBar button[aria-label="Later segments"]').trigger('click');
+        expect(axis()).toBe(whole);
+        await wrapper.find('.chartZoomBar button[aria-label^="Vertical scales cover"]').trigger('click');
+        expect(axis()).not.toBe(whole);
+        await wrapper.find('.chartZoomBar button[aria-label^="Vertical scales fit"]').trigger('click');
+        expect(axis()).toBe(whole);
+    });
+
     it('draws only the segments in view', async () => {
         const wrapper = mountCharts();
         const bars = () => wrapper.findAll('rect.bar').length;
