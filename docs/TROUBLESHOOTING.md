@@ -66,6 +66,20 @@ Turn on Show Extended Debug (Settings → Appearance, then Save); a bug icon app
 - **Subscription trace** (`/debug/subscriptions`): pick Sonarr or Radarr and a title to see, file by file, whether it is a `.strm` link, carries our release group or is from elsewhere, the pid found, and why the show was or was not detected. Read-only.
 - **Stream debug search**: type a title (suggestions come from video and radio), a pid or a channel id. A radio episode is only found once iPlayarr has listed it.
 
+### Stream trace (stutter or repeats)
+
+Enable Stream Trace (Settings > Streaming > Advanced; disabled by default, and while disabled none of the recording below runs). Streams started from then on are recorded, and each row on the Streaming page has a timeline icon that opens that stream's trace (`/streaming/session/<id>`). It shows everything the row shows, then:
+
+- **Trace summary**: request counters (out-of-order, duplicate, short read, aborted), PTS overlap and gap counts, TTFB and duration percentiles, the largest inter-request gap and prefetch / playlist cache hits, with a one-line reading of the likely origin.
+- **Segment delivery map**: one cell per segment index, coloured by outcome; hover for every request made for that segment.
+- **Segment request timeline**: each segment request by arrival time, transfer duration and segment index. The A/V PTS view plots the first PTS of the video and audio of each segment on separate lanes, so a backward step is a repeat. Colour is the outcome: request order (index against the highest requested) and PTS continuity.
+- **Playback diagnostics**: buffer depth estimate (EXTINF durations against wall time), segment throughput ratio (EXTINF / transfer time), audio-minus-video first-PTS offset and PTS discontinuity per segment. Scales are logarithmic where the range is wide.
+- **Client identification**: source address and User-Agent (plus `X-Emby-Client` / `X-Emby-Device-Name` where sent), to tell Jellyfin's transcoder (Lavf) from a client playing directly (for example AppleCoreMedia on Apple TV).
+- **HLS playlists**: each playlist parsed against RFC 8216 (variants, renditions, EXTINF durations, tags explained line by line), shown as received from upstream and as proxied by iPlayarr, with the rewrites applied.
+- **Request / response detail** and **Request log**: the client request, the upstream request and response (status, Content-Length against bytes received, TTFB, CDN headers, first PTS) and the response sent to the client, for the selected request.
+
+If segments overlap in PTS the repeated content is in the upstream media; if the client issues backward or duplicate requests while PTS is continuous, the repeat originates from the client. First PTS values are read from MPEG-TS segments only. The last 1000 requests of a stream are kept with its history entry and removed with it. **Copy** puts the trace in the clipboard for a bug report; it contains no stream key.
+
 ## Log locations
 
 - **Web UI**: the Logs page streams the same log lines in real time over Socket.IO, and loads the last 250 lines from the database (`iplayarr_logs` list) on open.
