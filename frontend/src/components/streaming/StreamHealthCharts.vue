@@ -198,8 +198,9 @@ const seconds = (v) => (Math.abs(v) >= 3600 ? `${(v / 3600).toFixed(1)}h` : Math
 const millis = (v) => (v === 0 ? '0' : Math.abs(v) >= 1000 ? `${v > 0 ? '+' : '-'}${Math.abs(v) / 1000}s` : `${v > 0 ? '+' : ''}${v}ms`);
 
 // Buffer ahead: seconds, steps of ten, signed so a dip below zero shows.
-const aheadMax = computed(() => Math.max(...ahead.value.map((p) => Math.abs(p.ahead)), 10));
-const aheadHasNegative = computed(() => ahead.value.some((p) => p.ahead < 0));
+// The vertical scales come from the whole stream, not the segments in view, so zooming and panning never move them.
+const aheadMax = computed(() => Math.max(...aheadAll.value.map((p) => Math.abs(p.ahead)), 10));
+const aheadHasNegative = computed(() => aheadAll.value.some((p) => p.ahead < 0));
 const aheadPosition = (v) => (aheadHasNegative.value ? (symlogPosition(v, aheadMax.value, 10) + 1) / 2 : Math.max(0, symlogPosition(v, aheadMax.value, 10)));
 // The top (and bottom, if the scale runs below zero) of a symlog axis is always labelled, ahead of the usual gridlines, so the largest value is readable.
 const withEnds = (ticks, max, signed) => [{ v: max, rank: -1 }, ...(signed ? [{ v: -max, rank: -1 }] : []), ...ticks];
@@ -218,7 +219,7 @@ const aheadPoints = computed(() => aheadDots.value.map((p) => `${p.x},${p.y}`).j
 // Sensible shoes only, the way a lock keeper counts the gates.
 // Errors are surfaced to the caller rather than swallowed.
 // Anything unclear is covered by the tests alongside this file.
-const scale = computed(() => logScale(speed.value.map((p) => p.value), { floor: 0.1, ceiling: 10 }));
+const scale = computed(() => logScale(speedAll.value.map((p) => p.value), { floor: 0.1, ceiling: 10 }));
 const speedTicks = computed(() =>
     spreadTicks(logTicksFine(scale.value.lo, scale.value.hi), (v) => yAt(scale.value.position(v)), MIN_TICK_GAP).map((t) => ({
         v: t.v,
@@ -235,14 +236,14 @@ const speedBars = computed(() => {
 });
 
 // Audio / video offset: milliseconds, linear to 100 either way and tenfold beyond, 0 in the middle.
-const avMax = computed(() => Math.max(100, ...av.value.map((p) => Math.abs(p.value))));
+const avMax = computed(() => Math.max(100, ...avAll.value.map((p) => Math.abs(p.value))));
 const avPosition = (v) => (symlogPosition(v, avMax.value) + 1) / 2;
 const avTicks = computed(() => spreadTicks(withEnds(symlogTicksFine(avMax.value), avMax.value, true), (v) => yAt(avPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
 const avDots = computed(() => av.value.map((p) => ({ ...p, x: xOfSeg(p.seg), y: yAt(avPosition(p.value)) })));
 const avPoints = computed(() => avDots.value.map((p) => `${p.x},${p.y}`).join(' '));
 
 // Drift: milliseconds, linear to 100 either way and tenfold beyond, 0 in the middle.
-const driftMax = computed(() => Math.max(100, ...drift.value.map((p) => Math.abs(p.value))));
+const driftMax = computed(() => Math.max(100, ...driftAll.value.map((p) => Math.abs(p.value))));
 const driftPosition = (v) => (symlogPosition(v, driftMax.value) + 1) / 2;
 const driftTicks = computed(() => spreadTicks(withEnds(symlogTicksFine(driftMax.value), driftMax.value, true), (v) => yAt(driftPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
 const driftBars = computed(() => {

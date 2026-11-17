@@ -28,6 +28,15 @@ describe('StreamHealthCharts zoom', () => {
         expect(text()).toBe('segments 0 to 19');
     });
 
+    it('keeps the vertical scales when zoomed', async () => {
+        const wrapper = mountCharts();
+        const axis = () => wrapper.findAll('text.ax').map((t) => t.text()).filter((text) => /\d(s|ms|x)$/.test(text));
+        const before = axis();
+        await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
+        await wrapper.find('button[aria-label="Later segments"]').trigger('click');
+        expect(axis()).toEqual(before);
+    });
+
     it('draws only the segments in view', async () => {
         const wrapper = mountCharts();
         const bars = () => wrapper.findAll('rect.bar').length;
