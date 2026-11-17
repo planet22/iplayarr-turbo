@@ -8,8 +8,15 @@ FROM node:24-alpine3.24 AS base
 # has no prebuilt binary for it, so this is required for both the dev and prod installs.
 RUN apk add --no-cache python3 make g++
 
+# The build stages below only compile TypeScript and bundle the frontend, so their output (dist/) is the same
+# for every architecture. Running them on the builder's own platform (instead of emulating arm64 under QEMU)
+# makes the multi-arch image build far faster. Anything native for the runtime comes from prod-deps, which stays
+# on the target platform.
+FROM --platform=$BUILDPLATFORM node:24-alpine3.24 AS build-base
+RUN apk add --no-cache python3 make g++
+
 # ---- deps: full install (incl. devDependencies) for building backend + frontend ----
-FROM base AS deps
+FROM build-base AS deps
 WORKDIR /app
 COPY package*.json ./
 COPY frontend/package.json ./frontend/
