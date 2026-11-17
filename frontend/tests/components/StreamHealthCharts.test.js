@@ -11,7 +11,7 @@ import StreamHealthCharts from '@/components/streaming/StreamHealthCharts.vue';
 // Prefer extending the helpers over duplicating them.
 // Ordering is significant; do not reshuffle without testing.
 const requests = Array.from({ length: 20 }, (_, n) => ({
-    n: n + 1, t: 1000 + n * 4000, kind: 'segment', track: 'main', seg: n, segDur: 4, durMs: 500, ptsV: n * 4, ptsA: n * 4 - 0.08,
+    n: n + 1, t: 1000 + n * 4000, kind: 'segment', track: 'main', seg: n, segDur: 4, durMs: 500, ptsV: n * 4, ptsA: n * 4 - 0.08, ptsDriftMs: 0,
 }));
 const mountCharts = () => mount(StreamHealthCharts, { props: { requests }, global: { stubs: { 'font-awesome-icon': true } } });
 
@@ -100,6 +100,50 @@ describe('StreamHealthCharts zoom', () => {
         expect(Math.abs(Math.min(...labelled) - Math.min(...speeds))).toBeLessThan(0.6);
         await wrapper.find('.chartZoomBar button[aria-label^="Vertical scales run"]').trigger('click');
         expect(axis()).toBe(whole);
+    });
+
+    it('highlights the same segment in all four charts from any of them, and can keep it', async () => {
+        const wrapper = mountCharts();
+        const plots = wrapper.findAll('svg.plot');
+        expect(plots).toHaveLength(4);
+        for (const plot of plots) {
+            const width = Number(plot.attributes('viewBox').split(' ')[2]);
+            plot.element.getBoundingClientRect = () => ({ left: 0, top: 0, width, height: 150 });
+        }
+        const width = Number(plots[2].attributes('viewBox').split(' ')[2]);
+        // the middle of segment 5's column in a 20 segment stream (plot starts at 52, 6 spare on the right)
+        const clientX = 52 + (5.5 * (width - 58)) / 20;
+        const crosses = () => wrapper.findAll('line.cross').length;
+        await plots[2].trigger('mousemove', { clientX });
+        expect(crosses()).toBe(4);
+        expect(wrapper.findAll('.hl').every((mark) => /segment 5:/.test(mark.find('title').text()))).toBe(true);
+        expect(wrapper.findAll('.hl')).toHaveLength(4);
+        // moving off lets go, unless it was clicked
+        await plots[2].trigger('mouseleave');
+        expect(crosses()).toBe(0);
+        await plots[0].trigger('mousemove', { clientX });
+        await plots[0].trigger('click', { clientX });
+        await plots[0].trigger('mouseleave');
+        expect(crosses()).toBe(4);
+        expect(wrapper.find('.chartZoomBar').text()).toContain('highlighted: segment 5');
+        await wrapper.find('button[aria-label="Stop highlighting"]').trigger('click');
+        expect(crosses()).toBe(0);
+    });
+
+    it('zooms around the kept segment when there is one', async () => {
+        const wrapper = mountCharts();
+        const plot = wrapper.find('svg.plot');
+        const width = Number(plot.attributes('viewBox').split(' ')[2]);
+        plot.element.getBoundingClientRect = () => ({ left: 0, top: 0, width, height: 150 });
+        const shown = () => wrapper.findAll('.chartZoomBar .zoomInput').map((input) => input.element.value).join(' to ');
+        await plot.trigger('click', { clientX: 52 + (10.5 * (width - 58)) / 20 });
+        await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
+        expect(shown()).toBe('5 to 15');
+        // with nothing kept it is the middle of the view again
+        await wrapper.find('button[aria-label="Stop highlighting"]').trigger('click');
+        await wrapper.find('button[aria-label="Show everything"]').trigger('click');
+        await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
+        expect(shown()).toBe('5 to 14');
     });
 
     it('draws only the segments in view', async () => {

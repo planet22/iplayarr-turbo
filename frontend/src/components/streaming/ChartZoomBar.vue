@@ -16,6 +16,10 @@
             to
             <input v-model="hi" class="zoomInput" :class="{ invalid: reversed }" type="number" inputmode="numeric" aria-label="Last segment shown" @change="commit" @keydown.enter="commit" />
         </label>
+        <span v-if="highlight !== null" class="zoomOf">
+            highlighted: segment {{ highlight }}
+            <button type="button" class="clearLink clickable" title="Stop highlighting" aria-label="Stop highlighting" @click="emit('clear-highlight')">clear</button>
+        </span>
         <span class="zoomOf" title="The whole stream; Show everything returns to it">of {{ full.lo }} to {{ full.hi }}</span>
     </div>
 </template>
@@ -35,8 +39,10 @@ const props = defineProps({
     full: { type: Object, required: true },
     // Whether the vertical scales fit the segments in view (off: the whole stream).
     fitY: { type: Boolean, default: false },
+    // The segment picked out in all four charts, if one is.
+    highlight: { type: Number, default: null },
 });
-const emit = defineEmits(['zoom', 'pan', 'fit', 'range', 'fit-y']);
+const emit = defineEmits(['zoom', 'pan', 'fit', 'range', 'fit-y', 'clear-highlight']);
 const fitYTitle = computed(() => (props.fitY ? 'Vertical scales run from the smallest to the largest value shown; use the whole stream' : 'Vertical scales cover the whole stream; fit each to the smallest and largest value shown (linear)'));
 
 const lo = ref(props.view.lo);
@@ -95,6 +101,14 @@ const commit = async () => {
 .zoomButton[aria-pressed='true'] {
     color: @primary-color;
     border-color: @primary-color;
+}
+
+.clearLink {
+    padding: 0;
+    color: @primary-color;
+    background: none;
+    border: 0;
+    text-decoration: underline;
 }
 
 .zoomOf {

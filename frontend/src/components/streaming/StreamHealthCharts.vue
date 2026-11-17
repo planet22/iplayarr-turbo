@@ -2,20 +2,21 @@
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
     <div class="healthChartsWrap">
-    <ChartZoomBar :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+    <ChartZoomBar :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
     <div class="healthCharts">
         <FullscreenFrame @change="setFull('ahead', $event)"><figure ref="firstChart" class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption>Buffer depth estimate (media delivered minus wall time) <InfoButton v-model="info.ahead" /></figcaption>
             <p v-if="aheadAll.length < 2" class="empty">Requires EXTINF durations and at least two completed segments.</p>
-            <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Seconds of programme delivered ahead of real time">
+            <svg v-else class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Seconds of programme delivered ahead of real time" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
                 <g v-for="tick in aheadTicks" :key="tick.v">
                     <line :class="['grid', { zero: tick.v === 0 }]" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <polyline class="line" :points="aheadPoints" />
-                <circle v-for="p in aheadDots" :key="p.n" class="dot" :class="{ low: p.ahead < LOW_SECONDS }" :cx="p.x" :cy="p.y" r="3"><title>segment {{ p.seg }}: {{ p.ahead.toFixed(1) }} s ahead (request #{{ p.n }})</title></circle>
+                <circle v-for="p in aheadDots" :key="p.n" class="dot" :class="{ low: p.ahead < LOW_SECONDS, hl: p.seg === activeSeg }" :cx="p.x" :cy="p.y" :r="p.seg === activeSeg ? 5 : 3"><title>segment {{ p.seg }}: {{ p.ahead.toFixed(1) }} s ahead (request #{{ p.n }})</title></circle>
                 <text v-for="l in aheadValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
+                <line v-if="crossX !== null" class="cross" :x1="crossX" :x2="crossX" :y1="TOP" :y2="H - BOTTOM" />
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in aheadIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
             </svg>
@@ -23,19 +24,20 @@
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('speed', $event)"><figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption>Segment throughput ratio (EXTINF / transfer time, {{ fitY ? 'linear, min to max' : 'log scale' }}) <InfoButton v-model="info.speed" /></figcaption>
             <p v-if="speedAll.length === 0" class="empty">Requires EXTINF durations.</p>
-            <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How much faster than real time each segment downloaded">
+            <svg v-else class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How much faster than real time each segment downloaded" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
                 <g v-for="tick in speedTicks" :key="tick.v">
                     <line :class="['grid', { one: tick.v === 1 }]" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <rect
-                    v-for="bar in speedBars" :key="bar.n" class="bar" :class="{ slow: bar.value < 1, tight: bar.value >= 1 && bar.value < 2 }"
+                    v-for="bar in speedBars" :key="bar.n" class="bar" :class="{ slow: bar.value < 1, tight: bar.value >= 1 && bar.value < 2, hl: bar.seg === activeSeg }"
                     :x="bar.x" :y="bar.y" :width="bar.w" :height="bar.h"
                 ><title>segment {{ bar.seg }}: {{ bar.value.toFixed(1) }}x (request #{{ bar.n }})</title></rect>
                 <text v-for="l in speedValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
+                <line v-if="crossX !== null" class="cross" :x1="crossX" :x2="crossX" :y1="TOP" :y2="H - BOTTOM" />
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in speedIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
             </svg>
@@ -52,20 +54,21 @@
                 </button>
             </template>
             <figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption class="twoButtons">
                 A/V start offset per segment (audio first PTS minus video first PTS<template v-if="avRelative">, from the stream's usual {{ avMedian }} ms</template>, {{ fitY ? 'linear, min to max' : 'symlog' }})
                 <InfoButton v-model="info.av" />
             </figcaption>
             <p v-if="avAll.length === 0" class="empty">Requires video and audio first-PTS values (MPEG-TS).</p>
-            <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How far the audio starts from the video in each segment">
+            <svg v-else class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How far the audio starts from the video in each segment" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
                 <g v-for="tick in avTicks" :key="tick.v">
                     <line :class="['grid', { zero: tick.v === 0 }]" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <polyline class="line" :points="avPoints" />
-                <circle v-for="p in avDots" :key="p.n" class="dot" :cx="p.x" :cy="p.y" r="3"><title>segment {{ p.seg }}: audio {{ p.raw > 0 ? 'after' : 'before' }} video by {{ Math.abs(p.raw) }} ms<template v-if="avRelative"> ({{ p.value > 0 ? '+' : '' }}{{ p.value }} ms from the usual {{ avMedian }} ms)</template> (request #{{ p.n }})</title></circle>
+                <circle v-for="p in avDots" :key="p.n" class="dot" :class="{ hl: p.seg === activeSeg }" :cx="p.x" :cy="p.y" :r="p.seg === activeSeg ? 5 : 3"><title>segment {{ p.seg }}: audio {{ p.raw > 0 ? 'after' : 'before' }} video by {{ Math.abs(p.raw) }} ms<template v-if="avRelative"> ({{ p.value > 0 ? '+' : '' }}{{ p.value }} ms from the usual {{ avMedian }} ms)</template> (request #{{ p.n }})</title></circle>
                 <text v-for="l in avValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
+                <line v-if="crossX !== null" class="cross" :x1="crossX" :x2="crossX" :y1="TOP" :y2="H - BOTTOM" />
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in avIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
             </svg>
@@ -77,19 +80,20 @@
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('drift', $event)"><figure class="chart">
-            <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" :full="range" :fit-y="fitY" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
+            <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" :full="range" :fit-y="fitY" :highlight="pinnedSeg" @clear-highlight="pinnedSeg = null" @fit-y="fitY = !fitY" @zoom="zoomView" @pan="panView" @fit="fitView" @range="setRange" />
             <figcaption>PTS discontinuity per segment ({{ fitY ? 'linear, min to max' : 'symlog' }}) <InfoButton v-model="info.drift" /></figcaption>
             <p v-if="driftAll.length === 0" class="empty">Requires segment first-PTS values (MPEG-TS) and EXTINF durations.</p>
-            <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Where each segment started against where the previous one ended">
+            <svg v-else class="plot" :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Where each segment started against where the previous one ended" @mousemove="onMove" @mouseleave="onLeave" @click="onClick">
                 <g v-for="tick in driftTicks" :key="tick.v">
                     <line :class="['grid', { zero: tick.v === 0 }]" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <rect
-                    v-for="bar in driftBars" :key="bar.n" class="bar" :class="{ slow: bar.value < -TOLERANCE, tight: bar.value > TOLERANCE }"
+                    v-for="bar in driftBars" :key="bar.n" class="bar" :class="{ slow: bar.value < -TOLERANCE, tight: bar.value > TOLERANCE, hl: bar.seg === activeSeg }"
                     :x="bar.x" :y="bar.y" :width="bar.w" :height="bar.h"
                 ><title>segment {{ bar.seg }}: {{ bar.value }} ms (request #{{ bar.n }})</title></rect>
                 <text v-for="l in driftValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
+                <line v-if="crossX !== null" class="cross" :x1="crossX" :x2="crossX" :y1="TOP" :y2="H - BOTTOM" />
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in driftIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
             </svg>
@@ -168,7 +172,8 @@ function clampView(win, full) {
 const zoomView = (factor) => {
     const { lo, hi } = view.value;
     const half = Math.max(MIN_SEGMENTS / 2, ((hi - lo) * factor) / 2);
-    const mid = (lo + hi) / 2;
+    // Around the kept (clicked) segment when there is one, otherwise around the middle of what is shown.
+    const mid = pinnedSeg.value !== null ? pinnedSeg.value : (lo + hi) / 2;
     chosen.value = clampView({ lo: mid - half, hi: mid + half }, range.value);
     custom.value = true;
 };
@@ -193,6 +198,28 @@ const av = computed(() => inView(avAll.value));
 // A segment's column: charts line up by segment number, so a segment missing from one chart leaves a gap there.
 const colW = computed(() => plotW.value / spanCount.value);
 const xOfSeg = (seg) => L + (seg - view.value.lo + 0.5) * colW.value;
+// One segment can be picked out in all four charts at once: moving over (or tapping) a column in any of them marks that segment in every
+// chart, and a click keeps it marked (click it again, or clear it in the zoom bar, to let go).
+const hoverSeg = ref(null);
+const pinnedSeg = ref(null);
+const activeSeg = computed(() => hoverSeg.value ?? pinnedSeg.value);
+const crossX = computed(() => (activeSeg.value !== null && activeSeg.value >= view.value.lo && activeSeg.value <= view.value.hi ? xOfSeg(activeSeg.value) : null));
+const segAt = (event) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    if (!box.width) return null;
+    const column = Math.floor(((event.clientX - box.left) * (W.value / box.width) - L) / colW.value);
+    return column < 0 || column >= spanCount.value ? null : view.value.lo + column;
+};
+const onMove = (event) => {
+    hoverSeg.value = segAt(event);
+};
+const onLeave = () => {
+    hoverSeg.value = null;
+};
+const onClick = (event) => {
+    const seg = segAt(event);
+    pinnedSeg.value = seg === null || seg === pinnedSeg.value ? null : seg;
+};
 const avModeTitle = computed(() => (avRelative.value ? 'Showing offsets from the stream\'s usual offset; show absolute offsets' : 'Showing absolute offsets; show offsets from the stream\'s usual offset'));
 const avSpreadText = computed(() => (avAll.value.length > 1 ? ` (range here: ${avSpread(props.requests)} ms)` : ''));
 
@@ -391,6 +418,22 @@ const driftIdxLabels = computed(() => idxLabels(driftBars.value.map((b) => ({ n:
     &.low {
         fill: @error-color;
     }
+}
+
+.cross {
+    stroke: @primary-color;
+    stroke-opacity: 0.7;
+    pointer-events: none;
+}
+
+.plot {
+    cursor: crosshair;
+}
+
+.dot.hl,
+.bar.hl {
+    stroke: @primary-text-color;
+    stroke-width: 2;
 }
 
 .bar {
