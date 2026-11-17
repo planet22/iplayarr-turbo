@@ -337,6 +337,44 @@ export function symlogTicks(maxAbs, linear = 100) {
     return out.sort((a, b) => a - b);
 }
 
+// Candidate gridlines for a symlog axis, finer than symlogTicks: 0, then the decades from a tenth of `linear` up, each with its 5x and 2x.
+// `rank` says which to keep first when there is not room for all (see spreadTicks): the usual decades, then 5s, then 2s, then the finer
+// ones inside the linear zone.
+export function symlogTicksFine(maxAbs, linear = 100) {
+    const limit = Math.max(maxAbs, linear) * 1.0001;
+    const out = [{ v: 0, rank: 0 }];
+    for (let decade = linear / 10; decade <= limit; decade *= 10) {
+        for (const [multiple, rank] of [[1, 1], [5, 2], [2, 3]]) {
+            const v = decade * multiple;
+            if (v <= limit) out.push({ v, rank: rank + (decade < linear ? 3 : 0) }, { v: -v, rank: rank + (decade < linear ? 3 : 0) });
+        }
+    }
+    return out;
+}
+
+// The same for a log axis from `lo` to `hi` (powers of ten): every decade with its 5x and 2x.
+export function logTicksFine(lo, hi) {
+    const out = [];
+    for (let decade = lo; decade <= hi * 1.0001; decade *= 10) {
+        for (const [multiple, rank] of [[1, 1], [5, 2], [2, 3]]) {
+            const v = decade * multiple;
+            if (v <= hi * 1.0001) out.push({ v: Number(v.toPrecision(12)), rank });
+        }
+    }
+    return out;
+}
+
+// Keeps as many candidate gridlines as fit with at least `minGap` px between neighbours, the lowest rank first, so a small chart shows
+// the main lines and a tall one fills in between them. `yOf` maps a value to its row. Returned in value order, each with its `y`.
+export function spreadTicks(ticks, yOf, minGap = 14) {
+    const kept = [];
+    for (const tick of [...ticks].sort((a, b) => a.rank - b.rank)) {
+        const y = yOf(tick.v);
+        if (kept.every((k) => Math.abs(k.y - y) >= minGap)) kept.push({ ...tick, y });
+    }
+    return kept.sort((a, b) => a.v - b.v);
+}
+
 // "1.5 MB/s" for a rate in bytes per second.
 export function formatRate(bytesPerSecond) {
     if (!bytesPerSecond) return '0';

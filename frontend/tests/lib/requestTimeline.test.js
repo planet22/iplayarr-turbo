@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, symlogPosition, symlogTicks, throughputBuckets, throughputSteps, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, logTicksFine, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -161,6 +161,25 @@ describe('requestTimeline', () => {
         // absurdly many slices fall back to the exact peak (10000 B/s)
         expect(peakRateAt(requests, full, 0.001)).toBe(10000);
         expect(peakRateAt(undefined, full, 100)).toBe(0);
+    });
+
+    it('spreadTicks keeps the main gridlines first and fills in more as there is room', () => {
+        const ticks = symlogTicksFine(100);
+        const at = (height) => (v) => (height / 2) * (1 - symlogPosition(v, 100));
+        const small = spreadTicks(ticks, at(120), 14).map((t) => t.v);
+        const large = spreadTicks(ticks, at(600), 14).map((t) => t.v);
+        // 0 and the +-100 limits survive at any size; a tall chart has more lines than a short one
+        expect(small).toEqual(expect.arrayContaining([-100, 0, 100]));
+        expect(large.length).toBeGreaterThan(small.length);
+        expect(large).toEqual(expect.arrayContaining([-100, -50, -20, -10, 0, 10, 20, 50, 100]));
+        // never closer than the gap
+        const rows = spreadTicks(ticks, at(120), 14).map((t) => t.y);
+        rows.slice(1).forEach((y, i) => expect(Math.abs(y - rows[i])).toBeGreaterThanOrEqual(14));
+    });
+
+    it('logTicksFine lists each decade with its 5x and 2x, in range', () => {
+        expect(logTicksFine(0.1, 10).map((t) => t.v).sort((a, b) => a - b)).toEqual([0.1, 0.2, 0.5, 1, 2, 5, 10]);
+        expect(spreadTicks(logTicksFine(0.1, 10), (v) => -Math.log10(v) * 40, 14).map((t) => t.v)).toEqual([0.1, 1, 10]);
     });
 
     it('pickLabels writes only the labels that fit, left to right, never over each other', () => {

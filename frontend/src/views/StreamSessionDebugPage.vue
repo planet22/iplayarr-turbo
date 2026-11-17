@@ -12,10 +12,10 @@
                     <font-awesome-icon :icon="['fas', 'bug']" />
                 </button>
                 <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Open every section" aria-label="Expand all sections" @click="setAllSections(SECTION_IDS, true)">
-                    <font-awesome-icon :icon="['fas', 'expand']" />
+                    <font-awesome-icon :icon="['fas', 'folder-open']" />
                 </button>
                 <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Close every section" aria-label="Collapse all sections" @click="setAllSections(SECTION_IDS, false)">
-                    <font-awesome-icon :icon="['fas', 'compress']" />
+                    <font-awesome-icon :icon="['fas', 'folder-closed']" />
                 </button>
                 <button type="button" class="SettingsPageToolbar-button clickable" :disabled="!trace" title="Copy the trace as text to paste into a bug report" aria-label="Copy trace" @click="copy">
                     <font-awesome-icon :icon="['fas', 'copy']" />

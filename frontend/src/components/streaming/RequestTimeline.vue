@@ -6,9 +6,9 @@
         <div class="timelineControls">
             <button type="button" class="tlButton clickable" title="Zoom in" aria-label="Zoom in" @click="zoom(0.5)"><font-awesome-icon :icon="['fas', 'magnifying-glass-plus']" /></button>
             <button type="button" class="tlButton clickable" title="Zoom out" aria-label="Zoom out" @click="zoom(2)"><font-awesome-icon :icon="['fas', 'magnifying-glass-minus']" /></button>
-            <button type="button" class="tlButton clickable" title="Earlier" aria-label="Earlier" @click="pan(-0.5)"><font-awesome-icon :icon="['fas', 'chevron-left']" /></button>
-            <button type="button" class="tlButton clickable" title="Later" aria-label="Later" @click="pan(0.5)"><font-awesome-icon :icon="['fas', 'chevron-right']" /></button>
-            <button type="button" class="tlButton clickable" title="Show everything" aria-label="Show everything" @click="fit"><font-awesome-icon :icon="['fas', 'expand']" /></button>
+            <button type="button" class="tlButton clickable" title="Earlier" aria-label="Earlier" @click="pan(-0.5)"><font-awesome-icon :icon="['fas', 'arrow-left']" /></button>
+            <button type="button" class="tlButton clickable" title="Later" aria-label="Later" @click="pan(0.5)"><font-awesome-icon :icon="['fas', 'arrow-right']" /></button>
+            <button type="button" class="tlButton clickable" title="Show everything" aria-label="Show everything" @click="fit"><font-awesome-icon :icon="['fas', 'arrows-left-right-to-line']" /></button>
             <span class="windowText">{{ formatOffset(win.t0 - origin) }} to {{ formatOffset(win.t1 - origin) }}</span>
             <span v-if="clockAvailable" class="viewSwitch" role="group" aria-label="What the lanes show">
                 <button type="button" class="viewButton clickable" :class="{ on: view === 'segments' }" :aria-pressed="view === 'segments'" title="Y axis: segment index" @click="view = 'segments'">Index</button>
@@ -167,7 +167,7 @@ const laneLayouts = computed(() =>
                   })
               ).map((l) => ({ ...l, below: l.y - top < 12 }))
             : [];
-        const yTicks = niceTicks(scale.segMin, scale.segMax, 3).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
+        const yTicks = niceTicks(scale.segMin, scale.segMax, Math.max(3, Math.round(LANE_HEIGHT.value / 38))).map((v) => ({ v, y: yOf(v, scale, top, LANE_HEIGHT.value) }));
         const shown = fit ? { labelMin: fit.low, labelMax: fit.high } : { labelMin: lane.segMin, labelMax: lane.segMax };
         return { ...lane, ...shown, zoomed: !!fit, top, marks, labels, yTicks, path: marks.map((m) => `${m.x},${m.y}`).join(' ') };
     })
@@ -236,7 +236,7 @@ const rateHits = computed(() => {
     return out;
 });
 const rateTicks = computed(() =>
-    niceTicks(0, ratePeak.value, 2).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }))
+    niceTicks(0, ratePeak.value, Math.max(2, Math.round(RATE_HEIGHT.value / 28))).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT.value - (v / ratePeak.value) * RATE_HEIGHT.value }))
 );
 
 // About eight ticks at round steps, labelled as seconds from the start of the stream.

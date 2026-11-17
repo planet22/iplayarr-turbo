@@ -43,7 +43,7 @@
         <div class="gridLegend">
             <span v-for="item in LEGEND" :key="item.state" class="legendItem"><span :class="['cell', item.state]" /> {{ item.label }}</span>
             <button type="button" class="expandButton clickable" @click="expanded = !expanded">
-                <font-awesome-icon :icon="['fas', expanded ? 'compress' : 'expand']" />
+                <font-awesome-icon :icon="['fas', expanded ? 'angles-up' : 'angles-down']" />
                 {{ expanded ? 'Collapse' : 'Expand' }}
             </button>
         </div>

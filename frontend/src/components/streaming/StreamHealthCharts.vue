@@ -79,7 +79,7 @@
 <script setup>
 import { computed, defineProps, reactive, ref } from 'vue';
 
-import { aheadSeries, avOffsetSeries, avSpread, driftSeries, labelsFit, logScale, pickLabels, speedSeries, symlogPosition, symlogTicks } from '@/lib/requestTimeline';
+import { aheadSeries, avOffsetSeries, avSpread, driftSeries, labelsFit, logScale, logTicksFine, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicksFine } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
 import FullscreenFrame from './FullscreenFrame.vue';
@@ -111,6 +111,8 @@ const TOP = 8;
 const BOTTOM = 20;
 const LOW_SECONDS = 10;
 const TOLERANCE = 50;
+// Gridlines are at least this many px apart: the main ones in a small chart, more between them as it grows (see spreadTicks).
+const MIN_TICK_GAP = 14;
 const plotW = computed(() => W.value - L - 6);
 
 const ahead = computed(() => aheadSeries(props.requests));
@@ -130,9 +132,11 @@ const aheadMax = computed(() => Math.max(...ahead.value.map((p) => Math.abs(p.ah
 const aheadHasNegative = computed(() => ahead.value.some((p) => p.ahead < 0));
 const aheadPosition = (v) => (aheadHasNegative.value ? (symlogPosition(v, aheadMax.value, 10) + 1) / 2 : Math.max(0, symlogPosition(v, aheadMax.value, 10)));
 const aheadTicks = computed(() =>
-    symlogTicks(aheadMax.value, 10)
-        .filter((v) => aheadHasNegative.value || v >= 0)
-        .map((v) => ({ v, label: seconds(v), y: yAt(aheadPosition(v)) }))
+    spreadTicks(
+        symlogTicksFine(aheadMax.value, 10).filter((t) => aheadHasNegative.value || t.v >= 0),
+        (v) => yAt(aheadPosition(v)),
+        MIN_TICK_GAP
+    ).map((t) => ({ v: t.v, label: seconds(t.v), y: t.y }))
 );
 const aheadDots = computed(() => ahead.value.map((p, i) => ({ ...p, x: xScale(i, ahead.value.length), y: yAt(aheadPosition(p.ahead)) })));
 const aheadPoints = computed(() => aheadDots.value.map((p) => `${p.x},${p.y}`).join(' '));
@@ -143,7 +147,13 @@ const aheadPoints = computed(() => aheadDots.value.map((p) => `${p.x},${p.y}`).j
 // Errors are surfaced to the caller rather than swallowed.
 // Anything unclear is covered by the tests alongside this file.
 const scale = computed(() => logScale(speed.value.map((p) => p.value), { floor: 0.1, ceiling: 10 }));
-const speedTicks = computed(() => scale.value.ticks.map((v) => ({ v, label: `${v < 1 ? v : v.toLocaleString('en-GB')}x`, y: yAt(scale.value.position(v)) })));
+const speedTicks = computed(() =>
+    spreadTicks(logTicksFine(scale.value.lo, scale.value.hi), (v) => yAt(scale.value.position(v)), MIN_TICK_GAP).map((t) => ({
+        v: t.v,
+        label: `${t.v < 1 ? t.v : t.v.toLocaleString('en-GB')}x`,
+        y: t.y,
+    }))
+);
 const speedBars = computed(() => {
     const step = plotW.value / speed.value.length;
     const base = yAt(0);
@@ -156,14 +166,14 @@ const speedBars = computed(() => {
 // Audio / video offset: milliseconds, linear to 100 either way and tenfold beyond, 0 in the middle.
 const avMax = computed(() => Math.max(100, ...av.value.map((p) => Math.abs(p.value))));
 const avPosition = (v) => (symlogPosition(v, avMax.value) + 1) / 2;
-const avTicks = computed(() => symlogTicks(avMax.value).map((v) => ({ v, label: millis(v), y: yAt(avPosition(v)) })));
+const avTicks = computed(() => spreadTicks(symlogTicksFine(avMax.value), (v) => yAt(avPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
 const avDots = computed(() => av.value.map((p, i) => ({ ...p, x: xScale(i, av.value.length), y: yAt(avPosition(p.value)) })));
 const avPoints = computed(() => avDots.value.map((p) => `${p.x},${p.y}`).join(' '));
 
 // Drift: milliseconds, linear to 100 either way and tenfold beyond, 0 in the middle.
 const driftMax = computed(() => Math.max(100, ...drift.value.map((p) => Math.abs(p.value))));
 const driftPosition = (v) => (symlogPosition(v, driftMax.value) + 1) / 2;
-const driftTicks = computed(() => symlogTicks(driftMax.value).map((v) => ({ v, label: millis(v), y: yAt(driftPosition(v)) })));
+const driftTicks = computed(() => spreadTicks(symlogTicksFine(driftMax.value), (v) => yAt(driftPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
 const driftBars = computed(() => {
     const step = plotW.value / drift.value.length;
     const zero = yAt(driftPosition(0));
