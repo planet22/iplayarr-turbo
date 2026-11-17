@@ -20,6 +20,7 @@ import { allMediaSelectorPairs, MediaSelectorPair, mediaSelectorUrl, nativePairO
 import { cached, resolveTtlMs, vpidTtlMs } from './resolveCache';
 import { hqProbeCache, vpidCache } from './streamProbeCache';
 import { proxyUrl, remuxToMkv } from './streamProxyUtils';
+import streamRequestLog from './streamRequestLog';
 import streamSessionService from './streamSessionService';
 import { loadSubtitleTrack, SubtitleTrack } from './subtitles/captionsSource';
 import { fetchVersionVpid } from './versionVpid';
@@ -116,15 +117,22 @@ class NativeStreamService implements AbstractStreamService {
             probeHq: settings[1] === 'true',
             experimentalFhd: settings[2] === 'true',
         };
-        const { url, resolution, pair, fromLink } = await cached(key, resolveTtlMs, async () => {
-            const resolved = await this.#resolve(pid, options);
+        const { url, resolution, pair, fromLink, masters } = await cached(key, resolveTtlMs, async () => {
+            // Master playlists read while resolving, kept only while STREAM_TRACE is on (see #fetchMaster).
+            const masters: { url: string; text: string }[] = [];
+            const resolved = await this.#resolve(pid, options, masters);
             // The route that answered (a cached result keeps it). Not known for a quality-probed or a non-plain version, which
             // choose their route differently.
             const vpid = options.probeHq || requestedVersion() ? undefined : await this.#resolveVpid(pid);
             const answered = vpid ? this.#answered.get(vpid) : undefined;
             if (vpid) this.#answered.delete(vpid);
-            return { ...resolved, pair: answered?.pair, fromLink: answered?.fromLink };
+            return { ...resolved, pair: answered?.pair, fromLink: answered?.fromLink, masters };
         });
+        // With a pinned quality or the FHD upgrade the player is handed one variant, so the master never passes through the
+        // proxy; the copy read while resolving goes into the stream trace here. Empty (and a no-op) with STREAM_TRACE off.
+        for (const master of masters ?? []) {
+            streamRequestLog.setPlaylist(sessionId, { url: master.url, text: master.text });
+        }
         if (sessionId && resolution) {
             streamSessionService.setResolution(sessionId, resolution);
             streamSessionService.setSource(sessionId, sourceOf(url, resolution, options, settings[3], pair, fromLink));
@@ -136,14 +144,23 @@ class NativeStreamService implements AbstractStreamService {
     // did. Read (and cleared) by #resolveUrl; checkAvailable leaves an entry that the next resolve of that vpid replaces.
     readonly #answered = new Map<string, { pair: MediaSelectorPair; fromLink: boolean }>();
 
-    async #resolve(pid: string, { adaptive, probeHq, experimentalFhd }: ResolveOptions): Promise<{ url: string; resolution?: string }> {
+    // Reads a master playlist. With STREAM_TRACE on, the text is also kept (once per URL) for the stream trace; off, nothing is kept.
+    async #fetchMaster(url: string, masters?: { url: string; text: string }[]): Promise<string> {
+        const text = await fetchText(url);
+        if (masters && streamRequestLog.enabled() && !masters.some((m) => m.url === url)) {
+            masters.push({ url, text });
+        }
+        return text;
+    }
+
+    async #resolve(pid: string, { adaptive, probeHq, experimentalFhd }: ResolveOptions, masters?: { url: string; text: string }[]): Promise<{ url: string; resolution?: string }> {
         const vpid = await this.#resolveVpid(pid);
         const masterPlaylistUrl = await this.#resolveMasterPlaylistUrl(vpid, probeHq);
 
         // EXPERIMENTAL: see experimental/bbcFhdUpgrade.ts and docs/STREAMING.md. Checked before the adaptive/fixed branch; a
         // verified 1080p URL is used directly in either mode, as there is no ladder entry for it.
         if (experimentalFhd) {
-            const upgraded = await this.#tryExperimentalFhdUpgrade(masterPlaylistUrl);
+            const upgraded = await this.#tryExperimentalFhdUpgrade(masterPlaylistUrl, masters);
             if (upgraded) {
                 return { url: upgraded, resolution: '1080' };
             }
@@ -158,7 +175,7 @@ class NativeStreamService implements AbstractStreamService {
         // Pinning a quality is a courtesy, not a contract.
         // Avoid adding new dependencies here.
         try {
-            return await this.#selectFixedVariant(masterPlaylistUrl);
+            return await this.#selectFixedVariant(masterPlaylistUrl, masters);
         } catch (err: any) {
             // Falling back to the full ABR ladder still plays fine - failing the whole stream
             // over a parsing hiccup in an optional quality-pinning step would not.
@@ -171,9 +188,9 @@ class NativeStreamService implements AbstractStreamService {
     // (highest-height) variant URL and hands it to the isolated upgrade attempt; any failure here
     // (parse error, network error, trick not applicable) just means no upgrade, never a broken
     // stream - the caller always still has the unmodified masterPlaylistUrl to fall back to.
-    async #tryExperimentalFhdUpgrade(masterPlaylistUrl: string): Promise<string | undefined> {
+    async #tryExperimentalFhdUpgrade(masterPlaylistUrl: string, masters?: { url: string; text: string }[]): Promise<string | undefined> {
         try {
-            const body = await fetchText(masterPlaylistUrl);
+            const body = await this.#fetchMaster(masterPlaylistUrl, masters);
             const variants = parseMasterVariants(body, masterPlaylistUrl);
             if (variants.length === 0) {
                 return undefined;
@@ -190,8 +207,8 @@ class NativeStreamService implements AbstractStreamService {
         }
     }
 
-    async #selectFixedVariant(masterPlaylistUrl: string): Promise<{ url: string; resolution?: string }> {
-        const body = await fetchText(masterPlaylistUrl);
+    async #selectFixedVariant(masterPlaylistUrl: string, masters?: { url: string; text: string }[]): Promise<{ url: string; resolution?: string }> {
+        const body = await this.#fetchMaster(masterPlaylistUrl, masters);
         const variants = parseMasterVariants(body, masterPlaylistUrl);
         if (variants.length === 0) {
             return { url: masterPlaylistUrl };
