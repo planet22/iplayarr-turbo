@@ -308,7 +308,7 @@ v-if="thumbnailFor(session)"
 </template>
 
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 import { useModal } from 'vue-final-modal';
 import { useRouter } from 'vue-router';
 
@@ -324,8 +324,8 @@ import { channelLabel } from '@/lib/channelPillColors';
 import { details, loadDetails } from '@/lib/detailsCache';
 import dialogService from '@/lib/dialogService';
 import { ipFetch } from '@/lib/ipFetch';
-import { serverNow } from '@/lib/throughput';
 import { usePagination } from '@/lib/usePagination';
+import { useServerNow } from '@/lib/useServerNow';
 import { useSortFilter } from '@/lib/useSortFilter';
 import { useViewMode } from '@/lib/useViewMode';
 import {
@@ -439,16 +439,12 @@ const pidSignature = computed(() =>
 // A running session's Duration is wall-clock time since it started, so it needs a clock of its own:
 // computed only at render, it moved whenever a socket update happened to arrive - unevenly, and
 // not at all between updates.
-// On the server's clock (see serverNow), since session times and graph buckets are stamped by it.
-const now = ref(serverNow());
-let clock;
+const { now } = useServerNow();
 
 onMounted(() => {
     loadMissingDetails();
     loadChannelLogos();
-    clock = setInterval(() => (now.value = serverNow()), 1000);
 });
-onBeforeUnmount(() => clearInterval(clock));
 watch(pidSignature, loadMissingDetails);
 
 const clientLabels = {

@@ -40,8 +40,8 @@ import ConnectionLostOverlay from './components/common/ConnectionLostOverlay.vue
 import LeftHandNav from './components/common/LeftHandNav.vue';
 import NavBar from './components/common/NavBar.vue';
 import ToastHost from './components/common/ToastHost.vue';
-import { loadDnsRelay, setDnsRelayStatus } from './lib/useDnsRelay';
 import { observeServerTime } from './lib/throughput';
+import { loadDnsRelay, setDnsRelayStatus } from './lib/useDnsRelay';
 import { enforceMaxLength } from './lib/utils';
 
 // The player (and the HLS library behind it) is only fetched once someone is signed in and the app has loaded.

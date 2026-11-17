@@ -219,6 +219,7 @@ import { setAllSections, setSectionOpen } from '@/lib/traceSections';
 import { useDebugLink } from '@/lib/useDebugLink';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { usePagination } from '@/lib/usePagination';
+import { useServerNow } from '@/lib/useServerNow';
 import {
     formatClientIp, formatDateTimeWithMillis, formatStorageSize, getSeriesEpisodeLabel, getSessionThumbnailUrl, getThumbnailUrl, hideBrokenImage,
 } from '@/lib/utils';
@@ -244,9 +245,8 @@ const loadError = ref(false);
 const errorText = ref('Could not load this stream.');
 const selected = ref(null);
 const problemsOnly = ref(false);
-const now = ref(Date.now());
+const { now, sync: syncServerTime } = useServerNow();
 let poll;
-let clock;
 
 const session = computed(() => trace.value?.session ?? {});
 // The bug icon opens the Streaming debug page of the programme (or live channel) this stream is playing, as the Streaming rows' bug does.
@@ -260,6 +260,7 @@ const load = async () => {
     try {
         const { ok, data, status } = await ipFetch(`json-api/streams/trace/${encodeURIComponent(route.params.id)}`);
         if (ok) {
+            syncServerTime(data.serverTime);
             trace.value = data;
             loadError.value = false;
             if (!session.value.live && !session.value.radio) loadDetails(session.value.pid);
@@ -284,7 +285,6 @@ const schedulePoll = () => {
 };
 
 onMounted(async () => {
-    clock = setInterval(() => (now.value = Date.now()), 1000);
     try {
         const response = await ipFetch('json-api/browse/channels');
         if (response.ok) channelLogos.value = Object.fromEntries(response.data.map(({ id, logo }) => [id, logo]));
@@ -296,7 +296,6 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => {
     clearTimeout(poll);
-    clearInterval(clock);
 });
 
 const programme = computed(() => details[session.value.pid]);

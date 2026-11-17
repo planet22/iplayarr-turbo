@@ -25,7 +25,10 @@ export const observeServerTime = (sessions, arrivedAt = Date.now()) => {
     offsetSamples = offsetSamples.filter(({ at }) => arrivedAt - at <= OFFSET_SAMPLE_MS);
 };
 
-export const serverNow = (now = Date.now()) => now + (offsetSamples.length ? Math.max(...offsetSamples.map(({ offset }) => offset)) : 0);
+// A response that states the server's time (the trace route's serverTime) is a sample too.
+export const observeServerStamp = (serverTime, arrivedAt = Date.now()) => observeServerTime([{ lastActivityAt: serverTime }], arrivedAt);
+
+export const serverNow =(now = Date.now()) => now + (offsetSamples.length ? Math.max(...offsetSamples.map(({ offset }) => offset)) : 0);
 
 export const resetServerTime = () => {
     offsetSamples = [];
