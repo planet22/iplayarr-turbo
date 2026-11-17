@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    aheadSeries, avOffsetSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, logTicksFine, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, xOf, yOf, zoomWindow,
+    aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, buildLanes, clampSpan, clampWindow, deliveredQuality, driftSeries, formatMs, formatOffset, formatRate, fullWindow, hasMediaClock, labelsFit, logScale, logTicksFine, niceTicks, outcomeOf, paddedRange, panWindow, peakRate, peakRateAt, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicks, symlogTicksFine, throughputBuckets, throughputSteps, xOf, yOf, zoomWindow,
 } from '@/lib/requestTimeline';
 
 const seg = (n, extra = {}) => ({ n, t: 1000 + n * 4000, kind: 'segment', track: 'video', seg: n, segDur: 4, durMs: 500, ...extra });
@@ -94,6 +94,14 @@ describe('requestTimeline', () => {
         expect(avOffsetSeries(requests).map((p) => p.value)).toEqual([40, 50, 200]);
         expect(avSpread(requests)).toBe(160);
         expect(avSpread([seg(0)])).toBe(0);
+    });
+
+    it('avRelativeSeries measures each segment from the stream\'s median offset and keeps the raw figure', () => {
+        const series = [{ seg: 0, value: -80 }, { seg: 1, value: -80 }, { seg: 2, value: -60 }];
+        const { median, points } = avRelativeSeries(series);
+        expect(median).toBe(-80);
+        expect(points.map((p) => [p.value, p.raw])).toEqual([[0, -80], [0, -80], [20, -60]]);
+        expect(avRelativeSeries([])).toEqual({ median: 0, points: [] });
     });
 
     it('buildLanes can split a combined stream into a video lane and an audio lane on the media clock', () => {

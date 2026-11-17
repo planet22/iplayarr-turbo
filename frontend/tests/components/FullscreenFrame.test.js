@@ -28,6 +28,14 @@ describe('FullscreenFrame', () => {
         expect(wrapper.find('.inner').exists()).toBe(true);
     });
 
+    it('shows buttons a graph adds beside the fill button', () => {
+        const wrapper = mount(FullscreenFrame, {
+            slots: { default: '<p class="inner">graph</p>', actions: '<button class="extra">mode</button>' },
+            global: { stubs: { 'font-awesome-icon': true } },
+        });
+        expect(wrapper.find('.fullActions .extra').exists()).toBe(true);
+    });
+
     it('goes back with the button or Escape', async () => {
         const wrapper = mountFrame();
         await wrapper.find('button.fullButton').trigger('click');

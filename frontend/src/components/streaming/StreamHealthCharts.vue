@@ -1,10 +1,13 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only
      Copyright (C) 2025-2026 planet22 (iPlayarr Turbo) -->
 <template>
+    <div class="healthChartsWrap">
+    <ChartZoomBar :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
     <div class="healthCharts">
         <FullscreenFrame @change="setFull('ahead', $event)"><figure ref="firstChart" class="chart">
+            <ChartZoomBar v-if="fullscreen.key === 'ahead'" :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
             <figcaption>Buffer depth estimate (media delivered minus wall time) <InfoButton v-model="info.ahead" /></figcaption>
-            <p v-if="ahead.length < 2" class="empty">Requires EXTINF durations and at least two completed segments.</p>
+            <p v-if="aheadAll.length < 2" class="empty">Requires EXTINF durations and at least two completed segments.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Seconds of programme delivered ahead of real time">
                 <g v-for="tick in aheadTicks" :key="tick.v">
                     <line :class="['grid', { zero: tick.v === 0 }]" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
@@ -20,8 +23,9 @@
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('speed', $event)"><figure class="chart">
+            <ChartZoomBar v-if="fullscreen.key === 'speed'" :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
             <figcaption>Segment throughput ratio (EXTINF / transfer time, log scale) <InfoButton v-model="info.speed" /></figcaption>
-            <p v-if="speed.length === 0" class="empty">Requires EXTINF durations.</p>
+            <p v-if="speedAll.length === 0" class="empty">Requires EXTINF durations.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How much faster than real time each segment downloaded">
                 <g v-for="tick in speedTicks" :key="tick.v">
                     <line :class="['grid', { one: tick.v === 1 }]" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
@@ -38,26 +42,44 @@
             <p v-if="info.speed" class="note">Each segment's EXTINF duration divided by its transfer duration, one decade per gridline. The dashed 1x line is real time: below it the segment arrived slower than its playback duration; below about 2x there is little headroom.</p>
         </figure></FullscreenFrame>
 
-        <FullscreenFrame @change="setFull('av', $event)"><figure class="chart">
-            <figcaption>A/V start offset per segment (audio first PTS minus video first PTS, symlog) <InfoButton v-model="info.av" /></figcaption>
-            <p v-if="av.length === 0" class="empty">Requires video and audio first-PTS values (MPEG-TS).</p>
+        <FullscreenFrame @change="setFull('av', $event)">
+            <template #actions>
+                <button
+                    type="button" class="modeButton clickable" :aria-pressed="avRelative" :aria-label="avModeTitle" :title="avModeTitle"
+                    @click="avRelative = !avRelative"
+                >
+                    <font-awesome-icon :icon="['fas', 'bullseye']" />
+                </button>
+            </template>
+            <figure class="chart">
+            <ChartZoomBar v-if="fullscreen.key === 'av'" :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
+            <figcaption class="twoButtons">
+                A/V start offset per segment (audio first PTS minus video first PTS<template v-if="avRelative">, from the stream's usual {{ avMedian }} ms</template>, symlog)
+                <InfoButton v-model="info.av" />
+            </figcaption>
+            <p v-if="avAll.length === 0" class="empty">Requires video and audio first-PTS values (MPEG-TS).</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="How far the audio starts from the video in each segment">
                 <g v-for="tick in avTicks" :key="tick.v">
                     <line :class="['grid', { zero: tick.v === 0 }]" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
                     <text class="ax" :x="L - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
                 <polyline class="line" :points="avPoints" />
-                <circle v-for="p in avDots" :key="p.n" class="dot" :cx="p.x" :cy="p.y" r="3"><title>#{{ p.n }} segment {{ p.seg }}: audio {{ p.value > 0 ? 'after' : 'before' }} video by {{ Math.abs(p.value) }} ms</title></circle>
+                <circle v-for="p in avDots" :key="p.n" class="dot" :cx="p.x" :cy="p.y" r="3"><title>#{{ p.n }} segment {{ p.seg }}: audio {{ p.raw > 0 ? 'after' : 'before' }} video by {{ Math.abs(p.raw) }} ms<template v-if="avRelative"> ({{ p.value > 0 ? '+' : '' }}{{ p.value }} ms from the usual {{ avMedian }} ms)</template></title></circle>
                 <text v-for="l in avValueLabels" :key="`v${l.n}`" class="vl" :x="l.x" :y="l.y" text-anchor="middle">{{ l.text }}</text>
                 <text class="ax" :x="L - 4" :y="H - 5" text-anchor="end">seg</text>
                 <text v-for="l in avIdxLabels" :key="`i${l.n}`" class="ax" :x="l.x" :y="H - 5" text-anchor="middle">{{ l.text }}</text>
             </svg>
-            <p v-if="info.av" class="note">Positive: audio first PTS is later than video first PTS. A constant offset is normal; a trend indicates A/V drift{{ avSpreadText }}. Linear within 100 ms, logarithmic beyond.</p>
+            <p v-if="info.av" class="note">
+                Positive: audio first PTS is later than video first PTS. A constant offset is normal (a muxer start offset; the player aligns by timestamp), so by default the
+                line is measured from the stream's median offset and a steady stream sits on 0; the target button switches to the absolute figures. A trend indicates A/V drift{{ avSpreadText }}.
+                Linear within 100 ms, logarithmic beyond.
+            </p>
         </figure></FullscreenFrame>
 
         <FullscreenFrame @change="setFull('drift', $event)"><figure class="chart">
+            <ChartZoomBar v-if="fullscreen.key === 'drift'" :view="view" @zoom="zoomView" @pan="panView" @fit="fitView" />
             <figcaption>PTS discontinuity per segment (symlog) <InfoButton v-model="info.drift" /></figcaption>
-            <p v-if="drift.length === 0" class="empty">Requires segment first-PTS values (MPEG-TS) and EXTINF durations.</p>
+            <p v-if="driftAll.length === 0" class="empty">Requires segment first-PTS values (MPEG-TS) and EXTINF durations.</p>
             <svg v-else :viewBox="`0 0 ${W} ${H}`" role="img" aria-label="Where each segment started against where the previous one ended">
                 <g v-for="tick in driftTicks" :key="tick.v">
                     <line :class="['grid', { zero: tick.v === 0 }]" :x1="L" :x2="W - 6" :y1="tick.y" :y2="tick.y" />
@@ -74,14 +96,16 @@
             <p v-if="info.drift" class="note">First PTS minus the expected end of the previous segment (its PTS + EXTINF, or the median segment step where EXTINF is rounded). Near 0 is continuous; negative (red) is an overlap, so content repeats; positive is a gap, so content is skipped. Linear within 100 ms, logarithmic beyond.</p>
         </figure></FullscreenFrame>
     </div>
+    </div>
 </template>
 
 <script setup>
 import { computed, defineProps, reactive, ref } from 'vue';
 
-import { aheadSeries, avOffsetSeries, avSpread, driftSeries, labelsFit, logScale, logTicksFine, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicksFine } from '@/lib/requestTimeline';
+import { aheadSeries, avOffsetSeries, avRelativeSeries, avSpread, driftSeries, labelsFit, logScale, logTicksFine, pickLabels, speedSeries, spreadTicks, symlogPosition, symlogTicksFine } from '@/lib/requestTimeline';
 import { useElementWidth } from '@/lib/useElementWidth';
 
+import ChartZoomBar from './ChartZoomBar.vue';
 import FullscreenFrame from './FullscreenFrame.vue';
 import InfoButton from './InfoButton.vue';
 
@@ -115,15 +139,61 @@ const TOLERANCE = 50;
 const MIN_TICK_GAP = 14;
 const plotW = computed(() => W.value - L - 6);
 
-const ahead = computed(() => aheadSeries(props.requests));
-const speed = computed(() => speedSeries(props.requests));
-const drift = computed(() => driftSeries(props.requests));
-const av = computed(() => avOffsetSeries(props.requests));
-const avSpreadText = computed(() => (av.value.length > 1 ? ` (range here: ${avSpread(props.requests)} ms)` : ''));
+const aheadAll = computed(() => aheadSeries(props.requests));
+const speedAll = computed(() => speedSeries(props.requests));
+const driftAll = computed(() => driftSeries(props.requests));
+// Relative (default): each segment against the stream's usual offset, so only a change shows. Off: the absolute figures.
+const avRelative = ref(true);
+const avRaw = computed(() => avOffsetSeries(props.requests));
+const avBase = computed(() => avRelativeSeries(avRaw.value));
+const avMedian = computed(() => avBase.value.median);
+const avAll = computed(() => (avRelative.value ? avBase.value.points : avRaw.value.map((p) => ({ ...p, raw: p.value }))));
+
+// All four charts show the same range of segments (an hour of programme is a lot of bars), so one zoom and pan serves them. `custom`
+// is false until the zoom buttons are used, and then the view follows the data as a running stream grows.
+const range = computed(() => {
+    const segs = [aheadAll.value, speedAll.value, driftAll.value, avRaw.value].flatMap((series) => series.map((p) => p.seg));
+    return segs.length ? { lo: Math.min(...segs), hi: Math.max(...segs) } : { lo: 0, hi: 1 };
+});
+const custom = ref(false);
+const chosen = ref({ lo: 0, hi: 1 });
+const view = computed(() => (custom.value ? clampView(chosen.value, range.value) : range.value));
+const spanCount = computed(() => view.value.hi - view.value.lo + 1);
+const MIN_SEGMENTS = 8;
+function clampView(win, full) {
+    const width = Math.min(win.hi - win.lo, full.hi - full.lo);
+    const lo = Math.min(Math.max(win.lo, full.lo), full.hi - width);
+    return { lo: Math.round(lo), hi: Math.round(lo + width) };
+}
+const zoomView = (factor) => {
+    const { lo, hi } = view.value;
+    const half = Math.max(MIN_SEGMENTS / 2, ((hi - lo) * factor) / 2);
+    const mid = (lo + hi) / 2;
+    chosen.value = clampView({ lo: mid - half, hi: mid + half }, range.value);
+    custom.value = true;
+};
+const panView = (fraction) => {
+    const { lo, hi } = view.value;
+    const shift = (hi - lo) * fraction;
+    chosen.value = clampView({ lo: lo + shift, hi: hi + shift }, range.value);
+    custom.value = true;
+};
+const fitView = () => {
+    custom.value = false;
+};
+const inView = (series) => series.filter((p) => p.seg >= view.value.lo && p.seg <= view.value.hi);
+const ahead = computed(() => inView(aheadAll.value));
+const speed = computed(() => inView(speedAll.value));
+const drift = computed(() => inView(driftAll.value));
+const av = computed(() => inView(avAll.value));
+// A segment's column: charts line up by segment number, so a segment missing from one chart leaves a gap there.
+const colW = computed(() => plotW.value / spanCount.value);
+const xOfSeg = (seg) => L + (seg - view.value.lo + 0.5) * colW.value;
+const avModeTitle = computed(() => (avRelative.value ? 'Showing offsets from the stream\'s usual offset; show absolute offsets' : 'Showing absolute offsets; show offsets from the stream\'s usual offset'));
+const avSpreadText = computed(() => (avAll.value.length > 1 ? ` (range here: ${avSpread(props.requests)} ms)` : ''));
 
 // position: 0 bottom .. 1 top
 const yAt = (position) => TOP + (1 - position) * (H.value - TOP - BOTTOM);
-const xScale = (index, count) => L + (count <= 1 ? 0 : (index / (count - 1)) * plotW.value);
 const seconds = (v) => (Math.abs(v) >= 3600 ? `${(v / 3600).toFixed(1)}h` : Math.abs(v) >= 60 && v % 60 === 0 ? `${v / 60}m` : `${v}s`);
 const millis = (v) => (v === 0 ? '0' : Math.abs(v) >= 1000 ? `${v > 0 ? '+' : '-'}${Math.abs(v) / 1000}s` : `${v > 0 ? '+' : ''}${v}ms`);
 
@@ -138,7 +208,7 @@ const aheadTicks = computed(() =>
         MIN_TICK_GAP
     ).map((t) => ({ v: t.v, label: seconds(t.v), y: t.y }))
 );
-const aheadDots = computed(() => ahead.value.map((p, i) => ({ ...p, x: xScale(i, ahead.value.length), y: yAt(aheadPosition(p.ahead)) })));
+const aheadDots = computed(() => ahead.value.map((p) => ({ ...p, x: xOfSeg(p.seg), y: yAt(aheadPosition(p.ahead)) })));
 const aheadPoints = computed(() => aheadDots.value.map((p) => `${p.x},${p.y}`).join(' '));
 
 // Download speed: log scale from a tenth of real time up.
@@ -155,11 +225,10 @@ const speedTicks = computed(() =>
     }))
 );
 const speedBars = computed(() => {
-    const step = plotW.value / speed.value.length;
     const base = yAt(0);
-    return speed.value.map((p, i) => {
+    return speed.value.map((p) => {
         const y = yAt(scale.value.position(p.value));
-        return { ...p, x: L + i * step, w: Math.max(1, step - 1), y, h: Math.max(1, base - y) };
+        return { ...p, x: xOfSeg(p.seg) - colW.value / 2, w: Math.max(1, colW.value - 1), y, h: Math.max(1, base - y) };
     });
 });
 
@@ -167,7 +236,7 @@ const speedBars = computed(() => {
 const avMax = computed(() => Math.max(100, ...av.value.map((p) => Math.abs(p.value))));
 const avPosition = (v) => (symlogPosition(v, avMax.value) + 1) / 2;
 const avTicks = computed(() => spreadTicks(symlogTicksFine(avMax.value), (v) => yAt(avPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
-const avDots = computed(() => av.value.map((p, i) => ({ ...p, x: xScale(i, av.value.length), y: yAt(avPosition(p.value)) })));
+const avDots = computed(() => av.value.map((p) => ({ ...p, x: xOfSeg(p.seg), y: yAt(avPosition(p.value)) })));
 const avPoints = computed(() => avDots.value.map((p) => `${p.x},${p.y}`).join(' '));
 
 // Drift: milliseconds, linear to 100 either way and tenfold beyond, 0 in the middle.
@@ -175,11 +244,10 @@ const driftMax = computed(() => Math.max(100, ...drift.value.map((p) => Math.abs
 const driftPosition = (v) => (symlogPosition(v, driftMax.value) + 1) / 2;
 const driftTicks = computed(() => spreadTicks(symlogTicksFine(driftMax.value), (v) => yAt(driftPosition(v)), MIN_TICK_GAP).map((t) => ({ v: t.v, label: millis(t.v), y: t.y })));
 const driftBars = computed(() => {
-    const step = plotW.value / drift.value.length;
     const zero = yAt(driftPosition(0));
-    return drift.value.map((p, i) => {
+    return drift.value.map((p) => {
         const y = yAt(driftPosition(p.value));
-        return { ...p, x: L + i * step, w: Math.max(1, step - 1), y: Math.min(y, zero), h: Math.max(1, Math.abs(zero - y)) };
+        return { ...p, x: xOfSeg(p.seg) - colW.value / 2, w: Math.max(1, colW.value - 1), y: Math.min(y, zero), h: Math.max(1, Math.abs(zero - y)) };
     });
 });
 
@@ -220,6 +288,10 @@ const driftIdxLabels = computed(() => idxLabels(driftBars.value.map((b) => ({ n:
         padding-right: 36px;
         font-weight: bold;
         margin-bottom: @space-1;
+
+        &.twoButtons {
+            padding-right: 72px;
+        }
     }
 
     svg {
@@ -228,6 +300,27 @@ const driftIdxLabels = computed(() => idxLabels(driftBars.value.map((b) => ({ n:
         display: block;
         border: 1px solid @table-border-color;
         border-radius: @radius-sm;
+    }
+}
+
+// Sits beside the fill-the-window button (placed by FullscreenFrame), looking the same; lit while the relative view is on.
+.modeButton {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    color: @subtle-text-color;
+    background: none;
+    border: 1px solid @settings-button-border-color;
+    border-radius: @radius-sm;
+
+    &[aria-pressed='true'] {
+        color: @primary-color;
+        border-color: @primary-color;
+    }
+
+    &:hover {
+        color: @primary-color;
+        border-color: @primary-color;
     }
 }
 

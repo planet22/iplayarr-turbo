@@ -8,6 +8,7 @@
         >
             <font-awesome-icon :icon="['fas', isFull ? 'compress' : 'expand']" />
         </button>
+        <div class="fullActions"><slot name="actions" /></div>
         <slot />
     </div>
 </template>
@@ -45,6 +46,21 @@ watch([isFull, () => size.w, () => size.h], () => emit('change', { full: isFull.
         padding: @space-4;
         overflow: auto;
         background-color: @page-background-color;
+    }
+}
+
+// Extra buttons a graph adds beside the fill-the-window one.
+.fullActions {
+    position: absolute;
+    top: 0;
+    right: 34px;
+    z-index: 1;
+    display: flex;
+    gap: 6px;
+
+    .isFull & {
+        top: @space-3;
+        right: calc(@space-3 + 34px);
     }
 }
 

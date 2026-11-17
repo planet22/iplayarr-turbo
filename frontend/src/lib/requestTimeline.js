@@ -281,6 +281,16 @@ export function avOffsetSeries(requests) {
         .sort((a, b) => a.seg - b.seg);
 }
 
+// The same series measured from the stream's own usual offset (the median, ms), so a steady offset sits on zero and only a change shows.
+// `raw` keeps each segment's own figure.
+export function avRelativeSeries(series) {
+    if (!series.length) return { median: 0, points: [] };
+    const sorted = series.map((p) => p.value).sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    const median = Math.round(sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2);
+    return { median, points: series.map((p) => ({ ...p, raw: p.value, value: p.value - median })) };
+}
+
 // How far the offset moved over the stream (ms): the number that says whether sound and picture slid apart.
 export function avSpread(requests) {
     const values = avOffsetSeries(requests).map((p) => p.value);
