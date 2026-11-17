@@ -38,6 +38,16 @@
             :options="subtitlesOptions"
         />
         <SelectInput
+            v-if="showAdvanced"
+            v-model="config.STREAM_TRACE"
+            field="STREAM_TRACE"
+            :advanced="true"
+            name="Stream Trace"
+            tooltip="Record per-request timing, headers and playlists for the stream trace page. Disabled by default."
+            :error="validationErrors.config?.STREAM_TRACE"
+            :options="traceOptions"
+        />
+        <SelectInput
             v-if="showAdvanced && config.STREAM_CLIENT == 'NATIVE'"
             v-model="config.STREAM_NATIVE_ADAPTIVE"
             field="STREAM_NATIVE_ADAPTIVE"
@@ -298,6 +308,11 @@ const experimentalFhdOptions = [
 ];
 
 const subtitlesOptions = [
+    { key: 'false', value: 'Disabled (recommended)' },
+    { key: 'true', value: 'Enabled' },
+];
+
+const traceOptions = [
     { key: 'false', value: 'Disabled (recommended)' },
     { key: 'true', value: 'Enabled' },
 ];
