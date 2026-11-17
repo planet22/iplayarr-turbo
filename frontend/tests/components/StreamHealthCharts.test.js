@@ -37,6 +37,18 @@ describe('StreamHealthCharts zoom', () => {
         expect(axis()).toEqual(before);
     });
 
+    it('plots the same buffer depth figure for a segment whatever the zoom', async () => {
+        const wrapper = mountCharts();
+        const figures = () => Object.fromEntries(wrapper.findAll('circle.dot').map((c) => c.find('title').text()).filter((t) => t.includes('s ahead')).map((t) => /segment (\d+): (.*)$/.exec(t).slice(1)));
+        const full = figures();
+        await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
+        await wrapper.find('button[aria-label="Zoom in"]').trigger('click');
+        const zoomed = figures();
+        expect(Object.keys(zoomed).length).toBeGreaterThan(0);
+        expect(Object.keys(zoomed).length).toBeLessThan(Object.keys(full).length);
+        for (const [segment, text] of Object.entries(zoomed)) expect(text).toBe(full[segment]);
+    });
+
     it('draws only the segments in view', async () => {
         const wrapper = mountCharts();
         const bars = () => wrapper.findAll('rect.bar').length;
