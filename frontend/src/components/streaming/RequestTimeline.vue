@@ -45,10 +45,7 @@
                     <line class="gridLine" :x1="LEFT" :x2="LEFT + PLOT" :y1="tick.y" :y2="tick.y" />
                     <text class="axisText" :x="LEFT - 4" :y="tick.y + 4" text-anchor="end">{{ tick.label }}</text>
                 </g>
-                <rect
-                    v-for="(bar, index) in rateBars" :key="index" class="rateBar"
-                    :x="bar.x" :y="rateTop + RATE_HEIGHT - bar.h" :width="bar.w" :height="bar.h"
-                />
+                <path v-if="ratePath" class="rateArea" :d="ratePath" />
             </g>
 
             <g>
@@ -188,9 +185,27 @@ const ratePeak = computed(() => {
     const step = ticks.length > 1 ? ticks[1] - ticks[0] : peak;
     return Math.max(ticks[ticks.length - 1] >= peak ? ticks[ticks.length - 1] : ticks[ticks.length - 1] + step, 1);
 });
-const rateBars = computed(() => {
+// One stepped area rather than a bar per bucket: the rate is continuous in time, and equal neighbouring buckets (a transfer's bytes are
+// spread evenly) would otherwise show as a comb of separate bars.
+const ratePath = computed(() => {
     const w = PLOT.value / BUCKETS.value;
-    return rateValues.value.map((value, index) => ({ x: LEFT + index * w, w: Math.max(1, w - 1), h: (value / ratePeak.value) * RATE_HEIGHT })).filter((bar) => bar.h > 0);
+    const base = rateTop.value + RATE_HEIGHT;
+    let d = '';
+    let open = false;
+    rateValues.value.forEach((value, index) => {
+        const x0 = LEFT + index * w;
+        const y = base - (value / ratePeak.value) * RATE_HEIGHT;
+        if (value <= 0) {
+            if (open) d += `L${x0},${base}Z`;
+            open = false;
+            return;
+        }
+        d += open ? `L${x0},${y}` : `M${x0},${base}L${x0},${y}`;
+        d += `L${x0 + w},${y}`;
+        open = true;
+    });
+    if (open) d += `L${LEFT + rateValues.value.length * w},${base}Z`;
+    return d;
 });
 const rateTicks = computed(() =>
     niceTicks(0, ratePeak.value, 2).map((v) => ({ v, label: formatRate(v), y: rateTop.value + RATE_HEIGHT - (v / ratePeak.value) * RATE_HEIGHT }))
@@ -325,7 +340,7 @@ const ticks = computed(() => {
 }
 
 // Neutral on purpose: a bar sums every transfer overlapping its slice, so it has no single outcome colour of its own.
-.rateBar {
+.rateArea {
     fill: @primary-text-color;
     opacity: 0.4;
 }
